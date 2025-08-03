@@ -10,6 +10,38 @@ git config user.name "Lance-Kraakman"
 git config user.email "lance@aifactory.nz"
 ```
 
+### NEXTJS Rules
+
+Use Server Actions when:
+- You're using the App Router.
+- The action is internal-only (not called externally).
+- You want type-safe, co-located DB logic (e.g., Drizzle).
+- You don’t need custom HTTP headers/status codes.
+- You're handling form submissions or component-triggered mutations.
+
+Use API Routes when:
+- You need to expose an HTTP endpoint (e.g., to mobile clients or webhooks).
+- You require custom HTTP responses (headers, status, etc.).
+- The action is called via fetch or by external services.
+- You need to test or call it independently (e.g., via Postman).
+- You're using the Pages Router, or need full control over request/response.
+
+Use Server Components when:
+
+- You don't need interactivity (no event listeners).
+- You want to fetch data on the server (e.g., DB queries).
+- You want better performance and smaller bundles.
+- You’re using Server Actions, file system, or sensitive logic.
+- Component is static or rendered once on request.
+
+Use Client Components when:
+
+- You need interactivity (e.g., onClick, useState, useEffect).
+- You’re using browser-only APIs (e.g., localStorage, window).
+- You use context/state that updates on the client.
+- Component relies on real-time updates, sockets, or animations.
+- You’re handling forms with client-side validation.
+
 ### git
 
 Please make descriptive git commits at reasonable intervals. DO NOT add comments that include Claude Code as a collaborator.
