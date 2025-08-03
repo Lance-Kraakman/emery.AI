@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Upload, X, File, Download } from 'lucide-react'
+import { Upload, X, File, Download, Eye } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface FileMetadata {
   id: string
@@ -21,6 +22,7 @@ interface FileUploadProps {
 }
 
 export default function FileUpload({ value, onChange, workspaceId, tableId, fieldId }: FileUploadProps) {
+  const router = useRouter()
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -137,6 +139,7 @@ export default function FileUpload({ value, onChange, workspaceId, tableId, fiel
       {/* File List */}
       {currentFiles.length > 0 && (
         <div className="space-y-2">
+          <p className="text-sm text-gray-600">Files ({currentFiles.length}):</p>
           {currentFiles.map((file) => (
             <div key={file.id} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
               <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -148,15 +151,22 @@ export default function FileUpload({ value, onChange, workspaceId, tableId, fiel
               </div>
               <div className="flex items-center gap-1">
                 <button
+                  onClick={() => router.push(`/editor/${file.id}?fileName=${encodeURIComponent(file.name)}&tableId=${tableId}&fieldId=${fieldId}`)}
+                  className="p-2 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded"
+                  title="View/Edit File"
+                >
+                  <Eye size={16} />
+                </button>
+                <button
                   onClick={() => {/* TODO: Implement download */}}
-                  className="p-1 text-gray-400 hover:text-blue-600"
+                  className="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded"
                   title="Download"
                 >
                   <Download size={16} />
                 </button>
                 <button
                   onClick={() => removeFile(file.id)}
-                  className="p-1 text-gray-400 hover:text-red-600"
+                  className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded"
                   title="Remove"
                 >
                   <X size={16} />
@@ -166,6 +176,7 @@ export default function FileUpload({ value, onChange, workspaceId, tableId, fiel
           ))}
         </div>
       )}
+
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, serial, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, serial, integer, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
 
 export const workspaces = pgTable("workspaces", {
   id: serial("id").primaryKey(),
@@ -32,4 +32,15 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   name: text("name"),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const fileVersions = pgTable("file_versions", {
+  id: serial("id").primaryKey(),
+  fileId: uuid("file_id").notNull(), // References the file UUID from JSONB metadata
+  versionNumber: integer("version_number").notNull(),
+  content: jsonb("content").notNull(), // Tiptap document JSON
+  createdAt: timestamp("created_at").defaultNow(),
+  createdBy: uuid("created_by"), // User who created this version
+  isCurrent: boolean("is_current").default(false),
+  changeSummary: text("change_summary"), // Optional: description of changes
 });

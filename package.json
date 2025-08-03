@@ -15,6 +15,11 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.859.0",
     "@aws-sdk/s3-request-presigner": "^3.859.0",
+    "@tiptap/extension-character-count": "^3.0.9",
+    "@tiptap/extension-placeholder": "^3.0.9",
+    "@tiptap/pm": "^3.0.9",
+    "@tiptap/react": "^3.0.9",
+    "@tiptap/starter-kit": "^3.0.9",
     "@types/multer": "^2.0.0",
     "dotenv": "16.4.7",
     "drizzle-orm": "0.44.4",

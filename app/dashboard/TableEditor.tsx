@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Plus, Edit, Trash2, Save, X } from 'lucide-react'
+import { ArrowLeft, Plus, Edit, Trash2, Save, X, Eye } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import FileUpload from './FileUpload'
 
 interface Field {
@@ -27,6 +28,7 @@ interface TableEditorProps {
 }
 
 export default function TableEditor({ tableId, onBack }: TableEditorProps) {
+  const router = useRouter()
   const [fields, setFields] = useState<Field[]>([])
   const [rows, setRows] = useState<Row[]>([])
   const [showNewField, setShowNewField] = useState(false)
@@ -484,8 +486,18 @@ export default function TableEditor({ tableId, onBack }: TableEditorProps) {
                                       </div> : '-')
                                   : field.type === 'file'
                                   ? (row[`field_${field.id}`]?.files?.length > 0 ? 
-                                      <div className="text-sm">
-                                        📁 {row[`field_${field.id}`].files.length} file(s)
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm">📁 {row[`field_${field.id}`].files.length} file(s)</span>
+                                        {row[`field_${field.id}`].files.map((file: any, index: number) => (
+                                          <button
+                                            key={file.id || index}
+                                            onClick={() => router.push(`/editor/${file.id}?fileName=${encodeURIComponent(file.name)}&tableId=${tableId}&fieldId=${field.id}`)}
+                                            className="p-1 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded"
+                                            title={`View/Edit ${file.name}`}
+                                          >
+                                            <Eye size={14} />
+                                          </button>
+                                        ))}
                                       </div> : '-')
                                   : (row[`field_${field.id}`] || '-')
                                 }
@@ -542,6 +554,7 @@ export default function TableEditor({ tableId, onBack }: TableEditorProps) {
           )}
         </div>
       </div>
+
     </div>
   )
 }
