@@ -52,7 +52,7 @@ export async function createWorkspaceAction(formData: FormData) {
   }
 
   revalidatePath('/dashboard');
-  redirect('/dashboard');
+  return result;
 }
 
 export async function getWorkspaces(userId: string) {

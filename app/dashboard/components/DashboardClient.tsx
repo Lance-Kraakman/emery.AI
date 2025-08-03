@@ -77,6 +77,7 @@ export default function DashboardClient({
           workspaces={initialWorkspaces}
           selectedWorkspace={selectedWorkspace}
           onSelectWorkspace={handleWorkspaceSelect}
+          onWorkspaceCreate={onDataUpdate?.loadWorkspaces}
         />
 
         {selectedWorkspace ? (
@@ -84,6 +85,7 @@ export default function DashboardClient({
             tables={initialTables.filter(table => table.workspaceId === selectedWorkspace)}
             workspaceId={selectedWorkspace}
             onSelectTable={setSelectedTable}
+            onTableUpdate={onDataUpdate?.loadTables}
           />
         ) : (
           <div className="flex-1 p-6">

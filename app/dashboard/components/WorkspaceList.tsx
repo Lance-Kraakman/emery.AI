@@ -17,12 +17,14 @@ interface WorkspaceListProps {
   workspaces: Workspace[];
   selectedWorkspace: number | null;
   onSelectWorkspace: (id: number) => void;
+  onWorkspaceCreate?: () => void;
 }
 
 export default function WorkspaceList({ 
   workspaces, 
   selectedWorkspace, 
-  onSelectWorkspace 
+  onSelectWorkspace,
+  onWorkspaceCreate
 }: WorkspaceListProps) {
   const [showNewWorkspace, setShowNewWorkspace] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -33,6 +35,7 @@ export default function WorkspaceList({
       try {
         await createWorkspaceAction(formData);
         setShowNewWorkspace(false);
+        onWorkspaceCreate?.();
       } catch (error) {
         console.error('Error creating workspace:', error);
         alert('Failed to create workspace');

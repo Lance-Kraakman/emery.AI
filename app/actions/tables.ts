@@ -74,6 +74,7 @@ export async function createTableAction(formData: FormData) {
   }
 
   revalidatePath('/dashboard');
+  return result;
 }
 
 export async function getTables(workspaceId: number) {
@@ -148,4 +149,5 @@ export async function deleteTableAction(formData: FormData) {
   }
 
   revalidatePath('/dashboard');
+  return result;
 }

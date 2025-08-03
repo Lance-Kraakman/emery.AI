@@ -18,9 +18,10 @@ interface TableListProps {
   tables: Table[];
   workspaceId: number;
   onSelectTable: (id: number) => void;
+  onTableUpdate?: () => void;
 }
 
-export default function TableList({ tables, workspaceId, onSelectTable }: TableListProps) {
+export default function TableList({ tables, workspaceId, onSelectTable, onTableUpdate }: TableListProps) {
   const [showNewTable, setShowNewTable] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -29,6 +30,7 @@ export default function TableList({ tables, workspaceId, onSelectTable }: TableL
       try {
         await createTableAction(formData);
         setShowNewTable(false);
+        onTableUpdate?.();
       } catch (error) {
         console.error('Error creating table:', error);
         alert('Failed to create table');
@@ -44,6 +46,7 @@ export default function TableList({ tables, workspaceId, onSelectTable }: TableL
         const formData = new FormData();
         formData.append('tableId', tableId.toString());
         await deleteTableAction(formData);
+        onTableUpdate?.();
       } catch (error) {
         console.error('Error deleting table:', error);
         alert('Failed to delete table');
