@@ -6,10 +6,10 @@ import { eq } from "drizzle-orm";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { fileId: string } }
+  { params }: { params: Promise<{ fileId: string }> }
 ) {
   try {
-    const { fileId } = params;
+    const { fileId } = await params;
     const { searchParams } = new URL(request.url);
     const tableId = searchParams.get("tableId");
     const fieldId = searchParams.get("fieldId");

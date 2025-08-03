@@ -11,7 +11,7 @@ interface Table {
   workspaceId: number;
   name: string;
   dbName: string;
-  createdAt: string;
+  createdAt: Date | null;
 }
 
 interface TableListProps {
@@ -106,7 +106,7 @@ export default function TableList({ tables, workspaceId, onSelectTable }: TableL
                 <div>
                   <h3 className="font-medium text-gray-900">{table.name}</h3>
                   <p className="text-sm text-gray-500">
-                    Created {new Date(table.createdAt).toLocaleDateString()}
+                    Created {table.createdAt ? new Date(table.createdAt).toLocaleDateString() : 'Unknown'}
                   </p>
                 </div>
               </div>

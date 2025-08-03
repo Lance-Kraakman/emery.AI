@@ -19,7 +19,7 @@ interface Table {
   workspaceId: number;
   name: string;
   dbName: string;
-  createdAt: string;
+  createdAt: Date | null;
 }
 
 interface DashboardClientProps {

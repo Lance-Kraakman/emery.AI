@@ -20,7 +20,7 @@ interface Table {
   workspaceId: number;
   name: string;
   dbName: string;
-  createdAt: string;
+  createdAt: Date | null;
 }
 
 export default function DashboardWithData() {
