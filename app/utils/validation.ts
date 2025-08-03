@@ -8,33 +8,66 @@ export interface ValidationResult {
   error?: string;
 }
 
+export interface ValidationRule {
+  name: string;
+  validate: (value: any, field: Field) => ValidationResult;
+  applicableTypes?: string[];
+}
+
+// Scalable validation registry
+class ValidationRegistry {
+  private rules: Map<string, ValidationRule[]> = new Map();
+  private globalRules: ValidationRule[] = [];
+
+  registerRule(rule: ValidationRule) {
+    if (rule.applicableTypes) {
+      rule.applicableTypes.forEach(type => {
+        if (!this.rules.has(type)) {
+          this.rules.set(type, []);
+        }
+        this.rules.get(type)!.push(rule);
+      });
+    } else {
+      this.globalRules.push(rule);
+    }
+  }
+
+  validateField(field: Field, value: any): ValidationResult[] {
+    const results: ValidationResult[] = [];
+    
+    // Apply global rules
+    for (const rule of this.globalRules) {
+      const result = rule.validate(value, field);
+      if (!result.isValid) {
+        results.push(result);
+      }
+    }
+    
+    // Apply type-specific rules
+    const typeRules = this.rules.get(field.type) || [];
+    for (const rule of typeRules) {
+      const result = rule.validate(value, field);
+      if (!result.isValid) {
+        results.push(result);
+      }
+    }
+    
+    return results;
+  }
+}
+
+// Global validation registry instance
+export const validationRegistry = new ValidationRegistry();
+
 export function validateFieldValue(field: Field, value: any): ValidationResult {
-  // Check required fields
-  if (field.required && isEmptyValue(value)) {
-    return {
-      isValid: false,
-      error: `${field.name} is required`
-    };
+  const results = validationRegistry.validateField(field, value);
+  
+  // Return the first error found, or success if no errors
+  if (results.length > 0) {
+    return results[0];
   }
-
-  // Skip validation for empty optional fields
-  if (isEmptyValue(value)) {
-    return { isValid: true };
-  }
-
-  // Type-specific validation
-  switch (field.type) {
-    case 'email':
-      return validateEmail(value);
-    case 'url':
-      return validateUrl(value);
-    case 'number':
-      return validateNumber(value);
-    case 'date':
-      return validateDate(value);
-    default:
-      return { isValid: true };
-  }
+  
+  return { isValid: true };
 }
 
 export function validateRowData(fields: Field[], data: Record<string, any>): ValidationResult[] {
@@ -116,3 +149,105 @@ function validateDate(value: any): ValidationResult {
 
   return { isValid: true };
 }
+
+function validateRelation(value: any): ValidationResult {
+  // Relations should be arrays of objects with id property
+  if (!Array.isArray(value)) {
+    return { isValid: false, error: 'Relation must be an array' };
+  }
+
+  for (const item of value) {
+    if (typeof item !== 'object' || !item.id) {
+      return { isValid: false, error: 'Relation items must have an id property' };
+    }
+  }
+
+  return { isValid: true };
+}
+
+function validateFile(value: any): ValidationResult {
+  // Files should be objects with files array containing file metadata
+  if (typeof value !== 'object' || !value.files) {
+    return { isValid: false, error: 'File field must contain files array' };
+  }
+
+  if (!Array.isArray(value.files)) {
+    return { isValid: false, error: 'Files must be an array' };
+  }
+
+  for (const file of value.files) {
+    if (!file.id || !file.name || !file.s3Key) {
+      return { isValid: false, error: 'File metadata is incomplete' };
+    }
+  }
+
+  return { isValid: true };
+}
+
+// Register all validation rules
+validationRegistry.registerRule({
+  name: 'required',
+  validate: (value: any, field: Field) => {
+    if (field.required && isEmptyValue(value)) {
+      return {
+        isValid: false,
+        error: `${field.name} is required`
+      };
+    }
+    return { isValid: true };
+  }
+});
+
+validationRegistry.registerRule({
+  name: 'email-format',
+  applicableTypes: ['email'],
+  validate: (value: any) => {
+    if (isEmptyValue(value)) return { isValid: true };
+    return validateEmail(value);
+  }
+});
+
+validationRegistry.registerRule({
+  name: 'url-format',
+  applicableTypes: ['url'],
+  validate: (value: any) => {
+    if (isEmptyValue(value)) return { isValid: true };
+    return validateUrl(value);
+  }
+});
+
+validationRegistry.registerRule({
+  name: 'number-format',
+  applicableTypes: ['number'],
+  validate: (value: any) => {
+    if (isEmptyValue(value)) return { isValid: true };
+    return validateNumber(value);
+  }
+});
+
+validationRegistry.registerRule({
+  name: 'date-format',
+  applicableTypes: ['date'],
+  validate: (value: any) => {
+    if (isEmptyValue(value)) return { isValid: true };
+    return validateDate(value);
+  }
+});
+
+validationRegistry.registerRule({
+  name: 'relation-format',
+  applicableTypes: ['relation'],
+  validate: (value: any) => {
+    if (isEmptyValue(value)) return { isValid: true };
+    return validateRelation(value);
+  }
+});
+
+validationRegistry.registerRule({
+  name: 'file-format',
+  applicableTypes: ['file'],
+  validate: (value: any) => {
+    if (isEmptyValue(value)) return { isValid: true };
+    return validateFile(value);
+  }
+});

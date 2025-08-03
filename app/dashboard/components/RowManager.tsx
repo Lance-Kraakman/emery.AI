@@ -9,6 +9,7 @@ import { createRowAction, updateRowAction, deleteRowAction } from '@/app/actions
 import { Field, Row } from '@/app/actions/types';
 import { validateRowData, hasValidationErrors, getValidationErrorMessage } from '@/app/utils/validation';
 import FileUpload from '../FileUpload';
+import RelationField from './RelationField';
 
 interface RowManagerProps {
   tableId: number;
@@ -168,6 +169,16 @@ export default function RowManager({ tableId, workspaceId, fields, rows, onRowUp
             fieldId={field.id}
           />
         );
+      case 'relation':
+        return (
+          <RelationField
+            value={value}
+            onChange={onChange}
+            relatedTableId={field.relatedTableId}
+            workspaceId={workspaceId}
+            disabled={isPending}
+          />
+        );
       default:
         return (
           <input
@@ -201,6 +212,34 @@ export default function RowManager({ tableId, workspaceId, fields, rows, onRowUp
             {value}
           </a>
         ) : '-';
+      case 'relation':
+        if (!Array.isArray(value) || value.length === 0) return '-';
+        return (
+          <div className="space-y-1">
+            {value.slice(0, 3).map((item: any, index: number) => (
+              <div key={item.id || index} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                {item.value || item.id || 'Unknown'}
+              </div>
+            ))}
+            {value.length > 3 && (
+              <div className="text-xs text-gray-500">+{value.length - 3} more</div>
+            )}
+          </div>
+        );
+      case 'file':
+        if (!value?.files || !Array.isArray(value.files) || value.files.length === 0) return '-';
+        return (
+          <div className="space-y-1">
+            {value.files.slice(0, 2).map((file: any, index: number) => (
+              <div key={file.id || index} className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                {file.name || 'File'}
+              </div>
+            ))}
+            {value.files.length > 2 && (
+              <div className="text-xs text-gray-500">+{value.files.length - 2} more files</div>
+            )}
+          </div>
+        );
       default:
         return typeof value === 'string' && value.length > 50 
           ? `${value.substring(0, 50)}...` 

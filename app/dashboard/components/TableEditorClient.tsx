@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { getFields } from '@/app/actions/fields';
 import { getRowsData } from '@/app/actions/rows';
+import { getTables } from '@/app/actions/tables';
 import { Field, Row } from '@/app/actions/types';
 import FieldManager from './FieldManager';
 import RowManager from './RowManager';
@@ -21,6 +22,7 @@ interface TableEditorClientProps {
 export default function TableEditorClient({ tableId, tableName, workspaceId, onBack }: TableEditorClientProps) {
   const [fields, setFields] = useState<Field[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
+  const [availableTables, setAvailableTables] = useState<Array<{ id: number; name: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -30,12 +32,14 @@ export default function TableEditorClient({ tableId, tableName, workspaceId, onB
   const loadData = async () => {
     try {
       setIsLoading(true);
-      const [fieldsData, rowsData] = await Promise.all([
+      const [fieldsData, rowsData, tablesData] = await Promise.all([
         getFields(tableId),
-        getRowsData(tableId)
+        getRowsData(tableId),
+        getTables(workspaceId)
       ]);
       setFields(fieldsData);
       setRows(Array.from(rowsData) as unknown as Row[]);
+      setAvailableTables(tablesData.map(t => ({ id: t.id, name: t.name })));
     } catch (error) {
       console.error('Error loading table data:', error);
     } finally {
@@ -46,12 +50,14 @@ export default function TableEditorClient({ tableId, tableName, workspaceId, onB
   const handleFieldUpdate = async () => {
     try {
       // Reload both fields and rows since field changes affect row structure
-      const [fieldsData, rowsData] = await Promise.all([
+      const [fieldsData, rowsData, tablesData] = await Promise.all([
         getFields(tableId),
-        getRowsData(tableId)
+        getRowsData(tableId),
+        getTables(workspaceId)
       ]);
       setFields(fieldsData);
       setRows(Array.from(rowsData) as unknown as Row[]);
+      setAvailableTables(tablesData.map(t => ({ id: t.id, name: t.name })));
     } catch (error) {
       console.error('Error refreshing fields:', error);
     }
@@ -96,7 +102,9 @@ export default function TableEditorClient({ tableId, tableName, workspaceId, onB
       <div className="max-w-7xl mx-auto p-6 space-y-8">
         <FieldManager
           tableId={tableId}
+          workspaceId={workspaceId}
           fields={fields}
+          availableTables={availableTables}
           onFieldUpdate={handleFieldUpdate}
         />
 
