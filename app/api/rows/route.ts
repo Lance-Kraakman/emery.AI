@@ -39,8 +39,8 @@ export async function POST(request: NextRequest) {
       }
       
       if (value !== undefined && value !== null) {
-        // Handle JSONB fields for relations
-        if (field.type === 'relation') {
+        // Handle JSONB fields for relations and files
+        if (field.type === 'relation' || field.type === 'file') {
           // If value is a string, try to parse it as JSON
           if (typeof value === 'string') {
             try {
@@ -131,8 +131,8 @@ export async function PUT(request: NextRequest) {
       const value = data[field.slug] || data[field.name];
       
       if (value !== undefined && value !== null) {
-        // Handle JSONB fields for relations
-        if (field.type === 'relation') {
+        // Handle JSONB fields for relations and files
+        if (field.type === 'relation' || field.type === 'file') {
           // If value is a string, try to parse it as JSON
           if (typeof value === 'string') {
             try {

@@ -21,6 +21,7 @@ export async function addFieldToTable(tableName: string, fieldId: number, type: 
     url: "TEXT", 
     date: "DATE",
     relation: "JSONB", // Use JSONB for relationships like Baserow
+    file: "JSONB", // Use JSONB for file metadata like Baserow
   };
 
   const sqlType = typeMap[type] ?? "TEXT";
@@ -31,8 +32,8 @@ export async function addFieldToTable(tableName: string, fieldId: number, type: 
     ADD COLUMN field_${fieldId} ${sqlType} ${nullable};
   `));
   
-  // Add GIN index for JSONB fields (relationships)
-  if (type === 'relation') {
+  // Add GIN index for JSONB fields (relationships and files)
+  if (type === 'relation' || type === 'file') {
     await db.execute(sql.raw(`
       CREATE INDEX IF NOT EXISTS idx_${tableName}_field_${fieldId}_gin 
       ON ${tableName} USING GIN (field_${fieldId});

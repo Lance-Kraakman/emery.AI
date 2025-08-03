@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { ArrowLeft, Plus, Edit, Trash2, Save, X } from 'lucide-react'
+import FileUpload from './FileUpload'
 
 interface Field {
   id: number
   tableId: number
   name: string
   slug: string
-  type: 'text' | 'number' | 'boolean' | 'email' | 'url' | 'date' | 'relation'
+  type: 'text' | 'number' | 'boolean' | 'email' | 'url' | 'date' | 'relation' | 'file'
   required: boolean
   orderIndex: number
 }
@@ -249,6 +250,16 @@ export default function TableEditor({ tableId, onBack }: TableEditorProps) {
             placeholder='{"id": "123", "name": "Related Item"}'
           />
         )
+      case 'file':
+        return (
+          <FileUpload
+            value={value}
+            onChange={onChange}
+            workspaceId={1} // TODO: Get actual workspace ID
+            tableId={tableId}
+            fieldId={field.id}
+          />
+        )
       case 'text':
       default:
         return (
@@ -313,6 +324,7 @@ export default function TableEditor({ tableId, onBack }: TableEditorProps) {
                   <option value="url">🔗 URL</option>
                   <option value="date">📅 Date</option>
                   <option value="relation">🔗 Relation</option>
+                  <option value="file">📁 File</option>
                 </select>
                 <label className="flex items-center gap-2">
                   <input
@@ -353,6 +365,7 @@ export default function TableEditor({ tableId, onBack }: TableEditorProps) {
                       {field.type === 'url' && '🔗'}
                       {field.type === 'date' && '📅'}
                       {field.type === 'relation' && '🔗'}
+                      {field.type === 'file' && '📁'}
                       {field.name}
                     </h3>
                     <p className="text-sm text-gray-500">
@@ -468,6 +481,11 @@ export default function TableEditor({ tableId, onBack }: TableEditorProps) {
                                         {typeof row[`field_${field.id}`] === 'object' 
                                           ? JSON.stringify(row[`field_${field.id}`], null, 0)
                                           : row[`field_${field.id}`]}
+                                      </div> : '-')
+                                  : field.type === 'file'
+                                  ? (row[`field_${field.id}`]?.files?.length > 0 ? 
+                                      <div className="text-sm">
+                                        📁 {row[`field_${field.id}`].files.length} file(s)
                                       </div> : '-')
                                   : (row[`field_${field.id}`] || '-')
                                 }
