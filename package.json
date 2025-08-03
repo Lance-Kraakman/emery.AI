@@ -1,0 +1,38 @@
+{
+  "name": "orchastrate",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  },
+  "packageManager": "pnpm@10.14.0",
+  "dependencies": {
+    "next": "15.4.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "drizzle-orm": "0.44.4",
+    "postgres": "3.4.7",
+    "uuid": "10.0.0",
+    "lucide-react": "0.536.0",
+    "dotenv": "16.4.7"
+  },
+  "devDependencies": {
+    "typescript": "5.9.2",
+    "@types/node": "24.1.0",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "@types/uuid": "10.0.0",
+    "drizzle-kit": "0.31.4",
+    "eslint": "9.32.0",
+    "eslint-config-next": "15.4.5",
+    "tailwindcss": "3.4.15",
+    "autoprefixer": "10.4.21",
+    "postcss": "8.5.6"
+  }
+}
