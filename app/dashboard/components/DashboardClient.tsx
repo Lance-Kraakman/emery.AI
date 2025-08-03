@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import WorkspaceList from './WorkspaceList';
 import TableList from './TableList';
-import TableEditor from '../TableEditor';
+import TableEditorClient from './TableEditorClient';
 import { useUserId } from './UserIdProvider';
 
 interface Workspace {
@@ -58,7 +58,14 @@ export default function DashboardClient({
   }
 
   if (selectedTable) {
-    return <TableEditor tableId={selectedTable} onBack={() => setSelectedTable(null)} />;
+    const table = initialTables.find(t => t.id === selectedTable);
+    return (
+      <TableEditorClient 
+        tableId={selectedTable} 
+        tableName={table?.name || 'Unknown Table'}
+        onBack={() => setSelectedTable(null)} 
+      />
+    );
   }
 
   return (
