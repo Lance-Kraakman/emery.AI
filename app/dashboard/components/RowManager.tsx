@@ -7,24 +7,43 @@ import { useState, useTransition } from 'react';
 import { Plus, Edit, Trash2, Save, X } from 'lucide-react';
 import { createRowAction, updateRowAction, deleteRowAction } from '@/app/actions/rows';
 import { Field, Row } from '@/app/actions/types';
+import { validateRowData, hasValidationErrors, getValidationErrorMessage } from '@/app/utils/validation';
+import FileUpload from '../FileUpload';
 
 interface RowManagerProps {
   tableId: number;
+  workspaceId: number;
   fields: Field[];
   rows: Row[];
   onRowUpdate: () => void;
 }
 
-export default function RowManager({ tableId, fields, rows, onRowUpdate }: RowManagerProps) {
+export default function RowManager({ tableId, workspaceId, fields, rows, onRowUpdate }: RowManagerProps) {
   const [showNewRow, setShowNewRow] = useState(false);
   const [editingRow, setEditingRow] = useState<string | null>(null);
   const [newRowData, setNewRowData] = useState<Record<string, any>>({});
   const [editRowData, setEditRowData] = useState<Record<string, any>>({});
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
 
   async function handleCreateRow(formData: FormData) {
+    // Validate data before submission
+    const validationResults = validateRowData(fields, newRowData);
+    if (hasValidationErrors(validationResults)) {
+      const errors: Record<string, string> = {};
+      validationResults.forEach((result: any) => {
+        if (!result.isValid && result.field) {
+          errors[result.field] = result.error || 'Invalid value';
+        }
+      });
+      setValidationErrors(errors);
+      alert(getValidationErrorMessage(validationResults));
+      return;
+    }
+
     startTransition(async () => {
       try {
+        setValidationErrors({});
         const data = JSON.stringify(newRowData);
         formData.append('data', data);
         await createRowAction(formData);
@@ -139,6 +158,16 @@ export default function RowManager({ tableId, fields, rows, onRowUpdate }: RowMa
             disabled={isPending}
           />
         );
+      case 'file':
+        return (
+          <FileUpload
+            value={value}
+            onChange={onChange}
+            workspaceId={workspaceId}
+            tableId={tableId}
+            fieldId={field.id}
+          />
+        );
       default:
         return (
           <input
@@ -209,6 +238,9 @@ export default function RowManager({ tableId, fields, rows, onRowUpdate }: RowMa
                   newRowData[field.slug],
                   (value) => setNewRowData(prev => ({ ...prev, [field.slug]: value }))
                 )}
+                {validationErrors[field.slug] && (
+                  <p className="mt-1 text-sm text-red-600">{validationErrors[field.slug]}</p>
+                )}
               </div>
             ))}
 
@@ -225,6 +257,7 @@ export default function RowManager({ tableId, fields, rows, onRowUpdate }: RowMa
                 onClick={() => {
                   setShowNewRow(false);
                   setNewRowData({});
+                  setValidationErrors({});
                 }}
                 disabled={isPending}
                 className="px-4 py-2 border text-sm rounded-md hover:bg-gray-50"
