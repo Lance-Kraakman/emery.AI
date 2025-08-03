@@ -18,7 +18,7 @@ export interface Field {
   tableId: number;
   name: string;
   slug: string;
-  type: "text" | "number" | "boolean" | "relation";
+  type: "text" | "number" | "boolean" | "email" | "url" | "date" | "relation";
   orderIndex: number;
   relatedTableId?: number;
   required: boolean;

@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     const processedData: Record<string, any> = {};
     
     for (const field of tableFields) {
-      const fieldKey = `field_${field.slug}`;
+      const fieldKey = `field_${field.id}`;
       const value = data[field.slug] || data[field.name];
       
       if (field.required && (value === undefined || value === null || value === "")) {
@@ -39,7 +39,21 @@ export async function POST(request: NextRequest) {
       }
       
       if (value !== undefined && value !== null) {
-        processedData[fieldKey] = value;
+        // Handle JSONB fields for relations
+        if (field.type === 'relation') {
+          // If value is a string, try to parse it as JSON
+          if (typeof value === 'string') {
+            try {
+              processedData[fieldKey] = JSON.parse(value);
+            } catch {
+              processedData[fieldKey] = value;
+            }
+          } else {
+            processedData[fieldKey] = value;
+          }
+        } else {
+          processedData[fieldKey] = value;
+        }
       }
     }
 
@@ -113,11 +127,25 @@ export async function PUT(request: NextRequest) {
     const processedData: Record<string, any> = {};
     
     for (const field of tableFields) {
-      const fieldKey = `field_${field.slug}`;
+      const fieldKey = `field_${field.id}`;
       const value = data[field.slug] || data[field.name];
       
       if (value !== undefined && value !== null) {
-        processedData[fieldKey] = value;
+        // Handle JSONB fields for relations
+        if (field.type === 'relation') {
+          // If value is a string, try to parse it as JSON
+          if (typeof value === 'string') {
+            try {
+              processedData[fieldKey] = JSON.parse(value);
+            } catch {
+              processedData[fieldKey] = value;
+            }
+          } else {
+            processedData[fieldKey] = value;
+          }
+        } else {
+          processedData[fieldKey] = value;
+        }
       }
     }
 

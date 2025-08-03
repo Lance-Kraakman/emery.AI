@@ -20,7 +20,7 @@ export const fields = pgTable("fields", {
   tableId: integer("table_id").notNull().references(() => tables.id),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
-  type: text("type").notNull(), // text, number, boolean, relation
+  type: text("type").notNull(), // text, number, boolean, email, url, date, relation
   orderIndex: integer("order_index").default(0),
   relatedTableId: integer("related_table_id").references(() => tables.id),
   required: boolean("required").default(false),

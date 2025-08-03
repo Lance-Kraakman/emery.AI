@@ -41,8 +41,6 @@ export async function POST(request: NextRequest) {
     const maxOrder = await db.select().from(fields).where(eq(fields.tableId, tableId));
     const orderIndex = maxOrder.length > 0 ? Math.max(...maxOrder.map(f => f.orderIndex || 0)) + 1 : 0;
 
-    await addFieldToTable(table.dbName, slug, type, required);
-
     const [newField] = await db.insert(fields).values({
       tableId,
       name,
@@ -51,6 +49,8 @@ export async function POST(request: NextRequest) {
       required,
       orderIndex,
     }).returning();
+
+    await addFieldToTable(table.dbName, newField.id, type, required);
 
     return NextResponse.json(newField, { status: 201 });
   } catch (error) {
@@ -121,7 +121,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await removeFieldFromTable(table.dbName, field.slug);
+    await removeFieldFromTable(table.dbName, field.id);
     await db.delete(fields).where(eq(fields.id, parseInt(fieldId)));
 
     return NextResponse.json({ message: "Field deleted successfully" });

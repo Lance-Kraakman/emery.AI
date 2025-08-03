@@ -28,11 +28,27 @@ export default function Dashboard() {
   const [newWorkspaceName, setNewWorkspaceName] = useState('')
   const [newTableName, setNewTableName] = useState('')
   
-  const mockUserId = 'user-123'
+  // Generate or retrieve user ID from localStorage
+  const [userId, setUserId] = useState<string>('')
 
   useEffect(() => {
-    loadWorkspaces()
+    // Get or create a proper UUID
+    let storedUserId = localStorage.getItem('userId')
+    
+    // Check if it's a valid UUID format (contains hyphens)
+    if (!storedUserId || !storedUserId.includes('-')) {
+      storedUserId = crypto.randomUUID()
+      localStorage.setItem('userId', storedUserId)
+    }
+    
+    setUserId(storedUserId)
   }, [])
+
+  useEffect(() => {
+    if (userId) {
+      loadWorkspaces()
+    }
+  }, [userId])
 
   useEffect(() => {
     if (selectedWorkspace) {
@@ -41,8 +57,10 @@ export default function Dashboard() {
   }, [selectedWorkspace])
 
   const loadWorkspaces = async () => {
+    if (!userId) return
+    
     try {
-      const response = await fetch(`/api/workspaces?userId=${mockUserId}`)
+      const response = await fetch(`/api/workspaces?userId=${userId}`)
       if (response.ok) {
         const data = await response.json()
         setWorkspaces(data)
@@ -70,13 +88,13 @@ export default function Dashboard() {
   }
 
   const createWorkspace = async () => {
-    if (!newWorkspaceName.trim()) return
+    if (!newWorkspaceName.trim() || !userId) return
     
     try {
       const response = await fetch('/api/workspaces', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: mockUserId, name: newWorkspaceName })
+        body: JSON.stringify({ userId, name: newWorkspaceName })
       })
       
       if (response.ok) {
@@ -135,7 +153,12 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="border-b bg-white px-6 py-4">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">🗂️ Orchastrate</h1>
+          <div className="text-sm text-gray-500">
+            {userId && `User: ${userId.slice(0, 8)}...`}
+          </div>
+        </div>
       </div>
 
       <div className="flex">

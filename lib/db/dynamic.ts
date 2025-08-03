@@ -1,5 +1,6 @@
 import { db } from "./client";
 import { sql } from "drizzle-orm";
+import postgres from "postgres";
 
 export async function createDynamicTable(tableName: string) {
   await db.execute(sql.raw(`
@@ -11,12 +12,15 @@ export async function createDynamicTable(tableName: string) {
   `));
 }
 
-export async function addFieldToTable(tableName: string, slug: string, type: string, required: boolean = false) {
+export async function addFieldToTable(tableName: string, fieldId: number, type: string, required: boolean = false) {
   const typeMap: Record<string, string> = {
     text: "TEXT",
     number: "INTEGER",
-    boolean: "BOOLEAN", 
-    relation: "UUID",
+    boolean: "BOOLEAN",
+    email: "TEXT",
+    url: "TEXT", 
+    date: "DATE",
+    relation: "JSONB", // Use JSONB for relationships like Baserow
   };
 
   const sqlType = typeMap[type] ?? "TEXT";
@@ -24,14 +28,22 @@ export async function addFieldToTable(tableName: string, slug: string, type: str
   
   await db.execute(sql.raw(`
     ALTER TABLE ${tableName} 
-    ADD COLUMN field_${slug} ${sqlType} ${nullable};
+    ADD COLUMN field_${fieldId} ${sqlType} ${nullable};
   `));
+  
+  // Add GIN index for JSONB fields (relationships)
+  if (type === 'relation') {
+    await db.execute(sql.raw(`
+      CREATE INDEX IF NOT EXISTS idx_${tableName}_field_${fieldId}_gin 
+      ON ${tableName} USING GIN (field_${fieldId});
+    `));
+  }
 }
 
-export async function removeFieldFromTable(tableName: string, slug: string) {
+export async function removeFieldFromTable(tableName: string, fieldId: number) {
   await db.execute(sql.raw(`
     ALTER TABLE ${tableName} 
-    DROP COLUMN IF EXISTS field_${slug};
+    DROP COLUMN IF EXISTS field_${fieldId};
   `));
 }
 
@@ -44,13 +56,15 @@ export async function insertRow(tableName: string, data: Record<string, any>) {
     return;
   }
 
+  // Get the raw postgres client from environment
+  const client = postgres(process.env.DATABASE_URL!);
   const fieldNames = fields.map(field => `"${field}"`).join(", ");
-  const placeholders = fields.map((_, i) => `$${i + 1}`).join(", ");
+  const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
   
-  await db.execute(sql.raw(`
-    INSERT INTO ${tableName} (${fieldNames}) 
-    VALUES (${placeholders})
-  `, ...values));
+  const query = `INSERT INTO ${tableName} (${fieldNames}) VALUES (${placeholders})`;
+  
+  await client.unsafe(query, values);
+  await client.end();
 }
 
 export async function updateRow(tableName: string, id: string, data: Record<string, any>) {
@@ -59,30 +73,29 @@ export async function updateRow(tableName: string, id: string, data: Record<stri
   
   if (fields.length === 0) return;
 
+  const client = postgres(process.env.DATABASE_URL!);
   const setClause = fields.map((field, i) => `"${field}" = $${i + 1}`).join(", ");
   
-  await db.execute(sql.raw(`
-    UPDATE ${tableName} 
-    SET ${setClause}, updated_at = now()
-    WHERE id = $${fields.length + 1}
-  `, ...values, id));
+  const query = `UPDATE ${tableName} SET ${setClause}, updated_at = now() WHERE id = $${fields.length + 1}`;
+  
+  await client.unsafe(query, [...values, id]);
+  await client.end();
 }
 
 export async function deleteRow(tableName: string, id: string) {
-  await db.execute(sql.raw(`
-    DELETE FROM ${tableName} 
-    WHERE id = $1
-  `, id));
+  const client = postgres(process.env.DATABASE_URL!);
+  const query = `DELETE FROM ${tableName} WHERE id = $1`;
+  await client.unsafe(query, [id]);
+  await client.end();
 }
 
 export async function getRows(tableName: string, limit: number = 100, offset: number = 0) {
-  const result = await db.execute(sql.raw(`
-    SELECT * FROM ${tableName} 
-    ORDER BY created_at DESC 
-    LIMIT $1 OFFSET $2
-  `, limit, offset));
+  const client = postgres(process.env.DATABASE_URL!);
+  const query = `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT $1 OFFSET $2`;
+  const result = await client.unsafe(query, [limit, offset]);
+  await client.end();
   
-  return result.rows;
+  return result;
 }
 
 export async function dropDynamicTable(tableName: string) {

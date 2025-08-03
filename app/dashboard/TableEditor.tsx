@@ -8,7 +8,7 @@ interface Field {
   tableId: number
   name: string
   slug: string
-  type: 'text' | 'number' | 'boolean' | 'relation'
+  type: 'text' | 'number' | 'boolean' | 'email' | 'url' | 'date' | 'relation'
   required: boolean
   orderIndex: number
 }
@@ -174,13 +174,15 @@ export default function TableEditor({ tableId, onBack }: TableEditorProps) {
     setEditingRow(row.id)
     const rowData: Record<string, any> = {}
     fields.forEach(field => {
-      const fieldKey = `field_${field.slug}`
+      const fieldKey = `field_${field.id}`
       rowData[field.slug] = row[fieldKey]
     })
     setEditRowData(rowData)
   }
 
   const renderFieldInput = (field: Field, value: any, onChange: (value: any) => void) => {
+    const baseClass = "w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+    
     switch (field.type) {
       case 'number':
         return (
@@ -188,16 +190,63 @@ export default function TableEditor({ tableId, onBack }: TableEditorProps) {
             type="number"
             value={value || ''}
             onChange={(e) => onChange(e.target.value ? Number(e.target.value) : '')}
-            className="w-full px-3 py-2 border rounded-md"
+            className={baseClass}
           />
         )
       case 'boolean':
         return (
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              checked={value || false}
+              onChange={(e) => onChange(e.target.checked)}
+              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+          </div>
+        )
+      case 'email':
+        return (
           <input
-            type="checkbox"
-            checked={value || false}
-            onChange={(e) => onChange(e.target.checked)}
-            className="w-4 h-4"
+            type="email"
+            value={value || ''}
+            onChange={(e) => onChange(e.target.value)}
+            className={baseClass}
+            placeholder="user@example.com"
+          />
+        )
+      case 'url':
+        return (
+          <input
+            type="url"
+            value={value || ''}
+            onChange={(e) => onChange(e.target.value)}
+            className={baseClass}
+            placeholder="https://example.com"
+          />
+        )
+      case 'date':
+        return (
+          <input
+            type="date"
+            value={value || ''}
+            onChange={(e) => onChange(e.target.value)}
+            className={baseClass}
+          />
+        )
+      case 'relation':
+        return (
+          <textarea
+            value={typeof value === 'object' ? JSON.stringify(value, null, 2) : value || ''}
+            onChange={(e) => {
+              try {
+                const parsed = JSON.parse(e.target.value);
+                onChange(parsed);
+              } catch {
+                onChange(e.target.value);
+              }
+            }}
+            className={`${baseClass} h-20 font-mono text-xs`}
+            placeholder='{"id": "123", "name": "Related Item"}'
           />
         )
       case 'text':
@@ -207,7 +256,7 @@ export default function TableEditor({ tableId, onBack }: TableEditorProps) {
             type="text"
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
-            className="w-full px-3 py-2 border rounded-md"
+            className={baseClass}
           />
         )
     }
@@ -257,10 +306,13 @@ export default function TableEditor({ tableId, onBack }: TableEditorProps) {
                   onChange={(e) => setNewField({ ...newField, type: e.target.value as any })}
                   className="px-3 py-2 border rounded-md"
                 >
-                  <option value="text">Text</option>
-                  <option value="number">Number</option>
-                  <option value="boolean">Boolean</option>
-                  <option value="relation">Relation</option>
+                  <option value="text">📝 Text</option>
+                  <option value="number">🔢 Number</option>
+                  <option value="boolean">☑️ Checkbox</option>
+                  <option value="email">📧 Email</option>
+                  <option value="url">🔗 URL</option>
+                  <option value="date">📅 Date</option>
+                  <option value="relation">🔗 Relation</option>
                 </select>
                 <label className="flex items-center gap-2">
                   <input
@@ -293,9 +345,18 @@ export default function TableEditor({ tableId, onBack }: TableEditorProps) {
               <div key={field.id} className="bg-white border rounded-lg p-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="font-medium text-gray-900">{field.name}</h3>
+                    <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                      {field.type === 'text' && '📝'}
+                      {field.type === 'number' && '🔢'}
+                      {field.type === 'boolean' && '☑️'}
+                      {field.type === 'email' && '📧'}
+                      {field.type === 'url' && '🔗'}
+                      {field.type === 'date' && '📅'}
+                      {field.type === 'relation' && '🔗'}
+                      {field.name}
+                    </h3>
                     <p className="text-sm text-gray-500">
-                      {field.type} {field.required && '(required)'}
+                      {field.type} {field.required && '• required'}
                     </p>
                   </div>
                   <button
@@ -386,10 +447,29 @@ export default function TableEditor({ tableId, onBack }: TableEditorProps) {
                                 (value) => setEditRowData({ ...editRowData, [field.slug]: value })
                               )
                             ) : (
-                              <span>
+                              <span className="block max-w-xs truncate">
                                 {field.type === 'boolean' 
-                                  ? (row[`field_${field.slug}`] ? 'Yes' : 'No')
-                                  : (row[`field_${field.slug}`] || '-')
+                                  ? (row[`field_${field.id}`] ? '✅ Yes' : '❌ No')
+                                  : field.type === 'email' 
+                                  ? (row[`field_${field.id}`] ? 
+                                      <a href={`mailto:${row[`field_${field.id}`]}`} className="text-blue-600 hover:underline">
+                                        {row[`field_${field.id}`]}
+                                      </a> : '-')
+                                  : field.type === 'url'
+                                  ? (row[`field_${field.id}`] ? 
+                                      <a href={row[`field_${field.id}`]} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                        {row[`field_${field.id}`]}
+                                      </a> : '-')
+                                  : field.type === 'date'
+                                  ? (row[`field_${field.id}`] ? new Date(row[`field_${field.id}`]).toLocaleDateString() : '-')
+                                  : field.type === 'relation'
+                                  ? (row[`field_${field.id}`] ? 
+                                      <div className="font-mono text-xs bg-gray-100 p-1 rounded max-w-xs">
+                                        {typeof row[`field_${field.id}`] === 'object' 
+                                          ? JSON.stringify(row[`field_${field.id}`], null, 0)
+                                          : row[`field_${field.id}`]}
+                                      </div> : '-')
+                                  : (row[`field_${field.id}`] || '-')
                                 }
                               </span>
                             )}
