@@ -35,7 +35,7 @@ export default function TableEditorClient({ tableId, tableName, organizationId, 
       const [fieldsData, rowsData, tablesData] = await Promise.all([
         getFields(tableId),
         getRowsData(tableId),
-        getTables(workspaceId)
+        getTables(organizationId)
       ]);
       setFields(fieldsData);
       setRows(Array.from(rowsData) as unknown as Row[]);
@@ -53,7 +53,7 @@ export default function TableEditorClient({ tableId, tableName, organizationId, 
       const [fieldsData, rowsData, tablesData] = await Promise.all([
         getFields(tableId),
         getRowsData(tableId),
-        getTables(workspaceId)
+        getTables(organizationId)
       ]);
       setFields(fieldsData);
       setRows(Array.from(rowsData) as unknown as Row[]);
