@@ -45,6 +45,13 @@ const authOptions = {
         session.user.organizationId = userRecord?.organizationId;
         session.user.roleId = userRecord?.roleId;
         session.user.jobTitle = userRecord?.jobTitle;
+        
+        // Check if this is the first user (potential super admin)
+        if (!userRecord?.organizationId || !userRecord?.roleId) {
+          const userCount = await db.select().from(users);
+          session.user.isFirstUser = userCount.length === 1;
+          session.user.needsSetup = true;
+        }
       }
       return session;
     },
@@ -80,6 +87,7 @@ export const signOut = nextAuthSignOut
 
 export async function hasPermission(userId: string, permission: string): Promise<boolean> {
   try {
+    // Check if it's a user
     const userQuery = await db
       .select({
         user: users,
@@ -90,12 +98,17 @@ export async function hasPermission(userId: string, permission: string): Promise
       .where(eq(users.id, userId))
       .limit(1);
 
-    const user = userQuery[0];
-    if (!user?.role?.permissions) {
-      return false;
+    if (userQuery.length > 0) {
+      const user = userQuery[0];
+      if (!user?.role?.permissions) {
+        return false;
+      }
+      return user.role.permissions.includes(permission);
     }
 
-    return user.role.permissions.includes(permission);
+    // If not a user, check if it's a worker (by API key or worker ID)
+    // This allows workers to have permissions too
+    return false; // For now, workers need separate handling
   } catch (error) {
     console.error("Error checking permission:", error);
     return false;

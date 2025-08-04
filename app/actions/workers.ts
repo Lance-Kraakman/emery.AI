@@ -1,14 +1,21 @@
 'use server'
 
 import { db } from "@/lib/db/client";
-import { workers } from "@/lib/db/schema";
+import { workers, roles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { requirePermission } from "./permissions";
 import type { ActionResult, CreateWorkerData } from "./types";
+
+// Simple API key generator
+function generateApiKey(): string {
+  return 'wk_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
 
 export async function createWorker(data: CreateWorkerData): Promise<ActionResult> {
   try {
-    const { name, type, capabilities, status } = data;
+    const session = await requirePermission("manage_workers");
+    const { name, type, capabilities, status, roleId } = data;
 
     if (!name || !type) {
       return {
@@ -22,6 +29,9 @@ export async function createWorker(data: CreateWorkerData): Promise<ActionResult
       type,
       capabilities,
       status: status || "active",
+      organizationId: session.user.organizationId,
+      roleId: roleId || null,
+      apiKey: generateApiKey(),
     }).returning();
 
     revalidatePath('/dashboard');

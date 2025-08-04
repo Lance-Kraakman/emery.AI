@@ -75,6 +75,8 @@ export const workers = pgTable("workers", {
   capabilities: text("capabilities").array(),
   status: text("status").default("active"),
   organizationId: integer("organization_id").references(() => organizations.id),
+  roleId: integer("role_id").references(() => roles.id),
+  apiKey: text("api_key").unique(), // For API authentication
   createdAt: timestamp("created_at").defaultNow(),
 });
 
