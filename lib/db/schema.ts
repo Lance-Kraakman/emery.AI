@@ -1,17 +1,11 @@
 import { pgTable, text, uuid, serial, integer, timestamp, boolean } from "drizzle-orm/pg-core";
 
-export const workspaces = pgTable("workspaces", {
-  id: serial("id").primaryKey(),
-  userId: uuid("user_id").notNull(),
-  name: text("name").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
 export const tables = pgTable("tables", {
   id: serial("id").primaryKey(),
-  workspaceId: integer("workspace_id").notNull().references(() => workspaces.id),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
   dbName: text("db_name").notNull().unique(),
+  createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -27,20 +21,30 @@ export const fields = pgTable("fields", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  email: text("email").notNull().unique(),
-  name: text("name"),
-  organizationId: integer("organization_id").references(() => organizations.id),
-  role: text("role"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
 export const organizations = pgTable("organizations", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   mission: text("mission"),
   sharedTools: text("shared_tools").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const roles = pgTable("roles", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  permissions: text("permissions").array(),
+  organizationId: integer("organization_id").references(() => organizations.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  image: text("image"),
+  organizationId: integer("organization_id").references(() => organizations.id),
+  roleId: integer("role_id").references(() => roles.id),
+  jobTitle: text("job_title"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -56,45 +60,45 @@ export const teams = pgTable("teams", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const teamMemberships = pgTable("team_memberships", {
+  id: serial("id").primaryKey(),
+  teamId: integer("team_id").notNull().references(() => teams.id),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const workers = pgTable("workers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   type: text("type").notNull(),
   capabilities: text("capabilities").array(),
   status: text("status").default("active"),
+  organizationId: integer("organization_id").references(() => organizations.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const roles = pgTable("roles", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
-  permissions: text("permissions").array(),
-  createdAt: timestamp("created_at").defaultNow(),
+export const accounts = pgTable("accounts", {
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  provider: text("provider").notNull(),
+  providerAccountId: text("provider_account_id").notNull(),
+  refresh_token: text("refresh_token"),
+  access_token: text("access_token"),
+  expires_at: integer("expires_at"),
+  token_type: text("token_type"),
+  scope: text("scope"),
+  id_token: text("id_token"),
+  session_state: text("session_state"),
 });
 
-export const teamMemberships = pgTable("team_memberships", {
-  id: serial("id").primaryKey(),
-  teamId: integer("team_id").notNull().references(() => teams.id),
-  principalType: text("principal_type").notNull(),
-  principalId: text("principal_id").notNull(),
-  roleId: integer("role_id").references(() => roles.id),
-  createdAt: timestamp("created_at").defaultNow(),
+export const sessions = pgTable("sessions", {
+  sessionToken: text("session_token").notNull().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expires: timestamp("expires").notNull(),
 });
 
-export const databaseAcl = pgTable("database_acl", {
-  id: serial("id").primaryKey(),
-  databaseId: integer("database_id").notNull().references(() => workspaces.id),
-  principalType: text("principal_type").notNull(),
-  principalId: text("principal_id").notNull(),
-  roleId: integer("role_id").notNull().references(() => roles.id),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const tableAcl = pgTable("table_acl", {
-  id: serial("id").primaryKey(),
-  tableId: integer("table_id").notNull().references(() => tables.id),
-  principalType: text("principal_type").notNull(),
-  principalId: text("principal_id").notNull(),
-  roleId: integer("role_id").notNull().references(() => roles.id),
-  createdAt: timestamp("created_at").defaultNow(),
+export const verificationTokens = pgTable("verification_tokens", {
+  identifier: text("identifier").notNull(),
+  token: text("token").notNull(),
+  expires: timestamp("expires").notNull(),
 });

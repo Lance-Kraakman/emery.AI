@@ -1,73 +1,40 @@
 'use client'
 
-// AIDEV-NOTE: Client component that uses Server Actions for data fetching - hybrid approach
-// AIDEV-QUESTION: Should we implement server-side session management instead of localStorage?
-
 import { useEffect, useState } from 'react';
-import { getWorkspaces } from '@/app/actions/workspaces';
 import { getTables } from '@/app/actions/tables';
 import DashboardClient from './DashboardClient';
-import { useUserId } from './UserIdProvider';
-
-interface Workspace {
-  id: number;
-  name: string;
-  userId: string;
-}
+import { useSession } from 'next-auth/react';
 
 interface Table {
   id: number;
-  workspaceId: number;
+  organizationId: number;
   name: string;
   dbName: string;
+  createdBy: string;
   createdAt: Date | null;
 }
 
 export default function DashboardWithData() {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
-  const [selectedWorkspace, setSelectedWorkspace] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const { userId } = useUserId();
+  const { data: session, status } = useSession();
 
   useEffect(() => {
-    if (userId) {
-      loadWorkspaces();
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    if (selectedWorkspace) {
+    if (session?.user) {
       loadTables();
-    } else {
-      setTables([]);
     }
-  }, [selectedWorkspace]);
-
-  const loadWorkspaces = async () => {
-    if (!userId) return;
-    
-    try {
-      const data = await getWorkspaces(userId);
-      setWorkspaces(data);
-      if (data.length > 0 && !selectedWorkspace) {
-        setSelectedWorkspace(data[0].id);
-      }
-    } catch (error) {
-      console.error('Error loading workspaces:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [session]);
 
   const loadTables = async () => {
-    if (!selectedWorkspace) return;
+    if (!session?.user) return;
     
     try {
-      const data = await getTables(selectedWorkspace);
+      const data = await getTables();
       setTables(data);
     } catch (error) {
       console.error('Error loading tables:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -81,11 +48,8 @@ export default function DashboardWithData() {
 
   return (
     <DashboardClient
-      initialWorkspaces={workspaces}
       initialTables={tables}
-      initialSelectedWorkspace={selectedWorkspace}
-      onWorkspaceSelect={setSelectedWorkspace}
-      onDataUpdate={{ loadWorkspaces, loadTables }}
+      onDataUpdate={{ loadTables }}
     />
   );
 }

@@ -1,251 +1,135 @@
 'use server'
 
+import { auth, hasPermission as authHasPermission } from "@/lib/auth";
 import { db } from "@/lib/db/client";
-import { databaseAcl, tableAcl, roles, users, teams, workers } from "@/lib/db/schema";
-import { eq, and, or, inArray } from "drizzle-orm";
+import { users, roles } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import type { ActionResult, GrantPermissionData } from "./types";
+import type { ActionResult, UpdateUserData } from "./types";
 
-export async function grantPermission(data: GrantPermissionData): Promise<ActionResult> {
+export async function assignUserRole(userId: string, roleId: number): Promise<ActionResult> {
   try {
-    const { resourceType, resourceId, principalType, principalId, roleId } = data;
-
-    if (!resourceType || !resourceId || !principalType || !principalId || !roleId) {
+    const session = await auth();
+    if (!session?.user?.id) {
       return {
         success: false,
-        error: "All permission fields are required",
+        error: "Authentication required",
       };
     }
 
-    let newPermission;
-    
-    if (resourceType === 'database') {
-      [newPermission] = await db.insert(databaseAcl).values({
-        databaseId: resourceId,
-        principalType,
-        principalId,
-        roleId,
-      }).returning();
-    } else if (resourceType === 'table') {
-      [newPermission] = await db.insert(tableAcl).values({
-        tableId: resourceId,
-        principalType,
-        principalId,
-        roleId,
-      }).returning();
-    } else {
+    const hasAccess = await authHasPermission(session.user.id, "manage_users");
+    if (!hasAccess) {
       return {
         success: false,
-        error: "Invalid resource type",
+        error: "Permission denied: manage_users required",
       };
     }
+
+    const [updatedUser] = await db
+      .update(users)
+      .set({ roleId })
+      .where(eq(users.id, userId))
+      .returning();
 
     revalidatePath('/dashboard');
     
     return {
       success: true,
-      data: newPermission,
+      data: updatedUser,
     };
   } catch (error) {
-    console.error("Error granting permission:", error);
+    console.error("Error assigning user role:", error);
     return {
       success: false,
-      error: "Failed to grant permission",
+      error: "Failed to assign user role",
     };
   }
 }
 
-export async function revokePermission(resourceType: 'database' | 'table', permissionId: number): Promise<ActionResult> {
+export async function updateUserProfile(userId: string, data: UpdateUserData): Promise<ActionResult> {
   try {
-    if (!resourceType || !permissionId) {
+    const session = await auth();
+    if (!session?.user?.id) {
       return {
         success: false,
-        error: "resourceType and permissionId are required",
+        error: "Authentication required",
       };
     }
 
-    if (resourceType === 'database') {
-      await db.delete(databaseAcl).where(eq(databaseAcl.id, permissionId));
-    } else if (resourceType === 'table') {
-      await db.delete(tableAcl).where(eq(tableAcl.id, permissionId));
-    } else {
-      return {
-        success: false,
-        error: "Invalid resource type",
-      };
+    if (session.user.id !== userId) {
+      const hasAccess = await authHasPermission(session.user.id, "manage_users");
+      if (!hasAccess) {
+        return {
+          success: false,
+          error: "Permission denied: can only update own profile or need manage_users permission",
+        };
+      }
     }
+
+    const [updatedUser] = await db
+      .update(users)
+      .set(data)
+      .where(eq(users.id, userId))
+      .returning();
 
     revalidatePath('/dashboard');
     
     return {
       success: true,
-      data: { message: "Permission revoked successfully" },
+      data: updatedUser,
     };
   } catch (error) {
-    console.error("Error revoking permission:", error);
+    console.error("Error updating user profile:", error);
     return {
       success: false,
-      error: "Failed to revoke permission",
+      error: "Failed to update user profile",
     };
   }
 }
 
-export async function getResourcePermissions(resourceType: 'database' | 'table', resourceId: number) {
+export async function getUserPermissions(userId: string): Promise<string[]> {
   try {
-    if (!resourceType || !resourceId) {
-      throw new Error("resourceType and resourceId are required");
-    }
+    const user = await db.query.users.findFirst({
+      where: (users, { eq }) => eq(users.id, userId),
+      with: {
+        role: true,
+      },
+    });
 
-    let permissions;
-    
-    if (resourceType === 'database') {
-      permissions = await db
-        .select({
-          id: databaseAcl.id,
-          principalType: databaseAcl.principalType,
-          principalId: databaseAcl.principalId,
-          role: roles,
-        })
-        .from(databaseAcl)
-        .leftJoin(roles, eq(databaseAcl.roleId, roles.id))
-        .where(eq(databaseAcl.databaseId, resourceId));
-    } else {
-      permissions = await db
-        .select({
-          id: tableAcl.id,
-          principalType: tableAcl.principalType,
-          principalId: tableAcl.principalId,
-          role: roles,
-        })
-        .from(tableAcl)
-        .leftJoin(roles, eq(tableAcl.roleId, roles.id))
-        .where(eq(tableAcl.tableId, resourceId));
-    }
-
-    return permissions;
+    return user?.role?.permissions || [];
   } catch (error) {
-    console.error("Error fetching resource permissions:", error);
-    throw new Error("Failed to fetch resource permissions");
+    console.error("Error getting user permissions:", error);
+    return [];
   }
 }
 
-export async function hasPermission(
-  principalType: 'user' | 'team' | 'worker',
-  principalId: string,
-  resourceType: 'database' | 'table',
-  resourceId: number,
-  permission: string
-): Promise<boolean> {
+export async function hasPermission(permission: string): Promise<boolean> {
   try {
-    if (!principalType || !principalId || !resourceType || !resourceId || !permission) {
+    const session = await auth();
+    if (!session?.user?.id) {
       return false;
     }
 
-    let userTeamIds: number[] = [];
-    
-    if (principalType === 'user') {
-      const userTeams = await db
-        .select({ teamId: teams.id })
-        .from(teams)
-        .leftJoin(users, eq(users.organizationId, teams.organizationId))
-        .where(eq(users.id, principalId));
-      
-      userTeamIds = userTeams.map(t => t.teamId);
-    }
-
-    let aclTable = resourceType === 'database' ? databaseAcl : tableAcl;
-    let resourceColumn = resourceType === 'database' ? databaseAcl.databaseId : tableAcl.tableId;
-
-    const directPermissions = await db
-      .select({ permissions: roles.permissions })
-      .from(aclTable)
-      .leftJoin(roles, eq(aclTable.roleId, roles.id))
-      .where(
-        and(
-          eq(resourceColumn, resourceId),
-          or(
-            and(
-              eq(aclTable.principalType, principalType),
-              eq(aclTable.principalId, principalId)
-            ),
-            principalType === 'user' && userTeamIds.length > 0 ? 
-              and(
-                eq(aclTable.principalType, 'team'),
-                inArray(aclTable.principalId, userTeamIds.map(id => id.toString()))
-              ) : undefined
-          )
-        )
-      );
-
-    const hasDirectPermission = directPermissions.some(p => 
-      p.permissions && p.permissions.includes(permission)
-    );
-
-    return hasDirectPermission;
+    return await authHasPermission(session.user.id, permission);
   } catch (error) {
     console.error("Error checking permission:", error);
     return false;
   }
 }
 
-export async function getEffectivePermissions(
-  principalType: 'user' | 'team' | 'worker',
-  principalId: string,
-  resourceType: 'database' | 'table',
-  resourceId: number
-): Promise<string[]> {
-  try {
-    if (!principalType || !principalId || !resourceType || !resourceId) {
-      return [];
-    }
-
-    let userTeamIds: number[] = [];
-    
-    if (principalType === 'user') {
-      const userTeams = await db
-        .select({ teamId: teams.id })
-        .from(teams)
-        .leftJoin(users, eq(users.organizationId, teams.organizationId))
-        .where(eq(users.id, principalId));
-      
-      userTeamIds = userTeams.map(t => t.teamId);
-    }
-
-    let aclTable = resourceType === 'database' ? databaseAcl : tableAcl;
-    let resourceColumn = resourceType === 'database' ? databaseAcl.databaseId : tableAcl.tableId;
-
-    const allPermissions = await db
-      .select({ permissions: roles.permissions })
-      .from(aclTable)
-      .leftJoin(roles, eq(aclTable.roleId, roles.id))
-      .where(
-        and(
-          eq(resourceColumn, resourceId),
-          or(
-            and(
-              eq(aclTable.principalType, principalType),
-              eq(aclTable.principalId, principalId)
-            ),
-            principalType === 'user' && userTeamIds.length > 0 ? 
-              and(
-                eq(aclTable.principalType, 'team'),
-                inArray(aclTable.principalId, userTeamIds.map(id => id.toString()))
-              ) : undefined
-          )
-        )
-      );
-
-    const effectivePermissions = new Set<string>();
-    
-    allPermissions.forEach(p => {
-      if (p.permissions) {
-        p.permissions.forEach(permission => effectivePermissions.add(permission));
-      }
-    });
-
-    return Array.from(effectivePermissions);
-  } catch (error) {
-    console.error("Error getting effective permissions:", error);
-    return [];
+export async function requireAuth() {
+  const session = await auth();
+  if (!session?.user) {
+    throw new Error("Authentication required");
   }
+  return session;
+}
+
+export async function requirePermission(permission: string) {
+  const session = await requireAuth();
+  const hasAccess = await authHasPermission(session.user.id, permission);
+  if (!hasAccess) {
+    throw new Error(`Permission denied: ${permission}`);
+  }
+  return session;
 }

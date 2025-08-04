@@ -1,13 +1,13 @@
-// AIDEV-NOTE: Server Component dashboard - simplified version using hybrid approach
-// AIDEV-TODO: Implement proper session management to move data fetching server-side
-
-import { UserIdProvider } from './components/UserIdProvider';
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import DashboardWithData from './components/DashboardWithData';
 
-export default function Dashboard() {
-  return (
-    <UserIdProvider>
-      <DashboardWithData />
-    </UserIdProvider>
-  );
+export default async function Dashboard() {
+  const session = await auth();
+  
+  if (!session?.user) {
+    redirect("/auth/signin");
+  }
+
+  return <DashboardWithData />;
 }

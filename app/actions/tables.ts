@@ -4,35 +4,45 @@
 // AIDEV-TODO: Add transaction support for table creation/deletion with dynamic tables
 
 import { db } from "@/lib/db/client";
-import { tables, workspaces } from "@/lib/db/schema";
+import { tables, organizations } from "@/lib/db/schema";
 import { createDynamicTable, dropDynamicTable } from "@/lib/db/dynamic";
 import { generateTableName } from "@/utils/slugify";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { requireAuth, requirePermission } from "./permissions";
 import type { ActionResult, CreateTableData } from "./types";
 
 export async function createTable(data: CreateTableData): Promise<ActionResult> {
   try {
-    const { workspaceId, name } = data;
+    const session = await requirePermission("create_table");
+    const { organizationId, name } = data;
 
-    if (!workspaceId || !name) {
+    if (!organizationId || !name) {
       return {
         success: false,
-        error: "workspaceId and name are required",
+        error: "organizationId and name are required",
       };
     }
 
-    // Verify workspace exists
-    const workspace = await db
+    // Verify organization exists and user has access
+    const organization = await db
       .select()
-      .from(workspaces)
-      .where(eq(workspaces.id, workspaceId))
+      .from(organizations)
+      .where(eq(organizations.id, organizationId))
       .limit(1);
       
-    if (workspace.length === 0) {
+    if (organization.length === 0) {
       return {
         success: false,
-        error: "Workspace not found",
+        error: "Organization not found",
+      };
+    }
+
+    // Check if user belongs to this organization
+    if (session.user.organizationId !== organizationId) {
+      return {
+        success: false,
+        error: "Access denied: user not in organization",
       };
     }
 
@@ -43,9 +53,10 @@ export async function createTable(data: CreateTableData): Promise<ActionResult> 
 
     // Then create metadata entry
     const [newTable] = await db.insert(tables).values({
-      workspaceId,
+      organizationId,
       name,
       dbName,
+      createdBy: session.user.id,
     }).returning();
 
     revalidatePath('/dashboard');
@@ -64,10 +75,10 @@ export async function createTable(data: CreateTableData): Promise<ActionResult> 
 }
 
 export async function createTableAction(formData: FormData) {
-  const workspaceId = parseInt(formData.get('workspaceId') as string);
+  const organizationId = parseInt(formData.get('organizationId') as string);
   const name = formData.get('name') as string;
 
-  const result = await createTable({ workspaceId, name });
+  const result = await createTable({ organizationId, name });
   
   if (!result.success) {
     throw new Error(result.error);
@@ -77,17 +88,20 @@ export async function createTableAction(formData: FormData) {
   return result;
 }
 
-export async function getTables(workspaceId: number) {
+export async function getTables(organizationId?: number) {
   try {
-    if (!workspaceId) {
-      throw new Error("workspaceId is required");
+    const session = await requireAuth();
+
+    let query = db.select().from(tables);
+    
+    if (organizationId) {
+      query = query.where(eq(tables.organizationId, organizationId));
+    } else if (session.user.organizationId) {
+      // Default to user's organization
+      query = query.where(eq(tables.organizationId, session.user.organizationId));
     }
 
-    const tableList = await db
-      .select()
-      .from(tables)
-      .where(eq(tables.workspaceId, workspaceId));
-
+    const tableList = await query;
     return tableList;
   } catch (error) {
     console.error("Error fetching tables:", error);

@@ -24,13 +24,8 @@ export interface Row {
   [key: string]: any;
 }
 
-export interface CreateWorkspaceData {
-  userId: string;
-  name: string;
-}
-
 export interface CreateTableData {
-  workspaceId: number;
+  organizationId: number;
   name: string;
 }
 
@@ -79,19 +74,16 @@ export interface CreateWorkerData {
 export interface CreateRoleData {
   name: string;
   permissions: string[];
-}
-
-export interface GrantPermissionData {
-  resourceType: 'database' | 'table';
-  resourceId: number;
-  principalType: 'user' | 'team' | 'worker';
-  principalId: string;
-  roleId: number;
+  organizationId?: number;
 }
 
 export interface TeamMembershipData {
   teamId: number;
-  principalType: 'user' | 'worker';
-  principalId: string;
+  userId: string;
+}
+
+export interface UpdateUserData {
+  organizationId?: number;
   roleId?: number;
+  jobTitle?: string;
 }

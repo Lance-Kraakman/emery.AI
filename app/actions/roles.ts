@@ -8,7 +8,7 @@ import type { ActionResult, CreateRoleData } from "./types";
 
 export async function createRole(data: CreateRoleData): Promise<ActionResult> {
   try {
-    const { name, permissions } = data;
+    const { name, permissions, organizationId } = data;
 
     if (!name || !permissions || permissions.length === 0) {
       return {
@@ -20,6 +20,7 @@ export async function createRole(data: CreateRoleData): Promise<ActionResult> {
     const [newRole] = await db.insert(roles).values({
       name,
       permissions,
+      organizationId,
     }).returning();
 
     revalidatePath('/dashboard');
