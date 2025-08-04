@@ -102,7 +102,7 @@ export default function TableEditorClient({ tableId, tableName, organizationId, 
       <div className="max-w-7xl mx-auto p-6 space-y-8">
         <FieldManager
           tableId={tableId}
-          workspaceId={workspaceId}
+          organizationId={organizationId}
           fields={fields}
           availableTables={availableTables}
           onFieldUpdate={handleFieldUpdate}

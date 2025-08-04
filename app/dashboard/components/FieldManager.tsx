@@ -9,13 +9,13 @@ import { Field } from '@/app/actions/types';
 
 interface FieldManagerProps {
   tableId: number;
-  workspaceId: number;
+  organizationId: number;
   fields: Field[];
   availableTables: Array<{ id: number; name: string }>;
   onFieldUpdate: () => void;
 }
 
-export default function FieldManager({ tableId, workspaceId, fields, availableTables, onFieldUpdate }: FieldManagerProps) {
+export default function FieldManager({ tableId, organizationId, fields, availableTables, onFieldUpdate }: FieldManagerProps) {
   const [showNewField, setShowNewField] = useState(false);
   const [selectedFieldType, setSelectedFieldType] = useState('text');
   const [isPending, startTransition] = useTransition();
