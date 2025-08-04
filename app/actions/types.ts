@@ -64,7 +64,7 @@ export interface CreateTeamData {
   tools?: string[];
 }
 
-export interface CreateWorkerData {
+export interface CreateAgentData {
   name: string;
   type: string;
   capabilities?: string[];

@@ -68,7 +68,7 @@ export async function setupInitialAdmin(data: SetupData): Promise<ActionResult> 
         'manage_data',
         'manage_users',
         'manage_teams',
-        'manage_workers',
+        'manage_agents',
         'manage_organization'
       ],
       organizationId: organization.id,

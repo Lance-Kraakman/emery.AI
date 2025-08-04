@@ -39,7 +39,7 @@ async function seed() {
           'manage_data',
           'manage_users',
           'manage_teams',
-          'manage_workers'
+          'manage_agents'
         ],
         organizationId: defaultOrg.id
       }).returning();

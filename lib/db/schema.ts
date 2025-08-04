@@ -68,7 +68,7 @@ export const teamMemberships = pgTable("team_memberships", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const workers = pgTable("workers", {
+export const agents = pgTable("agents", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   type: text("type").notNull(),

@@ -1,18 +1,18 @@
 import { Suspense } from 'react';
 import { getOrganizations } from '@/app/actions/organizations';
 import { getTeams } from '@/app/actions/teams';
-import { getWorkers } from '@/app/actions/workers';
+import { getAgents } from '@/app/actions/agents';
 import { getRoles } from '@/app/actions/roles';
 import OrganizationManager from './components/OrganizationManager';
 import TeamManager from './components/TeamManager';
-import WorkerManager from './components/WorkerManager';
+import AgentManager from './components/AgentManager';
 import RoleManager from './components/RoleManager';
 
 export default async function ManagePage() {
-  const [organizations, teams, workers, roles] = await Promise.all([
+  const [organizations, teams, agents, roles] = await Promise.all([
     getOrganizations(),
     getTeams(),
-    getWorkers(),
+    getAgents(),
     getRoles(),
   ]);
 
@@ -32,8 +32,8 @@ export default async function ManagePage() {
         </div>
         
         <div className="space-y-8">
-          <Suspense fallback={<div>Loading workers...</div>}>
-            <WorkerManager workers={workers} />
+          <Suspense fallback={<div>Loading agents...</div>}>
+            <AgentManager agents={agents} />
           </Suspense>
           
           <Suspense fallback={<div>Loading roles...</div>}>

@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { createWorkerAction, deleteWorker } from '@/app/actions/workers';
+import { createAgentAction, deleteAgent } from '@/app/actions/agents';
 
-interface Worker {
+interface Agent {
   id: number;
   name: string;
   type: string;
@@ -12,31 +12,31 @@ interface Worker {
   createdAt: Date | null;
 }
 
-interface WorkerManagerProps {
-  workers: Worker[];
+interface AgentManagerProps {
+  agents: Agent[];
 }
 
-export default function WorkerManager({ workers }: WorkerManagerProps) {
+export default function AgentManager({ agents }: AgentManagerProps) {
   const [isCreating, setIsCreating] = useState(false);
 
   return (
     <div className="border rounded p-4">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">Workers</h2>
+        <h2 className="text-xl font-semibold">Agents</h2>
         <button
           onClick={() => setIsCreating(!isCreating)}
           className="bg-blue-500 text-white px-3 py-1 rounded text-sm"
         >
-          {isCreating ? 'Cancel' : 'Add Worker'}
+          {isCreating ? 'Cancel' : 'Add Agent'}
         </button>
       </div>
 
       {isCreating && (
-        <form action={createWorkerAction} className="mb-4 p-3 border rounded bg-gray-50">
+        <form action={createAgentAction} className="mb-4 p-3 border rounded bg-gray-50">
           <div className="space-y-2">
             <input
               name="name"
-              placeholder="Worker name"
+              placeholder="Agent name"
               required
               className="w-full p-2 border rounded"
             />
@@ -74,21 +74,21 @@ export default function WorkerManager({ workers }: WorkerManagerProps) {
       )}
 
       <div className="space-y-2 max-h-60 overflow-y-auto">
-        {workers.map((worker) => (
-          <div key={worker.id} className="flex justify-between items-start p-2 border rounded">
+        {agents.map((agent) => (
+          <div key={agent.id} className="flex justify-between items-start p-2 border rounded">
             <div className="flex-1">
-              <h3 className="font-medium">{worker.name}</h3>
+              <h3 className="font-medium">{agent.name}</h3>
               <p className="text-sm text-gray-600">
-                {worker.type} • {worker.status || 'active'}
+                {agent.type} • {agent.status || 'active'}
               </p>
-              {worker.capabilities && worker.capabilities.length > 0 && (
-                <p className="text-xs text-gray-500">Capabilities: {worker.capabilities.join(', ')}</p>
+              {agent.capabilities && agent.capabilities.length > 0 && (
+                <p className="text-xs text-gray-500">Capabilities: {agent.capabilities.join(', ')}</p>
               )}
             </div>
             <button
               onClick={async () => {
-                if (confirm('Delete this worker?')) {
-                  await deleteWorker(worker.id);
+                if (confirm('Delete this agent?')) {
+                  await deleteAgent(agent.id);
                   window.location.reload();
                 }
               }}
@@ -98,8 +98,8 @@ export default function WorkerManager({ workers }: WorkerManagerProps) {
             </button>
           </div>
         ))}
-        {workers.length === 0 && (
-          <p className="text-gray-500 text-center py-4">No workers found</p>
+        {agents.length === 0 && (
+          <p className="text-gray-500 text-center py-4">No agents found</p>
         )}
       </div>
     </div>
