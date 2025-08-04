@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, serial, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, serial, integer, timestamp, boolean, primaryKey } from "drizzle-orm/pg-core";
 
 export const tables = pgTable("tables", {
   id: serial("id").primaryKey(),
@@ -90,7 +90,11 @@ export const accounts = pgTable("accounts", {
   scope: text("scope"),
   id_token: text("id_token"),
   session_state: text("session_state"),
-});
+}, (table) => ({
+  compoundKey: primaryKey({
+    columns: [table.provider, table.providerAccountId],
+  }),
+}));
 
 export const sessions = pgTable("sessions", {
   sessionToken: text("session_token").notNull().primaryKey(),
