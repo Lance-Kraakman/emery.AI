@@ -1,4 +1,4 @@
-import { createBackendClient } from '@pipedream/sdk/server';
+import { PipedreamClient, PipedreamEnvironment } from '@pipedream/sdk';
 
 // Check if Pipedream is properly configured (server-side only)
 const isPipedreamConfigured = typeof window === 'undefined' && 
@@ -10,12 +10,10 @@ const isPipedreamConfigured = typeof window === 'undefined' &&
   process.env.PIPEDREAM_CLIENT_SECRET.trim() !== '';
 
 export const pipedreamClient = isPipedreamConfigured
-  ? createBackendClient({
-      environment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
-      credentials: {
-        clientId: process.env.PIPEDREAM_CLIENT_ID!,
-        clientSecret: process.env.PIPEDREAM_CLIENT_SECRET!,
-      },
+  ? new PipedreamClient({
+      environment: process.env.NODE_ENV === 'production' ? PipedreamEnvironment.Production : PipedreamEnvironment.Development,
+      clientId: process.env.PIPEDREAM_CLIENT_ID!,
+      clientSecret: process.env.PIPEDREAM_CLIENT_SECRET!,
       projectId: process.env.PIPEDREAM_PROJECT_ID!,
     })
   : null;
