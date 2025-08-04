@@ -48,6 +48,12 @@ export default function DashboardClient({
           <h1 className="text-2xl font-bold text-gray-900">🗂️ Orchastrate</h1>
           <div className="flex items-center gap-4">
             <a 
+              href="/dashboard/connections" 
+              className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
+            >
+              OAuth Connections
+            </a>
+            <a 
               href="/dashboard/manage" 
               className="bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600"
             >

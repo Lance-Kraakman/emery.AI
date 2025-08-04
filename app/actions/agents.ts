@@ -31,6 +31,7 @@ export async function createAgent(data: CreateAgentData): Promise<ActionResult> 
       status: status || "active",
       organizationId: session.user.organizationId,
       roleId: roleId || null,
+      ownerId: session.user.id, // Agent is owned by the creating user
       apiKey: generateApiKey(),
     }).returning();
 

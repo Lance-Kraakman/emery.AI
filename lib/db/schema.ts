@@ -76,6 +76,7 @@ export const agents = pgTable("agents", {
   status: text("status").default("active"),
   organizationId: integer("organization_id").references(() => organizations.id),
   roleId: integer("role_id").references(() => roles.id),
+  ownerId: uuid("owner_id").notNull().references(() => users.id), // Agent owner (user)
   apiKey: text("api_key").unique(), // For API authentication
   createdAt: timestamp("created_at").defaultNow(),
 });
