@@ -92,16 +92,17 @@ export async function getTables(organizationId?: number) {
   try {
     const session = await requireAuth();
 
-    let query = db.select().from(tables);
+    const targetOrgId = organizationId || session.user.organizationId;
     
-    if (organizationId) {
-      query = query.where(eq(tables.organizationId, organizationId));
-    } else if (session.user.organizationId) {
-      // Default to user's organization
-      query = query.where(eq(tables.organizationId, session.user.organizationId));
+    if (!targetOrgId) {
+      return [];
     }
 
-    const tableList = await query;
+    const tableList = await db
+      .select()
+      .from(tables)
+      .where(eq(tables.organizationId, targetOrgId));
+
     return tableList;
   } catch (error) {
     console.error("Error fetching tables:", error);

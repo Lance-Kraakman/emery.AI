@@ -39,8 +39,9 @@ export const roles = pgTable("roles", {
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
-  email: text("email").notNull().unique(),
   name: text("name"),
+  email: text("email").unique(),
+  emailVerified: timestamp("email_verified"),
   image: text("image"),
   organizationId: integer("organization_id").references(() => organizations.id),
   roleId: integer("role_id").references(() => roles.id),

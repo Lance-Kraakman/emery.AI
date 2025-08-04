@@ -35,7 +35,7 @@ export default function DashboardClient({
       <TableEditorClient 
         tableId={selectedTable} 
         tableName={table?.name || 'Unknown Table'}
-        organizationId={table?.organizationId || 0}
+        workspaceId={table?.organizationId || 0}
         onBack={() => setSelectedTable(null)} 
       />
     );

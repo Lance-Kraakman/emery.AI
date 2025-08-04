@@ -1,16 +1,10 @@
-export interface Workspace {
-  id: number;
-  userId: string;
-  name: string;
-  createdAt: Date;
-}
-
 export interface Table {
   id: number;
-  workspaceId: number;
+  organizationId: number;
   name: string;
   dbName: string;
-  createdAt: Date;
+  createdBy: string;
+  createdAt: Date | null;
 }
 
 export interface Field {

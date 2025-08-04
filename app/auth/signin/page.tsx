@@ -1,5 +1,6 @@
-import { signIn, auth } from "@/lib/auth"
+import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
+import { SignInButton } from "./SignInButton"
 
 export default async function SignInPage() {
   const session = await auth()
@@ -20,33 +21,8 @@ export default async function SignInPage() {
           </p>
         </div>
         <div className="mt-8 space-y-4">
-          <form
-            action={async () => {
-              "use server"
-              await signIn("github", { redirectTo: "/dashboard" })
-            }}
-          >
-            <button
-              type="submit"
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-800 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-            >
-              Sign in with GitHub
-            </button>
-          </form>
-          
-          <form
-            action={async () => {
-              "use server"
-              await signIn("google", { redirectTo: "/dashboard" })
-            }}
-          >
-            <button
-              type="submit"
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Sign in with Google
-            </button>
-          </form>
+          <SignInButton provider="github" />
+          <SignInButton provider="google" />
         </div>
       </div>
     </div>

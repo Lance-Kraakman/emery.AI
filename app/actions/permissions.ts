@@ -89,13 +89,17 @@ export async function updateUserProfile(userId: string, data: UpdateUserData): P
 
 export async function getUserPermissions(userId: string): Promise<string[]> {
   try {
-    const user = await db.query.users.findFirst({
-      where: (users, { eq }) => eq(users.id, userId),
-      with: {
-        role: true,
-      },
-    });
+    const userQuery = await db
+      .select({
+        user: users,
+        role: roles,
+      })
+      .from(users)
+      .leftJoin(roles, eq(users.roleId, roles.id))
+      .where(eq(users.id, userId))
+      .limit(1);
 
+    const user = userQuery[0];
     return user?.role?.permissions || [];
   } catch (error) {
     console.error("Error getting user permissions:", error);

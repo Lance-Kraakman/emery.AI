@@ -8,20 +8,21 @@ import { createTableAction, deleteTableAction } from '@/app/actions/tables';
 
 interface Table {
   id: number;
-  workspaceId: number;
+  organizationId: number;
   name: string;
   dbName: string;
+  createdBy: string;
   createdAt: Date | null;
 }
 
 interface TableListProps {
   tables: Table[];
-  workspaceId: number;
+  organizationId?: number;
   onSelectTable: (id: number) => void;
   onTableUpdate?: () => void;
 }
 
-export default function TableList({ tables, workspaceId, onSelectTable, onTableUpdate }: TableListProps) {
+export default function TableList({ tables, organizationId, onSelectTable, onTableUpdate }: TableListProps) {
   const [showNewTable, setShowNewTable] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -72,7 +73,7 @@ export default function TableList({ tables, workspaceId, onSelectTable, onTableU
         <div className="mb-6 p-4 border rounded-lg bg-white">
           <h3 className="font-medium mb-3">Create New Table</h3>
           <form action={handleCreateTable} className="flex gap-3">
-            <input type="hidden" name="workspaceId" value={workspaceId} />
+            <input type="hidden" name="organizationId" value={organizationId} />
             <input
               type="text"
               name="name"

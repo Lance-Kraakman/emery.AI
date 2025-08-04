@@ -54,7 +54,7 @@ export async function GET(
     // In a real implementation, you'd query the row data to get the exact s3Key
     
     // Generate signed URL (15 minutes expiry)
-    const signedUrl = await generateDownloadUrl(`files/workspace-${table.workspaceId}/table-${tableId}/field-${fieldId}/${fileId}/`, 900);
+    const signedUrl = await generateDownloadUrl(`files/organization-${table.organizationId}/table-${tableId}/field-${fieldId}/${fileId}/`, 900);
 
     return NextResponse.json({ downloadUrl: signedUrl });
   } catch (error) {

@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const workspaceId = parseInt(formData.get('workspaceId') as string);
+    const organizationId = parseInt(formData.get('organizationId') as string);
     const tableId = parseInt(formData.get('tableId') as string);
     const fieldId = parseInt(formData.get('fieldId') as string);
 
@@ -16,9 +16,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!workspaceId || !tableId || !fieldId) {
+    if (!organizationId || !tableId || !fieldId) {
       return NextResponse.json(
-        { error: "workspaceId, tableId, and fieldId are required" },
+        { error: "organizationId, tableId, and fieldId are required" },
         { status: 400 }
       );
     }
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       buffer,
       file.name,
       file.type,
-      workspaceId,
+      organizationId,
       tableId,
       fieldId
     );

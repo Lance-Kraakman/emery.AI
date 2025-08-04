@@ -28,22 +28,22 @@ export async function ensureBucketExists(): Promise<void> {
   }
 }
 
-export function generateS3Key(workspaceId: number, tableId: number, fieldId: number, fileId: string, fileName: string): string {
+export function generateS3Key(organizationId: number, tableId: number, fieldId: number, fileId: string, fileName: string): string {
   const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-  return `files/workspace-${workspaceId}/table-${tableId}/field-${fieldId}/${fileId}/${sanitizedFileName}`;
+  return `files/organization-${organizationId}/table-${tableId}/field-${fieldId}/${fileId}/${sanitizedFileName}`;
 }
 
 export async function uploadFile(
   buffer: Buffer,
   fileName: string,
   mimeType: string,
-  workspaceId: number,
+  organizationId: number,
   tableId: number,
   fieldId: number
 ): Promise<FileMetadata> {
   
   const fileId = uuidv4();
-  const s3Key = generateS3Key(workspaceId, tableId, fieldId, fileId, fileName);
+  const s3Key = generateS3Key(organizationId, tableId, fieldId, fileId, fileName);
   
   const command = new PutObjectCommand({
     Bucket: BUCKET_NAME,

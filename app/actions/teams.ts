@@ -75,13 +75,15 @@ export async function createTeamAction(formData: FormData) {
 
 export async function getTeams(organizationId?: number) {
   try {
-    let query = db.select().from(teams);
-    
     if (organizationId) {
-      query = query.where(eq(teams.organizationId, organizationId));
+      const allTeams = await db
+        .select()
+        .from(teams)
+        .where(eq(teams.organizationId, organizationId));
+      return allTeams;
     }
 
-    const allTeams = await query;
+    const allTeams = await db.select().from(teams);
     return allTeams;
   } catch (error) {
     console.error("Error fetching teams:", error);
@@ -165,20 +167,18 @@ export async function deleteTeam(teamId: number): Promise<ActionResult> {
 
 export async function addTeamMember(data: TeamMembershipData): Promise<ActionResult> {
   try {
-    const { teamId, principalType, principalId, roleId } = data;
+    const { teamId, userId } = data;
 
-    if (!teamId || !principalType || !principalId) {
+    if (!teamId || !userId) {
       return {
         success: false,
-        error: "teamId, principalType, and principalId are required",
+        error: "teamId and userId are required",
       };
     }
 
     const [newMembership] = await db.insert(teamMemberships).values({
       teamId,
-      principalType,
-      principalId,
-      roleId,
+      userId,
     }).returning();
 
     revalidatePath('/dashboard');
