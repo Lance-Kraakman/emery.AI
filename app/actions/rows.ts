@@ -8,6 +8,7 @@ import { tables, fields } from "@/lib/db/schema";
 import { insertRow, updateRow, deleteRow, getRows } from "@/lib/db/dynamic";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { requirePermission } from "./permissions";
 import type { ActionResult, CreateRowData, UpdateRowData } from "./types";
 
 async function processRowData(tableId: number, data: Record<string, any>) {
@@ -46,6 +47,7 @@ async function processRowData(tableId: number, data: Record<string, any>) {
 
 export async function createRow(data: CreateRowData): Promise<ActionResult> {
   try {
+    const session = await requirePermission("manage_data");
     const { tableId, data: rowData } = data;
 
     if (!tableId) {
@@ -127,6 +129,7 @@ export async function getRowsData(tableId: number, limit = 100, offset = 0) {
 
 export async function updateRowData(data: UpdateRowData): Promise<ActionResult> {
   try {
+    const session = await requirePermission("manage_data");
     const { tableId, rowId, data: rowData } = data;
 
     if (!tableId || !rowId) {
@@ -214,6 +217,8 @@ export async function updateRowAction(formData: FormData) {
 
 export async function deleteRowData(tableId: number, rowId: string): Promise<ActionResult> {
   try {
+    const session = await requirePermission("manage_data");
+    
     if (!tableId || !rowId) {
       return {
         success: false,

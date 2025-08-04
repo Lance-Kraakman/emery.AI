@@ -9,10 +9,12 @@ import { addFieldToTable, removeFieldFromTable } from "@/lib/db/dynamic";
 import { slugify } from "@/utils/slugify";
 import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { requirePermission } from "./permissions";
 import type { ActionResult, CreateFieldData } from "./types";
 
 export async function createField(data: CreateFieldData): Promise<ActionResult> {
   try {
+    const session = await requirePermission("create_fields");
     const { tableId, name, type, required = false, relatedTableId } = data;
 
     if (!tableId || !name || !type) {
@@ -116,6 +118,8 @@ export async function getFields(tableId: number) {
 
 export async function deleteField(fieldId: number): Promise<ActionResult> {
   try {
+    const session = await requirePermission("manage_fields");
+    
     if (!fieldId) {
       return {
         success: false,
