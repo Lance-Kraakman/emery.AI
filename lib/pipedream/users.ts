@@ -17,6 +17,10 @@ export interface CreatePipedreamUserData {
  * Create or get a Pipedream external user for our user
  */
 export async function createOrGetPipedreamUser(data: CreatePipedreamUserData): Promise<PipedreamUser> {
+  if (!pipedreamClient) {
+    throw new Error('Pipedream client not available (server-side only)');
+  }
+  
   const externalUserId = getExternalUserId(data.userId);
   
   try {
@@ -44,6 +48,10 @@ export async function createOrGetPipedreamUser(data: CreatePipedreamUserData): P
  * Delete a Pipedream external user
  */
 export async function deletePipedreamUser(userId: string): Promise<void> {
+  if (!pipedreamClient) {
+    throw new Error('Pipedream client not available (server-side only)');
+  }
+  
   const externalUserId = getExternalUserId(userId);
   
   try {
@@ -58,6 +66,10 @@ export async function deletePipedreamUser(userId: string): Promise<void> {
  * Get user's OAuth connections
  */
 export async function getUserConnections(userId: string) {
+  if (!pipedreamClient) {
+    throw new Error('Pipedream client not available (server-side only)');
+  }
+  
   const externalUserId = getExternalUserId(userId);
   
   try {
@@ -73,6 +85,10 @@ export async function getUserConnections(userId: string) {
  * Generate OAuth connection URL for a user
  */
 export async function generateConnectionUrl(userId: string, appName: string, redirectUrl?: string) {
+  if (!pipedreamClient) {
+    throw new Error('Pipedream client not available (server-side only)');
+  }
+  
   const externalUserId = getExternalUserId(userId);
   
   try {

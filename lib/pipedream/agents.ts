@@ -17,6 +17,13 @@ export interface AgentActionResult {
  * Run a Pipedream action on behalf of an agent (using owner's credentials)
  */
 export async function runActionForAgent(request: AgentActionRequest): Promise<AgentActionResult> {
+  if (!pipedreamClient) {
+    return {
+      success: false,
+      error: 'Pipedream client not available (server-side only)',
+    };
+  }
+  
   const { ownerUserId, actionId, configuredProps } = request;
   const externalUserId = getExternalUserIdForAgent(ownerUserId);
   
@@ -44,6 +51,11 @@ export async function runActionForAgent(request: AgentActionRequest): Promise<Ag
  * Get available actions for an agent (based on owner's connections)
  */
 export async function getAvailableActionsForAgent(ownerUserId: string) {
+  if (!pipedreamClient) {
+    console.error('Pipedream client not available (server-side only)');
+    return [];
+  }
+  
   const externalUserId = getExternalUserIdForAgent(ownerUserId);
   
   try {
@@ -74,6 +86,13 @@ export async function executeCustomRequestForAgent(
     data?: any;
   }
 ): Promise<AgentActionResult> {
+  if (!pipedreamClient) {
+    return {
+      success: false,
+      error: 'Pipedream client not available (server-side only)',
+    };
+  }
+  
   const externalUserId = getExternalUserIdForAgent(ownerUserId);
   
   try {
