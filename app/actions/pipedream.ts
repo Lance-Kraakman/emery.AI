@@ -38,6 +38,15 @@ export async function initializePipedreamUser(): Promise<ActionResult> {
     };
   } catch (error) {
     console.error("Error initializing Pipedream user:", error);
+    
+    // Check if it's a configuration error
+    if (error instanceof Error && error.message.includes('not available')) {
+      return {
+        success: false,
+        error: "Pipedream is not configured. Please set PIPEDREAM_PROJECT_ID, PIPEDREAM_CLIENT_ID, and PIPEDREAM_CLIENT_SECRET environment variables.",
+      };
+    }
+    
     return {
       success: false,
       error: "Failed to initialize Pipedream user",

@@ -38,7 +38,11 @@ export function ConnectionsManager() {
       setError(null);
       
       // Initialize Pipedream user first
-      await initializePipedreamUser();
+      const initResult = await initializePipedreamUser();
+      if (!initResult.success) {
+        setError(initResult.error || 'Failed to initialize Pipedream');
+        return;
+      }
       
       // Then get connections
       const result = await getUserOAuthConnections();
