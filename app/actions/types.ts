@@ -52,3 +52,46 @@ export interface UpdateRowData {
   tableId: number;
   data: Record<string, any>;
 }
+
+export interface CreateOrganizationData {
+  name: string;
+  mission?: string;
+  sharedTools?: string[];
+}
+
+export interface CreateTeamData {
+  organizationId: number;
+  name: string;
+  purpose?: string;
+  description?: string;
+  responsibilities?: string[];
+  goals?: string[];
+  tools?: string[];
+}
+
+export interface CreateWorkerData {
+  name: string;
+  type: string;
+  capabilities?: string[];
+  status?: string;
+}
+
+export interface CreateRoleData {
+  name: string;
+  permissions: string[];
+}
+
+export interface GrantPermissionData {
+  resourceType: 'database' | 'table';
+  resourceId: number;
+  principalType: 'user' | 'team' | 'worker';
+  principalId: string;
+  roleId: number;
+}
+
+export interface TeamMembershipData {
+  teamId: number;
+  principalType: 'user' | 'worker';
+  principalId: string;
+  roleId?: number;
+}

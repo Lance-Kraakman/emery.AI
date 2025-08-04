@@ -74,8 +74,16 @@ export default function DashboardClient({
       <div className="border-b bg-white px-6 py-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">🗂️ Orchastrate</h1>
-          <div className="text-sm text-gray-500">
-            {userId && `User: ${userId.slice(0, 8)}...`}
+          <div className="flex items-center gap-4">
+            <a 
+              href="/dashboard/manage" 
+              className="bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600"
+            >
+              System Management
+            </a>
+            <div className="text-sm text-gray-500">
+              {userId && `User: ${userId.slice(0, 8)}...`}
+            </div>
           </div>
         </div>
       </div>
