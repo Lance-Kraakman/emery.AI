@@ -15,12 +15,12 @@ interface FileMetadata {
 interface FileUploadProps {
   value: { files: FileMetadata[] } | null
   onChange: (value: { files: FileMetadata[] }) => void
-  workspaceId: number
+  organizationId: number
   tableId: number
   fieldId: number
 }
 
-export default function FileUpload({ value, onChange, workspaceId, tableId, fieldId }: FileUploadProps) {
+export default function FileUpload({ value, onChange, organizationId, tableId, fieldId }: FileUploadProps) {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -34,7 +34,7 @@ export default function FileUpload({ value, onChange, workspaceId, tableId, fiel
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('workspaceId', workspaceId.toString())
+      formData.append('organizationId', organizationId.toString())
       formData.append('tableId', tableId.toString())
       formData.append('fieldId', fieldId.toString())
 

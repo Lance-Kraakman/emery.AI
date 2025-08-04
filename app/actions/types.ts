@@ -69,6 +69,7 @@ export interface CreateWorkerData {
   type: string;
   capabilities?: string[];
   status?: string;
+  roleId?: number;
 }
 
 export interface CreateRoleData {

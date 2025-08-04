@@ -1,8 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { uploadFile, validateFileType, validateFileSize } from "@/lib/s3/operations";
+import { auth, hasPermission } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
+    // Check authentication and permissions
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    // Check if user has permission to manage data
+    const hasDataPermission = await hasPermission(session.user.id, "manage_data");
+    if (!hasDataPermission) {
+      return NextResponse.json(
+        { error: "Permission denied: manage_data required" },
+        { status: 403 }
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const organizationId = parseInt(formData.get('organizationId') as string);

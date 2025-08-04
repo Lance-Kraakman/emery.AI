@@ -255,7 +255,7 @@ export default function TableEditor({ tableId, onBack }: TableEditorProps) {
           <FileUpload
             value={value}
             onChange={onChange}
-            workspaceId={1} // TODO: Get actual workspace ID
+            organizationId={1} // TODO: Get actual organization ID from session
             tableId={tableId}
             fieldId={field.id}
           />

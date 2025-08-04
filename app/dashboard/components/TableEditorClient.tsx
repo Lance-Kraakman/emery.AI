@@ -15,11 +15,11 @@ import RowManager from './RowManager';
 interface TableEditorClientProps {
   tableId: number;
   tableName: string;
-  workspaceId: number;
+  organizationId: number;
   onBack: () => void;
 }
 
-export default function TableEditorClient({ tableId, tableName, workspaceId, onBack }: TableEditorClientProps) {
+export default function TableEditorClient({ tableId, tableName, organizationId, onBack }: TableEditorClientProps) {
   const [fields, setFields] = useState<Field[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [availableTables, setAvailableTables] = useState<Array<{ id: number; name: string }>>([]);
@@ -110,7 +110,7 @@ export default function TableEditorClient({ tableId, tableName, workspaceId, onB
 
         <RowManager
           tableId={tableId}
-          workspaceId={workspaceId}
+          organizationId={organizationId}
           fields={fields}
           rows={rows}
           onRowUpdate={handleRowUpdate}

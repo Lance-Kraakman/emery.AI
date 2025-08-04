@@ -13,13 +13,13 @@ import RelationField from './RelationField';
 
 interface RowManagerProps {
   tableId: number;
-  workspaceId: number;
+  organizationId: number;
   fields: Field[];
   rows: Row[];
   onRowUpdate: () => void;
 }
 
-export default function RowManager({ tableId, workspaceId, fields, rows, onRowUpdate }: RowManagerProps) {
+export default function RowManager({ tableId, organizationId, fields, rows, onRowUpdate }: RowManagerProps) {
   const [showNewRow, setShowNewRow] = useState(false);
   const [editingRow, setEditingRow] = useState<string | null>(null);
   const [newRowData, setNewRowData] = useState<Record<string, any>>({});
@@ -164,7 +164,7 @@ export default function RowManager({ tableId, workspaceId, fields, rows, onRowUp
           <FileUpload
             value={value}
             onChange={onChange}
-            workspaceId={workspaceId}
+            organizationId={organizationId}
             tableId={tableId}
             fieldId={field.id}
           />
