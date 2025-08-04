@@ -15,6 +15,7 @@ export interface CreatePipedreamUserData {
 
 /**
  * Create or get a Pipedream external user for our user
+ * Note: In Pipedream Connect, users are created implicitly when they create accounts/connections
  */
 export async function createOrGetPipedreamUser(data: CreatePipedreamUserData): Promise<PipedreamUser> {
   if (!pipedreamClient) {
@@ -23,29 +24,18 @@ export async function createOrGetPipedreamUser(data: CreatePipedreamUserData): P
   
   const externalUserId = getExternalUserId(data.userId);
   
-  try {
-    // Try to get existing user first
-    const existingUser = await pipedreamClient.users.get({ external_user_id: externalUserId });
-    return existingUser;
-  } catch (error) {
-    // User doesn't exist, create them
-    try {
-      const newUser = await pipedreamClient.users.create({
-        external_user_id: externalUserId,
-        // Include optional metadata
-        ...(data.email && { email: data.email }),
-        ...(data.name && { name: data.name }),
-      });
-      return newUser;
-    } catch (createError) {
-      console.error('Failed to create Pipedream user:', createError);
-      throw new Error('Failed to create Pipedream user');
-    }
-  }
+  // In Pipedream Connect, users are created implicitly when they connect accounts
+  // We'll return a mock user object for now - the actual user will be created when they connect an account
+  return {
+    id: externalUserId,
+    external_user_id: externalUserId,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
 }
 
 /**
- * Delete a Pipedream external user
+ * Delete a Pipedream external user and all their accounts
  */
 export async function deletePipedreamUser(userId: string): Promise<void> {
   if (!pipedreamClient) {
@@ -55,6 +45,7 @@ export async function deletePipedreamUser(userId: string): Promise<void> {
   const externalUserId = getExternalUserId(userId);
   
   try {
+    // Delete all accounts for this external user
     await pipedreamClient.users.delete({ external_user_id: externalUserId });
   } catch (error) {
     console.error('Failed to delete Pipedream user:', error);
@@ -73,8 +64,20 @@ export async function getUserConnections(userId: string) {
   const externalUserId = getExternalUserId(userId);
   
   try {
-    const connections = await pipedreamClient.users.getConnections({ external_user_id: externalUserId });
-    return connections;
+    // Use the accounts API to get user's connected accounts
+    const accounts = await pipedreamClient.accounts.list({ 
+      externalUserId: externalUserId 
+    });
+    
+    // Transform accounts to match the expected connection format
+    return accounts.map((account: any) => ({
+      id: account.id,
+      app: account.app,
+      account_name: account.name || account.email || account.username,
+      status: account.status || 'connected',
+      created_at: account.created_at || new Date().toISOString(),
+      updated_at: account.updated_at || new Date().toISOString(),
+    }));
   } catch (error) {
     console.error('Failed to get user connections:', error);
     return [];
@@ -92,12 +95,20 @@ export async function generateConnectionUrl(userId: string, appName: string, red
   const externalUserId = getExternalUserId(userId);
   
   try {
-    const connectionUrl = await pipedreamClient.users.generateConnectionUrl({
+    // Create a connect token for the frontend to use
+    const token = await pipedreamClient.tokens.create({
       external_user_id: externalUserId,
-      app: appName,
-      ...(redirectUrl && { redirect_url: redirectUrl }),
+      allowed_origins: redirectUrl ? [redirectUrl] : ['http://localhost:3000', 'http://localhost:3002'],
     });
-    return connectionUrl;
+    
+    // Return the connect URL that uses this token
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://connect.pipedream.com' 
+      : 'https://connect.pipedream.com';
+    
+    const connectUrl = `${baseUrl}?token=${token.token}&app=${appName}&redirect_uri=${encodeURIComponent(redirectUrl || window?.location?.origin || 'http://localhost:3000')}`;
+    
+    return connectUrl;
   } catch (error) {
     console.error('Failed to generate connection URL:', error);
     throw new Error('Failed to generate connection URL');
