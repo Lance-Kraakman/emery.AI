@@ -112,6 +112,8 @@ export async function getTables(organizationId?: number) {
 
 export async function deleteTable(tableId: number): Promise<ActionResult> {
   try {
+    const session = await requirePermission("manage_tables");
+    
     if (!tableId) {
       return {
         success: false,
