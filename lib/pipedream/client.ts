@@ -1,4 +1,4 @@
-import { Pipedream, PipedreamEnvironment } from '@pipedream/sdk';
+import { PipedreamClient } from '@pipedream/sdk';
 
 // Check if Pipedream is properly configured (server-side only)
 const isPipedreamConfigured = typeof window === 'undefined' && 
@@ -9,17 +9,14 @@ const isPipedreamConfigured = typeof window === 'undefined' &&
   process.env.PIPEDREAM_CLIENT_ID.trim() !== '' &&
   process.env.PIPEDREAM_CLIENT_SECRET.trim() !== '';
 
-// Configure Pipedream with credentials (if configured)
-if (isPipedreamConfigured) {
-  Pipedream.setup({
-    environment: process.env.NODE_ENV === 'production' ? PipedreamEnvironment.Production : PipedreamEnvironment.Development,
-    clientId: process.env.PIPEDREAM_CLIENT_ID!,
-    clientSecret: process.env.PIPEDREAM_CLIENT_SECRET!,
-    projectId: process.env.PIPEDREAM_PROJECT_ID!,
-  });
-}
-
-export const pipedreamClient = isPipedreamConfigured ? Pipedream : null;
+export const pipedreamClient = isPipedreamConfigured
+  ? new PipedreamClient({
+      projectEnvironment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+      clientId: process.env.PIPEDREAM_CLIENT_ID!,
+      clientSecret: process.env.PIPEDREAM_CLIENT_SECRET!,
+      projectId: process.env.PIPEDREAM_PROJECT_ID!,
+    })
+  : null;
 
 // Helper function to get external user ID from our user ID
 export function getExternalUserId(userId: string): string {

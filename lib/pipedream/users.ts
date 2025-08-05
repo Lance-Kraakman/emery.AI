@@ -66,7 +66,7 @@ export async function getUserConnections(userId: string) {
   try {
     // Use the accounts API to get user's connected accounts
     const accounts = await pipedreamClient.accounts.list({ 
-      externalUserId: externalUserId 
+      external_user_id: externalUserId 
     });
     
     // Transform accounts to match the expected connection format
@@ -96,19 +96,14 @@ export async function generateConnectionUrl(userId: string, appName: string, red
   
   try {
     // Create a connect token for the frontend to use
-    const token = await pipedreamClient.tokens.create({
+    const tokenResult = await pipedreamClient.tokens.create({
       external_user_id: externalUserId,
-      allowed_origins: redirectUrl ? [redirectUrl] : ['http://localhost:3000', 'http://localhost:3002'],
+      allowed_origins: ['http://localhost:3000', 'http://localhost:3002'],
+      success_redirect_uri: redirectUrl,
     });
     
-    // Return the connect URL that uses this token
-    const baseUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://connect.pipedream.com' 
-      : 'https://connect.pipedream.com';
-    
-    const connectUrl = `${baseUrl}?token=${token.token}&app=${appName}&redirect_uri=${encodeURIComponent(redirectUrl || window?.location?.origin || 'http://localhost:3000')}`;
-    
-    return connectUrl;
+    // Return the connect URL from the token response
+    return tokenResult.connect_link_url || tokenResult.connectUrl;
   } catch (error) {
     console.error('Failed to generate connection URL:', error);
     throw new Error('Failed to generate connection URL');

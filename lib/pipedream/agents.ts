@@ -60,13 +60,13 @@ export async function getAvailableActionsForAgent(ownerUserId: string) {
   
   try {
     // Get user's connections to determine available actions
-    const connections = await pipedreamClient.users.getConnections({ 
+    const accounts = await pipedreamClient.accounts.list({ 
       external_user_id: externalUserId 
     });
     
     // This would need to be enhanced to map connections to available actions
-    // For now, return the connections as available integrations
-    return connections;
+    // For now, return the accounts as available integrations
+    return accounts;
   } catch (error) {
     console.error('Failed to get available actions for agent:', error);
     return [];
@@ -96,16 +96,9 @@ export async function executeCustomRequestForAgent(
   const externalUserId = getExternalUserIdForAgent(ownerUserId);
   
   try {
-    const result = await pipedreamClient.users.makeRequest({
-      external_user_id: externalUserId,
-      app: appName,
-      ...requestConfig,
-    });
-    
-    return {
-      success: true,
-      data: result,
-    };
+    // Note: Custom API requests may not be directly supported in this SDK version
+    // This would typically require using actions or a proxy endpoint
+    throw new Error('Custom API requests not implemented - use actions.run() instead');
   } catch (error) {
     console.error('Failed to execute custom request for agent:', error);
     return {
