@@ -29,7 +29,19 @@ export async function POST(
 ): Promise<Response> {
   try {
     const session = await auth();
-    if (!session?.user) {
+    
+    // AIDEV-NOTE: Development bypass for testing - remove in production
+    let userId = session?.user?.id;
+    if (!session?.user && process.env.NODE_ENV === 'development') {
+      // Allow testing with test user ID via header
+      const testUserId = request.headers.get('x-test-user-id');
+      if (testUserId === '550e8400-e29b-41d4-a716-446655440000') {
+        userId = testUserId;
+        console.log('⚠️  Using development test user bypass for execute');
+      } else {
+        return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+    } else if (!session?.user) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -50,7 +62,7 @@ export async function POST(
     }
 
     // Verify agent ownership (agents can only be used by their owners)
-    if (agent.ownerId !== session.user.id) {
+    if (agent.ownerId !== userId) {
       return Response.json({ 
         error: 'Access denied: You can only execute actions for agents you own' 
       }, { status: 403 });
@@ -67,7 +79,7 @@ export async function POST(
     const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // Log the action execution for audit trail
-    console.log(`[AGENT-EXECUTE] ${executionId}: Agent ${agentId} executing ${action} for user ${session.user.id}`);
+    console.log(`[AGENT-EXECUTE] ${executionId}: Agent ${agentId} executing ${action} for user ${userId}`);
 
     // Execute the action using agent's owner credentials
     const result = await runActionForAgent({
