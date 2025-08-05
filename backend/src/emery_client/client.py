@@ -1,7 +1,7 @@
 """
-Orchastrate Python Client
+Emery Python Client
 
-Main client class for integrating with Orchastrate agents.
+Main client class for integrating with Emery agents.
 """
 
 import hashlib
@@ -28,8 +28,8 @@ from .types import (
 logger = logging.getLogger(__name__)
 
 
-class OrchastratePythonClient:
-    """Python client for Orchastrate Agent API."""
+class EmeryPythonClient:
+    """Python client for Emery Agent API."""
     
     def __init__(
         self, 
@@ -39,10 +39,10 @@ class OrchastratePythonClient:
         debug: bool = False
     ):
         """
-        Initialize Orchastrate Python client.
+        Initialize Emery Python client.
         
         Args:
-            api_url: Base URL of Orchastrate API (e.g., http://localhost:3000)
+            api_url: Base URL of Emery API (e.g., http://localhost:3000)
             agent_id: ID of the agent to use
             webhook_secret: Secret for webhook HMAC verification
             debug: Enable debug logging
@@ -55,7 +55,7 @@ class OrchastratePythonClient:
         # AIDEV-NOTE: Development test user bypass headers - remove in production
         self.session.headers.update({
             'Content-Type': 'application/json',
-            'User-Agent': 'OrchastratePythonClient/1.0',
+            'User-Agent': 'EmeryPythonClient/1.0',
             'X-Test-User-Id': '550e8400-e29b-41d4-a716-446655440000'
         })
         
@@ -68,16 +68,16 @@ class OrchastratePythonClient:
             logging.basicConfig(level=logging.DEBUG)
             logger.setLevel(logging.DEBUG)
         
-        logger.info(f"Initialized OrchastratePythonClient for agent {agent_id}")
+        logger.info(f"Initialized EmeryPythonClient for agent {agent_id}")
         
     def _setup_webhook_routes(self) -> None:
         """Set up Flask routes for webhook handling."""
         
         @self.webhook_app.route('/webhook/agent-result', methods=['POST'])
         def handle_webhook():
-            """Handle incoming webhook from Orchastrate agent execution."""
+            """Handle incoming webhook from Emery agent execution."""
             data = request.get_json()
-            signature = request.headers.get('X-Orchastrate-Signature')
+            signature = request.headers.get('X-Emery-Signature')
             
             # AIDEV-NOTE: Critical security check - verify webhook signature
             if not self._verify_webhook_signature(data, signature):

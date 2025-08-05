@@ -78,10 +78,10 @@ export default async function AgentDetailsPage({ params }: AgentDetailsPageProps
         <div className="mb-8 p-4 bg-blue-50 rounded-lg border">
           <h3 className="font-semibold mb-2">📖 Usage in Your Agent Code:</h3>
           <pre className="bg-white p-3 rounded border text-sm overflow-x-auto">
-{`from orchastrate_client.simple_client import OrchastratePythonClient
+{`from emery_client.simple_client import EmeryPythonClient
 
 # Initialize OAuth proxy
-oauth_proxy = OrchastratePythonClient("${agent.apiKey}")
+oauth_proxy = EmeryPythonClient("${agent.apiKey}")
 
 # Use any connected OAuth service
 oauth_proxy.gmail.send_email(
@@ -154,7 +154,7 @@ oauth_proxy.slack.post_message(
           <ol className="list-decimal list-inside space-y-1 text-gray-700">
             <li>Connect OAuth services (Gmail, Slack, GitHub) in <Link href="/dashboard/connections" className="text-blue-500 hover:underline">Connections</Link></li>
             <li>Copy the API key above to use in your Python agent libraries</li>
-            <li>Initialize <code className="bg-white px-1 rounded">OrchastratePythonClient</code> with the API key</li>
+            <li>Initialize <code className="bg-white px-1 rounded">EmeryPythonClient</code> with the API key</li>
             <li>Call OAuth services: <code className="bg-white px-1 rounded">oauth_proxy.gmail.send_email(...)</code></li>
             <li>Your agent will automatically use your OAuth tokens securely!</li>
           </ol>

@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'backend', 'src'))
 
-from orchastrate_client.simple_client import OrchastratePythonClient
+from emery_client.simple_client import EmeryPythonClient
 
 def test_oauth_proxy():
     print("🚀 Testing Simple OAuth Proxy Service")
@@ -18,7 +18,7 @@ def test_oauth_proxy():
     
     try:
         # Initialize simple client
-        oauth_proxy = OrchastratePythonClient(api_key)
+        oauth_proxy = EmeryPythonClient(api_key)
         print(f"✅ Initialized OAuth proxy with API key: {api_key[:20]}...")
         
         # Test Gmail service

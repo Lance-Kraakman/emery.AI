@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Integration Test Runner for Orchastrate Python Client
+Integration Test Runner for Emery Python Client
 
 This script tests the integration between Python applications and 
-Orchastrate Next.js API routes for secure OAuth credential delegation.
+Emery Next.js API routes for secure OAuth credential delegation.
 
 Usage:
     uv run scripts/test_integration.py <agent_id>
@@ -20,28 +20,28 @@ from typing import Optional
 # Add src to path for local development
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from orchastrate_client import OrchastratePythonClient
-from orchastrate_client.gmail import GmailIntegration
+from emery_client import EmeryPythonClient
+from emery_client.gmail import GmailIntegration
 
 
 
 
 def run_integration_tests(agent_id: int, api_url: str) -> None:
     """
-    Run comprehensive integration tests for Orchastrate Python client.
+    Run comprehensive integration tests for Emery Python client.
     
     Args:
         agent_id: ID of the agent to test
-        api_url: Base URL of Orchastrate API
+        api_url: Base URL of Emery API
     """
-    print("🚀 Orchastrate Python Agent Client Integration Test")
+    print("🚀 Emery Python Agent Client Integration Test")
     print("=" * 60)
     print(f"🤖 Testing with agent ID: {agent_id}")
     print(f"🌐 API URL: {api_url}")
     
     try:
         # AIDEV-NOTE: Initialize client with debug logging for testing
-        client = OrchastratePythonClient(api_url, agent_id, debug=True)
+        client = EmeryPythonClient(api_url, agent_id, debug=True)
         client.start_webhook_server(3001)
         
         gmail = GmailIntegration(client)
@@ -65,7 +65,7 @@ def run_integration_tests(agent_id: int, api_url: str) -> None:
             result = gmail.send_email(
                 to="test@example.com",
                 subject="Python Agent Integration Test",
-                body="This email was sent from a Python app via Orchastrate agent!"
+                body="This email was sent from a Python app via Emery agent!"
             )
             print(f"✅ Send email: {result.success}")
         except Exception as e:
@@ -122,7 +122,7 @@ def run_integration_tests(agent_id: int, api_url: str) -> None:
         print(f"   • Webhook Results: {len(client.webhook_results)}")
         
         print("\n💡 Next Steps:")
-        print("   1. Create agents in Orchastrate dashboard (/dashboard/manage)")
+        print("   1. Create agents in Emery dashboard (/dashboard/manage)")
         print("   2. Connect services via /dashboard/connections")
         print("   3. Use this Python client in your applications")
         
@@ -140,7 +140,7 @@ def main() -> None:
     )
     
     # Configuration from environment and command line
-    api_url = os.getenv("ORCHASTRATE_API", "http://localhost:3000")
+    api_url = os.getenv("EMERY_API", "http://localhost:3000")
     agent_id = int(sys.argv[1]) if len(sys.argv) > 1 else 1
     
     run_integration_tests(agent_id, api_url)

@@ -74,8 +74,8 @@ export const oauthApps = pgTable("oauth_apps", {
 
 ```python
 # Python client usage
-client = OrchastratePythonClient(
-    api_url="https://api.orchastrate.com",
+client = EmeryPythonClient(
+    api_url="https://api.emery.com",
     agent_api_key="agent_abc123_key456"  # Agent-specific key
 )
 ```
@@ -151,8 +151,8 @@ export default function AgentApiKeysPage({ params }: { params: { id: string } })
 ### Phase 3: Python Client Updates
 
 ```python
-# backend/src/orchastrate_client/client.py
-class OrchastratePythonClient:
+# backend/src/emery_client/client.py
+class EmeryPythonClient:
     def __init__(
         self, 
         api_url: str, 
@@ -168,7 +168,7 @@ class OrchastratePythonClient:
         self.session.headers.update({
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json',
-            'User-Agent': 'OrchastratePythonClient/2.0',
+            'User-Agent': 'EmeryPythonClient/2.0',
         })
 ```
 

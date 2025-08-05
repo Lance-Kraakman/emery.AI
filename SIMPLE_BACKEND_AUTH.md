@@ -68,11 +68,11 @@ export async function POST(request: NextRequest) {
 
 ### Single Client Class
 ```python
-# backend/src/orchastrate_client/client.py
-class OrchastratePythonClient:
+# backend/src/emery_client/client.py
+class EmeryPythonClient:
     """Dead simple agent client - just pass API key and call methods."""
     
-    def __init__(self, agent_api_key: str, api_url: str = "https://api.orchastrate.com"):
+    def __init__(self, agent_api_key: str, api_url: str = "https://api.emery.com"):
         self.api_key = agent_api_key
         self.api_url = api_url
         self.session = requests.Session()
@@ -116,7 +116,7 @@ class ServiceClient:
 ### Usage (This is ALL developers need to know)
 ```python
 # Initialize with agent API key (from dashboard)
-client = OrchastratePythonClient("orch_agent_123_xK9mP2nQ8wR7")
+client = EmeryPythonClient("orch_agent_123_xK9mP2nQ8wR7")
 
 # Use any connected service automatically
 client.gmail.send_email(to="user@example.com", subject="Hello", body="World")
@@ -194,12 +194,12 @@ async function executeWithOwnerCredentials(
 ## 📁 File Structure (Minimal Changes)
 
 ```
-orchastrate/
+emery/
 ├── app/api/agents/
 │   ├── execute/route.ts          # Single endpoint for all actions
 │   └── capabilities/route.ts     # Agent discovery
 ├── backend/
-│   └── src/orchastrate_client/
+│   └── src/emery_client/
 │       ├── __init__.py
 │       └── client.py             # Single file, ~100 lines
 └── lib/auth/
@@ -243,7 +243,7 @@ UPDATE agents SET api_key = CONCAT('orch_agent_', id, '_', generate_random_strin
 ### What Developers Use (Backend)
 ```python
 # One line setup
-client = OrchastratePythonClient("orch_agent_123_xK9mP2nQ8wR7")
+client = EmeryPythonClient("orch_agent_123_xK9mP2nQ8wR7")
 
 # Any connected service works automatically
 client.gmail.send_email(to="user@example.com", subject="Deploy complete!")
@@ -258,7 +258,7 @@ client.gmail.send_email(to="user@example.com", subject="Deploy complete!")
 
 ## 🔒 Security Benefits
 
-✅ **No OAuth Tokens in Backend**: Tokens never leave Orchastrate
+✅ **No OAuth Tokens in Backend**: Tokens never leave Emery
 ✅ **Simple Key Management**: One key per agent, easy to revoke
 ✅ **Automatic Service Discovery**: No hardcoded service lists
 ✅ **Proxy Authentication**: All requests authenticated through owner's credentials

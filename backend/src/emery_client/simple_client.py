@@ -8,7 +8,7 @@ import requests
 from typing import Any, Dict, Optional
 
 
-class OrchastratePythonClient:
+class EmeryPythonClient:
     """Simple OAuth proxy client for agent libraries."""
     
     def __init__(self, agent_api_key: str, api_url: str = "http://localhost:3000"):
@@ -17,7 +17,7 @@ class OrchastratePythonClient:
         
         Args:
             agent_api_key: API key from agent dashboard (e.g., "orch_agent_123_abc")
-            api_url: Orchastrate API URL
+            api_url: Emery API URL
         """
         self.api_key = agent_api_key
         self.api_url = api_url.rstrip('/')
@@ -27,7 +27,7 @@ class OrchastratePythonClient:
         self.session.headers.update({
             'Authorization': f'Bearer {agent_api_key}',
             'Content-Type': 'application/json',
-            'User-Agent': 'OrchastratePythonClient/1.0'
+            'User-Agent': 'EmeryPythonClient/1.0'
         })
         
         # Create dynamic service proxies
@@ -71,7 +71,7 @@ class OrchastratePythonClient:
 class ServiceProxy:
     """Dynamic proxy for OAuth service calls."""
     
-    def __init__(self, client: OrchastratePythonClient, service: str):
+    def __init__(self, client: EmeryPythonClient, service: str):
         self.client = client
         self.service = service
     
@@ -101,7 +101,7 @@ class ServiceProxy:
 # Example usage for your agent libraries:
 if __name__ == "__main__":
     # Initialize with agent API key from dashboard
-    oauth_proxy = OrchastratePythonClient("orch_agent_123_abc")
+    oauth_proxy = EmeryPythonClient("orch_agent_123_abc")
     
     # Use any connected OAuth service
     try:

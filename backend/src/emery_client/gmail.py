@@ -1,12 +1,12 @@
 """
-Gmail integration examples for Orchastrate Python client.
+Gmail integration examples for Emery Python client.
 """
 
 import base64
 import logging
 from typing import Dict, Optional, Any
 
-from .client import OrchastratePythonClient
+from .client import EmeryPythonClient
 from .types import ExecutionResult, ProxyResult
 
 
@@ -16,12 +16,12 @@ logger = logging.getLogger(__name__)
 class GmailIntegration:
     """Gmail-specific integration examples."""
     
-    def __init__(self, client: OrchastratePythonClient):
+    def __init__(self, client: EmeryPythonClient):
         """
         Initialize Gmail integration.
         
         Args:
-            client: Configured OrchastratePythonClient instance
+            client: Configured EmeryPythonClient instance
         """
         self.client = client
         logger.info("Initialized Gmail integration")

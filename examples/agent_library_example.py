@@ -1,14 +1,14 @@
 """
 Example Agent Library - Customer Onboarding Agent
 
-This shows how you would write agent libraries that use Orchastrate OAuth proxy.
+This shows how you would write agent libraries that use Emery OAuth proxy.
 """
 
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'backend', 'src'))
 
-from orchastrate_client.simple_client import OrchastratePythonClient
+from emery_client.simple_client import EmeryPythonClient
 from typing import Dict, Any
 
 
@@ -22,12 +22,12 @@ class CustomerOnboardingAgent:
     3. Creates GitHub issues for setup tasks
     """
     
-    def __init__(self, config: Dict[str, Any], oauth_proxy: OrchastratePythonClient):
+    def __init__(self, config: Dict[str, Any], oauth_proxy: EmeryPythonClient):
         """
         Initialize agent with config from frontend.
         
         Args:
-            config: Configuration from Orchastrate dashboard
+            config: Configuration from Emery dashboard
             oauth_proxy: OAuth proxy client with agent API key
         """
         self.config = config
@@ -151,7 +151,7 @@ if __name__ == "__main__":
     }
     
     # OAuth proxy with agent API key from dashboard
-    oauth_proxy = OrchastratePythonClient("orch_agent_2_abc123")
+    oauth_proxy = EmeryPythonClient("orch_agent_2_abc123")
     
     # Initialize agent
     agent = CustomerOnboardingAgent(config, oauth_proxy)

@@ -1,11 +1,11 @@
 """
-Orchastrate Python Client Library
+Emery Python Client Library
 
-This package provides a Python client for integrating with Orchastrate agents
+This package provides a Python client for integrating with Emery agents
 and their OAuth credential delegation system.
 """
 
-from .client import OrchastratePythonClient
+from .client import EmeryPythonClient
 from .types import (
     AgentCapabilities,
     ConnectedService,
@@ -16,7 +16,7 @@ from .types import (
 
 __version__ = "0.1.0"
 __all__ = [
-    "OrchastratePythonClient",
+    "EmeryPythonClient",
     "AgentCapabilities", 
     "ConnectedService",
     "AvailableAction",

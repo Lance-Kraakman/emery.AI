@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'backend', 'src'))
 
-from orchastrate_client.simple_client import OrchastratePythonClient
+from emery_client.simple_client import EmeryPythonClient
 
 def test_lance_gmail():
     print("📧 Testing Gmail OAuth with Lance's Agent")
@@ -18,7 +18,7 @@ def test_lance_gmail():
     
     try:
         # Initialize OAuth proxy for Lance's agent
-        oauth_proxy = OrchastratePythonClient(api_key)
+        oauth_proxy = EmeryPythonClient(api_key)
         print(f"✅ Initialized OAuth proxy for Lance's agent")
         print(f"   API Key: {api_key}")
         
@@ -28,7 +28,7 @@ def test_lance_gmail():
             result = oauth_proxy.gmail.send_email(
                 to="lance@aifactory.nz",  # Send to yourself for testing
                 subject="🚀 OAuth Proxy Test - SUCCESS!",
-                body="This email was sent via Orchastrate OAuth proxy using your Gmail connection!\n\nIf you're reading this, the OAuth proxy is working perfectly! 🎉"
+                body="This email was sent via Emery OAuth proxy using your Gmail connection!\n\nIf you're reading this, the OAuth proxy is working perfectly! 🎉"
             )
             print("🎉 SUCCESS! Gmail email sent via OAuth proxy:")
             print(f"   Result: {result}")

@@ -15,4 +15,4 @@ const s3Client = new S3Client({
 });
 
 export { s3Client };
-export const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'orchastrate-files';
+export const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'emery-files';

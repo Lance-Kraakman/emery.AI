@@ -20,7 +20,7 @@ export const pipedreamClient = isPipedreamConfigured
 
 // Helper function to get external user ID from our user ID
 export function getExternalUserId(userId: string): string {
-  return `orchastrate_user_${userId}`;
+  return `emery_user_${userId}`;
 }
 
 // Helper function to get external user ID for an agent (uses owner's ID)

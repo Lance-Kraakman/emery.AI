@@ -5,7 +5,7 @@ export default function Home() {
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto text-center">
         <h1 className="text-4xl font-bold text-gray-900 mb-6">
-          🗂️ Welcome to Orchastrate
+          🗂️ Welcome to Emery
         </h1>
         <p className="text-xl text-gray-600 mb-8">
           A powerful Baserow-style database builder with dynamic tables, custom fields, and spreadsheet-like editing

@@ -1,10 +1,10 @@
 # Backend - Python Testing & Integration
 
-This directory contains Python-based testing scripts and integration tools for the Orchastrate system.
+This directory contains Python-based testing scripts and integration tools for the Emery system.
 
 ## Overview
 
-The backend directory provides Python tools for testing and integrating with the Orchastrate Next.js API routes. This is specifically for Python applications that need to use Orchastrate agents with OAuth credential delegation.
+The backend directory provides Python tools for testing and integrating with the Emery Next.js API routes. This is specifically for Python applications that need to use Emery agents with OAuth credential delegation.
 
 ## Architecture
 
@@ -14,9 +14,9 @@ backend/
 ├── CLAUDE.local.md         # Development guidelines
 ├── pyproject.toml          # uv-based Python project configuration
 ├── src/
-│   └── orchastrate_client/ # Python client library
+│   └── emery_client/ # Python client library
 │       ├── __init__.py
-│       ├── client.py       # Main OrchastratePythonClient
+│       ├── client.py       # Main EmeryPythonClient
 │       ├── gmail.py        # Gmail integration examples
 │       └── types.py        # Type definitions
 ├── tests/                  # Unit tests
@@ -59,7 +59,7 @@ uv run pytest tests/
 uv run mypy src/
 ```
 
-## Integration with Orchastrate
+## Integration with Emery
 
 ### Next.js API Routes
 The Python client integrates with these Next.js API routes:
@@ -78,10 +78,10 @@ The Python client integrates with these Next.js API routes:
 
 ### Basic Client Usage
 ```python
-from orchastrate_client import OrchastratePythonClient
+from emery_client import EmeryPythonClient
 
 # Initialize client
-client = OrchastratePythonClient(
+client = EmeryPythonClient(
     api_url="http://localhost:3000",
     agent_id=1
 )
@@ -94,13 +94,13 @@ print(f"Connected services: {[s.service for s in capabilities.connected_services
 result = client.execute_action("gmail-send-email", {
     "to": "test@example.com",
     "subject": "Test Email",
-    "body": "Hello from Orchastrate agent!"
+    "body": "Hello from Emery agent!"
 })
 ```
 
 ### Gmail Integration
 ```python
-from orchastrate_client.gmail import GmailIntegration
+from emery_client.gmail import GmailIntegration
 
 gmail = GmailIntegration(client)
 
@@ -108,7 +108,7 @@ gmail = GmailIntegration(client)
 gmail.send_email(
     to="recipient@example.com",
     subject="Python Integration Test",
-    body="This email was sent via Orchastrate agent!"
+    body="This email was sent via Emery agent!"
 )
 
 # Get messages
@@ -135,10 +135,10 @@ result = client.execute_action("gmail-get-messages", {
 ## Testing
 
 ### Integration Tests
-Run integration tests against a running Orchastrate instance:
+Run integration tests against a running Emery instance:
 
 ```bash
-# Ensure Orchastrate is running
+# Ensure Emery is running
 cd ..
 pnpm dev
 
@@ -193,12 +193,12 @@ uv run pytest tests/ -v
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
-client = OrchastratePythonClient(api_url="...", agent_id=1, debug=True)
+client = EmeryPythonClient(api_url="...", agent_id=1, debug=True)
 ```
 
 ### Environment Variables
 ```bash
-export ORCHASTRATE_API="http://localhost:3000"
+export EMERY_API="http://localhost:3000"
 export WEBHOOK_SECRET="your-webhook-secret"
 export LOG_LEVEL="DEBUG"
 ```

@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import AuthProvider from '@/components/AuthProvider'
 
 export const metadata: Metadata = {
-  title: 'Orchastrate - Dynamic Database Builder',
+  title: 'Emery - Dynamic Database Builder',
   description: 'Build dynamic databases with tables, fields, and rows',
 }
 
