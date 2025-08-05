@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, ExternalLink, Trash2, RefreshCw } from 'lucide-react';
 import { getUserOAuthConnections, getAppConnectionUrl, initializePipedreamUser } from '@/app/actions/pipedream';
 
@@ -40,15 +40,17 @@ export function ConnectionsManager() {
     if (connectedApp) {
       // Connection was successful, refresh the connections list
       console.log(`Successfully connected ${connectedApp}`);
-      loadConnections();
       
-      // Clean up the URL
+      // Clean up the URL first to prevent re-renders
       const cleanUrl = window.location.pathname;
       window.history.replaceState({}, document.title, cleanUrl);
+      
+      // Then refresh connections
+      loadConnections();
     }
-  }, []);
+  }, []); // Empty dependency array is correct here
 
-  const loadConnections = async () => {
+  const loadConnections = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -73,7 +75,7 @@ export function ConnectionsManager() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // No dependencies needed since it only uses external functions and setters
 
   const handleConnectApp = async (appId: string) => {
     try {
@@ -147,7 +149,7 @@ export function ConnectionsManager() {
       )}
 
       {/* Connected Apps */}
-      {connections.length > 0 && (
+      {connections && connections.length > 0 && (
         <div className="bg-white shadow rounded-lg">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-lg font-medium text-gray-900">Connected Apps</h2>
@@ -156,7 +158,7 @@ export function ConnectionsManager() {
             </p>
           </div>
           <div className="divide-y divide-gray-200">
-            {connections.map((connection) => (
+            {connections?.map((connection) => (
               <div key={connection.id} className="px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
@@ -202,7 +204,7 @@ export function ConnectionsManager() {
         </div>
         <div className="divide-y divide-gray-200">
           {AVAILABLE_APPS.map((app) => {
-            const isConnected = connections.some(c => c.app === app.id && c.status === 'connected');
+            const isConnected = connections?.some(c => c?.app === app.id && c?.status === 'connected') || false;
             const isConnecting = connectingApp === app.id;
             
             return (
