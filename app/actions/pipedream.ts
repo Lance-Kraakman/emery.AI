@@ -1,7 +1,7 @@
 'use server'
 
 import { requireAuth } from "./permissions";
-import { createOrGetPipedreamUser, getUserConnections, generateConnectionUrl } from "@/lib/pipedream/users";
+import { createOrGetPipedreamUser, getUserConnections, generateConnectionUrl, disconnectUserAccount } from "@/lib/pipedream/users";
 import { runActionForAgent } from "@/lib/pipedream/agents";
 import { db } from "@/lib/db/client";
 import { agents } from "@/lib/db/schema";
@@ -17,6 +17,10 @@ export interface RunAgentActionData {
   agentId: number;
   actionId: string;
   configuredProps: Record<string, any>;
+}
+
+export interface DisconnectAccountData {
+  accountId: string;
 }
 
 /**
@@ -164,6 +168,28 @@ export async function runAgentAction(data: RunAgentActionData): Promise<ActionRe
     return {
       success: false,
       error: "Failed to run agent action",
+    };
+  }
+}
+
+/**
+ * Disconnect an OAuth account for the current user
+ */
+export async function disconnectOAuthAccount(data: DisconnectAccountData): Promise<ActionResult> {
+  try {
+    const session = await requireAuth();
+    
+    await disconnectUserAccount(session.user.id, data.accountId);
+    
+    return {
+      success: true,
+      data: { message: "Account disconnected successfully" },
+    };
+  } catch (error) {
+    console.error("Error disconnecting OAuth account:", error);
+    return {
+      success: false,
+      error: "Failed to disconnect account",
     };
   }
 }

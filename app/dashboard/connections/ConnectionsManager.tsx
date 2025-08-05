@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, ExternalLink, Trash2, RefreshCw } from 'lucide-react';
-import { getUserOAuthConnections, getAppConnectionUrl, initializePipedreamUser } from '@/app/actions/pipedream';
+import { getUserOAuthConnections, getAppConnectionUrl, initializePipedreamUser, disconnectOAuthAccount } from '@/app/actions/pipedream';
 
 interface Connection {
   id: string;
@@ -27,6 +27,7 @@ export function ConnectionsManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
+  const [disconnectingAccount, setDisconnectingAccount] = useState<string | null>(null);
 
   useEffect(() => {
     loadConnections();
@@ -76,6 +77,27 @@ export function ConnectionsManager() {
       setLoading(false);
     }
   }, []); // No dependencies needed since it only uses external functions and setters
+
+  const handleDisconnectAccount = async (accountId: string) => {
+    try {
+      setDisconnectingAccount(accountId);
+      setError(null);
+      
+      const result = await disconnectOAuthAccount({ accountId });
+      
+      if (result.success) {
+        // Refresh connections list after successful disconnect
+        await loadConnections();
+      } else {
+        setError(result.error || 'Failed to disconnect account');
+      }
+    } catch (err) {
+      setError('Failed to disconnect account');
+      console.error('Error disconnecting account:', err);
+    } finally {
+      setDisconnectingAccount(null);
+    }
+  };
 
   const handleConnectApp = async (appId: string) => {
     try {
@@ -182,10 +204,16 @@ export function ConnectionsManager() {
                 <div className="flex items-center space-x-4">
                   {getConnectionStatus(connection)}
                   <button
-                    className="text-gray-400 hover:text-red-600"
+                    onClick={() => handleDisconnectAccount(connection.id)}
+                    disabled={disconnectingAccount === connection.id}
+                    className="text-gray-400 hover:text-red-600 disabled:opacity-50"
                     title="Disconnect"
                   >
-                    <Trash2 size={16} />
+                    {disconnectingAccount === connection.id ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={16} />
+                    )}
                   </button>
                 </div>
               </div>

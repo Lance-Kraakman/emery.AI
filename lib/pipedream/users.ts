@@ -93,6 +93,28 @@ export async function getUserConnections(userId: string) {
 }
 
 /**
+ * Disconnect a specific OAuth account for a user
+ */
+export async function disconnectUserAccount(userId: string, accountId: string): Promise<void> {
+  if (!pipedreamClient) {
+    throw new Error('Pipedream client not available (server-side only)');
+  }
+  
+  const externalUserId = getExternalUserId(userId);
+  
+  try {
+    // Delete the specific account
+    await pipedreamClient.accounts.delete({ 
+      external_user_id: externalUserId,
+      id: accountId 
+    });
+  } catch (error) {
+    console.error('Failed to disconnect account:', error);
+    throw new Error('Failed to disconnect account');
+  }
+}
+
+/**
  * Generate OAuth connection URL for a user
  */
 export async function generateConnectionUrl(userId: string, appName: string, redirectUrl?: string) {
