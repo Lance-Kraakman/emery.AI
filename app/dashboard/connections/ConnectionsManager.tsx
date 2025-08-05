@@ -164,13 +164,13 @@ export function ConnectionsManager() {
                   <div className="flex-shrink-0">
                     <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
                       <span className="text-sm font-medium text-gray-700">
-                        {connection.app.charAt(0).toUpperCase()}
+                        {(connection.app?.name || connection.app?.key || connection.app || 'App').charAt(0).toUpperCase()}
                       </span>
                     </div>
                   </div>
                   <div className="ml-4">
                     <div className="text-sm font-medium text-gray-900">
-                      {connection.app}
+                      {connection.app?.name || connection.app?.key || connection.app || 'Unknown App'}
                     </div>
                     {connection.account_name && (
                       <div className="text-sm text-gray-500">
@@ -204,7 +204,10 @@ export function ConnectionsManager() {
         </div>
         <div className="divide-y divide-gray-200">
           {AVAILABLE_APPS.map((app) => {
-            const isConnected = connections?.some(c => c?.app === app.id && c?.status === 'connected') || false;
+            const isConnected = connections?.some(c => 
+              (c?.app?.key === app.id || c?.app?.name === app.id || c?.app === app.id) && 
+              c?.status === 'connected'
+            ) || false;
             const isConnecting = connectingApp === app.id;
             
             return (

@@ -80,9 +80,9 @@ export async function getUserConnections(userId: string) {
     // Transform accounts to match the expected connection format
     return accounts.map((account: any) => ({
       id: account.id,
-      app: account.app,
+      app: account.app, // Keep the full app object
       account_name: account.name || account.email || account.username,
-      status: account.status || 'connected',
+      status: account.healthy ? 'connected' : 'error',
       created_at: account.created_at || new Date().toISOString(),
       updated_at: account.updated_at || new Date().toISOString(),
     }));
