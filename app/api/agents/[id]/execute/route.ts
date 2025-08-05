@@ -1,0 +1,152 @@
+import { NextRequest } from 'next/server';
+import { auth } from '@/lib/auth';
+import { db } from '@/lib/db/client';
+import { agents } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
+import { runActionForAgent } from '@/lib/pipedream/agents';
+
+export interface AgentExecuteRequest {
+  action: string;
+  props: Record<string, any>;
+  webhook_url?: string;
+  timeout?: number;
+}
+
+export interface AgentExecuteResponse {
+  success: boolean;
+  result?: any;
+  error?: string;
+  execution_id?: string;
+}
+
+/**
+ * Execute a Pipedream action on behalf of an agent using owner's OAuth credentials
+ * This is the secure endpoint for Python backend apps to trigger agent actions
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+): Promise<Response> {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const agentId = parseInt(params.id);
+    if (isNaN(agentId)) {
+      return Response.json({ error: 'Invalid agent ID' }, { status: 400 });
+    }
+
+    // Get agent and verify ownership
+    const [agent] = await db
+      .select()
+      .from(agents)
+      .where(eq(agents.id, agentId))
+      .limit(1);
+
+    if (!agent) {
+      return Response.json({ error: 'Agent not found' }, { status: 404 });
+    }
+
+    // Verify agent ownership (agents can only be used by their owners)
+    if (agent.ownerId !== session.user.id) {
+      return Response.json({ 
+        error: 'Access denied: You can only execute actions for agents you own' 
+      }, { status: 403 });
+    }
+
+    const body: AgentExecuteRequest = await request.json();
+    const { action, props, webhook_url, timeout = 30000 } = body;
+
+    if (!action) {
+      return Response.json({ error: 'Action is required' }, { status: 400 });
+    }
+
+    // Generate execution ID for tracking
+    const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Log the action execution for audit trail
+    console.log(`[AGENT-EXECUTE] ${executionId}: Agent ${agentId} executing ${action} for user ${session.user.id}`);
+
+    // Execute the action using agent's owner credentials
+    const result = await runActionForAgent({
+      agentId,
+      ownerUserId: agent.ownerId,
+      actionId: action,
+      configuredProps: props,
+    });
+
+    // If webhook URL provided, send result asynchronously
+    if (webhook_url && result.success) {
+      // Fire and forget webhook - don't wait for it
+      setImmediate(async () => {
+        try {
+          const webhookPayload = {
+            execution_id: executionId,
+            agent_id: agentId,
+            action,
+            result: result.data,
+            timestamp: new Date().toISOString(),
+          };
+
+          const response = await fetch(webhook_url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Orchastrate-Signature': await generateWebhookSignature(webhookPayload),
+            },
+            body: JSON.stringify(webhookPayload),
+            signal: AbortSignal.timeout(timeout),
+          });
+
+          if (!response.ok) {
+            console.error(`[WEBHOOK-ERROR] ${executionId}: Failed to deliver to ${webhook_url}:`, response.status);
+          } else {
+            console.log(`[WEBHOOK-SUCCESS] ${executionId}: Delivered to ${webhook_url}`);
+          }
+        } catch (error) {
+          console.error(`[WEBHOOK-ERROR] ${executionId}: Failed to deliver to ${webhook_url}:`, error);
+        }
+      });
+    }
+
+    const response: AgentExecuteResponse = {
+      success: result.success,
+      result: result.data,
+      error: result.error,
+      execution_id: executionId,
+    };
+
+    return Response.json(response);
+
+  } catch (error) {
+    console.error('Error executing agent action:', error);
+    return Response.json({ 
+      success: false,
+      error: 'Internal server error' 
+    }, { status: 500 });
+  }
+}
+
+/**
+ * Generate HMAC signature for webhook verification
+ */
+async function generateWebhookSignature(payload: any): Promise<string> {
+  const secret = process.env.WEBHOOK_SECRET || 'default-webhook-secret';
+  const message = JSON.stringify(payload);
+  
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
+  return Array.from(new Uint8Array(signature))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
