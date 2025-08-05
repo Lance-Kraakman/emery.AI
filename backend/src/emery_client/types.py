@@ -1,5 +1,5 @@
 """
-Type definitions for Orchastrate Python client.
+Type definitions for Emery Python client.
 """
 
 from dataclasses import dataclass

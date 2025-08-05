@@ -1,4 +1,4 @@
-# Orchastrate - Dynamic Database Builder
+# Emery - Dynamic Database Builder
 
 A Baserow-style backend built with Next.js, Drizzle ORM, and PostgreSQL that allows users to create dynamic tables, fields, and manage data.
 

@@ -106,7 +106,7 @@ export async function POST(
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-Orchastrate-Signature': await generateWebhookSignature(webhookPayload),
+              'X-Emery-Signature': await generateWebhookSignature(webhookPayload),
             },
             body: JSON.stringify(webhookPayload),
             signal: AbortSignal.timeout(timeout),

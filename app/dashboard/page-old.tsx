@@ -154,7 +154,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50">
       <div className="border-b bg-white px-6 py-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">🗂️ Orchastrate</h1>
+          <h1 className="text-2xl font-bold text-gray-900">🗂️ Emery</h1>
           <div className="text-sm text-gray-500">
             {userId && `User: ${userId.slice(0, 8)}...`}
           </div>

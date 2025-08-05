@@ -1,4 +1,4 @@
-# Orchastrate - Future Improvements
+# Emery - Future Improvements
 
 ## Phase 3: UX Enhancements
 

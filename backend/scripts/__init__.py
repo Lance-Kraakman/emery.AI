@@ -1,1 +1,1 @@
-# Scripts package for Orchastrate backend testing
+# Scripts package for Emery backend testing
