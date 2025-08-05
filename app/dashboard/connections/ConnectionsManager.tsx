@@ -66,6 +66,7 @@ export function ConnectionsManager() {
       // Then get connections
       const result = await getUserOAuthConnections();
       if (result.success) {
+        console.log('🔍 Raw connections data:', JSON.stringify(result.data, null, 2));
         setConnections(result.data || []);
       } else {
         setError(result.error || 'Failed to load connections');
@@ -79,19 +80,26 @@ export function ConnectionsManager() {
   }, []); // No dependencies needed since it only uses external functions and setters
 
   const handleDisconnectAccount = async (accountId: string) => {
+    console.log('🗑️ Disconnect button clicked for account:', accountId);
+    
     try {
       setDisconnectingAccount(accountId);
       setError(null);
       
+      console.log('📞 Calling disconnectOAuthAccount...');
       const result = await disconnectOAuthAccount({ accountId });
+      console.log('📞 Disconnect result:', result);
       
       if (result.success) {
+        console.log('✅ Disconnect successful, refreshing connections...');
         // Refresh connections list after successful disconnect
         await loadConnections();
       } else {
+        console.error('❌ Disconnect failed:', result.error);
         setError(result.error || 'Failed to disconnect account');
       }
     } catch (err) {
+      console.error('💥 Disconnect error:', err);
       setError('Failed to disconnect account');
       console.error('Error disconnecting account:', err);
     } finally {
