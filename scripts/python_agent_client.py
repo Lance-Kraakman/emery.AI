@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """
-Python Agent Client Example
+Python Agent Client - Test & Example
 
-This demonstrates how a Python backend application would 
-integrate with Orchastrate agents for OAuth credential delegation.
+This demonstrates how a Python backend application integrates 
+with Orchastrate Next.js API routes for secure OAuth credential delegation.
+
+The Next.js routes (app/api/agents/[id]/*) handle:
+- /execute - Run Pipedream actions using agent owner's credentials
+- /proxy - Proxy API requests through agent's OAuth tokens  
+- /capabilities - Discover connected services and available actions
 
 Usage:
     python scripts/python_agent_client.py <agent_id>

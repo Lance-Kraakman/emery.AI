@@ -105,6 +105,10 @@ When adding fields via API:
 - `lib/pipedream/agents.ts`: Agent action execution using owner credentials
 - `app/actions/pipedream.ts`: Server actions for OAuth connection management
 - `app/dashboard/connections/`: UI for managing OAuth connections
+- `app/api/agents/[id]/`: Next.js API routes for Python backend integration
+  - `/execute` - Execute Pipedream actions with webhook support
+  - `/proxy` - Proxy authenticated API requests
+  - `/capabilities` - Get agent capabilities and connected services
 
 ### Environment Configuration
 ```bash
@@ -139,6 +143,12 @@ PIPEDREAM_API_KEY=your_api_key
 2. Run migrations: `pnpm db:migrate`
 3. Start dev server: `pnpm dev`
 4. Complete flow: OAuth login → create organization → create table → add fields → add rows → create agent → connect OAuth accounts
+
+### Testing Python Backend Integration
+1. Ensure Orchastrate is running: `pnpm dev`
+2. Create agent and connect Gmail via `/dashboard/connections`
+3. Test Python integration: `pnpm test:agent-api <agent_id>`
+4. Or run directly: `python scripts/python_agent_client.py <agent_id>`
 
 ## Important Implementation Details
 
