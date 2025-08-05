@@ -70,8 +70,9 @@ export function ConnectionsManager() {
       });
       
       if (result.success && result.data?.url) {
-        // Open connection URL in new window
-        window.open(result.data.url, '_blank', 'width=600,height=700');
+        // Open connection URL immediately in the same window to avoid token expiration
+        // Use window.location.href instead of window.open to prevent popup blockers
+        window.location.href = result.data.url;
       } else {
         setError(result.error || 'Failed to generate connection URL');
       }

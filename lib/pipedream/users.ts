@@ -65,9 +65,19 @@ export async function getUserConnections(userId: string) {
   
   try {
     // Use the accounts API to get user's connected accounts
-    const accounts = await pipedreamClient.accounts.list({ 
+    const response = await pipedreamClient.accounts.list({ 
       external_user_id: externalUserId 
     });
+    
+    // Handle different response structures - response might be wrapped in a data property
+    const accounts = Array.isArray(response) ? response : (response?.data || response?.accounts || []);
+    
+    console.log('Accounts response:', { response, accounts, isArray: Array.isArray(accounts) });
+    
+    if (!Array.isArray(accounts)) {
+      console.warn('Accounts response is not an array:', accounts);
+      return [];
+    }
     
     // Transform accounts to match the expected connection format
     return accounts.map((account: any) => ({
@@ -102,8 +112,20 @@ export async function generateConnectionUrl(userId: string, appName: string, red
       success_redirect_uri: redirectUrl,
     });
     
-    // Return the connect URL from the token response
-    return tokenResult.connect_link_url || tokenResult.connectUrl;
+    console.log('Token result:', tokenResult);
+    
+    // Return the connect URL from the token response - try different possible property names
+    const connectUrl = tokenResult.connect_link_url || 
+                      tokenResult.connectUrl || 
+                      tokenResult.url ||
+                      tokenResult.connect_url;
+    
+    if (!connectUrl) {
+      console.error('No connect URL found in token result:', tokenResult);
+      throw new Error('No connect URL returned from token creation');
+    }
+    
+    return connectUrl;
   } catch (error) {
     console.error('Failed to generate connection URL:', error);
     throw new Error('Failed to generate connection URL');
