@@ -78,6 +78,7 @@ export const agents = pgTable("agents", {
   roleId: integer("role_id").references(() => roles.id),
   ownerId: uuid("owner_id").notNull().references(() => users.id), // Agent owner (user)
   apiKey: text("api_key").unique(), // For API authentication
+  lastUsedAt: timestamp("last_used_at"), // Track API key usage
   createdAt: timestamp("created_at").defaultNow(),
 });
 
