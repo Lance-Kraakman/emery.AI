@@ -72,8 +72,6 @@ export async function getUserConnections(userId: string) {
     // Handle different response structures - response might be wrapped in a data property
     const accounts = Array.isArray(response) ? response : (response?.data || response?.accounts || []);
     
-    console.log('Accounts response:', { response, accounts, isArray: Array.isArray(accounts) });
-    
     if (!Array.isArray(accounts)) {
       console.warn('Accounts response is not an array:', accounts);
       return [];
@@ -112,20 +110,25 @@ export async function generateConnectionUrl(userId: string, appName: string, red
       success_redirect_uri: redirectUrl,
     });
     
-    console.log('Token result:', tokenResult);
+    // Build the proper connect URL with app parameter
+    const baseConnectUrl = tokenResult.connect_link_url || 
+                          tokenResult.connectUrl || 
+                          tokenResult.url ||
+                          tokenResult.connect_url;
     
-    // Return the connect URL from the token response - try different possible property names
-    const connectUrl = tokenResult.connect_link_url || 
-                      tokenResult.connectUrl || 
-                      tokenResult.url ||
-                      tokenResult.connect_url;
-    
-    if (!connectUrl) {
+    if (!baseConnectUrl) {
       console.error('No connect URL found in token result:', tokenResult);
       throw new Error('No connect URL returned from token creation');
     }
     
-    return connectUrl;
+    // Add the app parameter to the connect URL
+    const connectUrl = new URL(baseConnectUrl);
+    connectUrl.searchParams.set('app', appName);
+    if (redirectUrl) {
+      connectUrl.searchParams.set('success_redirect_uri', redirectUrl);
+    }
+    
+    return connectUrl.toString();
   } catch (error) {
     console.error('Failed to generate connection URL:', error);
     throw new Error('Failed to generate connection URL');

@@ -32,6 +32,22 @@ export function ConnectionsManager() {
     loadConnections();
   }, []);
 
+  // Handle successful connection redirect
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const connectedApp = urlParams.get('connected');
+    
+    if (connectedApp) {
+      // Connection was successful, refresh the connections list
+      console.log(`Successfully connected ${connectedApp}`);
+      loadConnections();
+      
+      // Clean up the URL
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
+  }, []);
+
   const loadConnections = async () => {
     try {
       setLoading(true);
