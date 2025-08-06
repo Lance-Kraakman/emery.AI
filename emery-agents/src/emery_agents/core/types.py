@@ -16,17 +16,17 @@ class StepType(Enum):
 
 
 class TriggerType(Enum):
-    MANUAL = "manual"
-    CRON = "cron"
-    WEBHOOK = "webhook"
-    DATABASE_EVENT = "database_event"
+    MANUAL = "MANUAL"
+    CRON = "CRON" 
+    WEBHOOK = "WEBHOOK"
+    DATABASE_EVENT = "DATABASE_EVENT"
 
 
 class TaskStatus(Enum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
-    ERROR = "error"
+    FAILED = "failed"  # Match database schema
 
 
 @dataclass
@@ -68,9 +68,9 @@ class Task:
 class Agent:
     id: str
     name: str
-    role: str
-    description: str
-    persona: str
+    role: Optional[str] = None
+    description: Optional[str] = None
+    persona: Optional[str] = None
     model: Optional[str] = None
     tools: List[str] = field(default_factory=list)
     servers: List[str] = field(default_factory=list)
@@ -80,14 +80,17 @@ class Agent:
     database_id: Optional[str] = None
     status: str = "active"
     organization_id: Optional[int] = None
+    role_id: Optional[int] = None  # Add role_id field from database
     owner_id: Optional[str] = None
     api_key: Optional[str] = None
+    last_used_at: Optional[datetime] = None  # Add last_used_at field
+    created_at: Optional[datetime] = None  # Add created_at field
 
 
 @dataclass
 class StepExecution:
     id: str
-    task_id: str
+    task_execution_id: str  # Match database schema field name
     step_id: str
     step_type: StepType
     instructions: Optional[str] = None
