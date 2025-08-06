@@ -10,13 +10,21 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "test:agent-api": "python scripts/python_agent_client.py"
+    "test:agent-api": "python scripts/python_agent_client.py",
+    "grpc:generate": "npm run grpc:generate:js && npm run grpc:generate:python",
+    "grpc:generate:js": "grpc_tools_node_protoc --js_out=import_style=commonjs,binary:lib/grpc/generated --grpc_out=grpc_js:lib/grpc/generated --plugin=protoc-gen-grpc=$(which grpc_tools_node_protoc_plugin) -I proto proto/agent_worker.proto",
+    "grpc:generate:python": "cd emery-agents && uv run python -m grpc_tools.protoc --python_out=src/emery_agents/grpc/generated --grpc_python_out=src/emery_agents/grpc/generated -I ../proto ../proto/agent_worker.proto",
+    "worker:start": "cd emery-agents && uv run python -m emery_agents.grpc.server_simple",
+    "test:grpc": "npx tsx scripts/test-grpc-e2e.ts",
+    "test:nextjs-grpc": "npx tsx scripts/test-nextjs-grpc.ts"
   },
   "packageManager": "pnpm@10.14.0",
   "dependencies": {
     "@auth/drizzle-adapter": "^1.10.0",
     "@aws-sdk/client-s3": "^3.859.0",
     "@aws-sdk/s3-request-presigner": "^3.859.0",
+    "@grpc/grpc-js": "^1.13.4",
+    "@grpc/proto-loader": "^0.8.0",
     "@pipedream/sdk": "2.0.0-rc.3",
     "@types/multer": "^2.0.0",
     "dotenv": "16.4.7",
@@ -31,6 +39,7 @@
     "uuid": "10.0.0"
   },
   "devDependencies": {
+    "@types/google-protobuf": "^3.15.12",
     "@types/node": "24.1.0",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
@@ -39,6 +48,7 @@
     "drizzle-kit": "0.31.4",
     "eslint": "9.32.0",
     "eslint-config-next": "15.4.5",
+    "grpc-tools": "^1.13.0",
     "postcss": "8.5.6",
     "tailwindcss": "3.4.15",
     "typescript": "5.9.2"

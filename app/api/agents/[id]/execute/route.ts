@@ -3,8 +3,7 @@ import { auth } from '@/lib/auth';
 import { db } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { runActionForAgent } from '@/lib/pipedream/agents';
-import { executeAgentCapability } from '@/lib/agents/executor';
+import { executeAgentCapabilityViaGRPC } from '@/lib/agents/grpc-executor';
 
 export interface AgentExecuteRequest {
   // New capability execution (main approach)
@@ -87,10 +86,10 @@ export async function POST(
     // Generate execution ID for tracking
     const executionId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Execute agent capability via emery-agents package
-    console.log(`[CAPABILITY-EXEC] ${executionId}: Agent ${agentId} executing capability '${capability_name}' for user ${userId}`);
+    // Execute agent capability via gRPC worker
+    console.log(`[GRPC-CAPABILITY-EXEC] ${executionId}: Agent ${agentId} executing capability '${capability_name}' for user ${userId}`);
     
-    const result = await executeAgentCapability({
+    const result = await executeAgentCapabilityViaGRPC({
       agent,
       capabilityName: capability_name,
       triggerData: trigger_data || {},

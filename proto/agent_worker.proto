@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package emery.agents;
+
+// Service for executing agent tasks on worker instances
+service AgentWorker {
+  // Execute a task and stream progress updates back to the API server
+  rpc ExecuteTask(TaskRequest) returns (stream TaskProgress);
+  
+  // Get worker health status and available capabilities
+  rpc GetWorkerInfo(Empty) returns (WorkerInfo);
+  
+  // Cancel a running task
+  rpc CancelTask(CancelTaskRequest) returns (CancelTaskResponse);
+}
+
+// Request to execute a specific agent task
+message TaskRequest {
+  string task_id = 1;              // Unique task identifier
+  int32 agent_id = 2;              // Agent to execute the task
+  string capability_name = 3;      // Which capability to execute
+  string trigger_data_json = 4;    // Input payload as JSON string
+  string organization_id = 5;      // Organization for multi-tenant routing
+  string owner_id = 6;             // Agent owner ID for OAuth credentials
+  int32 timeout_seconds = 7;       // Task execution timeout (default: 300)
+}
+
+// Streaming progress updates during task execution
+message TaskProgress {
+  string task_id = 1;              // Task being updated
+  TaskStatus status = 2;           // Current task status
+  string step_id = 3;              // Current step being executed
+  string step_type = 4;            // Type of step (TOOL_STEP, CODE_STEP)
+  string output_json = 5;          // Step output data as JSON
+  string error_message = 6;        // Error details if failed
+  int64 timestamp_ms = 7;          // Update timestamp
+  float progress_percent = 8;      // Completion percentage (0-100)
+}
+
+// Task execution status enum
+enum TaskStatus {
+  TASK_PENDING = 0;
+  TASK_IN_PROGRESS = 1;
+  TASK_COMPLETED = 2;
+  TASK_FAILED = 3;
+  TASK_CANCELLED = 4;
+  TASK_TIMEOUT = 5;
+}
+
+// Request to cancel a running task
+message CancelTaskRequest {
+  string task_id = 1;
+  string reason = 2;               // Optional cancellation reason
+}
+
+// Response to task cancellation request
+message CancelTaskResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Worker health and capability information
+message WorkerInfo {
+  string worker_id = 1;            // Unique worker instance ID
+  string version = 2;              // Worker software version
+  string organization_id = 3;      // Organization this worker serves
+  WorkerStatus status = 4;         // Current worker status
+  repeated string capabilities = 5; // Available agent capabilities
+  int32 active_tasks = 6;          // Number of currently running tasks
+  int32 max_concurrent_tasks = 7;  // Maximum concurrent task capacity
+  int64 uptime_seconds = 8;        // Worker uptime
+  repeated string supported_tools = 9; // Available MCP tools
+}
+
+// Worker health status
+enum WorkerStatus {
+  WORKER_HEALTHY = 0;
+  WORKER_BUSY = 1;
+  WORKER_DEGRADED = 2;
+  WORKER_UNHEALTHY = 3;
+  WORKER_SHUTTING_DOWN = 4;
+}
+
+// Empty message for requests with no parameters
+message Empty {}
+
+// Standard error response
+message ErrorResponse {
+  string code = 1;                 // Error code (e.g., "TASK_NOT_FOUND")
+  string message = 2;              // Human-readable error message
+  string details = 3;              // Additional error details
+}

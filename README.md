@@ -26,11 +26,12 @@ Emery is an enterprise AI agent orchestration platform that combines dynamic dat
 
 ### Tech Stack
 - **Frontend**: Next.js 14 (App Router) + React + TypeScript + Tailwind CSS
-- **Backend**: Next.js API Routes + Server Actions
+- **Backend**: Next.js API Routes + Server Actions + gRPC Workers
 - **Database**: PostgreSQL with pgvector extension
 - **ORM**: Drizzle ORM (static) + Raw SQL (dynamic operations)  
 - **Authentication**: NextAuth v4 with OAuth providers
-- **Agent Runtime**: Python execution environment with MCP tool integration
+- **Agent Runtime**: Python gRPC workers with distributed execution
+- **Communication**: Protocol Buffers + gRPC streaming for agent communication
 - **OAuth Proxy**: Pipedream Connect for external service integrations
 
 ## Quick Start
@@ -75,13 +76,50 @@ Emery is an enterprise AI agent orchestration platform that combines dynamic dat
    - Create your first agent in `/dashboard/manage`
    - Connect OAuth services in `/dashboard/connections`
 
+## 🚀 gRPC Worker Architecture
+
+Emery uses a distributed gRPC architecture for scalable agent execution:
+
+### Architecture Overview
+```
+┌─────────────────┐    gRPC/HTTP2     ┌──────────────────┐
+│   NextJS API    │ ← StreamingTask → │  Python Worker   │
+│   (Port 3000)   │                   │   (Port 50051)   │
+└─────────────────┘                   └──────────────────┘
+         │                                       │
+         ├─ Real-time SSE                       ├─ Agent Execution
+         ├─ Task Management                     ├─ Capability Handling  
+         ├─ Worker Discovery                    ├─ Step Progress
+         └─ Health Monitoring                  └─ Result Streaming
+```
+
+### Key Features
+- **Protocol Buffers**: Type-safe message serialization between NextJS and Python
+- **Streaming Progress**: Real-time task updates via gRPC streaming + Server-Sent Events
+- **Multi-tenant Routing**: Automatic worker discovery based on organization ID
+- **Health Monitoring**: Worker status tracking with 30s cached health checks
+- **Horizontal Scaling**: Workers can run in separate containers/instances
+
+### Quick Test
+```bash
+# Terminal 1: Start gRPC worker
+pnpm worker:start
+
+# Terminal 2: Start NextJS (in another terminal)
+WORKER_ADDRESS=localhost:50051 pnpm dev
+
+# Terminal 3: Run integration test
+pnpm test:nextjs-grpc
+```
+
 ## 📁 Project Structure
 
 ```
 /app
   /api
     /agents      # Agent management & OAuth proxy
-    /tasks       # Task execution tracking
+    /tasks       # Task execution tracking with real-time streaming
+    /workers     # gRPC worker discovery and health monitoring
     /fields      # Dynamic field operations  
     /rows        # Dynamic table data operations
   /dashboard     # Main application UI
@@ -95,14 +133,27 @@ Emery is an enterprise AI agent orchestration platform that combines dynamic dat
     - schema.ts    # Static Drizzle schema (users, agents, tasks)
     - dynamic.ts   # Dynamic table operations (Baserow-style)
     - client.ts    # Database connections
+  /grpc          # gRPC client infrastructure
+    - client.ts    # Multi-tenant worker registry and health monitoring
+  /agents
+    - grpc-executor.ts  # gRPC-based agent execution (replaces subprocess)
   /pipedream     # OAuth integration layer
   - auth.ts      # NextAuth configuration with RBAC
 
-/emery-agents  # Python agent runtime
+/emery-agents  # Python gRPC worker services
   /src/emery_agents
     - cli.py       # Agent CLI interface
     - runner.py    # Task execution engine
+    /grpc          # gRPC server implementation
+      - server_simple.py  # Streamlined gRPC agent worker
     /integrations  # External service clients
+
+/proto           # Protocol Buffer definitions
+  - agent_worker.proto  # gRPC service definitions for agent communication
+
+/scripts         # Testing and development utilities
+  - test-grpc-e2e.ts     # End-to-end gRPC communication test
+  - test-nextjs-grpc.ts  # NextJS API integration test
 ```
 
 ## 🧠 Core Concepts
@@ -113,11 +164,13 @@ Emery is an enterprise AI agent orchestration platform that combines dynamic dat
 - **Data Types**: Support for text, number, boolean, date, email, URL, and JSONB relations
 - **Baserow Compatibility**: Similar UX to popular no-code database platforms
 
-### 2. AI Agent System
+### 2. AI Agent System (gRPC-Powered)
 - **Agents**: Configurable AI assistants with specific roles and capabilities
-- **Tasks**: Discrete work units assigned to agents with payload data
-- **Capabilities**: Pre-defined workflows agents can execute (e.g., "send_email", "analyze_data")
-- **Step Execution**: Granular tracking of each step within a task for debugging
+- **Tasks**: Discrete work units executed by distributed gRPC worker processes
+- **Capabilities**: Pre-defined workflows agents can execute (e.g., "send_email", "analyze_data")  
+- **Step Execution**: Real-time streaming of task progress with granular step tracking
+- **Distributed Workers**: Python gRPC services that can run in separate containers/instances
+- **Multi-tenant Routing**: Automatic worker discovery and organization-based task routing
 
 ### 3. OAuth Credential Delegation
 - **User-Owned Credentials**: Agents use the OAuth tokens of their owners, not system credentials
@@ -133,10 +186,13 @@ Emery is an enterprise AI agent orchestration platform that combines dynamic dat
 
 ## 🔌 API Endpoints
 
-### Agent Management
-- `POST /api/tasks` - Create task for agent execution
+### Agent Management (gRPC-Powered)
+- `POST /api/tasks` - Create task for agent execution via gRPC workers
 - `GET /api/agents/{id}/capabilities` - Get agent capabilities and connected services
-- `POST /api/agents/{id}/execute` - Execute agent action (with webhook support)
+- `POST /api/agents/{id}/execute` - Execute agent action with real-time streaming
+- `GET /api/tasks/{id}/stream` - Server-Sent Events for real-time task progress
+- `GET /api/agents/{id}/worker-status` - Check worker health and status
+- `GET /api/workers/discovery` - Debug worker service discovery
 
 ### OAuth Proxy  
 - `POST /api/agents/proxy` - Universal OAuth proxy for all external service calls
@@ -189,7 +245,13 @@ pnpm dev                         # Next.js development server
 pnpm build                       # Production build
 pnpm lint                        # ESLint code quality checks
 
-# Agent Testing
+# gRPC Worker Management
+pnpm worker:start                # Start Python gRPC worker service
+pnpm grpc:generate               # Generate protobuf code (TypeScript + Python)
+
+# Testing & Integration
+pnpm test:grpc                   # Test gRPC client-server communication  
+pnpm test:nextjs-grpc           # Test complete NextJS + gRPC integration
 uv run scripts/test_integration.py <agent_id>  # Test Python agent integration
 pnpm test:agent-api <agent_id>   # Test agent API endpoints
 ```
@@ -207,14 +269,22 @@ NEXTAUTH_SECRET=your_secret
 NEXTAUTH_URL=http://localhost:3000
 GITHUB_ID=your_github_oauth_id
 GITHUB_SECRET=your_github_oauth_secret
+
+# gRPC Worker Configuration
+WORKER_ADDRESS=localhost:50051         # Single worker for development
+WORKER_HOST=localhost                  # Worker service host
+WORKER_BASE_PORT=50051                # Base port for multi-tenant workers
+WORKER_ADDRESS_ORG1=localhost:50052   # Organization-specific workers
 ```
 
 ## 🎯 Use Cases
 
 ### For Engineering Teams
 - **No-Code Database Creation**: Product managers can create tables without engineering sprints
+- **Scalable Agent Workers**: gRPC workers can run in separate containers for horizontal scaling
 - **External API Integration**: Agents handle complex OAuth workflows with external services  
-- **Workflow Automation**: Automate repetitive tasks across Gmail, Slack, GitHub, etc.
+- **Real-time Monitoring**: Stream task execution progress with Server-Sent Events
+- **Multi-tenant Architecture**: Organization-based worker routing and resource isolation
 - **Audit Trail**: Complete execution logs for debugging and compliance
 
 ### For Product Teams  
@@ -233,17 +303,20 @@ GITHUB_SECRET=your_github_oauth_secret
 
 ## 📈 Roadmap
 
-**Current Release:**
+**Current Release (v2.0 - gRPC Architecture):**
 - ✅ Dynamic table creation with custom fields
-- ✅ AI agent orchestration with task management
+- ✅ AI agent orchestration with distributed gRPC workers
+- ✅ Real-time task execution streaming via Server-Sent Events
+- ✅ Multi-tenant worker discovery and health monitoring
 - ✅ OAuth service integration (Gmail, Slack, GitHub)
 - ✅ Enterprise RBAC with organizations and teams
-- ✅ Python agent runtime with CLI interface
+- ✅ Python gRPC worker services with Protocol Buffers
+- ✅ Comprehensive integration testing suite
 
-**Next Release:**
-- [ ] Real-time task execution monitoring
+**Next Release (v2.1):**
 - [ ] Advanced workflow builder UI
 - [ ] Webhook endpoint management
 - [ ] Agent marketplace and templates
+- [ ] Container orchestration (Docker/Kubernetes)
 - [ ] Advanced analytics and reporting
 - [ ] Mobile app for task monitoring
