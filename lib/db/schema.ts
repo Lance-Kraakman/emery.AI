@@ -81,17 +81,15 @@ export const agents = pgTable("agents", {
   role: text("role"),
   description: text("description"),
   persona: text("persona"),
-  model: text("model"),
-  tools: text("tools").array(),
-  servers: text("servers").array(),
-  goals: text("goals").array(),
+  ownerId: uuid("owner_id").notNull().references(() => users.id), // Agent owner (user)
+  tools: jsonb("tools"), // Available tools as JSONB for rich configuration
+  servers: jsonb("servers"), // Available servers as JSONB for rich configuration  
   trigger: jsonb("trigger"), // Trigger configuration (JSON blob)
-  capabilities: jsonb("capabilities"), // Array of Capability objects with steps (JSON blob)
+  capabilities: jsonb("capabilities"), // STATIC: Array of Capability objects with steps (JSON blob)
   databaseId: text("database_id"),
   status: text("status").default("active"),
   organizationId: integer("organization_id").references(() => organizations.id),
   roleId: integer("role_id").references(() => roles.id),
-  ownerId: uuid("owner_id").notNull().references(() => users.id), // Agent owner (user)
   apiKey: text("api_key").unique(), // For API authentication
   lastUsedAt: timestamp("last_used_at"), // Track API key usage
   createdAt: timestamp("created_at").defaultNow(),
@@ -99,42 +97,32 @@ export const agents = pgTable("agents", {
 
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
+  agentId: integer("agent_id").notNull().references(() => agents.id), // WHICH agent executes this
   name: text("name").notNull(),
-  status: text("status").notNull().default("pending"), // pending, in_progress, completed, error
-  payload: jsonb("payload"), // Task payload data (JSON blob)
-  result: jsonb("result"), // Task result data (JSON blob)
+  capabilityName: text("capability_name").notNull(), // WHICH capability to use
+  status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed
+  payload: jsonb("payload"), // Input data for the task
+  result: jsonb("result"), // Final output data
   error: text("error"),
-  createdAt: timestamp("created_at").defaultNow(),
-  completedAt: timestamp("completed_at"),
-});
-
-export const taskExecutions = pgTable("task_executions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  agentId: integer("agent_id").notNull().references(() => agents.id),
-  capabilityName: text("capability_name").notNull(), // Which capability is being executed
-  triggerType: text("trigger_type").notNull(), // MANUAL, CRON, WEBHOOK, DATABASE_EVENT
-  status: text("status").notNull().default("pending"), // pending, in_progress, completed, error
-  inputData: jsonb("input_data"),
-  outputData: jsonb("output_data"),
-  errorMessage: text("error_message"),
-  startedAt: timestamp("started_at").defaultNow(),
+  
+  // Execution tracking
+  startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
   createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const stepExecutions = pgTable("step_executions", {
   id: uuid("id").primaryKey().defaultRandom(),
-  taskExecutionId: uuid("task_execution_id").notNull().references(() => taskExecutions.id),
-  stepId: text("step_id").notNull(),
+  taskId: uuid("task_id").notNull().references(() => tasks.id), // Reference the task directly
+  stepId: text("step_id").notNull(), // References the step ID from capability definition
   stepType: text("step_type").notNull(), // code_step, tool_step
   instructions: text("instructions"),
-  tools: text("tools").array(),
-  servers: text("servers").array(),
   inputData: jsonb("input_data"),
   outputData: jsonb("output_data"),
-  status: text("status").notNull().default("pending"), // pending, in_progress, completed, error
+  status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed
   errorMessage: text("error_message"),
-  startedAt: timestamp("started_at").defaultNow(),
+  startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
 });
 

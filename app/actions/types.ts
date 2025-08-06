@@ -69,14 +69,26 @@ export interface CreateAgentData {
   role?: string;
   description?: string;
   persona?: string;
-  model?: string;
-  tools?: string[];
-  servers?: string[];
-  goals?: string[];
+  // Remove: model (now per-step)
+  // Remove: goals (not needed)
+  tools?: ToolConfig[];
+  servers?: ServerConfig[];
   trigger?: TriggerConfig;
   capabilities?: CapabilityConfig[];
   status?: string;
   roleId?: number;
+}
+
+export interface ToolConfig {
+  name: string;
+  version?: string;
+  config?: Record<string, any>;
+}
+
+export interface ServerConfig {
+  name: string;
+  endpoint?: string;
+  config?: Record<string, any>;
 }
 
 export interface TriggerConfig {
@@ -97,8 +109,47 @@ export interface StepConfig {
   id: string;
   type: 'CODE_STEP' | 'TOOL_STEP';
   instructions: string;
-  tools?: string[];
-  servers?: string[];
+  model?: string; // Per-step model specification
+  tools?: ToolConfig[];
+  servers?: ServerConfig[];
+}
+
+// New Task types aligned with frontend model
+export interface Task {
+  id: string;
+  agentId: number;
+  name: string;
+  capabilityName: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  payload: Record<string, any>;
+  result?: any;
+  error?: string;
+  startedAt?: Date;
+  completedAt?: Date;
+  createdBy?: string;
+  createdAt: Date;
+}
+
+export interface StepExecution {
+  id: string;
+  taskId: string;
+  stepId: string;
+  stepType: 'code_step' | 'tool_step';
+  instructions?: string;
+  inputData?: Record<string, any>;
+  outputData?: Record<string, any>;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  errorMessage?: string;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
+export interface CreateTaskData {
+  agentId: number;
+  name: string;
+  capabilityName: string;
+  payload: Record<string, any>;
+  createdBy?: string;
 }
 
 export interface CreateRoleData {

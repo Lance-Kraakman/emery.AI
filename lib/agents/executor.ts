@@ -5,7 +5,7 @@
 
 import { spawn } from 'child_process';
 import { db } from '@/lib/db/client';
-import { taskExecutions } from '@/lib/db/schema';
+import { tasks } from '@/lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
 
 export interface AgentCapabilityRequest {
@@ -49,14 +49,15 @@ export async function executeAgentCapability(
   console.log(`[CAPABILITY] Starting execution ${executionId} for agent ${agent.id} capability '${capabilityName}'`);
   
   try {
-    // Record task execution start in database
-    await db.insert(taskExecutions).values({
+    // Record task start in database
+    await db.insert(tasks).values({
       id: executionId,
       agentId: agent.id,
+      name: `Capability execution: ${capabilityName}`,
       capabilityName: capabilityName,
-      triggerType: triggerData.trigger_type || 'MANUAL',
-      status: 'pending',
-      inputData: triggerData,
+      status: 'in_progress',
+      payload: triggerData,
+      startedAt: new Date(),
       createdBy: agent.ownerId,
     });
     
@@ -104,14 +105,14 @@ export async function executeAgentCapability(
             const result = JSON.parse(output.trim());
             
             // Update database with results
-            await db.update(taskExecutions)
+            await db.update(tasks)
               .set({
                 status: result.status || 'completed',
-                outputData: result.output_data,
-                errorMessage: result.error_message,
+                result: result.output_data,
+                error: result.error_message,
                 completedAt: new Date(),
               })
-              .where(eq(taskExecutions.id, executionId));
+              .where(eq(tasks.id, executionId));
             
             resolve({
               success: true,
@@ -126,13 +127,13 @@ export async function executeAgentCapability(
             const errorMessage = errorOutput || output || `Process exited with code ${code}`;
             
             // Update database with error
-            await db.update(taskExecutions)
+            await db.update(tasks)
               .set({
                 status: 'failed',
-                errorMessage,
+                error: errorMessage,
                 completedAt: new Date(),
               })
-              .where(eq(taskExecutions.id, executionId));
+              .where(eq(tasks.id, executionId));
             
             resolve({
               success: false,
@@ -146,13 +147,13 @@ export async function executeAgentCapability(
           console.error(`[CAPABILITY-PARSE-ERROR] ${executionId}:`, parseError);
           
           // Update database with parse error
-          await db.update(taskExecutions)
+          await db.update(tasks)
             .set({
               status: 'failed',
-              errorMessage: `Failed to parse execution result: ${parseError}`,
+              error: `Failed to parse execution result: ${parseError}`,
               completedAt: new Date(),
             })
-            .where(eq(taskExecutions.id, executionId));
+            .where(eq(tasks.id, executionId));
           
           resolve({
             success: false,
@@ -169,13 +170,13 @@ export async function executeAgentCapability(
         console.error(`[CAPABILITY-SPAWN-ERROR] ${executionId}:`, error);
         
         // Update database with spawn error
-        await db.update(taskExecutions)
+        await db.update(tasks)
           .set({
             status: 'failed',
-            errorMessage: `Failed to spawn agent process: ${error.message}`,
+            error: `Failed to spawn agent process: ${error.message}`,
             completedAt: new Date(),
           })
-          .where(eq(taskExecutions.id, executionId));
+          .where(eq(tasks.id, executionId));
         
         resolve({
           success: false,
@@ -204,13 +205,13 @@ export async function executeAgentCapability(
     
     // Update database with error
     try {
-      await db.update(taskExecutions)
+      await db.update(tasks)
         .set({
           status: 'failed',
-          errorMessage: error instanceof Error ? error.message : String(error),
+          error: error instanceof Error ? error.message : String(error),
           completedAt: new Date(),
         })
-        .where(eq(taskExecutions.id, executionId));
+        .where(eq(tasks.id, executionId));
     } catch (dbError) {
       console.error(`[CAPABILITY-DB-ERROR] ${executionId}:`, dbError);
     }
@@ -226,30 +227,30 @@ export async function executeAgentCapability(
 }
 
 /**
- * Get task execution status from database.
+ * Get task status from database.
  */
-export async function getTaskExecution(executionId: string) {
-  const [execution] = await db
+export async function getTask(taskId: string) {
+  const [task] = await db
     .select()
-    .from(taskExecutions)
-    .where(eq(taskExecutions.id, executionId))
+    .from(tasks)
+    .where(eq(tasks.id, taskId))
     .limit(1);
   
-  return execution;
+  return task;
 }
 
 /**
- * List task executions for a specific agent.
+ * List tasks for a specific agent.
  */
-export async function listTaskExecutions(agentId: number, limit = 50) {
-  const executions = await db
+export async function listTasks(agentId: number, limit = 50) {
+  const tasks_list = await db
     .select()
-    .from(taskExecutions)
-    .where(eq(taskExecutions.agentId, agentId))
-    .orderBy(desc(taskExecutions.startedAt))
+    .from(tasks)
+    .where(eq(tasks.agentId, agentId))
+    .orderBy(desc(tasks.startedAt))
     .limit(limit);
   
-  return executions;
+  return tasks_list;
 }
 
 

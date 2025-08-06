@@ -39,7 +39,9 @@ async function seed() {
           'manage_data',
           'manage_users',
           'manage_teams',
-          'manage_agents'
+          'manage_agents',
+          'view_agents',  // Add missing permission
+          'view_tasks'    // Add for task viewing
         ],
         organizationId: defaultOrg.id
       }).returning();
@@ -61,7 +63,9 @@ async function seed() {
         permissions: [
           'create_table',
           'create_fields',
-          'manage_data'
+          'manage_data',
+          'view_agents',  // Add missing permission
+          'view_tasks'    // Add for task viewing
         ],
         organizationId: defaultOrg.id
       }).returning();

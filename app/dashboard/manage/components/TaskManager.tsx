@@ -2,32 +2,33 @@
 
 import { useState, useEffect } from 'react';
 
-interface TaskExecution {
+interface Task {
   id: string;
   agentId: number;
+  name: string;
   capabilityName: string;
-  triggerType: string;
   status: string;
-  inputData?: any;
-  outputData?: any;
-  errorMessage?: string | null;
-  startedAt: Date | null;
-  completedAt: Date | null;
+  payload?: any;
+  result?: any;
+  error?: string | null;
+  startedAt?: Date | null;
+  completedAt?: Date | null;
   createdBy?: string | null;
+  createdAt: Date;
 }
 
-interface TaskExecutionsManagerProps {
-  executions: TaskExecution[];
+interface TaskManagerProps {
+  tasks: Task[];
   agents: Array<{id: number, name: string}>;
 }
 
-export default function TaskExecutionsManager({ executions, agents }: TaskExecutionsManagerProps) {
+export default function TaskManager({ tasks, agents }: TaskManagerProps) {
   const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
 
-  const filteredExecutions = selectedAgentId 
-    ? executions.filter(exec => exec.agentId === selectedAgentId)
-    : executions;
+  const filteredTasks = selectedAgentId 
+    ? tasks.filter(task => task.agentId === selectedAgentId)
+    : tasks;
 
   const getAgentName = (agentId: number) => {
     const agent = agents.find(a => a.id === agentId);
@@ -37,14 +38,16 @@ export default function TaskExecutionsManager({ executions, agents }: TaskExecut
   const executeCapability = async (agentId: number, capabilityName: string) => {
     setIsExecuting(true);
     try {
-      const response = await fetch(`/api/agents/${agentId}/execute`, {
+      const response = await fetch(`/api/tasks`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          capability_name: capabilityName,
-          trigger_data: {
+          agentId,
+          name: `Test execution: ${capabilityName}`,
+          capabilityName,
+          payload: {
             trigger_type: 'MANUAL',
             user_request: 'Test execution from dashboard',
             timestamp: new Date().toISOString()
@@ -55,14 +58,14 @@ export default function TaskExecutionsManager({ executions, agents }: TaskExecut
       const result = await response.json();
       
       if (result.success) {
-        alert(`Capability executed successfully! Execution ID: ${result.execution_id}`);
-        window.location.reload(); // Simple refresh to show new execution
+        alert(`Task created successfully! Task ID: ${result.data.id}`);
+        window.location.reload(); // Simple refresh to show new task
       } else {
-        alert(`Execution failed: ${result.error}`);
+        alert(`Task creation failed: ${result.error}`);
       }
     } catch (error) {
-      console.error('Execution error:', error);
-      alert(`Error executing capability: ${error}`);
+      console.error('Task creation error:', error);
+      alert(`Error creating task: ${error}`);
     } finally {
       setIsExecuting(false);
     }
@@ -81,7 +84,7 @@ export default function TaskExecutionsManager({ executions, agents }: TaskExecut
   return (
     <div className="border rounded p-4">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">Task Executions</h2>
+        <h2 className="text-xl font-semibold">Agent Tasks</h2>
         <div className="flex gap-2 items-center">
           <select 
             value={selectedAgentId || ''} 
@@ -134,64 +137,65 @@ export default function TaskExecutionsManager({ executions, agents }: TaskExecut
         </div>
       )}
 
-      {/* Executions List */}
+      {/* Tasks List */}
       <div className="space-y-2 max-h-96 overflow-y-auto">
-        {filteredExecutions.length === 0 && (
-          <p className="text-gray-500 text-center py-4">No task executions found</p>
+        {filteredTasks.length === 0 && (
+          <p className="text-gray-500 text-center py-4">No tasks found</p>
         )}
         
-        {filteredExecutions.map((execution) => (
-          <div key={execution.id} className="p-3 border rounded bg-white">
+        {filteredTasks.map((task) => (
+          <div key={task.id} className="p-3 border rounded bg-white">
             <div className="flex justify-between items-start mb-2">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-medium">{execution.capabilityName}</h3>
-                  <span className={`px-2 py-1 rounded text-xs ${getStatusColor(execution.status)}`}>
-                    {execution.status}
+                  <h3 className="font-medium">{task.name}</h3>
+                  <span className={`px-2 py-1 rounded text-xs ${getStatusColor(task.status)}`}>
+                    {task.status}
                   </span>
                 </div>
                 <p className="text-sm text-gray-600">
-                  Agent: {getAgentName(execution.agentId)} • 
-                  Trigger: {execution.triggerType} • 
-                  ID: {execution.id.substring(0, 8)}...
+                  Agent: {getAgentName(task.agentId)} • 
+                  Capability: {task.capabilityName} • 
+                  ID: {task.id.substring(0, 8)}...
                 </p>
-                {execution.startedAt && (
-                  <p className="text-xs text-gray-400">
-                    Started: {new Date(execution.startedAt).toLocaleString()}
-                    {execution.completedAt && (
-                      <> • Completed: {new Date(execution.completedAt).toLocaleString()}</>
-                    )}
-                  </p>
-                )}
+                <p className="text-xs text-gray-400">
+                  Created: {new Date(task.createdAt).toLocaleString()}
+                  {task.startedAt && (
+                    <> • Started: {new Date(task.startedAt).toLocaleString()}</>
+                  )}
+                  {task.completedAt && (
+                    <> • Completed: {new Date(task.completedAt).toLocaleString()}</>
+                  )}
+                </p>
               </div>
             </div>
 
-            {/* Input Data */}
-            {execution.inputData && (
+            {/* Task Payload */}
+            {task.payload && (
               <div className="mb-2">
-                <p className="text-xs font-semibold text-gray-700">Input:</p>
+                <p className="text-xs font-semibold text-gray-700">Payload:</p>
                 <pre className="text-xs bg-gray-50 p-2 rounded overflow-x-auto">
-                  {JSON.stringify(execution.inputData, null, 2)}
+                  {JSON.stringify(task.payload, null, 2)}
                 </pre>
               </div>
             )}
 
-            {/* Output Data */}
-            {execution.outputData && (
+            {/* Task Result */}
+            {task.result && (
               <div className="mb-2">
-                <p className="text-xs font-semibold text-gray-700">Output:</p>
+                <p className="text-xs font-semibold text-gray-700">Result:</p>
                 <pre className="text-xs bg-green-50 p-2 rounded overflow-x-auto">
-                  {JSON.stringify(execution.outputData, null, 2)}
+                  {JSON.stringify(task.result, null, 2)}
                 </pre>
               </div>
             )}
 
             {/* Error Message */}
-            {execution.errorMessage && (
+            {task.error && (
               <div className="mb-2">
                 <p className="text-xs font-semibold text-red-700">Error:</p>
                 <p className="text-xs bg-red-50 p-2 rounded text-red-800">
-                  {execution.errorMessage}
+                  {task.error}
                 </p>
               </div>
             )}
@@ -200,7 +204,7 @@ export default function TaskExecutionsManager({ executions, agents }: TaskExecut
       </div>
 
       <div className="mt-4 text-xs text-gray-500">
-        Total executions: {filteredExecutions.length}
+        Total tasks: {filteredTasks.length}
         {selectedAgentId && ` (filtered for ${getAgentName(selectedAgentId)})`}
       </div>
     </div>

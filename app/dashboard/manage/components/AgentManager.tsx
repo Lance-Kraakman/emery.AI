@@ -9,11 +9,9 @@ interface Agent {
   role?: string | null;
   description?: string | null;
   persona?: string | null;
-  model?: string | null;
-  tools?: string[] | null;
-  servers?: string[] | null;
-  goals?: string[] | null;
-  capabilities?: any | null; // JSONB field containing capabilities config
+  tools?: unknown; // JSONB field for ToolConfig[]
+  servers?: unknown; // JSONB field for ServerConfig[]
+  capabilities?: unknown; // JSONB field containing capabilities config
   status: string | null;
   apiKey?: string | null;
   createdAt: Date | null;
@@ -118,20 +116,25 @@ export default function AgentManager({ agents }: AgentManagerProps) {
               {agent.description && (
                 <p className="text-xs text-gray-500 mt-1">{agent.description}</p>
               )}
-              {agent.model && (
-                <p className="text-xs text-gray-400">Model: {agent.model}</p>
-              )}
-              {agent.tools && agent.tools.length > 0 && (
-                <p className="text-xs text-gray-400">Tools: {agent.tools.join(', ')}</p>
-              )}
-              {agent.servers && agent.servers.length > 0 && (
-                <p className="text-xs text-gray-400">Servers: {agent.servers.join(', ')}</p>
-              )}
-              {agent.capabilities && Array.isArray(agent.capabilities) && (
+              {agent.tools && Array.isArray(agent.tools) && agent.tools.length > 0 ? (
                 <p className="text-xs text-gray-400">
-                  Capabilities: {agent.capabilities.map(cap => cap.name).join(', ')}
+                  Tools: {(agent.tools as any[]).map(tool => 
+                    typeof tool === 'string' ? tool : tool.name || 'Unknown'
+                  ).join(', ')}
                 </p>
-              )}
+              ) : null}
+              {agent.servers && Array.isArray(agent.servers) && agent.servers.length > 0 ? (
+                <p className="text-xs text-gray-400">
+                  Servers: {(agent.servers as any[]).map(server => 
+                    typeof server === 'string' ? server : server.name || 'Unknown'
+                  ).join(', ')}
+                </p>
+              ) : null}
+              {agent.capabilities && Array.isArray(agent.capabilities) ? (
+                <p className="text-xs text-gray-400">
+                  Capabilities: {(agent.capabilities as any[]).map(cap => cap.name).join(', ')}
+                </p>
+              ) : null}
               {agent.apiKey && (
                 <p className="text-xs font-mono text-blue-600 mt-1">API Key: {agent.apiKey}</p>
               )}

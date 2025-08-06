@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from .types import TaskExecution, ExecutionContext, Agent
+from .types import Task, ExecutionContext, Agent
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +28,21 @@ class ExecutionContextManager:
     - execution_log.json: Execution progress log
     """
     
-    def __init__(self, task_execution: TaskExecution, agent: Agent):
-        self.task_execution = task_execution
+    def __init__(self, task: Task, agent: Agent):
+        self.task = task
         self.agent = agent
+        # Create execution context
+        from .types import Capability  # Avoid circular import
+        capability = None
+        for cap in agent.capabilities:
+            if cap.name == task.capability_name:
+                capability = cap
+                break
+        self.context = ExecutionContext(
+            agent=agent,
+            task=task,
+            capability=capability
+        )
         self.base_dir = None
         self.context_file = None
         self.step_outputs_dir = None

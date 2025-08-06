@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Any, Optional
 import os
 
-from ..core.types import TaskExecution
+from ..core.types import Task
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ class EmeryClientIntegration:
             logger.exception(f"Failed to get capabilities: {e}")
             return {"connected_services": [], "actions": []}
     
-    async def report_execution_result(self, task_execution: TaskExecution) -> None:
+    async def report_execution_result(self, task: Task) -> None:
         """
         Report task execution results back to Emery.
         

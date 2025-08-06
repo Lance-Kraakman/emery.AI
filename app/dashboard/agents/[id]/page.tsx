@@ -105,7 +105,6 @@ oauth_proxy.slack.post_message(
             <div className="space-y-2">
               <div><strong>ID:</strong> {agent.id}</div>
               <div><strong>Role:</strong> {agent.role || 'assistant'}</div>
-              <div><strong>Model:</strong> {agent.model || 'Not specified'}</div>
               <div><strong>Status:</strong> 
                 <span className={`ml-2 px-2 py-1 rounded text-xs ${
                   agent.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
@@ -137,44 +136,31 @@ oauth_proxy.slack.post_message(
           <div>
             <h3 className="font-semibold mb-3">Tools & Services</h3>
             <div className="space-y-3">
-              {agent.tools && agent.tools.length > 0 && (
+              {agent.tools && Array.isArray(agent.tools) && agent.tools.length > 0 ? (
                 <div>
                   <h4 className="font-medium text-sm">Tools:</h4>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {agent.tools.map((tool, index) => (
+                    {(agent.tools as any[]).map((tool, index) => (
                       <span key={index} className="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-xs">
-                        {tool}
+                        {typeof tool === 'string' ? tool : tool.name || 'Unknown'}
                       </span>
                     ))}
                   </div>
                 </div>
-              )}
+              ) : null}
               
-              {agent.servers && agent.servers.length > 0 && (
+              {agent.servers && Array.isArray(agent.servers) && agent.servers.length > 0 ? (
                 <div>
                   <h4 className="font-medium text-sm">Servers:</h4>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {agent.servers.map((server, index) => (
+                    {(agent.servers as any[]).map((server, index) => (
                       <span key={index} className="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">
-                        {server}
+                        {typeof server === 'string' ? server : server.name || 'Unknown'}
                       </span>
                     ))}
                   </div>
                 </div>
-              )}
-
-              {agent.goals && agent.goals.length > 0 && (
-                <div>
-                  <h4 className="font-medium text-sm">Goals:</h4>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {agent.goals.map((goal, index) => (
-                      <span key={index} className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
-                        {goal}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+              ) : null}
             </div>
             
             <div className="mt-4">

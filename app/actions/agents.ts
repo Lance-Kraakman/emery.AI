@@ -20,10 +20,8 @@ export async function createAgent(data: CreateAgentData): Promise<ActionResult> 
       role, 
       description, 
       persona, 
-      model, 
       tools, 
       servers, 
-      goals, 
       trigger, 
       capabilities, 
       status, 
@@ -42,16 +40,14 @@ export async function createAgent(data: CreateAgentData): Promise<ActionResult> 
       role: role || 'assistant',
       description,
       persona,
-      model,
-      tools,
-      servers,
-      goals,
+      ownerId: session.user.id, // Agent is owned by the creating user
+      tools: tools ? tools as any : null, // JSONB field - rich tool configuration
+      servers: servers ? servers as any : null, // JSONB field - rich server configuration
       trigger: trigger ? trigger as any : null, // JSONB field
       capabilities: capabilities ? capabilities as any : null, // JSONB field
       status: status || "active",
       organizationId: session.user.organizationId,
       roleId: roleId || null,
-      ownerId: session.user.id, // Agent is owned by the creating user
       apiKey: generateApiKey(),
     }).returning();
 
@@ -75,25 +71,33 @@ export async function createAgentAction(formData: FormData) {
   const role = formData.get('role') as string;
   const description = formData.get('description') as string;
   const persona = formData.get('persona') as string;
-  const model = formData.get('model') as string;
   const status = formData.get('status') as string;
   const toolsStr = formData.get('tools') as string;
   const serversStr = formData.get('servers') as string;
-  const goalsStr = formData.get('goals') as string;
   
-  const tools = toolsStr ? toolsStr.split(',').map(t => t.trim()).filter(t => t) : undefined;
-  const servers = serversStr ? serversStr.split(',').map(s => s.trim()).filter(s => s) : undefined;
-  const goals = goalsStr ? goalsStr.split(',').map(g => g.trim()).filter(g => g) : undefined;
+  // Parse tools into ToolConfig[] format
+  const tools = toolsStr 
+    ? toolsStr.split(',')
+        .map(t => t.trim())
+        .filter(t => t)
+        .map(toolName => ({ name: toolName })) // Simple format, can be enhanced later
+    : undefined;
+  
+  // Parse servers into ServerConfig[] format  
+  const servers = serversStr 
+    ? serversStr.split(',')
+        .map(s => s.trim())
+        .filter(s => s)
+        .map(serverName => ({ name: serverName })) // Simple format, can be enhanced later
+    : undefined;
 
   const result = await createAgent({ 
     name, 
     role, 
     description, 
     persona, 
-    model, 
     tools, 
     servers, 
-    goals, 
     status 
   });
   

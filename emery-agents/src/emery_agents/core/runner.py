@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 from .types import (
-    Agent, TaskExecution, StepExecution, AgentStep, Capability,
+    Agent, Task, StepExecution, AgentStep, Capability,
     TaskStatus, ExecutionContext, StepType
 )
 from .context_manager import ExecutionContextManager
@@ -51,7 +51,7 @@ class AgentRunner:
         capability_name: str,
         trigger_data: Dict[str, Any],
         step_overrides: Optional[List[Dict[str, Any]]] = None
-    ) -> TaskExecution:
+    ) -> Task:
         """
         Execute a specific agent capability with all its steps.
         
@@ -62,7 +62,7 @@ class AgentRunner:
             step_overrides: Optional step-level parameter overrides
             
         Returns:
-            TaskExecution with results from all steps
+            Task with results from all steps
         """
         # Find the capability to execute
         capability = None
@@ -77,17 +77,18 @@ class AgentRunner:
         execution_id = str(uuid.uuid4())
         logger.info(f"Starting capability execution {execution_id} for agent {agent.id}, capability: {capability_name}")
         
-        task_execution = TaskExecution(
+        task = Task(
             id=execution_id,
-            agent_id=agent.id,
+            agent_id=int(agent.id),  # Convert to int to match schema
+            name=f"Capability execution: {capability_name}",
             capability_name=capability_name,
-            trigger_type=trigger_data.get('trigger_type', 'MANUAL'),
-            input_data=trigger_data,
+            status=TaskStatus.IN_PROGRESS,
+            payload=trigger_data,
             started_at=datetime.now()
         )
         
         # Use context manager for persistent state between steps
-        with ExecutionContextManager(task_execution, agent) as context_manager:
+        with ExecutionContextManager(task, agent) as context_manager:
             try:
                 # Execute each step in the capability sequence
                 for i, step in enumerate(capability.steps):
@@ -104,7 +105,7 @@ class AgentRunner:
                     
                     # Execute the step
                     step_result = await self._execute_step(step_config, step_context, context_manager)
-                    task_execution.step_executions.append(step_result)
+                    context_manager.context.step_executions.append(step_result)
                     
                     # Save step output to persistent context
                     if step_result.output_data:
@@ -114,32 +115,32 @@ class AgentRunner:
                     context_manager.mark_step_completed(step.id)
                     
                     # Stop execution if step failed
-                    if step_result.status == TaskStatus.ERROR:
+                    if step_result.status == TaskStatus.FAILED:
                         logger.error(f"Step {step.id} failed: {step_result.error_message}")
-                        task_execution.status = TaskStatus.ERROR
-                        task_execution.error_message = f"Step {step.id} failed: {step_result.error_message}"
+                        task.status = TaskStatus.FAILED
+                        task.error = f"Step {step.id} failed: {step_result.error_message}"
                         break
                 
                 # Mark execution as completed if all steps succeeded
-                if task_execution.status == TaskStatus.PENDING:
-                    task_execution.status = TaskStatus.COMPLETED
+                if task.status == TaskStatus.IN_PROGRESS:
+                    task.status = TaskStatus.COMPLETED
                     # Get final context as output
                     final_context = context_manager.get_context()
-                    task_execution.output_data = final_context.get("step_outputs", {})
+                    task.result = final_context.get("step_outputs", {})
                 
             except Exception as e:
                 logger.exception(f"Task execution {execution_id} failed with exception")
-                task_execution.status = TaskStatus.ERROR
-                task_execution.error_message = str(e)
+                task.status = TaskStatus.FAILED
+                task.error = str(e)
             
             finally:
-                task_execution.completed_at = datetime.now()
+                task.completed_at = datetime.now()
                 
                 # Report execution results back to Emery
-                await self._report_execution_results(task_execution)
+                await self._report_execution_results(task)
         
-        logger.info(f"Task execution {execution_id} completed with status: {task_execution.status}")
-        return task_execution
+        logger.info(f"Task execution {execution_id} completed with status: {task.status}")
+        return task
     
     async def _execute_step(
         self, 
@@ -251,11 +252,11 @@ class AgentRunner:
             # AIDEV-NOTE: Simplified step configuration with StepType enum
         )
     
-    async def _report_execution_results(self, task_execution: TaskExecution) -> None:
+    async def _report_execution_results(self, task: Task) -> None:
         """Report execution results back to the Emery system."""
         try:
-            await self.emery_client.report_execution_result(task_execution)
-            logger.info(f"Reported execution results for {task_execution.id}")
+            await self.emery_client.report_execution_result(task)
+            logger.info(f"Reported execution results for {task.id}")
         except Exception as e:
             logger.error(f"Failed to report execution results: {e}")
 

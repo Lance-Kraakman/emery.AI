@@ -39,12 +39,27 @@ class Trigger:
 
 
 @dataclass
+class ToolConfig:
+    name: str
+    version: Optional[str] = None
+    config: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ServerConfig:
+    name: str
+    endpoint: Optional[str] = None
+    config: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class AgentStep:
     id: str
     type: StepType
     instructions: str
-    tools: List[str] = field(default_factory=list)
-    servers: List[str] = field(default_factory=list)
+    model: Optional[str] = None  # Per-step model specification
+    tools: List[ToolConfig] = field(default_factory=list)
+    servers: List[ServerConfig] = field(default_factory=list)
 
 
 @dataclass
@@ -57,11 +72,17 @@ class Capability:
 @dataclass
 class Task:
     id: str
+    agent_id: int
     name: str
+    capability_name: str  # Which capability to use
     status: TaskStatus
     payload: Dict[str, Any] = field(default_factory=dict)
     result: Optional[Any] = None
     error: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    created_by: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 @dataclass
@@ -71,31 +92,29 @@ class Agent:
     role: Optional[str] = None
     description: Optional[str] = None
     persona: Optional[str] = None
-    model: Optional[str] = None
-    tools: List[str] = field(default_factory=list)
-    servers: List[str] = field(default_factory=list)
-    goals: List[str] = field(default_factory=list)
+    # Removed: model (now per-step)
+    # Removed: goals (not needed)
+    tools: List[ToolConfig] = field(default_factory=list)
+    servers: List[ServerConfig] = field(default_factory=list)
     trigger: Optional[Trigger] = None
     capabilities: List[Capability] = field(default_factory=list)
     database_id: Optional[str] = None
     status: str = "active"
     organization_id: Optional[int] = None
-    role_id: Optional[int] = None  # Add role_id field from database
+    role_id: Optional[int] = None
     owner_id: Optional[str] = None
     api_key: Optional[str] = None
-    last_used_at: Optional[datetime] = None  # Add last_used_at field
-    created_at: Optional[datetime] = None  # Add created_at field
+    last_used_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
 
 
 @dataclass
 class StepExecution:
     id: str
-    task_execution_id: str  # Match database schema field name
+    task_id: str  # References task directly (updated field name)
     step_id: str
     step_type: StepType
     instructions: Optional[str] = None
-    tools: List[str] = field(default_factory=list)
-    servers: List[str] = field(default_factory=list)
     input_data: Dict[str, Any] = field(default_factory=dict)
     output_data: Dict[str, Any] = field(default_factory=dict)
     status: TaskStatus = TaskStatus.PENDING
@@ -104,33 +123,18 @@ class StepExecution:
     completed_at: Optional[datetime] = None
 
 
-@dataclass
-class TaskExecution:
-    """Main task execution containing multiple step executions"""
-    id: str
-    agent_id: str
-    capability_name: str  # Which capability is being executed
-    trigger_type: str
-    status: TaskStatus = TaskStatus.PENDING
-    input_data: Dict[str, Any] = field(default_factory=dict)
-    output_data: Dict[str, Any] = field(default_factory=dict)
-    error_message: Optional[str] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    created_by: Optional[str] = None
-    
-    # Step executions for this task
-    step_executions: List[StepExecution] = field(default_factory=list)
+# TaskExecution class removed - now using Task directly
 
 
 @dataclass
 class ExecutionContext:
     """Context passed between agent steps during execution"""
     agent: Agent
-    task_execution: TaskExecution
+    task: Task  # Updated to use Task instead of TaskExecution
     capability: Capability
     variables: Dict[str, Any] = field(default_factory=dict)
     outputs: Dict[str, Any] = field(default_factory=dict)  # Outputs from previous steps
+    step_executions: List[StepExecution] = field(default_factory=list)  # Track step executions
 
 
 # AIDEV-NOTE: These types mirror the TypeScript definitions exactly for consistency

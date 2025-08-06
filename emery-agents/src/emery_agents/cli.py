@@ -11,7 +11,7 @@ import sys
 from typing import Dict, Any
 
 from .core.runner import AgentRunner
-from .core.types import Agent, StepType, TriggerType, Trigger, AgentStep, Capability
+from .core.types import Agent, StepType, TriggerType, Trigger, AgentStep, Capability, ToolConfig, ServerConfig
 from .integrations.smolagents import SmolAgentsIntegration
 from .integrations.mcp_servers import MCPServerIntegration
 from .integrations.emery_client import EmeryClientIntegration
@@ -54,12 +54,44 @@ def parse_agent_config(config_data: Dict[str, Any]) -> Agent:
         # Parse steps for this capability
         cap_steps = []
         for step_data in cap_data.get('steps', []):
+            step_type_str = step_data.get('type', 'TOOL_STEP')
+            # Map from uppercase API format to lowercase enum values
+            step_type_map = {
+                'TOOL_STEP': 'tool_step',
+                'CODE_STEP': 'code_step'
+            }
+            step_type_value = step_type_map.get(step_type_str, step_type_str.lower())
+            
+            # Parse tools and servers as rich config objects
+            tools = []
+            for tool in step_data.get('tools', []):
+                if isinstance(tool, str):
+                    tools.append(ToolConfig(name=tool))
+                else:
+                    tools.append(ToolConfig(
+                        name=tool.get('name', ''),
+                        version=tool.get('version'),
+                        config=tool.get('config', {})
+                    ))
+            
+            servers = []
+            for server in step_data.get('servers', []):
+                if isinstance(server, str):
+                    servers.append(ServerConfig(name=server))
+                else:
+                    servers.append(ServerConfig(
+                        name=server.get('name', ''),
+                        endpoint=server.get('endpoint'),
+                        config=server.get('config', {})
+                    ))
+            
             cap_steps.append(AgentStep(
                 id=step_data['id'],
-                type=StepType(step_data.get('type', 'TOOL_STEP')),
+                type=StepType(step_type_value),
                 instructions=step_data['instructions'],
-                tools=step_data.get('tools', []),
-                servers=step_data.get('servers', [])
+                model=step_data.get('model'),  # Per-step model
+                tools=tools,
+                servers=servers
             ))
         
         capabilities.append(Capability(
@@ -68,16 +100,39 @@ def parse_agent_config(config_data: Dict[str, Any]) -> Agent:
             steps=cap_steps
         ))
     
+    # Parse agent-level tools and servers as rich config objects
+    agent_tools = []
+    for tool in config_data.get('tools', []):
+        if isinstance(tool, str):
+            agent_tools.append(ToolConfig(name=tool))
+        else:
+            agent_tools.append(ToolConfig(
+                name=tool.get('name', ''),
+                version=tool.get('version'),
+                config=tool.get('config', {})
+            ))
+    
+    agent_servers = []
+    for server in config_data.get('servers', []):
+        if isinstance(server, str):
+            agent_servers.append(ServerConfig(name=server))
+        else:
+            agent_servers.append(ServerConfig(
+                name=server.get('name', ''),
+                endpoint=server.get('endpoint'),
+                config=server.get('config', {})
+            ))
+
     return Agent(
         id=str(config_data['id']),
         name=config_data['name'],
         role=config_data.get('role', ''),
         description=config_data.get('description', ''),
         persona=config_data.get('persona', ''),
-        model=config_data.get('model'),
-        tools=config_data.get('tools', []),
-        servers=config_data.get('servers', []),
-        goals=config_data.get('goals', []),
+        # Removed: model (now per-step)
+        # Removed: goals (not needed)
+        tools=agent_tools,
+        servers=agent_servers,
         trigger=trigger,
         capabilities=capabilities,
         database_id=config_data.get('database_id'),
@@ -117,31 +172,22 @@ async def execute_capability_command(agent_id: str, capability_name: str):
         
         # Create runner and execute capability
         runner = AgentRunner(emery_client, smolagents, mcp_servers)
-        task_execution = await runner.execute_capability(agent, capability_name, trigger_data, step_overrides)
+        task = await runner.execute_capability(agent, capability_name, trigger_data, step_overrides)
         
         # Output results as JSON
         result = {
-            "execution_id": task_execution.id,
-            "capability_name": task_execution.capability_name,
-            "status": task_execution.status.value,
-            "output_data": task_execution.output_data,
-            "error_message": task_execution.error_message,
-            "step_executions": [
-                {
-                    "step_id": step.step_id,
-                    "step_type": step.step_type.value,
-                    "status": step.status.value,
-                    "output_data": step.output_data,
-                    "error_message": step.error_message
-                }
-                for step in task_execution.step_executions
-            ]
+            "execution_id": task.id,
+            "capability_name": task.capability_name,
+            "status": task.status.value,
+            "output_data": task.result,
+            "error_message": task.error,
+            "step_executions": []  # Step executions will be tracked separately in the context
         }
         
         print(json.dumps(result, indent=2))
         
         # Exit with appropriate code
-        sys.exit(0 if task_execution.status.value in ["completed"] else 1)
+        sys.exit(0 if task.status.value in ["completed"] else 1)
         
     except Exception as e:
         logger.exception(f"Agent execution failed: {e}")

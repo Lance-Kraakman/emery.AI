@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db/client';
-import { agents, taskExecutions } from '@/lib/db/schema';
+import { agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { runActionForAgent } from '@/lib/pipedream/agents';
 import { executeAgentCapability } from '@/lib/agents/executor';

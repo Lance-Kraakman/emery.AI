@@ -9,10 +9,11 @@ This package provides:
 """
 
 from .core.types import (
-    Agent, AgentStep, TaskExecution, StepExecution,
+    Agent, AgentStep, StepExecution,
     StepType, TriggerType, TaskStatus, Task,
-    Capability, Trigger, ExecutionContext
-    # AIDEV-NOTE: Updated to new Task-based model with StepType enum
+    Capability, Trigger, ExecutionContext,
+    ToolConfig, ServerConfig
+    # AIDEV-NOTE: Updated to new Task-based model - removed TaskExecution
 )
 from .core.runner import AgentRunner
 from .integrations.smolagents import SmolAgentsIntegration
@@ -27,7 +28,6 @@ __all__ = [
     # Core types
     "Agent",
     "AgentStep", 
-    "TaskExecution",
     "StepExecution",
     "StepType",
     "TriggerType",
@@ -36,6 +36,8 @@ __all__ = [
     "Capability",
     "Trigger",
     "ExecutionContext",
+    "ToolConfig",
+    "ServerConfig",
     
     # Core runner
     "AgentRunner",

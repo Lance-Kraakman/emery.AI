@@ -1,17 +1,17 @@
 """Core agent execution components."""
 
 from .types import (
-    Agent, AgentStep, TaskExecution, StepExecution,
+    Agent, AgentStep, StepExecution,
     StepType, TriggerType, TaskStatus, Task,
-    Capability, Trigger, ExecutionContext
-    # AIDEV-NOTE: Updated to new Task-based model
+    Capability, Trigger, ExecutionContext,
+    ToolConfig, ServerConfig
+    # AIDEV-NOTE: Updated to new Task-based model - removed TaskExecution
 )
 from .runner import AgentRunner
 
 __all__ = [
     "Agent",
     "AgentStep", 
-    "TaskExecution",
     "StepExecution",
     "StepType",
     "TriggerType", 
@@ -20,5 +20,7 @@ __all__ = [
     "Capability",
     "Trigger",
     "ExecutionContext",
+    "ToolConfig",
+    "ServerConfig",
     "AgentRunner",
 ]
