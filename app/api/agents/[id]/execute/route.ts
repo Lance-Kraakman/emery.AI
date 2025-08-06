@@ -31,8 +31,9 @@ export interface AgentExecuteResponse {
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ): Promise<Response> {
+  const params = await context.params;
   try {
     const session = await auth();
     

@@ -6,17 +6,18 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 
 interface AgentDetailsPageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default async function AgentDetailsPage({ params }: AgentDetailsPageProps) {
+  const { id } = await params;
   const session = await auth();
   
   if (!session?.user) {
     return <div>Please sign in to view agent details.</div>;
   }
 
-  const agentId = parseInt(params.id);
+  const agentId = parseInt(id);
   if (isNaN(agentId)) {
     notFound();
   }

@@ -105,7 +105,7 @@ async function executeWithOwnerCredentials(
     });
     console.log(`[PIPEDREAM-DEBUG] User accounts:`, JSON.stringify(accounts, null, 2));
     
-    if (!accounts || accounts.length === 0) {
+    if (!accounts || !Array.isArray(accounts.data) || accounts.data.length === 0) {
       throw new Error(`No OAuth connections found for user. Please connect ${service} in the dashboard.`);
     }
   } catch (accountError) {

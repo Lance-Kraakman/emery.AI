@@ -175,7 +175,7 @@ export default function RowManager({ tableId, organizationId, fields, rows, onRo
             value={value}
             onChange={onChange}
             relatedTableId={field.relatedTableId}
-            workspaceId={workspaceId}
+            workspaceId={organizationId}
             disabled={isPending}
           />
         );

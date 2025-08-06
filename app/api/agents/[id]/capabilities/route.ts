@@ -37,8 +37,9 @@ export interface AvailableAction {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ): Promise<Response> {
+  const params = await context.params;
   try {
     const session = await auth();
     
