@@ -15,19 +15,39 @@ function generateApiKey(): string {
 export async function createAgent(data: CreateAgentData): Promise<ActionResult> {
   try {
     const session = await requirePermission("manage_agents");
-    const { name, type, capabilities, status, roleId } = data;
+    const { 
+      name, 
+      role, 
+      description, 
+      persona, 
+      model, 
+      tools, 
+      servers, 
+      goals, 
+      trigger, 
+      capabilities, 
+      status, 
+      roleId 
+    } = data;
 
-    if (!name || !type) {
+    if (!name) {
       return {
         success: false,
-        error: "Agent name and type are required",
+        error: "Agent name is required",
       };
     }
 
     const [newAgent] = await db.insert(agents).values({
       name,
-      type,
-      capabilities,
+      role: role || 'assistant',
+      description,
+      persona,
+      model,
+      tools,
+      servers,
+      goals,
+      trigger: trigger ? trigger as any : null, // JSONB field
+      capabilities: capabilities ? capabilities as any : null, // JSONB field
       status: status || "active",
       organizationId: session.user.organizationId,
       roleId: roleId || null,
@@ -52,13 +72,30 @@ export async function createAgent(data: CreateAgentData): Promise<ActionResult> 
 
 export async function createAgentAction(formData: FormData) {
   const name = formData.get('name') as string;
-  const type = formData.get('type') as string;
+  const role = formData.get('role') as string;
+  const description = formData.get('description') as string;
+  const persona = formData.get('persona') as string;
+  const model = formData.get('model') as string;
   const status = formData.get('status') as string;
-  const capabilitiesStr = formData.get('capabilities') as string;
+  const toolsStr = formData.get('tools') as string;
+  const serversStr = formData.get('servers') as string;
+  const goalsStr = formData.get('goals') as string;
   
-  const capabilities = capabilitiesStr ? capabilitiesStr.split(',').map(c => c.trim()) : undefined;
+  const tools = toolsStr ? toolsStr.split(',').map(t => t.trim()).filter(t => t) : undefined;
+  const servers = serversStr ? serversStr.split(',').map(s => s.trim()).filter(s => s) : undefined;
+  const goals = goalsStr ? goalsStr.split(',').map(g => g.trim()).filter(g => g) : undefined;
 
-  const result = await createAgent({ name, type, capabilities, status });
+  const result = await createAgent({ 
+    name, 
+    role, 
+    description, 
+    persona, 
+    model, 
+    tools, 
+    servers, 
+    goals, 
+    status 
+  });
   
   if (!result.success) {
     throw new Error(result.error);

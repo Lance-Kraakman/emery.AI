@@ -103,7 +103,8 @@ oauth_proxy.slack.post_message(
             <h3 className="font-semibold mb-3">Agent Information</h3>
             <div className="space-y-2">
               <div><strong>ID:</strong> {agent.id}</div>
-              <div><strong>Type:</strong> {agent.type}</div>
+              <div><strong>Role:</strong> {agent.role || 'assistant'}</div>
+              <div><strong>Model:</strong> {agent.model || 'Not specified'}</div>
               <div><strong>Status:</strong> 
                 <span className={`ml-2 px-2 py-1 rounded text-xs ${
                   agent.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
@@ -116,19 +117,85 @@ oauth_proxy.slack.post_message(
                 <div><strong>Last Used:</strong> {agent.lastUsedAt.toLocaleDateString()}</div>
               )}
             </div>
+            
+            {agent.description && (
+              <div className="mt-4">
+                <h4 className="font-semibold mb-2">Description</h4>
+                <p className="text-gray-700 text-sm">{agent.description}</p>
+              </div>
+            )}
+            
+            {agent.persona && (
+              <div className="mt-4">
+                <h4 className="font-semibold mb-2">Persona</h4>
+                <p className="text-gray-700 text-sm">{agent.persona}</p>
+              </div>
+            )}
           </div>
 
           <div>
-            <h3 className="font-semibold mb-3">Capabilities</h3>
-            <div className="space-y-2">
-              {agent.capabilities && agent.capabilities.length > 0 ? (
-                agent.capabilities.map((capability, index) => (
-                  <span key={index} className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs mr-2 mb-2">
-                    {capability}
-                  </span>
-                ))
+            <h3 className="font-semibold mb-3">Tools & Services</h3>
+            <div className="space-y-3">
+              {agent.tools && agent.tools.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-sm">Tools:</h4>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {agent.tools.map((tool, index) => (
+                      <span key={index} className="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-xs">
+                        {tool}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {agent.servers && agent.servers.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-sm">Servers:</h4>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {agent.servers.map((server, index) => (
+                      <span key={index} className="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">
+                        {server}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {agent.goals && agent.goals.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-sm">Goals:</h4>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {agent.goals.map((goal, index) => (
+                      <span key={index} className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
+                        {goal}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="mt-4">
+              <h4 className="font-semibold mb-2">Capabilities</h4>
+              {agent.capabilities && Array.isArray(agent.capabilities) && agent.capabilities.length > 0 ? (
+                <div className="space-y-2">
+                  {agent.capabilities.map((capability: any, index: number) => (
+                    <div key={index} className="p-2 bg-gray-50 rounded text-sm">
+                      <div className="font-medium">{capability.name}</div>
+                      {capability.description && (
+                        <div className="text-gray-600 text-xs">{capability.description}</div>
+                      )}
+                      {capability.steps && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          {capability.steps.length} steps
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <div className="text-gray-500">No capabilities defined</div>
+                <div className="text-gray-500 text-sm">No capabilities defined</div>
               )}
             </div>
           </div>

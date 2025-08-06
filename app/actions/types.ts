@@ -66,10 +66,39 @@ export interface CreateTeamData {
 
 export interface CreateAgentData {
   name: string;
-  type: string;
-  capabilities?: string[];
+  role?: string;
+  description?: string;
+  persona?: string;
+  model?: string;
+  tools?: string[];
+  servers?: string[];
+  goals?: string[];
+  trigger?: TriggerConfig;
+  capabilities?: CapabilityConfig[];
   status?: string;
   roleId?: number;
+}
+
+export interface TriggerConfig {
+  type: 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT';
+  cron?: string;
+  webhook_url?: string;
+  webhook_secret?: string;
+  table_id?: number;
+}
+
+export interface CapabilityConfig {
+  name: string;
+  description: string;
+  steps: StepConfig[];
+}
+
+export interface StepConfig {
+  id: string;
+  type: 'CODE_STEP' | 'TOOL_STEP';
+  instructions: string;
+  tools?: string[];
+  servers?: string[];
 }
 
 export interface CreateRoleData {
