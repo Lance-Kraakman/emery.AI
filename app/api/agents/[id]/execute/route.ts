@@ -1,13 +1,18 @@
 import { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db/client';
-import { agents } from '@/lib/db/schema';
+import { agents, taskExecutions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { runActionForAgent } from '@/lib/pipedream/agents';
+import { executeAgentCapability } from '@/lib/agents/executor';
 
 export interface AgentExecuteRequest {
-  action: string;
-  props: Record<string, any>;
+  // New capability execution (main approach)
+  capability_name: string;
+  trigger_data?: Record<string, any>;
+  step_overrides?: Array<Record<string, any>>;
+  
+  // Common options
   webhook_url?: string;
   timeout?: number;
 }
@@ -20,8 +25,9 @@ export interface AgentExecuteResponse {
 }
 
 /**
- * Execute a Pipedream action on behalf of an agent using owner's OAuth credentials
- * This is the secure endpoint for Python backend apps to trigger agent actions
+ * Execute an agent capability via emery-agents package
+ * This is the secure endpoint for triggering specific agent capabilities
+ * with multi-step workflows and context persistence
  */
 export async function POST(
   request: NextRequest,
@@ -69,24 +75,26 @@ export async function POST(
     }
 
     const body: AgentExecuteRequest = await request.json();
-    const { action, props, webhook_url, timeout = 30000 } = body;
+    const { capability_name, trigger_data, step_overrides, webhook_url, timeout = 30000 } = body;
 
-    if (!action) {
-      return Response.json({ error: 'Action is required' }, { status: 400 });
+    if (!capability_name) {
+      return Response.json({ 
+        error: 'capability_name is required' 
+      }, { status: 400 });
     }
 
     // Generate execution ID for tracking
-    const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const executionId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Log the action execution for audit trail
-    console.log(`[AGENT-EXECUTE] ${executionId}: Agent ${agentId} executing ${action} for user ${userId}`);
-
-    // Execute the action using agent's owner credentials
-    const result = await runActionForAgent({
-      agentId,
-      ownerUserId: agent.ownerId,
-      actionId: action,
-      configuredProps: props,
+    // Execute agent capability via emery-agents package
+    console.log(`[CAPABILITY-EXEC] ${executionId}: Agent ${agentId} executing capability '${capability_name}' for user ${userId}`);
+    
+    const result = await executeAgentCapability({
+      agent,
+      capabilityName: capability_name,
+      triggerData: trigger_data || {},
+      stepOverrides: step_overrides,
+      executionId,
     });
 
     // If webhook URL provided, send result asynchronously
@@ -97,8 +105,8 @@ export async function POST(
           const webhookPayload = {
             execution_id: executionId,
             agent_id: agentId,
-            action,
-            result: result.data,
+            capability_name,
+            result: result.output_data,
             timestamp: new Date().toISOString(),
           };
 
@@ -125,7 +133,7 @@ export async function POST(
 
     const response: AgentExecuteResponse = {
       success: result.success,
-      result: result.data,
+      result: result.output_data,
       error: result.error,
       execution_id: executionId,
     };

@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, serial, integer, timestamp, boolean, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, serial, integer, timestamp, boolean, primaryKey, jsonb } from "drizzle-orm/pg-core";
 
 export const tables = pgTable("tables", {
   id: serial("id").primaryKey(),
@@ -26,6 +26,8 @@ export const organizations = pgTable("organizations", {
   name: text("name").notNull(),
   mission: text("mission"),
   sharedTools: text("shared_tools").array(),
+  sharedServers: text("shared_servers").array(),
+  databaseId: text("database_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -46,6 +48,8 @@ export const users = pgTable("users", {
   organizationId: integer("organization_id").references(() => organizations.id),
   roleId: integer("role_id").references(() => roles.id),
   jobTitle: text("job_title"),
+  role: text("role"),
+  teams: text("teams").array(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -58,6 +62,9 @@ export const teams = pgTable("teams", {
   responsibilities: text("responsibilities").array(),
   goals: text("goals").array(),
   tools: text("tools").array(),
+  servers: text("servers").array(),
+  agentIds: text("agent_ids").array(),
+  databaseId: text("database_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -71,8 +78,16 @@ export const teamMemberships = pgTable("team_memberships", {
 export const agents = pgTable("agents", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  type: text("type").notNull(),
-  capabilities: text("capabilities").array(),
+  role: text("role"),
+  description: text("description"),
+  persona: text("persona"),
+  model: text("model"),
+  tools: text("tools").array(),
+  servers: text("servers").array(),
+  goals: text("goals").array(),
+  trigger: jsonb("trigger"), // Trigger configuration (JSON blob)
+  capabilities: jsonb("capabilities"), // Array of Capability objects with steps (JSON blob)
+  databaseId: text("database_id"),
   status: text("status").default("active"),
   organizationId: integer("organization_id").references(() => organizations.id),
   roleId: integer("role_id").references(() => roles.id),
@@ -80,6 +95,47 @@ export const agents = pgTable("agents", {
   apiKey: text("api_key").unique(), // For API authentication
   lastUsedAt: timestamp("last_used_at"), // Track API key usage
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const tasks = pgTable("tasks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  status: text("status").notNull().default("pending"), // pending, in_progress, completed, error
+  payload: jsonb("payload"), // Task payload data (JSON blob)
+  result: jsonb("result"), // Task result data (JSON blob)
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const taskExecutions = pgTable("task_executions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: integer("agent_id").notNull().references(() => agents.id),
+  capabilityName: text("capability_name").notNull(), // Which capability is being executed
+  triggerType: text("trigger_type").notNull(), // MANUAL, CRON, WEBHOOK, DATABASE_EVENT
+  status: text("status").notNull().default("pending"), // pending, in_progress, completed, error
+  inputData: jsonb("input_data"),
+  outputData: jsonb("output_data"),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+  createdBy: uuid("created_by").references(() => users.id),
+});
+
+export const stepExecutions = pgTable("step_executions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  taskExecutionId: uuid("task_execution_id").notNull().references(() => taskExecutions.id),
+  stepId: text("step_id").notNull(),
+  stepType: text("step_type").notNull(), // code_step, tool_step
+  instructions: text("instructions"),
+  tools: text("tools").array(),
+  servers: text("servers").array(),
+  inputData: jsonb("input_data"),
+  outputData: jsonb("output_data"),
+  status: text("status").notNull().default("pending"), // pending, in_progress, completed, error
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
 });
 
 export const accounts = pgTable("accounts", {
