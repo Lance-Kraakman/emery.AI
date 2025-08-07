@@ -2,6 +2,13 @@ import { db } from "./client";
 import { sql } from "drizzle-orm";
 import postgres from "postgres";
 
+// Create a shared postgres client pool for raw SQL operations
+const rawClient = postgres(process.env.DATABASE_URL!, {
+  max: 10, // Maximum 10 connections in pool
+  idle_timeout: 20, // Close idle connections after 20 seconds
+  max_lifetime: 60 * 30, // Close connections after 30 minutes
+});
+
 export async function createDynamicTable(tableName: string) {
   await db.execute(sql.raw(`
     CREATE TABLE ${tableName} (
@@ -52,8 +59,7 @@ export async function insertRow(tableName: string, data: Record<string, any>): P
   const fields = Object.keys(data);
   const values = Object.values(data);
   
-  // Get the raw postgres client from environment
-  const client = postgres(process.env.DATABASE_URL!);
+  // Use shared client pool
   
   try {
     let query: string;
@@ -62,13 +68,13 @@ export async function insertRow(tableName: string, data: Record<string, any>): P
     if (fields.length === 0) {
       // Insert with default values and return the new row
       query = `INSERT INTO ${tableName} DEFAULT VALUES RETURNING *`;
-      result = await client.unsafe(query);
+      result = await rawClient.unsafe(query);
     } else {
       const fieldNames = fields.map(field => `"${field}"`).join(", ");
       const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
       
       query = `INSERT INTO ${tableName} (${fieldNames}) VALUES (${placeholders}) RETURNING *`;
-      result = await client.unsafe(query, values);
+      result = await rawClient.unsafe(query, values);
     }
     
     console.log(`[INSERT-ROW] Query: ${query}`);
@@ -79,9 +85,8 @@ export async function insertRow(tableName: string, data: Record<string, any>): P
   } catch (error) {
     console.error(`[INSERT-ROW] Error inserting row into ${tableName}:`, error);
     throw error;
-  } finally {
-    await client.end();
   }
+  // No need to close connection - using shared pool
 }
 
 export async function updateRow(tableName: string, id: string, data: Record<string, any>): Promise<any> {
@@ -93,7 +98,7 @@ export async function updateRow(tableName: string, id: string, data: Record<stri
     return null;
   }
 
-  const client = postgres(process.env.DATABASE_URL!);
+  // Use shared client pool
   
   try {
     const setClause = fields.map((field, i) => `"${field}" = $${i + 1}`).join(", ");
@@ -103,7 +108,7 @@ export async function updateRow(tableName: string, id: string, data: Record<stri
     console.log(`[UPDATE-ROW] Query: ${query}`);
     console.log(`[UPDATE-ROW] Values: ${JSON.stringify([...values, id])}`);
     
-    const result = await client.unsafe(query, [...values, id]);
+    const result = await rawClient.unsafe(query, [...values, id]);
     
     console.log(`[UPDATE-ROW] Updated ${result.length} rows`);
     
@@ -111,20 +116,19 @@ export async function updateRow(tableName: string, id: string, data: Record<stri
   } catch (error) {
     console.error(`[UPDATE-ROW] Error updating row ${id} in ${tableName}:`, error);
     throw error;
-  } finally {
-    await client.end();
   }
+  // No need to close connection - using shared pool
 }
 
 export async function deleteRow(tableName: string, id: string) {
-  const client = postgres(process.env.DATABASE_URL!);
+  // Use shared client pool
   const query = `DELETE FROM ${tableName} WHERE id = $1`;
-  await client.unsafe(query, [id]);
-  await client.end();
+  await rawClient.unsafe(query, [id]);
+  // No need to close connection - using shared pool
 }
 
 export async function getRows(tableName: string, limit: number = 100, offset: number = 0): Promise<any[]> {
-  const client = postgres(process.env.DATABASE_URL!);
+  // Use shared client pool
   
   try {
     const query = `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT $1 OFFSET $2`;
@@ -132,7 +136,7 @@ export async function getRows(tableName: string, limit: number = 100, offset: nu
     console.log(`[GET-ROWS] Query: ${query}`);
     console.log(`[GET-ROWS] Parameters: limit=${limit}, offset=${offset}`);
     
-    const result = await client.unsafe(query, [limit, offset]);
+    const result = await rawClient.unsafe(query, [limit, offset]);
     
     console.log(`[GET-ROWS] Found ${result.length} rows in ${tableName}`);
     if (result.length > 0) {
@@ -143,9 +147,8 @@ export async function getRows(tableName: string, limit: number = 100, offset: nu
   } catch (error) {
     console.error(`[GET-ROWS] Error fetching rows from ${tableName}:`, error);
     throw error;
-  } finally {
-    await client.end();
   }
+  // No need to close connection - using shared pool
 }
 
 export async function dropDynamicTable(tableName: string) {
