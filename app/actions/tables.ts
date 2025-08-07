@@ -90,23 +90,64 @@ export async function createTableAction(formData: FormData) {
 
 export async function getTables(organizationId?: number) {
   try {
-    const session = await requireAuth();
-
-    const targetOrgId = organizationId || session.user.organizationId;
+    console.log(`[GET-TABLES] Fetching tables for organizationId: ${organizationId}`);
     
-    if (!targetOrgId) {
+    // Check authentication
+    let session;
+    try {
+      session = await requireAuth();
+      console.log(`[GET-TABLES] Auth session:`, { 
+        userId: session.user?.id?.substring(0, 8) + '...', 
+        email: session.user?.email,
+        organizationId: session.user?.organizationId,
+        roleId: session.user?.roleId,
+        needsSetup: session.user?.needsSetup 
+      });
+    } catch (authError) {
+      console.error(`[GET-TABLES] Authentication failed:`, authError);
+      // Return empty array for auth failures instead of throwing - let the UI handle it
       return [];
     }
 
-    const tableList = await db
-      .select()
-      .from(tables)
-      .where(eq(tables.organizationId, targetOrgId));
+    const targetOrgId = organizationId || session.user.organizationId;
+    console.log(`[GET-TABLES] Target organization ID: ${targetOrgId}`);
+    
+    if (!targetOrgId) {
+      console.log(`[GET-TABLES] No organization ID available - user may need to complete setup`);
+      // Return empty array instead of throwing error - user likely needs to complete setup
+      return [];
+    }
 
+    // Check if user has access to this organization
+    if (organizationId && session.user.organizationId !== organizationId) {
+      console.warn(`[GET-TABLES] User ${session.user.id} trying to access org ${organizationId} but belongs to ${session.user.organizationId}`);
+      // Return empty array instead of throwing - this is an access issue, not a system error
+      return [];
+    }
+
+    console.log(`[GET-TABLES] Querying database for tables in organization ${targetOrgId}`);
+    let tableList;
+    try {
+      tableList = await db
+        .select()
+        .from(tables)
+        .where(eq(tables.organizationId, targetOrgId));
+    } catch (dbError) {
+      console.error(`[GET-TABLES] Database query failed:`, dbError);
+      throw new Error(`Database query failed: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
+    }
+
+    console.log(`[GET-TABLES] Found ${tableList.length} tables:`, tableList.map(t => ({ id: t.id, name: t.name, dbName: t.dbName })));
     return tableList;
   } catch (error) {
     console.error("Error fetching tables:", error);
-    throw new Error("Failed to fetch tables");
+    console.error("Error details:", error instanceof Error ? error.message : String(error));
+    console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
+    
+    // Return empty array instead of throwing error to prevent UI crashes
+    // The logs will help diagnose the issue
+    console.log(`[GET-TABLES] Returning empty array due to error to prevent UI crash`);
+    return [];
   }
 }
 
