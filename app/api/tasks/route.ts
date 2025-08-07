@@ -1,6 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createTask } from '@/app/actions/tasks';
 import type { CreateTaskData } from '@/app/actions/types';
+import { authenticateRequest } from '@/lib/auth/test-auth';
+import { db } from '@/lib/db/client';
+import { tasks } from '@/lib/db/schema';
+import { desc } from 'drizzle-orm';
+
+/**
+ * Get tasks list
+ */
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  try {
+    const authResult = await authenticateRequest(request);
+    
+    if (!authResult.success || !authResult.user) {
+      return NextResponse.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
+    }
+
+    // Get all tasks, ordered by creation date (most recent first)
+    const allTasks = await db
+      .select()
+      .from(tasks)
+      .orderBy(desc(tasks.createdAt));
+
+    return NextResponse.json({
+      success: true,
+      tasks: allTasks,
+    });
+
+  } catch (error) {
+    console.error('Error fetching tasks:', error);
+    return NextResponse.json({ 
+      success: false,
+      error: 'Internal server error' 
+    }, { status: 500 });
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {

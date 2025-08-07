@@ -50,6 +50,7 @@ export const users = pgTable("users", {
   jobTitle: text("job_title"),
   role: text("role"),
   teams: text("teams").array(),
+  apiKey: text("api_key").unique(), // User API key for management APIs
   createdAt: timestamp("created_at").defaultNow(),
 });
 
