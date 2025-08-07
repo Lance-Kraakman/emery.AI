@@ -12,12 +12,18 @@ import { requirePermission } from "./permissions";
 import type { ActionResult, CreateRowData, UpdateRowData } from "./types";
 
 async function processRowData(tableId: number, data: Record<string, any>) {
+  console.log(`[PROCESS-ROW] Processing data for table ${tableId}:`, JSON.stringify(data, null, 2));
+  
   const tableFields = await db.select().from(fields).where(eq(fields.tableId, tableId));
+  console.log(`[PROCESS-ROW] Found ${tableFields.length} fields:`, tableFields.map(f => ({ id: f.id, name: f.name, slug: f.slug, type: f.type, required: f.required })));
+  
   const processedData: Record<string, any> = {};
   
   for (const field of tableFields) {
     const fieldKey = `field_${field.id}`;
     const value = data[field.slug] || data[field.name];
+    
+    console.log(`[PROCESS-ROW] Field ${field.name} (${fieldKey}): ${field.slug}="${data[field.slug]}" OR ${field.name}="${data[field.name]}" => ${value}`);
     
     if (field.required && (value === undefined || value === null || value === "")) {
       throw new Error(`Field '${field.name}' is required`);
@@ -42,10 +48,12 @@ async function processRowData(tableId: number, data: Record<string, any>) {
     }
   }
   
+  console.log(`[PROCESS-ROW] Processed data:`, JSON.stringify(processedData, null, 2));
+  
   return processedData;
 }
 
-export async function createRow(data: CreateRowData): Promise<ActionResult> {
+export async function createRow(data: CreateRowData, revalidateUrl?: string): Promise<ActionResult> {
   try {
     const session = await requirePermission("manage_data");
     const { tableId, data: rowData } = data;
@@ -72,7 +80,10 @@ export async function createRow(data: CreateRowData): Promise<ActionResult> {
     // Insert row into dynamic table
     const newRow = await insertRow(table.dbName, processedData);
 
-    revalidatePath('/dashboard');
+    // Optional revalidation with custom URL
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    }
     
     return {
       success: true,
@@ -108,8 +119,11 @@ export async function createRowAction(formData: FormData) {
   return result;
 }
 
-export async function getRowsData(tableId: number, limit = 100, offset = 0) {
+export async function getRowsData(tableId: number, limit = 100, offset = 0): Promise<any[]> {
   try {
+    // Add authentication check (using manage_data as it covers view access)
+    await requirePermission("manage_data");
+    
     if (!tableId) {
       throw new Error("tableId is required");
     }
@@ -123,11 +137,11 @@ export async function getRowsData(tableId: number, limit = 100, offset = 0) {
     return rows;
   } catch (error) {
     console.error("Error fetching rows:", error);
-    throw new Error("Failed to fetch rows");
+    throw new Error(error instanceof Error ? error.message : "Failed to fetch rows");
   }
 }
 
-export async function updateRowData(data: UpdateRowData): Promise<ActionResult> {
+export async function updateRowData(data: UpdateRowData, revalidateUrl?: string): Promise<ActionResult> {
   try {
     const session = await requirePermission("manage_data");
     const { tableId, rowId, data: rowData } = data;
@@ -178,7 +192,10 @@ export async function updateRowData(data: UpdateRowData): Promise<ActionResult> 
     // Update row in dynamic table
     await updateRow(table.dbName, rowId, processedData);
 
-    revalidatePath('/dashboard');
+    // Optional revalidation with custom URL
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    }
     
     return {
       success: true,
@@ -215,7 +232,7 @@ export async function updateRowAction(formData: FormData) {
   return result;
 }
 
-export async function deleteRowData(tableId: number, rowId: string): Promise<ActionResult> {
+export async function deleteRowData(tableId: number, rowId: string, revalidateUrl?: string): Promise<ActionResult> {
   try {
     const session = await requirePermission("manage_data");
     
@@ -238,7 +255,10 @@ export async function deleteRowData(tableId: number, rowId: string): Promise<Act
     // Delete row from dynamic table
     await deleteRow(table.dbName, rowId);
 
-    revalidatePath('/dashboard');
+    // Optional revalidation with custom URL
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    }
     
     return {
       success: true,

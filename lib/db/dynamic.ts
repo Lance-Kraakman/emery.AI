@@ -48,39 +48,72 @@ export async function removeFieldFromTable(tableName: string, fieldId: number) {
   `));
 }
 
-export async function insertRow(tableName: string, data: Record<string, any>) {
+export async function insertRow(tableName: string, data: Record<string, any>): Promise<any> {
+  const fields = Object.keys(data);
+  const values = Object.values(data);
+  
+  // Get the raw postgres client from environment
+  const client = postgres(process.env.DATABASE_URL!);
+  
+  try {
+    let query: string;
+    let result: any;
+    
+    if (fields.length === 0) {
+      // Insert with default values and return the new row
+      query = `INSERT INTO ${tableName} DEFAULT VALUES RETURNING *`;
+      result = await client.unsafe(query);
+    } else {
+      const fieldNames = fields.map(field => `"${field}"`).join(", ");
+      const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
+      
+      query = `INSERT INTO ${tableName} (${fieldNames}) VALUES (${placeholders}) RETURNING *`;
+      result = await client.unsafe(query, values);
+    }
+    
+    console.log(`[INSERT-ROW] Query: ${query}`);
+    console.log(`[INSERT-ROW] Values: ${JSON.stringify(values)}`);
+    console.log(`[INSERT-ROW] Result: ${JSON.stringify(result[0])}`);
+    
+    return result[0]; // Return the first (and only) inserted row
+  } catch (error) {
+    console.error(`[INSERT-ROW] Error inserting row into ${tableName}:`, error);
+    throw error;
+  } finally {
+    await client.end();
+  }
+}
+
+export async function updateRow(tableName: string, id: string, data: Record<string, any>): Promise<any> {
   const fields = Object.keys(data);
   const values = Object.values(data);
   
   if (fields.length === 0) {
-    await db.execute(sql.raw(`INSERT INTO ${tableName} DEFAULT VALUES`));
-    return;
+    console.log(`[UPDATE-ROW] No fields to update for row ${id} in ${tableName}`);
+    return null;
   }
 
-  // Get the raw postgres client from environment
   const client = postgres(process.env.DATABASE_URL!);
-  const fieldNames = fields.map(field => `"${field}"`).join(", ");
-  const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
   
-  const query = `INSERT INTO ${tableName} (${fieldNames}) VALUES (${placeholders})`;
-  
-  await client.unsafe(query, values);
-  await client.end();
-}
-
-export async function updateRow(tableName: string, id: string, data: Record<string, any>) {
-  const fields = Object.keys(data);
-  const values = Object.values(data);
-  
-  if (fields.length === 0) return;
-
-  const client = postgres(process.env.DATABASE_URL!);
-  const setClause = fields.map((field, i) => `"${field}" = $${i + 1}`).join(", ");
-  
-  const query = `UPDATE ${tableName} SET ${setClause}, updated_at = now() WHERE id = $${fields.length + 1}`;
-  
-  await client.unsafe(query, [...values, id]);
-  await client.end();
+  try {
+    const setClause = fields.map((field, i) => `"${field}" = $${i + 1}`).join(", ");
+    
+    const query = `UPDATE ${tableName} SET ${setClause}, updated_at = now() WHERE id = $${fields.length + 1} RETURNING *`;
+    
+    console.log(`[UPDATE-ROW] Query: ${query}`);
+    console.log(`[UPDATE-ROW] Values: ${JSON.stringify([...values, id])}`);
+    
+    const result = await client.unsafe(query, [...values, id]);
+    
+    console.log(`[UPDATE-ROW] Updated ${result.length} rows`);
+    
+    return result[0]; // Return the updated row
+  } catch (error) {
+    console.error(`[UPDATE-ROW] Error updating row ${id} in ${tableName}:`, error);
+    throw error;
+  } finally {
+    await client.end();
+  }
 }
 
 export async function deleteRow(tableName: string, id: string) {
@@ -90,13 +123,29 @@ export async function deleteRow(tableName: string, id: string) {
   await client.end();
 }
 
-export async function getRows(tableName: string, limit: number = 100, offset: number = 0) {
+export async function getRows(tableName: string, limit: number = 100, offset: number = 0): Promise<any[]> {
   const client = postgres(process.env.DATABASE_URL!);
-  const query = `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT $1 OFFSET $2`;
-  const result = await client.unsafe(query, [limit, offset]);
-  await client.end();
   
-  return result;
+  try {
+    const query = `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT $1 OFFSET $2`;
+    
+    console.log(`[GET-ROWS] Query: ${query}`);
+    console.log(`[GET-ROWS] Parameters: limit=${limit}, offset=${offset}`);
+    
+    const result = await client.unsafe(query, [limit, offset]);
+    
+    console.log(`[GET-ROWS] Found ${result.length} rows in ${tableName}`);
+    if (result.length > 0) {
+      console.log(`[GET-ROWS] Sample row:`, JSON.stringify(result[0]));
+    }
+    
+    return result;
+  } catch (error) {
+    console.error(`[GET-ROWS] Error fetching rows from ${tableName}:`, error);
+    throw error;
+  } finally {
+    await client.end();
+  }
 }
 
 export async function dropDynamicTable(tableName: string) {
