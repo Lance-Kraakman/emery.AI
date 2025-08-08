@@ -33,23 +33,36 @@ const authOptions = {
   callbacks: {
     async session({ session, user }: any) {
       if (session.user) {
-        const dbUser = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, user.id))
-          .limit(1);
-        
-        const userRecord = dbUser[0];
+        try {
+          const dbUser = await db
+            .select()
+            .from(users)
+            .where(eq(users.id, user.id))
+            .limit(1);
+          
+          const userRecord = dbUser[0];
 
-        session.user.id = user.id;
-        session.user.organizationId = userRecord?.organizationId;
-        session.user.roleId = userRecord?.roleId;
-        session.user.jobTitle = userRecord?.jobTitle;
-        
-        // Check if this is the first user (potential super admin)
-        if (!userRecord?.organizationId || !userRecord?.roleId) {
-          const userCount = await db.select().from(users);
-          session.user.isFirstUser = userCount.length === 1;
+          session.user.id = user.id;
+          session.user.organizationId = userRecord?.organizationId;
+          session.user.roleId = userRecord?.roleId;
+          session.user.jobTitle = userRecord?.jobTitle;
+          
+          // Check if this is the first user (potential super admin)
+          if (!userRecord?.organizationId || !userRecord?.roleId) {
+            try {
+              const userCount = await db.select().from(users);
+              session.user.isFirstUser = userCount.length === 1;
+              session.user.needsSetup = true;
+            } catch (countError) {
+              console.warn("Could not check user count in session callback:", countError);
+              session.user.isFirstUser = false;
+              session.user.needsSetup = true; // Assume setup needed if we can't check
+            }
+          }
+        } catch (dbError) {
+          console.error("Database error in session callback:", dbError);
+          // Continue with basic session info even if DB lookup fails
+          session.user.id = user.id;
           session.user.needsSetup = true;
         }
       }

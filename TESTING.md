@@ -1,60 +1,111 @@
-# Testing the Automatic Agent Scheduling System
+# Testing Guide
 
-The system now supports **dual authentication**: NextAuth sessions (production) and user API keys (automation/testing).
+This guide covers testing the automatic agent scheduling system with real authentication.
 
-## Recommended: Automated Integration Test 
+## Authentication Overview
 
-**File:** `scripts/integration-test-final.ts`
+⚠️ **IMPORTANT**: All development bypasses have been removed. You must use real authentication.
 
-Fully automated test using the new **user API key system**. No manual browser login required.
+The system supports two authentication methods:
 
-### How to Run
+### 1. NextAuth Sessions (Browser-based)
+- **Best for**: Manual testing, UI workflows
+- **How**: Log in via browser OAuth (GitHub/Google)
+- **Usage**: Session cookies sent automatically
+
+### 2. User API Keys (Automation)
+- **Best for**: Automated testing, CI/CD, scripts
+- **Format**: `user_<48-char-hex>`  
+- **How**: `Authorization: Bearer user_...` header
+- **Usage**: Generate via `scripts/setup-user-auth.ts`
+
+## Quick Setup
+
+1. **Start services**:
+   ```bash
+   docker-compose up -d
+   pnpm db:migrate  
+   pnpm dev
+   ```
+
+2. **Create user account**: Log in via browser at http://localhost:3000 (OAuth)
+
+3. **Setup authentication**:
+   ```bash
+   npx tsx scripts/setup-user-auth.ts
+   ```
+
+4. **Run integration test**:
+   ```bash
+   npx tsx scripts/integration-test-api-auth.ts
+   ```
+
+## Integration Tests
+
+### Recommended: API Key Authentication Test
+
+**File:** `scripts/integration-test-api-auth.ts`
+
+✅ **Advantages**:
+- No browser session required
+- Reliable authentication  
+- Perfect for automation
+- Already configured with your credentials
 
 ```bash
-# Start NextJS server
-pnpm dev
-
-# Run the automated test
-npx tsx scripts/integration-test-final.ts
+npx tsx scripts/integration-test-api-auth.ts
 ```
 
-### What It Does
+### Alternative: Browser Session Test  
 
-- ✅ Creates test user with **user API key** (management APIs)
-- ✅ Creates agents with **agent API keys** (OAuth proxy)  
-- ✅ Tests hybrid authentication system
-- ✅ Monitors automatic CRON scheduling
-- ✅ No browser session required
-- ✅ Perfect for CI/CD automation
+**File:** `scripts/integration-test-production.ts`
 
-## Authentication Architecture
+Requires active browser login session:
 
-The system now has **two API key types**:
+```bash
+# Must be logged in via browser first
+npx tsx scripts/integration-test-production.ts
+```
 
-### 1. User API Keys (`user_...`)
-- **Purpose**: Management APIs (create agents, check tasks, control scheduler)
-- **Endpoints**: `/api/agents`, `/api/tasks`, `/api/scheduler/status`, `/api/tables`
-- **Format**: `user_48charshex`
-- **Stored**: `users.apiKey` column
-- **Use**: Automation, testing, external integrations
+## Authentication Setup
 
-### 2. Agent API Keys (`ag_...`)  
-- **Purpose**: OAuth proxy calls only
-- **Endpoints**: `/api/agents/proxy`
-- **Format**: `ag_30chars`
-- **Stored**: `agents.apiKey` column
-- **Use**: Agent OAuth actions (Gmail, Slack, etc.)
+### Getting Your Credentials
+
+Run the setup script to get your user ID and API key:
+
+```bash
+npx tsx scripts/setup-user-auth.ts
+```
+
+**Output Example**:
+```
+📋 Use this configuration for integration tests:
+const USER_ACCOUNT_ID = 'ef5b5ea0-19bf-4e8c-bb03-4f027130efd7';
+const USER_ORGANIZATION_ID = 1;
+
+🔐 API Key Authentication:
+export USER_API_KEY="user_2c254018f6828a8569816162dfb20b9a470cbd4beeb89890"
+```
 
 ### API Usage Examples
 
 ```bash
-# User API key - Create agent
-curl -H "Authorization: Bearer user_abc123..." \
-  POST /api/agents -d '{"name":"My Agent",...}'
+# Set your API key
+export USER_API_KEY="user_2c254018f6828a8569816162dfb20b9a470cbd4beeb89890"
 
-# Agent API key - OAuth call  
-curl -H "Authorization: Bearer ag_xyz789..." \
-  POST /api/agents/proxy -d '{"service":"gmail","action":"send_email",...}'
+# Test authentication
+curl -H "Authorization: Bearer $USER_API_KEY" \
+     http://localhost:3000/api/scheduler/status
+
+# Create agent  
+curl -X POST -H "Authorization: Bearer $USER_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"name":"Test Agent","role":"assistant","organizationId":1}' \
+     http://localhost:3000/api/agents
+
+# List tasks
+curl -H "Authorization: Bearer $USER_API_KEY" \
+     http://localhost:3000/api/tasks
 ```
 
 ---

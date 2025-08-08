@@ -5,6 +5,7 @@
 
 import { db } from '../lib/db/client';
 import { users, accounts } from '../lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 async function cleanupTestUsers() {
   try {
@@ -42,7 +43,7 @@ async function cleanupTestUsers() {
     console.log('🗑️  Deleting test users...');
     
     for (const user of usersWithoutOAuth) {
-      await db.delete(users).where({ id: user.id });
+      await db.delete(users).where(eq(users.id, user.id));
       console.log(`   ❌ Deleted: ${user.email || user.id.substring(0, 8) + '...'}`);
     }
     
