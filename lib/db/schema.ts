@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, serial, integer, timestamp, boolean, primaryKey, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, serial, integer, timestamp, boolean, primaryKey, jsonb, unique } from "drizzle-orm/pg-core";
 
 export const tables = pgTable("tables", {
   id: serial("id").primaryKey(),
@@ -33,11 +33,14 @@ export const organizations = pgTable("organizations", {
 
 export const roles = pgTable("roles", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
+  name: text("name").notNull(),
   permissions: text("permissions").array(),
   organizationId: integer("organization_id").references(() => organizations.id),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  // Unique constraint: role name must be unique within an organization
+  nameOrgUnique: unique().on(table.name, table.organizationId),
+}));
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
