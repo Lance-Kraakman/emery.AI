@@ -92,7 +92,13 @@ export async function executeAgentCapabilityViaGRPC(
     
     // Execute task via gRPC with streaming progress updates
     await workerClient.executeTask(taskRequest, async (progress) => {
-      console.log(`[GRPC-PROGRESS] ${executionId}: Step ${progress.step_id} - ${progress.status} (${progress.progress_percent}%)`);
+      console.log(`[GRPC-PROGRESS] ${executionId}: Step ${progress.step_id} - Status: ${progress.status} (${progress.progress_percent}%)`);
+      console.log(`[GRPC-DEBUG] ${executionId}: Progress object:`, JSON.stringify({
+        status: progress.status,
+        step_id: progress.step_id,
+        error_message: progress.error_message,
+        output_json: progress.output_json?.substring(0, 100)
+      }));
       
       // Parse output data if available
       let outputData = null;
@@ -109,18 +115,23 @@ export async function executeAgentCapabilityViaGRPC(
         stepExecutions.push({
           step_id: progress.step_id,
           step_type: progress.step_type,
-          status: progress.status === TaskStatus.TASK_COMPLETED ? 'completed' : 
-                  progress.status === TaskStatus.TASK_FAILED ? 'failed' : 'in_progress',
+          status: (progress.status === 'TASK_COMPLETED' || progress.status === TaskStatus.TASK_COMPLETED) ? 'completed' : 
+                  (progress.status === 'TASK_FAILED' || progress.status === TaskStatus.TASK_FAILED) ? 'failed' : 'in_progress',
           output_data: outputData,
           error_message: progress.error_message || undefined
         });
       }
       
       // Update final status based on progress
-      if (progress.status === TaskStatus.TASK_COMPLETED) {
+      // Note: gRPC returns status as string enum names, not numeric values
+      console.log(`[GRPC-STATUS-CHECK] ${executionId}: Comparing status '${progress.status}' (type: ${typeof progress.status})`);
+      
+      if (progress.status === 'TASK_COMPLETED' || progress.status === TaskStatus.TASK_COMPLETED) {
+        console.log(`[GRPC-STATUS] ${executionId}: Task COMPLETED detected!`);
         finalStatus = 'completed';
         finalOutputData = outputData;
-      } else if (progress.status === TaskStatus.TASK_FAILED) {
+      } else if (progress.status === 'TASK_FAILED' || progress.status === TaskStatus.TASK_FAILED) {
+        console.log(`[GRPC-STATUS] ${executionId}: Task FAILED detected!`);
         finalStatus = 'failed';
         finalError = progress.error_message || 'Task failed';
       }
