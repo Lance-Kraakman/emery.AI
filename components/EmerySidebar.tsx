@@ -149,14 +149,14 @@ export function EmerySidebar() {
                     <div>
                       <Separator className="my-2" />
                       <Collapsible 
-                        defaultOpen={pathname === "/mission-control"} 
+                        defaultOpen={pathname.startsWith("/mission-control") && searchParams?.has('tableId')} 
                         open={!isCollapsed && openCollapsibles.includes("Data")} 
                         onOpenChange={() => toggleCollapsible("Data")}
                       >
                         <CollapsibleTrigger asChild>
                           <button
                             className={`flex items-center justify-between w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
-                              pathname === "/mission-control" ? "bg-muted text-primary" : ""
+                              pathname.startsWith("/mission-control") && searchParams?.has('tableId') ? "bg-muted text-primary" : ""
                             }`}
                           >
                             <div className="flex items-center gap-3">
@@ -176,7 +176,7 @@ export function EmerySidebar() {
                               data.databases.map(db => (
                                 <Collapsible 
                                   key={db.id} 
-                                  defaultOpen={pathname === "/mission-control"} 
+                                  defaultOpen={pathname.startsWith("/mission-control") && searchParams?.has('tableId')} 
                                   open={openCollapsibles.includes(db.id)} 
                                   onOpenChange={() => toggleCollapsible(db.id)}
                                 >
