@@ -66,7 +66,7 @@ export async function createTask(data: CreateTaskData): Promise<ActionResult> {
 
 export async function getTasks(agentId?: number, limit = 50): Promise<ActionResult> {
   try {
-    await requirePermission("view_agents");
+    await requirePermission("manage_agents");
 
     const query = db.select().from(tasks);
     
@@ -93,7 +93,7 @@ export async function getTasks(agentId?: number, limit = 50): Promise<ActionResu
 
 export async function getTask(taskId: string): Promise<ActionResult> {
   try {
-    await requirePermission("view_agents");
+    await requirePermission("manage_agents");
 
     const [task] = await db
       .select()
@@ -123,7 +123,7 @@ export async function getTask(taskId: string): Promise<ActionResult> {
 
 export async function getTaskWithSteps(taskId: string): Promise<ActionResult> {
   try {
-    await requirePermission("view_agents");
+    await requirePermission("manage_agents");
 
     // Get task
     const [task] = await db
@@ -244,7 +244,7 @@ export async function deleteTask(taskId: string): Promise<ActionResult> {
 
 export async function getTaskStats(agentId?: number): Promise<ActionResult> {
   try {
-    await requirePermission("view_agents");
+    await requirePermission("manage_agents");
 
     const query = db.select().from(tasks);
     
