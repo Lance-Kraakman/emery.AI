@@ -1,7 +1,8 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { checkSetupStatus } from "@/app/actions/setup"; 
-import DashboardWithData from './components/DashboardWithData';
+import { EmeryProviders } from '@/components/EmeryProviders';
+import DashboardMainContent from './components/DashboardMainContent';
 
 export default async function Dashboard() {
   const session = await auth();
@@ -16,5 +17,9 @@ export default async function Dashboard() {
     redirect("/setup");
   }
 
-  return <DashboardWithData />;
+  return (
+    <EmeryProviders>
+      <DashboardMainContent />
+    </EmeryProviders>
+  );
 }
