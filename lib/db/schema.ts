@@ -45,13 +45,22 @@ export const users = pgTable("users", {
   email: text("email").unique(),
   emailVerified: timestamp("email_verified"),
   image: text("image"),
-  organizationId: integer("organization_id").references(() => organizations.id),
+  currentOrganizationId: integer("current_organization_id").references(() => organizations.id),
   roleId: integer("role_id").references(() => roles.id),
   jobTitle: text("job_title"),
   role: text("role"),
   teams: text("teams").array(),
   apiKey: text("api_key").unique(), // User API key for management APIs
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const userOrganizations = pgTable("user_organizations", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("member"), // owner, admin, member
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const teams = pgTable("teams", {

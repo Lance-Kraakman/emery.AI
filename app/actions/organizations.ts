@@ -1,13 +1,22 @@
 'use server'
 
 import { db } from "@/lib/db/client";
-import { organizations } from "@/lib/db/schema";
+import { organizations, users, userOrganizations } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { auth } from "@/lib/auth";
 import type { ActionResult, CreateOrganizationData } from "./types";
 
 export async function createOrganization(data: CreateOrganizationData): Promise<ActionResult> {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return {
+        success: false,
+        error: "Not authenticated",
+      };
+    }
+
     const { name, mission, sharedTools } = data;
 
     if (!name) {
@@ -17,11 +26,27 @@ export async function createOrganization(data: CreateOrganizationData): Promise<
       };
     }
 
+    // Create organization
     const [newOrganization] = await db.insert(organizations).values({
       name,
       mission,
       sharedTools,
     }).returning();
+
+    // Add creator as owner of the organization
+    await db.insert(userOrganizations).values({
+      userId: session.user.id,
+      organizationId: newOrganization.id,
+      role: 'owner',
+    });
+
+    // If user doesn't have a current organization, set this as current
+    if (!session.user.currentOrganizationId) {
+      await db
+        .update(users)
+        .set({ currentOrganizationId: newOrganization.id })
+        .where(eq(users.id, session.user.id));
+    }
 
     revalidatePath('/dashboard');
     
@@ -57,11 +82,25 @@ export async function createOrganizationAction(formData: FormData) {
 
 export async function getOrganizations() {
   try {
-    const allOrganizations = await db
-      .select()
-      .from(organizations);
+    const session = await auth();
+    if (!session?.user?.id) {
+      throw new Error("Not authenticated");
+    }
 
-    return allOrganizations;
+    // Return only organizations the user is a member of
+    const userOrgs = await db
+      .select({
+        organization: organizations,
+        userOrg: userOrganizations
+      })
+      .from(userOrganizations)
+      .innerJoin(organizations, eq(userOrganizations.organizationId, organizations.id))
+      .where(eq(userOrganizations.userId, session.user.id));
+
+    return userOrgs.map(uo => ({
+      ...uo.organization,
+      userRole: uo.userOrg.role
+    }));
   } catch (error) {
     console.error("Error fetching organizations:", error);
     throw new Error("Failed to fetch organizations");

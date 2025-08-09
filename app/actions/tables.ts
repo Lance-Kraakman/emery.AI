@@ -10,39 +10,19 @@ import { generateTableName } from "@/utils/slugify";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireAuth, requirePermission } from "./permissions";
+import { requireCurrentOrganization } from "./user-organizations";
 import type { ActionResult, CreateTableData } from "./types";
 
 export async function createTable(data: CreateTableData): Promise<ActionResult> {
   try {
     const session = await requirePermission("create_table");
-    const { organizationId, name } = data;
+    const currentOrg = await requireCurrentOrganization();
+    const { name } = data;
 
-    if (!organizationId || !name) {
+    if (!name) {
       return {
         success: false,
-        error: "organizationId and name are required",
-      };
-    }
-
-    // Verify organization exists and user has access
-    const organization = await db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.id, organizationId))
-      .limit(1);
-      
-    if (organization.length === 0) {
-      return {
-        success: false,
-        error: "Organization not found",
-      };
-    }
-
-    // Check if user belongs to this organization
-    if (session.user.organizationId !== organizationId) {
-      return {
-        success: false,
-        error: "Access denied: user not in organization",
+        error: "name is required",
       };
     }
 
@@ -51,9 +31,9 @@ export async function createTable(data: CreateTableData): Promise<ActionResult> 
     // Create dynamic table first
     await createDynamicTable(dbName);
 
-    // Then create metadata entry
+    // Then create metadata entry using current organization
     const [newTable] = await db.insert(tables).values({
-      organizationId,
+      organizationId: currentOrg.id,
       name,
       dbName,
       createdBy: session.user.id,
@@ -75,10 +55,9 @@ export async function createTable(data: CreateTableData): Promise<ActionResult> 
 }
 
 export async function createTableAction(formData: FormData) {
-  const organizationId = parseInt(formData.get('organizationId') as string);
   const name = formData.get('name') as string;
 
-  const result = await createTable({ organizationId, name });
+  const result = await createTable({ name });
   
   if (!result.success) {
     throw new Error(result.error);
@@ -88,54 +67,14 @@ export async function createTableAction(formData: FormData) {
   return result;
 }
 
-export async function getTables(organizationId?: number) {
+export async function getTables() {
   try {
-    console.log(`[GET-TABLES] Fetching tables for organizationId: ${organizationId}`);
+    const currentOrg = await requireCurrentOrganization();
     
-    // Check authentication
-    let session;
-    try {
-      session = await requireAuth();
-      console.log(`[GET-TABLES] Auth session:`, { 
-        userId: session.user?.id?.substring(0, 8) + '...', 
-        email: session.user?.email,
-        organizationId: session.user?.organizationId,
-        roleId: session.user?.roleId,
-        needsSetup: session.user?.needsSetup 
-      });
-    } catch (authError) {
-      console.error(`[GET-TABLES] Authentication failed:`, authError);
-      // Return empty array for auth failures instead of throwing - let the UI handle it
-      return [];
-    }
-
-    const targetOrgId = organizationId || session.user.organizationId;
-    console.log(`[GET-TABLES] Target organization ID: ${targetOrgId}`);
-    
-    if (!targetOrgId) {
-      console.log(`[GET-TABLES] No organization ID available - user may need to complete setup`);
-      // Return empty array instead of throwing error - user likely needs to complete setup
-      return [];
-    }
-
-    // Check if user has access to this organization
-    if (organizationId && session.user.organizationId !== organizationId) {
-      console.warn(`[GET-TABLES] User ${session.user.id} trying to access org ${organizationId} but belongs to ${session.user.organizationId}`);
-      // Return empty array instead of throwing - this is an access issue, not a system error
-      return [];
-    }
-
-    console.log(`[GET-TABLES] Querying database for tables in organization ${targetOrgId}`);
-    let tableList;
-    try {
-      tableList = await db
-        .select()
-        .from(tables)
-        .where(eq(tables.organizationId, targetOrgId));
-    } catch (dbError) {
-      console.error(`[GET-TABLES] Database query failed:`, dbError);
-      throw new Error(`Database query failed: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
-    }
+    const tableList = await db
+      .select()
+      .from(tables)
+      .where(eq(tables.organizationId, currentOrg.id));
 
     console.log(`[GET-TABLES] Found ${tableList.length} tables:`, tableList.map(t => ({ id: t.id, name: t.name, dbName: t.dbName })));
     return tableList;
@@ -154,6 +93,7 @@ export async function getTables(organizationId?: number) {
 export async function deleteTable(tableId: number): Promise<ActionResult> {
   try {
     const session = await requirePermission("manage_tables");
+    const currentOrg = await requireCurrentOrganization();
     
     if (!tableId) {
       return {
@@ -162,7 +102,7 @@ export async function deleteTable(tableId: number): Promise<ActionResult> {
       };
     }
 
-    // Get table info first
+    // Get table info and verify it belongs to current organization
     const [table] = await db
       .select()
       .from(tables)
@@ -173,6 +113,14 @@ export async function deleteTable(tableId: number): Promise<ActionResult> {
       return {
         success: false,
         error: "Table not found",
+      };
+    }
+
+    // Verify table belongs to current organization
+    if (table.organizationId !== currentOrg.id) {
+      return {
+        success: false,
+        error: "Access denied: table not in current organization",
       };
     }
 

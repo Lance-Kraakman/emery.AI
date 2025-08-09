@@ -25,7 +25,6 @@ export interface Row {
 }
 
 export interface CreateTableData {
-  organizationId: number;
   name: string;
 }
 

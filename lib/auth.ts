@@ -3,7 +3,7 @@ import GitHubProvider from "next-auth/providers/github"
 import GoogleProvider from "next-auth/providers/google"
 import { DrizzleAdapter } from "@auth/drizzle-adapter"
 import { db } from "./db/client"
-import { users, accounts, sessions, verificationTokens, roles } from "./db/schema"
+import { users, accounts, sessions, verificationTokens, roles, organizations, userOrganizations } from "./db/schema"
 import { eq } from "drizzle-orm"
 import { getServerSession } from "next-auth"
 import { getSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react"
@@ -43,12 +43,43 @@ const authOptions = {
           const userRecord = dbUser[0];
 
           session.user.id = user.id;
-          session.user.organizationId = userRecord?.organizationId;
+          session.user.currentOrganizationId = userRecord?.currentOrganizationId;
           session.user.roleId = userRecord?.roleId;
           session.user.jobTitle = userRecord?.jobTitle;
           
+          // Get user's organizations and current organization details
+          if (userRecord) {
+            try {
+              const userOrgs = await db
+                .select({
+                  organization: organizations,
+                  userOrg: userOrganizations
+                })
+                .from(userOrganizations)
+                .innerJoin(organizations, eq(userOrganizations.organizationId, organizations.id))
+                .where(eq(userOrganizations.userId, user.id));
+
+              session.user.availableOrganizations = userOrgs.map(uo => ({
+                ...uo.organization,
+                userRole: uo.userOrg.role
+              }));
+
+              // Get current organization details
+              if (userRecord.currentOrganizationId) {
+                const currentOrg = userOrgs.find(uo => uo.organization.id === userRecord.currentOrganizationId);
+                session.user.currentOrganization = currentOrg ? {
+                  ...currentOrg.organization,
+                  userRole: currentOrg.userOrg.role
+                } : null;
+              }
+            } catch (orgError) {
+              console.warn("Could not load user organizations:", orgError);
+              session.user.availableOrganizations = [];
+            }
+          }
+          
           // Check if this is the first user (potential super admin)
-          if (!userRecord?.organizationId || !userRecord?.roleId) {
+          if (!userRecord?.currentOrganizationId || !userRecord?.roleId || !session.user.availableOrganizations?.length) {
             try {
               const userCount = await db.select().from(users);
               session.user.isFirstUser = userCount.length === 1;
