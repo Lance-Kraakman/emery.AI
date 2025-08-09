@@ -39,7 +39,7 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
           id: session.user.id,
           email: session.user.email || '',
           name: session.user.name || null,
-          organizationId: session.user.organizationId || null,
+          organizationId: session.user.currentOrganizationId || null,
           roleId: session.user.roleId || null,
         },
       };

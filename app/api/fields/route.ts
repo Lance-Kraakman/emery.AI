@@ -4,9 +4,19 @@ import { fields, tables } from "@/lib/db/schema";
 import { addFieldToTable, removeFieldFromTable } from "@/lib/db/dynamic";
 import { slugify } from "@/utils/slugify";
 import { eq, and } from "drizzle-orm";
+import { authenticateRequest } from '@/lib/auth/test-auth';
 
 export async function POST(request: NextRequest) {
   try {
+    // Authenticate the request
+    const authResult = await authenticateRequest(request);
+    if (!authResult.authenticated) {
+      return NextResponse.json(
+        { error: authResult.error || 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     const { tableId, name, type, required = false } = await request.json();
 
     if (!tableId || !name || !type) {
@@ -21,6 +31,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Table not found" },
         { status: 404 }
+      );
+    }
+
+    // Verify table belongs to user's organization
+    if (table.organizationId !== authResult.user.organizationId) {
+      return NextResponse.json(
+        { error: "Access denied: table not in your organization" },
+        { status: 403 }
       );
     }
 

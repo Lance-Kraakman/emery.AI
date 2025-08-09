@@ -3,9 +3,19 @@ import { db } from "@/lib/db/client";
 import { tables, fields } from "@/lib/db/schema";
 import { insertRow, updateRow, deleteRow, getRows } from "@/lib/db/dynamic";
 import { eq } from "drizzle-orm";
+import { authenticateRequest } from '@/lib/auth/test-auth';
 
 export async function POST(request: NextRequest) {
   try {
+    // Authenticate the request
+    const authResult = await authenticateRequest(request);
+    if (!authResult.authenticated) {
+      return NextResponse.json(
+        { error: authResult.error || 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     const { tableId, data } = await request.json();
 
     if (!tableId) {
@@ -20,6 +30,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Table not found" },
         { status: 404 }
+      );
+    }
+
+    // Verify table belongs to user's organization
+    if (table.organizationId !== authResult.user.organizationId) {
+      return NextResponse.json(
+        { error: "Access denied: table not in your organization" },
+        { status: 403 }
       );
     }
 

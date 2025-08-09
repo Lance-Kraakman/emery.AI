@@ -5,6 +5,7 @@ import { agents, roles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
+import { requireCurrentOrganization } from "./user-organizations";
 import type { ActionResult, CreateAgentData } from "./types";
 
 // Simple API key generator
@@ -46,7 +47,7 @@ export async function createAgent(data: CreateAgentData): Promise<ActionResult> 
       trigger: trigger ? trigger as any : null, // JSONB field
       capabilities: capabilities ? capabilities as any : null, // JSONB field
       status: status || "active",
-      organizationId: session.user.organizationId,
+      organizationId: session.user.currentOrganizationId,
       roleId: roleId || null,
       apiKey: generateApiKey(),
     }).returning();
@@ -111,11 +112,14 @@ export async function createAgentAction(formData: FormData) {
 
 export async function getAgents() {
   try {
-    const allAgents = await db
+    const currentOrg = await requireCurrentOrganization();
+    
+    const organizationAgents = await db
       .select()
-      .from(agents);
+      .from(agents)
+      .where(eq(agents.organizationId, currentOrg.id));
 
-    return allAgents;
+    return organizationAgents;
   } catch (error) {
     console.error("Error fetching agents:", error);
     throw new Error("Failed to fetch agents");

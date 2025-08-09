@@ -50,7 +50,7 @@ export async function validateUserApiKey(apiKey: string): Promise<UserApiKeyInfo
         id: users.id,
         email: users.email,
         name: users.name,
-        organizationId: users.organizationId,
+        organizationId: users.currentOrganizationId,
         roleId: users.roleId,
       })
       .from(users)

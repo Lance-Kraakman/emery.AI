@@ -84,10 +84,18 @@ export async function GET(request: NextRequest): Promise<Response> {
 
     const userId = authResult.user.id;
 
-    // Get tables for user's organization(s)
+    // Get tables for user's current organization
+    if (!authResult.user.organizationId) {
+      return Response.json({ 
+        success: false, 
+        error: 'User has no current organization' 
+      }, { status: 400 });
+    }
+
     const userTables = await db
       .select()
-      .from(tables);
+      .from(tables)
+      .where(eq(tables.organizationId, authResult.user.organizationId));
 
     return Response.json({
       success: true,
