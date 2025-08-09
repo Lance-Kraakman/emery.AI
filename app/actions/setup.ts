@@ -1,7 +1,7 @@
 'use server'
 
 import { db } from "@/lib/db/client";
-import { organizations, roles, users } from "@/lib/db/schema";
+import { organizations, roles, users, userOrganizations } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -34,7 +34,7 @@ export async function setupInitialAdmin(data: SetupData): Promise<ActionResult> 
     }
 
     // Only allow setup if user has no organization/role OR is the only user
-    if (currentUser.organizationId && currentUser.roleId && allUsers.length > 1) {
+    if (currentUser.currentOrganizationId && currentUser.roleId && allUsers.length > 1) {
       return {
         success: false,
         error: "Initial setup already completed",
@@ -110,10 +110,17 @@ export async function setupInitialAdmin(data: SetupData): Promise<ActionResult> 
     // Assign the current user as Super Admin
     await db.update(users)
       .set({
-        organizationId: organization.id,
+        currentOrganizationId: organization.id,
         roleId: superAdminRole.id,
       })
       .where(eq(users.id, session.user.id));
+
+    // Add user to the organization as owner
+    await db.insert(userOrganizations).values({
+      userId: session.user.id,
+      organizationId: organization.id,
+      role: 'owner',
+    });
 
     revalidatePath('/dashboard');
     revalidatePath('/setup');
@@ -145,7 +152,7 @@ export async function checkSetupStatus(): Promise<{ needsSetup: boolean; isFirst
     const allUsers = await db.select().from(users);
     const currentUser = allUsers.find(u => u.id === session.user.id);
     
-    const needsSetup = !currentUser?.organizationId || !currentUser?.roleId;
+    const needsSetup = !currentUser?.currentOrganizationId || !currentUser?.roleId;
     const isFirstUser = allUsers.length === 1;
 
     return { needsSetup, isFirstUser };
