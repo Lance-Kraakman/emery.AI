@@ -115,7 +115,7 @@ export async function createRowAction(formData: FormData) {
     throw new Error(result.error);
   }
 
-  revalidatePath('/dashboard');
+  revalidatePath('/');
   return result;
 }
 
@@ -228,7 +228,7 @@ export async function updateRowAction(formData: FormData) {
     throw new Error(result.error);
   }
 
-  revalidatePath('/dashboard');
+  revalidatePath('/');
   return result;
 }
 
@@ -283,6 +283,6 @@ export async function deleteRowAction(formData: FormData) {
     throw new Error(result.error);
   }
 
-  revalidatePath('/dashboard');
+  revalidatePath('/');
   return result;
 }

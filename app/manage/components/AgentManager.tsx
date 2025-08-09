@@ -143,7 +143,7 @@ export default function AgentManager({ agents }: AgentManagerProps) {
               <button
                 onClick={() => {
                   // Navigate to agent detail page
-                  window.location.href = `/dashboard/agents/${agent.id}`;
+                  window.location.href = `/agents/${agent.id}`;
                 }}
                 className="bg-blue-500 text-white px-2 py-1 rounded text-xs"
               >

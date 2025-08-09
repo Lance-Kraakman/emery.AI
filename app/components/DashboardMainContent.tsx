@@ -69,7 +69,7 @@ export default function DashboardMainContent() {
                     <p className="text-muted-foreground mb-4">No tables yet</p>
                     <p className="text-sm text-muted-foreground">
                       Create your first table using the sidebar or{' '}
-                      <a href="/dashboard/manage" className="text-primary hover:underline">
+                      <a href="/manage" className="text-primary hover:underline">
                         Orchestration
                       </a>
                     </p>
@@ -82,7 +82,7 @@ export default function DashboardMainContent() {
                       .map(table => (
                         <a
                           key={table.id}
-                          href={`/dashboard?tableId=${table.id}`}
+                          href={`/?tableId=${table.id}`}
                           className="bg-card rounded-lg border p-4 hover:shadow-md transition-shadow"
                         >
                           <h4 className="font-medium mb-1">{table.name}</h4>
@@ -103,7 +103,7 @@ export default function DashboardMainContent() {
                 <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                   <a 
-                    href="/dashboard/manage?tab=agents"
+                    href="/manage?tab=agents"
                     className="bg-card rounded-lg border p-4 hover:shadow-md transition-shadow text-center"
                   >
                     <div className="text-2xl mb-2">🤖</div>
@@ -112,7 +112,7 @@ export default function DashboardMainContent() {
                   </a>
                   
                   <a 
-                    href="/dashboard/manage?tab=organization"
+                    href="/manage?tab=organization"
                     className="bg-card rounded-lg border p-4 hover:shadow-md transition-shadow text-center"
                   >
                     <div className="text-2xl mb-2">🏢</div>
@@ -121,7 +121,7 @@ export default function DashboardMainContent() {
                   </a>
                   
                   <a 
-                    href="/dashboard/connections"
+                    href="/connections"
                     className="bg-card rounded-lg border p-4 hover:shadow-md transition-shadow text-center"
                   >
                     <div className="text-2xl mb-2">🔗</div>

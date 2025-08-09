@@ -52,13 +52,13 @@ export default function DashboardClient({
           </div>
           <div className="flex items-center gap-4">
             <a 
-              href="/dashboard/connections" 
+              href="/connections" 
               className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
             >
               OAuth Connections
             </a>
             <a 
-              href="/dashboard/manage" 
+              href="/manage" 
               className="bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600"
             >
               System Management
