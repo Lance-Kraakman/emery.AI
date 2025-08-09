@@ -17,12 +17,12 @@ interface Table {
 
 interface TableListProps {
   tables: Table[];
-  organizationId?: number;
+  currentOrganizationId?: number;
   onSelectTable: (id: number) => void;
   onTableUpdate?: () => void;
 }
 
-export default function TableList({ tables, organizationId, onSelectTable, onTableUpdate }: TableListProps) {
+export default function TableList({ tables, currentOrganizationId, onSelectTable, onTableUpdate }: TableListProps) {
   const [showNewTable, setShowNewTable] = useState(false);
   const [isPending, startTransition] = useTransition();
 
