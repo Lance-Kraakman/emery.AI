@@ -39,7 +39,7 @@ export async function createTable(data: CreateTableData): Promise<ActionResult> 
       createdBy: session.user.id,
     }).returning();
 
-    revalidatePath('/');
+    revalidatePath('/mission-control');
     
     return {
       success: true,
@@ -63,7 +63,7 @@ export async function createTableAction(formData: FormData) {
     throw new Error(result.error);
   }
 
-  revalidatePath('/');
+  revalidatePath('/mission-control');
   return result;
 }
 
@@ -130,7 +130,7 @@ export async function deleteTable(tableId: number): Promise<ActionResult> {
     // Then delete metadata
     await db.delete(tables).where(eq(tables.id, tableId));
 
-    revalidatePath('/');
+    revalidatePath('/mission-control');
     
     return {
       success: true,
@@ -154,6 +154,6 @@ export async function deleteTableAction(formData: FormData) {
     throw new Error(result.error);
   }
 
-  revalidatePath('/');
+  revalidatePath('/mission-control');
   return result;
 }

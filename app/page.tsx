@@ -1,10 +1,8 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { checkSetupStatus } from "@/app/actions/setup"; 
-import { EmeryProviders } from '@/components/EmeryProviders';
-import DashboardMainContent from './components/DashboardMainContent';
 
-export default async function Dashboard() {
+export default async function RootPage() {
   const session = await auth();
   
   if (!session?.user) {
@@ -17,9 +15,6 @@ export default async function Dashboard() {
     redirect("/setup");
   }
 
-  return (
-    <EmeryProviders>
-      <DashboardMainContent />
-    </EmeryProviders>
-  );
+  // Redirect authenticated users to mission control
+  redirect("/mission-control");
 }

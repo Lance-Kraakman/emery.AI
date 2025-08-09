@@ -82,7 +82,7 @@ export default function DashboardMainContent() {
                       .map(table => (
                         <a
                           key={table.id}
-                          href={`/?tableId=${table.id}`}
+                          href={`/mission-control?tableId=${table.id}`}
                           className="bg-card rounded-lg border p-4 hover:shadow-md transition-shadow"
                         >
                           <h4 className="font-medium mb-1">{table.name}</h4>

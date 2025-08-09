@@ -1,5 +1,6 @@
 'use client'
 
+import { useSearchParams } from 'next/navigation'
 import {
   ChatCanvas,
   ChatInput,
@@ -10,6 +11,7 @@ import {
 import { X, Code, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useChatRSC } from './use-chat-rsc'
+import MissionControlDashboardContent from './dashboard-content'
 
 // Save/Revert Actions Component - separate from other actions
 function SaveRevertActions() {
@@ -115,6 +117,15 @@ function CustomCanvas() {
 }
 
 export default function Page(): JSX.Element {
+  const searchParams = useSearchParams()
+  const tableId = searchParams.get('tableId')
+  
+  // If there's a tableId or other dashboard params, show the dashboard content
+  if (tableId) {
+    return <MissionControlDashboardContent />
+  }
+  
+  // Otherwise show the AI chat interface
   return <CustomChat />
 }
 

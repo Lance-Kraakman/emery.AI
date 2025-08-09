@@ -123,7 +123,7 @@ export async function setupInitialAdmin(data: SetupData): Promise<ActionResult> 
       role: 'owner',
     });
 
-    revalidatePath('/');
+    revalidatePath('/mission-control');
     revalidatePath('/setup');
 
     return {

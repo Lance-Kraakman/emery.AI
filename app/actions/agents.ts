@@ -52,7 +52,7 @@ export async function createAgent(data: CreateAgentData): Promise<ActionResult> 
       apiKey: generateApiKey(),
     }).returning();
 
-    revalidatePath('/');
+    revalidatePath('/mission-control');
     
     return {
       success: true,
@@ -106,7 +106,7 @@ export async function createAgentAction(formData: FormData) {
     throw new Error(result.error);
   }
 
-  revalidatePath('/');
+  revalidatePath('/mission-control');
   return result;
 }
 
@@ -159,7 +159,7 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       .where(eq(agents.id, agentId))
       .returning();
 
-    revalidatePath('/');
+    revalidatePath('/mission-control');
     
     return {
       success: true,
@@ -185,7 +185,7 @@ export async function deleteAgent(agentId: number): Promise<ActionResult> {
 
     await db.delete(agents).where(eq(agents.id, agentId));
 
-    revalidatePath('/');
+    revalidatePath('/mission-control');
     
     return {
       success: true,
