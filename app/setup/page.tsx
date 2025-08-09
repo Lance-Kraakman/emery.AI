@@ -14,7 +14,7 @@ export default async function SetupPage() {
 
   // Redirect to dashboard if setup is already complete
   if (!needsSetup) {
-    redirect("/dashboard");
+    redirect("/mission-control");
   }
 
   return (

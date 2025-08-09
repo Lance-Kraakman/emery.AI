@@ -41,7 +41,7 @@ export default async function AgentDetailsPage({ params }: AgentDetailsPageProps
   return (
     <div className="container mx-auto p-6">
       <div className="mb-6">
-        <Link href="/dashboard/manage" className="text-blue-500 hover:underline">
+        <Link href="/manage" className="text-blue-500 hover:underline">
           ← Back to Management
         </Link>
       </div>
@@ -195,7 +195,7 @@ oauth_proxy.slack.post_message(
             Connect OAuth services to enable your agent to use Gmail, Slack, GitHub, etc.
           </p>
           <Link 
-            href="/dashboard/connections"
+            href="/connections"
             className="inline-block px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
           >
             Manage OAuth Connections →
@@ -206,7 +206,7 @@ oauth_proxy.slack.post_message(
         <div className="mt-8 p-4 bg-gray-50 rounded-lg border">
           <h3 className="font-semibold mb-2">🚀 Next Steps</h3>
           <ol className="list-decimal list-inside space-y-1 text-gray-700">
-            <li>Connect OAuth services (Gmail, Slack, GitHub) in <Link href="/dashboard/connections" className="text-blue-500 hover:underline">Connections</Link></li>
+            <li>Connect OAuth services (Gmail, Slack, GitHub) in <Link href="/connections" className="text-blue-500 hover:underline">Connections</Link></li>
             <li>Copy the API key above to use in your Python agent libraries</li>
             <li>Initialize <code className="bg-white px-1 rounded">EmeryPythonClient</code> with the API key</li>
             <li>Call OAuth services: <code className="bg-white px-1 rounded">oauth_proxy.gmail.send_email(...)</code></li>

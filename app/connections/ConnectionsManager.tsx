@@ -114,7 +114,7 @@ export function ConnectionsManager() {
       
       const result = await getAppConnectionUrl({
         appName: appId,
-        redirectUrl: `${window.location.origin}/dashboard/connections?connected=${appId}`,
+        redirectUrl: `${window.location.origin}/connections?connected=${appId}`,
       });
       
       if (result.success && result.data?.url) {
