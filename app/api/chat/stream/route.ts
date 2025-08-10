@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
           console.log('No current organization found for user')
         } else {
           const indexes = await ragService.listIndexes({ organizationId })
-          let ragIndex = indexes.find(idx => idx.domainTypes.includes('tables'))
+          let ragIndex = indexes.find(idx => idx.domainTypes.includes('organizations'))
         
           // Create default RAG index if none exists
           if (!ragIndex) {
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
               name: `Organization ${organizationId} Knowledge Base`,
               description: 'Automatic RAG index for organizational data',
               organizationId,
-              domainTypes: ['tables', 'agents'],
+              domainTypes: ['organizations', 'tables', 'agents'],
               createdBy: session.user.id,
             })
             ragIndex = await ragService.getIndex(indexId)

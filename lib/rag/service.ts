@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai'
 import { embed, embedMany } from 'ai'
 import { db } from '@/lib/db/client'
-import { ragIndexes, ragDocuments, ragQueryLogs, tables, fields } from '@/lib/db/schema'
+import { ragIndexes, ragDocuments, ragQueryLogs, tables, fields, organizations } from '@/lib/db/schema'
 import { eq, and, desc, sql, inArray } from 'drizzle-orm'
 import crypto from 'crypto'
 // Note: Using raw SQL for pgvector operations since drizzle-specific helpers aren't available
@@ -164,6 +164,11 @@ export class RagService {
 
       let totalDocuments = 0
 
+      // Index organization data if included
+      if (index.domainTypes.includes('organizations')) {
+        totalDocuments += await this.indexOrganizations(indexId, index)
+      }
+
       // Index tables if included in domain types
       if (index.domainTypes.includes('tables')) {
         totalDocuments += await this.indexTables(indexId, index)
@@ -255,6 +260,58 @@ export class RagService {
   }
 
   // Index agents for workflow context
+  private async indexOrganizations(indexId: string, ragIndex: RagIndex): Promise<number> {
+    if (!ragIndex.organizationId) {
+      return 0
+    }
+
+    // Get organization data
+    const [organization] = await db
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        mission: organizations.mission,
+        sharedTools: organizations.sharedTools,
+        sharedServers: organizations.sharedServers,
+        createdAt: organizations.createdAt,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, ragIndex.organizationId))
+
+    if (!organization) {
+      return 0
+    }
+
+    // Generate organization content for indexing
+    const organizationContent = this.generateOrganizationContent(organization)
+    
+    // Generate embedding for the content
+    const { embedding } = await embed({
+      model: this.embeddingModel,
+      value: organizationContent,
+    })
+    
+    // Insert organization document
+    await db.insert(ragDocuments).values({
+      ragIndexId: indexId,
+      sourceType: 'organization',
+      sourceId: organization.id.toString(),
+      sourceName: organization.name,
+      title: `Organization: ${organization.name}`,
+      content: organizationContent,
+      metadata: {
+        organizationId: organization.id,
+        sharedToolsCount: organization.sharedTools?.length || 0,
+        sharedServersCount: organization.sharedServers?.length || 0,
+        createdAt: organization.createdAt,
+      },
+      embedding,
+      contentHash: crypto.createHash('md5').update(organizationContent).digest('hex'),
+    })
+
+    return 1
+  }
+
   private async indexAgents(indexId: string, ragIndex: RagIndex): Promise<number> {
     // AIDEV-TODO: Implement agent indexing based on capabilities and descriptions
     return 0
@@ -280,6 +337,35 @@ Schema (${fields.length} fields):
 ${fieldsDescription}
 
 Usage: This table supports data analysis, reporting, workflow automation, and integration with other Emery systems. The dynamic schema allows for flexible data operations while maintaining type safety.`
+  }
+
+  // Generate comprehensive organization content for indexing
+  private generateOrganizationContent(organization: {
+    id: number
+    name: string
+    mission?: string | null
+    sharedTools?: string[] | null
+    sharedServers?: string[] | null
+    createdAt?: Date | null
+  }): string {
+    const toolsList = organization.sharedTools && organization.sharedTools.length > 0
+      ? `\nShared Tools:\n${organization.sharedTools.map(tool => `- ${tool}`).join('\n')}`
+      : '\nShared Tools: None configured'
+
+    const serversList = organization.sharedServers && organization.sharedServers.length > 0
+      ? `\nShared Servers:\n${organization.sharedServers.map(server => `- ${server}`).join('\n')}`
+      : '\nShared Servers: None configured'
+
+    const createdDate = organization.createdAt 
+      ? `\nEstablished: ${organization.createdAt.toLocaleDateString()}`
+      : ''
+
+    return `Organization: ${organization.name}
+${organization.mission ? `Mission: ${organization.mission}` : 'Mission: Not specified'}${createdDate}${toolsList}${serversList}
+
+About: ${organization.name} is an active organization on the Emery platform, which provides dynamic database management, workflow automation, and team collaboration capabilities. This organization can create tables, manage data, build workflows with agents, and coordinate team activities using shared resources and tools.
+
+Capabilities: The organization has access to Emery's full feature set including dynamic table creation, field management, data operations, agent-powered workflows, team collaboration, role-based access control, and integration with external services through shared tools and servers.`
   }
 
   // Vector similarity search using pgvector
