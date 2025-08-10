@@ -100,8 +100,15 @@ Always be helpful, accurate, and professional.`
       maxTokens: 2000,
     })
 
-    // AI SDK v5 uses different method
-    return result.toResponse()
+    // AI SDK v5 - use pipeTextStreamToResponse for streaming
+    return new Response(result.textStream, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    })
     
   } catch (error) {
     console.error('Streaming chat error:', error)
