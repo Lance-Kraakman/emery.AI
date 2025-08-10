@@ -50,20 +50,19 @@ export async function POST(req: NextRequest) {
             })
             ragIndex = await ragService.getIndex(indexId)
           }
-        }
 
-        // Search for relevant context
-        if (ragIndex) {
-          const searchResult = await ragService.search({
-            indexId: ragIndex.id,
-            query: latestMessage,
-            limit: 5,
-            threshold: 0.6,
-            userId: session.user.id,
-          })
+          // Search for relevant context
+          if (ragIndex) {
+            const searchResult = await ragService.search({
+              indexId: ragIndex.id,
+              query: latestMessage,
+              limit: 5,
+              threshold: 0.6,
+              userId: session.user.id,
+            })
 
-          if (searchResult.documents.length > 0) {
-            ragContext = `
+            if (searchResult.documents.length > 0) {
+              ragContext = `
 RELEVANT ORGANIZATION DATA:
 ${searchResult.documents.map((doc, idx) => 
   `[${idx + 1}] ${doc.title}
@@ -73,6 +72,7 @@ Source: ${doc.sourceType} - ${doc.sourceName} (${(doc.similarity! * 100).toFixed
 ).join('\n')}
 
 `
+            }
           }
         }
       }
