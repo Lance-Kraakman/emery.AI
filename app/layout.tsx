@@ -1,9 +1,10 @@
 import './globals.css'
-import type { Metadata } from 'next'
 import AuthProvider from '@/components/AuthProvider'
 
 // Initialize agent scheduler on server startup
 import '@/lib/scheduler'
+import AnimatedBackground from './components/AnimatedBackground'
+import { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'Emery - Dynamic Database Builder',
@@ -18,6 +19,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-gray-50 min-h-screen">
+        <AnimatedBackground />
         <AuthProvider>
           {children}
         </AuthProvider>

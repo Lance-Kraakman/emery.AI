@@ -23,6 +23,7 @@ import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { EmeryOrganizationModal } from "./EmeryOrganizationModal"
 import { useEmeryData } from "@/hooks/useEmeryData"
+import { useDataDialogs } from "@/contexts/DataDialogsContext"
 
 const navItems = [
   { href: "/mission-control", label: "Mission Control", icon: Target },
@@ -53,6 +54,7 @@ export function EmerySidebar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { data, isLoading } = useEmeryData()
+  const { setIsCreateDatabaseOpen, setIsCreateTableOpen, setSelectedDatabaseForTable } = useDataDialogs()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [openCollapsibles, setOpenCollapsibles] = useState<string[]>(
     pathname === "/mission-control" ? ["Data", ...data.databases.map(db => db.id)] : []
@@ -170,20 +172,24 @@ export function EmerySidebar() {
                         </CollapsibleTrigger>
                         {!isCollapsed && (
                           <CollapsibleContent className="pl-7 py-1 space-y-1">
-                            <Link
-                              href="/data"
-                              className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs hover:bg-accent"
+                            <button
+                              onClick={() => setIsCreateDatabaseOpen(true)}
+                              className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs hover:bg-accent w-full text-left"
                             >
                               <Plus className="h-3 w-3" />
-                              Create Database
-                            </Link>
-                            <Link
-                              href="/data"
-                              className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs hover:bg-accent"
+                              + Database
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedDatabaseForTable(undefined)
+                                setIsCreateTableOpen(true)
+                              }}
+                              className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs hover:bg-accent w-full text-left"
+                              disabled={data.databases.length === 0}
                             >
                               <Plus className="h-3 w-3" />
-                              Create Table
-                            </Link>
+                              + Table
+                            </button>
                             {isLoading ? (
                               <div className="text-xs text-muted-foreground px-3 py-2">Loading tables...</div>
                             ) : data.databases.length === 0 ? (
@@ -206,6 +212,16 @@ export function EmerySidebar() {
                                     </button>
                                   </CollapsibleTrigger>
                                   <CollapsibleContent className="pl-4 py-1 space-y-1">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedDatabaseForTable(db.id)
+                                        setIsCreateTableOpen(true)
+                                      }}
+                                      className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs hover:bg-accent w-full text-left"
+                                    >
+                                      <Plus className="h-3 w-3" />
+                                      + Table in {db.name}
+                                    </button>
                                     {db.tables.map(table => (
                                       <Link
                                         key={table.id}
