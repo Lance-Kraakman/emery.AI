@@ -136,34 +136,44 @@ function CustomChat() {
     <div className="flex h-screen flex-col">
       <ChatSection
         handler={handler}
-        className="flex flex-1 flex-row gap-4 p-4 overflow-hidden min-h-0"
+        className="flex flex-1 justify-center overflow-hidden min-h-0 bg-background"
       >
-        <div className="flex min-w-0 max-w-full flex-1 flex-col gap-4 min-h-0">
+        {/* ChatGPT-style centered container */}
+        <div className="flex flex-col min-h-0 w-full max-w-4xl">
           {/* Fixed header */}
-          <div className="flex-shrink-0 flex justify-between gap-2 border-b border-border bg-card p-4 rounded-t-lg">
-            <div>
-              <h1 className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-lg font-bold text-transparent">
+          <div className="flex-shrink-0 flex justify-center border-b border-border bg-background p-6">
+            <div className="text-center">
+              <h1 className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-2xl font-bold text-transparent">
                 Mission Control
               </h1>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground mt-2">
                 AI-powered organizational intelligence and analysis
               </p>
             </div>
           </div>
           
           {/* Scrollable chat area with fixed input */}
-          <div className="flex-1 flex flex-col min-h-0 bg-card rounded-b-lg">
-            {/* Messages area - scrollable */}
-            <div className="flex-1 overflow-y-auto min-h-0 p-4">
-              <ChatMessages className="h-full" />
+          <div className="flex-1 flex flex-col min-h-0">
+            {/* Messages area - scrollable with auto-scroll */}
+            <div 
+              ref={handler.scrollRef}
+              className="flex-1 overflow-y-auto min-h-0 px-4"
+            >
+              <div className="max-w-3xl mx-auto py-4">
+                <ChatMessages className="space-y-4" />
+              </div>
             </div>
             
             {/* Input area - fixed at bottom */}
-            <div className="flex-shrink-0 border-t border-border bg-muted/30 p-4 rounded-b-lg">
-              <ChatInput />
+            <div className="flex-shrink-0 border-t border-border bg-background/80 backdrop-blur-sm p-4">
+              <div className="max-w-3xl mx-auto">
+                <ChatInput />
+              </div>
             </div>
           </div>
         </div>
+        
+        {/* Canvas stays on the right */}
         <CustomCanvas />
       </ChatSection>
     </div>

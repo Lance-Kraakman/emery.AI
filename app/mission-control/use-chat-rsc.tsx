@@ -1,18 +1,37 @@
 'use client'
 
 import { generateId } from 'ai'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ChatHandler, Message } from '@llamaindex/chat-ui'
 
 interface ChatMessage extends Message {
   id: string
 }
 
+// Extended ChatHandler interface with scroll functionality
+interface ExtendedChatHandler extends ChatHandler {
+  scrollRef?: React.RefObject<HTMLDivElement>
+  scrollToBottom?: () => void
+}
+
 // Simple streaming chat handler that calls our API directly
-export function useChatRSC(): ChatHandler {
+export function useChatRSC(): ExtendedChatHandler {
   const [input, setInput] = useState<string>('')
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll to bottom function
+  const scrollToBottom = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }
+
+  // Auto-scroll when messages change
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
 
   const append = async (message: Message) => {
     const userMessage: ChatMessage = {
@@ -103,5 +122,7 @@ export function useChatRSC(): ChatHandler {
     append,
     messages,
     setMessages,
+    scrollRef,
+    scrollToBottom,
   }
 }
