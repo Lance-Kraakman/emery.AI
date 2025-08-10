@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { Upload, X, File, Download } from 'lucide-react'
+import { uploadFileAction } from '@/app/actions/files'
 
 interface FileMetadata {
   id: string
@@ -38,20 +39,16 @@ export default function FileUpload({ value, onChange, organizationId, tableId, f
       formData.append('tableId', tableId.toString())
       formData.append('fieldId', fieldId.toString())
 
-      const response = await fetch('/api/files/upload', {
-        method: 'POST',
-        body: formData,
-      })
+      const result = await uploadFileAction(formData);
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Upload failed')
+      if (!result.success) {
+        throw new Error(result.error || 'Upload failed');
       }
 
-      const fileMetadata: FileMetadata = await response.json()
+      const fileMetadata = result.data as FileMetadata;
       
       // Add the new file to the current files
-      const updatedFiles = [...currentFiles, fileMetadata]
+      const updatedFiles = [...currentFiles, fileMetadata];
       onChange({ files: updatedFiles })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')

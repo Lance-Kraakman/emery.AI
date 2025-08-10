@@ -15,14 +15,14 @@ import { getFields } from "@/app/actions/fields"
 import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
 
 interface FieldData {
-  id: number
-  tableId: number
-  name: string
-  slug: string
-  type: string
-  required: boolean
-  orderIndex: number
-  relatedTableId?: number
+  id: number;
+  tableId: number;
+  name: string;
+  slug: string;
+  type: string;
+  required: boolean | null;
+  orderIndex: number | null;
+  relatedTableId?: number | null;
 }
 
 interface RowData {
@@ -99,12 +99,16 @@ export function DataViewsClientSimplified() {
         return
       }
 
-      await updateRowData(selectedTableId, rowId, { [field.slug]: value })
-      setRows(prevRows => 
-        prevRows.map(row => 
-          row.id === rowId ? { ...row, [`field_${fieldId}`]: value } : row
+      await updateRowData({
+        tableId: selectedTableId,
+        rowId,
+        data: { [field.slug]: value },
+      });
+      setRows(prevRows =>
+        prevRows.map(row =>
+          row.id === rowId ? { ...row, [`field_${field.id}`]: value } : row
         )
-      )
+      );
     } catch (err) {
       console.error("Failed to update row:", err)
     }
