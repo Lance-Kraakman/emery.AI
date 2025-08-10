@@ -9,7 +9,7 @@ export async function createRagIndex(params: {
   description?: string
   domainTypes: string[]
   domainFilters?: any
-}) {
+}, revalidateUrl?: string) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
@@ -25,7 +25,12 @@ export async function createRagIndex(params: {
       createdBy: session.user.id,
     })
 
-    revalidatePath('/mission-control')
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl)
+    } else {
+      revalidatePath('/mission-control') // Default path for RAG index operations
+    }
     return { success: true, indexId }
   } catch (error) {
     console.error('Failed to create RAG index:', error)
@@ -74,7 +79,7 @@ export async function searchRagIndex(params: {
   }
 }
 
-export async function reindexRagIndex(indexId: string) {
+export async function reindexRagIndex(indexId: string, revalidateUrl?: string) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
@@ -83,7 +88,12 @@ export async function reindexRagIndex(indexId: string) {
 
     await ragService.reindexData(indexId)
     
-    revalidatePath('/mission-control')
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl)
+    } else {
+      revalidatePath('/mission-control') // Default path for RAG index operations
+    }
     return { success: true }
   } catch (error) {
     console.error('Failed to reindex RAG index:', error)
@@ -91,7 +101,7 @@ export async function reindexRagIndex(indexId: string) {
   }
 }
 
-export async function deleteRagIndex(indexId: string) {
+export async function deleteRagIndex(indexId: string, revalidateUrl?: string) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
@@ -100,7 +110,12 @@ export async function deleteRagIndex(indexId: string) {
 
     await ragService.deleteIndex(indexId)
     
-    revalidatePath('/mission-control')
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl)
+    } else {
+      revalidatePath('/mission-control') // Default path for RAG index operations
+    }
     return { success: true }
   } catch (error) {
     console.error('Failed to delete RAG index:', error)

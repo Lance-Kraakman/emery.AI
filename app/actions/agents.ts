@@ -14,7 +14,7 @@ function generateApiKey(): string {
   return 'ag_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
-export async function createAgent(data: CreateAgentData): Promise<ActionResult> {
+export async function createAgent(data: CreateAgentData, revalidateUrl?: string): Promise<ActionResult> {
   try {
     const session = await requirePermission("manage_agents");
     const { 
@@ -58,7 +58,12 @@ export async function createAgent(data: CreateAgentData): Promise<ActionResult> 
       autoReindexService.debouncedReindex(session.user.currentOrganizationId, 'agents').catch(console.error);
     }
 
-    revalidatePath('/mission-control');
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/manage'); // Default path for agent operations
+    }
     
     return {
       success: true,
@@ -112,7 +117,7 @@ export async function createAgentAction(formData: FormData) {
     throw new Error(result.error);
   }
 
-  revalidatePath('/mission-control');
+  // Note: revalidatePath is handled in the main createAgent function
   return result;
 }
 
@@ -150,7 +155,7 @@ export async function getAgent(agentId: number) {
   }
 }
 
-export async function updateAgent(agentId: number, data: Partial<CreateAgentData>): Promise<ActionResult> {
+export async function updateAgent(agentId: number, data: Partial<CreateAgentData>, revalidateUrl?: string): Promise<ActionResult> {
   try {
     if (!agentId) {
       return {
@@ -165,7 +170,12 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       .where(eq(agents.id, agentId))
       .returning();
 
-    revalidatePath('/mission-control');
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/manage'); // Default path for agent operations
+    }
     
     return {
       success: true,
@@ -180,7 +190,7 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
   }
 }
 
-export async function deleteAgent(agentId: number): Promise<ActionResult> {
+export async function deleteAgent(agentId: number, revalidateUrl?: string): Promise<ActionResult> {
   try {
     if (!agentId) {
       return {
@@ -191,7 +201,12 @@ export async function deleteAgent(agentId: number): Promise<ActionResult> {
 
     await db.delete(agents).where(eq(agents.id, agentId));
 
-    revalidatePath('/mission-control');
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/manage'); // Default path for agent operations
+    }
     
     return {
       success: true,

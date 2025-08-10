@@ -5,6 +5,7 @@ import { databases } from "@/lib/db/schema"
 import { eq, and } from "drizzle-orm"
 import { auth } from "@/lib/auth"
 import { z } from "zod"
+import { revalidatePath } from "next/cache"
 import { autoReindexService } from "@/lib/rag/auto-reindex"
 
 // AIDEV-NOTE: Database management server actions with metadata support for RAG indexing
@@ -67,7 +68,7 @@ export async function getDatabase(id: number) {
   }
 }
 
-export async function createDatabase(data: z.infer<typeof createDatabaseSchema>) {
+export async function createDatabase(data: z.infer<typeof createDatabaseSchema>, revalidateUrl?: string) {
   const session = await auth()
   if (!session?.user?.currentOrganizationId || !session?.user?.id) {
     throw new Error("Not authenticated or no organization selected")
@@ -123,6 +124,13 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>)
       }
     }
 
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl)
+    } else {
+      revalidatePath('/data') // Default path for database operations
+    }
+
     return { success: true, data: result[0] }
   } catch (error) {
     console.error('Error creating database:', error)
@@ -138,7 +146,7 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>)
   }
 }
 
-export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>) {
+export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>, revalidateUrl?: string) {
   const session = await auth()
   if (!session?.user?.currentOrganizationId) {
     throw new Error("Not authenticated or no organization selected")
@@ -178,6 +186,13 @@ export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>)
       }
     }
 
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl)
+    } else {
+      revalidatePath('/data') // Default path for database operations
+    }
+
     return { success: true, data: result[0] }
   } catch (error) {
     console.error('Error updating database:', error)
@@ -193,7 +208,7 @@ export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>)
   }
 }
 
-export async function deleteDatabase(id: number) {
+export async function deleteDatabase(id: number, revalidateUrl?: string) {
   const session = await auth()
   if (!session?.user?.currentOrganizationId) {
     throw new Error("Not authenticated or no organization selected")
@@ -230,6 +245,13 @@ export async function deleteDatabase(id: number) {
     } catch (error) {
       console.error('Failed to trigger RAG reindexing:', error)
       // Don't fail the whole operation if indexing fails
+    }
+
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl)
+    } else {
+      revalidatePath('/data') // Default path for database operations
     }
 
     return { success: true }

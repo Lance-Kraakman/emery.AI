@@ -14,7 +14,7 @@ import { requireCurrentOrganization } from "./user-organizations";
 import { autoReindexService } from "@/lib/rag/auto-reindex";
 import type { ActionResult, CreateTableData } from "./types";
 
-export async function createTable(data: CreateTableData & { databaseId?: number; description?: string }): Promise<ActionResult> {
+export async function createTable(data: CreateTableData & { databaseId?: number; description?: string }, revalidateUrl?: string): Promise<ActionResult> {
   try {
     const session = await requirePermission("create_table");
     const currentOrg = await requireCurrentOrganization();
@@ -67,7 +67,12 @@ export async function createTable(data: CreateTableData & { databaseId?: number;
     // Trigger RAG reindexing for tables domain in this organization
     autoReindexService.debouncedReindex(currentOrg.id, 'tables').catch(console.error);
     
-    revalidatePath('/mission-control');
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/data'); // Default path for table operations
+    }
     
     return {
       success: true,
@@ -91,7 +96,7 @@ export async function createTableAction(formData: FormData) {
     throw new Error(result.error);
   }
 
-  revalidatePath('/mission-control');
+  // Note: revalidatePath is handled in the main createTable function
   return result;
 }
 
@@ -135,7 +140,7 @@ export async function getTables() {
   }
 }
 
-export async function deleteTable(tableId: number): Promise<ActionResult> {
+export async function deleteTable(tableId: number, revalidateUrl?: string): Promise<ActionResult> {
   try {
     const session = await requirePermission("manage_tables");
     const currentOrg = await requireCurrentOrganization();
@@ -180,7 +185,12 @@ export async function deleteTable(tableId: number): Promise<ActionResult> {
     // Then delete metadata
     await db.delete(tables).where(eq(tables.id, tableId));
 
-    revalidatePath('/mission-control');
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/data'); // Default path for table operations
+    }
     
     return {
       success: true,
@@ -204,6 +214,6 @@ export async function deleteTableAction(formData: FormData) {
     throw new Error(result.error);
   }
 
-  revalidatePath('/mission-control');
+  // Note: revalidatePath is handled in the main deleteTable function
   return result;
 }

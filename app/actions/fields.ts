@@ -13,7 +13,7 @@ import { requirePermission } from "./permissions";
 import { autoReindexService } from "@/lib/rag/auto-reindex";
 import type { ActionResult, CreateFieldData } from "./types";
 
-export async function createField(data: CreateFieldData): Promise<ActionResult> {
+export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<ActionResult> {
   try {
     const session = await requirePermission("create_fields");
     const { tableId, name, type, required = false, relatedTableId } = data;
@@ -70,7 +70,12 @@ export async function createField(data: CreateFieldData): Promise<ActionResult> 
     // Trigger RAG reindexing for tables domain (since table schema changed)
     autoReindexService.debouncedReindex(table.organizationId, 'tables').catch(console.error);
 
-    revalidatePath('/dashboard');
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/data'); // Default path for field operations
+    }
     
     return {
       success: true,
@@ -98,7 +103,7 @@ export async function createFieldAction(formData: FormData) {
     throw new Error(result.error);
   }
 
-  revalidatePath('/dashboard');
+  // Note: revalidatePath is handled in the main createField function
   return result;
 }
 
@@ -120,7 +125,7 @@ export async function getFields(tableId: number) {
   }
 }
 
-export async function deleteField(fieldId: number): Promise<ActionResult> {
+export async function deleteField(fieldId: number, revalidateUrl?: string): Promise<ActionResult> {
   try {
     const session = await requirePermission("manage_fields");
     
@@ -159,7 +164,12 @@ export async function deleteField(fieldId: number): Promise<ActionResult> {
     // Then delete metadata
     await db.delete(fields).where(eq(fields.id, fieldId));
 
-    revalidatePath('/dashboard');
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/data'); // Default path for field operations
+    }
     
     return {
       success: true,
@@ -183,6 +193,6 @@ export async function deleteFieldAction(formData: FormData) {
     throw new Error(result.error);
   }
 
-  revalidatePath('/dashboard');
+  // Note: revalidatePath is handled in the main deleteField function
   return result;
 }
