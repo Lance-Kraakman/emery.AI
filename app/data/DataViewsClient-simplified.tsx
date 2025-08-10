@@ -9,26 +9,10 @@ import { Settings, Plus, Search, TableIcon as Table, Database } from "lucide-rea
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { DynamicDataTable } from "./components/DynamicDataTable"
 import { FieldManagerDialog } from "./components/FieldManagerDialog"
-// CreateTable and CreateDatabase dialogs now handled globally in EmeryProviders
 import { useEmeryData, EmeryTable } from "@/hooks/useEmeryData"
 import { getFields } from "@/app/actions/fields"
 import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
-
-interface FieldData {
-  id: number;
-  tableId: number;
-  name: string;
-  slug: string;
-  type: string;
-  required: boolean | null;
-  orderIndex: number | null;
-  relatedTableId?: number | null;
-}
-
-interface RowData {
-  id: string
-  [key: string]: any
-}
+import type { FieldData, RowData } from "@/types/db"
 
 export function DataViewsClientSimplified() {
   const searchParams = useSearchParams()
@@ -60,6 +44,12 @@ export function DataViewsClientSimplified() {
   const [error, setError] = useState<string | null>(null)
 
   const selectedTable = selectedTableId ? findTableById(selectedTableId) : undefined
+
+  // Update selected table when URL changes
+  useEffect(() => {
+    const tableId = tableIdParam ? parseInt(tableIdParam) : undefined;
+    setSelectedTableId(tableId);
+  }, [tableIdParam]);
 
   // Load table data when table is selected
   useEffect(() => {
@@ -291,6 +281,7 @@ export function DataViewsClientSimplified() {
                 <DynamicDataTable
                   fields={fields}
                   rows={filteredRows}
+                  organizationId={selectedTable.organizationId!}
                   onUpdateRow={handleUpdateRow}
                   onAddRow={handleAddRow}
                   onDeleteRow={handleDeleteRow}

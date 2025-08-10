@@ -12,6 +12,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { autoReindexService } from "@/lib/rag/auto-reindex";
 import type { ActionResult, CreateFieldData } from "./types";
+import type { FieldData } from "@/types/db";
 
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<ActionResult> {
   try {
@@ -58,7 +59,7 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
       tableId,
       name,
       slug,
-      type,
+      type: type as FieldData['type'],
       required,
       orderIndex,
       relatedTableId,
@@ -107,7 +108,7 @@ export async function createFieldAction(formData: FormData) {
   return result;
 }
 
-export async function getFields(tableId: number) {
+export async function getFields(tableId: number): Promise<FieldData[]> {
   try {
     if (!tableId) {
       throw new Error("tableId is required");
@@ -118,7 +119,7 @@ export async function getFields(tableId: number) {
       .where(eq(fields.tableId, tableId))
       .orderBy(fields.orderIndex);
 
-    return fieldList;
+    return fieldList as FieldData[];
   } catch (error) {
     console.error("Error fetching fields:", error);
     throw new Error("Failed to fetch fields");

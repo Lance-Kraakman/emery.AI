@@ -12,27 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Plus, Trash2, Edit2 } from "lucide-react"
 import { createField, deleteField } from "@/app/actions/fields"
 import { getTables } from "@/app/actions/tables"
-
-interface FieldData {
-  id: number
-  tableId: number
-  name: string
-  slug: string
-  type: string
-  required: boolean
-  orderIndex: number
-  relatedTableId?: number
-}
-
-interface TableData {
-  id: number
-  name: string
-  dbName: string
-  organizationId: number
-  createdBy: string
-  createdAt: Date | null
-  updatedAt: Date | null
-}
+import type { FieldData, Table as TableData } from "@/types/db"
 
 interface FieldManagerDialogProps {
   isOpen: boolean

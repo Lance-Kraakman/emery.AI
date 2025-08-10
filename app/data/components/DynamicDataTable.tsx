@@ -6,32 +6,18 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Trash2 } from "lucide-react"
 import { EditableCell } from "./EditableCell"
-
-interface FieldData {
-  id: number
-  tableId: number
-  name: string
-  slug: string
-  type: string
-  required: boolean
-  orderIndex: number
-  relatedTableId?: number
-}
-
-interface RowData {
-  id: string
-  [key: string]: any
-}
+import type { FieldData, RowData } from "@/types/db"
 
 interface DynamicDataTableProps {
-  fields: FieldData[]
-  rows: RowData[]
-  onUpdateRow: (rowId: string, fieldId: number, value: any) => void
-  onAddRow: () => void
-  onDeleteRow: (rowId: string) => void
+  fields: FieldData[];
+  rows: RowData[];
+  organizationId: number;
+  onUpdateRow: (rowId: string, fieldId: number, value: any) => void;
+  onAddRow: () => void;
+  onDeleteRow: (rowId: string) => void;
 }
 
-export function DynamicDataTable({ fields, rows, onUpdateRow, onAddRow, onDeleteRow }: DynamicDataTableProps) {
+export function DynamicDataTable({ fields, rows, organizationId, onUpdateRow, onAddRow, onDeleteRow }: DynamicDataTableProps) {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
 
   const handleSelectRow = (rowId: string, selected: boolean) => {
@@ -124,6 +110,7 @@ export function DynamicDataTable({ fields, rows, onUpdateRow, onAddRow, onDelete
                     <EditableCell
                       field={field}
                       value={row[`field_${field.id}`]}
+                      organizationId={organizationId}
                       onSave={(value) => onUpdateRow(row.id, field.id, value)}
                     />
                   </TableCell>

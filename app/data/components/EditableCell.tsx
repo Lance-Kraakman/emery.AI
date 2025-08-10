@@ -1,34 +1,29 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
-
-interface FieldData {
-  id: number
-  tableId: number
-  name: string
-  slug: string
-  type: string
-  required: boolean
-  orderIndex: number
-  relatedTableId?: number
-}
+import type { FieldData, FileMetadata } from "@/types/db"
+import { uploadFileAction } from "@/app/actions/files"
+import { PlusCircle } from "lucide-react"
 
 interface EditableCellProps {
-  field: FieldData
-  value: any
-  onSave?: (value: any) => void
-  onCancel?: () => void
+  field: FieldData;
+  value: any;
+  organizationId: number;
+  onSave?: (value: any) => void;
+  onCancel?: (value: any) => void;
 }
 
-export function EditableCell({ field, value, onSave, onCancel }: EditableCellProps) {
+export function EditableCell({ field, value, organizationId, onSave, onCancel }: EditableCellProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(value)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     setEditValue(value)
@@ -42,7 +37,7 @@ export function EditableCell({ field, value, onSave, onCancel }: EditableCellPro
   const handleCancel = () => {
     setEditValue(value)
     setIsEditing(false)
-    onCancel?.()
+    onCancel?.(value)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -51,6 +46,33 @@ export function EditableCell({ field, value, onSave, onCancel }: EditableCellPro
       handleSave()
     } else if (e.key === "Escape") {
       handleCancel()
+    }
+  }
+
+  const handleFileSelect = async (file: File) => {
+    if (!onSave) return
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('organizationId', organizationId.toString())
+      formData.append('tableId', field.tableId.toString())
+      formData.append('fieldId', field.id.toString())
+
+      const result = await uploadFileAction(formData)
+
+      if (!result.success) {
+        throw new Error(result.error || 'Upload failed')
+      }
+
+      const newFile = result.data as FileMetadata
+      const updatedFiles = Array.isArray(value) ? [...value, newFile] : [newFile]
+      onSave(updatedFiles)
+    } catch (err) {
+      console.error(err)
+      // TODO: Show error to user
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -270,24 +292,34 @@ export function EditableCell({ field, value, onSave, onCancel }: EditableCellPro
 
     case "file":
       return (
-        <div className="p-1">
-          <Input
-            type="text"
-            value={typeof editValue === 'object' ? JSON.stringify(editValue) : editValue || ""}
+        <div className="p-1 flex items-center gap-1">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
             onChange={(e) => {
-              try {
-                const parsed = JSON.parse(e.target.value)
-                setEditValue(parsed)
-              } catch {
-                setEditValue(e.target.value)
+              if (e.target.files?.[0]) {
+                handleFileSelect(e.target.files[0])
               }
             }}
-            onBlur={handleSave}
-            onKeyDown={handleKeyDown}
-            className="h-7 text-xs font-mono"
-            autoFocus
-            placeholder="JSON file data"
+            disabled={uploading}
           />
+          <div className="flex flex-wrap gap-1">
+            {Array.isArray(value) && value.map((file: any, idx: number) => (
+              <Badge key={idx} variant="outline" className="text-xs">
+                {file.name || file.filename || "File"}
+              </Badge>
+            ))}
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            <PlusCircle className="h-4 w-4" />
+          </Button>
         </div>
       )
 

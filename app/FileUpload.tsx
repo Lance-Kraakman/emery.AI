@@ -5,12 +5,12 @@ import { Upload, X, File, Download } from 'lucide-react'
 import { uploadFileAction } from '@/app/actions/files'
 
 interface FileMetadata {
-  id: string
-  name: string
-  size: number
-  mimeType: string
-  s3Key: string
-  uploadedAt: string
+  id: string;
+  name: string;
+  size: number;
+  mimeType?: string;
+  s3Key: string;
+  uploadedAt: string;
 }
 
 interface FileUploadProps {
@@ -85,12 +85,13 @@ export default function FileUpload({ value, onChange, organizationId, tableId, f
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  const getFileIcon = (mimeType: string) => {
-    if (mimeType.startsWith('image/')) return '🖼️'
-    if (mimeType.includes('pdf')) return '📄'
-    if (mimeType.includes('word')) return '📝'
-    if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return '📊'
-    return '📁'
+  const getFileIcon = (mimeType?: string) => {
+    if (!mimeType) return '📁';
+    if (mimeType.startsWith('image/')) return '🖼️';
+    if (mimeType.includes('pdf')) return '📄';
+    if (mimeType.includes('word')) return '📝';
+    if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return '📊';
+    return '📁';
   }
 
   return (
