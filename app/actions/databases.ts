@@ -5,7 +5,7 @@ import { databases } from "@/lib/db/schema"
 import { eq, and } from "drizzle-orm"
 import { auth } from "@/lib/auth"
 import { z } from "zod"
-import { databaseIndexingService } from "@/lib/rag/database-indexing"
+import { autoReindexService } from "@/lib/rag/auto-reindex"
 
 // AIDEV-NOTE: Database management server actions with metadata support for RAG indexing
 
@@ -113,19 +113,12 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>)
       })
       .returning()
 
-    // Index the database for RAG search if it has a description
+    // Trigger RAG reindexing for the organization if database has description
     if (result[0] && metadata?.description) {
       try {
-        await databaseIndexingService.indexDatabase({
-          id: result[0].id,
-          name: result[0].name,
-          slug: result[0].slug,
-          metadata: result[0].metadata,
-          organizationId: result[0].organizationId,
-          updatedAt: result[0].updatedAt
-        })
+        await autoReindexService.debouncedReindex(session.user.currentOrganizationId, 'databases')
       } catch (error) {
-        console.error('Failed to index database for RAG:', error)
+        console.error('Failed to trigger RAG reindexing:', error)
         // Don't fail the whole operation if indexing fails
       }
     }
@@ -175,19 +168,12 @@ export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>)
       return { success: false, error: "Database not found" }
     }
 
-    // Update the RAG index if it has a description
+    // Trigger RAG reindexing for the organization if database has description
     if (result[0] && metadata?.description) {
       try {
-        await databaseIndexingService.indexDatabase({
-          id: result[0].id,
-          name: result[0].name,
-          slug: result[0].slug,
-          metadata: result[0].metadata,
-          organizationId: result[0].organizationId,
-          updatedAt: result[0].updatedAt
-        })
+        await autoReindexService.debouncedReindex(session.user.currentOrganizationId, 'databases')
       } catch (error) {
-        console.error('Failed to update database index for RAG:', error)
+        console.error('Failed to trigger RAG reindexing:', error)
         // Don't fail the whole operation if indexing fails
       }
     }
@@ -238,11 +224,11 @@ export async function deleteDatabase(id: number) {
       return { success: false, error: "Database not found" }
     }
 
-    // Remove from RAG index
+    // Trigger RAG reindexing for the organization
     try {
-      await databaseIndexingService.removeFromIndex('database', id.toString(), session.user.currentOrganizationId)
+      await autoReindexService.debouncedReindex(session.user.currentOrganizationId, 'databases')
     } catch (error) {
-      console.error('Failed to remove database from RAG index:', error)
+      console.error('Failed to trigger RAG reindexing:', error)
       // Don't fail the whole operation if indexing fails
     }
 

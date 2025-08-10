@@ -169,6 +169,11 @@ export class RagService {
         totalDocuments += await this.indexOrganizations(indexId, index)
       }
 
+      // Index databases if included in domain types
+      if (index.domainTypes.includes('databases')) {
+        totalDocuments += await this.indexDatabases(indexId, index)
+      }
+
       // Index tables if included in domain types
       if (index.domainTypes.includes('tables')) {
         totalDocuments += await this.indexTables(indexId, index)
@@ -209,6 +214,8 @@ export class RagService {
       id: tables.id,
       name: tables.name,
       dbName: tables.dbName,
+      databaseId: tables.databaseId,
+      metadata: tables.metadata,
       organizationId: tables.organizationId,
     }).from(tables).where(and(...conditions))
 
@@ -242,11 +249,74 @@ export class RagService {
             metadata: {
               tableId: table.id,
               dbName: table.dbName,
+              databaseId: table.databaseId,
+              tableMetadata: table.metadata,
               organizationId: table.organizationId,
               fieldCount: tableFields.length,
             },
             embedding,
             contentHash: crypto.createHash('md5').update(schemaContent).digest('hex'),
+          }
+        })
+      )
+
+      // Batch insert for better performance
+      await db.insert(ragDocuments).values(documentsToInsert)
+      documentCount += documentsToInsert.length
+    }
+
+    return documentCount
+  }
+
+  // Index databases with metadata
+  private async indexDatabases(indexId: string, ragIndex: RagIndex): Promise<number> {
+    const conditions = []
+    if (ragIndex.organizationId) {
+      conditions.push(eq(databases.organizationId, ragIndex.organizationId))
+    }
+
+    const databasesToIndex = await db.select({
+      id: databases.id,
+      name: databases.name,
+      slug: databases.slug,
+      metadata: databases.metadata,
+      organizationId: databases.organizationId,
+    }).from(databases).where(and(...conditions))
+
+    // Process databases in batches
+    const batchSize = 10
+    const batches = []
+    for (let i = 0; i < databasesToIndex.length; i += batchSize) {
+      batches.push(databasesToIndex.slice(i, i + batchSize))
+    }
+
+    let documentCount = 0
+    for (const batch of batches) {
+      const documentsToInsert = await Promise.all(
+        batch.map(async (database) => {
+          const databaseContent = this.generateDatabaseContent(database)
+          
+          // Generate embedding for the content
+          const { embedding } = await embed({
+            model: this.embeddingModel,
+            value: databaseContent,
+          })
+          
+          return {
+            ragIndexId: indexId,
+            sourceType: 'database',
+            sourceId: database.id.toString(),
+            sourceName: database.name,
+            title: `Database: ${database.name}`,
+            content: databaseContent,
+            metadata: {
+              databaseId: database.id,
+              slug: database.slug,
+              databaseMetadata: database.metadata,
+              organizationId: database.organizationId,
+            },
+            embedding,
+            contentHash: crypto.createHash('md5').update(databaseContent).digest('hex'),
           }
         })
       )
@@ -391,7 +461,7 @@ export class RagService {
 
   // Generate comprehensive table schema content
   private generateTableSchemaContent(
-    table: { id: number; name: string; dbName: string },
+    table: { id: number; name: string; dbName: string; metadata?: any },
     fields: any[]
   ): string {
     const fieldsDescription = fields.map(field => {
@@ -401,14 +471,41 @@ export class RagService {
       return desc
     }).join('\n')
 
+    const description = table.metadata?.description 
+      ? `\nDescription: ${table.metadata.description}` 
+      : ''
+
     return `Table: ${table.name}
 Database Name: ${table.dbName}
-Purpose: Structured data storage and workflow operations
+Purpose: Structured data storage and workflow operations${description}
 
 Schema (${fields.length} fields):
 ${fieldsDescription}
 
 Usage: This table supports data analysis, reporting, workflow automation, and integration with other Emery systems. The dynamic schema allows for flexible data operations while maintaining type safety.`
+  }
+
+  // Generate comprehensive database content for indexing
+  private generateDatabaseContent(database: {
+    id: number;
+    name: string;
+    slug: string;
+    metadata?: any;
+    organizationId: number;
+  }): string {
+    const description = database.metadata?.description
+      ? `\nDescription: ${database.metadata.description}`
+      : ''
+
+    return `Database: ${database.name}
+Slug: ${database.slug}
+Organization: ${database.organizationId}${description}
+
+Purpose: This database organizes related tables and data for the organization. It provides logical grouping of tables that share common purposes or domains within the Emery platform.
+
+Capabilities: The database supports dynamic table creation, field management, data operations, and integration with workflow automation. Tables within this database can be used for data analysis, reporting, and agent-powered workflows.
+
+Context: This is a database within the Emery platform, which provides dynamic database management, workflow automation, and team collaboration capabilities.`
   }
 
   // Generate comprehensive organization content for indexing

@@ -12,7 +12,6 @@ import { revalidatePath } from "next/cache";
 import { requireAuth, requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { autoReindexService } from "@/lib/rag/auto-reindex";
-import { databaseIndexingService } from "@/lib/rag/database-indexing";
 import type { ActionResult, CreateTableData } from "./types";
 
 export async function createTable(data: CreateTableData & { databaseId?: number; description?: string }): Promise<ActionResult> {
@@ -64,30 +63,6 @@ export async function createTable(data: CreateTableData & { databaseId?: number;
       metadata,
       createdBy: session.user.id,
     }).returning();
-
-    // Index the table for RAG search if it has a description
-    if (metadata?.description) {
-      try {
-        const database = await db
-          .select({ name: databases.name, slug: databases.slug })
-          .from(databases)
-          .where(eq(databases.id, finalDatabaseId))
-          .limit(1)
-
-        await databaseIndexingService.indexTable({
-          id: newTable.id,
-          name: newTable.name,
-          databaseId: newTable.databaseId,
-          metadata: newTable.metadata,
-          organizationId: newTable.organizationId,
-          updatedAt: newTable.updatedAt,
-          database: database[0] || undefined
-        })
-      } catch (error) {
-        console.error('Failed to index table for RAG:', error)
-        // Don't fail the whole operation if indexing fails
-      }
-    }
 
     // Trigger RAG reindexing for tables domain in this organization
     autoReindexService.debouncedReindex(currentOrg.id, 'tables').catch(console.error);
@@ -197,13 +172,10 @@ export async function deleteTable(tableId: number): Promise<ActionResult> {
     // Drop dynamic table first
     await dropDynamicTable(table.dbName);
     
-    // Remove from RAG index
-    try {
-      await databaseIndexingService.removeFromIndex('table', tableId.toString(), currentOrg.id)
-    } catch (error) {
-      console.error('Failed to remove table from RAG index:', error)
-      // Don't fail the whole operation if indexing fails
-    }
+    // Trigger RAG reindexing for tables domain in this organization
+    autoReindexService.debouncedReindex(currentOrg.id, 'tables').catch(error => {
+      console.error('Failed to trigger RAG reindexing after table deletion:', error)
+    })
     
     // Then delete metadata
     await db.delete(tables).where(eq(tables.id, tableId));
