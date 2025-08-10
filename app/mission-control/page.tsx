@@ -133,13 +133,14 @@ function CustomChat() {
   const handler = useChatRSC()
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-screen flex-col">
       <ChatSection
         handler={handler}
-        className="flex flex-1 flex-row gap-4 p-4 overflow-hidden"
+        className="flex flex-1 flex-row gap-4 p-4 overflow-hidden min-h-0"
       >
-        <div className="flex min-w-0 max-w-full flex-1 flex-col gap-4">
-          <div className="flex justify-between gap-2 border-b border-border bg-card p-4 rounded-t-lg">
+        <div className="flex min-w-0 max-w-full flex-1 flex-col gap-4 min-h-0">
+          {/* Fixed header */}
+          <div className="flex-shrink-0 flex justify-between gap-2 border-b border-border bg-card p-4 rounded-t-lg">
             <div>
               <h1 className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-lg font-bold text-transparent">
                 Mission Control
@@ -149,9 +150,16 @@ function CustomChat() {
               </p>
             </div>
           </div>
-          <div className="flex-1 flex flex-col min-h-0">
-            <ChatMessages className="flex-1 overflow-y-auto" />
-            <div className="flex-shrink-0">
+          
+          {/* Scrollable chat area with fixed input */}
+          <div className="flex-1 flex flex-col min-h-0 bg-card rounded-b-lg">
+            {/* Messages area - scrollable */}
+            <div className="flex-1 overflow-y-auto min-h-0 p-4">
+              <ChatMessages className="h-full" />
+            </div>
+            
+            {/* Input area - fixed at bottom */}
+            <div className="flex-shrink-0 border-t border-border bg-muted/30 p-4 rounded-b-lg">
               <ChatInput />
             </div>
           </div>

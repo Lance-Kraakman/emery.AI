@@ -9,11 +9,11 @@ interface EmeryProvidersProps {
 
 export function EmeryProviders({ children }: EmeryProvidersProps) {
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <Suspense fallback={<div className="w-64 bg-card border-r border-border" />}>
         <EmerySidebar />
       </Suspense>
-      <main className="flex-1 flex flex-col overflow-hidden bg-background">
+      <main className="flex-1 flex flex-col overflow-hidden bg-background min-h-0">
         {children}
       </main>
     </div>
