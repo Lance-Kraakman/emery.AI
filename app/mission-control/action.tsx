@@ -5,28 +5,31 @@ import { Markdown } from '@llamaindex/chat-ui/widgets'
 import { ReactNode } from 'react'
 import { auth } from '@/lib/auth'
 import { ragService } from '@/lib/rag/service'
-import { openai } from '@ai-sdk/openai'
 import { generateText } from 'ai'
+import { getAIModel, getAIProviderInfo } from '@/lib/ai/models'
 
 export async function chatAction(question: string): Promise<ReactNode> {
   const session = await auth()
 
-  // Check if OpenAI API key is available
-  if (!process.env.OPENAI_API_KEY) {
+  // Check if any AI provider is configured
+  const providerInfo = getAIProviderInfo()
+  if (!providerInfo.configured) {
     return (
       <Markdown
-        content={`**🔑 OpenAI API Key Required**
+        content={`**🤗 HuggingFace Configuration Required**
 
-To enable AI-powered responses with RAG, please:
+To enable AI-powered responses with RAG using Qwen models:
 
-1. Add your OpenAI API key to \`.env.local\`:
+1. Get your HuggingFace token from https://huggingface.co/settings/tokens
+2. Add to \`.env.local\`:
    \`\`\`
-   OPENAI_API_KEY=sk-your-key-here
+   HF_TOKEN=hf_your-token-here
    \`\`\`
 
-2. Restart the development server
-
-3. The system will then automatically:
+After configuration:
+1. Restart the development server
+2. The system will automatically use **Qwen/Qwen2.5-Coder-32B-Instruct** for code tasks
+3. The system will automatically:
    - Index your organization's table schemas
    - Search for relevant context when you ask questions
    - Provide AI responses with your organizational data context
@@ -92,7 +95,7 @@ Source: ${doc.sourceType} - ${doc.sourceName} (${(doc.similarity! * 100).toFixed
   // Generate AI response with RAG context
   try {
     const { text } = await generateText({
-      model: openai('gpt-4o'),
+      model: getAIModel(),
       messages: [
         {
           role: 'system',

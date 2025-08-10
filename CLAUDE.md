@@ -19,6 +19,7 @@ Emery is a Baserow-style dynamic database builder that allows users to create ta
 - **UUID Primary Keys**: All dynamic tables use `gen_random_uuid()` for primary keys
 - **RBAC System**: Role-Based Access Control with organizations, roles, and permissions
 - **Agent System**: Agents belong to users and can use owner's OAuth credentials via Pipedream Connect
+- **AI Models**: Uses HuggingFace models (Qwen series) for chat, code generation, and embeddings
 
 ### Critical Files
 - `lib/db/dynamic.ts`: Core dynamic table operations (create, alter, insert, update, delete)
@@ -58,6 +59,15 @@ docker volume rm emery_db   # Reset database (removes all data)
 - Copy `.env.example` to `.env.local` for local development
 - Database runs on port 5433 to avoid conflicts with local PostgreSQL
 - Environment variables are loaded by dotenv in database client and Drizzle config
+
+### AI Model Configuration
+- **HuggingFace Models**: Uses advanced Qwen models for AI functionality
+  - **Default Chat**: `Qwen/Qwen2.5-Coder-32B-Instruct` - Best for code generation and technical tasks
+  - **General Chat**: `Qwen/Qwen2.5-72B-Instruct` - Superior reasoning and conversation
+  - **Fast Model**: `Qwen/Qwen2.5-Coder-7B-Instruct` - Faster responses with good quality
+  - **Embeddings**: `sentence-transformers/all-mpnet-base-v2` - High-quality text embeddings
+- **Required**: Set `HF_TOKEN` environment variable with your HuggingFace API token
+- **Get Token**: Visit https://huggingface.co/settings/tokens to create your token
 
 ## Field Type System
 

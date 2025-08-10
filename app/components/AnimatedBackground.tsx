@@ -84,7 +84,7 @@ export default function AnimatedBackground() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none fixed inset-0 w-full h-full z-0 overflow-hidden"
+      className="pointer-events-none fixed inset-0 w-full h-full z-0 overflow-hidden min-h-screen"
       style={{ isolation: "isolate" }}
     >
       {blobs.map((blob, i) => (

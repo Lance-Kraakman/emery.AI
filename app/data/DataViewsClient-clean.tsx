@@ -22,8 +22,8 @@ interface TableData {
   dbName: string
   organizationId: number
   createdBy: string
-  createdAt: Date
-  updatedAt: Date
+  createdAt: Date | null
+  updatedAt: Date | null
 }
 
 interface FieldData {
@@ -32,9 +32,9 @@ interface FieldData {
   name: string
   slug: string
   type: string
-  required: boolean
-  orderIndex: number
-  relatedTableId?: number
+  required: boolean | null
+  orderIndex: number | null
+  relatedTableId?: number | null
 }
 
 interface RowData {

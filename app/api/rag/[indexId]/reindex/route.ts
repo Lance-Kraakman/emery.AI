@@ -5,7 +5,7 @@ import { ragService } from '@/lib/rag/service'
 // POST /api/rag/[indexId]/reindex - Trigger reindexing
 export async function POST(
   request: NextRequest,
-  { params }: { params: { indexId: string } }
+  context: { params: Promise<{ indexId: string }> }
 ) {
   try {
     const session = await auth()
@@ -13,7 +13,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { indexId } = params
+    const { indexId } = await context.params
 
     // Start reindexing in background (async)
     ragService.reindexData(indexId).catch(console.error)

@@ -1,6 +1,6 @@
 "use server"
 
-import { db, pgClient } from "@/lib/db/client"
+import { db } from "@/lib/db/client"
 import { databases } from "@/lib/db/schema"
 import { eq, and } from "drizzle-orm"
 import { auth } from "@/lib/auth"

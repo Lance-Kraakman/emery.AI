@@ -18,10 +18,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-gray-50 min-h-screen">
+      <body className="relative">
         <AnimatedBackground />
         <AuthProvider>
-          {children}
+          <div className="relative z-10">
+            {children}
+          </div>
         </AuthProvider>
       </body>
     </html>

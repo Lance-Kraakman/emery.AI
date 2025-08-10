@@ -21,8 +21,8 @@ interface TableData {
   dbName: string
   organizationId: number
   createdBy: string
-  createdAt: Date
-  updatedAt: Date
+  createdAt: Date | null
+  updatedAt: Date | null
 }
 
 interface FieldData {

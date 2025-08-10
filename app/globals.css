@@ -102,7 +102,7 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply text-foreground antialiased;
   }
 }
 
@@ -324,16 +324,16 @@
 
 /* ChatCanvas and Chat UI Component Styling */
 .chat-section {
-  background-color: hsl(var(--background));
+  background-color: transparent;
   color: hsl(var(--foreground));
 }
 
 .chat-messages {
-  background-color: transparent;
+  background-color: transparent !important;
 }
 
 .chat-input {
-  background-color: hsl(var(--background));
+  background-color: transparent;
   border: 1px solid hsl(var(--border));
   color: hsl(var(--foreground));
   border-radius: var(--radius-md);

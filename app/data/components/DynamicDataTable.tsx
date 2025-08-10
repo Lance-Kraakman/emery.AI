@@ -53,7 +53,7 @@ export function DynamicDataTable({ fields, rows, onUpdateRow, onAddRow, onDelete
   }
 
   const handleDeleteSelected = async () => {
-    for (const rowId of selectedRows) {
+    for (const rowId of Array.from(selectedRows)) {
       await onDeleteRow(rowId)
     }
     setSelectedRows(new Set())

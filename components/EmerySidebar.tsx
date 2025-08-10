@@ -57,7 +57,7 @@ export function EmerySidebar() {
   const { setIsCreateDatabaseOpen, setIsCreateTableOpen, setSelectedDatabaseForTable } = useDataDialogs()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [openCollapsibles, setOpenCollapsibles] = useState<string[]>(
-    pathname === "/mission-control" ? ["Data", ...data.databases.map(db => db.id)] : []
+    pathname === "/mission-control" ? ["Data", ...data.databases.map(db => db.id.toString())] : []
   )
 
   const toggleSidebar = () => {
@@ -68,7 +68,7 @@ export function EmerySidebar() {
     setOpenCollapsibles(prev => {
       const isOpen = prev.includes(id)
       if (id === "Data") {
-        const dbIds = data.databases.map(db => db.id)
+        const dbIds = data.databases.map(db => db.id.toString())
         return isOpen
           ? prev.filter(item => item !== id && !dbIds.includes(item))
           : [...prev, id, ...dbIds]
@@ -79,7 +79,7 @@ export function EmerySidebar() {
 
   return (
     <div
-      className={`relative min-h-screen border-r bg-card transition-all duration-300 ease-in-out shadow-lg ${
+      className={`relative min-h-screen border-r transition-all duration-300 ease-in-out shadow-lg ${
         isCollapsed ? "w-16" : "w-64"
       }`}
     >
@@ -172,35 +172,17 @@ export function EmerySidebar() {
                         </CollapsibleTrigger>
                         {!isCollapsed && (
                           <CollapsibleContent className="pl-7 py-1 space-y-1">
-                            <button
-                              onClick={() => setIsCreateDatabaseOpen(true)}
-                              className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs hover:bg-accent w-full text-left"
-                            >
-                              <Plus className="h-3 w-3" />
-                              + Database
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedDatabaseForTable(undefined)
-                                setIsCreateTableOpen(true)
-                              }}
-                              className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs hover:bg-accent w-full text-left"
-                              disabled={data.databases.length === 0}
-                            >
-                              <Plus className="h-3 w-3" />
-                              + Table
-                            </button>
                             {isLoading ? (
                               <div className="text-xs text-muted-foreground px-3 py-2">Loading tables...</div>
                             ) : data.databases.length === 0 ? (
-                              <div className="text-xs text-muted-foreground px-3 py-2">No tables yet</div>
+                              <div className="text-xs text-muted-foreground px-3 py-2">No databases yet</div>
                             ) : (
                               data.databases.map(db => (
                                 <Collapsible 
                                   key={db.id} 
                                   defaultOpen={pathname.startsWith("/mission-control") && searchParams?.has('tableId')} 
-                                  open={openCollapsibles.includes(db.id)} 
-                                  onOpenChange={() => toggleCollapsible(db.id)}
+                                  open={openCollapsibles.includes(db.id.toString())} 
+                                  onOpenChange={() => toggleCollapsible(db.id.toString())}
                                 >
                                   <CollapsibleTrigger asChild>
                                     <button className="flex items-center justify-between w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs">
@@ -212,16 +194,6 @@ export function EmerySidebar() {
                                     </button>
                                   </CollapsibleTrigger>
                                   <CollapsibleContent className="pl-4 py-1 space-y-1">
-                                    <button
-                                      onClick={() => {
-                                        setSelectedDatabaseForTable(db.id)
-                                        setIsCreateTableOpen(true)
-                                      }}
-                                      className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs hover:bg-accent w-full text-left"
-                                    >
-                                      <Plus className="h-3 w-3" />
-                                      + Table in {db.name}
-                                    </button>
                                     {db.tables.map(table => (
                                       <Link
                                         key={table.id}
@@ -234,10 +206,29 @@ export function EmerySidebar() {
                                         {table.name}
                                       </Link>
                                     ))}
+                                    {/* Add Table button at the bottom of each database */}
+                                    <button
+                                      onClick={() => {
+                                        setSelectedDatabaseForTable(db.id)
+                                        setIsCreateTableOpen(true)
+                                      }}
+                                      className="flex items-center justify-center w-full rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs hover:bg-accent"
+                                      title="Add Table"
+                                    >
+                                      <Plus className="h-3 w-3" />
+                                    </button>
                                   </CollapsibleContent>
                                 </Collapsible>
                               ))
                             )}
+                            {/* Add Database button at the bottom */}
+                            <button
+                              onClick={() => setIsCreateDatabaseOpen(true)}
+                              className="flex items-center justify-center w-full rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs hover:bg-accent mt-2"
+                              title="Add Database"
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
                           </CollapsibleContent>
                         )}
                       </Collapsible>

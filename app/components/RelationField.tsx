@@ -51,7 +51,7 @@ export default function RelationField({
       
       // Get table info and records
       const [tables, records] = await Promise.all([
-        getTables(workspaceId),
+        getTables(),
         getRowsData(relatedTableId, 100, 0)
       ]);
 

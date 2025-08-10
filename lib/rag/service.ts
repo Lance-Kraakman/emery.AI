@@ -1,5 +1,5 @@
-import { openai } from '@ai-sdk/openai'
 import { embed, embedMany } from 'ai'
+import { getEmbeddingModel } from '@/lib/ai/models'
 import { db } from '@/lib/db/client'
 import { ragIndexes, ragDocuments, ragQueryLogs, tables, fields, organizations, agents } from '@/lib/db/schema'
 import { eq, and, desc, sql, inArray } from 'drizzle-orm'
@@ -40,7 +40,7 @@ export interface RagQueryResult {
 
 // AIDEV-NOTE: Best practices RAG service using pgvector for optimal vector similarity search
 export class RagService {
-  private embeddingModel = openai.embedding('text-embedding-ada-002')
+  private embeddingModel = getEmbeddingModel()
 
   // Initialize pgvector extension and create indexes
   async initializeVectorExtension(): Promise<void> {

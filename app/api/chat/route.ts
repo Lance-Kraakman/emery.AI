@@ -1,7 +1,7 @@
-import { openai } from '@ai-sdk/openai'
 import { streamText } from 'ai'
 import { auth } from '@/lib/auth'
 import { ragService } from '@/lib/rag/service'
+import { getAIModel } from '@/lib/ai/models'
 
 export async function POST(req: Request) {
   try {
@@ -63,13 +63,12 @@ Always be helpful, accurate, and reference the specific data sources when applic
     }
 
     const result = await streamText({
-      model: openai('gpt-4o'),
+      model: getAIModel(),
       messages: [systemMessage, ...messages],
       temperature: 0.7,
-      maxTokens: 2000,
     })
 
-    return result.toDataStreamResponse({
+    return result.toTextStreamResponse({
       headers: {
         'X-Rag-Results': ragResults ? JSON.stringify({
           documentsFound: ragResults.documents.length,

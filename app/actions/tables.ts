@@ -90,8 +90,13 @@ export async function createTable(data: CreateTableData & { databaseId: number; 
 
 export async function createTableAction(formData: FormData) {
   const name = formData.get('name') as string;
+  const databaseId = parseInt(formData.get('databaseId') as string);
 
-  const result = await createTable({ name });
+  if (!databaseId) {
+    throw new Error("Database ID is required");
+  }
+
+  const result = await createTable({ name, databaseId });
   
   if (!result.success) {
     throw new Error(result.error);

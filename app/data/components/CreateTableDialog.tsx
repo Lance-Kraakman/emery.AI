@@ -48,7 +48,7 @@ export function CreateTableDialog({ isOpen, onClose, onTableCreated, selectedDat
       
       const result = await createTable({ 
         name: tableName.trim(),
-        databaseId: databaseId ? parseInt(databaseId) : undefined,
+        databaseId: parseInt(databaseId),
         description: description.trim() || undefined
       })
       

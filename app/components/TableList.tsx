@@ -73,7 +73,7 @@ export default function TableList({ tables, currentOrganizationId, onSelectTable
         <div className="mb-6 p-4 border rounded-lg bg-white">
           <h3 className="font-medium mb-3">Create New Table</h3>
           <form action={handleCreateTable} className="flex gap-3">
-            <input type="hidden" name="organizationId" value={organizationId} />
+            <input type="hidden" name="organizationId" value={currentOrganizationId} />
             <input
               type="text"
               name="name"

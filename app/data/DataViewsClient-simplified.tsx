@@ -88,14 +88,21 @@ export function DataViewsClientSimplified() {
     }
   }
 
-  const handleUpdateRow = async (rowId: string, field: FieldData, value: any) => {
+  const handleUpdateRow = async (rowId: string, fieldId: number, value: any) => {
     if (!selectedTableId) return
 
     try {
+      // Find the field to get its slug
+      const field = fields.find(f => f.id === fieldId)
+      if (!field) {
+        console.error('Field not found for fieldId:', fieldId)
+        return
+      }
+
       await updateRowData(selectedTableId, rowId, { [field.slug]: value })
       setRows(prevRows => 
         prevRows.map(row => 
-          row.id === rowId ? { ...row, [field.slug]: value } : row
+          row.id === rowId ? { ...row, [`field_${fieldId}`]: value } : row
         )
       )
     } catch (err) {

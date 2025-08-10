@@ -30,19 +30,32 @@ class SmolAgentsIntegration:
         
         Args:
             step_type: Type of step (CODE_STEP or TOOL_STEP)
-            model: Model identifier (e.g., "claude-3-sonnet-20240229")
+            model: Model identifier (e.g., "Qwen/Qwen2.5-Coder-32B-Instruct")
             
         Returns:
             Appropriate smolagents agent instance
         """
+        import os
+        
         try:
             # Import smolagents dynamically to avoid hard dependency
             from smolagents import CodeAgent, ToolCallingAgent
             
+            # Require HF_TOKEN for operation
+            if not os.getenv("HF_TOKEN"):
+                raise RuntimeError("HF_TOKEN environment variable is required. Get your token from https://huggingface.co/settings/tokens")
+            
+            # Use Qwen model as default
+            default_model = "Qwen/Qwen2.5-Coder-32B-Instruct"
+            effective_model = model or default_model
+            
+            # Configure HF token
+            agent_kwargs = {"model": effective_model, "token": os.getenv("HF_TOKEN")}
+            
             if step_type == StepType.CODE_STEP:
-                return CodeAgent(model=model or "claude-3-sonnet-20240229")
+                return CodeAgent(**agent_kwargs)
             elif step_type == StepType.TOOL_STEP:
-                return ToolCallingAgent(model=model or "claude-3-sonnet-20240229")
+                return ToolCallingAgent(**agent_kwargs)
             else:
                 raise ValueError(f"Unsupported step type for smolagents: {step_type}")
                 
@@ -156,6 +169,7 @@ class SmolAgentsIntegration:
 
 
 # AIDEV-NOTE: This integration provides the bridge to smolagents library
+# AIDEV-NOTE: Uses HuggingFace models (Qwen series) exclusively via HF_TOKEN env var
 # AIDEV-TODO: Implement comprehensive tool registry with common tools
 # AIDEV-TODO: Add support for tool configuration and parameters
 # AIDEV-QUESTION: Should we cache agent instances or create new ones each time?

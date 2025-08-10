@@ -56,9 +56,9 @@ function CustomCanvas() {
   }
 
   return (
-    <div className="w-full md:w-2/3 bg-card border border-border rounded-lg shadow-sm flex flex-col">
+    <div className="w-full md:w-2/3 border border-border rounded-lg shadow-sm flex flex-col">
       {/* Custom header with artifact details */}
-      <div className="flex items-center justify-between p-4 border-b border-border bg-secondary/50 rounded-t-lg">
+      <div className="flex items-center justify-between p-4 border-b border-border rounded-t-lg">
         <div>
           <h2 className="font-semibold text-foreground">
             {currentArtifact.title ||
@@ -148,7 +148,7 @@ function CustomChat() {
             </p>
           </div>
         </div>
-        <ChatMessages className="flex-1 min-h-0 overflow-y-auto" />
+        <ChatMessages className="flex-1 min-h-0 overflow-y-auto bg-transparent" />
         <ChatInput />
       </div>
       <CustomCanvas />

@@ -71,7 +71,7 @@ export default function DashboardClient({
       <div className="flex">
         <TableList
           tables={initialTables}
-          currentOrganizationId={session?.user?.currentOrganizationId}
+          currentOrganizationId={session?.user?.currentOrganizationId || undefined}
           onSelectTable={setSelectedTable}
           onTableUpdate={onDataUpdate?.loadTables}
         />

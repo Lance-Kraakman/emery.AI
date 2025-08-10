@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server'
 import { streamText } from 'ai'
-import { openai } from '@ai-sdk/openai'
 import { auth } from '@/lib/auth'
 import { ragService } from '@/lib/rag/service'
+import { getAIModel, getAIProviderInfo } from '@/lib/ai/models'
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,11 +14,13 @@ export async function POST(req: NextRequest) {
     const { messages } = await req.json()
     const latestMessage = messages[messages.length - 1]?.content
 
-    // Check if OpenAI API key is available
-    if (!process.env.OPENAI_API_KEY) {
+    // Check if HuggingFace is configured
+    const providerInfo = getAIProviderInfo()
+    if (!providerInfo.configured) {
       return new Response(
         JSON.stringify({
-          error: 'OpenAI API key not configured. Please add OPENAI_API_KEY to your environment variables.'
+          error: 'HuggingFace not configured. Please add your HF_TOKEN to the environment variables.',
+          details: 'Get your token from https://huggingface.co/settings/tokens'
         }),
         { 
           status: 500,
@@ -48,7 +50,7 @@ export async function POST(req: NextRequest) {
               domainTypes: ['organizations', 'tables', 'agents'],
               createdBy: session.user.id,
             })
-            ragIndex = await ragService.getIndex(indexId)
+            ragIndex = await ragService.getIndex(indexId) || undefined
           }
 
           // Search for relevant context
@@ -97,10 +99,9 @@ Always be helpful, accurate, and professional.`
 
     // Stream the AI response
     const result = await streamText({
-      model: openai('gpt-4o'),
+      model: getAIModel(),
       messages: [systemMessage, ...messages],
       temperature: 0.7,
-      maxTokens: 2000,
     })
 
     // AI SDK v5 - create streaming response from textStream

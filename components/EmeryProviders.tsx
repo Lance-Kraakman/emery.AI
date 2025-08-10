@@ -55,7 +55,7 @@ export function EmeryProviders({ children }: EmeryProvidersProps) {
         <Suspense fallback={<div className="w-64 bg-card border-r border-border" />}>
           <EmerySidebar />
         </Suspense>
-        <main className="flex-1 flex flex-col overflow-hidden bg-background min-h-0">
+        <main className="flex-1 flex flex-col overflow-hidden min-h-0">
           {children}
         </main>
         <DataDialogs />

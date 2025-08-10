@@ -242,6 +242,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-crontab" },
     { name = "schedule" },
+    { name = "smolagents" },
     { name = "typing-extensions" },
     { name = "websockets" },
 ]
@@ -295,6 +296,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
     { name = "python-crontab", specifier = ">=3.0.0" },
     { name = "schedule", specifier = ">=1.2.0" },
+    { name = "smolagents", specifier = ">=1.20.0" },
     { name = "smolagents", marker = "extra == 'smolagents'", specifier = ">=0.1.0" },
     { name = "typing-extensions", specifier = ">=4.8.0" },
     { name = "websockets", specifier = ">=11.0.0" },

@@ -28,23 +28,11 @@ export default function RowManager({ tableId, organizationId, fields, rows, onRo
   const [isPending, startTransition] = useTransition();
 
   async function handleCreateRow(formData: FormData) {
-    // Validate data before submission
-    const validationResults = validateRowData(fields, newRowData);
-    if (hasValidationErrors(validationResults)) {
-      const errors: Record<string, string> = {};
-      validationResults.forEach((result: any) => {
-        if (!result.isValid && result.field) {
-          errors[result.field] = result.error || 'Invalid value';
-        }
-      });
-      setValidationErrors(errors);
-      alert(getValidationErrorMessage(validationResults));
-      return;
-    }
-
     startTransition(async () => {
       try {
-        setValidationErrors({});
+        // Simple direct approach: use the current state data
+        console.log('[SIMPLE-SUBMIT] Using newRowData state:', newRowData);
+        
         const data = JSON.stringify(newRowData);
         formData.append('data', data);
         await createRowAction(formData);
@@ -111,6 +99,7 @@ export default function RowManager({ tableId, organizationId, fields, rows, onRo
         return (
           <input
             type="number"
+            name={field.slug}
             value={value || ''}
             onChange={(e) => onChange(e.target.value ? Number(e.target.value) : '')}
             className={baseClass}
@@ -122,6 +111,7 @@ export default function RowManager({ tableId, organizationId, fields, rows, onRo
           <div className="flex items-center">
             <input
               type="checkbox"
+              name={field.slug}
               checked={Boolean(value)}
               onChange={(e) => onChange(e.target.checked)}
               disabled={isPending}
@@ -133,6 +123,7 @@ export default function RowManager({ tableId, organizationId, fields, rows, onRo
         return (
           <input
             type="date"
+            name={field.slug}
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
             className={baseClass}
@@ -143,6 +134,7 @@ export default function RowManager({ tableId, organizationId, fields, rows, onRo
         return (
           <input
             type="email"
+            name={field.slug}
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
             className={baseClass}
@@ -153,6 +145,7 @@ export default function RowManager({ tableId, organizationId, fields, rows, onRo
         return (
           <input
             type="url"
+            name={field.slug}
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
             className={baseClass}
@@ -183,6 +176,7 @@ export default function RowManager({ tableId, organizationId, fields, rows, onRo
         return (
           <input
             type="text"
+            name={field.slug}
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
             className={baseClass}
