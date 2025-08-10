@@ -137,7 +137,7 @@ function CustomChat() {
       handler={handler}
       className="block h-screen flex-row gap-4 p-0 md:flex md:p-5"
     >
-      <div className="flex min-w-0 max-w-full flex-1 flex-col gap-4">
+      <div className="flex min-w-0 max-w-4xl mx-auto flex-1 flex-col gap-4">
         <div className="flex justify-between gap-2 border-b p-4">
           <div>
             <h1 className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-lg font-bold text-transparent">
@@ -148,7 +148,7 @@ function CustomChat() {
             </p>
           </div>
         </div>
-        <ChatMessages className="flex-1" />
+        <ChatMessages className="flex-1 min-h-0 overflow-y-auto" />
         <ChatInput />
       </div>
       <CustomCanvas />
