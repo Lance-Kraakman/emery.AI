@@ -100,13 +100,13 @@ Always be helpful, accurate, and professional.`
       maxTokens: 2000,
     })
 
-    // AI SDK v5 - use pipeTextStreamToResponse for streaming
+    // AI SDK v5 - create streaming response from textStream
     return new Response(result.textStream, {
-      status: 200,
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
+        'Transfer-Encoding': 'chunked',
       },
     })
     

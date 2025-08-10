@@ -60,31 +60,23 @@ export function useChatRSC(): ChatHandler {
         role: 'assistant' as const,
       }])
 
-      // Read the stream
+      // Read the stream - AI SDK v5 returns plain text stream
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
 
-        // Decode the chunk
+        // Decode the chunk - it's plain text now, not SSE format
         const chunk = new TextDecoder().decode(value)
-        const lines = chunk.split('\n')
-
-        for (const line of lines) {
-          if (line.startsWith('0:')) {
-            try {
-              const content = line.slice(2).replace(/^"|"$/g, '')
-              assistantMessage += content
-              
-              // Update the assistant message
-              setMessages((prev) => prev.map((msg) =>
-                msg.id === assistantId
-                  ? { ...msg, content: assistantMessage }
-                  : msg
-              ))
-            } catch (e) {
-              // Skip malformed chunks
-            }
-          }
+        
+        if (chunk) {
+          assistantMessage += chunk
+          
+          // Update the assistant message in real-time
+          setMessages((prev) => prev.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: assistantMessage }
+              : msg
+          ))
         }
       }
 
