@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai'
 import { embed, embedMany } from 'ai'
 import { db } from '@/lib/db/client'
-import { ragIndexes, ragDocuments, ragQueryLogs, tables, fields, organizations } from '@/lib/db/schema'
+import { ragIndexes, ragDocuments, ragQueryLogs, tables, fields, organizations, agents } from '@/lib/db/schema'
 import { eq, and, desc, sql, inArray } from 'drizzle-orm'
 import crypto from 'crypto'
 // Note: Using raw SQL for pgvector operations since drizzle-specific helpers aren't available
@@ -313,8 +313,80 @@ export class RagService {
   }
 
   private async indexAgents(indexId: string, ragIndex: RagIndex): Promise<number> {
-    // AIDEV-TODO: Implement agent indexing based on capabilities and descriptions
-    return 0
+    if (!ragIndex.organizationId) {
+      return 0
+    }
+
+    // Get agents for this organization
+    const organizationAgents = await db
+      .select({
+        id: agents.id,
+        name: agents.name,
+        role: agents.role,
+        description: agents.description,
+        persona: agents.persona,
+        tools: agents.tools,
+        servers: agents.servers,
+        capabilities: agents.capabilities,
+        status: agents.status,
+        createdAt: agents.createdAt,
+      })
+      .from(agents)
+      .where(eq(agents.organizationId, ragIndex.organizationId))
+
+    if (organizationAgents.length === 0) {
+      return 0
+    }
+
+    // Process agents in batches for better performance
+    const batchSize = 10
+    const batches = []
+    for (let i = 0; i < organizationAgents.length; i += batchSize) {
+      batches.push(organizationAgents.slice(i, i + batchSize))
+    }
+
+    let documentCount = 0
+    for (const batch of batches) {
+      const documentsToInsert = await Promise.all(
+        batch.map(async (agent) => {
+          const agentContent = this.generateAgentContent(agent)
+          
+          // Generate embedding for the content
+          const { embedding } = await embed({
+            model: this.embeddingModel,
+            value: agentContent,
+          })
+          
+          return {
+            ragIndexId: indexId,
+            sourceType: 'agent',
+            sourceId: agent.id.toString(),
+            sourceName: agent.name,
+            title: `Agent: ${agent.name}`,
+            content: agentContent,
+            metadata: {
+              agentId: agent.id,
+              role: agent.role,
+              status: agent.status,
+              organizationId: ragIndex.organizationId,
+              toolCount: Array.isArray(agent.tools) ? agent.tools.length : 0,
+              serverCount: Array.isArray(agent.servers) ? agent.servers.length : 0,
+              capabilityCount: Array.isArray(agent.capabilities) ? agent.capabilities.length : 0,
+            },
+            embedding,
+            contentHash: crypto.createHash('md5').update(agentContent).digest('hex'),
+          }
+        })
+      )
+
+      // Batch insert for better performance
+      if (documentsToInsert.length > 0) {
+        await db.insert(ragDocuments).values(documentsToInsert)
+        documentCount += documentsToInsert.length
+      }
+    }
+
+    return documentCount
   }
 
   // Generate comprehensive table schema content
@@ -366,6 +438,46 @@ ${organization.mission ? `Mission: ${organization.mission}` : 'Mission: Not spec
 About: ${organization.name} is an active organization on the Emery platform, which provides dynamic database management, workflow automation, and team collaboration capabilities. This organization can create tables, manage data, build workflows with agents, and coordinate team activities using shared resources and tools.
 
 Capabilities: The organization has access to Emery's full feature set including dynamic table creation, field management, data operations, agent-powered workflows, team collaboration, role-based access control, and integration with external services through shared tools and servers.`
+  }
+
+  // Generate comprehensive agent content for indexing
+  private generateAgentContent(agent: {
+    id: number
+    name: string
+    role?: string | null
+    description?: string | null
+    persona?: string | null
+    tools?: any
+    servers?: any
+    capabilities?: any
+    status?: string | null
+    createdAt?: Date | null
+  }): string {
+    const toolsList = agent.tools && Array.isArray(agent.tools) && agent.tools.length > 0
+      ? `\nTools: ${agent.tools.map((tool: any) => typeof tool === 'string' ? tool : tool.name || 'Unknown').join(', ')}`
+      : '\nTools: None configured'
+
+    const serversList = agent.servers && Array.isArray(agent.servers) && agent.servers.length > 0
+      ? `\nServers: ${agent.servers.map((server: any) => typeof server === 'string' ? server : server.name || 'Unknown').join(', ')}`
+      : '\nServers: None configured'
+
+    const capabilitiesDesc = agent.capabilities && Array.isArray(agent.capabilities) && agent.capabilities.length > 0
+      ? `\nCapabilities: ${agent.capabilities.length} configured capabilities including ${agent.capabilities.map((cap: any) => cap.name || 'unnamed capability').join(', ')}`
+      : '\nCapabilities: None configured'
+
+    const createdDate = agent.createdAt 
+      ? `\nCreated: ${agent.createdAt.toLocaleDateString()}`
+      : ''
+
+    return `Agent: ${agent.name}
+${agent.role ? `Role: ${agent.role}` : 'Role: Not specified'}
+${agent.description ? `Description: ${agent.description}` : 'Description: Not provided'}
+${agent.persona ? `Persona: ${agent.persona}` : 'Persona: Default assistant'}
+Status: ${agent.status || 'active'}${createdDate}${toolsList}${serversList}${capabilitiesDesc}
+
+About: ${agent.name} is an AI agent configured within the Emery platform for workflow automation and task execution. This agent can process requests, execute workflows, and integrate with various tools and services to accomplish organizational objectives.
+
+Functionality: The agent operates within the Emery ecosystem to handle automated workflows, data processing, integration tasks, and other organizational processes as configured through its capabilities and available tools.`
   }
 
   // Vector similarity search using pgvector
