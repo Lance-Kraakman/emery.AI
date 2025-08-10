@@ -51,12 +51,12 @@ function CustomCanvas() {
 
   if (!isVisible || !currentArtifact) {
     return (
-      <ChatCanvas className="hidden md:flex md:w-1/2 bg-card border border-border rounded-lg shadow-sm" />
+      <ChatCanvas className="w-full md:w-2/3" />
     )
   }
 
   return (
-    <div className="hidden md:flex md:w-1/2 bg-card border border-border rounded-lg shadow-sm flex-col min-h-0">
+    <div className="w-full md:w-2/3 bg-card border border-border rounded-lg shadow-sm flex flex-col">
       {/* Custom header with artifact details */}
       <div className="flex items-center justify-between p-4 border-b border-border bg-secondary/50 rounded-t-lg">
         <div>
@@ -133,49 +133,25 @@ function CustomChat() {
   const handler = useChatRSC()
 
   return (
-    <div className="flex h-screen flex-col">
-      <ChatSection
-        handler={handler}
-        className="flex flex-1 justify-center overflow-hidden min-h-0 bg-background"
-      >
-        {/* ChatGPT-style centered container */}
-        <div className="flex flex-col min-h-0 w-full max-w-4xl">
-          {/* Fixed header */}
-          <div className="flex-shrink-0 flex justify-center border-b border-border bg-background p-6">
-            <div className="text-center">
-              <h1 className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-2xl font-bold text-transparent">
-                Mission Control
-              </h1>
-              <p className="text-sm text-muted-foreground mt-2">
-                AI-powered organizational intelligence and analysis
-              </p>
-            </div>
-          </div>
-          
-          {/* Scrollable chat area with fixed input */}
-          <div className="flex-1 flex flex-col min-h-0">
-            {/* Messages area - scrollable with auto-scroll */}
-            <div 
-              ref={handler.scrollRef}
-              className="flex-1 overflow-y-auto min-h-0 px-4"
-            >
-              <div className="max-w-3xl mx-auto py-4">
-                <ChatMessages className="space-y-4" />
-              </div>
-            </div>
-            
-            {/* Input area - fixed at bottom */}
-            <div className="flex-shrink-0 border-t border-border bg-background/80 backdrop-blur-sm p-4">
-              <div className="max-w-3xl mx-auto">
-                <ChatInput />
-              </div>
-            </div>
+    <ChatSection
+      handler={handler}
+      className="block h-screen flex-row gap-4 p-0 md:flex md:p-5"
+    >
+      <div className="flex min-w-0 max-w-full flex-1 flex-col gap-4">
+        <div className="flex justify-between gap-2 border-b p-4">
+          <div>
+            <h1 className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-lg font-bold text-transparent">
+              Mission Control
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              AI-powered organizational intelligence and analysis
+            </p>
           </div>
         </div>
-        
-        {/* Canvas stays on the right */}
-        <CustomCanvas />
-      </ChatSection>
-    </div>
+        <ChatMessages className="flex-1" />
+        <ChatInput />
+      </div>
+      <CustomCanvas />
+    </ChatSection>
   )
 }
