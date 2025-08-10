@@ -1,4 +1,20 @@
-import { pgTable, text, uuid, serial, integer, timestamp, boolean, primaryKey, jsonb, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, serial, integer, timestamp, boolean, primaryKey, jsonb, unique, customType } from "drizzle-orm/pg-core";
+
+// Custom vector type for pgvector
+const vector = customType<{ data: number[]; notNull: false; default: false }>({
+  dataType() {
+    return 'vector(1536)';
+  },
+  toDriver(value: number[]): string {
+    return JSON.stringify(value);
+  },
+  fromDriver(value: unknown): number[] {
+    if (typeof value === 'string') {
+      return JSON.parse(value);
+    }
+    return value as number[];
+  },
+});
 
 export const tables = pgTable("tables", {
   id: serial("id").primaryKey(),
@@ -167,4 +183,78 @@ export const verificationTokens = pgTable("verification_tokens", {
   identifier: text("identifier").notNull(),
   token: text("token").notNull(),
   expires: timestamp("expires").notNull(),
+});
+
+// RAG System Tables
+export const ragIndexes = pgTable("rag_indexes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  description: text("description"),
+  
+  // Scoping - configurable domain filtering
+  organizationId: integer("organization_id").references(() => organizations.id),
+  agentId: integer("agent_id").references(() => agents.id),
+  roleId: integer("role_id").references(() => roles.id),
+  
+  // Domain configuration - what to RAG against
+  domainTypes: jsonb("domain_types").notNull(), // ["tables", "files", "agents", "workflows"]
+  domainFilters: jsonb("domain_filters"), // Additional filtering criteria
+  
+  // Embedding configuration
+  embeddingModel: text("embedding_model").default("text-embedding-ada-002"),
+  embeddingDimensions: integer("embedding_dimensions").default(1536),
+  
+  // Status and metadata
+  status: text("status").default("active"), // active, building, error
+  lastIndexedAt: timestamp("last_indexed_at"),
+  documentCount: integer("document_count").default(0),
+  
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const ragDocuments = pgTable("rag_documents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ragIndexId: uuid("rag_index_id").notNull().references(() => ragIndexes.id),
+  
+  // Source identification
+  sourceType: text("source_type").notNull(), // "table", "file", "agent", "workflow"
+  sourceId: text("source_id").notNull(), // ID of the source (table.id, file_path, etc.)
+  sourceName: text("source_name").notNull(), // Human readable name
+  
+  // Content
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  metadata: jsonb("metadata"), // Additional context about the source
+  
+  // Vector embedding using pgvector for fast similarity search
+  embedding: vector("embedding"),
+  
+  // Content hash for change detection
+  contentHash: text("content_hash").notNull(),
+  
+  // Timestamps
+  indexedAt: timestamp("indexed_at").defaultNow(),
+  sourceUpdatedAt: timestamp("source_updated_at"),
+});
+
+export const ragQueryLogs = pgTable("rag_query_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ragIndexId: uuid("rag_index_id").notNull().references(() => ragIndexes.id),
+  
+  // Query details
+  query: text("query").notNull(),
+  queryEmbedding: vector("query_embedding"),
+  
+  // Results
+  resultsCount: integer("results_count").notNull(),
+  topResults: jsonb("top_results"), // Store top matching documents with scores
+  
+  // Context
+  userId: uuid("user_id").references(() => users.id),
+  agentId: integer("agent_id").references(() => agents.id),
+  sessionId: text("session_id"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
 });

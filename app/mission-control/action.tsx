@@ -2,44 +2,145 @@
 
 import { defaultAnnotationRenderers } from '@llamaindex/chat-ui'
 import { Markdown } from '@llamaindex/chat-ui/widgets'
-import { createStreamableUI } from 'ai/rsc'
 import { ReactNode } from 'react'
+import { auth } from '@/lib/auth'
+import { ragService } from '@/lib/rag/service'
+import { openai } from '@ai-sdk/openai'
+import { generateText } from 'ai'
 
-const TOKEN_DELAY = 30
-const ANNOTATION_DELAY = 300
-const INLINE_ANNOTATION_KEY = 'annotation'
+export async function chatAction(question: string): Promise<ReactNode> {
+  const session = await auth()
 
-export async function chatAction(question: string) {
-  const uiStream = createStreamableUI()
+  // Check if OpenAI API key is available
+  if (!process.env.OPENAI_API_KEY) {
+    return (
+      <Markdown
+        content={`**🔑 OpenAI API Key Required**
 
-  let assistantMsg = ''
+To enable AI-powered responses with RAG, please:
 
-  const responseStream = fakeChatStream(question)
-  responseStream
-    .pipeTo(
-      new WritableStream({
-        write: (data: any) => {
-          if (typeof data === 'string') {
-            assistantMsg += data
-          } else {
-            assistantMsg += toInlineAnnotationCode(data)
-          }
+1. Add your OpenAI API key to \`.env.local\`:
+   \`\`\`
+   OPENAI_API_KEY=sk-your-key-here
+   \`\`\`
 
-          uiStream.update(
-            <Markdown
-              content={assistantMsg}
-              annotationRenderers={defaultAnnotationRenderers}
-            />
-          )
-        },
-        close: () => {
-          uiStream.done()
-        },
-      })
+2. Restart the development server
+
+3. The system will then automatically:
+   - Index your organization's table schemas
+   - Search for relevant context when you ask questions
+   - Provide AI responses with your organizational data context
+
+Your question: "${question}"`}
+        annotationRenderers={defaultAnnotationRenderers}
+      />
     )
-    .catch(uiStream.error)
+  }
 
-  return uiStream.value as Promise<ReactNode>
+  let ragContext = ''
+
+  // AIDEV-NOTE: Get organization RAG index if available
+  try {
+    if (session?.user?.id) {
+      // Get or create default organization RAG index
+      const organizationId = 1 // AIDEV-TODO: Get from session
+      
+      const indexes = await ragService.listIndexes({ organizationId })
+      let ragIndex = indexes.find(idx => idx.domainTypes.includes('tables'))
+      
+      // Create default RAG index if none exists
+      if (!ragIndex) {
+        const indexId = await ragService.createIndex({
+          name: 'Organization Knowledge Base',
+          description: 'Automatic RAG index for organizational data',
+          organizationId,
+          domainTypes: ['tables', 'agents'],
+          createdBy: session.user.id,
+        })
+        ragIndex = await ragService.getIndex(indexId)
+      }
+
+      // Search for relevant context
+      if (ragIndex) {
+        const searchResult = await ragService.search({
+          indexId: ragIndex.id,
+          query: question,
+          limit: 5,
+          threshold: 0.6,
+          userId: session.user.id,
+        })
+
+        if (searchResult.documents.length > 0) {
+          ragContext = `
+RELEVANT ORGANIZATION DATA:
+${searchResult.documents.map((doc, idx) => 
+  `[${idx + 1}] ${doc.title}
+${doc.content.substring(0, 500)}...
+Source: ${doc.sourceType} - ${doc.sourceName} (${(doc.similarity! * 100).toFixed(1)}% match)
+---`
+).join('\n')}
+
+`
+        }
+      }
+    }
+  } catch (ragError) {
+    console.error('RAG search failed:', ragError)
+    // Continue without RAG context
+  }
+
+  // Generate AI response with RAG context
+  try {
+    const { text } = await generateText({
+      model: openai('gpt-4o'),
+      messages: [
+        {
+          role: 'system',
+          content: `You are an AI assistant for Emery, a dynamic database and workflow platform. You help users understand their organizational data, create workflows, and manage their systems.
+
+${ragContext ? `You have access to relevant context from the user's organization:
+
+${ragContext}
+
+Use this context to provide accurate, specific answers about their tables, data, and workflows. Reference the specific sources when applicable.` : 'No specific organizational context is available. Provide general guidance about database management and workflows.'}
+
+Always be helpful, accurate, and professional.`
+        },
+        {
+          role: 'user',
+          content: question
+        }
+      ],
+      temperature: 0.7,
+    })
+
+    return (
+      <Markdown
+        content={text}
+        annotationRenderers={defaultAnnotationRenderers}
+      />
+    )
+  } catch (error) {
+    console.error('AI generation failed:', error)
+    return (
+      <Markdown
+        content={`**⚠️ AI Response Error**
+
+There was an issue generating the AI response. This could be due to:
+
+1. **Invalid OpenAI API Key** - Check your \`.env.local\` file
+2. **API Rate Limits** - Wait a moment and try again  
+3. **Network Issues** - Check your internet connection
+
+**Your question:** "${question}"
+
+**RAG Context Found:** ${ragContext ? 'Yes - Found relevant organizational data' : 'No context available'}
+
+Please check your OpenAI API key and try again.`}
+        annotationRenderers={defaultAnnotationRenderers}
+      />
+    )
+  }
 }
 
 const SAMPLE_TEXT = [
