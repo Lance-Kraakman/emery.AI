@@ -33,8 +33,12 @@ export function CreateTableDialog({ isOpen, onClose, onTableCreated, selectedDat
       return
     }
 
-    if (!databaseId && data.databases.length === 0) {
-      setError("Please create a database first")
+    if (!databaseId) {
+      if (data.databases.length === 0) {
+        setError("Please create a database first")
+      } else {
+        setError("Please select a database")
+      }
       return
     }
 
@@ -81,17 +85,17 @@ export function CreateTableDialog({ isOpen, onClose, onTableCreated, selectedDat
         <DialogHeader>
           <DialogTitle>Create New Table</DialogTitle>
           <DialogDescription>
-            Create a new table to store your data. You can add fields after creation.
+            Create a new table within a database. Tables must belong to a database to organize your data structure.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="databaseId">Database</Label>
+              <Label htmlFor="databaseId">Database *</Label>
               <Select value={databaseId} onValueChange={setDatabaseId} disabled={loading}>
                 <SelectTrigger>
-                  <SelectValue placeholder={data.databases.length === 0 ? "No databases available" : "Select a database..."} />
+                  <SelectValue placeholder={data.databases.length === 0 ? "No databases available - create one first" : "Select a database..."} />
                 </SelectTrigger>
                 <SelectContent>
                   {data.databases.map((db) => (
@@ -145,7 +149,7 @@ export function CreateTableDialog({ isOpen, onClose, onTableCreated, selectedDat
             </Button>
             <Button 
               type="submit" 
-              disabled={loading || !tableName.trim()}
+              disabled={loading || !tableName.trim() || !databaseId}
             >
               {loading ? "Creating..." : "Create Table"}
             </Button>

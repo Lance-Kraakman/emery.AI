@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import { DataViewsClient } from "./DataViewsClient-clean"
+import { DataViewsClientHierarchical } from "./DataViewsClient-hierarchical"
 import { Loader2 } from "lucide-react"
 
 export default function DataViewsPage() {
@@ -12,7 +12,7 @@ export default function DataViewsPage() {
         </div>
       </div>
     }>
-      <DataViewsClient />
+      <DataViewsClientHierarchical />
     </Suspense>
   )
 }

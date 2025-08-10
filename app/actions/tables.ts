@@ -7,14 +7,14 @@ import { db } from "@/lib/db/client";
 import { tables, databases } from "@/lib/db/schema";
 import { createDynamicTable, dropDynamicTable } from "@/lib/db/dynamic";
 import { generateTableName } from "@/utils/slugify";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireAuth, requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { autoReindexService } from "@/lib/rag/auto-reindex";
 import type { ActionResult, CreateTableData } from "./types";
 
-export async function createTable(data: CreateTableData & { databaseId?: number; description?: string }, revalidateUrl?: string): Promise<ActionResult> {
+export async function createTable(data: CreateTableData & { databaseId: number; description?: string }, revalidateUrl?: string): Promise<ActionResult> {
   try {
     const session = await requirePermission("create_table");
     const currentOrg = await requireCurrentOrganization();
@@ -27,24 +27,25 @@ export async function createTable(data: CreateTableData & { databaseId?: number;
       };
     }
 
-    let finalDatabaseId = databaseId;
+    if (!databaseId) {
+      return {
+        success: false,
+        error: "Database selection is required. Tables must belong to a database.",
+      };
+    }
+
+    // Verify the specified database exists and belongs to the current organization
+    const [targetDatabase] = await db
+      .select()
+      .from(databases)
+      .where(and(eq(databases.id, databaseId), eq(databases.organizationId, currentOrg.id)))
+      .limit(1);
     
-    // If no database specified, use the first database in the organization
-    if (!finalDatabaseId) {
-      const defaultDatabase = await db
-        .select()
-        .from(databases)
-        .where(eq(databases.organizationId, currentOrg.id))
-        .limit(1);
-      
-      if (defaultDatabase.length === 0) {
-        return {
-          success: false,
-          error: "No database found. Please create a database first.",
-        };
-      }
-      
-      finalDatabaseId = defaultDatabase[0].id;
+    if (!targetDatabase) {
+      return {
+        success: false,
+        error: "Selected database not found or access denied.",
+      };
     }
 
     const dbName = generateTableName(name);
@@ -56,7 +57,7 @@ export async function createTable(data: CreateTableData & { databaseId?: number;
 
     // Then create metadata entry using current organization
     const [newTable] = await db.insert(tables).values({
-      databaseId: finalDatabaseId,
+      databaseId: databaseId,
       organizationId: currentOrg.id,
       name,
       dbName,
