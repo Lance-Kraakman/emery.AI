@@ -3,14 +3,24 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { getTables } from '@/app/actions/tables';
+import { getDatabases } from '@/app/actions/databases';
 import { getAgents } from '@/app/actions/agents';
 
 export interface EmeryTable {
   id: number;
   name: string;
   dbName: string;
+  databaseId: number;
   organizationId: number;
+  metadata?: { description?: string; [key: string]: any } | null;
   createdAt: Date | null;
+  updatedAt: Date | null;
+  database?: {
+    id: number;
+    name: string;
+    slug: string;
+    metadata?: { description?: string; [key: string]: any } | null;
+  } | null;
 }
 
 export interface EmeryAgent {
@@ -22,8 +32,10 @@ export interface EmeryAgent {
 }
 
 export interface EmeryDatabase {
-  id: string;
+  id: number;
   name: string;
+  slug: string;
+  metadata?: { description?: string; [key: string]: any } | null;
   tables: EmeryTable[];
 }
 
@@ -59,22 +71,25 @@ export function useEmeryData() {
       setError(null);
 
       try {
-        // Fetch tables
-        const tables = (await getTables()) as EmeryTable[];
+        // Fetch databases and tables
+        const [databasesResult, tablesResult, agentsResult] = await Promise.all([
+          getDatabases(),
+          getTables(),
+          getAgents()
+        ]);
 
-        // Fetch agents
-        const agents = (await getAgents()) as EmeryAgent[];
+        const databases = databasesResult as EmeryDatabase[];
+        const tables = tablesResult as EmeryTable[];
+        const agents = agentsResult as EmeryAgent[];
 
-        // For now, we'll create a single "database" grouping all tables
-        // This matches your sidebar structure where tables are grouped under databases
-        const databases: EmeryDatabase[] = tables.length > 0 ? [{
-          id: `org_${currentOrg.id}`,
-          name: currentOrg.name || 'Main Database',
-          tables: tables
-        }] : [];
+        // Group tables by database
+        const databasesWithTables = databases.map(db => ({
+          ...db,
+          tables: tables.filter(table => table.databaseId === db.id)
+        }));
 
         setData({
-          databases,
+          databases: databasesWithTables,
           agents,
           organization: {
             id: currentOrg.id,

@@ -4,7 +4,7 @@
 // AIDEV-TODO: Add transaction support for table creation/deletion with dynamic tables
 
 import { db } from "@/lib/db/client";
-import { tables, organizations } from "@/lib/db/schema";
+import { tables, databases } from "@/lib/db/schema";
 import { createDynamicTable, dropDynamicTable } from "@/lib/db/dynamic";
 import { generateTableName } from "@/utils/slugify";
 import { eq } from "drizzle-orm";
@@ -12,13 +12,14 @@ import { revalidatePath } from "next/cache";
 import { requireAuth, requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { autoReindexService } from "@/lib/rag/auto-reindex";
+import { databaseIndexingService } from "@/lib/rag/database-indexing";
 import type { ActionResult, CreateTableData } from "./types";
 
-export async function createTable(data: CreateTableData): Promise<ActionResult> {
+export async function createTable(data: CreateTableData & { databaseId?: number; description?: string }): Promise<ActionResult> {
   try {
     const session = await requirePermission("create_table");
     const currentOrg = await requireCurrentOrganization();
-    const { name } = data;
+    const { name, databaseId, description } = data;
 
     if (!name) {
       return {
@@ -27,18 +28,66 @@ export async function createTable(data: CreateTableData): Promise<ActionResult> 
       };
     }
 
+    let finalDatabaseId = databaseId;
+    
+    // If no database specified, use the first database in the organization
+    if (!finalDatabaseId) {
+      const defaultDatabase = await db
+        .select()
+        .from(databases)
+        .where(eq(databases.organizationId, currentOrg.id))
+        .limit(1);
+      
+      if (defaultDatabase.length === 0) {
+        return {
+          success: false,
+          error: "No database found. Please create a database first.",
+        };
+      }
+      
+      finalDatabaseId = defaultDatabase[0].id;
+    }
+
     const dbName = generateTableName(name);
 
     // Create dynamic table first
     await createDynamicTable(dbName);
 
+    const metadata = description ? { description } : null;
+
     // Then create metadata entry using current organization
     const [newTable] = await db.insert(tables).values({
+      databaseId: finalDatabaseId,
       organizationId: currentOrg.id,
       name,
       dbName,
+      metadata,
       createdBy: session.user.id,
     }).returning();
+
+    // Index the table for RAG search if it has a description
+    if (metadata?.description) {
+      try {
+        const database = await db
+          .select({ name: databases.name, slug: databases.slug })
+          .from(databases)
+          .where(eq(databases.id, finalDatabaseId))
+          .limit(1)
+
+        await databaseIndexingService.indexTable({
+          id: newTable.id,
+          name: newTable.name,
+          databaseId: newTable.databaseId,
+          metadata: newTable.metadata,
+          organizationId: newTable.organizationId,
+          updatedAt: newTable.updatedAt,
+          database: database[0] || undefined
+        })
+      } catch (error) {
+        console.error('Failed to index table for RAG:', error)
+        // Don't fail the whole operation if indexing fails
+      }
+    }
 
     // Trigger RAG reindexing for tables domain in this organization
     autoReindexService.debouncedReindex(currentOrg.id, 'tables').catch(console.error);
@@ -76,11 +125,28 @@ export async function getTables() {
     const currentOrg = await requireCurrentOrganization();
     
     const tableList = await db
-      .select()
+      .select({
+        id: tables.id,
+        databaseId: tables.databaseId,
+        organizationId: tables.organizationId,
+        name: tables.name,
+        dbName: tables.dbName,
+        metadata: tables.metadata,
+        createdBy: tables.createdBy,
+        createdAt: tables.createdAt,
+        updatedAt: tables.updatedAt,
+        database: {
+          id: databases.id,
+          name: databases.name,
+          slug: databases.slug,
+          metadata: databases.metadata,
+        }
+      })
       .from(tables)
+      .leftJoin(databases, eq(tables.databaseId, databases.id))
       .where(eq(tables.organizationId, currentOrg.id));
 
-    console.log(`[GET-TABLES] Found ${tableList.length} tables:`, tableList.map(t => ({ id: t.id, name: t.name, dbName: t.dbName })));
+    console.log(`[GET-TABLES] Found ${tableList.length} tables:`, tableList.map(t => ({ id: t.id, name: t.name, dbName: t.dbName, database: t.database?.name })));
     return tableList;
   } catch (error) {
     console.error("Error fetching tables:", error);
@@ -130,6 +196,14 @@ export async function deleteTable(tableId: number): Promise<ActionResult> {
 
     // Drop dynamic table first
     await dropDynamicTable(table.dbName);
+    
+    // Remove from RAG index
+    try {
+      await databaseIndexingService.removeFromIndex('table', tableId.toString(), currentOrg.id)
+    } catch (error) {
+      console.error('Failed to remove table from RAG index:', error)
+      // Don't fail the whole operation if indexing fails
+    }
     
     // Then delete metadata
     await db.delete(tables).where(eq(tables.id, tableId));

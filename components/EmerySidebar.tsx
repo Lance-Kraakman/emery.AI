@@ -16,6 +16,7 @@ import {
   Target,
   Workflow,
   Plug,
+  Plus,
 } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Separator } from "@/components/ui/separator"
@@ -154,9 +155,10 @@ export function EmerySidebar() {
                         onOpenChange={() => toggleCollapsible("Data")}
                       >
                         <CollapsibleTrigger asChild>
-                          <button
+                          <Link
+                            href="/data"
                             className={`flex items-center justify-between w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
-                              pathname.startsWith("/mission-control") && searchParams?.has('tableId') ? "bg-muted text-primary" : ""
+                              pathname.startsWith("/data") ? "bg-muted text-primary" : ""
                             }`}
                           >
                             <div className="flex items-center gap-3">
@@ -164,10 +166,24 @@ export function EmerySidebar() {
                               {!isCollapsed && "Data"}
                             </div>
                             {!isCollapsed && <ChevronDown className="h-4 w-4 transition-transform duration-200 data-[state=open]:rotate-180" />}
-                          </button>
+                          </Link>
                         </CollapsibleTrigger>
                         {!isCollapsed && (
                           <CollapsibleContent className="pl-7 py-1 space-y-1">
+                            <Link
+                              href="/data"
+                              className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs hover:bg-accent"
+                            >
+                              <Plus className="h-3 w-3" />
+                              Create Database
+                            </Link>
+                            <Link
+                              href="/data"
+                              className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs hover:bg-accent"
+                            >
+                              <Plus className="h-3 w-3" />
+                              Create Table
+                            </Link>
                             {isLoading ? (
                               <div className="text-xs text-muted-foreground px-3 py-2">Loading tables...</div>
                             ) : data.databases.length === 0 ? (
@@ -193,9 +209,9 @@ export function EmerySidebar() {
                                     {db.tables.map(table => (
                                       <Link
                                         key={table.id}
-                                        href={`/mission-control?tableId=${table.id}`}
+                                        href={`/data?tableId=${table.id}`}
                                         className={`flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs ${
-                                          pathname === "/mission-control" && searchParams.get('tableId') === table.id.toString() ? "bg-accent text-accent-foreground" : ""
+                                          pathname === "/data" && searchParams.get('tableId') === table.id.toString() ? "bg-accent text-accent-foreground" : ""
                                         }`}
                                       >
                                         <Table className="h-3 w-3" />

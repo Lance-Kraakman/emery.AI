@@ -16,13 +16,27 @@ const vector = customType<{ data: number[]; notNull: false; default: false }>({
   },
 });
 
-export const tables = pgTable("tables", {
+export const databases = pgTable("databases", {
   id: serial("id").primaryKey(),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
-  dbName: text("db_name").notNull().unique(),
+  slug: text("slug").notNull().unique(), // URL-safe database identifier
+  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata for RAG indexing
   createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const tables = pgTable("tables", {
+  id: serial("id").primaryKey(),
+  databaseId: integer("database_id").notNull().references(() => databases.id),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  name: text("name").notNull(),
+  dbName: text("db_name").notNull().unique(),
+  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata for RAG indexing
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const fields = pgTable("fields", {
