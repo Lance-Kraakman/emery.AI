@@ -11,6 +11,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireAuth, requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
+import { autoReindexService } from "@/lib/rag/auto-reindex";
 import type { ActionResult, CreateTableData } from "./types";
 
 export async function createTable(data: CreateTableData): Promise<ActionResult> {
@@ -39,6 +40,9 @@ export async function createTable(data: CreateTableData): Promise<ActionResult> 
       createdBy: session.user.id,
     }).returning();
 
+    // Trigger RAG reindexing for tables domain in this organization
+    autoReindexService.debouncedReindex(currentOrg.id, 'tables').catch(console.error);
+    
     revalidatePath('/mission-control');
     
     return {

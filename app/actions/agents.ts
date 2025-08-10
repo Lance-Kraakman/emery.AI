@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
+import { autoReindexService } from "@/lib/rag/auto-reindex";
 import type { ActionResult, CreateAgentData } from "./types";
 
 // Simple API key generator
@@ -51,6 +52,11 @@ export async function createAgent(data: CreateAgentData): Promise<ActionResult> 
       roleId: roleId || null,
       apiKey: generateApiKey(),
     }).returning();
+
+    // Trigger RAG reindexing for agents domain in this organization
+    if (session.user.currentOrganizationId) {
+      autoReindexService.debouncedReindex(session.user.currentOrganizationId, 'agents').catch(console.error);
+    }
 
     revalidatePath('/mission-control');
     

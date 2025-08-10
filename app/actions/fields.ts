@@ -10,6 +10,7 @@ import { slugify } from "@/utils/slugify";
 import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
+import { autoReindexService } from "@/lib/rag/auto-reindex";
 import type { ActionResult, CreateFieldData } from "./types";
 
 export async function createField(data: CreateFieldData): Promise<ActionResult> {
@@ -65,6 +66,9 @@ export async function createField(data: CreateFieldData): Promise<ActionResult> 
 
     // Add field to dynamic table
     await addFieldToTable(table.dbName, newField.id, type, required);
+
+    // Trigger RAG reindexing for tables domain (since table schema changed)
+    autoReindexService.debouncedReindex(table.organizationId, 'tables').catch(console.error);
 
     revalidatePath('/dashboard');
     

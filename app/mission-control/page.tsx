@@ -51,12 +51,12 @@ function CustomCanvas() {
 
   if (!isVisible || !currentArtifact) {
     return (
-      <ChatCanvas className="w-full md:w-2/3 bg-card border border-border rounded-lg shadow-sm" />
+      <ChatCanvas className="hidden md:flex md:w-1/2 bg-card border border-border rounded-lg shadow-sm" />
     )
   }
 
   return (
-    <div className="w-full md:w-2/3 bg-card border border-border rounded-lg shadow-sm flex flex-col">
+    <div className="hidden md:flex md:w-1/2 bg-card border border-border rounded-lg shadow-sm flex-col min-h-0">
       {/* Custom header with artifact details */}
       <div className="flex items-center justify-between p-4 border-b border-border bg-secondary/50 rounded-t-lg">
         <div>
@@ -133,25 +133,31 @@ function CustomChat() {
   const handler = useChatRSC()
 
   return (
-    <ChatSection
-      handler={handler}
-      className="block h-screen flex-row gap-4 p-0 md:flex md:p-5"
-    >
-      <div className="md:max-w-1/2 mx-auto flex h-full min-w-0 max-w-full flex-1 flex-col gap-4">
-        <div className="flex justify-between gap-2 border-b border-border bg-card p-4 rounded-t-lg">
-          <div>
-            <h1 className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-lg font-bold text-transparent">
-              Mission Control
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              AI-powered organizational intelligence and analysis
-            </p>
+    <div className="flex h-full flex-col">
+      <ChatSection
+        handler={handler}
+        className="flex flex-1 flex-row gap-4 p-4 overflow-hidden"
+      >
+        <div className="flex min-w-0 max-w-full flex-1 flex-col gap-4">
+          <div className="flex justify-between gap-2 border-b border-border bg-card p-4 rounded-t-lg">
+            <div>
+              <h1 className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-lg font-bold text-transparent">
+                Mission Control
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                AI-powered organizational intelligence and analysis
+              </p>
+            </div>
+          </div>
+          <div className="flex-1 flex flex-col min-h-0">
+            <ChatMessages className="flex-1 overflow-y-auto" />
+            <div className="flex-shrink-0">
+              <ChatInput />
+            </div>
           </div>
         </div>
-        <ChatMessages className="flex-1" />
-        <ChatInput />
-      </div>
-      <CustomCanvas />
-    </ChatSection>
+        <CustomCanvas />
+      </ChatSection>
+    </div>
   )
 }

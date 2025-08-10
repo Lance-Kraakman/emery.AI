@@ -32,21 +32,24 @@ export async function POST(req: NextRequest) {
     // Get organization RAG context if available
     try {
       if (session?.user?.id && latestMessage) {
-        const organizationId = 1 // AIDEV-TODO: Get from session
+        const organizationId = session.user.currentOrganizationId
+        if (!organizationId) {
+          console.log('No current organization found for user')
+        } else {
+          const indexes = await ragService.listIndexes({ organizationId })
+          let ragIndex = indexes.find(idx => idx.domainTypes.includes('tables'))
         
-        const indexes = await ragService.listIndexes({ organizationId })
-        let ragIndex = indexes.find(idx => idx.domainTypes.includes('tables'))
-        
-        // Create default RAG index if none exists
-        if (!ragIndex) {
-          const indexId = await ragService.createIndex({
-            name: 'Organization Knowledge Base',
-            description: 'Automatic RAG index for organizational data',
-            organizationId,
-            domainTypes: ['tables', 'agents'],
-            createdBy: session.user.id,
-          })
-          ragIndex = await ragService.getIndex(indexId)
+          // Create default RAG index if none exists
+          if (!ragIndex) {
+            const indexId = await ragService.createIndex({
+              name: `Organization ${organizationId} Knowledge Base`,
+              description: 'Automatic RAG index for organizational data',
+              organizationId,
+              domainTypes: ['tables', 'agents'],
+              createdBy: session.user.id,
+            })
+            ragIndex = await ragService.getIndex(indexId)
+          }
         }
 
         // Search for relevant context
