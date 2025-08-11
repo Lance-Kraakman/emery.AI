@@ -6,12 +6,8 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 
 const HF_MODELS = {
   chat: {
-    default: 'Qwen/Qwen2.5-Coder-32B-Instruct',
-    alternatives: [
-      'Qwen/Qwen2.5-72B-Instruct',      // Best reasoning
-      'Qwen/Qwen2.5-Coder-7B-Instruct', // Fastest
-      'Qwen/Qwen2.5-14B-Instruct',      // Balanced
-    ]
+    default: 'Qwen/Qwen-7B-Instruct',  // Only model with default interface provider
+    alternatives: []  // Using single model only
   },
   embedding: {
     default: 'BAAI/bge-m3',                             // Best quality: multilingual, 8192 tokens, 1024 dims
@@ -47,7 +43,7 @@ export function getAIModel(modelOverride?: string) {
  * Get available chat models
  */
 export function getAvailableChatModels() {
-  return [HF_MODELS.chat.default, ...HF_MODELS.chat.alternatives]
+  return [HF_MODELS.chat.default]  // Only Qwen/Qwen-7B-Instruct
 }
 
 /**
@@ -77,7 +73,7 @@ export function getEmbeddingModel(modelOverride?: string) {
     maxEmbeddingsPerCall: 32,
     supportsParallelCalls: true,
     
-    async doEmbed({ values, abortSignal }) {
+    async doEmbed({ values, abortSignal }: { values: string[]; abortSignal?: AbortSignal }) {
       const { HfInference } = await import('@huggingface/inference')
       const hf = new HfInference(hfToken)
       
@@ -121,7 +117,7 @@ export function getAvailableEmbeddingModels() {
 export function getAIProviderInfo() {
   const hfToken = process.env.HF_TOKEN
   return {
-    provider: hfToken ? 'huggingface' : 'none',
+    provider: 'auto',
     configured: Boolean(hfToken),
     defaultChatModel: HF_MODELS.chat.default,
     defaultEmbeddingModel: HF_MODELS.embedding.default,
@@ -132,11 +128,6 @@ export function getAIProviderInfo() {
  * Get model by use case
  */
 export function getModelRecommendation(useCase: 'code' | 'chat' | 'general' | 'fast') {
-  const models = {
-    code: HF_MODELS.chat.default,                      // Qwen Coder 32B
-    chat: 'Qwen/Qwen2.5-72B-Instruct',               // Best reasoning  
-    general: 'Qwen/Qwen2.5-14B-Instruct',            // Balanced
-    fast: 'Qwen/Qwen2.5-Coder-7B-Instruct',          // Fastest
-  }
-  return models[useCase] || models.code
+  // All use cases use the same model since it's the only one with default interface provider
+  return HF_MODELS.chat.default  // Qwen/Qwen-7B-Instruct
 }
