@@ -1,5 +1,7 @@
 'use client';
 
+// AIDEV-NOTE: Team node component for organization chart using ReactFlow and design system components
+
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

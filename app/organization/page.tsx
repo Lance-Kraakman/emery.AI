@@ -2,7 +2,10 @@ import { Suspense } from 'react';
 import { getAgents } from '@/app/actions/agents';
 import { getTeams } from '@/app/actions/teams';
 import { getTasks } from '@/app/actions/tasks';
+import { Loading } from '@/components/ui/loading';
 import OrganizationChart from './components/OrganizationChart';
+
+// AIDEV-NOTE: Organization page refactored to use consistent design patterns and improved loading states
 
 export default async function OrganizationPage() {
   // Fetch initial data on the server
@@ -17,7 +20,7 @@ export default async function OrganizationPage() {
   return (
     <div className="h-screen flex flex-col">
       <div className="flex-1 overflow-hidden">
-        <Suspense fallback={<div>Loading organization chart...</div>}>
+        <Suspense fallback={<Loading text="Loading organization chart..." />}>
           <OrganizationChart 
             initialAgents={agents} 
             initialTeams={teams}

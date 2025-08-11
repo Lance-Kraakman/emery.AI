@@ -1,9 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import { Edit, Users, Target, CheckCircle } from 'lucide-react';
 import { Agent, Team } from '@/types/db';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import TeamMembersPanel from './TeamMembersPanel';
 import TeamActivityPanel from './TeamActivityPanel';
+
+// AIDEV-NOTE: Team details view refactored to use consistent design system patterns
 
 interface TeamDetailsViewProps {
   team: Team;
@@ -20,120 +27,134 @@ export default function TeamDetailsView({ team, agents, onEdit }: TeamDetailsVie
   );
 
   return (
-    <div className="text-foreground">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold">{team.name}</h2>
-        <button
+    <div className="space-y-6">
+      <div className="flex justify-between items-start">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-bold">{team.name}</h2>
+          {team.purpose && (
+            <p className="text-muted-foreground">{team.purpose}</p>
+          )}
+          <div className="flex gap-2 mt-2">
+            <Badge variant="outline">
+              <Users size={12} className="mr-1" />
+              {teamAgents.length} agent{teamAgents.length !== 1 ? 's' : ''}
+            </Badge>
+          </div>
+        </div>
+        <Button
           onClick={onEdit}
-          className="bg-secondary text-secondary-foreground px-3 py-1 rounded text-sm hover:bg-muted"
+          variant="outline"
+          size="sm"
         >
+          <Edit size={16} />
           Edit
-        </button>
+        </Button>
       </div>
 
-      <div className="border-b border-border">
-        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`${
-              activeTab === 'overview'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-          >
-            Overview
-          </button>
-          <button
-            onClick={() => setActiveTab('agents')}
-            className={`${
-              activeTab === 'agents'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-          >
-            Agents ({teamAgents.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('members')}
-            className={`${
-              activeTab === 'members'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-          >
-            Members
-          </button>
-          <button
-            onClick={() => setActiveTab('activity')}
-            className={`${
-              activeTab === 'activity'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-          >
-            Activity
-          </button>
-        </nav>
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="agents">Agents ({teamAgents.length})</TabsTrigger>
+          <TabsTrigger value="members">Members</TabsTrigger>
+          <TabsTrigger value="activity">Activity</TabsTrigger>
+        </TabsList>
 
-      <div className="mt-6">
-        {activeTab === 'overview' && (
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-lg font-medium text-foreground">Purpose</h3>
-              <p className="text-muted-foreground">{team.purpose || 'No purpose defined'}</p>
-            </div>
-            <div>
-              <h3 className="text-lg font-medium text-foreground">Description</h3>
-              <p className="text-muted-foreground">{team.description || 'No description provided'}</p>
-            </div>
-            {team.responsibilities && team.responsibilities.length > 0 && (
-              <div>
-                <h3 className="text-lg font-medium text-foreground">Responsibilities</h3>
-                <ul className="text-muted-foreground list-disc list-inside space-y-1">
-                  {team.responsibilities.map((responsibility, index) => (
-                    <li key={index}>{responsibility}</li>
-                  ))}
-                </ul>
-              </div>
+        <TabsContent value="overview" className="space-y-6 mt-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            {team.description && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Description</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground">{team.description}</p>
+                </CardContent>
+              </Card>
             )}
+            
+            {team.responsibilities && team.responsibilities.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <CheckCircle size={18} />
+                    Responsibilities
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-2">
+                    {team.responsibilities.map((responsibility, index) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <CheckCircle size={14} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <span className="text-muted-foreground">{responsibility}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
+            
             {team.goals && team.goals.length > 0 && (
-              <div>
-                <h3 className="text-lg font-medium text-foreground">Goals</h3>
-                <ul className="text-muted-foreground list-disc list-inside space-y-1">
-                  {team.goals.map((goal, index) => (
-                    <li key={index}>{goal}</li>
-                  ))}
-                </ul>
-              </div>
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Target size={18} />
+                    Goals
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-2">
+                    {team.goals.map((goal, index) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <Target size={14} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <span className="text-muted-foreground">{goal}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
             )}
           </div>
-        )}
-        {activeTab === 'agents' && (
+        </TabsContent>
+        
+        <TabsContent value="agents" className="mt-6">
           <div className="space-y-4">
-            <h3 className="text-lg font-medium text-foreground">Team Agents</h3>
+            <h3 className="text-lg font-medium">Team Agents</h3>
             {teamAgents.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 {teamAgents.map((agent) => (
-                  <div key={agent.id} className="border rounded-lg p-4">
-                    <h4 className="font-medium text-foreground">{agent.name}</h4>
-                    <p className="text-sm text-muted-foreground">{agent.role}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{agent.description}</p>
-                  </div>
+                  <Card key={agent.id}>
+                    <CardContent className="p-4">
+                      <h4 className="font-medium text-foreground">{agent.name}</h4>
+                      <p className="text-sm text-muted-foreground">{agent.role}</p>
+                      {agent.description && (
+                        <p className="text-xs text-muted-foreground mt-2">{agent.description}</p>
+                      )}
+                      {agent.status && (
+                        <Badge 
+                          variant={agent.status === 'active' ? 'success' : 'secondary'}
+                          className="mt-2"
+                        >
+                          {agent.status}
+                        </Badge>
+                      )}
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             ) : (
               <p className="text-muted-foreground">No agents assigned to this team.</p>
             )}
           </div>
-        )}
-        {activeTab === 'members' && (
+        </TabsContent>
+        
+        <TabsContent value="members" className="mt-6">
           <TeamMembersPanel team={team} />
-        )}
-        {activeTab === 'activity' && (
+        </TabsContent>
+        
+        <TabsContent value="activity" className="mt-6">
           <TeamActivityPanel team={team} />
-        )}
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

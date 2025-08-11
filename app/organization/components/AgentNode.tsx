@@ -1,5 +1,7 @@
 'use client';
 
+// AIDEV-NOTE: Agent node component for organization chart with status indicators and task tracking
+
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

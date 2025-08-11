@@ -1,10 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Search, Plus, Users } from 'lucide-react';
 import { Agent, Team } from '@/types/db';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/loading';
+import { Badge } from '@/components/ui/badge';
 import TeamFormDialog from './TeamFormDialog';
 import TeamDetailsView from './TeamDetailsView';
 import { getTeams } from '@/app/actions/teams';
+
+// AIDEV-NOTE: Teams dashboard refactored to use consistent design system patterns
 
 interface TeamDashboardClientProps {
   initialTeams: Team[];
@@ -19,13 +28,16 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [error, setError] = useState<string | null>(null);
+
   const refreshTeams = async () => {
-    setLoading(true);
     try {
+      setLoading(true);
+      setError(null);
       const fetchedTeams = await getTeams();
       setTeams(fetchedTeams);
-    } catch (error) {
-      console.error('Failed to refresh teams:', error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load teams');
     } finally {
       setLoading(false);
     }
@@ -39,72 +51,103 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
   );
 
   return (
-    <div className="flex space-x-6 h-[calc(100vh-10rem)]">
+    <div className="flex gap-6 h-[calc(100vh-10rem)]">
       {/* Left Pane: Team List */}
-      <div className="w-1/3 flex flex-col space-y-2">
-        <div className="flex space-x-2">
-          <input
-            type="text"
-            placeholder="Search teams..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-2 py-1 border rounded bg-transparent"
-          />
-          <button
+      <div className="w-1/3 flex flex-col gap-4">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={16} />
+            <Input
+              placeholder="Search teams..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Button
             onClick={() => {
               setEditingTeam(null);
               setIsFormOpen(true);
             }}
-            className="bg-primary text-primary-foreground px-4 py-1 rounded"
+            variant="success"
+            size="sm"
           >
-            + New
-          </button>
+            <Plus size={16} />
+            New
+          </Button>
         </div>
         
-        <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+        <div className="flex-1 overflow-y-auto space-y-2">
+          {error && (
+            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md mb-4">
+              {error}
+            </div>
+          )}
           {loading ? (
-            <p>Loading...</p>
+            <Loading text="Loading teams..." />
+          ) : filteredTeams.length === 0 ? (
+            <EmptyState
+              title="No teams found"
+              description="Create your first team to get started"
+              action={{
+                label: "Create Team",
+                onClick: () => {
+                  setEditingTeam(null);
+                  setIsFormOpen(true);
+                }
+              }}
+            />
           ) : (
             filteredTeams.map((team) => (
-              <div
+              <Card
                 key={team.id}
-                onClick={() => setSelectedTeam(team)}
-                className={`p-4 rounded-lg cursor-pointer border transition-all ${
+                className={`cursor-pointer transition-all hover:shadow-md ${
                   selectedTeam?.id === team.id
-                    ? 'bg-secondary border-primary'
-                    : 'hover:bg-secondary'
+                    ? 'ring-2 ring-primary bg-secondary'
+                    : ''
                 }`}
+                onClick={() => setSelectedTeam(team)}
               >
-                <h3 className="font-semibold text-foreground">{team.name}</h3>
-                <p className="text-sm text-muted-foreground">{team.purpose || 'No purpose defined'}</p>
-                {team.agentIds && team.agentIds.length > 0 && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {team.agentIds.length} agent{team.agentIds.length !== 1 ? 's' : ''}
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Users size={16} className="text-muted-foreground" />
+                    <h3 className="font-semibold text-foreground">{team.name}</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    {team.purpose || 'No purpose defined'}
                   </p>
-                )}
-              </div>
+                  {team.agentIds && team.agentIds.length > 0 && (
+                    <Badge variant="outline" className="text-xs">
+                      {team.agentIds.length} agent{team.agentIds.length !== 1 ? 's' : ''}
+                    </Badge>
+                  )}
+                </CardContent>
+              </Card>
             ))
           )}
         </div>
       </div>
 
       {/* Right Pane: Team Details */}
-      <div className="w-2/3 rounded-lg p-6 border">
-        {selectedTeam ? (
-          <TeamDetailsView
-            team={selectedTeam}
-            agents={agents}
-            onEdit={() => {
-              setEditingTeam(selectedTeam);
-              setIsFormOpen(true);
-            }}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full rounded-lg">
-            <p className="text-muted-foreground">Select a team to view details or create a new one.</p>
-          </div>
-        )}
-      </div>
+      <Card className="w-2/3">
+        <CardContent className="p-6">
+          {selectedTeam ? (
+            <TeamDetailsView
+              team={selectedTeam}
+              agents={agents}
+              onEdit={() => {
+                setEditingTeam(selectedTeam);
+                setIsFormOpen(true);
+              }}
+            />
+          ) : (
+            <EmptyState
+              title="Select a team"
+              description="Choose a team from the list to view details and manage members"
+            />
+          )}
+        </CardContent>
+      </Card>
 
       <TeamFormDialog
         isOpen={isFormOpen}
