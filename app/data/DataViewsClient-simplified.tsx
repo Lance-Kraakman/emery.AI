@@ -213,7 +213,7 @@ export function DataViewsClientSimplified() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="py-4 px-6 border-b bg-background">
+      <div className="py-4 px-6 border-b">
         <h1 className="text-2xl font-bold">Data</h1>
         <p className="text-muted-foreground">
           {selectedTable 
@@ -225,7 +225,7 @@ export function DataViewsClientSimplified() {
       
       <div className="flex-1 flex flex-col px-6">
         {selectedTable && (
-          <div className="flex items-center justify-between py-4 border-b">
+          <div className="flex items-center justify-between py-4">
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -233,14 +233,14 @@ export function DataViewsClientSimplified() {
                   placeholder="Search in table..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 bg-transparent"
                 />
               </div>
             </div>
             <div className="flex items-center gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline">
+                  <Button variant="outline" className="bg-transparent">
                     <Settings className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>

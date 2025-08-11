@@ -6,7 +6,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 
 const HF_MODELS = {
   chat: {
-    default: 'Qwen/Qwen-7B-Instruct',  // Only model with default interface provider
+    default: 'Qwen/Qwen2.5-7B-Instruct',  // Only model with default interface provider
     alternatives: []  // Using single model only
   },
   embedding: {

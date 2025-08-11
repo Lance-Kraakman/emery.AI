@@ -8,7 +8,7 @@ import {
   ChatSection,
   useChatCanvas,
 } from '@llamaindex/chat-ui'
-import { X, Code, FileText } from 'lucide-react'
+import { X, Code, FileText, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useChatRSC } from './use-chat-rsc'
 import MissionControlDashboardContent from './dashboard-content'
@@ -149,7 +149,17 @@ function CustomChat() {
           </div>
         </div>
         <ChatMessages className="flex-1 min-h-0 overflow-y-auto bg-transparent" />
-        <ChatInput />
+        <ChatInput className="px-4 pb-4">
+          <ChatInput.Form className="flex items-center gap-3">
+            <ChatInput.Field
+              className="flex-1 border-none bg-gray-50 rounded-lg px-4 py-2"
+              placeholder="Ask me anything..."
+            />
+            <ChatInput.Submit className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2">
+              <Send className="h-4 w-4" />
+            </ChatInput.Submit>
+          </ChatInput.Form>
+        </ChatInput>
       </div>
       <CustomCanvas />
     </ChatSection>
