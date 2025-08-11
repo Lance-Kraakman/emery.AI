@@ -14,11 +14,11 @@ const HF_MODELS = {
     ]
   },
   embedding: {
-    default: 'sentence-transformers/all-mpnet-base-v2',
+    default: 'BAAI/bge-m3',                             // Best quality: multilingual, 8192 tokens, 1024 dims
     alternatives: [
-      'sentence-transformers/all-MiniLM-L6-v2', // Fast
-      'BAAI/bge-large-en-v1.5',                 // High quality
-      'thenlper/gte-large',                     // General purpose
+      'BAAI/bge-large-en-v1.5',                         // High quality (1024 dims)
+      'sentence-transformers/all-mpnet-base-v2',        // Good quality (768 dims)
+      'sentence-transformers/all-MiniLM-L6-v2',         // Fast (384 dims)
     ]
   }
 }

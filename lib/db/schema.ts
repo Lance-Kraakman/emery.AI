@@ -3,7 +3,7 @@ import { pgTable, text, uuid, serial, integer, timestamp, boolean, primaryKey, j
 // Custom vector type for pgvector
 const vector = customType<{ data: number[]; notNull: false; default: false }>({
   dataType() {
-    return 'vector(1536)';
+    return 'vector(1024)'; // Updated for BAAI/bge-m3 (multilingual, 8192 tokens)
   },
   toDriver(value: number[]): string {
     return JSON.stringify(value);
@@ -215,8 +215,8 @@ export const ragIndexes = pgTable("rag_indexes", {
   domainFilters: jsonb("domain_filters"), // Additional filtering criteria
   
   // Embedding configuration
-  embeddingModel: text("embedding_model").default("text-embedding-ada-002"),
-  embeddingDimensions: integer("embedding_dimensions").default(1536),
+  embeddingModel: text("embedding_model").default("BAAI/bge-m3"),
+  embeddingDimensions: integer("embedding_dimensions").default(1024),
   
   // Status and metadata
   status: text("status").default("active"), // active, building, error
