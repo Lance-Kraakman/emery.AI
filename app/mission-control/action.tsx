@@ -57,7 +57,7 @@ Your question: "${question}"`}
           name: 'Organization Knowledge Base',
           description: 'Automatic RAG index for organizational data',
           organizationId,
-          domainTypes: ['tables', 'agents'],
+          domainTypes: ['tables', 'agents', 'teams', 'file'],
           createdBy: session.user.id,
         })
         ragIndex = await ragService.getIndex(indexId) || undefined

@@ -166,9 +166,6 @@ export class RagService {
       .where(eq(ragIndexes.id, indexId))
 
     try {
-      // Clear existing documents for this index
-      await db.delete(ragDocuments).where(eq(ragDocuments.ragIndexId, indexId))
-
       let totalDocuments = 0
 
       // Index organization data if included
@@ -204,11 +201,12 @@ export class RagService {
       // AIDEV-TODO: Add workflow indexing
       
       // Update index status and document count
+      const finalDocumentCount = await db.select({ count: sql<number>`count(*)` }).from(ragDocuments).where(eq(ragDocuments.ragIndexId, indexId));
       await db.update(ragIndexes)
-        .set({ 
+        .set({
           status: 'active',
           lastIndexedAt: new Date(),
-          documentCount: totalDocuments
+          documentCount: finalDocumentCount[0].count,
         })
         .where(eq(ragIndexes.id, indexId))
 
@@ -240,55 +238,41 @@ export class RagService {
       .leftJoin(databases, eq(tables.databaseId, databases.id))
       .where(and(...conditions))
 
-    // Process tables in batches for better performance
-    const batchSize = 10
-    const batches = []
-    for (let i = 0; i < tablesToIndex.length; i += batchSize) {
-      batches.push(tablesToIndex.slice(i, i + batchSize))
+    if (tablesToIndex.length === 0) {
+      return this.synchronizeDocuments(indexId, 'table', [])
     }
 
-    let documentCount = 0
-    for (const batch of batches) {
-      const documentsToInsert = await Promise.all(
-        batch.map(async (table) => {
-          const tableFields = await db.select().from(fields).where(eq(fields.tableId, table.id))
-          const schemaContent = this.generateTableSchemaContent(table, tableFields)
-          
-          // Generate embedding for the content
-          const { embedding } = await embed({
-            model: this.embeddingModel,
-            value: schemaContent,
-          })
-          
-          return {
-            ragIndexId: indexId,
-            sourceType: 'table',
-            sourceId: table.id.toString(),
-            sourceName: table.name,
-            title: `Table: ${table.name} (Database: ${table.databaseName || 'Unknown'})`,
-            content: schemaContent,
-            metadata: {
-              tableId: table.id,
-              tableName: table.name,
-              databaseId: table.databaseId,
-              databaseName: table.databaseName,
-              databaseSlug: table.databaseSlug,
-              tableMetadata: table.metadata,
-              organizationId: table.organizationId,
-              fieldCount: tableFields.length,
-            },
-            embedding,
-            contentHash: crypto.createHash('md5').update(schemaContent).digest('hex'),
-          }
+    // Generate new documents
+    const newDocuments = await Promise.all(
+      tablesToIndex.map(async (table) => {
+        const tableFields = await db.select().from(fields).where(eq(fields.tableId, table.id))
+        const schemaContent = this.generateTableSchemaContent(table, tableFields)
+        const { embedding } = await embed({
+          model: this.embeddingModel,
+          value: schemaContent,
         })
-      )
+        return {
+          sourceId: table.id.toString(),
+          sourceName: table.name,
+          title: `Table: ${table.name} (Database: ${table.databaseName || 'Unknown'})`,
+          content: schemaContent,
+          metadata: {
+            tableId: table.id,
+            tableName: table.name,
+            databaseId: table.databaseId,
+            databaseName: table.databaseName,
+            databaseSlug: table.databaseSlug,
+            tableMetadata: table.metadata,
+            organizationId: table.organizationId,
+            fieldCount: tableFields.length,
+          },
+          embedding,
+          contentHash: crypto.createHash('md5').update(schemaContent).digest('hex'),
+        }
+      })
+    )
 
-      // Batch insert for better performance
-      await db.insert(ragDocuments).values(documentsToInsert)
-      documentCount += documentsToInsert.length
-    }
-
-    return documentCount
+    return this.synchronizeDocuments(indexId, 'table', newDocuments)
   }
 
   // Index databases with metadata
@@ -306,50 +290,36 @@ export class RagService {
       organizationId: databases.organizationId,
     }).from(databases).where(and(...conditions))
 
-    // Process databases in batches
-    const batchSize = 10
-    const batches = []
-    for (let i = 0; i < databasesToIndex.length; i += batchSize) {
-      batches.push(databasesToIndex.slice(i, i + batchSize))
+    if (databasesToIndex.length === 0) {
+      return this.synchronizeDocuments(indexId, 'database', [])
     }
 
-    let documentCount = 0
-    for (const batch of batches) {
-      const documentsToInsert = await Promise.all(
-        batch.map(async (database) => {
-          const databaseContent = this.generateDatabaseContent(database)
-          
-          // Generate embedding for the content
-          const { embedding } = await embed({
-            model: this.embeddingModel,
-            value: databaseContent,
-          })
-          
-          return {
-            ragIndexId: indexId,
-            sourceType: 'database',
-            sourceId: database.id.toString(),
-            sourceName: database.name,
-            title: `Database: ${database.name}`,
-            content: databaseContent,
-            metadata: {
-              databaseId: database.id,
-              slug: database.slug,
-              databaseMetadata: database.metadata,
-              organizationId: database.organizationId,
-            },
-            embedding,
-            contentHash: crypto.createHash('md5').update(databaseContent).digest('hex'),
-          }
+    // Generate new documents
+    const newDocuments = await Promise.all(
+      databasesToIndex.map(async (database) => {
+        const databaseContent = this.generateDatabaseContent(database)
+        const { embedding } = await embed({
+          model: this.embeddingModel,
+          value: databaseContent,
         })
-      )
+        return {
+          sourceId: database.id.toString(),
+          sourceName: database.name,
+          title: `Database: ${database.name}`,
+          content: databaseContent,
+          metadata: {
+            databaseId: database.id,
+            slug: database.slug,
+            databaseMetadata: database.metadata,
+            organizationId: database.organizationId,
+          },
+          embedding,
+          contentHash: crypto.createHash('md5').update(databaseContent).digest('hex'),
+        }
+      })
+    )
 
-      // Batch insert for better performance
-      await db.insert(ragDocuments).values(documentsToInsert)
-      documentCount += documentsToInsert.length
-    }
-
-    return documentCount
+    return this.synchronizeDocuments(indexId, 'database', newDocuments)
   }
 
   // Index agents for workflow context
@@ -372,22 +342,16 @@ export class RagService {
       .where(eq(organizations.id, ragIndex.organizationId))
 
     if (!organization) {
-      return 0
+      return this.synchronizeDocuments(indexId, 'organization', [])
     }
 
-    // Generate organization content for indexing
+    // Generate new document
     const organizationContent = this.generateOrganizationContent(organization)
-    
-    // Generate embedding for the content
     const { embedding } = await embed({
       model: this.embeddingModel,
       value: organizationContent,
     })
-    
-    // Insert organization document
-    await db.insert(ragDocuments).values({
-      ragIndexId: indexId,
-      sourceType: 'organization',
+    const newDocument = {
       sourceId: organization.id.toString(),
       sourceName: organization.name,
       title: `Organization: ${organization.name}`,
@@ -400,9 +364,9 @@ export class RagService {
       },
       embedding,
       contentHash: crypto.createHash('md5').update(organizationContent).digest('hex'),
-    })
+    }
 
-    return 1
+    return this.synchronizeDocuments(indexId, 'organization', [newDocument])
   }
 
   private async indexAgents(indexId: string, ragIndex: RagIndex): Promise<number> {
@@ -428,58 +392,38 @@ export class RagService {
       .where(eq(agents.organizationId, ragIndex.organizationId))
 
     if (organizationAgents.length === 0) {
-      return 0
+      return this.synchronizeDocuments(indexId, 'agent', [])
     }
 
-    // Process agents in batches for better performance
-    const batchSize = 10
-    const batches = []
-    for (let i = 0; i < organizationAgents.length; i += batchSize) {
-      batches.push(organizationAgents.slice(i, i + batchSize))
-    }
-
-    let documentCount = 0
-    for (const batch of batches) {
-      const documentsToInsert = await Promise.all(
-        batch.map(async (agent) => {
-          const agentContent = this.generateAgentContent(agent)
-          
-          // Generate embedding for the content
-          const { embedding } = await embed({
-            model: this.embeddingModel,
-            value: agentContent,
-          })
-          
-          return {
-            ragIndexId: indexId,
-            sourceType: 'agent',
-            sourceId: agent.id.toString(),
-            sourceName: agent.name,
-            title: `Agent: ${agent.name}`,
-            content: agentContent,
-            metadata: {
-              agentId: agent.id,
-              role: agent.role,
-              status: agent.status,
-              organizationId: ragIndex.organizationId,
-              toolCount: Array.isArray(agent.tools) ? agent.tools.length : 0,
-              serverCount: Array.isArray(agent.servers) ? agent.servers.length : 0,
-              capabilityCount: Array.isArray(agent.capabilities) ? agent.capabilities.length : 0,
-            },
-            embedding,
-            contentHash: crypto.createHash('md5').update(agentContent).digest('hex'),
-          }
+    // Generate new documents
+    const newDocuments = await Promise.all(
+      organizationAgents.map(async (agent) => {
+        const agentContent = this.generateAgentContent(agent)
+        const { embedding } = await embed({
+          model: this.embeddingModel,
+          value: agentContent,
         })
-      )
+        return {
+          sourceId: agent.id.toString(),
+          sourceName: agent.name,
+          title: `Agent: ${agent.name}`,
+          content: agentContent,
+          metadata: {
+            agentId: agent.id,
+            role: agent.role,
+            status: agent.status,
+            organizationId: ragIndex.organizationId,
+            toolCount: Array.isArray(agent.tools) ? agent.tools.length : 0,
+            serverCount: Array.isArray(agent.servers) ? agent.servers.length : 0,
+            capabilityCount: Array.isArray(agent.capabilities) ? agent.capabilities.length : 0,
+          },
+          embedding,
+          contentHash: crypto.createHash('md5').update(agentContent).digest('hex'),
+        }
+      })
+    )
 
-      // Batch insert for better performance
-      if (documentsToInsert.length > 0) {
-        await db.insert(ragDocuments).values(documentsToInsert)
-        documentCount += documentsToInsert.length
-      }
-    }
-
-    return documentCount
+    return this.synchronizeDocuments(indexId, 'agent', newDocuments)
   }
 
   private async indexTeams(indexId: string, ragIndex: RagIndex): Promise<number> {
@@ -494,54 +438,34 @@ export class RagService {
       .where(eq(teams.organizationId, ragIndex.organizationId))
 
     if (organizationTeams.length === 0) {
-      return 0
+      return this.synchronizeDocuments(indexId, 'team', [])
     }
 
-    // Process teams in batches for better performance
-    const batchSize = 10
-    const batches = []
-    for (let i = 0; i < organizationTeams.length; i += batchSize) {
-      batches.push(organizationTeams.slice(i, i + batchSize))
-    }
-
-    let documentCount = 0
-    for (const batch of batches) {
-      const documentsToInsert = await Promise.all(
-        batch.map(async (team) => {
-          const teamContent = this.generateTeamContent(team)
-          
-          // Generate embedding for the content
-          const { embedding } = await embed({
-            model: this.embeddingModel,
-            value: teamContent,
-          })
-          
-          return {
-            ragIndexId: indexId,
-            sourceType: 'team',
-            sourceId: team.id.toString(),
-            sourceName: team.name,
-            title: `Team: ${team.name}`,
-            content: teamContent,
-            metadata: {
-              teamId: team.id,
-              organizationId: ragIndex.organizationId,
-              agentCount: Array.isArray(team.agentIds) ? team.agentIds.length : 0,
-            },
-            embedding,
-            contentHash: crypto.createHash('md5').update(teamContent).digest('hex'),
-          }
+    // Generate new documents
+    const newDocuments = await Promise.all(
+      organizationTeams.map(async (team) => {
+        const teamContent = this.generateTeamContent(team)
+        const { embedding } = await embed({
+          model: this.embeddingModel,
+          value: teamContent,
         })
-      )
+        return {
+          sourceId: team.id.toString(),
+          sourceName: team.name,
+          title: `Team: ${team.name}`,
+          content: teamContent,
+          metadata: {
+            teamId: team.id,
+            organizationId: ragIndex.organizationId,
+            agentCount: Array.isArray(team.agentIds) ? team.agentIds.length : 0,
+          },
+          embedding,
+          contentHash: crypto.createHash('md5').update(teamContent).digest('hex'),
+        }
+      })
+    )
 
-      // Batch insert for better performance
-      if (documentsToInsert.length > 0) {
-        await db.insert(ragDocuments).values(documentsToInsert)
-        documentCount += documentsToInsert.length
-      }
-    }
-
-    return documentCount
+    return this.synchronizeDocuments(indexId, 'team', newDocuments)
   }
 
   // Generate comprehensive table schema content with enhanced relationship context
@@ -845,12 +769,12 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
 
     if (fileFields.length === 0) {
       console.log('[FILE-INDEX] No file fields found')
-      return 0
+      return this.synchronizeDocuments(indexId, 'file', [])
     }
 
     console.log(`[FILE-INDEX] Found ${fileFields.length} file fields`)
 
-    let documentCount = 0
+    const allNewDocuments = []
 
     for (const field of fileFields) {
       try {
@@ -904,9 +828,7 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${processedChunks.length} from ${
                       value: enhancedContent,
                     })
 
-                    await db.insert(ragDocuments).values({
-                      ragIndexId: indexId,
-                      sourceType: 'file',
+                    allNewDocuments.push({
                       sourceId: `${file.id}-chunk-${chunkIndex}`,
                       sourceName: file.name,
                       title: `File: ${file.name} (Chunk ${chunkIndex + 1}/${processedChunks.length}) - ${field.database_name} → ${field.table_name} → ${field.field_name}`,
@@ -933,13 +855,7 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${processedChunks.length} from ${
                       embedding,
                       contentHash: crypto.createHash('md5').update(enhancedContent).digest('hex'),
                     })
-
-                    documentCount++
                   }
-                  
-                  console.log(`[FILE-INDEX] Successfully indexed ${file.name} (${file.mimeType}) as ${processedChunks.length} LlamaIndex chunks`)
-                } else {
-                  console.log(`[FILE-INDEX] Failed to process file: ${file.name} with LlamaIndex`)
                 }
               }
             }
@@ -952,8 +868,7 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${processedChunks.length} from ${
       }
     }
 
-    console.log(`[FILE-INDEX] Indexed ${documentCount} files total`)
-    return documentCount
+    return this.synchronizeDocuments(indexId, 'file', allNewDocuments)
   }
 
   // Vector similarity search using pgvector
@@ -1136,6 +1051,57 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${processedChunks.length} from ${
     await db.delete(ragDocuments).where(eq(ragDocuments.ragIndexId, indexId))
     await db.delete(ragQueryLogs).where(eq(ragQueryLogs.ragIndexId, indexId))
     await db.delete(ragIndexes).where(eq(ragIndexes.id, indexId))
+  }
+
+  private async synchronizeDocuments(
+    indexId: string,
+    sourceType: string,
+    newDocuments: Omit<typeof ragDocuments.$inferInsert, 'ragIndexId' | 'sourceType'>[]
+  ): Promise<number> {
+    // Get existing hashes for this source type
+    const existingHashes = await db
+      .select({ contentHash: ragDocuments.contentHash })
+      .from(ragDocuments)
+      .where(and(eq(ragDocuments.ragIndexId, indexId), eq(ragDocuments.sourceType, sourceType)))
+      .then((rows) => new Set(rows.map((r) => r.contentHash)));
+
+    const newHashes = new Set(newDocuments.map((d) => d.contentHash));
+
+    // Documents to add
+    const documentsToAdd = newDocuments.filter((d) => !existingHashes.has(d.contentHash));
+
+    // Hashes to delete
+    const hashesToDelete: string[] = [];
+    for (const hash of Array.from(existingHashes)) {
+      if (hash && !newHashes.has(hash)) {
+        hashesToDelete.push(hash);
+      }
+    }
+
+    // Batch insert new documents
+    if (documentsToAdd.length > 0) {
+      const documentsToInsert = documentsToAdd.map(doc => ({
+        ...doc,
+        ragIndexId: indexId,
+        sourceType,
+      }));
+      await db.insert(ragDocuments).values(documentsToInsert);
+    }
+
+    // Batch delete obsolete documents
+    if (hashesToDelete.length > 0) {
+      await db
+        .delete(ragDocuments)
+        .where(
+          and(
+            eq(ragDocuments.ragIndexId, indexId),
+            eq(ragDocuments.sourceType, sourceType),
+            inArray(ragDocuments.contentHash, hashesToDelete)
+          )
+        );
+    }
+
+    return documentsToAdd.length;
   }
 }
 
