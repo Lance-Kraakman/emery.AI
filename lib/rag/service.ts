@@ -470,7 +470,7 @@ export class RagService {
     return documentCount
   }
 
-  // Generate comprehensive table schema content
+  // Generate comprehensive table schema content with enhanced relationship context
   private generateTableSchemaContent(
     table: { id: number; name: string; dbName: string; metadata?: any; databaseName?: string | null; databaseSlug?: string | null },
     fields: any[]
@@ -478,9 +478,24 @@ export class RagService {
     const fieldsDescription = fields.map(field => {
       let desc = `- ${field.name} (${field.type})`
       if (field.required) desc += ' *required*'
-      if (field.relatedTableId) desc += ` → relates to table ID ${field.relatedTableId}`
+      if (field.relatedTableId) {
+        desc += ` → relates to table ID ${field.relatedTableId} (relationship field for cross-table data connections)`
+      }
+      if (field.type === 'file') {
+        desc += ' → stores uploaded files (documents, spreadsheets, images, etc.)'
+      }
       return desc
     }).join('\n')
+
+    // Count different field types for better context
+    const fieldTypes = fields.reduce((acc, field) => {
+      acc[field.type] = (acc[field.type] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+
+    const fieldTypeSummary = Object.entries(fieldTypes)
+      .map(([type, count]) => `${count} ${type} field${count > 1 ? 's' : ''}`)
+      .join(', ')
 
     const description = table.metadata?.description 
       ? `\nDescription: ${table.metadata.description}` 
@@ -488,14 +503,29 @@ export class RagService {
 
     const databaseName = table.databaseName || 'Unknown Database'
 
+    const relationshipFields = fields.filter(f => f.relatedTableId)
+    const fileFields = fields.filter(f => f.type === 'file')
+
+    let relationshipContext = ''
+    if (relationshipFields.length > 0) {
+      relationshipContext = `\nRelationships: This table connects to other tables through ${relationshipFields.length} relationship field${relationshipFields.length > 1 ? 's' : ''}: ${relationshipFields.map(f => f.name).join(', ')}`
+    }
+
+    let fileContext = ''
+    if (fileFields.length > 0) {
+      fileContext = `\nFile Storage: This table can store files in ${fileFields.length} field${fileFields.length > 1 ? 's' : ''}: ${fileFields.map(f => f.name).join(', ')}. These files are uploaded documents, spreadsheets, images, or other data that belong to records in this table.`
+    }
+
     return `Table: ${table.name}
 Database: ${databaseName}
 Purpose: Structured data storage and workflow operations${description}
 
-Schema (${fields.length} fields):
-${fieldsDescription}
+Schema Overview: ${fieldTypeSummary} (${fields.length} total fields)
+${fieldsDescription}${relationshipContext}${fileContext}
 
-Usage: This table supports data analysis, reporting, workflow automation, and integration with other Emery systems. The dynamic schema allows for flexible data operations while maintaining type safety.`
+Data Context: This table is part of the "${databaseName}" database and contains structured data for the organization. Records in this table may have relationships to other tables and can include uploaded files that contain additional data or documentation.
+
+Usage: This table supports data analysis, reporting, workflow automation, and integration with other Emery systems. The dynamic schema allows for flexible data operations while maintaining type safety and relationships.`
   }
 
   // Generate comprehensive database content for indexing
@@ -764,19 +794,30 @@ ${data.text.substring(0, 2000)}${data.text.length > 2000 ? '\n\n... (content tru
                 const fileContent = await this.extractFileContent(file.s3Key, file.mimeType, file.name)
                 
                 if (fileContent) {
-                  // Generate embedding for the file content
+                  // Enhanced file content with relationship context
+                  const enhancedContent = `${fileContent}
+
+CONTEXT AND RELATIONSHIPS:
+- This file belongs to the "${field.table_name}" table in the "${field.database_name}" database
+- Stored in field: "${field.field_name}" (field type: file)
+- This file contains data that is related to and belongs with other records in the "${field.table_name}" table
+- Use this file's content in context with the "${field.table_name}" table structure and data when answering questions
+- File location: Table "${field.table_name}" → Field "${field.field_name}" → File "${file.name}"
+`
+                  
+                  // Generate embedding for the enhanced content
                   const { embedding } = await embed({
                     model: this.embeddingModel,
-                    value: fileContent,
+                    value: enhancedContent,
                   })
-                  
+
                   await db.insert(ragDocuments).values({
                     ragIndexId: indexId,
                     sourceType: 'file',
                     sourceId: file.id,
                     sourceName: file.name,
-                    title: `File: ${file.name} (Table: ${field.table_name})`,
-                    content: fileContent,
+                    title: `File: ${file.name} (Database: ${field.database_name}, Table: ${field.table_name}, Field: ${field.field_name})`,
+                    content: enhancedContent,
                     metadata: {
                       fileId: file.id,
                       fileName: file.name,
@@ -789,9 +830,10 @@ ${data.text.substring(0, 2000)}${data.text.length > 2000 ? '\n\n... (content tru
                       fieldName: field.field_name,
                       uploadedAt: file.uploadedAt,
                       organizationId: ragIndex.organizationId,
+                      contextPath: `${field.database_name} → ${field.table_name} → ${field.field_name}`,
                     },
                     embedding,
-                    contentHash: crypto.createHash('md5').update(fileContent).digest('hex'),
+                    contentHash: crypto.createHash('md5').update(enhancedContent).digest('hex'),
                   })
 
                   documentCount++
