@@ -1,7 +1,7 @@
 import { embed, embedMany } from 'ai'
 import { getEmbeddingModel } from '@/lib/ai/models'
 import { db } from '@/lib/db/client'
-import { ragIndexes, ragDocuments, ragQueryLogs, tables, fields, organizations, agents } from '@/lib/db/schema'
+import { ragIndexes, ragDocuments, ragQueryLogs, tables, fields, organizations, agents, databases } from '@/lib/db/schema'
 import { eq, and, desc, sql, inArray } from 'drizzle-orm'
 import crypto from 'crypto'
 // Note: Using raw SQL for pgvector operations since drizzle-specific helpers aren't available
@@ -217,7 +217,11 @@ export class RagService {
       databaseId: tables.databaseId,
       metadata: tables.metadata,
       organizationId: tables.organizationId,
-    }).from(tables).where(and(...conditions))
+      databaseName: databases.name,
+      databaseSlug: databases.slug,
+    }).from(tables)
+      .leftJoin(databases, eq(tables.databaseId, databases.id))
+      .where(and(...conditions))
 
     // Process tables in batches for better performance
     const batchSize = 10
@@ -244,12 +248,14 @@ export class RagService {
             sourceType: 'table',
             sourceId: table.id.toString(),
             sourceName: table.name,
-            title: `Table: ${table.name}`,
+            title: `Table: ${table.name} (Database: ${table.databaseName || 'Unknown'})`,
             content: schemaContent,
             metadata: {
               tableId: table.id,
-              dbName: table.dbName,
+              tableName: table.name,
               databaseId: table.databaseId,
+              databaseName: table.databaseName,
+              databaseSlug: table.databaseSlug,
               tableMetadata: table.metadata,
               organizationId: table.organizationId,
               fieldCount: tableFields.length,
@@ -461,7 +467,7 @@ export class RagService {
 
   // Generate comprehensive table schema content
   private generateTableSchemaContent(
-    table: { id: number; name: string; dbName: string; metadata?: any },
+    table: { id: number; name: string; dbName: string; metadata?: any; databaseName?: string | null; databaseSlug?: string | null },
     fields: any[]
   ): string {
     const fieldsDescription = fields.map(field => {
@@ -475,8 +481,10 @@ export class RagService {
       ? `\nDescription: ${table.metadata.description}` 
       : ''
 
+    const databaseName = table.databaseName || 'Unknown Database'
+
     return `Table: ${table.name}
-Database Name: ${table.dbName}
+Database: ${databaseName}
 Purpose: Structured data storage and workflow operations${description}
 
 Schema (${fields.length} fields):
