@@ -1,34 +1,16 @@
-export interface Table {
-  id: number;
-  organizationId: number;
-  name: string;
-  dbName: string;
-  createdBy: string;
-  createdAt: Date | null;
-}
+import { InferSelectModel } from 'drizzle-orm';
+import { agents, teams, tables, fields, users } from '@/lib/db/schema';
 
-export interface FieldData {
-  id: number;
-  tableId: number;
-  name: string;
-  slug: string;
-  type: "text" | "number" | "boolean" | "email" | "url" | "date" | "relation" | "file";
-  orderIndex: number | null;
-  relatedTableId?: number | null;
-  required: boolean | null;
-  createdAt: Date | null;
-}
+export type Agent = InferSelectModel<typeof agents>;
+export type Team = InferSelectModel<typeof teams>;
+export type Table = InferSelectModel<typeof tables>;
+export type FieldData = InferSelectModel<typeof fields>;
+export type User = InferSelectModel<typeof users>;
+
 
 export interface RowData {
   id: string;
   [key: string]: any;
-}
-
-export interface User {
-  id: string;
-  email: string;
-  name?: string;
-  createdAt: Date;
 }
 
 export interface DynamicRow {

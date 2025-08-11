@@ -326,3 +326,153 @@ For development without full OAuth setup:
 - **Error Propagation**: Maintains full error context from external services to client applications
 - **Webhook Integration**: Supports both synchronous and asynchronous execution patterns
 - **Multi-Client Support**: Both full-featured and simple Python clients for different use cases
+
+## Frontend Architecture Refactoring (2025-01)
+
+### Component Architecture Improvements
+
+#### Refactored Component Structure
+The frontend has been significantly refactored for better maintainability and consistency:
+
+**Component Organization:**
+- **Core UI Components**: Standardized shadcn/ui components with consistent design tokens
+- **Composite Components**: Business logic components built from core UI components
+- **Custom Hooks**: Extracted state management and side effects into reusable hooks
+- **Utility Components**: Reusable patterns like `FormField`, `EmptyState`, `Loading`
+
+#### Major Component Refactoring
+
+**RowManager Component (394 → 84 lines)**
+- **Extracted Components**: 
+  - `FieldInput.tsx` - Field type-specific input handling
+  - `CellRenderer.tsx` - Cell value display formatting
+  - `RowForm.tsx` - Form creation and editing
+  - `RowTable.tsx` - Table display and inline editing
+- **Custom Hook**: `useRowManager.ts` - State management and CRUD operations
+- **Benefits**: 80% reduction in complexity, better testability, clear separation of concerns
+
+**Other Refactored Components:**
+- **TableList**: Converted to shadcn/ui Card and Button components
+- **FieldManager**: Standardized form inputs and improved UX with EmptyState
+- **TableEditorClient**: Consolidated with better error handling
+
+#### Removed Dead Code
+- **Deleted Files**: 
+  - `app/TableEditor.tsx` (394 lines) - Replaced by refactored components
+  - `app/components/DashboardClient.tsx` (88 lines) - Unused component
+  - `app/components/DashboardWithData.tsx` - Dead data loader
+  - `app/utils/validation.ts` - Unused validation utilities
+  - `app/mission-control/dashboard-content.tsx` - Unnecessary wrapper
+- **Clean Directories**: Removed empty `dashboard/` subdirectories
+- **Import Cleanup**: Removed unused imports across all components
+
+### Styling Standardization
+
+#### Design System Implementation
+**Consistent Component Usage:**
+- **Buttons**: All hardcoded button styles replaced with `Button` component variants
+- **Forms**: Standardized `Input`, `Select`, `Checkbox` components
+- **Cards**: Consistent `Card`, `CardHeader`, `CardContent` structure
+- **Tables**: Proper `Table`, `TableHeader`, `TableBody` components
+- **Loading States**: Unified loading and disabled state styling
+
+**Color Token Migration:**
+- **Before**: `bg-blue-600`, `text-gray-900`, `text-red-500` (hardcoded colors)
+- **After**: `bg-primary`, `text-foreground`, `text-destructive` (design tokens)
+- **Benefits**: Automatic dark mode support, consistent theming, maintainable styles
+
+**Added Utility Components:**
+```typescript
+// New standardized components
+<FormField label="Name" required error={error}>
+  <Input {...props} />
+</FormField>
+
+<EmptyState 
+  title="No items" 
+  description="Add your first item"
+  action={{ label: "Add Item", onClick: handler }}
+/>
+
+<Loading text="Loading..." />
+<LoadingOverlay isLoading={pending}>...</LoadingOverlay>
+```
+
+#### Button Variant System
+Extended shadcn/ui Button with application-specific variants:
+- `success` - Green buttons for creation actions
+- `destructive` - Red buttons for delete actions  
+- `outline` - Secondary actions and cancellation
+- `ghost` - Icon buttons and subtle actions
+
+### Development Patterns
+
+#### Consistent Patterns Established
+**Form Handling:**
+- Standardized `FormField` wrapper with built-in error handling
+- Consistent loading states and disabled styling
+- Proper ARIA attributes and accessibility
+
+**Data Display:**
+- `EmptyState` for consistent empty states across all lists
+- `CellRenderer` for proper field type display formatting
+- Hover states and interaction patterns standardized
+
+**Component Composition:**
+- Clear separation between UI components and business logic
+- Proper prop interfaces and TypeScript types
+- Consistent naming conventions and file organization
+
+#### Custom Hooks Pattern
+**State Management Hooks:**
+- `useRowManager` - Row CRUD operations and form state
+- `useEmeryData` - Global data fetching and caching
+- Extracted from components for better testability and reuse
+
+### Code Quality Improvements
+
+#### TypeScript Integration
+- Consistent type definitions across all components
+- Proper prop interface definitions
+- Better error handling with type safety
+
+#### Performance Optimizations  
+- Component splitting reduces bundle size and improves tree shaking
+- Proper React patterns for state updates and side effects
+- Reduced re-renders through better state management
+
+#### Developer Experience
+- Clear component boundaries and responsibilities
+- Consistent import patterns and file organization
+- Better error messages and development warnings
+- Standardized loading and error states
+
+### Migration Benefits
+
+#### Maintainability
+- **Single Source of Truth**: All UI patterns now use shadcn/ui components
+- **Consistent Styling**: Design tokens ensure visual consistency
+- **Better Organization**: Clear separation of concerns and component responsibilities
+
+#### Developer Productivity
+- **Reusable Components**: Standard patterns reduce duplicate code
+- **Type Safety**: Better TypeScript integration prevents runtime errors
+- **Testing**: Smaller, focused components are easier to test
+
+#### User Experience
+- **Consistent Interactions**: Standardized hover, focus, and loading states
+- **Accessibility**: Proper ARIA attributes and keyboard navigation
+- **Performance**: Smaller components and better code splitting
+
+### Future Refactoring Opportunities
+
+#### Remaining Complex Components
+- **EditableCell.tsx** (341 lines) - Candidate for field-type component extraction
+- **DataViewsClient-simplified.tsx** (307 lines) - Could benefit from hook extraction
+- **EmerySidebar.tsx** (298 lines) - Navigation state management improvements
+
+#### Additional Improvements
+- **API Route Consolidation**: Review Server Actions vs API routes usage
+- **Error Boundary Implementation**: Consistent error handling across components
+- **Testing Strategy**: Unit tests for extracted hooks and components
+- **Performance Monitoring**: Bundle size analysis and optimization

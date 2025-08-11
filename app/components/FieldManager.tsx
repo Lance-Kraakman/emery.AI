@@ -6,6 +6,13 @@ import { useState, useTransition } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { createFieldAction, deleteFieldAction } from '@/app/actions/fields';
 import { Field } from '@/app/actions/types';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { FormField } from '@/components/ui/form-field';
+import { EmptyState } from '@/components/ui/empty-state';
 
 interface FieldManagerProps {
   tableId: number;
@@ -52,145 +59,156 @@ export default function FieldManager({ tableId, organizationId, fields, availabl
   return (
     <div className="mb-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">Fields</h3>
-        <button
+        <h3 className="text-lg font-semibold">Fields</h3>
+        <Button
           onClick={() => setShowNewField(true)}
           disabled={isPending}
-          className="flex items-center gap-2 px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50"
+          variant="default"
+          size="sm"
         >
           <Plus size={16} />
           Add Field
-        </button>
+        </Button>
       </div>
 
       {showNewField && (
-        <div className="mb-4 p-4 border rounded-lg bg-gray-50">
-          <h4 className="font-medium mb-3">Create New Field</h4>
-          <form action={handleCreateField} className="space-y-3">
-            <input type="hidden" name="tableId" value={tableId} />
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Field Name
-              </label>
-              <input
-                type="text"
-                name="name"
-                required
-                disabled={isPending}
-                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter field name"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Field Type
-              </label>
-              <select
-                name="type"
-                value={selectedFieldType}
-                onChange={(e) => setSelectedFieldType(e.target.value)}
-                disabled={isPending}
-                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="text">Text</option>
-                <option value="number">Number</option>
-                <option value="boolean">Boolean</option>
-                <option value="email">Email</option>
-                <option value="url">URL</option>
-                <option value="date">Date</option>
-                <option value="relation">Relation</option>
-                <option value="file">File</option>
-              </select>
-            </div>
-
-            {selectedFieldType === 'relation' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Related Table
-                </label>
-                <select
-                  name="relatedTableId"
-                  disabled={isPending}
-                  className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle>Create New Field</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form action={handleCreateField} className="space-y-4">
+              <input type="hidden" name="tableId" value={tableId} />
+              
+              <FormField label="Field Name" required>
+                <Input
+                  name="name"
                   required
+                  disabled={isPending}
+                  placeholder="Enter field name"
+                />
+              </FormField>
+
+              <FormField label="Field Type">
+                <Select
+                  name="type"
+                  value={selectedFieldType}
+                  onValueChange={setSelectedFieldType}
+                  disabled={isPending}
                 >
-                  <option value="">Select a table...</option>
-                  {availableTables
-                    .filter(table => table.id !== tableId) // Don't allow self-relations
-                    .map(table => (
-                      <option key={table.id} value={table.id}>
-                        {table.name}
-                      </option>
-                    ))}
-                </select>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="text">Text</SelectItem>
+                    <SelectItem value="number">Number</SelectItem>
+                    <SelectItem value="boolean">Boolean</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="url">URL</SelectItem>
+                    <SelectItem value="date">Date</SelectItem>
+                    <SelectItem value="relation">Relation</SelectItem>
+                    <SelectItem value="file">File</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormField>
+
+              {selectedFieldType === 'relation' && (
+                <FormField label="Related Table" required>
+                  <Select name="relatedTableId" disabled={isPending}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a table..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableTables
+                        .filter(table => table.id !== tableId)
+                        .map(table => (
+                          <SelectItem key={table.id} value={table.id.toString()}>
+                            {table.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+              )}
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  name="required"
+                  id="required"
+                  disabled={isPending}
+                  className="rounded border-input"
+                />
+                <label htmlFor="required" className="text-sm font-medium leading-none">
+                  Required field
+                </label>
               </div>
-            )}
 
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                name="required"
-                id="required"
-                disabled={isPending}
-                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <label htmlFor="required" className="ml-2 text-sm text-gray-700">
-                Required field
-              </label>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={isPending}
-                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50"
-              >
-                {isPending ? 'Creating...' : 'Create Field'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowNewField(false);
-                  setSelectedFieldType('text');
-                }}
-                disabled={isPending}
-                className="px-4 py-2 border text-sm rounded-md hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
+              <div className="flex gap-2">
+                <Button
+                  type="submit"
+                  disabled={isPending}
+                  variant="default"
+                >
+                  {isPending ? 'Creating...' : 'Create Field'}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setShowNewField(false);
+                    setSelectedFieldType('text');
+                  }}
+                  disabled={isPending}
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
-      <div className="space-y-2">
-        {fields.map((field) => (
-          <div key={field.id} className="flex items-center justify-between p-3 bg-white border rounded-lg">
-            <div>
-              <span className="font-medium text-gray-900">{field.name}</span>
-              <span className="ml-2 text-sm text-gray-500">({field.type})</span>
-              {field.required && (
-                <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
-                  Required
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => handleDeleteField(field.id)}
-              disabled={isPending}
-              className="p-1 text-gray-400 hover:text-red-600 disabled:opacity-50"
-            >
-              <Trash2 size={16} />
-            </button>
-          </div>
-        ))}
-      </div>
 
-      {fields.length === 0 && (
-        <div className="text-center py-8 text-gray-500">
-          No fields yet. Add your first field to get started.
+      {fields.length === 0 ? (
+        <EmptyState
+          title="No fields yet"
+          description="Add your first field to get started with data management."
+          action={{
+            label: "Add Field",
+            onClick: () => setShowNewField(true)
+          }}
+        />
+      ) : (
+        <div className="space-y-2">
+          {fields.map((field) => (
+            <Card key={field.id}>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{field.name}</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {field.type}
+                    </Badge>
+                    {field.required && (
+                      <Badge variant="destructive" className="text-xs">
+                        Required
+                      </Badge>
+                    )}
+                  </div>
+                  <Button
+                    onClick={() => handleDeleteField(field.id)}
+                    disabled={isPending}
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
     </div>

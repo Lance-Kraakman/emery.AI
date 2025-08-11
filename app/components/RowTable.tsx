@@ -2,6 +2,8 @@
 
 import { Edit, Trash2, Save, X } from 'lucide-react';
 import { Field, Row } from '@/app/actions/types';
+import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import CellRenderer from './CellRenderer';
 import FieldInput from './FieldInput';
 
@@ -36,7 +38,7 @@ export default function RowTable({
 }: RowTableProps) {
   if (fields.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500 border rounded-lg bg-gray-50">
+      <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/50">
         <p>Add some fields first to start managing data.</p>
       </div>
     );
@@ -44,36 +46,31 @@ export default function RowTable({
 
   if (rows.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500 border rounded-lg bg-gray-50">
+      <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/50">
         <p>No rows yet. Click "Add Row" to create your first entry.</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full bg-white border border-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
             {fields.map((field) => (
-              <th 
-                key={field.id} 
-                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b"
-              >
+              <TableHead key={field.id}>
                 {field.name}
-                {field.required && <span className="text-red-500 ml-1">*</span>}
-              </th>
+                {field.required && <span className="text-destructive ml-1">*</span>}
+              </TableHead>
             ))}
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200">
+            <TableHead>Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.map((row) => (
-            <tr key={row.id} className="hover:bg-gray-50">
+            <TableRow key={row.id}>
               {fields.map((field) => (
-                <td key={field.id} className="px-4 py-3 text-sm text-gray-900 border-b max-w-xs">
+                <TableCell key={field.id} className="max-w-xs">
                   {editingRow === row.id ? (
                     <FieldInput
                       field={field}
@@ -89,55 +86,59 @@ export default function RowTable({
                       value={row[`field_${field.id}`]} 
                     />
                   )}
-                </td>
+                </TableCell>
               ))}
-              <td className="px-4 py-3 text-sm text-gray-900 border-b">
+              <TableCell>
                 <div className="flex gap-1">
                   {editingRow === row.id ? (
                     <>
-                      <button
+                      <Button
                         onClick={() => onUpdateRow(row.id)}
                         disabled={isPending}
-                        className="p-1 text-green-600 hover:text-green-800 disabled:opacity-50 rounded"
-                        title="Save changes"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-green-600 hover:text-green-800"
                       >
                         <Save size={16} />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={onCancelEdit}
                         disabled={isPending}
-                        className="p-1 text-gray-600 hover:text-gray-800 rounded"
-                        title="Cancel editing"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
                       >
                         <X size={16} />
-                      </button>
+                      </Button>
                     </>
                   ) : (
                     <>
-                      <button
+                      <Button
                         onClick={() => onStartEdit(row)}
                         disabled={isPending}
-                        className="p-1 text-blue-600 hover:text-blue-800 disabled:opacity-50 rounded"
-                        title="Edit row"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
                       >
                         <Edit size={16} />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => onDeleteRow(row.id)}
                         disabled={isPending}
-                        className="p-1 text-red-600 hover:text-red-800 disabled:opacity-50 rounded"
-                        title="Delete row"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 size={16} />
-                      </button>
+                      </Button>
                     </>
                   )}
                 </div>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }

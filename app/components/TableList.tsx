@@ -58,94 +58,117 @@ export default function TableList({ tables, currentOrganizationId, onSelectTable
   return (
     <div className="flex-1 p-6">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Tables</h2>
-        <button
+        <h2 className="text-xl font-semibold">Tables</h2>
+        <Button
           onClick={() => setShowNewTable(true)}
           disabled={isPending}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+          variant="default"
+          size="sm"
         >
           <Plus size={16} />
           New Table
-        </button>
+        </Button>
       </div>
 
       {showNewTable && (
-        <div className="mb-6 p-4 border rounded-lg bg-white">
-          <h3 className="font-medium mb-3">Create New Table</h3>
-          <form action={handleCreateTable} className="flex gap-3">
-            <input type="hidden" name="organizationId" value={currentOrganizationId} />
-            <input
-              type="text"
-              name="name"
-              placeholder="Table name"
-              required
-              disabled={isPending}
-              className="flex-1 px-3 py-2 border rounded-md"
-            />
-            <button
-              type="submit"
-              disabled={isPending}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isPending ? 'Creating...' : 'Create'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowNewTable(false)}
-              disabled={isPending}
-              className="px-4 py-2 border rounded-md hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-          </form>
-        </div>
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Create New Table</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form action={handleCreateTable} className="flex gap-3">
+              <input type="hidden" name="organizationId" value={currentOrganizationId} />
+              <Input
+                type="text"
+                name="name"
+                placeholder="Table name"
+                required
+                disabled={isPending}
+                className="flex-1"
+              />
+              <Button
+                type="submit"
+                disabled={isPending}
+                variant="default"
+                size="sm"
+              >
+                {isPending ? 'Creating...' : 'Create'}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => setShowNewTable(false)}
+                disabled={isPending}
+                variant="outline"
+                size="sm"
+              >
+                Cancel
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {tables.map((table) => (
-          <div key={table.id} className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <Table className="text-blue-600" size={20} />
-                <div>
-                  <h3 className="font-medium text-gray-900">{table.name}</h3>
-                  <p className="text-sm text-gray-500">
-                    Created {table.createdAt ? new Date(table.createdAt).toLocaleDateString() : 'Unknown'}
-                  </p>
+          <Card key={table.id} className="hover:shadow-md transition-shadow">
+            <CardContent className="pt-6">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <Table className="text-primary" size={20} />
+                  <div>
+                    <h3 className="font-medium">{table.name}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Created {table.createdAt ? new Date(table.createdAt).toLocaleDateString() : 'Unknown'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    onClick={() => onSelectTable(table.id)}
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                  >
+                    <Settings size={16} />
+                  </Button>
+                  <Button
+                    onClick={() => handleDeleteTable(table.id)}
+                    disabled={isPending}
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 size={16} />
+                  </Button>
                 </div>
               </div>
-              <div className="flex gap-1">
-                <button
+              <div className="mt-4 pt-4 border-t">
+                <Button
                   onClick={() => onSelectTable(table.id)}
-                  className="p-1 text-gray-400 hover:text-blue-600"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
                 >
-                  <Settings size={16} />
-                </button>
-                <button
-                  onClick={() => handleDeleteTable(table.id)}
-                  disabled={isPending}
-                  className="p-1 text-gray-400 hover:text-red-600 disabled:opacity-50"
-                >
-                  <Trash2 size={16} />
-                </button>
+                  Manage Table
+                </Button>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
       {tables.length === 0 && (
         <div className="text-center py-12">
-          <Table className="mx-auto text-gray-400 mb-4" size={48} />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No tables yet</h3>
-          <p className="text-gray-500 mb-4">Create your first table to get started</p>
-          <button
+          <Table className="mx-auto text-muted-foreground mb-4" size={48} />
+          <h3 className="text-lg font-medium mb-2">No tables yet</h3>
+          <p className="text-muted-foreground mb-4">Create your first table to get started</p>
+          <Button
             onClick={() => setShowNewTable(true)}
             disabled={isPending}  
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            variant="default"
           >
             Create Table
-          </button>
+          </Button>
         </div>
       )}
     </div>

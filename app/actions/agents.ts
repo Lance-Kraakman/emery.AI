@@ -78,6 +78,17 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
   }
 }
 
+export async function addCapabilityToAgent(agentId: number, capability: { name: string; description: string; tools: string[]; servers: any[] }) {
+  'use server';
+  const agent = await db.select().from(agents).where(eq(agents.id, agentId));
+  if (agent.length === 0) {
+    throw new Error("Agent not found");
+  }
+  const existingCapabilities = (agent[0].capabilities as any[]) || [];
+  const newCapabilities = [...existingCapabilities, capability];
+  await db.update(agents).set({ capabilities: newCapabilities }).where(eq(agents.id, agentId));
+}
+
 export async function createAgentAction(formData: FormData) {
   const name = formData.get('name') as string;
   const role = formData.get('role') as string;
@@ -121,14 +132,40 @@ export async function createAgentAction(formData: FormData) {
   return result;
 }
 
-export async function getAgents() {
+import { and, like, sql } from "drizzle-orm";
+import { teams } from "@/lib/db/schema";
+
+export async function getAgents(filters: { teamId?: number | string, searchQuery?: string } = {}) {
   try {
     const currentOrg = await requireCurrentOrganization();
-    
+    const { teamId, searchQuery } = filters;
+
+    const conditions = [eq(agents.organizationId, currentOrg.id)];
+
+    if (searchQuery) {
+      conditions.push(like(agents.name, `%${searchQuery}%`));
+    }
+
+    if (teamId) {
+      const team = await db.select({ agentIds: teams.agentIds }).from(teams).where(eq(teams.id, Number(teamId)));
+      if (team.length > 0 && team[0].agentIds) {
+        const agentIdsAsNumbers = team[0].agentIds.map(id => Number(id));
+        if(agentIdsAsNumbers.length > 0) {
+          conditions.push(sql`${agents.id} IN ${agentIdsAsNumbers}`);
+        } else {
+          // No agents in this team, return empty
+          return [];
+        }
+      } else {
+        // Team not found or has no agents, return empty
+        return [];
+      }
+    }
+
     const organizationAgents = await db
       .select()
       .from(agents)
-      .where(eq(agents.organizationId, currentOrg.id));
+      .where(and(...conditions));
 
     return organizationAgents;
   } catch (error) {

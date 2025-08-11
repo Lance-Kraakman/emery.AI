@@ -6,6 +6,7 @@
 import { Plus } from 'lucide-react';
 import { Field, Row } from '@/app/actions/types';
 import { useRowManager } from '@/hooks/useRowManager';
+import { Button } from '@/components/ui/button';
 import RowForm from './RowForm';
 import RowTable from './RowTable';
 
@@ -39,15 +40,16 @@ export default function RowManager({ tableId, organizationId, fields, rows, onRo
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">Data</h3>
-        <button
+        <h3 className="text-lg font-semibold">Data</h3>
+        <Button
           onClick={() => setShowNewRow(true)}
           disabled={isPending || fields.length === 0}
-          className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50"
+          variant="success"
+          size="sm"
         >
           <Plus size={16} />
           Add Row
-        </button>
+        </Button>
       </div>
 
       {showNewRow && (

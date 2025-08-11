@@ -269,6 +269,10 @@ export const ragQueryLogs = pgTable("rag_query_logs", {
   userId: uuid("user_id").references(() => users.id),
   agentId: integer("agent_id").references(() => agents.id),
   sessionId: text("session_id"),
+
+  // Search parameters
+  similarityMetric: text("similarity_metric"),
+  threshold: integer("threshold"),
   
   createdAt: timestamp("created_at").defaultNow(),
 });

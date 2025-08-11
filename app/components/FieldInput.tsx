@@ -1,6 +1,8 @@
 'use client'
 
 import { Field } from '@/app/actions/types';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import FileUpload from '../FileUpload';
 import RelationField from './RelationField';
 
@@ -21,70 +23,62 @@ export default function FieldInput({
   organizationId,
   tableId 
 }: FieldInputProps) {
-  const baseClass = "w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500";
-  
   switch (field.type) {
     case 'number':
       return (
-        <input
+        <Input
           type="number"
           name={field.slug}
           value={value || ''}
           onChange={(e) => onChange(e.target.value ? Number(e.target.value) : '')}
-          className={baseClass}
           disabled={disabled}
         />
       );
     case 'boolean':
       return (
         <div className="flex items-center">
-          <input
-            type="checkbox"
+          <Checkbox
             name={field.slug}
             checked={Boolean(value)}
-            onChange={(e) => onChange(e.target.checked)}
+            onCheckedChange={onChange}
             disabled={disabled}
-            className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
           />
         </div>
       );
     case 'date':
       return (
-        <input
+        <Input
           type="date"
           name={field.slug}
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
-          className={baseClass}
           disabled={disabled}
         />
       );
     case 'email':
       return (
-        <input
+        <Input
           type="email"
           name={field.slug}
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
-          className={baseClass}
           disabled={disabled}
         />
       );
     case 'url':
       return (
-        <input
+        <Input
           type="url"
           name={field.slug}
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
-          className={baseClass}
           disabled={disabled}
         />
       );
     case 'file':
       if (!organizationId || !tableId) {
         console.warn('FileUpload requires organizationId and tableId');
-        return <div className="text-red-500">File upload configuration error</div>;
+        return <div className="text-destructive text-sm">File upload configuration error</div>;
       }
       return (
         <FileUpload
@@ -98,7 +92,7 @@ export default function FieldInput({
     case 'relation':
       if (!organizationId) {
         console.warn('RelationField requires organizationId');
-        return <div className="text-red-500">Relation field configuration error</div>;
+        return <div className="text-destructive text-sm">Relation field configuration error</div>;
       }
       return (
         <RelationField
@@ -111,12 +105,11 @@ export default function FieldInput({
       );
     default:
       return (
-        <input
+        <Input
           type="text"
           name={field.slug}
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
-          className={baseClass}
           disabled={disabled}
         />
       );

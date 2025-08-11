@@ -1,23 +1,22 @@
 import { Suspense } from 'react';
 import { getOrganizations } from '@/app/actions/organizations';
 import { getTeams } from '@/app/actions/teams';
-import { getAgents } from '@/app/actions/agents';
 import { getRoles } from '@/app/actions/roles';
 import { getTasks } from '@/app/actions/tasks';
 import { EmeryProviders } from '@/components/EmeryProviders';
 import OrganizationManager from './components/OrganizationManager';
 import TeamManager from './components/TeamManager';
-import AgentManager from './components/AgentManager';
 import RoleManager from './components/RoleManager';
 import TaskManager from './components/TaskManager';
+import { getAgents } from '@/app/actions/agents';
 
 export default async function ManagePage() {
-  const [organizations, teams, agents, roles, tasksResult] = await Promise.all([
+  const [organizations, teams, roles, tasksResult, agents] = await Promise.all([
     getOrganizations(),
     getTeams(),
-    getAgents(),
     getRoles(),
     getTasks(undefined, 100), // Get recent tasks for all agents
+    getAgents(),
   ]);
 
   const tasks = tasksResult.success ? tasksResult.data : [];
@@ -49,10 +48,6 @@ export default async function ManagePage() {
           </div>
           
           <div className="space-y-8">
-            <Suspense fallback={<div>Loading agents...</div>}>
-              <AgentManager agents={agents} />
-            </Suspense>
-            
             <Suspense fallback={<div>Loading roles...</div>}>
               <RoleManager roles={roles} />
             </Suspense>
