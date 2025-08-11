@@ -60,7 +60,7 @@ Your question: "${question}"`}
           domainTypes: ['tables', 'agents'],
           createdBy: session.user.id,
         })
-        ragIndex = await ragService.getIndex(indexId)
+        ragIndex = await ragService.getIndex(indexId) || undefined
       }
 
       // Search for relevant context
@@ -145,6 +145,11 @@ Please check your OpenAI API key and try again.`}
     )
   }
 }
+
+// Timing constants for streaming response simulation
+const TOKEN_DELAY = 50; // milliseconds between tokens
+const ANNOTATION_DELAY = 800; // milliseconds before annotations
+const INLINE_ANNOTATION_KEY = 'annotation'; // key for inline annotations
 
 const SAMPLE_TEXT = [
   `

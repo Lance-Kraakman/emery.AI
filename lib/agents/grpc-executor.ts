@@ -115,8 +115,8 @@ export async function executeAgentCapabilityViaGRPC(
         stepExecutions.push({
           step_id: progress.step_id,
           step_type: progress.step_type,
-          status: (progress.status === 'TASK_COMPLETED' || progress.status === TaskStatus.TASK_COMPLETED) ? 'completed' : 
-                  (progress.status === 'TASK_FAILED' || progress.status === TaskStatus.TASK_FAILED) ? 'failed' : 'in_progress',
+          status: progress.status === 'TASK_COMPLETED' ? 'completed' : 
+                  progress.status === 'TASK_FAILED' ? 'failed' : 'in_progress',
           output_data: outputData,
           error_message: progress.error_message || undefined
         });
@@ -126,11 +126,11 @@ export async function executeAgentCapabilityViaGRPC(
       // Note: gRPC returns status as string enum names, not numeric values
       console.log(`[GRPC-STATUS-CHECK] ${executionId}: Comparing status '${progress.status}' (type: ${typeof progress.status})`);
       
-      if (progress.status === 'TASK_COMPLETED' || progress.status === TaskStatus.TASK_COMPLETED) {
+      if (progress.status === 'TASK_COMPLETED') {
         console.log(`[GRPC-STATUS] ${executionId}: Task COMPLETED detected!`);
         finalStatus = 'completed';
         finalOutputData = outputData;
-      } else if (progress.status === 'TASK_FAILED' || progress.status === TaskStatus.TASK_FAILED) {
+      } else if (progress.status === 'TASK_FAILED') {
         console.log(`[GRPC-STATUS] ${executionId}: Task FAILED detected!`);
         finalStatus = 'failed';
         finalError = progress.error_message || 'Task failed';

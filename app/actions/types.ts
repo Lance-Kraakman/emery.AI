@@ -60,7 +60,7 @@ export interface CreateTeamData {
   description?: string;
   responsibilities?: string[];
   goals?: string[];
-  tools?: string[];
+  agentIds?: string[];
 }
 
 export interface CreateAgentData {

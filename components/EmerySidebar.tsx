@@ -32,8 +32,8 @@ const navItems = [
 ]
 
 const orchestrationNavItems = [
-  { href: "/manage?tab=organization", label: "Organization", icon: Building2 },
-  { href: "/manage?tab=teams", label: "Teams", icon: Users },
+  { href: "/organization", label: "Organization Chart", icon: Building2 },
+  { href: "/teams", label: "Teams", icon: Users },
   { href: "/agents", label: "Agents", icon: Bot },
 ]
 

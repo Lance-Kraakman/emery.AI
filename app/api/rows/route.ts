@@ -98,7 +98,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Use server action function
-    const result = await updateRowData(tableId, rowId, data);
+    const result = await updateRowData({ tableId, rowId, data });
     
     if (!result.success) {
       return NextResponse.json(

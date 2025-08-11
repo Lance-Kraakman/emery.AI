@@ -8,7 +8,7 @@ import type { ActionResult, CreateTeamData, TeamMembershipData } from "./types";
 
 export async function createTeam(data: CreateTeamData): Promise<ActionResult> {
   try {
-    const { organizationId, name, purpose, description, responsibilities, goals, tools } = data;
+    const { organizationId, name, purpose, description, responsibilities, goals, agentIds } = data;
 
     if (!organizationId || !name) {
       return {
@@ -24,10 +24,11 @@ export async function createTeam(data: CreateTeamData): Promise<ActionResult> {
       description,
       responsibilities,
       goals,
-      tools,
+      agentIds,
     }).returning();
 
     revalidatePath('/dashboard');
+    revalidatePath('/teams');
     
     return {
       success: true,
@@ -49,11 +50,11 @@ export async function createTeamAction(formData: FormData) {
   const description = formData.get('description') as string;
   const responsibilitiesStr = formData.get('responsibilities') as string;
   const goalsStr = formData.get('goals') as string;
-  const toolsStr = formData.get('tools') as string;
+  const agentIdsStr = formData.get('agentIds') as string;
   
   const responsibilities = responsibilitiesStr ? responsibilitiesStr.split(',').map(r => r.trim()) : undefined;
   const goals = goalsStr ? goalsStr.split(',').map(g => g.trim()) : undefined;
-  const tools = toolsStr ? toolsStr.split(',').map(t => t.trim()) : undefined;
+  const agentIds = agentIdsStr ? agentIdsStr.split(',').map(id => id.trim()).filter(id => id) : undefined;
 
   const result = await createTeam({ 
     organizationId, 
@@ -62,7 +63,7 @@ export async function createTeamAction(formData: FormData) {
     description, 
     responsibilities, 
     goals, 
-    tools 
+    agentIds
   });
   
   if (!result.success) {
@@ -125,6 +126,7 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
       .returning();
 
     revalidatePath('/dashboard');
+    revalidatePath('/teams');
     
     return {
       success: true,
@@ -151,6 +153,7 @@ export async function deleteTeam(teamId: number): Promise<ActionResult> {
     await db.delete(teams).where(eq(teams.id, teamId));
 
     revalidatePath('/dashboard');
+    revalidatePath('/teams');
     
     return {
       success: true,
@@ -182,6 +185,7 @@ export async function addTeamMember(data: TeamMembershipData): Promise<ActionRes
     }).returning();
 
     revalidatePath('/dashboard');
+    revalidatePath('/teams');
     
     return {
       success: true,
@@ -208,6 +212,7 @@ export async function removeTeamMember(membershipId: number): Promise<ActionResu
     await db.delete(teamMemberships).where(eq(teamMemberships.id, membershipId));
 
     revalidatePath('/dashboard');
+    revalidatePath('/teams');
     
     return {
       success: true,

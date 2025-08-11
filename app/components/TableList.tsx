@@ -4,6 +4,9 @@
 
 import { useState, useTransition } from 'react';
 import { Plus, Table, Settings, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { createTableAction, deleteTableAction } from '@/app/actions/tables';
 
 interface Table {

@@ -143,6 +143,46 @@ export async function setupInitialAdmin(data: SetupData): Promise<ActionResult> 
   }
 }
 
+export async function createOrganization(formData: FormData): Promise<ActionResult> {
+  const session = await auth();
+  const user = session?.user;
+
+  if (!user) {
+    return { success: false, error: "User not authenticated" };
+  }
+
+  const name = formData.get("name") as string;
+  const mission = formData.get("mission") as string | null;
+
+  if (!name) {
+    return { success: false, error: "Organization name is required" };
+  }
+
+  try {
+    const [newOrg] = await db
+      .insert(organizations)
+      .values({ name, mission })
+      .returning();
+
+    await db.insert(userOrganizations).values({
+      userId: user.id,
+      organizationId: newOrg.id,
+      role: "owner",
+    });
+
+    await db
+      .update(users)
+      .set({ currentOrganizationId: newOrg.id })
+      .where(eq(users.id, user.id));
+
+    revalidatePath("/");
+    return { success: true, data: newOrg };
+  } catch (error) {
+    console.error("Failed to create organization:", error);
+    return { success: false, error: "Failed to create organization." };
+  }
+}
+
 export async function checkSetupStatus(): Promise<{ needsSetup: boolean; isFirstUser: boolean }> {
   try {
     const session = await auth();

@@ -78,12 +78,11 @@ export function useEmeryData() {
           getAgents()
         ]);
 
-        const databases = databasesResult as EmeryDatabase[];
         const tables = tablesResult as EmeryTable[];
         const agents = agentsResult as EmeryAgent[];
 
-        // Group tables by database
-        const databasesWithTables = databases.map(db => ({
+        // Group tables by database  
+        const databasesWithTables = databasesResult.map(db => ({
           ...db,
           tables: tables.filter(table => table.databaseId === db.id)
         }));

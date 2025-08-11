@@ -32,7 +32,7 @@ export interface TaskRequest {
 
 export interface TaskProgress {
   task_id: string;
-  status: TaskStatus;
+  status: string; // gRPC enums come as strings when enums: String is set
   step_id?: string;
   step_type?: string;
   output_json?: string;

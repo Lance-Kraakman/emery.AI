@@ -58,6 +58,7 @@ export const organizations = pgTable("organizations", {
   sharedTools: text("shared_tools").array(),
   sharedServers: text("shared_servers").array(),
   databaseId: text("database_id"),
+  viewConfig: jsonb("view_config"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -104,8 +105,6 @@ export const teams = pgTable("teams", {
   description: text("description"),
   responsibilities: text("responsibilities").array(),
   goals: text("goals").array(),
-  tools: text("tools").array(),
-  servers: text("servers").array(),
   agentIds: text("agent_ids").array(),
   databaseId: text("database_id"),
   createdAt: timestamp("created_at").defaultNow(),

@@ -69,7 +69,7 @@ export function getEmbeddingModel(modelOverride?: string) {
   return {
     modelId: modelName,
     provider: 'huggingface',
-    specificationVersion: 'v2', // Required for AI SDK 5
+    specificationVersion: 'v2' as const, // Required for AI SDK 5
     maxEmbeddingsPerCall: 32,
     supportsParallelCalls: true,
     

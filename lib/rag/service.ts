@@ -106,16 +106,16 @@ export class RagService {
     return {
       id: index.id,
       name: index.name,
-      description: index.description,
-      organizationId: index.organizationId,
-      agentId: index.agentId,
-      roleId: index.roleId,
+      description: index.description || undefined,
+      organizationId: index.organizationId || undefined,
+      agentId: index.agentId || undefined,
+      roleId: index.roleId || undefined,
       domainTypes: index.domainTypes as string[],
       domainFilters: index.domainFilters,
-      embeddingModel: index.embeddingModel,
-      embeddingDimensions: index.embeddingDimensions,
-      status: index.status,
-      documentCount: index.documentCount,
+      embeddingModel: index.embeddingModel || 'sentence-transformers/all-mpnet-base-v2',
+      embeddingDimensions: index.embeddingDimensions || 768,
+      status: index.status || 'created',
+      documentCount: index.documentCount || 0,
     }
   }
 
@@ -135,16 +135,16 @@ export class RagService {
     return indexes.map(index => ({
       id: index.id,
       name: index.name,
-      description: index.description,
-      organizationId: index.organizationId,
-      agentId: index.agentId,
-      roleId: index.roleId,
+      description: index.description || undefined,
+      organizationId: index.organizationId || undefined,
+      agentId: index.agentId || undefined,
+      roleId: index.roleId || undefined,
       domainTypes: index.domainTypes as string[],
       domainFilters: index.domainFilters,
-      embeddingModel: index.embeddingModel,
-      embeddingDimensions: index.embeddingDimensions,
-      status: index.status,
-      documentCount: index.documentCount,
+      embeddingModel: index.embeddingModel || 'sentence-transformers/all-mpnet-base-v2',
+      embeddingDimensions: index.embeddingDimensions || 768,
+      status: index.status || 'created',
+      documentCount: index.documentCount || 0,
     }))
   }
 
@@ -494,7 +494,7 @@ export class RagService {
     }, {} as Record<string, number>)
 
     const fieldTypeSummary = Object.entries(fieldTypes)
-      .map(([type, count]) => `${count} ${type} field${count > 1 ? 's' : ''}`)
+      .map(([type, count]) => `${count} ${type} field${(count as number) > 1 ? 's' : ''}`)
       .join(', ')
 
     const description = table.metadata?.description 

@@ -2,18 +2,7 @@
 
 import { useState } from 'react';
 import { createTeamAction, deleteTeam } from '@/app/actions/teams';
-
-interface Team {
-  id: number;
-  organizationId: number;
-  name: string;
-  purpose: string | null;
-  description: string | null;
-  responsibilities: string[] | null;
-  goals: string[] | null;
-  tools: string[] | null;
-  createdAt: Date | null;
-}
+import { Team } from '@/types/db';
 
 interface Organization {
   id: number;
@@ -76,11 +65,6 @@ export default function TeamManager({ teams, organizations }: TeamManagerProps) 
             <input
               name="goals"
               placeholder="Goals (comma-separated)"
-              className="w-full p-2 border rounded"
-            />
-            <input
-              name="tools"
-              placeholder="Tools (comma-separated)"
               className="w-full p-2 border rounded"
             />
           </div>

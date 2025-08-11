@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useSession } from 'next-auth/react'
 import { switchCurrentOrganization } from '@/app/actions/user-organizations'
-import { createOrganizationAction } from '@/app/actions/organizations'
+import { createOrganization } from '@/app/actions/setup'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -50,7 +50,7 @@ export function EmeryOrganizationModal() {
   const handleCreateOrganization = async (formData: FormData) => {
     setIsLoading(true)
     try {
-      await createOrganizationAction(formData)
+      await createOrganization(formData)
       await update()
       setShowCreateModal(false)
       setIsOpen(false)
