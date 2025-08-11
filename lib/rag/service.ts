@@ -620,20 +620,25 @@ About: ${agent.name} is an AI agent configured within the Emery platform for wor
 Functionality: The agent operates within the Emery ecosystem to handle automated workflows, data processing, integration tasks, and other organizational processes as configured through its capabilities and available tools.`
   }
 
-  // File content extraction utilities
-  private async extractFileContent(s3Key: string, mimeType: string, fileName: string): Promise<string | null> {
+  // LlamaIndex-powered file processing with HuggingFace embeddings
+  private async processFileWithLlamaIndex(s3Key: string, mimeType: string, fileName: string): Promise<Array<{content: string, metadata: any}> | null> {
     try {
+      console.log(`[LLAMAINDEX] Processing ${fileName} with LlamaIndex`)
+      
+      // Download file from S3 to temporary location
       const { s3Client, BUCKET_NAME } = await import('@/lib/s3/client')
       const { GetObjectCommand } = await import('@aws-sdk/client-s3')
+      const fs = await import('fs/promises')
+      const path = await import('path')
+      const os = await import('os')
       
-      // Get file from S3
       const response = await s3Client.send(new GetObjectCommand({
         Bucket: BUCKET_NAME,
         Key: s3Key
       }))
 
       if (!response.Body) {
-        console.log(`[FILE-EXTRACT] No body found for ${fileName}`)
+        console.log(`[LLAMAINDEX] No body found for ${fileName}`)
         return null
       }
 
@@ -648,94 +653,67 @@ Functionality: The agent operates within the Emery ecosystem to handle automated
       }
       
       const buffer = Buffer.concat(chunks)
-      console.log(`[FILE-EXTRACT] Extracted ${buffer.length} bytes from ${fileName}`)
-
-      // Extract content based on MIME type
-      switch (mimeType) {
-        case 'text/csv':
-        case 'application/csv':
-          return await this.extractCSVContent(buffer, fileName)
-        
-        case 'application/pdf':
-          return await this.extractPDFContent(buffer, fileName)
-          
-        case 'text/plain':
-        case 'text/txt':
-          return buffer.toString('utf-8')
-          
-        case 'application/json':
-          return buffer.toString('utf-8')
-          
-        default:
-          console.log(`[FILE-EXTRACT] Unsupported MIME type: ${mimeType} for ${fileName}`)
-          return null
-      }
-    } catch (error) {
-      console.error(`[FILE-EXTRACT] Error extracting content from ${fileName}:`, error)
-      return null
-    }
-  }
-
-  private async extractCSVContent(buffer: Buffer, fileName: string): Promise<string | null> {
-    try {
-      const { parse } = await import('csv-parse/sync')
-      const csvText = buffer.toString('utf-8')
       
-      // Parse CSV with headers
-      const records = parse(csvText, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true
-      })
+      // Create temporary file
+      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'emery-rag-'))
+      const tempFilePath = path.join(tempDir, fileName)
+      await fs.writeFile(tempFilePath, buffer)
 
-      if (!records || records.length === 0) {
-        return `CSV file: ${fileName}\nNo data found in CSV file.`
-      }
+      try {
+        // Use LlamaIndex to process the document
+        const { SimpleDirectoryReader } = await import('llamaindex')
+        const { SentenceSplitter } = await import('llamaindex')
+        const { QuestionsAnsweredExtractor } = await import('llamaindex')
 
-      // Get column headers
-      const headers = Object.keys(records[0])
-      const sampleRows = records.slice(0, 5) // First 5 rows for preview
-      
-      let content = `CSV file: ${fileName}
-Total rows: ${records.length}
-Columns: ${headers.join(', ')}
-
-Sample data (first ${Math.min(5, records.length)} rows):
-`
-      
-      sampleRows.forEach((row: any, index: number) => {
-        content += `\nRow ${index + 1}:\n`
-        headers.forEach(header => {
-          content += `  ${header}: ${row[header] || 'N/A'}\n`
+        // Initialize LlamaIndex components
+        const reader = new SimpleDirectoryReader()
+        const splitter = new SentenceSplitter({
+          chunkSize: 1024,
+          chunkOverlap: 50
         })
-      })
+        
+        // Load and process document
+        const documents = await reader.loadData({ directoryPath: tempDir })
+        console.log(`[LLAMAINDEX] Loaded ${documents.length} documents from ${fileName}`)
+        
+        if (documents.length === 0) {
+          return null
+        }
 
-      if (records.length > 5) {
-        content += `\n... and ${records.length - 5} more rows`
+        // Process each document
+        const processedChunks: Array<{content: string, metadata: any}> = []
+        
+        for (const doc of documents) {
+          // Split into chunks
+          const textChunks = await splitter.splitText(doc.text)
+          console.log(`[LLAMAINDEX] Split ${fileName} into ${textChunks.length} chunks`)
+          
+          // Create processed chunks with metadata
+          textChunks.forEach((chunkText, index) => {
+            processedChunks.push({
+              content: chunkText,
+              metadata: {
+                ...doc.metadata,
+                chunkIndex: index,
+                totalChunks: textChunks.length,
+                chunkSize: chunkText.length,
+                fileName: fileName,
+                mimeType: mimeType
+              }
+            })
+          })
+        }
+
+        return processedChunks
+
+      } finally {
+        // Clean up temporary file
+        await fs.rm(tempDir, { recursive: true })
       }
 
-      return content
     } catch (error) {
-      console.error(`[CSV-EXTRACT] Error parsing CSV ${fileName}:`, error)
-      return `CSV file: ${fileName}\nError parsing CSV content: ${error instanceof Error ? error.message : 'Unknown error'}`
-    }
-  }
-
-  private async extractPDFContent(buffer: Buffer, fileName: string): Promise<string | null> {
-    try {
-      const pdfParse = await import('pdf-parse')
-      const data = await pdfParse.default(buffer)
-      
-      const content = `PDF file: ${fileName}
-Pages: ${data.numpages}
-Text content:
-
-${data.text.substring(0, 2000)}${data.text.length > 2000 ? '\n\n... (content truncated for indexing)' : ''}`
-
-      return content
-    } catch (error) {
-      console.error(`[PDF-EXTRACT] Error parsing PDF ${fileName}:`, error)
-      return `PDF file: ${fileName}\nError parsing PDF content: ${error instanceof Error ? error.message : 'Unknown error'}`
+      console.error(`[LLAMAINDEX] Error processing ${fileName}:`, error)
+      return null
     }
   }
 
@@ -791,11 +769,14 @@ ${data.text.substring(0, 2000)}${data.text.length > 2000 ? '\n\n... (content tru
             
             if (Array.isArray(fileData)) {
               for (const file of fileData) {
-                const fileContent = await this.extractFileContent(file.s3Key, file.mimeType, file.name)
+                // Use LlamaIndex for superior document processing
+                const processedChunks = await this.processFileWithLlamaIndex(file.s3Key, file.mimeType, file.name)
                 
-                if (fileContent) {
-                  // Enhanced file content with relationship context
-                  const enhancedContent = `${fileContent}
+                if (processedChunks && processedChunks.length > 0) {
+                  console.log(`[FILE-INDEX] Processing ${processedChunks.length} chunks from ${file.name}`)
+                  
+                  // Base context for all chunks
+                  const baseContext = `
 
 CONTEXT AND RELATIONSHIPS:
 - This file belongs to the "${field.table_name}" table in the "${field.database_name}" database
@@ -803,43 +784,61 @@ CONTEXT AND RELATIONSHIPS:
 - This file contains data that is related to and belongs with other records in the "${field.table_name}" table
 - Use this file's content in context with the "${field.table_name}" table structure and data when answering questions
 - File location: Table "${field.table_name}" → Field "${field.field_name}" → File "${file.name}"
-`
+
+CONTENT QUESTIONS: This content can answer questions like:
+- What information is contained in ${file.name}?
+- What data does ${file.name} have?
+- Tell me about the contents of ${file.name}`
+
+                  // Process each LlamaIndex chunk
+                  for (let chunkIndex = 0; chunkIndex < processedChunks.length; chunkIndex++) {
+                    const chunk = processedChunks[chunkIndex]
+                    const enhancedContent = `${chunk.content}${baseContext}
+
+CHUNK INFO: This is chunk ${chunkIndex + 1} of ${processedChunks.length} from ${file.name}, processed by LlamaIndex`
+
+                    // Generate HuggingFace embedding for the enhanced content
+                    const { embedding } = await embed({
+                      model: this.embeddingModel,
+                      value: enhancedContent,
+                    })
+
+                    await db.insert(ragDocuments).values({
+                      ragIndexId: indexId,
+                      sourceType: 'file',
+                      sourceId: `${file.id}-chunk-${chunkIndex}`,
+                      sourceName: file.name,
+                      title: `File: ${file.name} (Chunk ${chunkIndex + 1}/${processedChunks.length}) - ${field.database_name} → ${field.table_name} → ${field.field_name}`,
+                      content: enhancedContent,
+                      metadata: {
+                        fileId: file.id,
+                        fileName: file.name,
+                        fileSize: file.size,
+                        mimeType: file.mimeType,
+                        chunkIndex: chunkIndex,
+                        totalChunks: processedChunks.length,
+                        chunkSize: chunk.content.length,
+                        tableId: field.table_id,
+                        tableName: field.table_name,
+                        databaseName: field.database_name,
+                        fieldId: field.field_id,
+                        fieldName: field.field_name,
+                        uploadedAt: file.uploadedAt,
+                        organizationId: ragIndex.organizationId,
+                        contextPath: `${field.database_name} → ${field.table_name} → ${field.field_name}`,
+                        llamaIndexMetadata: chunk.metadata,
+                        processingMethod: 'llamaindex'
+                      },
+                      embedding,
+                      contentHash: crypto.createHash('md5').update(enhancedContent).digest('hex'),
+                    })
+
+                    documentCount++
+                  }
                   
-                  // Generate embedding for the enhanced content
-                  const { embedding } = await embed({
-                    model: this.embeddingModel,
-                    value: enhancedContent,
-                  })
-
-                  await db.insert(ragDocuments).values({
-                    ragIndexId: indexId,
-                    sourceType: 'file',
-                    sourceId: file.id,
-                    sourceName: file.name,
-                    title: `File: ${file.name} (Database: ${field.database_name}, Table: ${field.table_name}, Field: ${field.field_name})`,
-                    content: enhancedContent,
-                    metadata: {
-                      fileId: file.id,
-                      fileName: file.name,
-                      fileSize: file.size,
-                      mimeType: file.mimeType,
-                      tableId: field.table_id,
-                      tableName: field.table_name,
-                      databaseName: field.database_name,
-                      fieldId: field.field_id,
-                      fieldName: field.field_name,
-                      uploadedAt: file.uploadedAt,
-                      organizationId: ragIndex.organizationId,
-                      contextPath: `${field.database_name} → ${field.table_name} → ${field.field_name}`,
-                    },
-                    embedding,
-                    contentHash: crypto.createHash('md5').update(enhancedContent).digest('hex'),
-                  })
-
-                  documentCount++
-                  console.log(`[FILE-INDEX] Indexed file: ${file.name} (${file.mimeType})`)
+                  console.log(`[FILE-INDEX] Successfully indexed ${file.name} (${file.mimeType}) as ${processedChunks.length} LlamaIndex chunks`)
                 } else {
-                  console.log(`[FILE-INDEX] Skipped file: ${file.name} (no content extracted)`)
+                  console.log(`[FILE-INDEX] Failed to process file: ${file.name} with LlamaIndex`)
                 }
               }
             }
