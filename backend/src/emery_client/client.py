@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 class EmeryPythonClient:
-    """Python client for Emery Agent API."""
+    """Consolidated Python client for Emery Agent API."""
     
     def __init__(
         self, 
@@ -47,57 +47,78 @@ class EmeryPythonClient:
             webhook_secret: Secret for webhook HMAC verification
             debug: Enable debug logging
         """
+        # AIDEV-NOTE: Consolidated initialization with better error handling
         self.api_url = api_url.rstrip('/')
         self.agent_id = agent_id
         self.webhook_secret = webhook_secret
-        self.session = requests.Session()
+        self.webhook_results: list[WebhookPayload] = []
         
+        # Setup HTTP session with consistent headers
+        self._setup_session()
+        
+        # Setup webhook handling
+        self.webhook_app = Flask(__name__)
+        self._setup_webhook_routes()
+        
+        # Configure logging
+        if debug:
+            self._setup_debug_logging()
+        
+        logger.info(f"Initialized EmeryPythonClient for agent {agent_id}")
+    
+    def _setup_session(self) -> None:
+        """Configure HTTP session with required headers."""
+        self.session = requests.Session()
         # AIDEV-NOTE: Development test user bypass headers - remove in production
         self.session.headers.update({
             'Content-Type': 'application/json',
             'User-Agent': 'EmeryPythonClient/1.0',
             'X-Test-User-Id': '550e8400-e29b-41d4-a716-446655440000'
         })
-        
-        # AIDEV-NOTE: Webhook handling setup
-        self.webhook_app = Flask(__name__)
-        self.webhook_results: list[WebhookPayload] = []
-        self._setup_webhook_routes()
-        
-        if debug:
-            logging.basicConfig(level=logging.DEBUG)
-            logger.setLevel(logging.DEBUG)
-        
-        logger.info(f"Initialized EmeryPythonClient for agent {agent_id}")
-        
+    
+    def _setup_debug_logging(self) -> None:
+        """Configure debug logging."""
+        logging.basicConfig(level=logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
     def _setup_webhook_routes(self) -> None:
         """Set up Flask routes for webhook handling."""
         
         @self.webhook_app.route('/webhook/agent-result', methods=['POST'])
         def handle_webhook():
             """Handle incoming webhook from Emery agent execution."""
-            data = request.get_json()
-            signature = request.headers.get('X-Emery-Signature')
-            
-            # AIDEV-NOTE: Critical security check - verify webhook signature
-            if not self._verify_webhook_signature(data, signature):
-                logger.warning("Invalid webhook signature received")
-                return jsonify({"error": "Invalid signature"}), 401
-            
-            logger.info("✅ Webhook signature verified")  
-            logger.info(f"🎣 Received webhook: {json.dumps(data, indent=2)}")
-            
-            # Convert to structured payload
-            webhook_payload = WebhookPayload(
-                execution_id=data["execution_id"],
-                agent_id=data["agent_id"], 
-                action=data["action"],
-                result=data["result"],
-                timestamp=data["timestamp"],
-            )
-            
-            self.webhook_results.append(webhook_payload)
-            return jsonify({"status": "received"})
+            try:
+                data = request.get_json()
+                if not data:
+                    return jsonify({"error": "No JSON data provided"}), 400
+                
+                signature = request.headers.get('X-Emery-Signature')
+                
+                # AIDEV-NOTE: Critical security check - verify webhook signature
+                if not self._verify_webhook_signature(data, signature):
+                    logger.warning("Invalid webhook signature received")
+                    return jsonify({"error": "Invalid signature"}), 401
+                
+                logger.info("✅ Webhook signature verified")  
+                logger.info(f"🎣 Received webhook: {json.dumps(data, indent=2)}")
+                
+                # Convert to structured payload
+                webhook_payload = self._create_webhook_payload(data)
+                self.webhook_results.append(webhook_payload)
+                
+                return jsonify({"status": "received"})
+            except Exception as e:
+                logger.error(f"Webhook processing error: {e}")
+                return jsonify({"error": "Internal server error"}), 500
+    
+    def _create_webhook_payload(self, data: Dict[str, Any]) -> WebhookPayload:
+        """Create a structured webhook payload from raw data."""
+        return WebhookPayload(
+            execution_id=data["execution_id"],
+            agent_id=data["agent_id"], 
+            action=data["action"],
+            result=data["result"],
+            timestamp=data["timestamp"],
+        )
     
     def _verify_webhook_signature(self, payload: Dict[str, Any], signature: Optional[str]) -> bool:
         """Verify HMAC signature for webhook payload."""
@@ -151,10 +172,7 @@ class EmeryPythonClient:
         """
         logger.info(f"📋 Getting capabilities for agent {self.agent_id}...")
         
-        response = self.session.get(f"{self.api_url}/api/agents/{self.agent_id}/capabilities")
-        response.raise_for_status()
-        
-        data = response.json()
+        data = self._make_api_request("GET", f"/api/agents/{self.agent_id}/capabilities")
         
         # Convert to structured types
         connected_services = [
@@ -231,14 +249,8 @@ class EmeryPythonClient:
             payload["webhook_url"] = webhook_url
             logger.info(f"   📡 Using webhook: {webhook_url}")
         
-        response = self.session.post(
-            f"{self.api_url}/api/agents/{self.agent_id}/execute",
-            json=payload,
-            timeout=timeout
-        )
-        response.raise_for_status()
-        
-        data = response.json()
+        # AIDEV-NOTE: Consolidated API request with better error handling
+        data = self._make_api_request("POST", f"/api/agents/{self.agent_id}/execute", payload, timeout)
         
         result = ExecutionResult(
             success=data["success"],
@@ -247,6 +259,34 @@ class EmeryPythonClient:
             error=data.get("error")
         )
         
+        self._log_execution_result(result, use_webhook)
+        return result
+    
+    def _make_api_request(
+        self, 
+        method: str, 
+        endpoint: str, 
+        data: Optional[Dict[str, Any]] = None, 
+        timeout: int = 30
+    ) -> Dict[str, Any]:
+        """Make API request with consistent error handling."""
+        url = f"{self.api_url}{endpoint}"
+        
+        try:
+            if method.upper() == "GET":
+                response = self.session.get(url, timeout=timeout)
+            else:
+                response = self.session.post(url, json=data, timeout=timeout)
+            
+            response.raise_for_status()
+            return response.json()
+            
+        except requests.RequestException as e:
+            logger.error(f"API request failed: {method} {endpoint} - {e}")
+            raise
+    
+    def _log_execution_result(self, result: ExecutionResult, use_webhook: bool) -> None:
+        """Log execution result with appropriate detail."""
         if result.success:
             logger.info("✅ Action executed successfully")
             logger.info(f"   📄 Execution ID: {result.execution_id}")  
@@ -254,8 +294,6 @@ class EmeryPythonClient:
                 logger.debug(f"   📤 Result: {json.dumps(result.result, indent=2)}")
         else:
             logger.error(f"❌ Action failed: {result.error}")
-        
-        return result
     
     def proxy_request(
         self, 
@@ -296,14 +334,8 @@ class EmeryPythonClient:
         if params:
             payload["params"] = params
         
-        response = self.session.post(
-            f"{self.api_url}/api/agents/{self.agent_id}/proxy",
-            json=payload,
-            timeout=timeout
-        )
-        response.raise_for_status()
-        
-        result_data = response.json()
+        # AIDEV-NOTE: Use consolidated API request method
+        result_data = self._make_api_request("POST", f"/api/agents/{self.agent_id}/proxy", payload, timeout)
         
         result = ProxyResult(
             success=result_data["success"],
@@ -313,6 +345,11 @@ class EmeryPythonClient:
             error=result_data.get("error")
         )
         
+        self._log_proxy_result(result)
+        return result
+    
+    def _log_proxy_result(self, result: ProxyResult) -> None:
+        """Log proxy result with appropriate detail."""
         if result.success:
             logger.info("✅ Proxy request successful")
             logger.info(f"   📊 Status: {result.status}")
@@ -320,5 +357,3 @@ class EmeryPythonClient:
         else:
             logger.error(f"❌ Proxy request failed: {result.error}")
             raise Exception(result.error)
-        
-        return result
