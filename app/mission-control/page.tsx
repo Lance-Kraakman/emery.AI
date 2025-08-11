@@ -11,7 +11,7 @@ import {
 import { X, Code, FileText, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useChatRSC } from './use-chat-rsc'
-import MissionControlDashboardContent from './dashboard-content'
+import DashboardMainContent from '../components/DashboardMainContent'
 
 // Save/Revert Actions Component - separate from other actions
 function SaveRevertActions() {
@@ -122,7 +122,7 @@ export default function Page(): JSX.Element {
   
   // If there's a tableId or other dashboard params, show the dashboard content
   if (tableId) {
-    return <MissionControlDashboardContent />
+    return <DashboardMainContent />
   }
   
   // Otherwise show the AI chat interface

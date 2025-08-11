@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, ExternalLink, Trash2, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, RefreshCw } from 'lucide-react';
 import { getUserOAuthConnections, getAppConnectionUrl, initializePipedreamUser, disconnectOAuthAccount } from '@/app/actions/pipedream';
 
 interface Connection {

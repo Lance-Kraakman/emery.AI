@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Upload, X, File, Download } from 'lucide-react'
+import { Upload, X, Download } from 'lucide-react'
 import { uploadFileAction } from '@/app/actions/files'
 
 interface FileMetadata {
