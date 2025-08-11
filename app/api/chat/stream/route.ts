@@ -55,15 +55,18 @@ export async function POST(req: NextRequest) {
 
           // Search for relevant context
           if (ragIndex) {
+            console.log(`[RAG-SEARCH] Searching in index ${ragIndex.id} for query: "${latestMessage}"`)
             const searchResult = await ragService.search({
               indexId: ragIndex.id,
               query: latestMessage,
               limit: 5,
-              threshold: 0.6,
+              threshold: 0.3, // Lowered threshold for better matches
               userId: session.user.id,
             })
 
+            console.log(`[RAG-SEARCH] Found ${searchResult.documents.length} documents`)
             if (searchResult.documents.length > 0) {
+              console.log(`[RAG-SEARCH] Top match: ${searchResult.documents[0].title} (${(searchResult.documents[0].similarity! * 100).toFixed(1)}% similarity)`)
               ragContext = `
 RELEVANT ORGANIZATION DATA:
 ${searchResult.documents.map((doc, idx) => 
@@ -74,6 +77,8 @@ Source: ${doc.sourceType} - ${doc.sourceName} (${(doc.similarity! * 100).toFixed
 ).join('\n')}
 
 `
+            } else {
+              console.log('[RAG-SEARCH] No documents found above similarity threshold')
             }
           }
         }
@@ -95,6 +100,11 @@ ${ragContext}
 Use this context to provide accurate, specific answers about their tables, data, and workflows. Reference the specific sources when applicable.` : 'No specific organizational context is available. Provide general guidance about database management and workflows.'}
 
 Always be helpful, accurate, and professional.`
+    }
+
+    console.log(`[RAG-CONTEXT] Using RAG context: ${ragContext ? 'YES' : 'NO'}`)
+    if (ragContext) {
+      console.log(`[RAG-CONTEXT] Context length: ${ragContext.length} characters`)
     }
 
     // Stream the AI response
