@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
               name: `Organization ${organizationId} Knowledge Base`,
               description: 'Automatic RAG index for organizational data',
               organizationId,
-              domainTypes: ['organizations', 'tables', 'agents'],
+              domainTypes: ['organizations', 'tables', 'agents', 'files'],
               createdBy: session.user.id,
             })
             ragIndex = await ragService.getIndex(indexId) || undefined

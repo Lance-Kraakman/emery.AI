@@ -184,7 +184,12 @@ export class RagService {
         totalDocuments += await this.indexAgents(indexId, index)
       }
 
-      // AIDEV-TODO: Add file and workflow indexing
+      // Index files if included in domain types
+      if (index.domainTypes.includes('files')) {
+        totalDocuments += await this.indexFiles(indexId, index)
+      }
+
+      // AIDEV-TODO: Add workflow indexing
       
       // Update index status and document count
       await db.update(ragIndexes)
@@ -583,6 +588,230 @@ Status: ${agent.status || 'active'}${createdDate}${toolsList}${serversList}${cap
 About: ${agent.name} is an AI agent configured within the Emery platform for workflow automation and task execution. This agent can process requests, execute workflows, and integrate with various tools and services to accomplish organizational objectives.
 
 Functionality: The agent operates within the Emery ecosystem to handle automated workflows, data processing, integration tasks, and other organizational processes as configured through its capabilities and available tools.`
+  }
+
+  // File content extraction utilities
+  private async extractFileContent(s3Key: string, mimeType: string, fileName: string): Promise<string | null> {
+    try {
+      const { s3Client, BUCKET_NAME } = await import('@/lib/s3/client')
+      const { GetObjectCommand } = await import('@aws-sdk/client-s3')
+      
+      // Get file from S3
+      const response = await s3Client.send(new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: s3Key
+      }))
+
+      if (!response.Body) {
+        console.log(`[FILE-EXTRACT] No body found for ${fileName}`)
+        return null
+      }
+
+      // Convert stream to buffer
+      const chunks: Uint8Array[] = []
+      const reader = response.Body.transformToWebStream().getReader()
+      
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        chunks.push(value)
+      }
+      
+      const buffer = Buffer.concat(chunks)
+      console.log(`[FILE-EXTRACT] Extracted ${buffer.length} bytes from ${fileName}`)
+
+      // Extract content based on MIME type
+      switch (mimeType) {
+        case 'text/csv':
+        case 'application/csv':
+          return await this.extractCSVContent(buffer, fileName)
+        
+        case 'application/pdf':
+          return await this.extractPDFContent(buffer, fileName)
+          
+        case 'text/plain':
+        case 'text/txt':
+          return buffer.toString('utf-8')
+          
+        case 'application/json':
+          return buffer.toString('utf-8')
+          
+        default:
+          console.log(`[FILE-EXTRACT] Unsupported MIME type: ${mimeType} for ${fileName}`)
+          return null
+      }
+    } catch (error) {
+      console.error(`[FILE-EXTRACT] Error extracting content from ${fileName}:`, error)
+      return null
+    }
+  }
+
+  private async extractCSVContent(buffer: Buffer, fileName: string): Promise<string | null> {
+    try {
+      const { parse } = await import('csv-parse/sync')
+      const csvText = buffer.toString('utf-8')
+      
+      // Parse CSV with headers
+      const records = parse(csvText, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true
+      })
+
+      if (!records || records.length === 0) {
+        return `CSV file: ${fileName}\nNo data found in CSV file.`
+      }
+
+      // Get column headers
+      const headers = Object.keys(records[0])
+      const sampleRows = records.slice(0, 5) // First 5 rows for preview
+      
+      let content = `CSV file: ${fileName}
+Total rows: ${records.length}
+Columns: ${headers.join(', ')}
+
+Sample data (first ${Math.min(5, records.length)} rows):
+`
+      
+      sampleRows.forEach((row: any, index: number) => {
+        content += `\nRow ${index + 1}:\n`
+        headers.forEach(header => {
+          content += `  ${header}: ${row[header] || 'N/A'}\n`
+        })
+      })
+
+      if (records.length > 5) {
+        content += `\n... and ${records.length - 5} more rows`
+      }
+
+      return content
+    } catch (error) {
+      console.error(`[CSV-EXTRACT] Error parsing CSV ${fileName}:`, error)
+      return `CSV file: ${fileName}\nError parsing CSV content: ${error instanceof Error ? error.message : 'Unknown error'}`
+    }
+  }
+
+  private async extractPDFContent(buffer: Buffer, fileName: string): Promise<string | null> {
+    try {
+      const pdfParse = await import('pdf-parse')
+      const data = await pdfParse.default(buffer)
+      
+      const content = `PDF file: ${fileName}
+Pages: ${data.numpages}
+Text content:
+
+${data.text.substring(0, 2000)}${data.text.length > 2000 ? '\n\n... (content truncated for indexing)' : ''}`
+
+      return content
+    } catch (error) {
+      console.error(`[PDF-EXTRACT] Error parsing PDF ${fileName}:`, error)
+      return `PDF file: ${fileName}\nError parsing PDF content: ${error instanceof Error ? error.message : 'Unknown error'}`
+    }
+  }
+
+  // Index files with content extraction
+  private async indexFiles(indexId: string, ragIndex: RagIndex): Promise<number> {
+    if (!ragIndex.organizationId) {
+      return 0
+    }
+
+    console.log('[FILE-INDEX] Starting file indexing for organization', ragIndex.organizationId)
+
+    // Get all file fields from tables in this organization
+    const fileFields = await db.execute(sql`
+      SELECT DISTINCT 
+        f.id as field_id,
+        f.name as field_name, 
+        f.slug as field_slug,
+        t.id as table_id,
+        t.name as table_name,
+        t.db_name as table_db_name,
+        d.name as database_name
+      FROM fields f
+      JOIN tables t ON f.table_id = t.id  
+      JOIN databases d ON t.database_id = d.id
+      WHERE f.type = 'file' 
+      AND t.organization_id = ${ragIndex.organizationId}
+    `)
+
+    if (fileFields.length === 0) {
+      console.log('[FILE-INDEX] No file fields found')
+      return 0
+    }
+
+    console.log(`[FILE-INDEX] Found ${fileFields.length} file fields`)
+
+    let documentCount = 0
+
+    for (const field of fileFields) {
+      try {
+        // Get all rows with files in this field
+        const rows = await db.execute(sql`
+          SELECT id, ${sql.raw(`field_${field.field_id}`)} as file_data, created_at, updated_at
+          FROM ${sql.raw(field.table_db_name)} 
+          WHERE ${sql.raw(`field_${field.field_id}`)} IS NOT NULL
+          AND ${sql.raw(`field_${field.field_id}`)} != '[]'
+        `)
+
+        console.log(`[FILE-INDEX] Processing ${rows.length} rows with files in field ${field.field_name}`)
+
+        for (const row of rows) {
+          try {
+            const fileData = typeof row.file_data === 'string' ? JSON.parse(row.file_data) : row.file_data
+            
+            if (Array.isArray(fileData)) {
+              for (const file of fileData) {
+                const fileContent = await this.extractFileContent(file.s3Key, file.mimeType, file.name)
+                
+                if (fileContent) {
+                  // Generate embedding for the file content
+                  const { embedding } = await embed({
+                    model: this.embeddingModel,
+                    value: fileContent,
+                  })
+                  
+                  await db.insert(ragDocuments).values({
+                    ragIndexId: indexId,
+                    sourceType: 'file',
+                    sourceId: file.id,
+                    sourceName: file.name,
+                    title: `File: ${file.name} (Table: ${field.table_name})`,
+                    content: fileContent,
+                    metadata: {
+                      fileId: file.id,
+                      fileName: file.name,
+                      fileSize: file.size,
+                      mimeType: file.mimeType,
+                      tableId: field.table_id,
+                      tableName: field.table_name,
+                      databaseName: field.database_name,
+                      fieldId: field.field_id,
+                      fieldName: field.field_name,
+                      uploadedAt: file.uploadedAt,
+                      organizationId: ragIndex.organizationId,
+                    },
+                    embedding,
+                    contentHash: crypto.createHash('md5').update(fileContent).digest('hex'),
+                  })
+
+                  documentCount++
+                  console.log(`[FILE-INDEX] Indexed file: ${file.name} (${file.mimeType})`)
+                } else {
+                  console.log(`[FILE-INDEX] Skipped file: ${file.name} (no content extracted)`)
+                }
+              }
+            }
+          } catch (error) {
+            console.error(`[FILE-INDEX] Error processing row:`, error)
+          }
+        }
+      } catch (error) {
+        console.error(`[FILE-INDEX] Error processing field ${field.field_name}:`, error)
+      }
+    }
+
+    console.log(`[FILE-INDEX] Indexed ${documentCount} files total`)
+    return documentCount
   }
 
   // Vector similarity search using pgvector
