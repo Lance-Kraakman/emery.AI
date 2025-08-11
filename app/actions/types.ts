@@ -68,8 +68,6 @@ export interface CreateAgentData {
   role?: string;
   description?: string;
   persona?: string;
-  // Remove: model (now per-step)
-  // Remove: goals (not needed)
   tools?: ToolConfig[];
   servers?: ServerConfig[];
   trigger?: TriggerConfig;

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Loading } from '@/components/ui/loading';
-import AgentFormDialog from './AgentFormDialog';
+import AgentConfigurationWizard from './AgentConfigurationWizard';
 import AgentDetailsView from './AgentDetailsView';
 import { getAgents } from '@/app/actions/agents';
 
@@ -26,7 +26,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTeam, setSelectedTeam] = useState<string>('');
+  const [selectedTeam, setSelectedTeam] = useState<string>('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +46,19 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
     }
   };
 
-  const filteredAgents = agents;
+  const filteredAgents = agents.filter((agent) => {
+    const matchesSearch = agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         agent.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Check if agent belongs to selected team (teams have agentIds array)
+    let matchesTeam = selectedTeam === 'all';
+    if (selectedTeam !== 'all') {
+      const team = teams.find(t => t.id.toString() === selectedTeam);
+      matchesTeam = team?.agentIds?.includes(agent.id.toString()) || false;
+    }
+    
+    return matchesSearch && matchesTeam;
+  });
 
   return (
     <div className="flex gap-6 h-[calc(100vh-10rem)]">
@@ -80,7 +92,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
             <SelectValue placeholder="All Teams" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Teams</SelectItem>
+            <SelectItem value="all">All Teams</SelectItem>
             {teams.map((team) => (
               <SelectItem key={team.id} value={team.id.toString()}>
                 {team.name}
@@ -156,13 +168,15 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
         </CardContent>
       </Card>
 
-      <AgentFormDialog
+      <AgentConfigurationWizard
         isOpen={isFormOpen}
         onClose={() => {
           setIsFormOpen(false);
-          refreshAgents();
         }}
         agent={editingAgent}
+        onSuccess={() => {
+          refreshAgents();
+        }}
       />
     </div>
   );

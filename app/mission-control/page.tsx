@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   ChatCanvas,
@@ -116,7 +117,7 @@ function CustomCanvas() {
   )
 }
 
-export default function Page(): JSX.Element {
+function PageContent(): JSX.Element {
   const searchParams = useSearchParams()
   const tableId = searchParams.get('tableId')
   
@@ -127,6 +128,14 @@ export default function Page(): JSX.Element {
   
   // Otherwise show the AI chat interface
   return <CustomChat />
+}
+
+export default function Page(): JSX.Element {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <PageContent />
+    </Suspense>
+  )
 }
 
 function CustomChat() {

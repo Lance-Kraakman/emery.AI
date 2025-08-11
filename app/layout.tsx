@@ -5,6 +5,7 @@ import AuthProvider from '@/components/AuthProvider'
 import '@/lib/scheduler'
 import AnimatedBackground from './components/AnimatedBackground'
 import { Metadata } from 'next'
+import { EmeryProviders } from '@/components/EmeryProviders'
 
 export const metadata: Metadata = {
   title: 'Emery - Dynamic Database Builder',
@@ -21,9 +22,11 @@ export default function RootLayout({
       <body className="relative">
         <AnimatedBackground />
         <AuthProvider>
+          <EmeryProviders>
           <div className="relative z-10">
             {children}
           </div>
+          </EmeryProviders>
         </AuthProvider>
       </body>
     </html>

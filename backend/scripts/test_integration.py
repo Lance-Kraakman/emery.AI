@@ -24,8 +24,6 @@ from emery_client import EmeryPythonClient
 from emery_client.gmail import GmailIntegration
 
 
-
-
 def run_integration_tests(agent_id: int, api_url: str) -> None:
     """
     Run comprehensive integration tests for Emery Python client.

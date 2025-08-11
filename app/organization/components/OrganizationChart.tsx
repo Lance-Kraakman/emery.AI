@@ -116,12 +116,16 @@ export default function OrganizationChart({
     );
   };
 
-  // Auto-save view to DB
+  // Auto-save view to DB (only if currentOrganization is available)
   const autoSaveView = useCallback(async () => {
-    if (!currentOrganization || nodes.length === 0) return;
+    if (!currentOrganization?.id || nodes.length === 0) return;
 
-    const viewData = createViewData();
-    await updateOrganizationViewConfig(currentOrganization.id, viewData);
+    try {
+      const viewData = createViewData();
+      await updateOrganizationViewConfig(currentOrganization.id, viewData);
+    } catch (error) {
+      console.error('Failed to save organization view:', error);
+    }
   }, [createViewData, currentOrganization, nodes.length]);
 
   // Convert teams and agents to React Flow nodes
@@ -216,13 +220,15 @@ export default function OrganizationChart({
     generateNodesAndEdges();
   }, [generateNodesAndEdges]);
 
-  // Load view from DB on mount
+  // Load view from DB on mount (only if currentOrganization and viewConfig are available)
   useEffect(() => {
-    if (currentOrganization?.viewConfig) {
+    if (!currentOrganization?.viewConfig || nodes.length === 0) return;
+    
+    try {
       const viewData = currentOrganization.viewConfig as any;
       if (validateViewData(viewData)) {
         // Restore nodes with positions
-        if (viewData.nodes) {
+        if (viewData.nodes && viewData.nodes.length > 0) {
           const restoredNodes = nodes.map(node => {
             const savedNode = viewData.nodes.find((n: any) => n.id === node.id);
             return savedNode ? { ...node, position: savedNode.position } : node;
@@ -235,14 +241,16 @@ export default function OrganizationChart({
           const { selectedNodes: saved_selectedNodes, searchTerm: saved_searchTerm, 
                   isPanelCollapsed: saved_isPanelCollapsed, isConfiguring: saved_isConfiguring } = viewData.viewState;
           
-          if (saved_selectedNodes) setSelectedNodes(saved_selectedNodes);
-          if (saved_searchTerm) setSearchTerm(saved_searchTerm);
+          if (Array.isArray(saved_selectedNodes)) setSelectedNodes(saved_selectedNodes);
+          if (typeof saved_searchTerm === 'string') setSearchTerm(saved_searchTerm);
           if (typeof saved_isPanelCollapsed === 'boolean') setIsPanelCollapsed(saved_isPanelCollapsed);
           if (typeof saved_isConfiguring === 'boolean') setIsConfiguring(saved_isConfiguring);
         }
       }
+    } catch (error) {
+      console.error('Failed to load organization view configuration:', error);
     }
-  }, [currentOrganization, JSON.stringify(currentOrganization?.viewConfig), setNodes]);
+  }, [currentOrganization?.id, currentOrganization?.viewConfig, nodes.length, setNodes]);
 
   // Debounced auto-save effect
   useEffect(() => {
@@ -324,9 +332,8 @@ export default function OrganizationChart({
     });
   }, [selectedNodes, tasks, teams, agents]);
 
-  if (!currentOrganization) {
-    return <div className="flex items-center justify-center h-full">Loading...</div>;
-  }
+  // Component can work without currentOrganization for basic functionality
+  // currentOrganization is only needed for saving/loading view configurations
 
   return (
     <ReactFlowProvider>

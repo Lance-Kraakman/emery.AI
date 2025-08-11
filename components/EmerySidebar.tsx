@@ -17,6 +17,7 @@ import {
   Workflow,
   Plug,
   Plus,
+  SlidersHorizontal,
 } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Separator } from "@/components/ui/separator"
@@ -40,13 +41,18 @@ const orchestrationNavItems = [
 const settingsNavItems = [
   {
     label: "OAuth Connections",
-    href: "/connections", 
+    href: "/connections",
     icon: Plug,
   },
   {
     label: "Users & Permissions",
-    href: "/settings/users-and-permissions", 
+    href: "/settings/users-and-permissions",
     icon: Users,
+  },
+  {
+    label: "System",
+    href: "/settings/system",
+    icon: SlidersHorizontal,
   },
 ]
 
@@ -151,7 +157,7 @@ export function EmerySidebar() {
                               key={item.label}
                               href={item.href}
                               className={`flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs ${
-                                pathname === "/manage" && searchParams.get('tab') === item.href.split("=")[1] ? "bg-accent text-accent-foreground" : ""
+                                pathname === item.href ? "bg-accent text-accent-foreground" : ""
                               }`}
                             >
                               <item.icon className="h-3 w-3" />

@@ -6,9 +6,15 @@ import { getUserOAuthConnections, getAppConnectionUrl, initializePipedreamUser, 
 
 interface Connection {
   id: string;
-  app: string;
+  app: {
+    id: string;
+    name_slug: string;
+    name: string;
+    img_src: string;
+  };
   account_name?: string;
-  status: 'connected' | 'disconnected' | 'error';
+  status: string;
+  raw_status?: string;
   created_at: string;
   updated_at: string;
 }
@@ -133,26 +139,30 @@ export function ConnectionsManager() {
   };
 
   const getConnectionStatus = (connection: Connection) => {
-    switch (connection.status) {
-      case 'connected':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            Connected
-          </span>
-        );
-      case 'error':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-            Error
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-            Disconnected
-          </span>
-        );
+    const isConnected = connection.status === 'connected' || connection.status === 'active';
+    const statusText = connection.raw_status || connection.status;
+
+    if (isConnected) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 capitalize">
+          {statusText}
+        </span>
+      );
     }
+
+    if (connection.status === 'error') {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 capitalize">
+          {statusText}
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 capitalize">
+        {statusText}
+      </span>
+    );
   };
 
   if (loading) {
@@ -192,15 +202,11 @@ export function ConnectionsManager() {
               <div key={connection.id} className="px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                      <span className="text-sm font-medium text-gray-700">
-                        {(connection.app || 'App').charAt(0).toUpperCase()}
-                      </span>
-                    </div>
+                    <img className="w-10 h-10 rounded-lg" src={connection.app.img_src} alt={connection.app.name} />
                   </div>
                   <div className="ml-4">
                     <div className="text-sm font-medium text-gray-900">
-                      {connection.app || 'Unknown App'}
+                      {connection.app.name || 'Unknown App'}
                     </div>
                     {connection.account_name && (
                       <div className="text-sm text-gray-500">
@@ -240,21 +246,24 @@ export function ConnectionsManager() {
         </div>
         <div className="divide-y divide-gray-200">
           {AVAILABLE_APPS.map((app) => {
-            const isConnected = connections?.some(c => 
-              (c?.app === app.id) && 
-              c?.status === 'connected'
-            ) || false;
+            const connectedApp = connections?.find(c => c.app.name_slug === app.id);
+            const isConnected = !!connectedApp && (connectedApp.status === 'connected' || connectedApp.status === 'active');
             const isConnecting = connectingApp === app.id;
-            
+            const iconSrc = connectedApp?.app?.img_src;
+
             return (
               <div key={app.id} className="px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                      <span className="text-sm font-medium text-gray-700">
-                        {app.name.charAt(0)}
-                      </span>
-                    </div>
+                    {iconSrc ? (
+                      <img className="w-10 h-10 rounded-lg" src={iconSrc} alt={app.name} />
+                    ) : (
+                      <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                        <span className="text-sm font-medium text-gray-700">
+                          {app.name.charAt(0)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="ml-4">
                     <div className="text-sm font-medium text-gray-900">
