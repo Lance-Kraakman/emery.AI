@@ -24,7 +24,7 @@ const HF_MODELS = {
 }
 
 /**
- * Get chat model for HuggingFace
+ * Get chat model for HuggingFace via OpenAI-compatible endpoint
  */
 export function getAIModel(modelOverride?: string) {
   const hfToken = process.env.HF_TOKEN
@@ -32,9 +32,10 @@ export function getAIModel(modelOverride?: string) {
     throw new Error('HF_TOKEN required. Get token from https://huggingface.co/settings/tokens')
   }
 
+  // Use HuggingFace via OpenAI-compatible endpoint
   const hfProvider = createOpenAICompatible({
     name: 'huggingface',
-    baseURL: 'https://api-inference.huggingface.co/v1',
+    baseURL: 'https://router.huggingface.co/v1',
     headers: { Authorization: `Bearer ${hfToken}` },
   })
   
