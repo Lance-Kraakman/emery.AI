@@ -45,7 +45,8 @@ export interface RagQueryResult {
   query: string
 }
 
-// AIDEV-NOTE: Best practices RAG service using pgvector for optimal vector similarity search
+// AIDEV-NOTE: Best practices RAG service using pgvector with differential indexing for optimal vector similarity search
+// AIDEV-NOTE: Implements synchronizeDocuments for efficient updates - only adds new content, removes stale content
 export class RagService {
   private embeddingModel = getEmbeddingModel()
 
@@ -198,7 +199,7 @@ export class RagService {
         totalDocuments += await this.indexFiles(indexId, index)
       }
 
-      // AIDEV-TODO: Add workflow indexing
+      // AIDEV-TODO: Add workflow indexing when workflow system is implemented
       
       // Update index status and document count
       const finalDocumentCount = await db.select({ count: sql<number>`count(*)` }).from(ragDocuments).where(eq(ragDocuments.ragIndexId, indexId));

@@ -1,9 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { Edit } from 'lucide-react';
 import { Agent } from '@/types/db';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import CapabilityManager from './CapabilityManager';
 import AgentActivityPanel from './AgentActivityPanel';
+
+// AIDEV-NOTE: Agent details view refactored to use consistent design system patterns
 
 interface AgentDetailsViewProps {
   agent: Agent;
@@ -14,76 +20,85 @@ export default function AgentDetailsView({ agent, onEdit }: AgentDetailsViewProp
   const [activeTab, setActiveTab] = useState('overview');
 
   return (
-    <div className="text-foreground">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold">{agent.name}</h2>
-        <button
+    <div className="space-y-6">
+      <div className="flex justify-between items-start">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-bold">{agent.name}</h2>
+          {agent.role && (
+            <p className="text-muted-foreground">{agent.role}</p>
+          )}
+          {agent.status && (
+            <Badge variant={agent.status === 'active' ? 'success' : 'secondary'}>
+              {agent.status}
+            </Badge>
+          )}
+        </div>
+        <Button
           onClick={onEdit}
-          className="bg-secondary text-secondary-foreground px-3 py-1 rounded text-sm hover:bg-muted"
+          variant="outline"
+          size="sm"
         >
+          <Edit size={16} />
           Edit
-        </button>
+        </Button>
       </div>
 
-      <div className="border-b border-border">
-        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`${
-              activeTab === 'overview'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-          >
-            Overview
-          </button>
-          <button
-            onClick={() => setActiveTab('capabilities')}
-            className={`${
-              activeTab === 'capabilities'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-          >
-            Capabilities
-          </button>
-          <button
-            onClick={() => setActiveTab('activity')}
-            className={`${
-              activeTab === 'activity'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-          >
-            Activity
-          </button>
-        </nav>
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="capabilities">Capabilities</TabsTrigger>
+          <TabsTrigger value="activity">Activity</TabsTrigger>
+        </TabsList>
 
-      <div className="mt-6">
-        {activeTab === 'overview' && (
+        <TabsContent value="overview" className="space-y-6 mt-6">
           <div className="space-y-4">
-            <div>
-              <h3 className="text-lg font-medium text-foreground">Role</h3>
-              <p className="text-muted-foreground">{agent.role}</p>
-            </div>
-            <div>
-              <h3 className="text-lg font-medium text-foreground">Description</h3>
-              <p className="text-muted-foreground">{agent.description}</p>
-            </div>
-            <div>
-              <h3 className="text-lg font-medium text-foreground">Persona</h3>
-              <p className="text-muted-foreground">{agent.persona}</p>
-            </div>
+            {agent.description && (
+              <div>
+                <h3 className="text-lg font-medium text-foreground mb-2">Description</h3>
+                <p className="text-muted-foreground">{agent.description}</p>
+              </div>
+            )}
+            {agent.persona && (
+              <div>
+                <h3 className="text-lg font-medium text-foreground mb-2">Persona</h3>
+                <p className="text-muted-foreground">{agent.persona}</p>
+              </div>
+            )}
+            {agent.tools && Array.isArray(agent.tools) && agent.tools.length > 0 && (
+              <div>
+                <h3 className="text-lg font-medium text-foreground mb-2">Tools</h3>
+                <div className="flex flex-wrap gap-2">
+                  {agent.tools.map((tool: any, index: number) => (
+                    <Badge key={index} variant="outline">
+                      {typeof tool === 'string' ? tool : tool.name || 'Unknown'}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+            {agent.servers && Array.isArray(agent.servers) && agent.servers.length > 0 && (
+              <div>
+                <h3 className="text-lg font-medium text-foreground mb-2">Servers</h3>
+                <div className="flex flex-wrap gap-2">
+                  {agent.servers.map((server: any, index: number) => (
+                    <Badge key={index} variant="outline">
+                      {typeof server === 'string' ? server : server.name || 'Unknown'}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        )}
-        {activeTab === 'capabilities' && (
+        </TabsContent>
+        
+        <TabsContent value="capabilities" className="mt-6">
           <CapabilityManager agent={agent} />
-        )}
-        {activeTab === 'activity' && (
+        </TabsContent>
+        
+        <TabsContent value="activity" className="mt-6">
           <AgentActivityPanel agent={agent} />
-        )}
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

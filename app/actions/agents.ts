@@ -9,7 +9,7 @@ import { requireCurrentOrganization } from "./user-organizations";
 import { autoReindexService } from "@/lib/rag/auto-reindex";
 import type { ActionResult, CreateAgentData } from "./types";
 
-// Simple API key generator
+// AIDEV-NOTE: Simple API key generator for agent authentication - use more secure method in production
 function generateApiKey(): string {
   return 'ag_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }

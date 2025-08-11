@@ -2,9 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import { Agent, Team } from '@/types/db';
+import { Search, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/loading';
 import AgentFormDialog from './AgentFormDialog';
 import AgentDetailsView from './AgentDetailsView';
 import { getAgents } from '@/app/actions/agents';
+
+// AIDEV-NOTE: Agent dashboard refactored to use consistent design system patterns and improved UX
 
 interface AgentDashboardClientProps {
   initialAgents: Agent[];
@@ -19,91 +28,133 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const refreshAgents = async () => {
-    setLoading(true);
-    const fetchedAgents = await getAgents({
-      teamId: selectedTeam,
-      searchQuery: searchQuery,
-    });
-    setAgents(fetchedAgents);
-    setLoading(false);
+    try {
+      setLoading(true);
+      setError(null);
+      const fetchedAgents = await getAgents({
+        teamId: selectedTeam,
+        searchQuery: searchQuery,
+      });
+      setAgents(fetchedAgents);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load agents');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filteredAgents = agents;
 
   return (
-    <div className="flex space-x-6 h-[calc(100vh-10rem)]">
+    <div className="flex gap-6 h-[calc(100vh-10rem)]">
       {/* Left Pane: Agent List */}
-      <div className="w-1/3 flex flex-col space-y-2">
-        <div className="flex space-x-2">
-          <input
-            type="text"
-            placeholder="Search agents..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-2 py-1 border rounded bg-transparent"
-          />
-          <button
+      <div className="w-1/3 flex flex-col gap-4">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={16} />
+            <Input
+              placeholder="Search agents..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Button
             onClick={() => {
               setEditingAgent(null);
               setIsFormOpen(true);
             }}
-            className="bg-primary text-primary-foreground px-4 py-1 rounded"
+            variant="success"
+            size="sm"
           >
-            + New
-          </button>
+            <Plus size={16} />
+            New
+          </Button>
         </div>
-        <select
-          value={selectedTeam}
-          onChange={(e) => setSelectedTeam(e.target.value)}
-          className="w-full px-2 py-1 border rounded bg-transparent"
-        >
-          <option value="">All Teams</option>
-          {teams.map((team) => (
-            <option key={team.id} value={team.id.toString()}>
-              {team.name}
-            </option>
-          ))}
-        </select>
-        <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+        
+        <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+          <SelectTrigger>
+            <SelectValue placeholder="All Teams" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All Teams</SelectItem>
+            {teams.map((team) => (
+              <SelectItem key={team.id} value={team.id.toString()}>
+                {team.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex-1 overflow-y-auto space-y-2">
+          {error && (
+            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md mb-4">
+              {error}
+            </div>
+          )}
           {loading ? (
-            <p>Loading...</p>
+            <Loading text="Loading agents..." />
+          ) : filteredAgents.length === 0 ? (
+            <EmptyState
+              title="No agents found"
+              description="Create your first agent to get started"
+              action={{
+                label: "Create Agent",
+                onClick: () => {
+                  setEditingAgent(null);
+                  setIsFormOpen(true);
+                }
+              }}
+            />
           ) : (
             filteredAgents.map((agent) => (
-              <div
+              <Card
                 key={agent.id}
-                onClick={() => setSelectedAgent(agent)}
-                className={`p-4 rounded-lg cursor-pointer border transition-all ${
+                className={`cursor-pointer transition-all hover:shadow-md ${
                   selectedAgent?.id === agent.id
-                    ? 'bg-secondary border-primary'
-                    : 'hover:bg-secondary'
+                    ? 'ring-2 ring-primary bg-secondary'
+                    : ''
                 }`}
+                onClick={() => setSelectedAgent(agent)}
               >
-                <h3 className="font-semibold text-foreground">{agent.name}</h3>
-                <p className="text-sm text-muted-foreground">{agent.role}</p>
-              </div>
+                <CardContent className="p-4">
+                  <h3 className="font-semibold text-foreground">{agent.name}</h3>
+                  <p className="text-sm text-muted-foreground">{agent.role || 'No role specified'}</p>
+                  {agent.status && (
+                    <span className={`inline-block px-2 py-1 text-xs rounded-full mt-2 ${
+                      agent.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {agent.status}
+                    </span>
+                  )}
+                </CardContent>
+              </Card>
             ))
           )}
         </div>
       </div>
 
       {/* Right Pane: Agent Details */}
-      <div className="w-2/3 rounded-lg p-6 border">
-        {selectedAgent ? (
-          <AgentDetailsView
-            agent={selectedAgent}
-            onEdit={() => {
-              setEditingAgent(selectedAgent);
-              setIsFormOpen(true);
-            }}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full rounded-lg">
-            <p className="text-muted-foreground">Select an agent to view details or create a new one.</p>
-          </div>
-        )}
-      </div>
+      <Card className="w-2/3">
+        <CardContent className="p-6">
+          {selectedAgent ? (
+            <AgentDetailsView
+              agent={selectedAgent}
+              onEdit={() => {
+                setEditingAgent(selectedAgent);
+                setIsFormOpen(true);
+              }}
+            />
+          ) : (
+            <EmptyState
+              title="Select an agent"
+              description="Choose an agent from the list to view details and manage capabilities"
+            />
+          )}
+        </CardContent>
+      </Card>
 
       <AgentFormDialog
         isOpen={isFormOpen}

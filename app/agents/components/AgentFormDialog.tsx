@@ -3,6 +3,14 @@
 import { useState } from 'react';
 import { Agent } from '@/types/db';
 import { createAgentAction } from '@/app/actions/agents';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { FormField } from '@/components/ui/form-field';
+
+// AIDEV-NOTE: Agent form dialog refactored to use consistent design system components and patterns
 
 interface AgentFormDialogProps {
   isOpen: boolean;
@@ -11,77 +19,93 @@ interface AgentFormDialogProps {
 }
 
 export default function AgentFormDialog({ isOpen, onClose, agent }: AgentFormDialogProps) {
-  if (!isOpen) return null;
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (formData: FormData) => {
+    try {
+      setIsPending(true);
+      setError(null);
+      await createAgentAction(formData);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save agent');
+    } finally {
+      setIsPending(false);
+    }
+  };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-      <div className="bg-popover p-6 rounded-lg shadow-lg w-full max-w-md border">
-        <h2 className="text-2xl font-bold mb-4 text-foreground">{agent ? 'Edit Agent' : 'Create New Agent'}</h2>
-        <form action={createAgentAction}>
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-muted-foreground">Name</label>
-              <input
-                id="name"
-                name="name"
-                type="text"
-                required
-                defaultValue={agent?.name}
-                className="mt-1 block w-full p-2 border rounded"
-                placeholder="e.g., Sales Analyst Bot"
-              />
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{agent ? 'Edit Agent' : 'Create New Agent'}</DialogTitle>
+        </DialogHeader>
+        <form action={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
+              {error}
             </div>
-            <div>
-              <label htmlFor="role" className="block text-sm font-medium text-muted-foreground">Role</label>
-              <input
-                id="role"
-                name="role"
-                type="text"
-                defaultValue={agent?.role ?? ''}
-                className="mt-1 block w-full p-2 border rounded"
-                placeholder="e.g., Data Analyst"
-              />
-            </div>
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-muted-foreground">Description</label>
-              <textarea
-                id="description"
-                name="description"
-                rows={3}
-                defaultValue={agent?.description ?? ''}
-                className="mt-1 block w-full p-2 border rounded"
-                placeholder="A brief description of the agent's purpose."
-              />
-            </div>
-            <div>
-              <label htmlFor="persona" className="block text-sm font-medium text-muted-foreground">Persona</label>
-              <textarea
-                id="persona"
-                name="persona"
-                rows={3}
-                defaultValue={agent?.persona ?? ''}
-                className="mt-1 block w-full p-2 border rounded"
-                placeholder="Describe the agent's personality and communication style."
-              />
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end space-x-2">
-            <button
+          )}
+          
+          <FormField label="Name" required>
+            <Input
+              name="name"
+              required
+              defaultValue={agent?.name}
+              placeholder="e.g., Sales Analyst Bot"
+              disabled={isPending}
+            />
+          </FormField>
+          
+          <FormField label="Role">
+            <Input
+              name="role"
+              defaultValue={agent?.role ?? ''}
+              placeholder="e.g., Data Analyst"
+              disabled={isPending}
+            />
+          </FormField>
+          
+          <FormField label="Description">
+            <Textarea
+              name="description"
+              rows={3}
+              defaultValue={agent?.description ?? ''}
+              placeholder="A brief description of the agent's purpose."
+              disabled={isPending}
+            />
+          </FormField>
+          
+          <FormField label="Persona">
+            <Textarea
+              name="persona"
+              rows={3}
+              defaultValue={agent?.persona ?? ''}
+              placeholder="Describe the agent's personality and communication style."
+              disabled={isPending}
+            />
+          </FormField>
+          
+          <div className="flex justify-end space-x-2 pt-4">
+            <Button
               type="button"
+              variant="outline"
               onClick={onClose}
-              className="bg-secondary text-secondary-foreground px-4 py-2 rounded"
+              disabled={isPending}
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              className="bg-primary text-primary-foreground px-4 py-2 rounded"
+              variant="success"
+              disabled={isPending}
             >
-              {agent ? 'Save Changes' : 'Create Agent'}
-            </button>
+              {isPending ? 'Saving...' : (agent ? 'Save Changes' : 'Create Agent')}
+            </Button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
