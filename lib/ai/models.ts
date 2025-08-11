@@ -68,10 +68,11 @@ export function getEmbeddingModel(modelOverride?: string) {
     modelName = modelOverride
   }
   
-  // Use official HuggingFace SDK for embeddings
+  // Use official HuggingFace SDK for embeddings with AI SDK 5 compatibility
   return {
     modelId: modelName,
     provider: 'huggingface',
+    specificationVersion: 'v2', // Required for AI SDK 5
     maxEmbeddingsPerCall: 32,
     supportsParallelCalls: true,
     
