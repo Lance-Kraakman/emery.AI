@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { getTables } from '@/app/actions/tables';
 import { getDatabases } from '@/app/actions/databases';
@@ -59,60 +59,56 @@ export function useEmeryData() {
 
   const currentOrg = session?.user?.currentOrganization;
 
+  const fetchData = useCallback(async () => {
+    if (!session?.user || !currentOrg) {
+      setData({ databases: [], agents: [] });
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Fetch databases and tables
+      const [databasesResult, tablesResult, agentsResult] = await Promise.all([
+        getDatabases(),
+        getTables(),
+        getAgents()
+      ]);
+
+      const tables = tablesResult as EmeryTable[];
+      const agents = agentsResult as EmeryAgent[];
+
+      // Group tables by database
+      const databasesWithTables = databasesResult.map(db => ({
+        ...db,
+        tables: tables.filter(table => table.databaseId === db.id)
+      }));
+
+      setData({
+        databases: databasesWithTables,
+        agents,
+        organization: {
+          id: currentOrg.id,
+          name: currentOrg.name
+        }
+      });
+    } catch (err) {
+      console.error('Error fetching Emery data:', err);
+      setError('Failed to fetch data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [session, currentOrg]);
+
   useEffect(() => {
-    async function fetchData() {
-      if (!session?.user || !currentOrg) {
-        setData({ databases: [], agents: [] });
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        // Fetch databases and tables
-        const [databasesResult, tablesResult, agentsResult] = await Promise.all([
-          getDatabases(),
-          getTables(),
-          getAgents()
-        ]);
-
-        const tables = tablesResult as EmeryTable[];
-        const agents = agentsResult as EmeryAgent[];
-
-        // Group tables by database  
-        const databasesWithTables = databasesResult.map(db => ({
-          ...db,
-          tables: tables.filter(table => table.databaseId === db.id)
-        }));
-
-        setData({
-          databases: databasesWithTables,
-          agents,
-          organization: {
-            id: currentOrg.id,
-            name: currentOrg.name
-          }
-        });
-      } catch (err) {
-        console.error('Error fetching Emery data:', err);
-        setError('Failed to fetch data');
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
     fetchData();
-  }, [session, currentOrg?.id]);
+  }, [fetchData]);
 
-  const refetch = () => {
-    if (session?.user && currentOrg) {
-      setIsLoading(true);
-      // Re-trigger the effect
-      window.location.reload();
-    }
-  };
+  const refetch = useCallback(() => {
+    fetchData();
+  }, [fetchData]);
 
   return {
     data,

@@ -1,9 +1,16 @@
 import { embed, embedMany } from 'ai'
 import { getEmbeddingModel } from '@/lib/ai/models'
 import { db } from '@/lib/db/client'
-import { ragIndexes, ragDocuments, ragQueryLogs, tables, fields, organizations, agents, databases } from '@/lib/db/schema'
+import { ragIndexes, ragDocuments, ragQueryLogs, tables, fields, organizations, agents, databases, teams } from '@/lib/db/schema'
 import { eq, and, desc, sql, inArray } from 'drizzle-orm'
 import crypto from 'crypto'
+import { s3Client, BUCKET_NAME } from '@/lib/s3/client'
+import { GetObjectCommand } from '@aws-sdk/client-s3'
+import fs from 'fs/promises'
+import path from 'path'
+import os from 'os'
+import { SentenceSplitter } from 'llamaindex'
+import { SimpleDirectoryReader } from "@llamaindex/readers/directory";
 // Note: Using raw SQL for pgvector operations since drizzle-specific helpers aren't available
 
 export interface RagIndex {
@@ -74,7 +81,7 @@ export class RagService {
     organizationId?: number
     agentId?: number
     roleId?: number
-    domainTypes: string[] // ["tables", "files", "agents", "workflows"]
+    domainTypes: string[] // ["tables", "files", "agents", "workflows", "teams"]
     domainFilters?: any
     createdBy: string
   }): Promise<string> {
@@ -182,6 +189,11 @@ export class RagService {
       // Index agents if included
       if (index.domainTypes.includes('agents')) {
         totalDocuments += await this.indexAgents(indexId, index)
+      }
+
+      // Index teams if included
+      if (index.domainTypes.includes('teams')) {
+        totalDocuments += await this.indexTeams(indexId, index)
       }
 
       // Index files if included in domain types
@@ -470,6 +482,68 @@ export class RagService {
     return documentCount
   }
 
+  private async indexTeams(indexId: string, ragIndex: RagIndex): Promise<number> {
+    if (!ragIndex.organizationId) {
+      return 0
+    }
+
+    // Get teams for this organization
+    const organizationTeams = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.organizationId, ragIndex.organizationId))
+
+    if (organizationTeams.length === 0) {
+      return 0
+    }
+
+    // Process teams in batches for better performance
+    const batchSize = 10
+    const batches = []
+    for (let i = 0; i < organizationTeams.length; i += batchSize) {
+      batches.push(organizationTeams.slice(i, i + batchSize))
+    }
+
+    let documentCount = 0
+    for (const batch of batches) {
+      const documentsToInsert = await Promise.all(
+        batch.map(async (team) => {
+          const teamContent = this.generateTeamContent(team)
+          
+          // Generate embedding for the content
+          const { embedding } = await embed({
+            model: this.embeddingModel,
+            value: teamContent,
+          })
+          
+          return {
+            ragIndexId: indexId,
+            sourceType: 'team',
+            sourceId: team.id.toString(),
+            sourceName: team.name,
+            title: `Team: ${team.name}`,
+            content: teamContent,
+            metadata: {
+              teamId: team.id,
+              organizationId: ragIndex.organizationId,
+              agentCount: Array.isArray(team.agentIds) ? team.agentIds.length : 0,
+            },
+            embedding,
+            contentHash: crypto.createHash('md5').update(teamContent).digest('hex'),
+          }
+        })
+      )
+
+      // Batch insert for better performance
+      if (documentsToInsert.length > 0) {
+        await db.insert(ragDocuments).values(documentsToInsert)
+        documentCount += documentsToInsert.length
+      }
+    }
+
+    return documentCount
+  }
+
   // Generate comprehensive table schema content with enhanced relationship context
   private generateTableSchemaContent(
     table: { id: number; name: string; dbName: string; metadata?: any; databaseName?: string | null; databaseSlug?: string | null },
@@ -620,18 +694,48 @@ About: ${agent.name} is an AI agent configured within the Emery platform for wor
 Functionality: The agent operates within the Emery ecosystem to handle automated workflows, data processing, integration tasks, and other organizational processes as configured through its capabilities and available tools.`
   }
 
+  // Generate comprehensive team content for indexing
+  private generateTeamContent(team: {
+    id: number
+    name: string
+    purpose?: string | null
+    description?: string | null
+    responsibilities?: string[] | null
+    goals?: string[] | null
+    agentIds?: string[] | null
+    createdAt?: Date | null
+  }): string {
+    const responsibilitiesList = team.responsibilities && team.responsibilities.length > 0
+      ? `\nResponsibilities:\n${team.responsibilities.map(r => `- ${r}`).join('\n')}`
+      : '\nResponsibilities: Not specified'
+
+    const goalsList = team.goals && team.goals.length > 0
+      ? `\nGoals:\n${team.goals.map(g => `- ${g}`).join('\n')}`
+      : '\nGoals: Not specified'
+
+    const agentIdsList = team.agentIds && team.agentIds.length > 0
+      ? `\nAssociated Agent IDs: ${team.agentIds.join(', ')}`
+      : '\nAssociated Agent IDs: None'
+
+    const createdDate = team.createdAt
+      ? `\nCreated: ${team.createdAt.toLocaleDateString()}`
+      : ''
+
+    return `Team: ${team.name}
+${team.purpose ? `Purpose: ${team.purpose}` : 'Purpose: Not specified'}
+${team.description ? `Description: ${team.description}` : 'Description: Not provided'}${createdDate}${responsibilitiesList}${goalsList}${agentIdsList}
+
+About: ${team.name} is a team within the organization, responsible for specific functions and objectives. This team may utilize AI agents to automate tasks and achieve its goals.
+
+Functionality: The team collaborates on tasks, projects, and workflows within the Emery platform. Its activities are aligned with its defined purpose and responsibilities, contributing to the overall mission of the organization.`
+  }
+
   // LlamaIndex-powered file processing with HuggingFace embeddings
   private async processFileWithLlamaIndex(s3Key: string, mimeType: string, fileName: string): Promise<Array<{content: string, metadata: any}> | null> {
     try {
       console.log(`[LLAMAINDEX] Processing ${fileName} with LlamaIndex`)
       
       // Download file from S3 to temporary location
-      const { s3Client, BUCKET_NAME } = await import('@/lib/s3/client')
-      const { GetObjectCommand } = await import('@aws-sdk/client-s3')
-      const fs = await import('fs/promises')
-      const path = await import('path')
-      const os = await import('os')
-      
       const response = await s3Client.send(new GetObjectCommand({
         Bucket: BUCKET_NAME,
         Key: s3Key
@@ -644,10 +748,10 @@ Functionality: The agent operates within the Emery ecosystem to handle automated
 
       // Convert stream to buffer
       const chunks: Uint8Array[] = []
-      const reader = response.Body.transformToWebStream().getReader()
+      const streamReader = response.Body.transformToWebStream().getReader()
       
       while (true) {
-        const { done, value } = await reader.read()
+        const { done, value } = await streamReader.read()
         if (done) break
         chunks.push(value)
       }
@@ -661,19 +765,16 @@ Functionality: The agent operates within the Emery ecosystem to handle automated
 
       try {
         // Use LlamaIndex to process the document
-        const { SimpleDirectoryReader } = await import('llamaindex')
-        const { SentenceSplitter } = await import('llamaindex')
-        const { QuestionsAnsweredExtractor } = await import('llamaindex')
-
+        
         // Initialize LlamaIndex components
-        const reader = new SimpleDirectoryReader()
+        const llamaReader = new SimpleDirectoryReader()
         const splitter = new SentenceSplitter({
           chunkSize: 1024,
           chunkOverlap: 50
         })
         
         // Load and process document
-        const documents = await reader.loadData({ directoryPath: tempDir })
+        const documents = await llamaReader.loadData({ directoryPath: tempDir })
         console.log(`[LLAMAINDEX] Loaded ${documents.length} documents from ${fileName}`)
         
         if (documents.length === 0) {
@@ -689,7 +790,7 @@ Functionality: The agent operates within the Emery ecosystem to handle automated
           console.log(`[LLAMAINDEX] Split ${fileName} into ${textChunks.length} chunks`)
           
           // Create processed chunks with metadata
-          textChunks.forEach((chunkText, index) => {
+          textChunks.forEach((chunkText: string, index: number) => {
             processedChunks.push({
               content: chunkText,
               metadata: {
@@ -726,7 +827,7 @@ Functionality: The agent operates within the Emery ecosystem to handle automated
     console.log('[FILE-INDEX] Starting file indexing for organization', ragIndex.organizationId)
 
     // Get all file fields from tables in this organization
-    const fileFields = await db.execute(sql`
+    const fileFields: any[] = await db.execute(sql`
       SELECT DISTINCT 
         f.id as field_id,
         f.name as field_name, 

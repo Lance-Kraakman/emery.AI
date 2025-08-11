@@ -5,6 +5,7 @@ import { teams, teamMemberships } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { ActionResult, CreateTeamData, TeamMembershipData } from "./types";
+import { autoReindexService } from "@/lib/rag/auto-reindex";
 
 export async function createTeam(data: CreateTeamData): Promise<ActionResult> {
   try {
@@ -29,6 +30,8 @@ export async function createTeam(data: CreateTeamData): Promise<ActionResult> {
 
     revalidatePath('/dashboard');
     revalidatePath('/teams');
+
+    await autoReindexService.debouncedReindex(organizationId, 'teams')
     
     return {
       success: true,
@@ -127,6 +130,10 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
 
     revalidatePath('/dashboard');
     revalidatePath('/teams');
+
+    if (updatedTeam.organizationId) {
+      await autoReindexService.debouncedReindex(updatedTeam.organizationId, 'teams')
+    }
     
     return {
       success: true,
@@ -150,10 +157,14 @@ export async function deleteTeam(teamId: number): Promise<ActionResult> {
       };
     }
 
-    await db.delete(teams).where(eq(teams.id, teamId));
+    const [deletedTeam] = await db.delete(teams).where(eq(teams.id, teamId)).returning();
 
     revalidatePath('/dashboard');
     revalidatePath('/teams');
+
+    if (deletedTeam?.organizationId) {
+      await autoReindexService.debouncedReindex(deletedTeam.organizationId, 'teams')
+    }
     
     return {
       success: true,

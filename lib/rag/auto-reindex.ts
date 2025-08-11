@@ -51,7 +51,7 @@ export class AutoReindexService {
    * Reindex specific domain types for an organization
    * More targeted than full organization reindexing
    */
-  async reindexDomainType(organizationId: number, domainType: string): Promise<void> {
+  async reindexDomainType(organizationId: number, domainType: 'tables' | 'files' | 'agents' | 'teams' | 'workflows'): Promise<void> {
     try {
       console.log(`[AUTO-REINDEX] Reindexing ${domainType} for organization ${organizationId}`)
       
@@ -99,7 +99,12 @@ export class AutoReindexService {
       this.debounceTimers.delete(key)
       
       if (domainType) {
-        await this.reindexDomainType(organizationId, domainType)
+        const validDomainTypes = ['tables', 'files', 'agents', 'teams', 'workflows']
+        if (validDomainTypes.includes(domainType)) {
+          await this.reindexDomainType(organizationId, domainType as any)
+        } else {
+          console.error(`[AUTO-REINDEX] Invalid domain type: ${domainType}`)
+        }
       } else {
         await this.reindexOrganization(organizationId)
       }

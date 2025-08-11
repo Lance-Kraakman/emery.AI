@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -27,8 +27,8 @@ import { useDataDialogs } from "@/contexts/DataDialogsContext"
 
 const navItems = [
   { href: "/mission-control", label: "Mission Control", icon: Target },
-  { href: "/manage", label: "Orchestration", icon: Workflow },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/organization", label: "Orchestration", icon: Workflow },
+  { href: "/connections", label: "Settings", icon: Settings },
 ]
 
 const orchestrationNavItems = [
@@ -56,15 +56,29 @@ export function EmerySidebar() {
   const { data, isLoading } = useEmeryData()
   const { setIsCreateDatabaseOpen, setIsCreateTableOpen, setSelectedDatabaseForTable } = useDataDialogs()
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [openCollapsibles, setOpenCollapsibles] = useState<string[]>(
-    pathname === "/mission-control" ? ["Data", ...data.databases.map(db => db.id.toString())] : []
-  )
+  const [openCollapsibles, setOpenCollapsibles] = useState<string[]>([])
+
+  useEffect(() => {
+    const orchestrationPaths = orchestrationNavItems.map(item => item.href)
+    const settingsPaths = settingsNavItems.map(item => item.href)
+
+    if (orchestrationPaths.includes(pathname)) {
+      setOpenCollapsibles(["Orchestration"])
+    } else if (settingsPaths.includes(pathname)) {
+      setOpenCollapsibles(["Settings"])
+    } else if (pathname.startsWith("/data")) {
+      setOpenCollapsibles(["Data", ...data.databases.map(db => db.id.toString())])
+    } else {
+      setOpenCollapsibles([])
+    }
+  }, [pathname, data.databases])
 
   const toggleSidebar = () => {
     setIsCollapsed(!isCollapsed)
   }
 
   const toggleCollapsible = (id: string) => {
+    if (isCollapsed) return
     setOpenCollapsibles(prev => {
       const isOpen = prev.includes(id)
       if (id === "Data") {
@@ -84,24 +98,23 @@ export function EmerySidebar() {
       }`}
     >
       <div className="flex h-full max-h-screen flex-col gap-2">
-        <div className="flex h-16 items-center px-4">
+        <div
+          className={`flex h-16 items-center px-4 ${
+            isCollapsed ? "justify-center" : "justify-between"
+          }`}
+        >
           {!isCollapsed && <EmeryOrganizationModal />}
-          {isCollapsed && (
-            <div className="flex-1 flex justify-center">
-              <Bot className="h-6 w-6 text-primary" />
-            </div>
-          )}
           <Button
-            variant="outline"
+            variant="ghost"
             size="icon"
-            className={`h-8 w-8 ${!isCollapsed ? 'ml-auto' : ''}`}
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
             onClick={toggleSidebar}
           >
-            <PanelLeft className="h-4 w-4" />
+            {isCollapsed ? <Bot className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
           </Button>
         </div>
         <ScrollArea className="flex-1 py-2">
-          <nav className="grid items-start px-4 text-sm font-medium">
+          <nav className="grid items-start text-sm font-medium">
             {navItems.map(({ href, label, icon: Icon }) => {
               const isActive = pathname === href || (href !== '/mission-control' && pathname.startsWith(href))
               
@@ -118,17 +131,18 @@ export function EmerySidebar() {
                     {renderSeparator()}
                     <Collapsible open={!isCollapsed && openCollapsibles.includes(label)} onOpenChange={() => toggleCollapsible(label)}>
                       <CollapsibleTrigger asChild>
-                        <button
-                          className={`flex items-center justify-between w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
+                        <Link
+                          href={href}
+                          className={`flex items-center w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
                             isActive ? "bg-muted text-primary" : ""
-                          }`}
+                          } ${isCollapsed ? "justify-center" : "justify-between"}`}
                         >
                           <div className="flex items-center gap-3">
                             <Icon className="h-4 w-4" />
                             {!isCollapsed && label}
                           </div>
                           {!isCollapsed && <ChevronDown className="h-4 w-4 transition-transform duration-200 data-[state=open]:rotate-180" />}
-                        </button>
+                        </Link>
                       </CollapsibleTrigger>
                       {!isCollapsed && (
                         <CollapsibleContent className="pl-7 py-1 space-y-1">
@@ -159,9 +173,9 @@ export function EmerySidebar() {
                         <CollapsibleTrigger asChild>
                           <Link
                             href="/data"
-                            className={`flex items-center justify-between w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
+                            className={`flex items-center w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
                               pathname.startsWith("/data") ? "bg-muted text-primary" : ""
-                            }`}
+                            } ${isCollapsed ? "justify-center" : "justify-between"}`}
                           >
                             <div className="flex items-center gap-3">
                               <Database className="h-4 w-4" />
@@ -242,17 +256,18 @@ export function EmerySidebar() {
                     <Separator className="my-2" />
                     <Collapsible open={!isCollapsed && openCollapsibles.includes(label)} onOpenChange={() => toggleCollapsible(label)}>
                       <CollapsibleTrigger asChild>
-                        <button
-                          className={`flex items-center justify-between w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
+                        <Link
+                          href={href}
+                          className={`flex items-center w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
                             isActive ? "bg-muted text-primary" : ""
-                          }`}
+                          } ${isCollapsed ? "justify-center" : "justify-between"}`}
                         >
                           <div className="flex items-center gap-3">
                             <Icon className="h-4 w-4" />
                             {!isCollapsed && label}
                           </div>
                           {!isCollapsed && <ChevronDown className="h-4 w-4 transition-transform duration-200 data-[state=open]:rotate-180" />}
-                        </button>
+                        </Link>
                       </CollapsibleTrigger>
                       {!isCollapsed && (
                         <CollapsibleContent className="pl-7 py-1 space-y-1">
@@ -279,9 +294,9 @@ export function EmerySidebar() {
                   {renderSeparator()}
                   <Link
                     href={href}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
+                    className={`flex items-center gap-3 rounded-lg px-4 py-2 text-muted-foreground transition-all hover:text-primary ${
                       isActive ? "bg-muted text-primary" : ""
-                    }`}
+                    } ${isCollapsed ? "justify-center" : ""}`}
                   >
                     <Icon className="h-4 w-4" />
                     {!isCollapsed && label}
@@ -289,7 +304,6 @@ export function EmerySidebar() {
                 </div>
               );
             })}
-
           </nav>
         </ScrollArea>
       </div>

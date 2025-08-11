@@ -369,7 +369,8 @@ export default function OrganizationChart({
                 nodeTypes={nodeTypes}
                 connectionMode={ConnectionMode.Loose}
                 fitView
-                attributionPosition="bottom-left"
+                fitViewOptions={{ maxZoom: 0.85 }}
+                proOptions={{ hideAttribution: true }}
               >
                 <Controls />
                 

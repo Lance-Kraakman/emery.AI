@@ -94,8 +94,8 @@ export default function ActivityPanel({
   }, [activities]);
 
   return (
-    <div className="h-full flex flex-col bg-muted/50 border-r">
-      <div className="p-4 border-b bg-background">
+    <div className="h-full flex flex-col border-r">
+      <div className="p-4 border-b">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Activity className="w-5 h-5" />
@@ -115,13 +115,13 @@ export default function ActivityPanel({
             )}
             {onCollapse && (
               <Button 
-                variant="outline" 
-                size="sm" 
+                variant="ghost" 
+                size="icon" 
                 onClick={onCollapse}
-                className="text-xs"
+                className="text-muted-foreground hover:text-foreground"
                 title="Collapse activity panel"
               >
-                <ChevronLeft className="w-3 h-3" />
+                <ChevronLeft className="w-4 h-4" />
               </Button>
             )}
           </div>
