@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { switchCurrentOrganization } from '@/app/actions/user-organizations';
-import { createOrganizationAction } from '@/app/actions/organizations';
+import { createOrganization } from '@/app/actions/setup';
 
 interface Organization {
   id: number;
@@ -63,7 +63,7 @@ export default function OrganizationSwitcher() {
   const handleCreateOrganization = async (formData: FormData) => {
     setIsLoading(true);
     try {
-      await createOrganizationAction(formData);
+      await createOrganization(formData);
       await update(); // Refresh session
       setShowCreateModal(false);
       setIsOpen(false);

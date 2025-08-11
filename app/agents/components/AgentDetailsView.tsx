@@ -64,7 +64,7 @@ export default function AgentDetailsView({ agent, onEdit }: AgentDetailsViewProp
                 <p className="text-muted-foreground">{agent.persona}</p>
               </div>
             )}
-            {agent.tools && Array.isArray(agent.tools) && agent.tools.length > 0 && (
+            {agent.tools && Array.isArray(agent.tools) && agent.tools.length > 0 ? (
               <div>
                 <h3 className="text-lg font-medium text-foreground mb-2">Tools</h3>
                 <div className="flex flex-wrap gap-2">
@@ -75,8 +75,8 @@ export default function AgentDetailsView({ agent, onEdit }: AgentDetailsViewProp
                   ))}
                 </div>
               </div>
-            )}
-            {agent.servers && Array.isArray(agent.servers) && agent.servers.length > 0 && (
+            ) : null}
+            {agent.servers && Array.isArray(agent.servers) && agent.servers.length > 0 ? (
               <div>
                 <h3 className="text-lg font-medium text-foreground mb-2">Servers</h3>
                 <div className="flex flex-wrap gap-2">
@@ -87,7 +87,7 @@ export default function AgentDetailsView({ agent, onEdit }: AgentDetailsViewProp
                   ))}
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
         </TabsContent>
         

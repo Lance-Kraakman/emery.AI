@@ -30,7 +30,7 @@ async function assignAdminRole() {
     // Update the user with organization and role
     const [updatedUser] = await db.update(users)
       .set({ 
-        organizationId: adminRole.organizationId,
+        currentOrganizationId: adminRole.organizationId,
         roleId: adminRole.id 
       })
       .where(eq(users.id, user.id))
@@ -39,7 +39,7 @@ async function assignAdminRole() {
     console.log('✅ Successfully updated user:');
     console.log(`   Name: ${updatedUser.name}`);
     console.log(`   Email: ${updatedUser.email}`);
-    console.log(`   Organization ID: ${updatedUser.organizationId}`);
+    console.log(`   Organization ID: ${updatedUser.currentOrganizationId}`);
     console.log(`   Role ID: ${updatedUser.roleId}`);
     
     console.log('\n🎉 You now have admin permissions!');
