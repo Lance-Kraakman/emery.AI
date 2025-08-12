@@ -34,9 +34,12 @@ const authOptions = {
       server: {
         host: process.env.EMAIL_SERVER_HOST || "localhost",
         port: parseInt(process.env.EMAIL_SERVER_PORT || "1025"),
-        // MailHog doesn't require authentication, so omit auth for localhost
+        secure: false, // MailHog doesn't use TLS
+        // MailHog doesn't require authentication
         ...(process.env.EMAIL_SERVER_HOST === "localhost" || !process.env.EMAIL_SERVER_HOST 
-          ? {} 
+          ? { 
+              auth: undefined // Explicitly set to undefined for MailHog
+            } 
           : {
               auth: {
                 user: process.env.EMAIL_SERVER_USER || "",
