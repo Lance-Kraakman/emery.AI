@@ -28,6 +28,7 @@ import {
   Eye,
   Edit3,
   Activity,
+  RotateCcw,
 } from 'lucide-react';
 import { getTasks } from '@/app/actions/tasks';
 
@@ -70,6 +71,7 @@ export default function OrganizationChart() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [showResetNotification, setShowResetNotification] = useState(false);
 
   // Initialize auto-save hook
   const { saveViewConfig, loadViewConfig, isSaving } = useOrganizationViewConfig({
@@ -77,6 +79,25 @@ export default function OrganizationChart() {
     autoSaveDelay: 2000,
     enabled: !!currentOrganization?.id,
   });
+
+  // Reset layout to default positions
+  const resetLayout = useCallback(() => {
+    const confirmed = window.confirm(
+      'Are you sure you want to reset the layout? This will move all nodes back to their default positions and cannot be undone.'
+    );
+    
+    if (confirmed) {
+      console.log('Resetting layout to default positions');
+      generateNodesAndEdges();
+      
+      // Clear selected nodes since positions are changing
+      setSelectedNodes([]);
+      
+      // Show reset notification briefly
+      setShowResetNotification(true);
+      setTimeout(() => setShowResetNotification(false), 3000);
+    }
+  }, [generateNodesAndEdges]);
 
   // Auto-save view using the custom hook
   const autoSaveView = useCallback(() => {
@@ -377,6 +398,7 @@ export default function OrganizationChart() {
                 
                 {/* Top toolbar */}
                 <ReactFlowPanel position="top-center">
+                  <div className="flex items-center gap-2">
                     <Button
                       size="sm"
                       variant={isConfiguring ? "default" : "outline"}
@@ -394,6 +416,20 @@ export default function OrganizationChart() {
                         </>
                       )}
                     </Button>
+                    
+                    {/* Reset Layout Button - only show in configure mode */}
+                    {isConfiguring && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={resetLayout}
+                        title="Reset layout to default positions"
+                      >
+                        <RotateCcw className="w-4 h-4 mr-1" />
+                        Reset Layout
+                      </Button>
+                    )}
+                  </div>
                 </ReactFlowPanel>
 
                 {/* Search toolbar */}
@@ -420,15 +456,22 @@ export default function OrganizationChart() {
                   </div>
                 </ReactFlowPanel>
 
-                {/* Save status indicator */}
-                {isSaving && (
+                {/* Status indicators - Save or Reset notification */}
+                {isSaving ? (
                   <ReactFlowPanel position="bottom-left">
                     <div className="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm flex items-center gap-2">
                       <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                       Saving...
                     </div>
                   </ReactFlowPanel>
-                )}
+                ) : showResetNotification ? (
+                  <ReactFlowPanel position="bottom-left">
+                    <div className="bg-green-500 text-white px-3 py-1 rounded-lg text-sm flex items-center gap-2">
+                      <RotateCcw className="w-3 h-3" />
+                      Layout reset to default positions
+                    </div>
+                  </ReactFlowPanel>
+                ) : null}
 
                 {/* Selection info */}
                 {selectedNodes.length > 0 && (
