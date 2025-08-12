@@ -17,12 +17,7 @@ export default async function TeamsPage() {
   ]);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Teams</h1>
-        <p className="text-muted-foreground">Manage your teams and their members</p>
-      </div>
-      
+    <div className="h-full">
       <Suspense fallback={<Loading text="Loading dashboard..." />}>
         <TeamDashboardClient initialTeams={teams} agents={agents} />
       </Suspense>

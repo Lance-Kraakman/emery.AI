@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Plus, Users } from 'lucide-react';
+import { Search, Plus, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Agent, Team } from '@/types/db';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,8 +27,8 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
-
   const [error, setError] = useState<string | null>(null);
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
 
   const refreshTeams = async () => {
     try {
@@ -51,33 +51,48 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
   );
 
   return (
-    <div className="flex gap-6 h-[calc(100vh-10rem)]">
+    <div className="flex h-full">
       {/* Left Pane: Team List */}
-      <div className="w-1/3 flex flex-col gap-4">
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={16} />
-            <Input
-              placeholder="Search teams..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
+      <div
+        className={`transition-all duration-300 ${
+          isPanelCollapsed ? 'w-12' : 'w-1/4'
+        } border-r flex flex-col`}
+      >
+        <div className="flex items-center p-2">
+          {!isPanelCollapsed && <h2 className="text-lg font-semibold">Teams</h2>}
           <Button
-            onClick={() => {
-              setEditingTeam(null);
-              setIsFormOpen(true);
-            }}
-            variant="success"
-            size="sm"
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsPanelCollapsed(!isPanelCollapsed)}
+            className="ml-auto"
           >
-            <Plus size={16} />
-            New
+            {isPanelCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </Button>
         </div>
-        
-        <div className="flex-1 overflow-y-auto space-y-2">
+        {!isPanelCollapsed && (
+          <div className="p-2 flex flex-col gap-4 flex-grow">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={16} />
+              <Input
+                placeholder="Search teams..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Button
+              onClick={() => {
+                setEditingTeam(null);
+                setIsFormOpen(true);
+              }}
+              variant="success"
+              size="sm"
+            >
+              <Plus size={16} />
+              New
+            </Button>
+            
+            <div className="flex-1 overflow-y-auto space-y-2">
           {error && (
             <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md mb-4">
               {error}
@@ -125,29 +140,34 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
               </Card>
             ))
           )}
-        </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Right Pane: Team Details */}
-      <Card className="w-2/3">
-        <CardContent className="p-6">
-          {selectedTeam ? (
-            <TeamDetailsView
-              team={selectedTeam}
-              agents={agents}
-              onEdit={() => {
-                setEditingTeam(selectedTeam);
-                setIsFormOpen(true);
-              }}
-            />
-          ) : (
-            <EmptyState
-              title="Select a team"
-              description="Choose a team from the list to view details and manage members"
-            />
-          )}
-        </CardContent>
-      </Card>
+      <div className="flex-1 p-0">
+        <Card className="h-full rounded-none border-none">
+          <CardContent className="p-6 h-full">
+            {selectedTeam ? (
+              <TeamDetailsView
+                team={selectedTeam}
+                agents={agents}
+                onEdit={() => {
+                  setEditingTeam(selectedTeam);
+                  setIsFormOpen(true);
+                }}
+              />
+            ) : (
+              <EmptyState
+                title="Select a team"
+                description="Choose a team from the list to view details and manage members"
+                className="text-left justify-start"
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <TeamFormDialog
         isOpen={isFormOpen}
