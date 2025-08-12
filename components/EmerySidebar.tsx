@@ -18,10 +18,14 @@ import {
   Plug,
   Plus,
   SlidersHorizontal,
+  LogOut,
 } from "lucide-react"
+import { signOut, useSession } from "next-auth/react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { EmeryOrganizationModal } from "./EmeryOrganizationModal"
 import { useEmery } from "@/contexts/EmeryContext"
 import { useDataDialogs } from "@/contexts/DataDialogsContext"
@@ -59,6 +63,7 @@ const settingsNavItems = [
 export function EmerySidebar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const { data: sessionData } = useSession()
   const { data, isLoading } = useEmery()
   const { setIsCreateDatabaseOpen, setIsCreateTableOpen, setSelectedDatabaseForTable } = useDataDialogs()
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -312,6 +317,82 @@ export function EmerySidebar() {
             })}
           </nav>
         </ScrollArea>
+        
+        {/* User Avatar and Menu at Bottom */}
+        <div className="mt-auto p-4 border-t border-border">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                className={`w-full p-2 h-auto ${
+                  isCollapsed ? "justify-center" : "justify-start gap-3"
+                }`}
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarImage 
+                    src={sessionData?.user?.image || undefined} 
+                    alt={sessionData?.user?.name || "User"} 
+                  />
+                  <AvatarFallback className="text-xs">
+                    {sessionData?.user?.name?.charAt(0).toUpperCase() || 
+                     sessionData?.user?.email?.charAt(0).toUpperCase() || 
+                     "U"}
+                  </AvatarFallback>
+                </Avatar>
+                {!isCollapsed && (
+                  <div className="flex flex-col items-start text-left">
+                    <span className="text-sm font-medium text-foreground">
+                      {sessionData?.user?.name || "User"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {sessionData?.user?.email}
+                    </span>
+                  </div>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent 
+              className="w-56 p-0" 
+              side={isCollapsed ? "right" : "top"} 
+              align={isCollapsed ? "start" : "end"}
+            >
+              <div className="p-3 border-b border-border">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage 
+                      src={sessionData?.user?.image || undefined} 
+                      alt={sessionData?.user?.name || "User"} 
+                    />
+                    <AvatarFallback>
+                      {sessionData?.user?.name?.charAt(0).toUpperCase() || 
+                       sessionData?.user?.email?.charAt(0).toUpperCase() || 
+                       "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">
+                      {sessionData?.user?.name || "User"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {sessionData?.user?.email}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="p-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={() => signOut({ callbackUrl: '/auth/signin' })}
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign Out
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
     </div>
   )
