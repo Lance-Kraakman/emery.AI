@@ -108,9 +108,9 @@ export function useOrganizationViewConfig({
         position: node.position,
         type: node.type || 'default',
         data: {
-          id: node.data.id,
-          name: node.data.name,
-          type: node.data.type,
+          id: node.data.id as string | number,
+          name: node.data.name as string,
+          type: node.data.type as string,
         }
       })),
       edges: edges.map(edge => ({

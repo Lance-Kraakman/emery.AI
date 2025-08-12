@@ -36,7 +36,7 @@ export type DbClient = typeof db;
 // AIDEV-NOTE: Connection monitoring utility for debugging connection leaks
 export async function getConnectionStats() {
   try {
-    const result = await rawClient`
+    const result = await client`
       SELECT 
         count(*) as total_connections,
         count(*) FILTER (WHERE state = 'active') as active_connections,

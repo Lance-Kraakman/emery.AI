@@ -80,38 +80,6 @@ export default function OrganizationChartClient() {
     enabled: !!currentOrganization?.id,
   });
 
-  // Reset layout to default positions
-  const resetLayout = useCallback(() => {
-    const confirmed = window.confirm(
-      'Are you sure you want to reset the layout? This will move all nodes back to their default positions and cannot be undone.'
-    );
-    
-    if (confirmed) {
-      generateNodesAndEdges();
-      
-      // Clear selected nodes since positions are changing
-      setSelectedNodes([]);
-      
-      // Show reset notification briefly
-      setShowResetNotification(true);
-      setTimeout(() => setShowResetNotification(false), 3000);
-    }
-  }, [generateNodesAndEdges]);
-
-  // Auto-save view using the custom hook
-  const autoSaveView = useCallback(() => {
-    if (!currentOrganization?.id || nodes.length === 0) return;
-
-    const viewState = {
-      selectedNodes,
-      searchTerm,
-      isPanelCollapsed,
-      isConfiguring,
-    };
-
-    saveViewConfig(nodes, edges, viewState);
-  }, [nodes, edges, selectedNodes, searchTerm, isPanelCollapsed, isConfiguring, currentOrganization, saveViewConfig]);
-
   // Convert teams and agents to React Flow nodes
   const generateNodesAndEdges = useCallback(() => {
     const newNodes: Node[] = [];
@@ -204,6 +172,39 @@ export default function OrganizationChartClient() {
     setNodes(newNodes);
     setEdges(newEdges);
   }, [agents, teams, tasks, setNodes, setEdges]);
+
+
+  // Reset layout to default positions
+  const resetLayout = useCallback(() => {
+    const confirmed = window.confirm(
+      'Are you sure you want to reset the layout? This will move all nodes back to their default positions and cannot be undone.'
+    );
+    
+    if (confirmed) {
+      generateNodesAndEdges();
+      
+      // Clear selected nodes since positions are changing
+      setSelectedNodes([]);
+      
+      // Show reset notification briefly
+      setShowResetNotification(true);
+      setTimeout(() => setShowResetNotification(false), 3000);
+    }
+  }, [generateNodesAndEdges]);
+
+  // Auto-save view using the custom hook
+  const autoSaveView = useCallback(() => {
+    if (!currentOrganization?.id || nodes.length === 0) return;
+
+    const viewState = {
+      selectedNodes,
+      searchTerm,
+      isPanelCollapsed,
+      isConfiguring,
+    };
+
+    saveViewConfig(nodes, edges, viewState);
+  }, [nodes, edges, selectedNodes, searchTerm, isPanelCollapsed, isConfiguring, currentOrganization, saveViewConfig]);
 
   // Generate nodes and edges when data changes
   useEffect(() => {

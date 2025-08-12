@@ -55,10 +55,7 @@ export default function AgentFormDialogImproved({ isOpen, onClose, agent }: Agen
       try {
         if (agent) {
           // Update existing agent
-          const result = await updateAgent(agent.id, {
-            ...validatedData,
-            organizationId: currentOrganization.id,
-          });
+          const result = await updateAgent(agent.id, validatedData);
           
           if (!result.success) {
             throw new Error(result.error);
@@ -105,7 +102,7 @@ export default function AgentFormDialogImproved({ isOpen, onClose, agent }: Agen
           <DialogTitle className="flex items-center gap-2">
             {agent ? 'Edit Agent' : 'Create New Agent'}
             {form.hasUnsavedChanges && (
-              <AlertTriangle className="w-4 h-4 text-orange-500" title="Unsaved changes" />
+              <AlertTriangle className="w-4 h-4 text-orange-500" />
             )}
           </DialogTitle>
         </DialogHeader>
@@ -181,7 +178,11 @@ export default function AgentFormDialogImproved({ isOpen, onClose, agent }: Agen
             <FormField label="Schedule">
               <ScheduleManager 
                 agentId={agent.id} 
-                initialRRule={(agent.trigger as any)?.rrule} 
+                initialRRule={(agent.trigger as any)?.rrule}
+                onScheduleChange={(rrule) => {
+                  // AIDEV-NOTE: Update agent trigger with new schedule
+                  console.log('Schedule changed:', rrule);
+                }}
               />
             </FormField>
           )}

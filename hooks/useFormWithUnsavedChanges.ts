@@ -60,9 +60,8 @@ export function useFormWithUnsavedChanges<T extends Record<string, any>>({
   const validateField = useCallback((key: keyof T) => {
     const value = values[key];
     try {
-      // Create a partial schema for single field validation
-      const fieldSchema = schema.pick({ [key]: true } as any);
-      fieldSchema.parse({ [key]: value });
+      // Validate single field by parsing just that field
+      schema.parse({ ...values, [key]: value });
       setErrors(prev => ({ ...prev, [key]: undefined }));
     } catch (error) {
       if (error instanceof z.ZodError) {

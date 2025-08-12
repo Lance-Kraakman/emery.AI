@@ -83,7 +83,7 @@ export async function GET(
     // Get owner's connected services
     const connections = await getUserConnections(agent.ownerId);
     const connectedServices: ConnectedService[] = connections.map(conn => ({
-      service: conn.app?.key || conn.app?.name || 'unknown',
+      service: (conn.app as any)?.key || (conn.app as any)?.name || 'unknown',
       account_name: conn.account_name || 'Unknown Account',
       status: conn.status as 'connected' | 'error' | 'disconnected',
       connected_at: conn.created_at,

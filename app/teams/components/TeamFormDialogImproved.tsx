@@ -141,7 +141,7 @@ export default function TeamFormDialogImproved({ isOpen, onClose, team, agents }
             <Users className="w-5 h-5" />
             {team ? 'Edit Team' : 'Create New Team'}
             {form.hasUnsavedChanges && (
-              <AlertTriangle className="w-4 h-4 text-orange-500" title="Unsaved changes" />
+              <AlertTriangle className="w-4 h-4 text-orange-500" />
             )}
           </DialogTitle>
         </DialogHeader>

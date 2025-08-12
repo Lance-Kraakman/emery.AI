@@ -1,9 +1,10 @@
+'use client';
+
 import dynamic from 'next/dynamic';
 import { Loading } from '@/components/ui/loading';
 
-// AIDEV-NOTE: Organization page refactored to use dynamic imports for ReactFlow component
+// AIDEV-NOTE: Organization page converted to Client Component to support ssr: false
 // AIDEV-NOTE: This prevents hydration issues with client-only ReactFlow components
-// AIDEV-NOTE: Page is dynamic due to session/organization context requirements
 
 const OrganizationChart = dynamic(() => import('./components/OrganizationChartClient'), {
   ssr: false, // ReactFlow needs to run client-side only
@@ -14,9 +15,7 @@ const OrganizationChart = dynamic(() => import('./components/OrganizationChartCl
   )
 });
 
-export const dynamic = 'force-dynamic';
-
-export default async function OrganizationPage() {
+export default function OrganizationPage() {
   return (
     <div className="h-screen flex flex-col">
       <div className="flex-1 overflow-hidden">
