@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server';
-import { auth } from '@/lib/auth';
+import { authenticateRequest } from '@/lib/auth/test-auth';
 import { db } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { executeAgentCapabilityViaGRPC } from '@/lib/agents/grpc-executor';
+import crypto from 'crypto';
 
 export interface AgentExecuteRequest {
   // New capability execution (main approach)
@@ -34,22 +35,13 @@ export async function POST(
 ): Promise<Response> {
   const params = await context.params;
   try {
-    const session = await auth();
+    const authResult = await authenticateRequest(request);
     
-    // AIDEV-NOTE: Development bypass for testing - remove in production
-    let userId = session?.user?.id;
-    if (!session?.user && process.env.NODE_ENV === 'development') {
-      // Allow testing with test user ID via header
-      const testUserId = request.headers.get('x-test-user-id');
-      if (testUserId === '550e8400-e29b-41d4-a716-446655440000') {
-        userId = testUserId;
-        console.log('⚠️  Using development test user bypass for execute');
-      } else {
-        return Response.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-    } else if (!session?.user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!authResult.success || !authResult.user) {
+      return Response.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
     }
+    
+    const userId = authResult.user.id;
 
     const agentId = parseInt(params.id);
     if (isNaN(agentId)) {
@@ -83,8 +75,8 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // Generate execution ID for tracking
-    const executionId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Generate execution ID for tracking (UUID format for database compatibility)
+    const executionId = crypto.randomUUID();
 
     // Execute agent capability via gRPC worker
     console.log(`[GRPC-CAPABILITY-EXEC] ${executionId}: Agent ${agentId} executing capability '${capability_name}' for user ${userId}`);

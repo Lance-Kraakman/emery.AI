@@ -13,7 +13,7 @@
  */
 
 import { db, rawClient } from '../lib/db/client';
-import { users, organizations, agents, userOrganizations, roles, permissions, userRoles } from '../lib/db/schema';
+import { users, organizations, agents, userOrganizations, roles } from '../lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import crypto from 'crypto';
 
@@ -28,8 +28,7 @@ const TEST_USER = {
 
 const TEST_ORG = {
   name: 'Test Organization',
-  slug: 'test-org',
-  description: 'Organization for development and testing',
+  mission: 'Organization for development and testing',
 };
 
 const TEST_AGENTS = [
@@ -129,13 +128,14 @@ function generateApiKey(): string {
 async function cleanDatabase(organizationId: number) {
   console.log('🧹 Cleaning existing test data...');
   
-  // Delete in dependency order
-  await db.delete(userRoles).where(eq(userRoles.userId, TEST_USER.id));
+  // Delete in dependency order to avoid foreign key constraints
   await db.delete(agents).where(eq(agents.organizationId, organizationId));
   await db.delete(userOrganizations).where(and(
     eq(userOrganizations.userId, TEST_USER.id),
     eq(userOrganizations.organizationId, organizationId)
   ));
+  // Delete roles before organization
+  await db.delete(roles).where(eq(roles.organizationId, organizationId));
   await db.delete(organizations).where(eq(organizations.id, organizationId));
   await db.delete(users).where(eq(users.id, TEST_USER.id));
   
@@ -148,17 +148,35 @@ async function createTestUser() {
   // Check if user already exists
   const existingUser = await db.select().from(users).where(eq(users.id, TEST_USER.id)).limit(1);
   
+  let user;
   if (existingUser.length === 0) {
-    await db.insert(users).values(TEST_USER);
+    // Create user with API key for testing
+    const apiKey = `user_${generateApiKey()}`;
+    [user] = await db.insert(users).values({
+      ...TEST_USER,
+      apiKey
+    }).returning();
     console.log(`✅ Created test user: ${TEST_USER.email}`);
+    console.log(`✅ User API Key: ${apiKey}`);
   } else {
+    user = existingUser[0];
     console.log(`✅ Test user already exists: ${TEST_USER.email}`);
+    
+    // Add API key if it doesn't exist
+    if (!user.apiKey) {
+      const apiKey = `user_${generateApiKey()}`;
+      await db.update(users).set({ apiKey }).where(eq(users.id, TEST_USER.id));
+      console.log(`✅ Added User API Key: ${apiKey}`);
+      user.apiKey = apiKey;
+    } else {
+      console.log(`✅ User API Key: ${user.apiKey}`);
+    }
   }
   
-  return TEST_USER.id;
+  return { id: TEST_USER.id, apiKey: user.apiKey };
 }
 
-async function createTestOrganization(userId: string) {
+async function createTestOrganization(userInfo: { id: string, apiKey: string }) {
   console.log('🏢 Creating test organization...');
   
   // Create organization
@@ -167,7 +185,7 @@ async function createTestOrganization(userId: string) {
   
   // Add user to organization
   await db.insert(userOrganizations).values({
-    userId,
+    userId: userInfo.id,
     organizationId: organization.id,
     role: 'owner'
   });
@@ -187,11 +205,10 @@ async function createTestOrganization(userId: string) {
     }).returning();
   }
   
-  // Assign Super Admin role to user
-  await db.insert(userRoles).values({
-    userId,
+  // Assign Super Admin role to user (update user's roleId)
+  await db.update(users).set({
     roleId: superAdminRole.id
-  });
+  }).where(eq(users.id, userInfo.id));
   
   console.log(`✅ Added user to organization with Super Admin role`);
   
@@ -259,13 +276,13 @@ async function createTestTables() {
   }
 }
 
-async function printSeedSummary(organization: any, createdAgents: any[]) {
+async function printSeedSummary(organization: any, createdAgents: any[], userApiKey: string) {
   console.log('\n📋 Seed Data Summary');
   console.log('='.repeat(50));
   console.log(`User ID: ${TEST_USER.id}`);
   console.log(`User Email: ${TEST_USER.email}`);
   console.log(`Organization: ${organization.name} (ID: ${organization.id})`);
-  console.log(`Organization Slug: ${organization.slug}`);
+  console.log(`Organization Mission: ${organization.mission}`);
   console.log('\nAgents Created:');
   
   for (const agent of createdAgents) {
@@ -274,14 +291,13 @@ async function printSeedSummary(organization: any, createdAgents: any[]) {
     console.log(`    Capabilities: ${agent.capabilities?.length || 0}`);
   }
   
-  console.log('\n🧪 Testing Commands:');
-  console.log(`npx tsx scripts/test-agent-execution.js ${createdAgents[0]?.id || 1}`);
-  console.log(`cd emery-agents && ./scripts/start-test-server.sh`);
+  console.log('\n🧪 API Testing Commands:');
+  console.log(`curl -H "Authorization: Bearer ${userApiKey}" http://localhost:3000/api/agents`);
   console.log('\n📱 Frontend Testing:');
   console.log(`Visit: http://localhost:3000/dashboard (login as ${TEST_USER.email})`);
   console.log(`OAuth: http://localhost:3000/dashboard/connections`);
-  console.log('\n🔑 Development Headers:');
-  console.log(`x-test-user-id: ${TEST_USER.id}`);
+  console.log('\n🔑 API Authentication:');
+  console.log(`User API Key: ${userApiKey}`);
 }
 
 async function main() {
@@ -293,10 +309,10 @@ async function main() {
   
   try {
     // Create test user
-    const userId = await createTestUser();
+    const userInfo = await createTestUser();
     
     // Create test organization  
-    const organization = await createTestOrganization(userId);
+    const organization = await createTestOrganization(userInfo);
     
     // Clean existing data if requested
     if (shouldClean) {
@@ -309,13 +325,13 @@ async function main() {
     }
     
     // Create test agents
-    const createdAgents = await createTestAgents(userId, finalOrganization.id);
+    const createdAgents = await createTestAgents(userInfo.id, finalOrganization.id);
     
     // Create test database tables
     await createTestTables();
     
     // Print summary
-    await printSeedSummary(finalOrganization, createdAgents);
+    await printSeedSummary(finalOrganization, createdAgents, userInfo.apiKey);
     
     console.log('\n✅ Seed data creation complete!');
     

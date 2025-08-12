@@ -23,7 +23,8 @@
     "test:scheduler": "npx tsx scripts/test-scheduler-system.ts",
     "seed:test": "npx tsx scripts/seed-test-data.ts",
     "seed:clean": "npx tsx scripts/seed-test-data.ts --clean",
-    "test:agent-execution": "node scripts/test-agent-execution.js"
+    "test:agent-execution": "node scripts/test-agent-execution.js",
+    "test:agent-api": "node scripts/test-agent-execution-api.js"
   },
   "packageManager": "pnpm@10.14.0",
   "dependencies": {
