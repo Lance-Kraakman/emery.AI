@@ -11,7 +11,6 @@ export default async function ConnectionsPage() {
   }
 
   return (
-    <EmeryProviders>
       <div className="container mx-auto p-6">
         <div className="max-w-4xl mx-auto">
           <div className="mb-6">
@@ -24,6 +23,5 @@ export default async function ConnectionsPage() {
           <ConnectionsManager />
         </div>
       </div>
-    </EmeryProviders>
   );
 }

@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { Agent } from '@/types/db';
 import { createAgent, updateAgent } from '@/app/actions/agents';
-import { getUserOAuthConnections } from '@/app/actions/pipedream';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,17 +14,23 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, Check, ExternalLink, Zap, Code, Database, MessageSquare, Globe, FileText, Brain, Settings } from 'lucide-react';
+import { AlertCircle, Check, ExternalLink, Zap, Code, Database, MessageSquare, Globe, FileText, Brain, Settings, GripVertical } from 'lucide-react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import { Capability } from './CapabilityEditor';
+
+const CapabilityEditor = dynamic(() => import('./CapabilityEditor'), { ssr: false });
+
+const generateUniqueId = (prefix: string) => {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+};
 
 import {
   PREDEFINED_TOOLS,
   PREDEFINED_TRIGGERS,
   getToolsByCategory,
   getToolCategories,
-  isToolAvailableForUser,
-  getAvailableToolsForUser,
-  getUnavailableToolsForUser,
   type ToolDefinition,
   type TriggerDefinition
 } from '@/lib/agents/tools-registry';
@@ -33,17 +38,11 @@ import {
 // AIDEV-NOTE: Enhanced agent configuration wizard with OAuth-aware tool selection
 
 interface AgentConfigurationWizardProps {
-  isOpen: boolean;
   onClose: () => void;
   agent?: Agent | null;
   onSuccess?: () => void;
 }
 
-interface Connection {
-  id: string;
-  app: string;
-  status: 'connected' | 'disconnected' | 'error';
-}
 
 const getCategoryIcon = (category: string) => {
   const icons = {
@@ -60,7 +59,6 @@ const getCategoryIcon = (category: string) => {
 };
 
 export default function AgentConfigurationWizard({ 
-  isOpen, 
   onClose, 
   agent,
   onSuccess 
@@ -68,6 +66,11 @@ export default function AgentConfigurationWizard({
   const [currentStep, setCurrentStep] = useState(0);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
   
   // Form data
   const [formData, setFormData] = useState({
@@ -78,49 +81,26 @@ export default function AgentConfigurationWizard({
     selectedTools: [] as string[],
     triggerType: 'MANUAL' as string,
     triggerConfig: {} as Record<string, any>,
-    capabilities: [] as Array<{
-      name: string;
-      description: string;
-      steps: Array<{
-        id: string;
-        type: 'CODE_STEP' | 'TOOL_STEP';
-        instructions: string;
-        tools: Array<{ name: string }>;
-      }>;
-    }>
+    capabilities: (agent?.capabilities as Capability[]) || [],
   });
 
-  // OAuth connections
-  const [connections, setConnections] = useState<Connection[]>([]);
-  const [connectionsLoading, setConnectionsLoading] = useState(true);
-
-  // Load user's OAuth connections
   useEffect(() => {
-    if (isOpen) {
-      loadConnections();
+    const initialCapabilities = (agent?.capabilities as Capability[]) || [];
+    if (agent) {
+      setFormData(prev => ({
+        ...prev,
+        capabilities: initialCapabilities.map(cap => ({
+          ...cap,
+          id: cap.id || generateUniqueId('cap'),
+          steps: cap.steps ? cap.steps.map(step => ({
+            ...step,
+            id: step.id || generateUniqueId('step'),
+          })) : [],
+        })),
+      }));
     }
-  }, [isOpen]);
+  }, [agent]);
 
-  const loadConnections = async () => {
-    try {
-      setConnectionsLoading(true);
-      const result = await getUserOAuthConnections();
-      if (result.success) {
-        setConnections(result.data || []);
-      }
-    } catch (error) {
-      console.error('Failed to load connections:', error);
-    } finally {
-      setConnectionsLoading(false);
-    }
-  };
-
-  const connectedServices = connections
-    .filter(conn => conn.status === 'connected')
-    .map(conn => conn.app);
-
-  const availableTools = getAvailableToolsForUser(connectedServices);
-  const unavailableTools = getUnavailableToolsForUser(connectedServices);
 
   const handleToolToggle = (toolName: string) => {
     setFormData(prev => ({
@@ -142,14 +122,19 @@ export default function AgentConfigurationWizard({
       // Create basic capability if none specified
       let capabilities = formData.capabilities;
       if (capabilities.length === 0) {
+        const selectedToolDefinitions = formData.selectedTools.map(toolName => 
+          PREDEFINED_TOOLS.find(t => t.name === toolName)
+        ).filter(t => t) as ToolDefinition[];
+
         capabilities = [{
+          id: 'cap_1',
           name: 'default_capability',
           description: 'Default capability for this agent',
           steps: [{
             id: 'step_1',
             type: 'TOOL_STEP' as const,
             instructions: formData.description || 'Execute the selected tools as needed',
-            tools: formData.selectedTools.map(toolName => ({ name: toolName }))
+            tools: selectedToolDefinitions
           }]
         }];
       }
@@ -220,23 +205,37 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
 
   const steps = [
     { id: 'basic', title: 'Basic Info', description: 'Name, role, and description' },
-    { id: 'tools', title: 'Tools & Capabilities', description: 'Select tools and configure capabilities' },
+    { id: 'capabilities', title: 'Capabilities', description: 'Configure agent capabilities and steps' },
     { id: 'triggers', title: 'Triggers', description: 'How and when the agent runs' },
     { id: 'review', title: 'Review & Create', description: 'Review configuration and create agent' }
   ];
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>
-            {agent ? 'Edit Agent' : 'Create New Agent'}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="flex h-[600px]">
+    <div className="flex flex-col h-full bg-background">
+      <div className="flex-shrink-0 border-b p-4 flex justify-between items-center">
+        <h2 className="text-2xl font-bold tracking-tight">
+          {agent ? 'Edit Agent' : 'Create New Agent'}
+        </h2>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={isPending || !formData.name}
+          >
+            {isPending ? 'Saving...' : (agent ? 'Save Changes' : 'Create Agent')}
+          </Button>
+        </div>
+      </div>
+      <div className="flex-grow flex overflow-hidden">
+        <div className="flex h-full w-full">
           {/* Sidebar Navigation */}
-          <div className="w-64 border-r bg-gray-50 p-4">
+          <div className="w-64 border-r bg-muted/40 p-4 flex-shrink-0">
             <nav className="space-y-2">
               {steps.map((step, index) => (
                 <button
@@ -245,7 +244,7 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                   className={`w-full text-left p-3 rounded-lg transition-colors ${
                     currentStep === index
                       ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-gray-200'
+                      : 'hover:bg-accent hover:text-accent-foreground'
                   }`}
                 >
                   <div className="font-medium">{step.title}</div>
@@ -258,7 +257,7 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
           {/* Main Content */}
           <div className="flex-1 p-6 overflow-y-auto">
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
                 <div className="flex">
                   <AlertCircle className="w-5 h-5 text-red-400" />
                   <div className="ml-3">
@@ -270,10 +269,10 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
 
             {/* Step 0: Basic Info */}
             {currentStep === 0 && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div>
-                  <h2 className="text-2xl font-bold mb-2">Basic Information</h2>
-                  <p className="text-muted-foreground">
+                  <h2 className="text-xl font-bold mb-1">Basic Information</h2>
+                  <p className="text-sm text-muted-foreground">
                     Give your agent a name and describe its purpose.
                   </p>
                 </div>
@@ -299,7 +298,7 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                     value={formData.description}
                     onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                     placeholder="Describe what this agent does and its main objectives..."
-                    rows={4}
+                    rows={3}
                   />
                 </FormField>
 
@@ -308,165 +307,31 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                     value={formData.persona}
                     onChange={(e) => setFormData(prev => ({ ...prev, persona: e.target.value }))}
                     placeholder="Describe the agent's communication style and personality..."
-                    rows={3}
+                    rows={2}
                   />
                 </FormField>
               </div>
             )}
 
-            {/* Step 1: Tools & Capabilities */}
-            {currentStep === 1 && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold mb-2">Tools & Capabilities</h2>
-                  <p className="text-muted-foreground">
-                    Select the tools your agent can use. OAuth tools require connected accounts.
-                  </p>
-                </div>
-
-                {connectionsLoading ? (
-                  <div className="text-center py-8">Loading your connected services...</div>
-                ) : (
-                  <>
-                    {/* OAuth Status */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <Zap className="w-5 h-5" />
-                          OAuth Connections
-                        </CardTitle>
-                        <CardDescription>
-                          Your connected services: {connectedServices.length > 0 
-                            ? connectedServices.join(', ') 
-                            : 'None connected'}
-                          {connectedServices.length === 0 && (
-                            <Link 
-                              href="/connections" 
-                              className="ml-2 text-primary hover:underline inline-flex items-center gap-1"
-                            >
-                              Connect services <ExternalLink className="w-3 h-3" />
-                            </Link>
-                          )}
-                        </CardDescription>
-                      </CardHeader>
-                    </Card>
-
-                    {/* Available Tools */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold text-green-700">Available Tools</h3>
-                      {getToolCategories().map(category => {
-                        const categoryTools = availableTools.filter(tool => tool.category === category);
-                        if (categoryTools.length === 0) return null;
-
-                        const Icon = getCategoryIcon(category);
-                        
-                        return (
-                          <Card key={category}>
-                            <CardHeader>
-                              <CardTitle className="flex items-center gap-2 capitalize">
-                                <Icon className="w-4 h-4" />
-                                {category}
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="grid grid-cols-1 gap-3">
-                                {categoryTools.map(tool => (
-                                  <div 
-                                    key={tool.name}
-                                    className="flex items-start gap-3 p-3 border rounded-lg hover:bg-gray-50"
-                                  >
-                                    <Checkbox
-                                      checked={formData.selectedTools.includes(tool.name)}
-                                      onCheckedChange={() => handleToolToggle(tool.name)}
-                                    />
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-medium">{tool.display_name}</span>
-                                        {tool.requires_auth && (
-                                          <Badge variant="secondary" className="text-xs">
-                                            {tool.oauth_service}
-                                          </Badge>
-                                        )}
-                                      </div>
-                                      <p className="text-sm text-muted-foreground mt-1">
-                                        {tool.description}
-                                      </p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-
-                    {/* Unavailable Tools */}
-                    {unavailableTools.length > 0 && (
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-semibold text-orange-700">Requires OAuth Connection</h3>
-                          <Link 
-                            href="/connections" 
-                            className="text-primary hover:underline inline-flex items-center gap-1 text-sm"
-                          >
-                            Connect services <ExternalLink className="w-3 h-3" />
-                          </Link>
-                        </div>
-                        
-                        {getToolCategories().map(category => {
-                          const categoryTools = unavailableTools.filter(tool => tool.category === category);
-                          if (categoryTools.length === 0) return null;
-
-                          const Icon = getCategoryIcon(category);
-                          
-                          return (
-                            <Card key={category} className="opacity-60">
-                              <CardHeader>
-                                <CardTitle className="flex items-center gap-2 capitalize">
-                                  <Icon className="w-4 h-4" />
-                                  {category}
-                                </CardTitle>
-                              </CardHeader>
-                              <CardContent>
-                                <div className="grid grid-cols-1 gap-3">
-                                  {categoryTools.map(tool => (
-                                    <div 
-                                      key={tool.name}
-                                      className="flex items-start gap-3 p-3 border rounded-lg bg-gray-50"
-                                    >
-                                      <Checkbox disabled />
-                                      <div className="flex-1">
-                                        <div className="flex items-center gap-2">
-                                          <span className="font-medium">{tool.display_name}</span>
-                                          <Badge variant="outline" className="text-xs">
-                                            Connect {tool.oauth_service}
-                                          </Badge>
-                                        </div>
-                                        <p className="text-sm text-muted-foreground mt-1">
-                                          {tool.description}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+            {/* Step 1: Capabilities */}
+            {currentStep === 1 && isClient && (
+              <CapabilityEditor
+                capabilities={formData.capabilities}
+                setCapabilities={(value) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    capabilities: typeof value === 'function' ? value(prev.capabilities) : value,
+                  }));
+                }}
+              />
             )}
 
             {/* Step 2: Triggers */}
             {currentStep === 2 && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div>
-                  <h2 className="text-2xl font-bold mb-2">Agent Triggers</h2>
-                  <p className="text-muted-foreground">
+                  <h2 className="text-xl font-bold mb-1">Agent Triggers</h2>
+                  <p className="text-sm text-muted-foreground">
                     Configure how and when your agent should execute.
                   </p>
                 </div>
@@ -537,110 +402,71 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
 
             {/* Step 3: Review */}
             {currentStep === 3 && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div>
-                  <h2 className="text-2xl font-bold mb-2">Review & Create</h2>
-                  <p className="text-muted-foreground">
+                  <h2 className="text-xl font-bold mb-1">Review & Create</h2>
+                  <p className="text-sm text-muted-foreground">
                     Review your agent configuration before creating.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Basic Information</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <dl className="space-y-2">
-                        <div><dt className="font-medium">Name:</dt><dd>{formData.name}</dd></div>
-                        <div><dt className="font-medium">Role:</dt><dd>{formData.role}</dd></div>
-                        <div><dt className="font-medium">Description:</dt><dd>{formData.description}</dd></div>
-                      </dl>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Selected Tools ({formData.selectedTools.length})</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-wrap gap-2">
-                        {formData.selectedTools.map(toolName => {
-                          const tool = PREDEFINED_TOOLS.find(t => t.name === toolName);
-                          return (
-                            <Badge key={toolName} variant="secondary">
-                              {tool?.display_name || toolName}
-                            </Badge>
-                          );
-                        })}
-                        {formData.selectedTools.length === 0 && (
-                          <span className="text-muted-foreground">No tools selected</span>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Trigger Configuration</CardTitle>
-                    </CardHeader>
-                    <CardContent>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="space-y-4">
+                      {/* Basic Info */}
                       <div>
-                        <span className="font-medium">Type:</span> {
-                          PREDEFINED_TRIGGERS.find(t => t.type === formData.triggerType)?.display_name
-                        }
-                        {formData.triggerType === 'CRON' && formData.triggerConfig.cron && (
-                          <div className="mt-2">
-                            <span className="font-medium">Schedule:</span> {formData.triggerConfig.cron}
-                          </div>
-                        )}
+                        <h3 className="text-base font-semibold border-b pb-2 mb-2">Basic Information</h3>
+                        <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-xs">
+                          <div><dt className="font-medium text-muted-foreground">Name</dt><dd className="font-semibold">{formData.name}</dd></div>
+                          <div><dt className="font-medium text-muted-foreground">Role</dt><dd>{formData.role || 'Not set'}</dd></div>
+                          <div className="col-span-full"><dt className="font-medium text-muted-foreground">Description</dt><dd>{formData.description || 'Not set'}</dd></div>
+                        </dl>
                       </div>
-                    </CardContent>
-                  </Card>
-                </div>
+
+                      {/* Tools */}
+                      <div>
+                        <h3 className="text-base font-semibold border-b pb-2 mb-2">
+                          Selected Tools ({formData.selectedTools.length})
+                        </h3>
+                        <div className="flex flex-wrap gap-1">
+                          {formData.selectedTools.map(toolName => {
+                            const tool = PREDEFINED_TOOLS.find(t => t.name === toolName);
+                            return (
+                              <Badge key={toolName} variant="secondary" className="text-xs">
+                                {tool?.display_name || toolName}
+                              </Badge>
+                            );
+                          })}
+                          {formData.selectedTools.length === 0 && (
+                            <span className="text-xs text-muted-foreground">No tools selected</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Trigger */}
+                      <div>
+                        <h3 className="text-base font-semibold border-b pb-2 mb-2">Trigger</h3>
+                        <div className="text-xs">
+                          <span className="font-medium text-muted-foreground">Type: </span>
+                          <span className="font-semibold">{
+                            PREDEFINED_TRIGGERS.find(t => t.type === formData.triggerType)?.display_name
+                          }</span>
+                          {formData.triggerType === 'CRON' && formData.triggerConfig.cron && (
+                            <div className="mt-1">
+                              <span className="font-medium text-muted-foreground">Schedule: </span>
+                              <span className="font-mono bg-gray-100 px-1 py-0.5 rounded text-xs">{formData.triggerConfig.cron}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             )}
-
-            {/* Navigation */}
-            <div className="flex justify-between mt-8 pt-6 border-t">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
-                disabled={currentStep === 0}
-              >
-                Previous
-              </Button>
-              
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={onClose}
-                >
-                  Cancel
-                </Button>
-                
-                {currentStep < steps.length - 1 ? (
-                  <Button
-                    onClick={() => setCurrentStep(Math.min(steps.length - 1, currentStep + 1))}
-                    disabled={currentStep === 0 && !formData.name}
-                  >
-                    Next
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={isPending || !formData.name}
-                  >
-                    {isPending ? 'Creating...' : (agent ? 'Update Agent' : 'Create Agent')}
-                  </Button>
-                )}
-              </div>
-            </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }

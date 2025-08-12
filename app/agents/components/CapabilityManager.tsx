@@ -25,11 +25,11 @@ export default function CapabilityManager({ agent }: CapabilityManagerProps) {
         <h3 className="text-xl font-semibold">Capabilities</h3>
         <Button
           onClick={() => setIsFormOpen(true)}
-          variant="success"
+          variant="outline"
           size="sm"
         >
-          <Plus size={16} />
-          Add Capability
+          <Settings size={16} className="mr-2" />
+          Edit Capabilities
         </Button>
       </div>
       
@@ -82,7 +82,7 @@ export default function CapabilityManager({ agent }: CapabilityManagerProps) {
           title="No capabilities configured"
           description="Add capabilities to define what this agent can do"
           action={{
-            label: "Add First Capability",
+            label: "Configure Capabilities",
             onClick: () => setIsFormOpen(true)
           }}
         />

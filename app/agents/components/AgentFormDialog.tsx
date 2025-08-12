@@ -41,7 +41,7 @@ export default function AgentFormDialog({ isOpen, onClose, agent }: AgentFormDia
         <DialogHeader>
           <DialogTitle>{agent ? 'Edit Agent' : 'Create New Agent'}</DialogTitle>
         </DialogHeader>
-        <form action={handleSubmit} className="space-y-4">
+        <form action={handleSubmit} className="space-y-3">
           {error && (
             <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
               {error}
@@ -70,7 +70,7 @@ export default function AgentFormDialog({ isOpen, onClose, agent }: AgentFormDia
           <FormField label="Description">
             <Textarea
               name="description"
-              rows={3}
+              rows={2}
               defaultValue={agent?.description ?? ''}
               placeholder="A brief description of the agent's purpose."
               disabled={isPending}
@@ -80,14 +80,14 @@ export default function AgentFormDialog({ isOpen, onClose, agent }: AgentFormDia
           <FormField label="Persona">
             <Textarea
               name="persona"
-              rows={3}
+              rows={2}
               defaultValue={agent?.persona ?? ''}
               placeholder="Describe the agent's personality and communication style."
               disabled={isPending}
             />
           </FormField>
           
-          <div className="flex justify-end space-x-2 pt-4">
+          <div className="flex justify-end space-x-2 pt-3">
             <Button
               type="button"
               variant="outline"

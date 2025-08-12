@@ -1,7 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import { Agent } from '@/types/db';
 import { addCapabilityToAgent } from '@/app/actions/agents';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { FormField } from '@/components/ui/form-field';
 
 interface CapabilityFormDialogProps {
   isOpen: boolean;
@@ -10,84 +16,108 @@ interface CapabilityFormDialogProps {
 }
 
 export default function CapabilityFormDialog({ isOpen, onClose, agent }: CapabilityFormDialogProps) {
-  if (!isOpen) return null;
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setIsPending(true);
+    setError(null);
+
     const formData = new FormData(event.currentTarget);
     const name = formData.get('name') as string;
     const description = formData.get('description') as string;
-    const tools = (formData.get('tools') as string).split(',').map(t => t.trim());
-    const servers = JSON.parse(formData.get('servers') as string);
-    await addCapabilityToAgent(agent.id, { name, description, tools, servers });
-    onClose();
+    const tools = (formData.get('tools') as string).split(',').map(t => t.trim()).filter(t => t);
+    const serversRaw = formData.get('servers') as string;
+    
+    let servers = [];
+    try {
+      if (serversRaw) {
+        servers = JSON.parse(serversRaw);
+      }
+    } catch (e) {
+      setError('Invalid JSON format for Servers.');
+      setIsPending(false);
+      return;
+    }
+
+    try {
+      await addCapabilityToAgent(agent.id, { name, description, tools, servers });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add capability');
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-      <div className="bg-popover p-6 rounded-lg shadow-lg w-full max-w-md border">
-        <h2 className="text-2xl font-bold mb-4 text-foreground">Add Capability</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-muted-foreground">Name</label>
-              <input
-                id="name"
-                name="name"
-                type="text"
-                required
-                className="mt-1 block w-full p-2 border rounded"
-                placeholder="e.g., Analyze Sales Data"
-              />
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add Capability</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {error && (
+            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
+              {error}
             </div>
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-muted-foreground">Description</label>
-              <textarea
-                id="description"
-                name="description"
-                rows={3}
-                className="mt-1 block w-full p-2 border rounded"
-                placeholder="A brief description of the capability."
-              />
-            </div>
-            <div>
-              <label htmlFor="tools" className="block text-sm font-medium text-muted-foreground">Tools</label>
-              <input
-                id="tools"
-                name="tools"
-                type="text"
-                className="mt-1 block w-full p-2 border rounded"
-                placeholder="e.g., slack,gmail"
-              />
-            </div>
-            <div>
-              <label htmlFor="servers" className="block text-sm font-medium text-muted-foreground">Servers</label>
-              <textarea
-                id="servers"
-                name="servers"
-                rows={3}
-                className="mt-1 block w-full p-2 border rounded"
-                placeholder='e.g., [{ "name": "My API", "url": "https://api.example.com", "auth": { "type": "bearer", "token": "abc123" } }]'
-              />
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end space-x-2">
-            <button
+          )}
+          
+          <FormField label="Name" required>
+            <Input
+              name="name"
+              required
+              placeholder="e.g., Analyze Sales Data"
+              disabled={isPending}
+            />
+          </FormField>
+          
+          <FormField label="Description">
+            <Textarea
+              name="description"
+              rows={2}
+              placeholder="A brief description of the capability."
+              disabled={isPending}
+            />
+          </FormField>
+          
+          <FormField label="Tools" description="Comma-separated list of tool names.">
+            <Input
+              name="tools"
+              placeholder="e.g., python_executor, gmail"
+              disabled={isPending}
+            />
+          </FormField>
+          
+          <FormField label="Servers" description="JSON array of server configurations.">
+            <Textarea
+              name="servers"
+              rows={3}
+              placeholder='e.g., [{ "name": "My API", "url": "..." }]'
+              disabled={isPending}
+            />
+          </FormField>
+          
+          <div className="flex justify-end space-x-2 pt-3">
+            <Button
               type="button"
+              variant="outline"
               onClick={onClose}
-              className="bg-secondary text-secondary-foreground px-4 py-2 rounded"
+              disabled={isPending}
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              className="bg-primary text-primary-foreground px-4 py-2 rounded"
+              variant="success"
+              disabled={isPending}
             >
-              Add Capability
-            </button>
+              {isPending ? 'Adding...' : 'Add Capability'}
+            </Button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

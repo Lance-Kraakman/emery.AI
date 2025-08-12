@@ -17,12 +17,7 @@ export default async function AgentsPage() {
   ]);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Agents</h1>
-        <p className="text-muted-foreground">Manage your AI agents and their capabilities</p>
-      </div>
-      
+    <div className="h-full">
       <Suspense fallback={<Loading text="Loading dashboard..." />}>
         <AgentDashboardClient initialAgents={agents} teams={teams} />
       </Suspense>

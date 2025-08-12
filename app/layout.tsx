@@ -18,12 +18,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className="relative">
+    <html lang="en" className="h-full">
+      <body className="relative h-full">
         <AnimatedBackground />
         <AuthProvider>
-          <EmeryProviders>
-          <div className="relative z-10">
+        <EmeryProviders>
+          <div className="relative z-10 h-full">
             {children}
           </div>
           </EmeryProviders>

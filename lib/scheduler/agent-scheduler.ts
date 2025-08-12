@@ -111,7 +111,7 @@ export class AgentScheduler {
   private async cleanupDatabaseListeners(): Promise<void> {
     if (this.postgresListener) {
       try {
-        await this.postgresListener.close();
+        await this.postgresListener.end();
       } catch (error) {
         console.warn('[SCHEDULER] Error closing database listener:', error);
       }

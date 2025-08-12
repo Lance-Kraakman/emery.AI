@@ -80,15 +80,32 @@ export async function getUserConnections(userId: string) {
     }
     
     // Transform accounts to match the expected connection format
-    return accounts.map((account: any) => ({
-      id: account.id,
-      app: account.app, // Keep the full app object
-      account_name: account.account_name || account.name || account.email || account.username,
-      status: account.status, // Pass raw status
+    return accounts.map((account: any) => {
+      // Safely access and normalize app name
+      let appName = '';
+      if (typeof account.app === 'string') {
+        appName = account.app;
+      } else if (account.app && typeof account.app.name === 'string') {
+        appName = account.app.name;
+      } else {
+        appName = 'unknown'; // Fallback for unexpected structure
+      }
+      
+      // Normalize Google services to 'gmail' for tool matching
+      if (appName === 'google' || appName.startsWith('google_')) {
+        appName = 'gmail';
+      }
+      
+      return {
+        id: account.id,
+        app: appName,
+        account_name: account.account_name || account.name || account.email || account.username,
+        status: account.status, // Pass raw status
       raw_status: account.status,
       created_at: account.created_at || new Date().toISOString(),
       updated_at: account.updated_at || new Date().toISOString(),
-    }));
+      };
+    });
   } catch (error) {
     console.error('Failed to get user connections:', error);
     return [];
