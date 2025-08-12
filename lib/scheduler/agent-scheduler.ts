@@ -118,9 +118,10 @@ export class AgentScheduler {
   private async cleanupDatabaseListeners(): Promise<void> {
     if (this.postgresListener) {
       try {
-        await this.postgresListener.end();
+        // AIDEV-NOTE: Don't close shared client, just unlisten
+        this.postgresListener.unlisten('emery_table_changes');
       } catch (error) {
-        console.warn('[SCHEDULER] Error closing database listener:', error);
+        console.warn('[SCHEDULER] Error removing database listener:', error);
       }
       this.postgresListener = null;
     }
@@ -321,24 +322,20 @@ export class AgentScheduler {
       // Setup triggers for agents with DATABASE_EVENT configuration
       await DatabaseTriggerManager.setupTriggersForAgents();
       
-      // Setup PostgreSQL listener
-      const { Client } = await import('pg');
-      this.postgresListener = new Client({
-        connectionString: process.env.DATABASE_URL,
-      });
+      // Setup PostgreSQL listener using shared client pool
+      const { rawClient } = await import('@/lib/db/client');
+      
+      // AIDEV-NOTE: Use raw client for LISTEN instead of creating new connection
+      // This prevents connection leaks by reusing the shared pool
+      this.postgresListener = rawClient;
 
-      await this.postgresListener.connect();
-
-      // Listen for table change notifications
-      await this.postgresListener.query('LISTEN emery_table_changes');
-
-      this.postgresListener.on('notification', async (msg: any) => {
+      // AIDEV-NOTE: Using postgres.js listen() method instead of pg Client
+      // This automatically handles LISTEN command and provides callback for notifications
+      this.postgresListener.listen('emery_table_changes', async (payload: string) => {
         try {
-          if (msg.channel === 'emery_table_changes') {
-            const payload = JSON.parse(msg.payload);
-            console.log(`[SCHEDULER-DB] Received table change notification:`, payload);
-            await this.handleDatabaseEvent(payload);
-          }
+          const data = JSON.parse(payload);
+          console.log(`[SCHEDULER-DB] Received table change notification:`, data);
+          await this.handleDatabaseEvent(data);
         } catch (error) {
           console.error('[SCHEDULER-DB] Error handling database notification:', error);
         }
