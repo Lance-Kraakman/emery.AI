@@ -231,7 +231,7 @@ export default function ActivityPanel({
             ))}
           </div>
         )}
-      </ScrollArea>
+      </div>
     </div>
   );
 }
