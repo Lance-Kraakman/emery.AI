@@ -3,12 +3,12 @@
 import { signIn } from "next-auth/react"
 
 interface SignInButtonProps {
-  provider: "github" | "google"
+  provider: "github" | "google" | "email"
 }
 
 export function SignInButton({ provider }: SignInButtonProps) {
   const handleSignIn = () => {
-    signIn(provider, { callbackUrl: "/dashboard" })
+    signIn(provider, { callbackUrl: "/mission-control" })
   }
 
   const buttonConfig = {

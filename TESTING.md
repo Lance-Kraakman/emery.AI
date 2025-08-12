@@ -113,10 +113,25 @@ These capabilities automatically return successful responses for testing purpose
 
 ## OAuth and Connections Testing
 
-### Frontend OAuth Testing
+### Frontend Authentication Testing
 
+#### Email Sign-In (for Test Users)
+1. **Start email server** (for development):
+   ```bash
+   # Install MailHog (one-time setup)
+   brew install mailhog
+   
+   # Start MailHog email server
+   mailhog
+   ```
+2. **Visit sign-in page**: `http://localhost:3000/auth/signin`
+3. **Enter test email**: `test@emery.dev`
+4. **Check MailHog**: `http://localhost:8025` to see the magic sign-in link
+5. **Click the link** to sign in
+
+#### OAuth Testing
 1. **Start the development server**: `pnpm dev`
-2. **Visit connections page**: `http://localhost:3000/dashboard/connections`
+2. **Visit connections page**: `http://localhost:3000/connections`
 3. **Connect OAuth accounts**: Gmail, Slack, GitHub, etc.
 4. **Test disconnection**: Ensure you can disconnect and reconnect
 
