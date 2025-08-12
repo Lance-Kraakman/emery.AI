@@ -83,8 +83,8 @@ export default function TeamConfigurationPanel({
   };
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      <div className="flex-shrink-0 border-b p-4 flex justify-between items-center">
+    <div className="flex flex-col h-full">
+      <div className="flex-shrink-0 border-b border-border/20 p-4 flex justify-between items-center">
         <h2 className="text-2xl font-bold tracking-tight">
           {team ? 'Edit Team' : 'Create New Team'}
         </h2>
@@ -200,7 +200,7 @@ export default function TeamConfigurationPanel({
               </div>
             )}
 
-            <ScrollArea className="h-48 border rounded-md p-3">
+            <ScrollArea className="h-48 border border-border/20 rounded-md p-3">
               <div className="space-y-2">
                 {agents.length > 0 ? (
                   agents.map((agent) => (

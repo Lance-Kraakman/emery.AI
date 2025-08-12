@@ -211,8 +211,8 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
   ];
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      <div className="flex-shrink-0 border-b p-4 flex justify-between items-center">
+    <div className="flex flex-col h-full">
+      <div className="flex-shrink-0 border-b border-border/20 p-4 flex justify-between items-center">
         <h2 className="text-2xl font-bold tracking-tight">
           {agent ? 'Edit Agent' : 'Create New Agent'}
         </h2>
@@ -235,7 +235,7 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
       <div className="flex-grow flex overflow-hidden">
         <div className="flex h-full w-full">
           {/* Sidebar Navigation */}
-          <div className="w-64 border-r bg-muted/40 p-4 flex-shrink-0">
+          <div className="w-64 border-r border-border/20 p-4 flex-shrink-0">
             <nav className="space-y-2">
               {steps.map((step, index) => (
                 <button
@@ -243,8 +243,8 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                   onClick={() => setCurrentStep(index)}
                   className={`w-full text-left p-3 rounded-lg transition-colors ${
                     currentStep === index
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-accent hover:text-accent-foreground'
+                      ? 'bg-primary/20 text-primary-foreground'
+                      : 'hover:bg-accent/10 hover:text-accent-foreground'
                   }`}
                 >
                   <div className="font-medium">{step.title}</div>
@@ -410,12 +410,12 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                   </p>
                 </div>
 
-                <Card>
+                <Card className="bg-transparent border-border/20">
                   <CardContent className="p-4">
                     <div className="space-y-4">
                       {/* Basic Info */}
                       <div>
-                        <h3 className="text-base font-semibold border-b pb-2 mb-2">Basic Information</h3>
+                        <h3 className="text-base font-semibold border-b border-border/20 pb-2 mb-2">Basic Information</h3>
                         <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-xs">
                           <div><dt className="font-medium text-muted-foreground">Name</dt><dd className="font-semibold">{formData.name}</dd></div>
                           <div><dt className="font-medium text-muted-foreground">Role</dt><dd>{formData.role || 'Not set'}</dd></div>
@@ -425,7 +425,7 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
 
                       {/* Tools */}
                       <div>
-                        <h3 className="text-base font-semibold border-b pb-2 mb-2">
+                        <h3 className="text-base font-semibold border-b border-border/20 pb-2 mb-2">
                           Selected Tools ({formData.selectedTools.length})
                         </h3>
                         <div className="flex flex-wrap gap-1">
@@ -445,7 +445,7 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
 
                       {/* Trigger */}
                       <div>
-                        <h3 className="text-base font-semibold border-b pb-2 mb-2">Trigger</h3>
+                        <h3 className="text-base font-semibold border-b border-border/20 pb-2 mb-2">Trigger</h3>
                         <div className="text-xs">
                           <span className="font-medium text-muted-foreground">Type: </span>
                           <span className="font-semibold">{
