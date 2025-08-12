@@ -152,7 +152,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
                       <p className="text-sm text-muted-foreground">{agent.role || 'No role specified'}</p>
                       {agent.status && (
                         <span className={`inline-block px-2 py-1 text-xs rounded-full mt-2 ${
-                          agent.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          agent.status === 'active' ? 'bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-muted/50 text-muted-foreground'
                         }`}>
                           {agent.status}
                         </span>

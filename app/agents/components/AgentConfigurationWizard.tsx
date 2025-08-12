@@ -257,11 +257,11 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
           {/* Main Content */}
           <div className="flex-1 p-6 overflow-y-auto">
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+              <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
                 <div className="flex">
-                  <AlertCircle className="w-5 h-5 text-red-400" />
+                  <AlertCircle className="w-5 h-5 text-destructive" />
                   <div className="ml-3">
-                    <div className="text-sm text-red-800">{error}</div>
+                    <div className="text-sm text-destructive">{error}</div>
                   </div>
                 </div>
               </div>
@@ -454,7 +454,7 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                           {formData.triggerType === 'CRON' && formData.triggerConfig.cron && (
                             <div className="mt-1">
                               <span className="font-medium text-muted-foreground">Schedule: </span>
-                              <span className="font-mono bg-gray-100 px-1 py-0.5 rounded text-xs">{formData.triggerConfig.cron}</span>
+                              <span className="font-mono bg-muted/50 px-1 py-0.5 rounded text-xs">{formData.triggerConfig.cron}</span>
                             </div>
                           )}
                         </div>

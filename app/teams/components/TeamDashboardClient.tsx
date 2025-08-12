@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Loading } from '@/components/ui/loading';
 import { Badge } from '@/components/ui/badge';
 import TeamFormDialog from './TeamFormDialog';
+import TeamConfigurationPanel from './TeamConfigurationPanel';
 import TeamDetailsView from './TeamDetailsView';
 import { getTeams } from '@/app/actions/teams';
 
@@ -25,6 +26,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [isPanelEditMode, setIsPanelEditMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +85,8 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
             <Button
               onClick={() => {
                 setEditingTeam(null);
-                setIsFormOpen(true);
+                setSelectedTeam(null);
+                setIsPanelEditMode(true);
               }}
               variant="success"
               size="sm"
@@ -108,7 +111,8 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
                 label: "Create Team",
                 onClick: () => {
                   setEditingTeam(null);
-                  setIsFormOpen(true);
+                  setSelectedTeam(null);
+                  setIsPanelEditMode(true);
                 }
               }}
             />
@@ -145,17 +149,31 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
         )}
       </div>
 
-      {/* Right Pane: Team Details */}
+      {/* Right Pane: Team Details or Editor */}
       <div className="flex-1 p-0">
         <Card className="h-full rounded-none border-none">
           <CardContent className="p-6 h-full">
-            {selectedTeam ? (
+            {isPanelEditMode ? (
+              <TeamConfigurationPanel
+                team={editingTeam}
+                agents={agents}
+                onClose={() => {
+                  setIsPanelEditMode(false);
+                  setEditingTeam(null);
+                }}
+                onSuccess={() => {
+                  refreshTeams();
+                  setIsPanelEditMode(false);
+                  setEditingTeam(null);
+                }}
+              />
+            ) : selectedTeam ? (
               <TeamDetailsView
                 team={selectedTeam}
                 agents={agents}
                 onEdit={() => {
                   setEditingTeam(selectedTeam);
-                  setIsFormOpen(true);
+                  setIsPanelEditMode(true);
                 }}
               />
             ) : (
