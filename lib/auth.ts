@@ -34,10 +34,16 @@ const authOptions = {
       server: {
         host: process.env.EMAIL_SERVER_HOST || "localhost",
         port: parseInt(process.env.EMAIL_SERVER_PORT || "1025"),
-        auth: {
-          user: process.env.EMAIL_SERVER_USER || "",
-          pass: process.env.EMAIL_SERVER_PASSWORD || "",
-        },
+        // MailHog doesn't require authentication, so omit auth for localhost
+        ...(process.env.EMAIL_SERVER_HOST === "localhost" || !process.env.EMAIL_SERVER_HOST 
+          ? {} 
+          : {
+              auth: {
+                user: process.env.EMAIL_SERVER_USER || "",
+                pass: process.env.EMAIL_SERVER_PASSWORD || "",
+              }
+            }
+        ),
       },
       from: process.env.EMAIL_FROM || "noreply@emery.dev",
     }),
