@@ -86,7 +86,7 @@ export function useEmeryData() {
         getDatabases(),
         getTables(),
         getAgents(),
-        getTeams()
+        getTeams(currentOrg.id)
       ]);
 
       const tables = tablesResult as EmeryTable[];

@@ -188,7 +188,7 @@ export default function TeamFormDialog({ isOpen, onClose, team, agents }: TeamFo
               variant="success"
               disabled={loading}
             >
-              {loading ? 'Saving...' : (team ? 'Update Team' : 'Create Team')}
+              {loading ? 'Saving...' : (team ? 'Update Team' : 'Review')}
             </Button>
           </div>
         </form>

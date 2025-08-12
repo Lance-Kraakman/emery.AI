@@ -365,7 +365,7 @@ export const PREDEFINED_SERVERS: ServerDefinition[] = [
  * Trigger type definitions
  */
 export interface TriggerDefinition {
-  type: 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT';
+  type: 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT' | 'CALENDAR';
   display_name: string;
   description: string;
   parameters: Array<{
@@ -430,6 +430,20 @@ export const PREDEFINED_TRIGGERS: TriggerDefinition[] = [
         required: true,
         description: 'Database table ID to monitor',
         placeholder: 'Select table to monitor'
+      }
+    ]
+  },
+  {
+    type: 'CALENDAR',
+    display_name: 'Calendar Event',
+    description: 'Execute agent based on a calendar schedule',
+    parameters: [
+      {
+        name: 'rrule',
+        type: 'string',
+        required: true,
+        description: 'Recurrence rule string (iCalendar RFC 5545)',
+        placeholder: 'Select dates on the calendar to generate an rrule'
       }
     ]
   }

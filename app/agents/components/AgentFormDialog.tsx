@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { FormField } from '@/components/ui/form-field';
 import { useEmery } from '@/contexts/EmeryContext';
+import ScheduleManager from './ScheduleManager';
 
 // AIDEV-NOTE: Agent form dialog refactored to use consistent design system components and patterns
 
@@ -89,6 +90,12 @@ export default function AgentFormDialog({ isOpen, onClose, agent }: AgentFormDia
               disabled={isPending}
             />
           </FormField>
+
+          {agent && (
+            <FormField label="Schedule">
+              <ScheduleManager agentId={agent.id} initialRRule={(agent.trigger as any)?.rrule} />
+            </FormField>
+          )}
           
           <div className="flex justify-end space-x-2 pt-3">
             <Button

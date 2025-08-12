@@ -6,6 +6,7 @@
  */
 
 import cron from 'node-cron';
+import { RRule } from 'rrule';
 import { db } from '@/lib/db/client';
 import { agents, tasks } from '@/lib/db/schema';
 import { sql, eq, and, isNotNull } from 'drizzle-orm';
@@ -13,8 +14,9 @@ import { executeAgentCapabilityViaGRPC } from '@/lib/agents/grpc-executor';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface TriggerConfig {
-  type: 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT';
+  type: 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT' | 'CALENDAR';
   cron?: string;
+  rrule?: string;
   webhook_url?: string;
   webhook_secret?: string;
   table_id?: string;
@@ -24,6 +26,7 @@ interface SchedulerJob {
   agentId: number;
   agent: any;
   cronJob?: any;
+  calendarJob?: NodeJS.Timeout;
   triggerConfig: TriggerConfig;
 }
 
@@ -97,6 +100,10 @@ export class AgentScheduler {
         console.log(`[SCHEDULER] Destroying cron job for agent ${agentId}`);
         schedulerJob.cronJob.destroy();
       }
+      if (schedulerJob.calendarJob) {
+        console.log(`[SCHEDULER] Clearing calendar job for agent ${agentId}`);
+        clearTimeout(schedulerJob.calendarJob);
+      }
     });
     this.scheduledJobs.clear();
   }
@@ -140,6 +147,8 @@ export class AgentScheduler {
 
         if (triggerConfig.type === 'CRON' && triggerConfig.cron) {
           schedulerJob.cronJob = await this.createCronJob(agent.id, triggerConfig.cron, agent);
+        } else if (triggerConfig.type === 'CALENDAR' && triggerConfig.rrule) {
+          schedulerJob.calendarJob = this.createCalendarJob(agent.id, triggerConfig.rrule, agent);
         }
 
         this.scheduledJobs.set(agent.id, schedulerJob);
@@ -191,6 +200,30 @@ export class AgentScheduler {
     return job;
   }
 
+  private createCalendarJob(agentId: number, rruleString: string, agent: any): NodeJS.Timeout | undefined {
+    try {
+      const rule = RRule.fromString(rruleString);
+      const now = new Date();
+      const next = rule.after(now);
+
+      if (next) {
+        const delay = next.getTime() - now.getTime();
+        console.log(`[SCHEDULER] Scheduling calendar job for agent ${agentId} to run at ${next}`);
+        return setTimeout(() => {
+          this.executeAgentForTrigger(agent, {
+            trigger_type: 'CALENDAR',
+            scheduled_time: next.toISOString(),
+            rrule: rruleString,
+          });
+          // Reschedule the next job
+          this.addSchedulerJob(agent);
+        }, delay);
+      }
+    } catch (error) {
+      console.error(`[SCHEDULER] Invalid rrule string for agent ${agentId}:`, error);
+    }
+  }
+
   /**
    * Start periodic check for new/updated agents
    * AIDEV-NOTE: Consolidated periodic checking with better error recovery
@@ -240,6 +273,8 @@ export class AgentScheduler {
 
       if (triggerConfig.type === 'CRON' && triggerConfig.cron) {
         schedulerJob.cronJob = await this.createCronJob(agent.id, triggerConfig.cron, agent);
+      } else if (triggerConfig.type === 'CALENDAR' && triggerConfig.rrule) {
+        schedulerJob.calendarJob = this.createCalendarJob(agent.id, triggerConfig.rrule, agent);
       }
 
       this.scheduledJobs.set(agent.id, schedulerJob);
@@ -254,8 +289,23 @@ export class AgentScheduler {
     if (job?.cronJob) {
       job.cronJob.destroy();
     }
+    if (job?.calendarJob) {
+      clearTimeout(job.calendarJob);
+    }
     this.scheduledJobs.delete(agentId);
     console.log(`[SCHEDULER] Removed scheduled job for inactive agent ${agentId}`);
+  }
+
+  async updateAgentTrigger(agentId: number, triggerConfig: TriggerConfig): Promise<void> {
+    const agent = await db.select().from(agents).where(eq(agents.id, agentId)).then(res => res[0]);
+    if (!agent) {
+      throw new Error(`Agent with ID ${agentId} not found`);
+    }
+
+    await db.update(agents).set({ trigger: triggerConfig }).where(eq(agents.id, agentId));
+
+    this.removeSchedulerJob(agentId);
+    await this.addSchedulerJob({ ...agent, trigger: triggerConfig });
   }
 
   /**

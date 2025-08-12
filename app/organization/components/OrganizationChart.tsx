@@ -37,6 +37,7 @@ import TeamNode from './TeamNode';
 import AgentNode from './AgentNode';
 import ActivityPanel from './ActivityPanel';
 import { useEmery } from '@/contexts/EmeryContext';
+import { Loading } from '@/components/ui/loading';
 
 // Define custom node types
 const nodeTypes = {
@@ -45,15 +46,19 @@ const nodeTypes = {
 };
 
 export default function OrganizationChart() {
-  const { data, currentOrganization } = useEmery();
+  const { data, currentOrganization, isLoading } = useEmery();
   const { agents, teams } = data;
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [isTasksLoading, setIsTasksLoading] = useState(true);
   
   useEffect(() => {
+    setIsTasksLoading(true);
     getTasks().then(result => {
       if (result.success) {
         setTasks(result.data);
       }
+    }).finally(() => {
+      setIsTasksLoading(false);
     });
   }, []);
   
@@ -332,6 +337,15 @@ export default function OrganizationChart() {
 
   // Component can work without currentOrganization for basic functionality
   // currentOrganization is only needed for saving/loading view configurations
+
+  // Show loading spinner while data is loading
+  if (isLoading || isTasksLoading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loading text="Loading organization chart..." />
+      </div>
+    );
+  }
 
   return (
     <ReactFlowProvider>

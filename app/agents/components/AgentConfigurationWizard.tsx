@@ -18,6 +18,7 @@ import { AlertCircle, Check, ExternalLink, Zap, Code, Database, MessageSquare, G
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Capability } from './CapabilityEditor';
+import ScheduleManager from './ScheduleManager';
 
 const CapabilityEditor = dynamic(() => import('./CapabilityEditor'), { ssr: false });
 
@@ -256,7 +257,7 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
     { id: 'basic', title: 'Basic Info', description: 'Name, role, and description' },
     { id: 'capabilities', title: 'Capabilities', description: 'Configure agent capabilities and steps' },
     { id: 'triggers', title: 'Triggers', description: 'How and when the agent runs' },
-    { id: 'review', title: 'Review & Create', description: 'Review configuration and create agent' }
+    { id: 'review', title: 'Review', description: 'Review configuration and create agent' }
   ];
 
   return (
@@ -421,6 +422,19 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                   </FormField>
                 )}
 
+                {formData.triggerType === 'CALENDAR' && agent?.id && (
+                  <FormField label="Calendar Schedule">
+                    <ScheduleManager
+                      agentId={agent.id}
+                      initialRRule={formData.triggerConfig.rrule}
+                      onScheduleChange={(rrule) => setFormData(prev => ({
+                        ...prev,
+                        triggerConfig: { ...prev.triggerConfig, rrule }
+                      }))}
+                    />
+                  </FormField>
+                )}
+
                 {formData.triggerType === 'WEBHOOK' && (
                   <div className="space-y-4">
                     <FormField label="Webhook URL">
@@ -546,7 +560,7 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
             {currentStep === 3 && (
               <div className="space-y-4">
                 <div>
-                  <h2 className="text-xl font-bold mb-1">Review & Create</h2>
+                  <h2 className="text-xl font-bold mb-1">Review</h2>
                   <p className="text-sm text-muted-foreground">
                     Review your agent configuration before creating.
                   </p>

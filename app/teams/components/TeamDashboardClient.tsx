@@ -13,6 +13,7 @@ import TeamFormDialog from './TeamFormDialog';
 import TeamConfigurationPanel from './TeamConfigurationPanel';
 import TeamDetailsView from './TeamDetailsView';
 import { getTeams } from '@/app/actions/teams';
+import { useEmery } from '@/contexts/EmeryContext';
 
 // AIDEV-NOTE: Teams dashboard refactored to use consistent design system patterns
 
@@ -22,6 +23,7 @@ interface TeamDashboardClientProps {
 }
 
 export default function TeamDashboardClient({ initialTeams, agents }: TeamDashboardClientProps) {
+  const { currentOrganization } = useEmery();
   const [teams, setTeams] = useState<Team[]>(initialTeams);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -36,7 +38,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
     try {
       setLoading(true);
       setError(null);
-      const fetchedTeams = await getTeams();
+      const fetchedTeams = await getTeams(currentOrganization?.id);
       setTeams(fetchedTeams);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load teams');
