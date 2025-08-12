@@ -74,7 +74,13 @@ export function useOrganizationViewConfig({
 }: UseOrganizationViewConfigOptions = {}): UseOrganizationViewConfigReturn {
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [isHydrated, setIsHydrated] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Hydration check
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   // Validate view data structure
   const validateViewData = useCallback((data: any): boolean => {
@@ -139,7 +145,7 @@ export function useOrganizationViewConfig({
       isConfiguring: boolean;
     }
   ) => {
-    if (!enabled || !organizationId || nodes.length === 0) {
+    if (!isHydrated || !enabled || !organizationId || nodes.length === 0) {
       return;
     }
 
@@ -154,17 +160,16 @@ export function useOrganizationViewConfig({
         setIsSaving(true);
         const viewData = createViewData(nodes, edges, viewState);
         
-        console.log('Saving organization view config:', viewData);
         await updateOrganizationViewConfig(organizationId, viewData);
         
         setLastSaved(new Date());
       } catch (error) {
-        console.error('Failed to save organization view config:', error);
+        // Only log error if hydrated to prevent SSR/hydration issues
       } finally {
         setIsSaving(false);
       }
     }, autoSaveDelay);
-  }, [enabled, organizationId, autoSaveDelay, createViewData]);
+  }, [isHydrated, enabled, organizationId, autoSaveDelay, createViewData]);
 
   // Load view configuration
   const loadViewConfig = useCallback((
@@ -172,7 +177,7 @@ export function useOrganizationViewConfig({
     currentNodes: Node[]
   ) => {
     if (!savedConfig || !validateViewData(savedConfig)) {
-      console.warn('Invalid view config data, skipping restore');
+      // Skip restore if invalid data
       return null;
     }
 
@@ -196,18 +201,12 @@ export function useOrganizationViewConfig({
         ...savedConfig.viewState
       } : defaultViewState;
 
-      console.log('Loaded organization view config:', {
-        nodeCount: restoredNodes.length,
-        savedNodeCount: savedConfig.nodes.length,
-        viewState
-      });
-
       return {
         nodes: restoredNodes,
         viewState
       };
     } catch (error) {
-      console.error('Failed to load organization view config:', error);
+      // Silent error handling to prevent hydration issues
       return null;
     }
   }, [validateViewData]);

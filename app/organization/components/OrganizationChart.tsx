@@ -52,8 +52,16 @@ export default function OrganizationChart() {
   const { agents, teams } = data;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isTasksLoading, setIsTasksLoading] = useState(true);
+  const [isHydrated, setIsHydrated] = useState(false);
   
+  // Hydration check
   useEffect(() => {
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    
     setIsTasksLoading(true);
     getTasks().then(result => {
       if (result.success) {
@@ -62,7 +70,7 @@ export default function OrganizationChart() {
     }).finally(() => {
       setIsTasksLoading(false);
     });
-  }, []);
+  }, [isHydrated]);
   
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -87,7 +95,6 @@ export default function OrganizationChart() {
     );
     
     if (confirmed) {
-      console.log('Resetting layout to default positions');
       generateNodesAndEdges();
       
       // Clear selected nodes since positions are changing
@@ -97,7 +104,7 @@ export default function OrganizationChart() {
       setShowResetNotification(true);
       setTimeout(() => setShowResetNotification(false), 3000);
     }
-  }, [generateNodesAndEdges]);
+  }, [isHydrated, generateNodesAndEdges]);
 
   // Auto-save view using the custom hook
   const autoSaveView = useCallback(() => {
@@ -118,14 +125,8 @@ export default function OrganizationChart() {
     const newNodes: Node[] = [];
     const newEdges: Edge[] = [];
 
-    // AIDEV-NOTE: Debug logging to check teams data
-    console.log('OrganizationChart - Teams data:', teams);
-    console.log('OrganizationChart - Agents data:', agents);
-    console.log('OrganizationChart - Tasks data:', tasks);
-
     // Create team nodes
     teams.forEach((team, index) => {
-      console.log(`Creating node for team ${index + 1}:`, team);
       const teamX = 200 + (index % 3) * 400;
       const teamY = 100 + Math.floor(index / 3) * 300;
 
@@ -150,14 +151,10 @@ export default function OrganizationChart() {
         selectable: true,
       });
 
-      console.log(`Added team node: team-${team.id} at position (${teamX}, ${teamY})`);
-
       // Create agent nodes for this team
       const teamAgents = agents.filter(agent => 
         team.agentIds?.includes(agent.id.toString())
       );
-      
-      console.log(`Team ${team.id} has ${teamAgents.length} agents:`, teamAgents.map(a => a.name));
 
       teamAgents.forEach((agent, agentIndex) => {
         const agentX = teamX + (agentIndex % 2) * 200 - 50;
@@ -211,30 +208,21 @@ export default function OrganizationChart() {
       });
     });
 
-    // Summary of what was created
-    const teamNodes = newNodes.filter(n => n.type === 'team');
-    const agentNodes = newNodes.filter(n => n.type === 'agent');
-    
-    console.log('OrganizationChart - SUMMARY:');
-    console.log(`- Created ${teamNodes.length} team nodes:`, teamNodes.map(n => `${n.id} (${n.data.name})`));
-    console.log(`- Created ${agentNodes.length} agent nodes:`, agentNodes.map(n => `${n.id} (${n.data.name})`));
-    console.log(`- Created ${newEdges.length} edges`);
-    
-    console.log('OrganizationChart - Setting nodes:', newNodes);
-    console.log('OrganizationChart - Setting edges:', newEdges);
+    // Set nodes and edges
     
     setNodes(newNodes);
     setEdges(newEdges);
   }, [agents, teams, tasks, setNodes, setEdges]);
 
-  // Generate nodes and edges when data changes
+  // Generate nodes and edges when data changes (only after hydration)
   useEffect(() => {
+    if (!isHydrated) return;
     generateNodesAndEdges();
-  }, [generateNodesAndEdges]);
+  }, [isHydrated, generateNodesAndEdges]);
 
-  // Load view from DB on mount using the custom hook
+  // Load view from DB on mount using the custom hook (only after hydration)
   useEffect(() => {
-    if (!currentOrganization?.viewConfig || nodes.length === 0) return;
+    if (!isHydrated || !currentOrganization?.viewConfig || nodes.length === 0) return;
     
     const result = loadViewConfig(currentOrganization.viewConfig, nodes);
     
@@ -256,18 +244,18 @@ export default function OrganizationChart() {
         }
       }
     }
-  }, [currentOrganization?.id, currentOrganization?.viewConfig, nodes.length, loadViewConfig, setNodes]);
+  }, [isHydrated, currentOrganization?.id, currentOrganization?.viewConfig, nodes.length, loadViewConfig, setNodes]);
 
-  // Debounced auto-save effect
+  // Debounced auto-save effect (only after hydration)
   useEffect(() => {
-    if (nodes.length === 0) return; // Don't auto-save until we have data
+    if (!isHydrated || nodes.length === 0) return; // Don't auto-save until hydrated and we have data
     
     const timer = setTimeout(() => {
       autoSaveView();
     }, 2000); // Auto-save 2 seconds after last change
     
     return () => clearTimeout(timer);
-  }, [nodes, selectedNodes, searchTerm, isPanelCollapsed, isConfiguring, autoSaveView]);
+  }, [isHydrated, nodes, selectedNodes, searchTerm, isPanelCollapsed, isConfiguring, autoSaveView]);
 
   // Handle node selection with multi-select support
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
