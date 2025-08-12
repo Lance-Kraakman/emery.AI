@@ -47,21 +47,13 @@ const nodeTypes = {
   agent: AgentNode,
 };
 
-export default function OrganizationChart() {
+export default function OrganizationChartClient() {
   const { data, currentOrganization, isLoading } = useEmery();
   const { agents, teams } = data;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isTasksLoading, setIsTasksLoading] = useState(true);
-  const [isHydrated, setIsHydrated] = useState(false);
-  
-  // Hydration check
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
 
   useEffect(() => {
-    if (!isHydrated) return;
-    
     setIsTasksLoading(true);
     getTasks().then(result => {
       if (result.success) {
@@ -70,7 +62,7 @@ export default function OrganizationChart() {
     }).finally(() => {
       setIsTasksLoading(false);
     });
-  }, [isHydrated]);
+  }, []);
   
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -104,7 +96,7 @@ export default function OrganizationChart() {
       setShowResetNotification(true);
       setTimeout(() => setShowResetNotification(false), 3000);
     }
-  }, [isHydrated, generateNodesAndEdges]);
+  }, [generateNodesAndEdges]);
 
   // Auto-save view using the custom hook
   const autoSaveView = useCallback(() => {
@@ -209,20 +201,18 @@ export default function OrganizationChart() {
     });
 
     // Set nodes and edges
-    
     setNodes(newNodes);
     setEdges(newEdges);
   }, [agents, teams, tasks, setNodes, setEdges]);
 
-  // Generate nodes and edges when data changes (only after hydration)
+  // Generate nodes and edges when data changes
   useEffect(() => {
-    if (!isHydrated) return;
     generateNodesAndEdges();
-  }, [isHydrated, generateNodesAndEdges]);
+  }, [generateNodesAndEdges]);
 
-  // Load view from DB on mount using the custom hook (only after hydration)
+  // Load view from DB on mount using the custom hook
   useEffect(() => {
-    if (!isHydrated || !currentOrganization?.viewConfig || nodes.length === 0) return;
+    if (!currentOrganization?.viewConfig || nodes.length === 0) return;
     
     const result = loadViewConfig(currentOrganization.viewConfig, nodes);
     
@@ -244,18 +234,18 @@ export default function OrganizationChart() {
         }
       }
     }
-  }, [isHydrated, currentOrganization?.id, currentOrganization?.viewConfig, nodes.length, loadViewConfig, setNodes]);
+  }, [currentOrganization?.id, currentOrganization?.viewConfig, nodes.length, loadViewConfig, setNodes]);
 
-  // Debounced auto-save effect (only after hydration)
+  // Debounced auto-save effect
   useEffect(() => {
-    if (!isHydrated || nodes.length === 0) return; // Don't auto-save until hydrated and we have data
+    if (nodes.length === 0) return; // Don't auto-save until we have data
     
     const timer = setTimeout(() => {
       autoSaveView();
     }, 2000); // Auto-save 2 seconds after last change
     
     return () => clearTimeout(timer);
-  }, [isHydrated, nodes, selectedNodes, searchTerm, isPanelCollapsed, isConfiguring, autoSaveView]);
+  }, [nodes, selectedNodes, searchTerm, isPanelCollapsed, isConfiguring, autoSaveView]);
 
   // Handle node selection with multi-select support
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
@@ -325,9 +315,6 @@ export default function OrganizationChart() {
       return directAgentMatch || teamAgentMatch;
     });
   }, [selectedNodes, tasks, teams, agents]);
-
-  // Component can work without currentOrganization for basic functionality
-  // currentOrganization is only needed for saving/loading view configurations
 
   // Show loading spinner while data is loading
   if (isLoading || isTasksLoading) {

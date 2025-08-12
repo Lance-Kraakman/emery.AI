@@ -74,13 +74,7 @@ export function useOrganizationViewConfig({
 }: UseOrganizationViewConfigOptions = {}): UseOrganizationViewConfigReturn {
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [isHydrated, setIsHydrated] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Hydration check
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
 
   // Validate view data structure
   const validateViewData = useCallback((data: any): boolean => {
@@ -145,7 +139,7 @@ export function useOrganizationViewConfig({
       isConfiguring: boolean;
     }
   ) => {
-    if (!isHydrated || !enabled || !organizationId || nodes.length === 0) {
+    if (!enabled || !organizationId || nodes.length === 0) {
       return;
     }
 
@@ -164,12 +158,12 @@ export function useOrganizationViewConfig({
         
         setLastSaved(new Date());
       } catch (error) {
-        // Only log error if hydrated to prevent SSR/hydration issues
+        console.error('Failed to save organization view config:', error);
       } finally {
         setIsSaving(false);
       }
     }, autoSaveDelay);
-  }, [isHydrated, enabled, organizationId, autoSaveDelay, createViewData]);
+  }, [enabled, organizationId, autoSaveDelay, createViewData]);
 
   // Load view configuration
   const loadViewConfig = useCallback((
@@ -177,7 +171,7 @@ export function useOrganizationViewConfig({
     currentNodes: Node[]
   ) => {
     if (!savedConfig || !validateViewData(savedConfig)) {
-      // Skip restore if invalid data
+      console.warn('Invalid view config data, skipping restore');
       return null;
     }
 
@@ -206,7 +200,7 @@ export function useOrganizationViewConfig({
         viewState
       };
     } catch (error) {
-      // Silent error handling to prevent hydration issues
+      console.error('Failed to load organization view config:', error);
       return null;
     }
   }, [validateViewData]);
