@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { autoReindexService } from "@/lib/rag/auto-reindex";
+import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
 import type { ActionResult, CreateAgentData } from "./types";
 
 // AIDEV-NOTE: Simple API key generator for agent authentication - use more secure method in production
@@ -89,47 +90,50 @@ export async function addCapabilityToAgent(agentId: number, capability: { name: 
   await db.update(agents).set({ capabilities: newCapabilities }).where(eq(agents.id, agentId));
 }
 
-export async function createAgentAction(formData: FormData) {
-  const name = formData.get('name') as string;
-  const role = formData.get('role') as string;
-  const description = formData.get('description') as string;
-  const persona = formData.get('persona') as string;
-  const status = formData.get('status') as string;
-  const toolsStr = formData.get('tools') as string;
-  const serversStr = formData.get('servers') as string;
-  
-  // Parse tools into ToolConfig[] format
-  const tools = toolsStr 
-    ? toolsStr.split(',')
-        .map(t => t.trim())
-        .filter(t => t)
-        .map(toolName => ({ name: toolName })) // Simple format, can be enhanced later
-    : undefined;
-  
-  // Parse servers into ServerConfig[] format  
-  const servers = serversStr 
-    ? serversStr.split(',')
-        .map(s => s.trim())
-        .filter(s => s)
-        .map(serverName => ({ name: serverName })) // Simple format, can be enhanced later
-    : undefined;
+export async function createAgentAction(formData: FormData): Promise<ActionResult> {
+  try {
+    const currentOrg = await requireCurrentOrganization();
+    
+    // Parse form data
+    const rawData = parseFormDataToAgent(formData);
+    const dataWithOrg = { ...rawData, organizationId: currentOrg.id };
+    
+    // Validate using Zod schema
+    const validatedData = createAgentSchema.parse(dataWithOrg);
+    
+    // Parse tools and servers from form if they exist
+    const toolsStr = formData.get('tools') as string;
+    const serversStr = formData.get('servers') as string;
+    
+    const tools = toolsStr 
+      ? toolsStr.split(',')
+          .map(t => t.trim())
+          .filter(t => t)
+          .map(toolName => ({ name: toolName })) // Simple format, can be enhanced later
+      : undefined;
+    
+    const servers = serversStr 
+      ? serversStr.split(',')
+          .map(s => s.trim())
+          .filter(s => s)
+          .map(serverName => ({ name: serverName })) // Simple format, can be enhanced later
+      : undefined;
 
-  const result = await createAgent({ 
-    name, 
-    role, 
-    description, 
-    persona, 
-    tools, 
-    servers, 
-    status 
-  });
-  
-  if (!result.success) {
-    throw new Error(result.error);
+    const result = await createAgent({ 
+      ...validatedData,
+      tools, 
+      servers,
+      status: 'active'
+    });
+    
+    return result;
+  } catch (error) {
+    console.error("Error in createAgentAction:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to create agent",
+    };
   }
-
-  // Note: revalidatePath is handled in the main createAgent function
-  return result;
 }
 
 import { and, like, sql, desc } from "drizzle-orm";

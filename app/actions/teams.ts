@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { teams, teamMemberships } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { createTeamSchema, updateTeamSchema, parseFormDataToTeam } from "@/lib/schemas";
 import type { ActionResult, CreateTeamData, TeamMembershipData } from "./types";
 import { autoReindexService } from "@/lib/rag/auto-reindex";
 
@@ -46,35 +47,28 @@ export async function createTeam(data: CreateTeamData): Promise<ActionResult> {
   }
 }
 
-export async function createTeamAction(formData: FormData) {
-  const organizationId = parseInt(formData.get('organizationId') as string);
-  const name = formData.get('name') as string;
-  const purpose = formData.get('purpose') as string;
-  const description = formData.get('description') as string;
-  const responsibilitiesStr = formData.get('responsibilities') as string;
-  const goalsStr = formData.get('goals') as string;
-  const agentIdsStr = formData.get('agentIds') as string;
-  
-  const responsibilities = responsibilitiesStr ? responsibilitiesStr.split(',').map(r => r.trim()) : undefined;
-  const goals = goalsStr ? goalsStr.split(',').map(g => g.trim()) : undefined;
-  const agentIds = agentIdsStr ? agentIdsStr.split(',').map(id => id.trim()).filter(id => id) : undefined;
+export async function createTeamAction(formData: FormData): Promise<ActionResult> {
+  try {
+    // Parse and validate form data
+    const rawData = parseFormDataToTeam(formData);
+    const validatedData = createTeamSchema.parse(rawData);
 
-  const result = await createTeam({ 
-    organizationId, 
-    name, 
-    purpose, 
-    description, 
-    responsibilities, 
-    goals, 
-    agentIds
-  });
-  
-  if (!result.success) {
-    throw new Error(result.error);
+    const result = await createTeam(validatedData);
+    
+    if (!result.success) {
+      return result;
+    }
+
+    revalidatePath('/dashboard');
+    revalidatePath('/teams');
+    return result;
+  } catch (error) {
+    console.error("Error in createTeamAction:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to create team",
+    };
   }
-
-  revalidatePath('/dashboard');
-  return result;
 }
 
 export async function getTeams(organizationId?: number) {

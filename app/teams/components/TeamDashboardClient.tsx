@@ -9,7 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Loading } from '@/components/ui/loading';
 import { Badge } from '@/components/ui/badge';
-import TeamFormDialog from './TeamFormDialog';
+import TeamFormDialogImproved from './TeamFormDialogImproved';
 import TeamConfigurationPanel from './TeamConfigurationPanel';
 import TeamDetailsView from './TeamDetailsView';
 import { getTeams } from '@/app/actions/teams';
@@ -195,7 +195,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
         </Card>
       </div>
 
-      <TeamFormDialog
+      <TeamFormDialogImproved
         isOpen={isFormOpen}
         onClose={() => {
           setIsFormOpen(false);

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Loading } from '@/components/ui/loading';
-import AgentFormDialog from './AgentFormDialog';
+import AgentFormDialogImproved from './AgentFormDialogImproved';
 import AgentConfigurationWizard from './AgentConfigurationWizard';
 import AgentDetailsView from './AgentDetailsView';
 import { getAgents } from '@/app/actions/agents';

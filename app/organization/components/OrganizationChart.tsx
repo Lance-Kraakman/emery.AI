@@ -14,6 +14,7 @@ import {
   ReactFlowProvider 
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import '@/styles/reactflow-custom.css';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
