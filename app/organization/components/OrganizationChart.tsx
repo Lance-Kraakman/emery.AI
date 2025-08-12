@@ -108,6 +108,15 @@ export default function OrganizationChart() {
       const teamX = 200 + (index % 3) * 400;
       const teamY = 100 + Math.floor(index / 3) * 300;
 
+      // Filter tasks for this team (safely handle missing agentIds)
+      const teamTasks = (team.agentIds && team.agentIds.length > 0) 
+        ? tasks.filter(task => 
+            team.agentIds!.some(agentId => 
+              agents.some(agent => agent.id.toString() === agentId && agent.id === task.agentId)
+            )
+          )
+        : [];
+
       newNodes.push({
         id: `team-${team.id}`,
         type: 'team',
@@ -115,19 +124,19 @@ export default function OrganizationChart() {
         data: { 
           ...team,
           type: 'team',
-          tasks: tasks.filter(task => 
-            team.agentIds?.some(agentId => 
-              agents.some(agent => agent.id.toString() === agentId && agent.id === task.agentId)
-            )
-          )
+          tasks: teamTasks
         },
         selectable: true,
       });
+
+      console.log(`Added team node: team-${team.id} at position (${teamX}, ${teamY})`);
 
       // Create agent nodes for this team
       const teamAgents = agents.filter(agent => 
         team.agentIds?.includes(agent.id.toString())
       );
+      
+      console.log(`Team ${team.id} has ${teamAgents.length} agents:`, teamAgents.map(a => a.name));
 
       teamAgents.forEach((agent, agentIndex) => {
         const agentX = teamX + (agentIndex % 2) * 200 - 50;
@@ -181,6 +190,15 @@ export default function OrganizationChart() {
       });
     });
 
+    // Summary of what was created
+    const teamNodes = newNodes.filter(n => n.type === 'team');
+    const agentNodes = newNodes.filter(n => n.type === 'agent');
+    
+    console.log('OrganizationChart - SUMMARY:');
+    console.log(`- Created ${teamNodes.length} team nodes:`, teamNodes.map(n => `${n.id} (${n.data.name})`));
+    console.log(`- Created ${agentNodes.length} agent nodes:`, agentNodes.map(n => `${n.id} (${n.data.name})`));
+    console.log(`- Created ${newEdges.length} edges`);
+    
     console.log('OrganizationChart - Setting nodes:', newNodes);
     console.log('OrganizationChart - Setting edges:', newEdges);
     
