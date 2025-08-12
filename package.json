@@ -20,7 +20,10 @@
     "worker:start": "cd emery-agents && uv run python -m emery_agents.grpc.server_simple",
     "test:grpc": "npx tsx scripts/test-grpc-e2e.ts",
     "test:nextjs-grpc": "npx tsx scripts/test-nextjs-grpc.ts",
-    "test:scheduler": "npx tsx scripts/test-scheduler-system.ts"
+    "test:scheduler": "npx tsx scripts/test-scheduler-system.ts",
+    "seed:test": "npx tsx scripts/seed-test-data.ts",
+    "seed:clean": "npx tsx scripts/seed-test-data.ts --clean",
+    "test:agent-execution": "node scripts/test-agent-execution.js"
   },
   "packageManager": "pnpm@10.14.0",
   "dependencies": {

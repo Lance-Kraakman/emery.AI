@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
- * Simple test script to verify agent execution pipeline works
+ * Test script to verify agent execution pipeline works
+ * 
+ * Prerequisites: Run `npx tsx scripts/seed-test-data.ts` first to create test data
  * 
  * Usage: node scripts/test-agent-execution.js [agent_id]
  */
@@ -10,7 +12,8 @@ const API_BASE = 'http://localhost:3000';
 
 async function testAgentExecution(agentId = 1) {
   console.log(`🧪 Testing agent execution for agent ${agentId}`);
-  console.log('='  .repeat(50));
+  console.log('Prerequisites: Test data should be seeded with `npx tsx scripts/seed-test-data.ts`');
+  console.log('='  .repeat(70));
 
   try {
     // Test 1: Get agent capabilities

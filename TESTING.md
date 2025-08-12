@@ -1,255 +1,313 @@
-# Testing Guide
+# Emery Testing Guide
 
-This guide covers testing the automatic agent scheduling system with real authentication.
+This guide covers testing the complete agent execution pipeline in Emery, from seeding test data to running end-to-end tests.
 
-## Authentication Overview
-
-⚠️ **IMPORTANT**: All development bypasses have been removed. You must use real authentication.
-
-The system supports two authentication methods:
-
-### 1. NextAuth Sessions (Browser-based)
-- **Best for**: Manual testing, UI workflows
-- **How**: Log in via browser OAuth (GitHub/Google)
-- **Usage**: Session cookies sent automatically
-
-### 2. User API Keys (Automation)
-- **Best for**: Automated testing, CI/CD, scripts
-- **Format**: `user_<48-char-hex>`  
-- **How**: `Authorization: Bearer user_...` header
-- **Usage**: Generate via `scripts/setup-user-auth.ts`
-
-## Quick Setup
-
-1. **Start services**:
-   ```bash
-   docker-compose up -d
-   pnpm db:migrate  
-   pnpm dev
-   ```
-
-2. **Create user account**: Log in via browser at http://localhost:3000 (OAuth)
-
-3. **Setup authentication**:
-   ```bash
-   npx tsx scripts/setup-user-auth.ts
-   ```
-
-4. **Run integration test**:
-   ```bash
-   npx tsx scripts/integration-test-api-auth.ts
-   ```
-
-## Integration Tests
-
-### Recommended: API Key Authentication Test
-
-**File:** `scripts/integration-test-api-auth.ts`
-
-✅ **Advantages**:
-- No browser session required
-- Reliable authentication  
-- Perfect for automation
-- Already configured with your credentials
+## Quick Start
 
 ```bash
-npx tsx scripts/integration-test-api-auth.ts
+# 1. Seed test data (required first step)
+pnpm seed:test
+
+# 2. Start the development server  
+pnpm dev
+
+# 3. Start the agent worker (in another terminal)
+cd emery-agents && ./scripts/start-test-server.sh
+
+# 4. Run agent execution tests
+pnpm test:agent-execution
 ```
 
-### Alternative: Browser Session Test  
+## Test Data Setup
 
-**File:** `scripts/integration-test-production.ts`
+### Seeding Test Data
 
-Requires active browser login session:
+The seed script creates a complete testing environment:
 
 ```bash
-# Must be logged in via browser first
-npx tsx scripts/integration-test-production.ts
+# Create test data for the first time
+pnpm seed:test
+
+# Clean and recreate all test data
+pnpm seed:clean
 ```
 
-## Authentication Setup
+**What gets created:**
+- **Test User**: `test@emery.dev` with ID `550e8400-e29b-41d4-a716-446655440000`
+- **Test Organization**: "Test Organization" with full permissions
+- **Test Agents**: Multiple agents with different capabilities and configurations
+- **Test Capabilities**: Built-in test capabilities for infrastructure validation
+- **Test Database Tables**: Sample dynamic tables with test data
 
-### Getting Your Credentials
+### Manual Database Reset
 
-Run the setup script to get your user ID and API key:
+If you need to completely reset the database:
 
 ```bash
-npx tsx scripts/setup-user-auth.ts
+# Stop all services first
+docker-compose down
+
+# Remove database volume (loses ALL data)
+docker volume rm emery_db
+
+# Restart database
+docker-compose up -d
+
+# Run migrations
+pnpm db:migrate
+
+# Seed test data
+pnpm seed:test
 ```
 
-**Output Example**:
-```
-📋 Use this configuration for integration tests:
-const USER_ACCOUNT_ID = 'ef5b5ea0-19bf-4e8c-bb03-4f027130efd7';
-const USER_ORGANIZATION_ID = 1;
-
-🔐 API Key Authentication:
-export USER_API_KEY="user_2c254018f6828a8569816162dfb20b9a470cbd4beeb89890"
-```
-
-### API Usage Examples
-
-```bash
-# Set your API key
-export USER_API_KEY="user_2c254018f6828a8569816162dfb20b9a470cbd4beeb89890"
-
-# Test authentication
-curl -H "Authorization: Bearer $USER_API_KEY" \
-     http://localhost:3000/api/scheduler/status
-
-# Create agent  
-curl -X POST -H "Authorization: Bearer $USER_API_KEY" \
-     -H "Content-Type: application/json" \
-     -d '{"name":"Test Agent","role":"assistant","organizationId":1}' \
-     http://localhost:3000/api/agents
-
-# List tasks
-curl -H "Authorization: Bearer $USER_API_KEY" \
-     http://localhost:3000/api/tasks
-```
-
----
-
-## Alternative: Production Test (Manual Login)
-
-**File:** `scripts/integration-test-production.ts`
-
-Requires manual browser authentication for testing with real NextAuth sessions.
+## Agent Execution Testing
 
 ### Prerequisites
 
-1. **User Account**: You must have a valid user account in the application
-2. **Authentication**: You must be logged in via the web interface
-3. **User ID**: You need to know your user ID from the database
+1. **Database Running**: `docker-compose up -d`
+2. **Migrations Applied**: `pnpm db:migrate`
+3. **Test Data Seeded**: `pnpm seed:test`
+4. **Next.js Server**: `pnpm dev`
+5. **Agent Worker**: `cd emery-agents && ./scripts/start-test-server.sh`
 
-### How to Run the Test
+### Running Tests
 
-1. **Start the NextJS server:**
-   ```bash
-   pnpm dev
-   ```
+#### Basic Agent Execution Test
 
-2. **Log in to the application:**
-   - Open http://localhost:3000 in your browser
-   - Complete the OAuth login process
-   - Keep your browser session active
+```bash
+# Test agent ID 1 (default)
+pnpm test:agent-execution
 
-3. **Find your User ID:**
-   - Check the `users` table in your database, OR
-   - Inspect the NextAuth session in browser dev tools, OR
-   - Check the UI for your user profile information
-
-4. **Update the test configuration:**
-   ```bash
-   # Edit the test file
-   nano scripts/integration-test-production.ts
-   
-   # Update this line with your actual user ID:
-   const USER_ACCOUNT_ID = 'your-actual-user-id-here';
-   ```
-
-5. **Run the integration test:**
-   ```bash
-   npx tsx scripts/integration-test-production.ts
-   ```
-
-### What the Test Does
-
-The test will:
-- ✅ Verify your authentication session
-- ✅ Start the Python gRPC worker
-- ✅ Initialize the agent scheduler
-- ✅ Create CRON and webhook agents
-- ✅ Monitor task execution for 2.5 minutes
-- ✅ Report on scheduler functionality
-
-### Expected Results
-
-```
-🧪 PRODUCTION AGENT SCHEDULING INTEGRATION TEST
-===============================================
-
-📋 Test Configuration:
-   User Account ID: [your-user-id]
-   Organization ID: 1
-   ⚠️  This test requires you to be logged in to the application
-
-1️⃣  Starting services...
-   🌐 NextJS server is already running
-   🐍 Starting Python worker...
-✅ Services ready
-
-2️⃣  Testing authentication...
-✅ Authentication successful - user session active
-
-3️⃣  Initializing scheduler...
-   Running: true
-   Existing CRON jobs: X
-✅ Scheduler initialized
-
-4️⃣  Testing agent creation...
-✅ CRON agent created (ID: XX)
-✅ Webhook agent created (ID: XX)
-
-5️⃣  Monitoring task execution...
-   ⏱️  Waiting 150 seconds for CRON execution...
-   📊 Final scheduler status:
-      Running: true
-      CRON jobs: X
-   📋 Task execution summary:
-      Total tasks: XX
-      Recent tasks (3 min): X
-      ✅ Completed: X
-      ❌ Failed: X
-      🔄 In Progress: X
-      ⏳ Pending: X
-
-🎉 SUCCESS: Automatic scheduling is working with production authentication!
-
-============================================================
-📊 PRODUCTION INTEGRATION TEST RESULTS
-============================================================
-✅ NextAuth session authentication: Working
-✅ No development bypasses: Confirmed
-✅ Scheduler initialization: Working
-✅ Agent creation with real user: Working
-✅ Task execution pipeline: Working
-
-🚀 Production automatic agent scheduling system is operational!
+# Test specific agent
+pnpm test:agent-execution 2
 ```
 
-### Troubleshooting
+**What this tests:**
+- Agent capabilities discovery
+- Agent execution via gRPC
+- OAuth proxy functionality (with graceful failure if no connections)
+- End-to-end pipeline validation
 
-**Authentication Failed:**
-- Make sure you're logged in to the application in your browser
-- Ensure your browser session cookies are being sent
-- Check that your user ID is correct
+#### Component Testing
 
-**Agent Creation Failed:**
-- Verify your user belongs to an organization
-- Check that your organization ID exists in the database
-- Ensure your user has proper permissions
+```bash
+# Test gRPC communication
+pnpm test:grpc
 
-**No Task Execution:**
-- Verify the Python gRPC worker is running
-- Check the scheduler is actually started
-- Look at the application logs for errors
+# Test Next.js to gRPC integration
+pnpm test:nextjs-grpc
 
-## No Development Bypasses
+# Test scheduler system
+pnpm test:scheduler
+```
 
-The system now has **NO** authentication bypasses:
-- ❌ No `x-test-user-id` header support
-- ❌ No Bearer token workarounds  
-- ❌ No hardcoded test user IDs
-- ❌ No development-only authentication paths
+### Test Capabilities
 
-All authentication must go through NextAuth sessions with proper OAuth login.
+The system includes built-in test capabilities that work without complex AI logic:
 
-## Database Requirements
+- **`test_capability`**: Basic infrastructure validation
+- **`ping`**: Simple ping/pong test
+- **`health_check`**: System health validation with tools
 
-Make sure your database has:
-- A valid user record with your user ID
-- An organization that your user belongs to
-- Proper foreign key relationships
+These capabilities automatically return successful responses for testing purposes.
 
-You can create these through the normal application signup/login flow.
+## OAuth and Connections Testing
+
+### Frontend OAuth Testing
+
+1. **Start the development server**: `pnpm dev`
+2. **Visit connections page**: `http://localhost:3000/dashboard/connections`
+3. **Connect OAuth accounts**: Gmail, Slack, GitHub, etc.
+4. **Test disconnection**: Ensure you can disconnect and reconnect
+
+### OAuth Proxy Testing
+
+The OAuth proxy can be tested directly with agent API keys:
+
+```bash
+# Get agent API key from seed output or database
+curl -X POST "http://localhost:3000/api/agents/proxy" \
+  -H "Authorization: Bearer YOUR_AGENT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "service": "gmail",
+    "action": "send_email", 
+    "params": {
+      "to": "test@example.com",
+      "subject": "Test",
+      "body": "Hello"
+    }
+  }'
+```
+
+## Development Authentication
+
+### Test User Authentication
+
+For development testing, the system supports a test user bypass:
+
+**Test User ID**: `550e8400-e29b-41d4-a716-446655440000`
+
+This can be used in API requests via the `x-test-user-id` header:
+
+```bash
+curl -H "x-test-user-id: 550e8400-e29b-41d4-a716-446655440000" \
+  http://localhost:3000/api/agents
+```
+
+**Important**: This bypass only works in development mode and should be removed in production.
+
+## Agent Configuration
+
+### Test Agent Capabilities
+
+The seeded agents include various test configurations:
+
+```json
+{
+  "name": "test_capability",
+  "description": "Test capability for infrastructure validation",
+  "steps": [
+    {
+      "id": "test_step_1",
+      "type": "TOOL_STEP", 
+      "instructions": "Return success response with trigger data",
+      "tools": [],
+      "servers": []
+    }
+  ]
+}
+```
+
+### Adding Custom Test Agents
+
+You can modify `scripts/seed-test-data.ts` to add custom agent configurations:
+
+```typescript
+const CUSTOM_AGENT = {
+  name: 'Custom Test Agent',
+  description: 'My custom test agent',
+  capabilities: [
+    // Your custom capabilities
+  ],
+  tools: [
+    // Your custom tools
+  ]
+};
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Database Connection Errors**
+```bash
+# Check if database is running
+docker-compose ps
+
+# Check database logs
+docker-compose logs db
+```
+
+**Agent Worker Not Responding**
+```bash
+# Check if gRPC server is running
+cd emery-agents && ps aux | grep python
+
+# Restart the worker
+cd emery-agents && ./scripts/start-test-server.sh
+```
+
+**OAuth Connection Issues**
+- Ensure `PIPEDREAM_*` environment variables are set
+- Check Pipedream Connect configuration
+- Verify webhook URLs are accessible
+
+**Test Data Issues**
+```bash
+# Clean and recreate test data
+pnpm seed:clean
+
+# Check database contents
+pnpm db:studio
+```
+
+### Debug Logging
+
+Enable debug logging for detailed execution traces:
+
+```bash
+# Enable debug logging
+export DEBUG=emery:*
+
+# Run tests with verbose output
+pnpm test:agent-execution
+```
+
+## CI/CD Testing
+
+### Automated Testing
+
+For CI/CD pipelines, use the following sequence:
+
+```bash
+# Setup
+docker-compose up -d
+pnpm db:migrate
+pnpm seed:test
+
+# Test
+pnpm build
+pnpm test:agent-execution
+
+# Cleanup
+docker-compose down
+```
+
+### Test Data Validation
+
+Verify test data integrity:
+
+```bash
+# Check test user exists
+npx tsx -e "
+import { db } from './lib/db/client';
+import { users } from './lib/db/schema';
+import { eq } from 'drizzle-orm';
+
+const testUser = await db.select().from(users)
+  .where(eq(users.id, '550e8400-e29b-41d4-a716-446655440000'));
+console.log('Test user:', testUser.length > 0 ? 'EXISTS' : 'MISSING');
+"
+```
+
+## Production Considerations
+
+### Security
+
+- **Remove test user bypass** in production
+- **Use proper authentication** for all API endpoints
+- **Secure agent API keys** with proper rotation
+- **Validate webhook signatures** for external integrations
+
+### Performance
+
+- **Database connection pooling** is configured for production load
+- **gRPC worker scaling** can be implemented with multiple instances
+- **OAuth token caching** reduces external API calls
+
+### Monitoring
+
+- **Agent execution metrics** via logging and monitoring
+- **Database performance** monitoring for dynamic operations
+- **OAuth connection health** checks for service availability
+
+## Next Steps
+
+1. **Run the complete test suite** to verify everything works
+2. **Connect real OAuth accounts** for full integration testing
+3. **Create custom agents** for your specific use cases
+4. **Monitor execution logs** to understand the pipeline
+5. **Scale testing** with multiple concurrent agents
+
+For additional help, check the main project documentation in `CLAUDE.md`.
