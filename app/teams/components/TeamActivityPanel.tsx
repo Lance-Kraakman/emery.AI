@@ -18,8 +18,10 @@ interface ActivityItem {
 export default function TeamActivityPanel({ team }: TeamActivityPanelProps) {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
+    setHasMounted(true);
     // AIDEV-TODO: Implement actual activity tracking from database
     // For now, show placeholder content
     setLoading(false);
@@ -66,7 +68,7 @@ export default function TeamActivityPanel({ team }: TeamActivityPanelProps) {
               <div className="flex-1">
                 <p className="text-foreground">{activity.message}</p>
                 <p className="text-sm text-muted-foreground">
-                  {activity.timestamp.toLocaleDateString()} at {activity.timestamp.toLocaleTimeString()}
+                  {hasMounted ? `${activity.timestamp.toLocaleDateString()} at ${activity.timestamp.toLocaleTimeString()}` : ''}
                 </p>
               </div>
             </div>

@@ -3,10 +3,11 @@
 import { EmerySidebar } from '@/components/EmerySidebar'
 import { Suspense } from 'react'
 import { DataDialogsProvider } from '@/contexts/DataDialogsContext'
+import { EmeryProvider } from '@/contexts/EmeryContext'
 import { CreateDatabaseDialog } from '@/app/data/components/CreateDatabaseDialog'
 import { CreateTableDialog } from '@/app/data/components/CreateTableDialog'
 import { useDataDialogs } from '@/contexts/DataDialogsContext'
-import { useEmeryData } from '@/hooks/useEmeryData'
+import { useEmery } from '@/contexts/EmeryContext'
 import { ThemeProvider } from '@/components/ThemeProvider'
 
 function DataDialogs() {
@@ -18,7 +19,7 @@ function DataDialogs() {
     selectedDatabaseForTable,
     setSelectedDatabaseForTable 
   } = useDataDialogs()
-  const { refetch } = useEmeryData()
+  const { refetch } = useEmery()
   
   const handleDataStructureCreated = () => {
     refetch()
@@ -57,17 +58,19 @@ export function EmeryProviders({ children }: EmeryProvidersProps) {
       enableSystem
       disableTransitionOnChange
     >
-      <DataDialogsProvider>
-        <div className="flex h-screen overflow-hidden">
-          <Suspense fallback={<div className="w-64 bg-card border-r border-border" />}>
-            <EmerySidebar />
-          </Suspense>
-          <main className="flex-1 flex flex-col overflow-hidden min-h-0">
-            {children}
-          </main>
-          <DataDialogs />
-        </div>
-      </DataDialogsProvider>
+      <EmeryProvider>
+        <DataDialogsProvider>
+          <div className="flex h-screen overflow-hidden">
+            <Suspense fallback={<div className="w-64 bg-card border-r border-border" />}>
+              <EmerySidebar />
+            </Suspense>
+            <main className="flex-1 flex flex-col overflow-hidden min-h-0">
+              {children}
+            </main>
+            <DataDialogs />
+          </div>
+        </DataDialogsProvider>
+      </EmeryProvider>
     </ThemeProvider>
   )
 }

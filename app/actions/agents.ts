@@ -132,7 +132,7 @@ export async function createAgentAction(formData: FormData) {
   return result;
 }
 
-import { and, like, sql } from "drizzle-orm";
+import { and, like, sql, desc } from "drizzle-orm";
 import { teams } from "@/lib/db/schema";
 
 export async function getAgents(filters: { teamId?: number | string, searchQuery?: string } = {}) {
@@ -146,8 +146,14 @@ export async function getAgents(filters: { teamId?: number | string, searchQuery
       conditions.push(like(agents.name, `%${searchQuery}%`));
     }
 
-    if (teamId) {
-      const team = await db.select({ agentIds: teams.agentIds }).from(teams).where(eq(teams.id, Number(teamId)));
+    if (teamId && teamId !== 'all') {
+      const teamIdNumber = Number(teamId);
+      if (isNaN(teamIdNumber)) {
+        console.warn(`Invalid teamId provided: ${teamId}`);
+        return [];
+      }
+      
+      const team = await db.select({ agentIds: teams.agentIds }).from(teams).where(eq(teams.id, teamIdNumber));
       if (team.length > 0 && team[0].agentIds) {
         const agentIdsAsNumbers = team[0].agentIds.map(id => Number(id));
         if(agentIdsAsNumbers.length > 0) {
@@ -165,7 +171,8 @@ export async function getAgents(filters: { teamId?: number | string, searchQuery
     const organizationAgents = await db
       .select()
       .from(agents)
-      .where(and(...conditions));
+      .where(and(...conditions))
+      .orderBy(desc(agents.createdAt));
 
     return organizationAgents;
   } catch (error) {

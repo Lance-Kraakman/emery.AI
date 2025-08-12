@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { getTables } from '@/app/actions/tables';
 import { getDatabases } from '@/app/actions/databases';
 import { getAgents } from '@/app/actions/agents';
+import { getTeams } from '@/app/actions/teams';
 
 export interface EmeryTable {
   id: number;
@@ -31,6 +32,14 @@ export interface EmeryAgent {
   organizationId?: number;
 }
 
+export interface EmeryTeam {
+  id: number;
+  name: string;
+  purpose?: string;
+  organizationId?: number;
+  agentIds?: string[];
+}
+
 export interface EmeryDatabase {
   id: number;
   name: string;
@@ -42,6 +51,7 @@ export interface EmeryDatabase {
 export interface EmeryData {
   databases: EmeryDatabase[];
   agents: EmeryAgent[];
+  teams: EmeryTeam[];
   organization?: {
     id: number;
     name: string;
@@ -53,6 +63,7 @@ export function useEmeryData() {
   const [data, setData] = useState<EmeryData>({
     databases: [],
     agents: [],
+    teams: [],
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +72,7 @@ export function useEmeryData() {
 
   const fetchData = useCallback(async () => {
     if (!session?.user || !currentOrg) {
-      setData({ databases: [], agents: [] });
+      setData({ databases: [], agents: [], teams: [] });
       setIsLoading(false);
       return;
     }
@@ -71,14 +82,16 @@ export function useEmeryData() {
 
     try {
       // Fetch databases and tables
-      const [databasesResult, tablesResult, agentsResult] = await Promise.all([
+      const [databasesResult, tablesResult, agentsResult, teamsResult] = await Promise.all([
         getDatabases(),
         getTables(),
-        getAgents()
+        getAgents(),
+        getTeams()
       ]);
 
       const tables = tablesResult as EmeryTable[];
       const agents = agentsResult as EmeryAgent[];
+      const teams = teamsResult as EmeryTeam[];
 
       // Group tables by database
       const databasesWithTables = databasesResult.map(db => ({
@@ -89,6 +102,7 @@ export function useEmeryData() {
       setData({
         databases: databasesWithTables,
         agents,
+        teams,
         organization: {
           id: currentOrg.id,
           name: currentOrg.name

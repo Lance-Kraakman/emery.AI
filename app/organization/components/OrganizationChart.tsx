@@ -29,13 +29,14 @@ import {
   Activity,
 } from 'lucide-react';
 import { updateOrganizationViewConfig } from '@/app/actions/organizations';
+import { getTasks } from '@/app/actions/tasks';
 
 import { Agent, Team } from '@/types/db';
 import { Task } from '@/app/actions/types';
 import TeamNode from './TeamNode';
 import AgentNode from './AgentNode';
 import ActivityPanel from './ActivityPanel';
-import { useEmeryData } from '@/hooks/useEmeryData';
+import { useEmery } from '@/contexts/EmeryContext';
 
 // Define custom node types
 const nodeTypes = {
@@ -43,21 +44,18 @@ const nodeTypes = {
   agent: AgentNode,
 };
 
-interface OrganizationChartProps {
-  initialAgents: Agent[];
-  initialTeams: Team[];
-  initialTasks: Task[];
-}
-
-export default function OrganizationChart({ 
-  initialAgents, 
-  initialTeams, 
-  initialTasks 
-}: OrganizationChartProps) {
-  const { currentOrganization } = useEmeryData();
-  const [agents, setAgents] = useState<Agent[]>(initialAgents);
-  const [teams, setTeams] = useState<Team[]>(initialTeams);
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+export default function OrganizationChart() {
+  const { data, currentOrganization } = useEmery();
+  const { agents, teams } = data;
+  const [tasks, setTasks] = useState<Task[]>([]);
+  
+  useEffect(() => {
+    getTasks().then(result => {
+      if (result.success) {
+        setTasks(result.data);
+      }
+    });
+  }, []);
   
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);

@@ -97,7 +97,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
                 setEditingAgent(null);
                 setIsWizardOpen(true);
               }}
-              variant="success"
+              variant="default"
               size="sm"
             >
               <Plus size={16} />
@@ -145,7 +145,13 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
                         ? 'ring-2 ring-primary bg-secondary'
                         : ''
                     }`}
-                    onClick={() => setSelectedAgent(agent)}
+                    onClick={() => {
+                      setSelectedAgent(agent);
+                      // If in edit mode, update the editing agent as well
+                      if (isWizardOpen) {
+                        setEditingAgent(agent);
+                      }
+                    }}
                   >
                     <CardContent className="p-4">
                       <h3 className="font-semibold text-foreground">{agent.name}</h3>

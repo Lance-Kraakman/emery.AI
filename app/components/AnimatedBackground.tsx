@@ -10,11 +10,13 @@ import { useEffect, useState } from "react";
  * - Respects prefers-reduced-motion
  */
 export default function AnimatedBackground() {
+  const [isMounted, setIsMounted] = useState(false);
   const prefersReducedMotion = useReducedMotion();
   // Responsive to window size for blob positioning
-  const [dimensions, setDimensions] = useState({ width: 1920, height: 1080 });
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
+    setIsMounted(true);
     function handleResize() {
       setDimensions({
         width: window.innerWidth,
@@ -25,6 +27,10 @@ export default function AnimatedBackground() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  if (!isMounted) {
+    return null;
+  }
 
   // Animation variants for blobs
   const blobVariants = (xRange: [number, number], yRange: [number, number]) => ({

@@ -88,7 +88,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
                 setSelectedTeam(null);
                 setIsPanelEditMode(true);
               }}
-              variant="success"
+              variant="default"
               size="sm"
             >
               <Plus size={16} />
@@ -125,7 +125,13 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
                     ? 'ring-2 ring-primary bg-secondary'
                     : ''
                 }`}
-                onClick={() => setSelectedTeam(team)}
+                onClick={() => {
+                  setSelectedTeam(team);
+                  // If in edit mode, update the editing team as well
+                  if (isPanelEditMode) {
+                    setEditingTeam(team);
+                  }
+                }}
               >
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 mb-2">

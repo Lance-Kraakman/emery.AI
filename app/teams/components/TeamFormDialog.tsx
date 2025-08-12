@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { FormField } from '@/components/ui/form-field';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { createTeamAction, updateTeam } from '@/app/actions/teams';
-import { useEmeryData } from '@/hooks/useEmeryData';
+import { useEmery } from '@/contexts/EmeryContext';
 
 // AIDEV-NOTE: Team form dialog refactored to use consistent design system components and patterns
 
@@ -22,7 +22,7 @@ interface TeamFormDialogProps {
 }
 
 export default function TeamFormDialog({ isOpen, onClose, team, agents }: TeamFormDialogProps) {
-  const { currentOrganization } = useEmeryData();
+  const { currentOrganization, refetch } = useEmery();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>(team?.agentIds || []);
@@ -55,6 +55,7 @@ export default function TeamFormDialog({ isOpen, onClose, team, agents }: TeamFo
         await createTeamAction(formData);
       }
       
+      refetch();
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save team');

@@ -14,10 +14,9 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, Check, ExternalLink, Zap, Code, Database, MessageSquare, Globe, FileText, Brain, Settings, GripVertical } from 'lucide-react';
+import { AlertCircle, Check, ExternalLink, Zap, Code, Database, MessageSquare, Globe, FileText, Brain, Settings } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { Capability } from './CapabilityEditor';
 
 const CapabilityEditor = dynamic(() => import('./CapabilityEditor'), { ssr: false });
@@ -92,6 +91,7 @@ export default function AgentConfigurationWizard({
 
   useEffect(() => {
     const initialCapabilities = (agent?.capabilities as Capability[]) || [];
+    
     if (agent) {
       // Extract trigger config and task definition from agent
       const trigger = agent.trigger as any;
@@ -107,8 +107,12 @@ export default function AgentConfigurationWizard({
         payload: {}
       };
 
-      setFormData(prev => ({
-        ...prev,
+      setFormData({
+        name: agent.name || '',
+        role: agent.role || '',
+        description: agent.description || '',
+        persona: agent.persona || '',
+        selectedTools: [] as string[],
         triggerType,
         triggerConfig,
         taskDefinition,
@@ -120,7 +124,25 @@ export default function AgentConfigurationWizard({
             id: step.id || generateUniqueId('step'),
           })) : [],
         })),
-      }));
+      });
+    } else {
+      // Reset form for new agent
+      setFormData({
+        name: '',
+        role: '',
+        description: '',
+        persona: '',
+        selectedTools: [] as string[],
+        triggerType: 'MANUAL' as string,
+        triggerConfig: {} as Record<string, any>,
+        taskDefinition: {
+          name: '',
+          capabilityName: '',
+          description: '',
+          payload: {} as Record<string, any>
+        },
+        capabilities: [],
+      });
     }
   }, [agent]);
 
@@ -446,27 +468,36 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                       />
                     </FormField>
 
-                    <FormField label="Capability to Execute" required>
-                      <Select 
-                        value={formData.taskDefinition.capabilityName}
-                        onValueChange={(value) => setFormData(prev => ({
-                          ...prev,
-                          taskDefinition: { ...prev.taskDefinition, capabilityName: value }
-                        }))}
+                    <FormField label="Capability to Execute" description="Optional - system will auto-select if not specified">
+                      <Select
+                        value={formData.taskDefinition.capabilityName || '_auto'}
+                        onValueChange={(value) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            taskDefinition: {
+                              ...prev.taskDefinition,
+                              capabilityName: value === '_auto' ? '' : value
+                            }
+                          }));
+                        }}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select a capability" />
+                          <SelectValue placeholder="Auto-select capability" />
                         </SelectTrigger>
                         <SelectContent>
-                          {formData.capabilities.map((capability) => (
-                            <SelectItem key={capability.id} value={capability.name}>
-                              {capability.name} - {capability.description}
+                          {formData.capabilities.length === 0 ? (
+                            <SelectItem value="_placeholder" disabled>
+                              No capabilities available
                             </SelectItem>
-                          ))}
-                          {formData.capabilities.length === 0 && (
-                            <SelectItem value="default_capability" disabled>
-                              Default capability will be used
-                            </SelectItem>
+                          ) : (
+                            <>
+                              <SelectItem value="_auto">Auto-select (recommended)</SelectItem>
+                              {formData.capabilities.map((capability) => (
+                                <SelectItem key={capability.id} value={capability.name}>
+                                  {capability.name} - {capability.description}
+                                </SelectItem>
+                              ))}
+                            </>
                           )}
                         </SelectContent>
                       </Select>
@@ -574,12 +605,10 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                                 <span className="font-medium text-muted-foreground">Task: </span>
                                 <span className="font-semibold">{formData.taskDefinition.name}</span>
                               </div>
-                              {formData.taskDefinition.capabilityName && (
-                                <div className="mt-1 text-xs">
-                                  <span className="font-medium text-muted-foreground">Capability: </span>
-                                  <span>{formData.taskDefinition.capabilityName}</span>
-                                </div>
-                              )}
+                              <div className="mt-1 text-xs">
+                                <span className="font-medium text-muted-foreground">Capability: </span>
+                                <span>{formData.taskDefinition.capabilityName || 'Auto-select (recommended)'}</span>
+                              </div>
                               {formData.taskDefinition.description && (
                                 <div className="mt-1 text-xs text-muted-foreground">
                                   {formData.taskDefinition.description}

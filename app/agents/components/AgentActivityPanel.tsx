@@ -13,8 +13,10 @@ export default function AgentActivityPanel({ agent }: AgentActivityPanelProps) {
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
+    setHasMounted(true);
     const fetchTasks = async () => {
       setLoading(true);
       const result = await getTasks(agent.id);
@@ -63,7 +65,7 @@ export default function AgentActivityPanel({ agent }: AgentActivityPanelProps) {
                 </div>
                 <p className="text-sm text-muted-foreground">Capability: {task.capabilityName}</p>
                 <p className="text-xs text-muted-foreground/80 mt-2">
-                  Created at: {new Date(task.createdAt).toLocaleString()}
+                  Created at: {hasMounted ? new Date(task.createdAt).toLocaleString() : ''}
                 </p>
                 <div className="mt-2">
                   <h5 className="text-xs font-semibold text-muted-foreground">Payload</h5>

@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db/client";
 import { teams, teamMemberships } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { ActionResult, CreateTeamData, TeamMembershipData } from "./types";
 import { autoReindexService } from "@/lib/rag/auto-reindex";
@@ -79,16 +79,13 @@ export async function createTeamAction(formData: FormData) {
 
 export async function getTeams(organizationId?: number) {
   try {
+    const query = db.select().from(teams).orderBy(desc(teams.createdAt));
+
     if (organizationId) {
-      const allTeams = await db
-        .select()
-        .from(teams)
-        .where(eq(teams.organizationId, organizationId));
-      return allTeams;
+      return await query.where(eq(teams.organizationId, organizationId));
     }
 
-    const allTeams = await db.select().from(teams);
-    return allTeams;
+    return await query;
   } catch (error) {
     console.error("Error fetching teams:", error);
     throw new Error("Failed to fetch teams");

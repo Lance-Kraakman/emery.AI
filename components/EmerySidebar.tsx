@@ -23,7 +23,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { EmeryOrganizationModal } from "./EmeryOrganizationModal"
-import { useEmeryData } from "@/hooks/useEmeryData"
+import { useEmery } from "@/contexts/EmeryContext"
 import { useDataDialogs } from "@/contexts/DataDialogsContext"
 
 const navItems = [
@@ -59,7 +59,7 @@ const settingsNavItems = [
 export function EmerySidebar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const { data, isLoading } = useEmeryData()
+  const { data, isLoading } = useEmery()
   const { setIsCreateDatabaseOpen, setIsCreateTableOpen, setSelectedDatabaseForTable } = useDataDialogs()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [openCollapsibles, setOpenCollapsibles] = useState<string[]>([])

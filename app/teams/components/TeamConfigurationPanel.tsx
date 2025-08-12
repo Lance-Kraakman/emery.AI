@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Agent, Team } from '@/types/db';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,33 +32,69 @@ export default function TeamConfigurationPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>(team?.agentIds || []);
+  const [formData, setFormData] = useState({
+    name: team?.name || '',
+    purpose: team?.purpose || '',
+    description: team?.description || '',
+    responsibilities: team?.responsibilities?.join(', ') || '',
+    goals: team?.goals?.join(', ') || '',
+  });
 
-  const handleSubmit = async (formData: FormData) => {
+  // Update form data when team changes
+  useEffect(() => {
+    if (team) {
+      setFormData({
+        name: team.name || '',
+        purpose: team.purpose || '',
+        description: team.description || '',
+        responsibilities: team.responsibilities?.join(', ') || '',
+        goals: team.goals?.join(', ') || '',
+      });
+      setSelectedAgentIds(team.agentIds || []);
+    } else {
+      // Reset form for new team
+      setFormData({
+        name: '',
+        purpose: '',
+        description: '',
+        responsibilities: '',
+        goals: '',
+      });
+      setSelectedAgentIds([]);
+    }
+  }, [team]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!currentOrganization) return;
     
     try {
       setLoading(true);
       setError(null);
-      
-      // Add organization ID and agent IDs to form data
-      formData.append('organizationId', currentOrganization.id.toString());
-      formData.append('agentIds', selectedAgentIds.join(','));
 
       let result;
       if (team) {
         // Update existing team
         const data = {
-          name: formData.get('name') as string,
-          purpose: formData.get('purpose') as string,
-          description: formData.get('description') as string,
-          responsibilities: (formData.get('responsibilities') as string)?.split(',').map(r => r.trim()).filter(r => r),
-          goals: (formData.get('goals') as string)?.split(',').map(g => g.trim()).filter(g => g),
+          name: formData.name,
+          purpose: formData.purpose,
+          description: formData.description,
+          responsibilities: formData.responsibilities?.split(',').map(r => r.trim()).filter(r => r),
+          goals: formData.goals?.split(',').map(g => g.trim()).filter(g => g),
           agentIds: selectedAgentIds,
         };
         result = await updateTeam(team.id, data);
       } else {
         // Create new team
-        result = await createTeamAction(formData);
+        const teamData = new FormData();
+        teamData.append('name', formData.name);
+        teamData.append('purpose', formData.purpose);
+        teamData.append('description', formData.description);
+        teamData.append('responsibilities', formData.responsibilities);
+        teamData.append('goals', formData.goals);
+        teamData.append('organizationId', currentOrganization.id.toString());
+        teamData.append('agentIds', selectedAgentIds.join(','));
+        result = await createTeamAction(teamData);
       }
 
       if (result.success) {
@@ -120,35 +156,32 @@ export default function TeamConfigurationPanel({
 
         <form
           id="team-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSubmit(new FormData(e.currentTarget));
-          }}
+          onSubmit={handleSubmit}
           className="space-y-6"
         >
           <FormField label="Team Name" required>
             <Input
-              name="name"
               placeholder="e.g., Marketing Team"
-              defaultValue={team?.name || ''}
+              value={formData.name}
+              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
               required
             />
           </FormField>
 
           <FormField label="Purpose">
             <Input
-              name="purpose"
               placeholder="e.g., Drive marketing initiatives and campaigns"
-              defaultValue={team?.purpose || ''}
+              value={formData.purpose}
+              onChange={(e) => setFormData(prev => ({ ...prev, purpose: e.target.value }))}
             />
           </FormField>
 
           <FormField label="Description">
             <Textarea
-              name="description"
               placeholder="Describe the team's role and objectives..."
               rows={3}
-              defaultValue={team?.description || ''}
+              value={formData.description}
+              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
             />
           </FormField>
 
@@ -157,10 +190,10 @@ export default function TeamConfigurationPanel({
             description="Comma-separated list"
           >
             <Textarea
-              name="responsibilities"
               placeholder="e.g., Content creation, Campaign management, Brand awareness"
               rows={2}
-              defaultValue={team?.responsibilities?.join(', ') || ''}
+              value={formData.responsibilities}
+              onChange={(e) => setFormData(prev => ({ ...prev, responsibilities: e.target.value }))}
             />
           </FormField>
 
@@ -169,10 +202,10 @@ export default function TeamConfigurationPanel({
             description="Comma-separated list"
           >
             <Textarea
-              name="goals"
               placeholder="e.g., Increase brand awareness, Generate qualified leads"
               rows={2}
-              defaultValue={team?.goals?.join(', ') || ''}
+              value={formData.goals}
+              onChange={(e) => setFormData(prev => ({ ...prev, goals: e.target.value }))}
             />
           </FormField>
 

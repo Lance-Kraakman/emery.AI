@@ -138,7 +138,7 @@ export const PREDEFINED_TOOLS: ToolDefinition[] = [
     parameters: [
       { name: 'spreadsheet_id', type: 'string', required: true, description: 'Google Sheets spreadsheet ID' },
       { name: 'range', type: 'string', required: true, description: 'Sheet range (e.g., "Sheet1!A1:D10")' }
-    ]
+    ],
   },
   {
     name: 'sheets_write_data',

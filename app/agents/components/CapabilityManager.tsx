@@ -1,13 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { Agent } from '@/types/db';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
-import CapabilityFormDialog from './CapabilityFormDialog';
 
 // AIDEV-NOTE: Capability manager refactored to use consistent design system patterns
 
@@ -16,21 +13,12 @@ interface CapabilityManagerProps {
 }
 
 export default function CapabilityManager({ agent }: CapabilityManagerProps) {
-  const [isFormOpen, setIsFormOpen] = useState(false);
   const capabilities = agent.capabilities as any[] || [];
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-xl font-semibold">Capabilities</h3>
-        <Button
-          onClick={() => setIsFormOpen(true)}
-          variant="outline"
-          size="sm"
-        >
-          <Settings size={16} className="mr-2" />
-          Edit Capabilities
-        </Button>
       </div>
       
       {capabilities.length > 0 ? (
@@ -48,7 +36,33 @@ export default function CapabilityManager({ agent }: CapabilityManagerProps) {
                   <p className="text-sm text-muted-foreground">{cap.description}</p>
                 )}
                 
-                {cap.tools && cap.tools.length > 0 && (
+                {/* Display steps and their tools (new structure) */}
+                {cap.steps && cap.steps.length > 0 && (
+                  <div>
+                    <h5 className="text-xs font-semibold text-muted-foreground mb-2">Steps ({cap.steps.length})</h5>
+                    <div className="space-y-2">
+                      {cap.steps.map((step: any, stepIndex: number) => (
+                        <div key={stepIndex} className="p-2 border rounded-md bg-muted/30">
+                          {step.instructions && (
+                            <p className="text-sm mb-2">{step.instructions}</p>
+                          )}
+                          {step.tools && step.tools.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {step.tools.map((tool: any, toolIndex: number) => (
+                                <Badge key={toolIndex} variant="secondary" className="text-xs">
+                                  {tool.display_name || tool.name || tool}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Legacy tools display (old structure) */}
+                {cap.tools && cap.tools.length > 0 && !cap.steps && (
                   <div>
                     <h5 className="text-xs font-semibold text-muted-foreground mb-2">Tools</h5>
                     <div className="flex flex-wrap gap-2">
@@ -61,6 +75,7 @@ export default function CapabilityManager({ agent }: CapabilityManagerProps) {
                   </div>
                 )}
                 
+                {/* Legacy servers display (old structure) */}
                 {cap.servers && cap.servers.length > 0 && (
                   <div>
                     <h5 className="text-xs font-semibold text-muted-foreground mb-2">Servers</h5>
@@ -80,19 +95,9 @@ export default function CapabilityManager({ agent }: CapabilityManagerProps) {
       ) : (
         <EmptyState
           title="No capabilities configured"
-          description="Add capabilities to define what this agent can do"
-          action={{
-            label: "Configure Capabilities",
-            onClick: () => setIsFormOpen(true)
-          }}
+          description="Add capabilities to define what this agent can do."
         />
       )}
-      
-      <CapabilityFormDialog
-        isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
-        agent={agent}
-      />
     </div>
   );
 }

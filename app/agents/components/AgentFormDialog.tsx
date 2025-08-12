@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { FormField } from '@/components/ui/form-field';
+import { useEmery } from '@/contexts/EmeryContext';
 
 // AIDEV-NOTE: Agent form dialog refactored to use consistent design system components and patterns
 
@@ -21,12 +22,14 @@ interface AgentFormDialogProps {
 export default function AgentFormDialog({ isOpen, onClose, agent }: AgentFormDialogProps) {
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { refetch } = useEmery();
 
   const handleSubmit = async (formData: FormData) => {
     try {
       setIsPending(true);
       setError(null);
       await createAgentAction(formData);
+      refetch();
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save agent');
