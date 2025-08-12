@@ -212,14 +212,16 @@ export default function OrganizationChartClient() {
     saveViewConfig(nodes, edges, viewState);
   }, [nodes, edges, selectedNodes, searchTerm, isPanelCollapsed, isConfiguring, currentOrganization, saveViewConfig]);
 
-  // Generate nodes and edges when data changes
+  // Generate nodes and edges when data changes - only on client
   useEffect(() => {
-    generateNodesAndEdges();
-  }, [generateNodesAndEdges]);
+    if (isClient) {
+      generateNodesAndEdges();
+    }
+  }, [generateNodesAndEdges, isClient]);
 
-  // Load view from DB on mount using the custom hook
+  // Load view from DB on mount using the custom hook - only on client
   useEffect(() => {
-    if (!currentOrganization?.viewConfig || nodes.length === 0) return;
+    if (!isClient || !currentOrganization?.viewConfig || nodes.length === 0) return;
     
     const result = loadViewConfig(currentOrganization.viewConfig, nodes);
     
@@ -243,16 +245,16 @@ export default function OrganizationChartClient() {
     }
   }, [currentOrganization?.id, currentOrganization?.viewConfig, nodes.length, loadViewConfig, setNodes]);
 
-  // Debounced auto-save effect
+  // Debounced auto-save effect - only on client
   useEffect(() => {
-    if (nodes.length === 0) return; // Don't auto-save until we have data
+    if (!isClient || nodes.length === 0) return; // Don't auto-save until we have data
     
     const timer = setTimeout(() => {
       autoSaveView();
     }, 2000); // Auto-save 2 seconds after last change
     
     return () => clearTimeout(timer);
-  }, [nodes, selectedNodes, searchTerm, isPanelCollapsed, isConfiguring, autoSaveView]);
+  }, [nodes, selectedNodes, searchTerm, isPanelCollapsed, isConfiguring, autoSaveView, isClient]);
 
   // Handle node selection with multi-select support
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
