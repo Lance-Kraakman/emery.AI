@@ -2,6 +2,7 @@
 
 import { requireAuth } from "./permissions";
 import { createOrGetPipedreamUser, getUserConnections, generateConnectionUrl, disconnectUserAccount } from "@/lib/pipedream/users";
+import { normalizePipedreamConnections } from "@/lib/pipedream/connection-mapper";
 import { runActionForAgent } from "@/lib/pipedream/agents";
 import { db } from "@/lib/db/client";
 import { agents } from "@/lib/db/schema";
@@ -72,11 +73,12 @@ export async function getUserOAuthConnections(): Promise<ActionResult> {
       name: session.user.name || undefined,
     });
     
-    const connections = await getUserConnections(session.user.id);
+    const rawConnections = await getUserConnections(session.user.id);
+    const normalizedConnections = normalizePipedreamConnections(rawConnections);
     
     return {
       success: true,
-      data: connections,
+      data: normalizedConnections,
     };
   } catch (error) {
     console.error("Error getting user OAuth connections:", error);

@@ -35,6 +35,7 @@ export class AgentScheduler {
   private scheduledJobs = new Map<number, SchedulerJob>(); // agent_id -> scheduled job
   private checkInterval: NodeJS.Timeout | null = null;
   private postgresListener: any = null;
+  private postgresListenerInstance: any = null;
   
   // AIDEV-NOTE: Consolidated job management with typed interface
 
@@ -116,13 +117,16 @@ export class AgentScheduler {
   }
 
   private async cleanupDatabaseListeners(): Promise<void> {
-    if (this.postgresListener) {
+    if (this.postgresListenerInstance) {
       try {
         // AIDEV-NOTE: Don't close shared client, just unlisten
-        this.postgresListener.unlisten('emery_table_changes');
+        await this.postgresListenerInstance.unlisten();
       } catch (error) {
         console.warn('[SCHEDULER] Error removing database listener:', error);
       }
+      this.postgresListenerInstance = null;
+    }
+    if (this.postgresListener) {
       this.postgresListener = null;
     }
   }
@@ -331,7 +335,7 @@ export class AgentScheduler {
 
       // AIDEV-NOTE: Using postgres.js listen() method instead of pg Client
       // This automatically handles LISTEN command and provides callback for notifications
-      this.postgresListener.listen('emery_table_changes', async (payload: string) => {
+      this.postgresListenerInstance = await this.postgresListener.listen('emery_table_changes', async (payload: string) => {
         try {
           const data = JSON.parse(payload);
           console.log(`[SCHEDULER-DB] Received table change notification:`, data);

@@ -6,7 +6,7 @@ and their OAuth credential delegation system.
 """
 
 from .client import EmeryPythonClient
-from .types import (
+from .data_types import (
     AgentCapabilities,
     ConnectedService,
     AvailableAction,

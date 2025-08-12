@@ -13,7 +13,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "test:agent-api": "python scripts/python_agent_client.py",
+    "test:agent-api": "node scripts/test-agent-execution-api.js",
     "grpc:generate": "npm run grpc:generate:js && npm run grpc:generate:python",
     "grpc:generate:js": "grpc_tools_node_protoc --js_out=import_style=commonjs,binary:lib/grpc/generated --grpc_out=grpc_js:lib/grpc/generated --plugin=protoc-gen-grpc=$(which grpc_tools_node_protoc_plugin) -I proto proto/agent_worker.proto",
     "grpc:generate:python": "cd emery-agents && uv run python -m grpc_tools.protoc --python_out=src/emery_agents/grpc/generated --grpc_python_out=src/emery_agents/grpc/generated -I ../proto ../proto/agent_worker.proto",
@@ -23,8 +23,7 @@
     "test:scheduler": "npx tsx scripts/test-scheduler-system.ts",
     "seed:test": "npx tsx scripts/seed-test-data.ts",
     "seed:clean": "npx tsx scripts/seed-test-data.ts --clean",
-    "test:agent-execution": "node scripts/test-agent-execution.js",
-    "test:agent-api": "node scripts/test-agent-execution-api.js"
+    "test:agent-execution": "node scripts/test-agent-execution.js"
   },
   "packageManager": "pnpm@10.14.0",
   "dependencies": {
@@ -68,6 +67,7 @@
     "@radix-ui/react-toggle-group": "^1.1.10",
     "@radix-ui/react-tooltip": "^1.2.7",
     "@types/multer": "^2.0.0",
+    "@types/nodemailer": "^6.4.17",
     "@types/react-beautiful-dnd": "^13.1.8",
     "@xyflow/react": "^12.8.2",
     "ai": "^5.0.8",
@@ -92,6 +92,7 @@
     "next-auth": "^4.24.11",
     "next-themes": "^0.4.6",
     "node-cron": "^4.2.1",
+    "nodemailer": "^7.0.5",
     "pdf-parse": "^1.1.1",
     "pg": "^8.16.3",
     "pgvector": "^0.2.1",

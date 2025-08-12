@@ -516,39 +516,59 @@ export function getRequiredOAuthServices(): string[] {
   ));
 }
 
+import { NormalizedConnection } from '@/lib/pipedream/connection-mapper';
+
 /**
- * Check if a tool is available for a user based on their OAuth connections
- * @param toolName Name of the tool to check
- * @param userConnections Array of user's connected OAuth services
+ * Check if a tool is available for a user based on their OAuth connections.
+ * This function now works with the normalized connection objects.
+ *
+ * @param toolName - The name of the tool to check.
+ * @param userConnections - An array of the user's normalized connection objects.
+ * @returns True if the tool is available, false otherwise.
  */
-export function isToolAvailableForUser(toolName: string, userConnections: string[]): boolean {
+export function isToolAvailableForUser(toolName: string, userConnections: NormalizedConnection[]): boolean {
   const tool = getToolByName(toolName);
-  if (!tool) return false;
-  
-  // If tool doesn't require auth, it's always available
-  if (!tool.requires_auth) return true;
-  
-  // If tool requires auth, check if user has the required OAuth connection
-  return tool.oauth_service ? userConnections.includes(tool.oauth_service) : false;
+  if (!tool) {
+    return false;
+  }
+
+  // If the tool doesn't require authentication, it's always available.
+  if (!tool.requires_auth) {
+    return true;
+  }
+
+  // If the tool requires authentication, check if the user has a matching active connection.
+  if (tool.oauth_service) {
+    return userConnections.some(
+      (connection) =>
+        connection.app === tool.oauth_service &&
+        (connection.status === 'connected' || connection.status === 'active')
+    );
+  }
+
+  return false;
 }
 
 /**
- * Get available tools for a user based on their OAuth connections
- * @param userConnections Array of user's connected OAuth services  
+ * Get available tools for a user based on their OAuth connections.
+ *
+ * @param userConnections - An array of the user's normalized connection objects.
+ * @returns An array of tool definitions that are available to the user.
  */
-export function getAvailableToolsForUser(userConnections: string[]): ToolDefinition[] {
-  return PREDEFINED_TOOLS.filter(tool => 
-    isToolAvailableForUser(tool.name, userConnections)
-  );
+export function getAvailableToolsForUser(userConnections: NormalizedConnection[]): ToolDefinition[] {
+  return PREDEFINED_TOOLS.filter(tool => isToolAvailableForUser(tool.name, userConnections));
 }
 
 /**
- * Get unavailable tools for a user (OAuth required but not connected)
- * @param userConnections Array of user's connected OAuth services
+ * Get unavailable tools for a user (i.e., tools that require an OAuth connection
+ * that the user has not configured or is inactive).
+ *
+ * @param userConnections - An array of the user's normalized connection objects.
+ * @returns An array of tool definitions that are unavailable to the user.
  */
-export function getUnavailableToolsForUser(userConnections: string[]): ToolDefinition[] {
-  return PREDEFINED_TOOLS.filter(tool => 
-    tool.requires_auth && !isToolAvailableForUser(tool.name, userConnections)
+export function getUnavailableToolsForUser(userConnections: NormalizedConnection[]): ToolDefinition[] {
+  return PREDEFINED_TOOLS.filter(
+    (tool) => tool.requires_auth && !isToolAvailableForUser(tool.name, userConnections)
   );
 }
 

@@ -6,8 +6,11 @@
  */
 
 import { NextRequest } from 'next/server';
-import { auth } from '@/lib/auth';
+import { auth, getUserIdFromRequest } from '@/lib/auth';
 import { validateUserApiKey, extractApiKeyFromHeader, UserApiKeyInfo } from './user-api-keys';
+import { db } from '@/lib/db/client';
+import { users } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 export interface AuthResult {
   success: boolean;
@@ -22,11 +25,12 @@ export interface AuthResult {
 }
 
 /**
- * Authenticate a request using either NextAuth session or user API key
+ * Authenticate a request using either NextAuth session, user API key, or development bypass
  * 
  * Priority:
  * 1. NextAuth session (production authentication)
  * 2. User API key (automation/testing authentication)
+ * 3. Development bypass (testing with x-test-user-id header)
  */
 export async function authenticateRequest(request: NextRequest): Promise<AuthResult> {
   try {
@@ -60,6 +64,30 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
             name: apiKeyUser.name,
             organizationId: apiKeyUser.organizationId,
             roleId: apiKeyUser.roleId,
+          },
+        };
+      }
+    }
+
+    // Development bypass using x-test-user-id header
+    const userId = await getUserIdFromRequest(request);
+    if (userId) {
+      // Get user details from database
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      
+      if (user) {
+        return {
+          success: true,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            organizationId: user.currentOrganizationId,
+            roleId: user.roleId,
           },
         };
       }

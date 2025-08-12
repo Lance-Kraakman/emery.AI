@@ -98,13 +98,6 @@ export function EmailSignInForm({ callbackUrl = "/mission-control" }: EmailSignI
           {message}
         </div>
       )}
-      
-      {/* Development hint for test user */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="text-xs text-gray-500 text-center mt-4 p-2 bg-yellow-50 border border-yellow-200 rounded">
-          <strong>Development:</strong> Use <code>test@emery.dev</code> for testing
-        </div>
-      )}
     </div>
   )
 }

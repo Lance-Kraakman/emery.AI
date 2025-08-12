@@ -14,9 +14,9 @@ from typing import Any, Dict, Optional
 import requests
 from flask import Flask, request, jsonify
 
-from .types import (
+from .data_types import (
     AgentCapabilities,
-    ConnectedService, 
+    ConnectedService,
     AvailableAction,
     ExecutionResult,
     ProxyResult,

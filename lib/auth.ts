@@ -1,13 +1,41 @@
 import NextAuth from "next-auth"
 import GitHubProvider from "next-auth/providers/github"
 import GoogleProvider from "next-auth/providers/google"
-import EmailProvider from "next-auth/providers/email"
 import { DrizzleAdapter } from "@auth/drizzle-adapter"
 import { db } from "./db/client"
 import { users, accounts, sessions, verificationTokens, roles, organizations, userOrganizations } from "./db/schema"
 import { eq } from "drizzle-orm"
 import { getServerSession } from "next-auth"
 import { getSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react"
+
+// AIDEV-NOTE: Development bypass for testing - allows tests to authenticate as specific user
+export function getTestUserId(): string {
+  return "550e8400-e29b-41d4-a716-446655440000";
+}
+
+export function isDevelopmentBypass(): boolean {
+  return process.env.NODE_ENV === "development";
+}
+
+// AIDEV-NOTE: Reusable development bypass for API routes
+export async function getUserIdFromRequest(request: Request): Promise<string | null> {
+  const session = await auth();
+  
+  // Return authenticated user ID if available
+  if (session?.user?.id) {
+    return session.user.id;
+  }
+  
+  // Development bypass for testing
+  if (isDevelopmentBypass()) {
+    const testUserId = request.headers.get('x-test-user-id');
+    if (testUserId === getTestUserId()) {
+      return testUserId;
+    }
+  }
+  
+  return null;
+}
 
 const authOptions = {
   adapter: DrizzleAdapter(db, {
@@ -29,26 +57,6 @@ const authOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-    EmailProvider({
-      server: {
-        host: process.env.EMAIL_SERVER_HOST || "localhost",
-        port: parseInt(process.env.EMAIL_SERVER_PORT || "1025"),
-        secure: false, // MailHog doesn't use TLS
-        // MailHog doesn't require authentication
-        ...(process.env.EMAIL_SERVER_HOST === "localhost" || !process.env.EMAIL_SERVER_HOST 
-          ? { 
-              auth: undefined // Explicitly set to undefined for MailHog
-            } 
-          : {
-              auth: {
-                user: process.env.EMAIL_SERVER_USER || "",
-                pass: process.env.EMAIL_SERVER_PASSWORD || "",
-              }
-            }
-        ),
-      },
-      from: process.env.EMAIL_FROM || "noreply@emery.dev",
     }),
   ],
   callbacks: {

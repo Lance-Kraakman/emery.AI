@@ -4,28 +4,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, RefreshCw } from 'lucide-react';
 import { getUserOAuthConnections, getAppConnectionUrl, initializePipedreamUser, disconnectOAuthAccount } from '@/app/actions/pipedream';
 
-interface Connection {
-  id: string;
-  app: {
-    id: string;
-    name_slug: string;
-    name: string;
-    img_src: string;
-  };
-  account_name?: string;
-  status: string;
-  raw_status?: string;
-  created_at: string;
-  updated_at: string;
-}
+import { NormalizedConnection as Connection } from '@/lib/pipedream/connection-mapper';
 
 const AVAILABLE_APPS = [
-  { id: 'slack', name: 'Slack', description: 'Send messages, create channels, and more' },
-  { id: 'gmail', name: 'Gmail', description: 'Send emails, read inbox, and manage labels' },
-  { id: 'github', name: 'GitHub', description: 'Manage repositories, issues, and pull requests' },
-  { id: 'google-sheets', name: 'Google Sheets', description: 'Read and write to spreadsheets' },
-  { id: 'discord', name: 'Discord', description: 'Send messages and manage servers' },
-  { id: 'twitter', name: 'Twitter', description: 'Post tweets and manage your timeline' },
+  { id: 'slack', name: 'Slack', description: 'Send messages, create channels, and more', icon: '/icons/slack.svg' },
+  { id: 'gmail', name: 'Gmail', description: 'Send emails, read inbox, and manage labels', icon: '/icons/gmail.svg' },
+  { id: 'github', name: 'GitHub', description: 'Manage repositories, issues, and pull requests', icon: '/icons/github.svg' },
+  { id: 'google-sheets', name: 'Google Sheets', description: 'Read and write to spreadsheets', icon: '/icons/google-sheets.svg' },
+  { id: 'discord', name: 'Discord', description: 'Send messages and manage servers', icon: '/icons/discord.svg' },
+  { id: 'twitter', name: 'Twitter', description: 'Post tweets and manage your timeline', icon: '/icons/twitter.svg' },
 ];
 
 export function ConnectionsManager() {
@@ -202,11 +189,11 @@ export function ConnectionsManager() {
               <div key={connection.id} className="px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <img className="w-10 h-10 rounded-lg" src={connection.app.img_src} alt={connection.app.name} />
+                    <img className="w-10 h-10 rounded-lg" src={AVAILABLE_APPS.find(a => a.id === connection.app)?.icon || ''} alt={connection.app} />
                   </div>
                   <div className="ml-4">
                     <div className="text-sm font-medium text-gray-900">
-                      {connection.app.name || 'Unknown App'}
+                      {AVAILABLE_APPS.find(a => a.id === connection.app)?.name || 'Unknown App'}
                     </div>
                     {connection.account_name && (
                       <div className="text-sm text-gray-500">
@@ -246,24 +233,15 @@ export function ConnectionsManager() {
         </div>
         <div className="divide-y divide-gray-200">
           {AVAILABLE_APPS.map((app) => {
-            const connectedApp = connections?.find(c => c.app.name_slug === app.id);
+            const connectedApp = connections?.find(c => c.app === app.id);
             const isConnected = !!connectedApp && (connectedApp.status === 'connected' || connectedApp.status === 'active');
             const isConnecting = connectingApp === app.id;
-            const iconSrc = connectedApp?.app?.img_src;
 
             return (
               <div key={app.id} className="px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    {iconSrc ? (
-                      <img className="w-10 h-10 rounded-lg" src={iconSrc} alt={app.name} />
-                    ) : (
-                      <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                        <span className="text-sm font-medium text-gray-700">
-                          {app.name.charAt(0)}
-                        </span>
-                      </div>
-                    )}
+                    <img className="w-10 h-10 rounded-lg" src={app.icon} alt={app.name} />
                   </div>
                   <div className="ml-4">
                     <div className="text-sm font-medium text-gray-900">

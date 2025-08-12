@@ -24,8 +24,11 @@ export default async function SignInPage() {
         </div>
         
         <div className="mt-8 space-y-6">
-          {/* Email Sign In Form */}
-          <EmailSignInForm />
+          {/* OAuth Providers */}
+          <div className="space-y-3">
+            <SignInButton provider="github" />
+            <SignInButton provider="google" />
+          </div>
           
           {/* Separator */}
           <div className="relative">
@@ -33,15 +36,12 @@ export default async function SignInPage() {
               <Separator className="w-full" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-gray-50 text-gray-500">Or continue with</span>
+              <span className="px-2 bg-gray-50 text-gray-500">Or sign in with email</span>
             </div>
           </div>
           
-          {/* OAuth Providers */}
-          <div className="space-y-3">
-            <SignInButton provider="github" />
-            <SignInButton provider="google" />
-          </div>
+          {/* Email Sign In Form */}
+          <EmailSignInForm />
         </div>
       </div>
     </div>
