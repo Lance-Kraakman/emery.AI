@@ -29,7 +29,6 @@ import {
   Edit3,
   Activity,
 } from 'lucide-react';
-import { updateOrganizationViewConfig } from '@/app/actions/organizations';
 import { getTasks } from '@/app/actions/tasks';
 
 import { Agent, Team } from '@/types/db';
@@ -39,6 +38,7 @@ import AgentNode from './AgentNode';
 import ActivityPanel from './ActivityPanel';
 import { useEmery } from '@/contexts/EmeryContext';
 import { Loading } from '@/components/ui/loading';
+import { useOrganizationViewConfig } from '@/hooks/useOrganizationViewConfig';
 
 // Define custom node types
 const nodeTypes = {
@@ -71,74 +71,40 @@ export default function OrganizationChart() {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
 
-  // Enhanced view data structure with validation
-  const createViewData = useCallback(() => {
-    return {
-      version: '1.0',
-      organizationId: currentOrganization?.id,
-      nodes: nodes.map(node => ({ 
-        id: node.id, 
-        position: node.position,
-        type: node.type,
-        data: {
-          id: node.data.id,
-          name: node.data.name,
-          type: node.data.type,
-          // Only save essential data, not full objects
-        }
-      })),
-      edges: edges.map(edge => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        type: edge.type
-      })),
-      viewState: {
-        selectedNodes,
-        searchTerm,
-        isPanelCollapsed,
-        isConfiguring
-      },
-      metadata: {
-        timestamp: new Date().toISOString(),
-        nodeCount: nodes.length,
-        edgeCount: edges.length
-      }
-    };
-  }, [nodes, edges, selectedNodes, searchTerm, isPanelCollapsed, isConfiguring, currentOrganization]);
+  // Initialize auto-save hook
+  const { saveViewConfig, loadViewConfig, isSaving } = useOrganizationViewConfig({
+    organizationId: currentOrganization?.id,
+    autoSaveDelay: 2000,
+    enabled: !!currentOrganization?.id,
+  });
 
-  // Validate view data structure
-  const validateViewData = (data: any): boolean => {
-    return (
-      data &&
-      typeof data === 'object' &&
-      data.version &&
-      Array.isArray(data.nodes) &&
-      Array.isArray(data.edges) &&
-      data.viewState &&
-      data.metadata
-    );
-  };
-
-  // Auto-save view to DB (only if currentOrganization is available)
-  const autoSaveView = useCallback(async () => {
+  // Auto-save view using the custom hook
+  const autoSaveView = useCallback(() => {
     if (!currentOrganization?.id || nodes.length === 0) return;
 
-    try {
-      const viewData = createViewData();
-      await updateOrganizationViewConfig(currentOrganization.id, viewData);
-    } catch (error) {
-      console.error('Failed to save organization view:', error);
-    }
-  }, [createViewData, currentOrganization, nodes.length]);
+    const viewState = {
+      selectedNodes,
+      searchTerm,
+      isPanelCollapsed,
+      isConfiguring,
+    };
+
+    saveViewConfig(nodes, edges, viewState);
+  }, [nodes, edges, selectedNodes, searchTerm, isPanelCollapsed, isConfiguring, currentOrganization, saveViewConfig]);
 
   // Convert teams and agents to React Flow nodes
   const generateNodesAndEdges = useCallback(() => {
     const newNodes: Node[] = [];
     const newEdges: Edge[] = [];
 
+    // AIDEV-NOTE: Debug logging to check teams data
+    console.log('OrganizationChart - Teams data:', teams);
+    console.log('OrganizationChart - Agents data:', agents);
+    console.log('OrganizationChart - Tasks data:', tasks);
+
     // Create team nodes
     teams.forEach((team, index) => {
+      console.log(`Creating node for team ${index + 1}:`, team);
       const teamX = 200 + (index % 3) * 400;
       const teamY = 100 + Math.floor(index / 3) * 300;
 
@@ -215,6 +181,9 @@ export default function OrganizationChart() {
       });
     });
 
+    console.log('OrganizationChart - Setting nodes:', newNodes);
+    console.log('OrganizationChart - Setting edges:', newEdges);
+    
     setNodes(newNodes);
     setEdges(newEdges);
   }, [agents, teams, tasks, setNodes, setEdges]);
@@ -224,37 +193,31 @@ export default function OrganizationChart() {
     generateNodesAndEdges();
   }, [generateNodesAndEdges]);
 
-  // Load view from DB on mount (only if currentOrganization and viewConfig are available)
+  // Load view from DB on mount using the custom hook
   useEffect(() => {
     if (!currentOrganization?.viewConfig || nodes.length === 0) return;
     
-    try {
-      const viewData = currentOrganization.viewConfig as any;
-      if (validateViewData(viewData)) {
-        // Restore nodes with positions
-        if (viewData.nodes && viewData.nodes.length > 0) {
-          const restoredNodes = nodes.map(node => {
-            const savedNode = viewData.nodes.find((n: any) => n.id === node.id);
-            return savedNode ? { ...node, position: savedNode.position } : node;
-          });
-          setNodes(restoredNodes);
+    const result = loadViewConfig(currentOrganization.viewConfig, nodes);
+    
+    if (result) {
+      setNodes(result.nodes);
+      
+      if (result.viewState) {
+        if (Array.isArray(result.viewState.selectedNodes)) {
+          setSelectedNodes(result.viewState.selectedNodes);
         }
-        
-        // Restore view state
-        if (viewData.viewState) {
-          const { selectedNodes: saved_selectedNodes, searchTerm: saved_searchTerm, 
-                  isPanelCollapsed: saved_isPanelCollapsed, isConfiguring: saved_isConfiguring } = viewData.viewState;
-          
-          if (Array.isArray(saved_selectedNodes)) setSelectedNodes(saved_selectedNodes);
-          if (typeof saved_searchTerm === 'string') setSearchTerm(saved_searchTerm);
-          if (typeof saved_isPanelCollapsed === 'boolean') setIsPanelCollapsed(saved_isPanelCollapsed);
-          if (typeof saved_isConfiguring === 'boolean') setIsConfiguring(saved_isConfiguring);
+        if (typeof result.viewState.searchTerm === 'string') {
+          setSearchTerm(result.viewState.searchTerm);
+        }
+        if (typeof result.viewState.isPanelCollapsed === 'boolean') {
+          setIsPanelCollapsed(result.viewState.isPanelCollapsed);
+        }
+        if (typeof result.viewState.isConfiguring === 'boolean') {
+          setIsConfiguring(result.viewState.isConfiguring);
         }
       }
-    } catch (error) {
-      console.error('Failed to load organization view configuration:', error);
     }
-  }, [currentOrganization?.id, currentOrganization?.viewConfig, nodes.length, setNodes]);
+  }, [currentOrganization?.id, currentOrganization?.viewConfig, nodes.length, loadViewConfig, setNodes]);
 
   // Debounced auto-save effect
   useEffect(() => {
@@ -438,6 +401,16 @@ export default function OrganizationChart() {
                     />
                   </div>
                 </ReactFlowPanel>
+
+                {/* Save status indicator */}
+                {isSaving && (
+                  <ReactFlowPanel position="bottom-left">
+                    <div className="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm flex items-center gap-2">
+                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Saving...
+                    </div>
+                  </ReactFlowPanel>
+                )}
 
                 {/* Selection info */}
                 {selectedNodes.length > 0 && (
