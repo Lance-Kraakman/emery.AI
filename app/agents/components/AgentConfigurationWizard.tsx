@@ -81,14 +81,37 @@ export default function AgentConfigurationWizard({
     selectedTools: [] as string[],
     triggerType: 'MANUAL' as string,
     triggerConfig: {} as Record<string, any>,
+    taskDefinition: {
+      name: '',
+      capabilityName: '',
+      description: '',
+      payload: {} as Record<string, any>
+    },
     capabilities: (agent?.capabilities as Capability[]) || [],
   });
 
   useEffect(() => {
     const initialCapabilities = (agent?.capabilities as Capability[]) || [];
     if (agent) {
+      // Extract trigger config and task definition from agent
+      const trigger = agent.trigger as any;
+      const triggerType = trigger?.type || 'MANUAL';
+      const triggerConfig = trigger ? { ...trigger } : {};
+      delete triggerConfig.type;
+      delete triggerConfig.taskDefinition;
+      
+      const taskDefinition = trigger?.taskDefinition || {
+        name: '',
+        capabilityName: '',
+        description: '',
+        payload: {}
+      };
+
       setFormData(prev => ({
         ...prev,
+        triggerType,
+        triggerConfig,
+        taskDefinition,
         capabilities: initialCapabilities.map(cap => ({
           ...cap,
           id: cap.id || generateUniqueId('cap'),
@@ -142,7 +165,11 @@ export default function AgentConfigurationWizard({
       // Create trigger config
       const trigger = {
         type: formData.triggerType as 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT',
-        ...formData.triggerConfig
+        ...formData.triggerConfig,
+        // Include task definition for non-manual triggers
+        ...(formData.triggerType !== 'MANUAL' && {
+          taskDefinition: formData.taskDefinition
+        })
       };
 
       const agentData = {
@@ -332,7 +359,7 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                 <div>
                   <h2 className="text-xl font-bold mb-1">Agent Triggers</h2>
                   <p className="text-sm text-muted-foreground">
-                    Configure how and when your agent should execute.
+                    Configure how and when your agent should execute, and what task to create when triggered.
                   </p>
                 </div>
 
@@ -397,6 +424,90 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                     </FormField>
                   </div>
                 )}
+
+                {/* Task Definition - shown for all non-manual triggers */}
+                {formData.triggerType !== 'MANUAL' && (
+                  <div className="space-y-4 border-t border-border/20 pt-4">
+                    <div>
+                      <h3 className="text-lg font-semibold mb-2">Task Definition</h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Define what task should be created when this trigger fires.
+                      </p>
+                    </div>
+
+                    <FormField label="Task Name" required>
+                      <Input
+                        value={formData.taskDefinition.name}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          taskDefinition: { ...prev.taskDefinition, name: e.target.value }
+                        }))}
+                        placeholder="e.g., Daily Report Generation"
+                      />
+                    </FormField>
+
+                    <FormField label="Capability to Execute" required>
+                      <Select 
+                        value={formData.taskDefinition.capabilityName}
+                        onValueChange={(value) => setFormData(prev => ({
+                          ...prev,
+                          taskDefinition: { ...prev.taskDefinition, capabilityName: value }
+                        }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a capability" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {formData.capabilities.map((capability) => (
+                            <SelectItem key={capability.id} value={capability.name}>
+                              {capability.name} - {capability.description}
+                            </SelectItem>
+                          ))}
+                          {formData.capabilities.length === 0 && (
+                            <SelectItem value="default_capability" disabled>
+                              Default capability will be used
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </FormField>
+
+                    <FormField label="Task Description">
+                      <Textarea
+                        value={formData.taskDefinition.description}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          taskDefinition: { ...prev.taskDefinition, description: e.target.value }
+                        }))}
+                        placeholder="Describe what this scheduled task should accomplish..."
+                        rows={2}
+                      />
+                    </FormField>
+
+                    <FormField 
+                      label="Task Payload (JSON)" 
+                      description="Additional data to pass to the task (optional)"
+                    >
+                      <Textarea
+                        value={JSON.stringify(formData.taskDefinition.payload, null, 2)}
+                        onChange={(e) => {
+                          try {
+                            const payload = e.target.value ? JSON.parse(e.target.value) : {};
+                            setFormData(prev => ({
+                              ...prev,
+                              taskDefinition: { ...prev.taskDefinition, payload }
+                            }));
+                          } catch (error) {
+                            // Invalid JSON - don't update state, but allow user to continue typing
+                          }
+                        }}
+                        placeholder='{"key": "value"}'
+                        rows={3}
+                        className="font-mono text-sm"
+                      />
+                    </FormField>
+                  </div>
+                )}
               </div>
             )}
 
@@ -455,6 +566,25 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                             <div className="mt-1">
                               <span className="font-medium text-muted-foreground">Schedule: </span>
                               <span className="font-mono bg-muted/50 px-1 py-0.5 rounded text-xs">{formData.triggerConfig.cron}</span>
+                            </div>
+                          )}
+                          {formData.triggerType !== 'MANUAL' && formData.taskDefinition.name && (
+                            <div className="mt-2 pt-2 border-t border-border/20">
+                              <div className="text-xs">
+                                <span className="font-medium text-muted-foreground">Task: </span>
+                                <span className="font-semibold">{formData.taskDefinition.name}</span>
+                              </div>
+                              {formData.taskDefinition.capabilityName && (
+                                <div className="mt-1 text-xs">
+                                  <span className="font-medium text-muted-foreground">Capability: </span>
+                                  <span>{formData.taskDefinition.capabilityName}</span>
+                                </div>
+                              )}
+                              {formData.taskDefinition.description && (
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                  {formData.taskDefinition.description}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
