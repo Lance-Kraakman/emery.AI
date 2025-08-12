@@ -94,14 +94,14 @@ export default function ActivityPanel({
   }, [activities]);
 
   return (
-    <div className="h-full flex flex-col border-r">
-      <div className="p-4 border-b">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Activity className="w-5 h-5" />
-            Activity Feed
+    <div className="h-full flex flex-col border-r min-w-0 w-full overflow-hidden">
+      <div className="p-4 border-b min-w-0 overflow-hidden">
+        <div className="flex items-center justify-between mb-3 min-w-0">
+          <h2 className="text-lg font-semibold flex items-center gap-2 truncate">
+            <Activity className="w-5 h-5 shrink-0" />
+            <span className="truncate">Activity Feed</span>
           </h2>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 shrink-0">
             {selectedNodes.length > 0 && (
               <Button 
                 variant="outline" 
@@ -110,7 +110,7 @@ export default function ActivityPanel({
                 className="text-xs"
               >
                 <Filter className="w-3 h-3 mr-1" />
-                Clear Filter
+                <span className="hidden sm:inline">Clear Filter</span>
               </Button>
             )}
             {onCollapse && (
@@ -128,36 +128,36 @@ export default function ActivityPanel({
         </div>
         
         {/* Activity Summary */}
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Total:</span>
-            <span className="font-medium">{activityCounts.total}</span>
+        <div className="flex flex-col gap-1 text-sm min-w-0 overflow-hidden">
+          <div className="flex items-center justify-between min-w-0">
+            <span className="text-muted-foreground truncate">Total:</span>
+            <span className="font-medium shrink-0">{activityCounts.total}</span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Active:</span>
-            <span className="font-medium text-green-600">{activityCounts.active}</span>
+          <div className="flex items-center justify-between min-w-0">
+            <span className="text-muted-foreground truncate">Active:</span>
+            <span className="font-medium text-green-600 shrink-0">{activityCounts.active}</span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Pending:</span>
-            <span className="font-medium text-yellow-600">{activityCounts.pending}</span>
+          <div className="flex items-center justify-between min-w-0">
+            <span className="text-muted-foreground truncate">Pending:</span>
+            <span className="font-medium text-yellow-600 shrink-0">{activityCounts.pending}</span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Failed:</span>
-            <span className="font-medium text-red-600">{activityCounts.failed}</span>
+          <div className="flex items-center justify-between min-w-0">
+            <span className="text-muted-foreground truncate">Failed:</span>
+            <span className="font-medium text-red-600 shrink-0">{activityCounts.failed}</span>
           </div>
         </div>
 
         {/* Selection Info */}
         {selectedNodes.length > 0 && (
-          <div className="mt-3 p-2 bg-primary/10 rounded text-sm">
-            <p className="text-primary font-medium">
+          <div className="mt-3 p-2 bg-primary/10 rounded text-sm min-w-0">
+            <p className="text-primary font-medium break-words">
               Filtered by {selectedNodes.length} selected node{selectedNodes.length !== 1 ? 's' : ''}
             </p>
           </div>
         )}
       </div>
 
-      <ScrollArea className="flex-1 p-4">
+      <div className="flex-1 p-4 min-w-0 w-full overflow-y-auto overflow-x-hidden">
         {sortedActivities.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
             <Activity className="w-8 h-8 mb-2 opacity-50" />
@@ -169,44 +169,44 @@ export default function ActivityPanel({
             )}
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0 w-full">
             {Object.entries(groupedActivities).map(([status, statusActivities]) => (
-              <div key={status} className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  {getStatusIcon(status)}
-                  <span className="capitalize">
+              <div key={status} className="space-y-2 min-w-0 w-full">
+                <div className="flex items-center gap-2 text-sm font-medium min-w-0">
+                  <div className="shrink-0">{getStatusIcon(status)}</div>
+                  <span className="capitalize truncate">
                     {status.replace('_', ' ')} ({(statusActivities as Task[]).length})
                   </span>
                 </div>
                 
                 {(statusActivities as Task[]).map((activity) => (
-                  <Card key={activity.id} className="shadow-sm hover:shadow-md transition-shadow">
-                    <CardContent className="p-3">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1 min-w-0">
+                  <Card key={activity.id} className="shadow-sm hover:shadow-md transition-shadow min-w-0 w-full">
+                    <CardContent className="p-3 min-w-0 w-full">
+                      <div className="flex items-start justify-between mb-2 min-w-0">
+                        <div className="flex-1 min-w-0 pr-1 overflow-hidden">
                           <h4 className="font-medium text-sm truncate">
                             {activity.name}
                           </h4>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-muted-foreground truncate">
                             {activity.capabilityName}
                           </p>
                         </div>
                         <Badge 
                           variant="secondary" 
-                          className={`text-xs ${getStatusColor(activity.status)}`}
+                          className={`text-xs shrink-0 ml-1 ${getStatusColor(activity.status)}`}
                         >
                           {activity.status.replace('_', ' ')}
                         </Badge>
                       </div>
                       
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Bot className="w-3 h-3" />
-                          <span>Agent {activity.agentId}</span>
+                      <div className="flex flex-col gap-1 text-xs text-muted-foreground min-w-0">
+                        <div className="flex items-center gap-1 min-w-0 overflow-hidden">
+                          <Bot className="w-3 h-3 shrink-0" />
+                          <span className="truncate">Agent {activity.agentId}</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          <span>
+                        <div className="flex items-center gap-1 min-w-0 overflow-hidden">
+                          <Calendar className="w-3 h-3 shrink-0" />
+                          <span className="truncate">
                             {formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true })}
                           </span>
                         </div>
@@ -215,7 +215,7 @@ export default function ActivityPanel({
                       {activity.error && (
                         <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs">
                           <p className="text-red-800 font-medium">Error:</p>
-                          <p className="text-red-700 mt-1">{activity.error}</p>
+                          <p className="text-red-700 mt-1 break-words">{activity.error}</p>
                         </div>
                       )}
 

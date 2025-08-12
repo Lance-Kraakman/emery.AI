@@ -52,6 +52,12 @@ export default function OrganizationChartClient() {
   const { agents, teams } = data;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isTasksLoading, setIsTasksLoading] = useState(true);
+  const [isClient, setIsClient] = useState(false);
+
+  // Handle client-side hydration
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   useEffect(() => {
     setIsTasksLoading(true);
@@ -87,8 +93,8 @@ export default function OrganizationChartClient() {
 
     // Create team nodes
     teams.forEach((team, index) => {
-      const teamX = 200 + (index % 3) * 400;
-      const teamY = 100 + Math.floor(index / 3) * 300;
+      const teamX = 300 + (index + 1) * 20; // Same position with 20px offset (1-based)
+      const teamY = 150 + (index + 1) * 20; // Same position with 20px offset (1-based)
 
       // Filter tasks for this team (safely handle missing agentIds)
       const teamTasks = (team.agentIds && team.agentIds.length > 0) 
@@ -317,8 +323,8 @@ export default function OrganizationChartClient() {
     });
   }, [selectedNodes, tasks, teams, agents]);
 
-  // Show loading spinner while data is loading
-  if (isLoading || isTasksLoading) {
+  // Show loading spinner while data is loading or during hydration
+  if (isLoading || isTasksLoading || !isClient) {
     return (
       <div className="h-full flex items-center justify-center">
         <Loading text="Loading organization chart..." />
@@ -332,7 +338,7 @@ export default function OrganizationChartClient() {
         <PanelGroup direction="horizontal" className="h-full">
           {!isPanelCollapsed && (
             <>
-              <Panel defaultSize={25} minSize={20}>
+              <Panel defaultSize={30} minSize={25}>
                 <ActivityPanel 
                   activities={filteredActivities}
                   selectedNodes={selectedNodes}
@@ -345,7 +351,7 @@ export default function OrganizationChartClient() {
             </>
           )}
           
-          <Panel defaultSize={isPanelCollapsed ? 100 : 75}>
+          <Panel defaultSize={isPanelCollapsed ? 100 : 70}>
             <div className="h-full relative">
               {isPanelCollapsed && (
                 <Button
