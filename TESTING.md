@@ -116,13 +116,9 @@ These capabilities automatically return successful responses for testing purpose
 ### Frontend Authentication Testing
 
 #### Email Sign-In (for Test Users)
-1. **Start email server** (for development):
+1. **Start all services** (includes MailHog):
    ```bash
-   # Install MailHog (one-time setup)
-   brew install mailhog
-   
-   # Start MailHog email server
-   mailhog
+   docker-compose up -d
    ```
 2. **Visit sign-in page**: `http://localhost:3000/auth/signin`
 3. **Enter test email**: `test@emery.dev`

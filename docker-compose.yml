@@ -25,6 +25,20 @@ services:
       - minio:/data
     command: server /data --console-address ":9001"
 
+  # Email testing server for development
+  mailhog:
+    image: mailhog/mailhog:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1025:1025"  # SMTP server
+      - "127.0.0.1:8025:8025"  # Web UI
+    environment:
+      MH_STORAGE: maildir
+      MH_MAILDIR_PATH: /maildir
+    volumes:
+      - mailhog:/maildir
+
 volumes:
   db:
   minio:
+  mailhog:
