@@ -1,6 +1,7 @@
 import NextAuth from "next-auth"
 import GitHubProvider from "next-auth/providers/github"
 import GoogleProvider from "next-auth/providers/google"
+import EmailProvider from "next-auth/providers/email"
 import { DrizzleAdapter } from "@auth/drizzle-adapter"
 import { db } from "./db/client"
 import { users, accounts, sessions, verificationTokens, roles, organizations, userOrganizations } from "./db/schema"
@@ -28,6 +29,17 @@ const authOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+    EmailProvider({
+      server: {
+        host: process.env.EMAIL_SERVER_HOST || "localhost",
+        port: parseInt(process.env.EMAIL_SERVER_PORT || "1025"),
+        auth: {
+          user: process.env.EMAIL_SERVER_USER || "",
+          pass: process.env.EMAIL_SERVER_PASSWORD || "",
+        },
+      },
+      from: process.env.EMAIL_FROM || "noreply@emery.dev",
     }),
   ],
   callbacks: {

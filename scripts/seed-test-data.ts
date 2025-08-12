@@ -294,8 +294,8 @@ async function printSeedSummary(organization: any, createdAgents: any[], userApi
   console.log('\n🧪 API Testing Commands:');
   console.log(`curl -H "Authorization: Bearer ${userApiKey}" http://localhost:3000/api/agents`);
   console.log('\n📱 Frontend Testing:');
-  console.log(`Visit: http://localhost:3000/dashboard (login as ${TEST_USER.email})`);
-  console.log(`OAuth: http://localhost:3000/dashboard/connections`);
+  console.log(`Visit: http://localhost:3000/mission-control (login as ${TEST_USER.email})`);
+  console.log(`OAuth: http://localhost:3000/connections`);
   console.log('\n🔑 API Authentication:');
   console.log(`User API Key: ${userApiKey}`);
 }
