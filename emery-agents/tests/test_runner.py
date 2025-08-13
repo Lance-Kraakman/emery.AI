@@ -42,12 +42,12 @@ class TestAgentRunner:
             runner._find_or_create_capability(sample_agent, "nonexistent")
     
     @pytest.mark.asyncio
-    async def test_execute_capability_success(self, mock_integrations, sample_agent, sample_trigger_data):
-        """Execute capability successfully."""
-        # Setup mocks
-        mock_integrations["smolagents"].execute_step.return_value = {
-            "result": "success",
-            "status": "completed"
+    async def test_execute_capability_success(self, mock_integrations, sample_agent):
+        """Execute capability successfully using simplified smolagents."""
+        # Setup mock for simplified architecture
+        mock_integrations["smolagents"].execute_with_orchestrator.return_value = {
+            "status": "success",
+            "result": {"output": "Task completed successfully"}
         }
         
         runner = AgentRunner(**mock_integrations)
@@ -55,8 +55,7 @@ class TestAgentRunner:
         # Execute
         task = await runner.execute_capability(
             sample_agent,
-            "test_capability", 
-            sample_trigger_data
+            "test_capability"
         )
         
         # Verify
@@ -70,81 +69,59 @@ class TestAgentRunner:
         mock_integrations["emery_client"].report_execution_result.assert_called_once()
     
     @pytest.mark.asyncio 
-    async def test_execute_test_capability(self, mock_integrations, sample_agent, sample_trigger_data):
-        """Execute built-in test capability."""
+    async def test_execute_test_capability(self, mock_integrations, sample_agent):
+        """Execute built-in test capability using simplified smolagents."""
+        mock_integrations["smolagents"].execute_with_orchestrator.return_value = {
+            "status": "success",
+            "result": {"output": "Test capability executed"}
+        }
+        
         runner = AgentRunner(**mock_integrations)
         
         task = await runner.execute_capability(
             sample_agent,
-            "test",
-            sample_trigger_data
+            "test"
         )
         
         assert task.capabilityName == "test"
         assert task.status in [TaskStatus.COMPLETED, TaskStatus.FAILED]
     
     @pytest.mark.asyncio
-    async def test_step_execution_error_handling(self, mock_integrations, sample_agent, sample_trigger_data):
-        """Handle step execution errors properly."""
-        # Setup smolagents to raise error
-        mock_integrations["smolagents"].execute_step.side_effect = Exception("Step failed")
+    async def test_execution_error_handling(self, mock_integrations, sample_agent):
+        """Handle execution errors properly."""
+        # Setup smolagents to return error
+        mock_integrations["smolagents"].execute_with_orchestrator.return_value = {
+            "status": "failed",
+            "error": "Execution failed"
+        }
         
         runner = AgentRunner(**mock_integrations)
         
         task = await runner.execute_capability(
             sample_agent,
-            "test_capability",
-            sample_trigger_data
+            "test_capability"
         )
         
         assert task.status == TaskStatus.FAILED
-        assert "failed" in task.error.lower() or "exception" in task.error.lower()
+        assert "failed" in task.error.lower() or "execution" in task.error.lower()
     
-    def test_apply_step_overrides(self, mock_integrations, sample_agent):
-        """Apply step configuration overrides."""
-        runner = AgentRunner(**mock_integrations)
-        
-        original_step = StepConfig(
-            id="test_step",
-            type=StepType.CODE_STEP,
-            instructions="Original instructions"
-        )
-        
-        overrides = [{"instructions": "Overridden instructions"}]
-        
-        modified_step = runner._apply_step_overrides(original_step, overrides, 0)
-        
-        assert modified_step.instructions == "Overridden instructions"
-        assert modified_step.id == original_step.id
-        assert modified_step.type == original_step.type
-    
-    def test_no_overrides(self, mock_integrations):
-        """Handle case with no overrides."""
-        runner = AgentRunner(**mock_integrations)
-        
-        original_step = StepConfig(
-            id="test_step", 
-            type=StepType.CODE_STEP,
-            instructions="Original"
-        )
-        
-        result_step = runner._apply_step_overrides(original_step, None, 0)
-        
-        assert result_step == original_step
     
     @pytest.mark.asyncio
-    async def test_report_execution_results_error(self, mock_integrations, sample_agent, sample_trigger_data):
+    async def test_report_execution_results_error(self, mock_integrations, sample_agent):
         """Handle reporting errors gracefully."""
         # Setup emery_client to raise error on reporting
         mock_integrations["emery_client"].report_execution_result.side_effect = Exception("Reporting failed")
+        mock_integrations["smolagents"].execute_with_orchestrator.return_value = {
+            "status": "success",
+            "result": {"output": "Test completed"}
+        }
         
         runner = AgentRunner(**mock_integrations)
         
         # Should not raise exception even if reporting fails
         task = await runner.execute_capability(
             sample_agent,
-            "test",
-            sample_trigger_data
+            "test"
         )
         
         # Execution should complete despite reporting failure

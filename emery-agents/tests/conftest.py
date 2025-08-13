@@ -70,14 +70,6 @@ def sample_task_instructions() -> TaskInstructions:
     )
 
 
-@pytest.fixture
-def sample_trigger_data() -> Dict[str, Any]:
-    """Sample trigger data."""
-    return {
-        "trigger_type": "manual",
-        "user_request": "Test execution",
-        "timestamp": "2024-01-01T00:00:00Z"
-    }
 
 
 @pytest.fixture
@@ -92,7 +84,6 @@ def mock_emery_client():
 def mock_smolagents():
     """Mock SmolAgents orchestrator."""
     orchestrator = Mock()
-    orchestrator.execute_step = AsyncMock()
     orchestrator.execute_with_orchestrator = AsyncMock()
     orchestrator.setup_agent_orchestrator = Mock()
     return orchestrator

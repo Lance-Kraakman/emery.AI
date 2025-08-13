@@ -1,6 +1,7 @@
 """
 Production gRPC server implementation for agent worker instances.
-Uses proto-first architecture receiving complete agent configuration via gRPC.
+Uses proto-first architecture with simplified smolagents hierarchy for all execution.
+All capability routing and step management handled internally by smolagents.
 """
 
 import asyncio
@@ -49,70 +50,8 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         self.start_time = time.time()
         self.active_tasks: Dict[str, Any] = {}
         
-        # Initialize integrations that don't depend on specific agent config
-        # AIDEV-NOTE: We initialize these once and reuse for all agent executions
+        # AIDEV-NOTE: Simplified architecture - smolagents handles all execution routing
         
-    def select_capability_for_instructions(self, agent: Agent, instruction_config: TaskInstructions) -> str:
-        """
-        Select the best capability for instruction-based execution using intelligent routing.
-        This can be enhanced with smolagents or other AI-based routing in the future.
-        """
-        instructions = instruction_config.instructions.lower()
-        capabilities = agent.capabilities or []
-        
-        logger.info(f"[CAPABILITY-ROUTING] Selecting capability for instructions: '{instruction_config.instructions[:SHORT_LOG_PREVIEW_LENGTH]}...'")
-        logger.info(f"[CAPABILITY-ROUTING] Available capabilities: {[cap.name for cap in capabilities]}")
-        
-        if not capabilities:
-            logger.warning(f"[CAPABILITY-ROUTING] No capabilities available, using fallback")
-            return 'general_task'
-        
-        if len(capabilities) == 1:
-            selected = capabilities[0].name
-            logger.info(f"[CAPABILITY-ROUTING] Only one capability available: {selected}")
-            return selected
-        
-        # Keyword-based routing (can be enhanced with AI/ML later)
-        for capability in capabilities:
-            capability_name = capability.name.lower()
-            capability_desc = capability.description.lower() if capability.description else ''
-            
-            # Direct name match
-            if capability_name in instructions:
-                logger.info(f"[CAPABILITY-ROUTING] Matched by name: '{capability.name}'")
-                return capability.name
-            
-            # Description keyword match
-            if capability_desc and any(word in instructions for word in capability_desc.split()[:3]):
-                logger.info(f"[CAPABILITY-ROUTING] Matched by description: '{capability.name}'")
-                return capability.name
-        
-        # Tool-based routing
-        if instruction_config.tools:
-            for capability in capabilities:
-                for step in capability.steps:
-                    if step.tools:
-                        for step_tool in step.tools:
-                            for req_tool in instruction_config.tools:
-                                if step_tool.name == req_tool.name:
-                                    logger.info(f"[CAPABILITY-ROUTING] Matched by tool '{req_tool.name}': '{capability.name}'")
-                                    return capability.name
-        
-        # Server-based routing
-        if instruction_config.servers:
-            for capability in capabilities:
-                for step in capability.steps:
-                    if step.servers:
-                        for step_server in step.servers:
-                            for req_server in instruction_config.servers:
-                                if step_server.name == req_server.name:
-                                    logger.info(f"[CAPABILITY-ROUTING] Matched by server '{req_server.name}': '{capability.name}'")
-                                    return capability.name
-        
-        # Fallback to first capability
-        selected = capabilities[0].name
-        logger.info(f"[CAPABILITY-ROUTING] Using fallback capability: '{selected}'")
-        return selected
     
     async def ExecuteTask(
         self, 
@@ -142,12 +81,12 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         instruction_config = task_data['instruction_config']  # May be None for direct execution
         trigger_data = task_data['trigger_data']
         
-        # Log execution details
-        if capability_name:
-            logger.info(f"[TASK-START] {task_id}: Agent {agent.name} executing capability '{capability_name}'")
-        elif instruction_config:
-            logger.info(f"[TASK-START] {task_id}: Agent {agent.name} executing instruction-based task")
+        # Log execution details - smolagents handles all routing internally
+        logger.info(f"[TASK-START] {task_id}: Agent {agent.name} executing task")
+        if instruction_config:
             logger.info(f"[TASK-INSTRUCTIONS] {task_id}: '{instruction_config.instructions[:MAX_LOG_PREVIEW_LENGTH]}...'")
+        elif capability_name:
+            logger.info(f"[TASK-CAPABILITY] {task_id}: Targeting capability '{capability_name}'")
         else:
             raise ValueError("Either capability_name or instruction_config must be provided")
         
@@ -156,7 +95,6 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         # Track active task
         self.active_tasks[task_id] = {
             'agent': agent,
-            'capability_name': capability_name,
             'instruction_config': instruction_config,
             'start_time': time.time()
         }
@@ -188,7 +126,13 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                 progress_percent=PROGRESS_INITIAL
             )
             
-            # Execute using orchestrator
+            # Execute using orchestrator - smolagents handles all capability routing
+            if not instruction_config:
+                # Convert capability_name to instruction_config for smolagents
+                instruction_config = TaskInstructions(
+                    instructions=f"Execute capability: {capability_name}"
+                )
+            
             task_result = await orchestrator.execute_with_orchestrator(
                 instructions=instruction_config
             )
