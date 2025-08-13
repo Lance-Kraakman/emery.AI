@@ -66,10 +66,11 @@ async function testGRPCConnection() {
       }
       
       // Check for completion
-      if (progress.status === 2) { // TASK_COMPLETED
+      const statusNumber = Number(progress.status);
+      if (statusNumber === 2) { // TASK_COMPLETED
         console.log('🎉 COMPLETION STATUS RECEIVED!');
         completionReceived = true;
-      } else if (progress.status === 3) { // TASK_FAILED
+      } else if (statusNumber === 3) { // TASK_FAILED
         console.log('💥 FAILURE STATUS RECEIVED!');
         completionReceived = true;
       }

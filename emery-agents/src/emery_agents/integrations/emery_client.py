@@ -4,8 +4,15 @@ Handles communication back to the main Emery application.
 """
 
 import logging
-from typing import Dict, Any, Optional
+import json
 import os
+from typing import Dict, Any, Optional
+
+# Optional dependency import with graceful fallback
+try:
+    from emery_client.simple_client import EmeryPythonClient
+except ImportError:
+    EmeryPythonClient = None
 
 from ..core.types import Task
 
@@ -49,10 +56,11 @@ class EmeryClientIntegration:
         Returns:
             Dict with action results
         """
+        if EmeryPythonClient is None:
+            logger.error("emery_client not available - cannot execute OAuth actions")
+            raise RuntimeError("emery_client package not found")
+        
         try:
-            # Import the existing Emery client
-            from emery_client.simple_client import EmeryPythonClient
-            
             # Create client instance
             client = EmeryPythonClient(self.api_key, self.api_url)
             
@@ -66,9 +74,6 @@ class EmeryClientIntegration:
             logger.info(f"OAuth action {service}.{action} completed successfully")
             return result
             
-        except ImportError:
-            logger.error("emery_client not available - cannot execute OAuth actions")
-            raise RuntimeError("emery_client package not found")
         except Exception as e:
             logger.exception(f"OAuth action failed: {e}")
             raise
@@ -80,18 +85,17 @@ class EmeryClientIntegration:
         Returns:
             Dict with agent capabilities
         """
+        if EmeryPythonClient is None:
+            logger.error("emery_client not available - cannot get capabilities")
+            return {"connected_services": [], "actions": []}
+        
         try:
-            from emery_client.simple_client import EmeryPythonClient
-            
             client = EmeryPythonClient(self.api_key, self.api_url)
             capabilities = await client.get_capabilities()
             
             logger.info("Retrieved agent capabilities")
             return capabilities
             
-        except ImportError:
-            logger.error("emery_client not available - cannot get capabilities")
-            return {"connected_services": [], "actions": []}
         except Exception as e:
             logger.exception(f"Failed to get capabilities: {e}")
             return {"connected_services": [], "actions": []}
@@ -106,17 +110,16 @@ class EmeryClientIntegration:
         try:
             # AIDEV-TODO: Implement API endpoint for reporting execution results
             # For now, just log the results
-            logger.info(f"Task execution {task_execution.id} completed with status: {task_execution.status}")
-            logger.info(f"Capability executed: {task_execution.capability_name}")
+            logger.info(f"Task execution {task.id} completed with status: {task.status}")
+            logger.info(f"Capability executed: {task.capabilityName}")
             
-            if task_execution.error_message:
-                logger.error(f"Task execution error: {task_execution.error_message}")
+            if task.error:
+                logger.error(f"Task execution error: {task.error}")
             
-            # Log step results
-            for step in task_execution.step_executions:
-                logger.info(f"Step {step.step_id}: {step.status}")
-                if step.error_message:
-                    logger.error(f"Step error: {step.error_message}")
+            # Log task completion
+            logger.info(f"Task {task.id}: {task.status}")
+            if task.error:
+                logger.error(f"Task error: {task.error}")
             
         except Exception as e:
             logger.exception(f"Failed to report execution results: {e}")
@@ -138,7 +141,6 @@ class EmeryClientIntegration:
             # For now, return from environment variable
             config_json = os.getenv("EMERY_AGENT_CONFIG")
             if config_json:
-                import json
                 return json.loads(config_json)
             
             logger.warning(f"No configuration found for agent {target_agent_id}")

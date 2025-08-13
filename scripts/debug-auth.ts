@@ -14,7 +14,7 @@ async function debugAuth() {
     const allUsers = await db.select().from(users);
     console.log(`👥 Users (${allUsers.length}):`);
     allUsers.forEach((u, i) => {
-      console.log(`  ${i+1}. ${u.id.substring(0, 8)}... | Email: ${u.email || 'NULL'} | Org: ${u.organizationId || 'NULL'} | Role: ${u.roleId || 'NULL'}`);
+      console.log(`  ${i+1}. ${u.id.substring(0, 8)}... | Email: ${u.email || 'NULL'} | Org: ${u.currentOrganizationId || 'NULL'} | Role: ${u.roleId || 'NULL'}`);
     });
     
     console.log('\n🔗 OAuth Accounts:');

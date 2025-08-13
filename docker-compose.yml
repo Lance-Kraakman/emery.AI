@@ -28,3 +28,4 @@ services:
 volumes:
   db:
   minio:
+  mailhog:

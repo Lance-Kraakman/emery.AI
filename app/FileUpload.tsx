@@ -1,15 +1,16 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Upload, X, File, Download } from 'lucide-react'
+import { Upload, X, Download } from 'lucide-react'
+import { uploadFileAction } from '@/app/actions/files'
 
 interface FileMetadata {
-  id: string
-  name: string
-  size: number
-  mimeType: string
-  s3Key: string
-  uploadedAt: string
+  id: string;
+  name: string;
+  size: number;
+  mimeType?: string;
+  s3Key: string;
+  uploadedAt: string;
 }
 
 interface FileUploadProps {
@@ -38,20 +39,16 @@ export default function FileUpload({ value, onChange, organizationId, tableId, f
       formData.append('tableId', tableId.toString())
       formData.append('fieldId', fieldId.toString())
 
-      const response = await fetch('/api/files/upload', {
-        method: 'POST',
-        body: formData,
-      })
+      const result = await uploadFileAction(formData);
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Upload failed')
+      if (!result.success) {
+        throw new Error(result.error || 'Upload failed');
       }
 
-      const fileMetadata: FileMetadata = await response.json()
+      const fileMetadata = result.data as FileMetadata;
       
       // Add the new file to the current files
-      const updatedFiles = [...currentFiles, fileMetadata]
+      const updatedFiles = [...currentFiles, fileMetadata];
       onChange({ files: updatedFiles })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
@@ -88,12 +85,13 @@ export default function FileUpload({ value, onChange, organizationId, tableId, f
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  const getFileIcon = (mimeType: string) => {
-    if (mimeType.startsWith('image/')) return '🖼️'
-    if (mimeType.includes('pdf')) return '📄'
-    if (mimeType.includes('word')) return '📝'
-    if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return '📊'
-    return '📁'
+  const getFileIcon = (mimeType?: string) => {
+    if (!mimeType) return '📁';
+    if (mimeType.startsWith('image/')) return '🖼️';
+    if (mimeType.includes('pdf')) return '📄';
+    if (mimeType.includes('word')) return '📝';
+    if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return '📊';
+    return '📁';
   }
 
   return (

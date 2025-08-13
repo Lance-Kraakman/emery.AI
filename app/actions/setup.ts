@@ -12,58 +12,14 @@ interface SetupData {
   organizationMission?: string;
 }
 
-export async function setupInitialAdmin(data: SetupData): Promise<ActionResult> {
-  try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return {
-        success: false,
-        error: "Authentication required",
-      };
-    }
-
-    // Check if this is the first user
-    const allUsers = await db.select().from(users);
-    const currentUser = allUsers.find(u => u.id === session.user.id);
-    
-    if (!currentUser) {
-      return {
-        success: false,
-        error: "User not found",
-      };
-    }
-
-    // Only allow setup if user has no organization/role OR is the only user
-    if (currentUser.currentOrganizationId && currentUser.roleId && allUsers.length > 1) {
-      return {
-        success: false,
-        error: "Initial setup already completed",
-      };
-    }
-
-    const { organizationName, organizationMission } = data;
-
-    if (!organizationName) {
-      return {
-        success: false,
-        error: "Organization name is required",
-      };
-    }
-
-    // Create the organization
-    const [organization] = await db.insert(organizations).values({
-      name: organizationName,
-      mission: organizationMission || "Building the future with AI-human collaboration",
-      sharedTools: ['tables', 'fields', 'data', 'teams', 'workers'],
-    }).returning();
-
-    // Create Super Admin role
-    const [superAdminRole] = await db.insert(roles).values({
+async function createStandardRoles(organizationId: number) {
+  const standardRoles = [
+    {
       name: 'Super Admin',
       permissions: [
         'create_table',
         'manage_tables',
-        'create_fields', 
+        'create_fields',
         'manage_fields',
         'manage_data',
         'manage_users',
@@ -72,74 +28,91 @@ export async function setupInitialAdmin(data: SetupData): Promise<ActionResult> 
         'view_agents',
         'manage_organization'
       ],
-      organizationId: organization.id,
-    }).returning();
-
-    // Create standard roles
-    const [adminRole] = await db.insert(roles).values({
+      organizationId: organizationId,
+    },
+    {
       name: 'Admin',
       permissions: [
         'create_table',
         'manage_tables',
         'create_fields',
-        'manage_fields', 
+        'manage_fields',
         'manage_data',
         'manage_users',
         'manage_teams'
       ],
-      organizationId: organization.id,
-    }).returning();
-
-    const [editorRole] = await db.insert(roles).values({
+      organizationId: organizationId,
+    },
+    {
       name: 'Editor',
       permissions: [
         'create_table',
         'create_fields',
         'manage_data'
       ],
-      organizationId: organization.id,
-    }).returning();
-
-    const [viewerRole] = await db.insert(roles).values({
+      organizationId: organizationId,
+    },
+    {
       name: 'Viewer',
       permissions: [
         'manage_data' // Read-only data access
       ],
-      organizationId: organization.id,
-    }).returning();
+      organizationId: organizationId,
+    }
+  ];
 
-    // Assign the current user as Super Admin
-    await db.update(users)
-      .set({
-        currentOrganizationId: organization.id,
-        roleId: superAdminRole.id,
-      })
-      .where(eq(users.id, session.user.id));
+  const insertedRoles = await db.insert(roles).values(standardRoles).returning();
+  const superAdminRole = insertedRoles.find(role => role.name === 'Super Admin');
+  if (!superAdminRole) {
+    throw new Error("Super Admin role not created");
+  }
+  return superAdminRole;
+}
 
-    // Add user to the organization as owner
+export async function createOrganization(formData: FormData): Promise<ActionResult> {
+  const session = await auth();
+  const user = session?.user;
+
+  if (!user) {
+    return { success: false, error: "User not authenticated" };
+  }
+
+  const name = formData.get("organizationName") as string;
+  const mission = formData.get("organizationMission") as string | null;
+
+  if (!name) {
+    return { success: false, error: "Organization name is required" };
+  }
+
+  try {
+    const [newOrg] = await db
+      .insert(organizations)
+      .values({ name, mission })
+      .returning();
+
+    const superAdminRole = await createStandardRoles(newOrg.id);
+    console.log("Created roles for organization:", newOrg.id);
+
+
     await db.insert(userOrganizations).values({
-      userId: session.user.id,
-      organizationId: organization.id,
-      role: 'owner',
+      userId: user.id,
+      organizationId: newOrg.id,
+      role: "owner",
     });
 
-    revalidatePath('/mission-control');
-    revalidatePath('/setup');
+    await db
+      .update(users)
+      .set({
+        currentOrganizationId: newOrg.id,
+        roleId: superAdminRole.id
+      })
+      .where(eq(users.id, user.id));
 
-    return {
-      success: true,
-      data: {
-        organization,
-        roles: [superAdminRole, adminRole, editorRole, viewerRole],
-        message: "Initial setup completed successfully! You are now the Super Admin.",
-      },
-    };
+    revalidatePath("/");
+    return { success: true, data: newOrg };
   } catch (error) {
-    console.error("Error in initial setup:", error);
-    return {
-      success: false,
-      error: "Failed to complete initial setup",
-    };
+    console.error("Failed to create organization:", error);
+    return { success: false, error: "Failed to create organization." };
   }
 }
 
@@ -149,14 +122,10 @@ export async function checkSetupStatus(): Promise<{ needsSetup: boolean; isFirst
     if (!session?.user?.id) {
       return { needsSetup: false, isFirstUser: false };
     }
-
-    const allUsers = await db.select().from(users);
-    const currentUser = allUsers.find(u => u.id === session.user.id);
-    
-    const needsSetup = !currentUser?.currentOrganizationId || !currentUser?.roleId;
-    const isFirstUser = allUsers.length === 1;
-
-    return { needsSetup, isFirstUser };
+    return {
+      needsSetup: session.user.needsSetup || false,
+      isFirstUser: session.user.isFirstUser || false,
+    };
   } catch (error) {
     console.error("Error checking setup status:", error);
     return { needsSetup: false, isFirstUser: false };

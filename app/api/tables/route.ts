@@ -24,7 +24,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     const userId = authResult.user.id;
 
     const body = await request.json();
-    const { name, description, organizationId } = body;
+    const { name, description, organizationId, databaseId } = body;
 
     if (!name) {
       return Response.json({ 
@@ -32,6 +32,11 @@ export async function POST(request: NextRequest): Promise<Response> {
       }, { status: 400 });
     }
 
+    if (!databaseId) {
+      return Response.json({ 
+        error: 'Missing required field: databaseId' 
+      }, { status: 400 });
+    }
 
     // Generate database table name
     const dbName = `table_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -40,6 +45,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     const [newTable] = await db.insert(tables).values({
       name,
       dbName,
+      databaseId: parseInt(databaseId),
       organizationId: organizationId ? parseInt(organizationId) : 1, // Default to org 1
       createdBy: userId,
     }).returning();

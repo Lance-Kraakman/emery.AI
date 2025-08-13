@@ -9,12 +9,6 @@ export default async function RootPage() {
     redirect("/auth/signin");
   }
 
-  // Check if user needs initial setup
-  const { needsSetup } = await checkSetupStatus();
-  if (needsSetup) {
-    redirect("/setup");
-  }
-
   // Redirect authenticated users to mission control
   redirect("/mission-control");
 }

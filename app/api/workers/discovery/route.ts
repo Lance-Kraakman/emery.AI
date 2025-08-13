@@ -9,19 +9,6 @@ import { workerRegistry } from '@/lib/grpc/client';
 export async function GET(request: NextRequest): Promise<Response> {
   try {
     const session = await auth();
-    
-    // AIDEV-NOTE: Development bypass for testing - remove in production
-    let userId = session?.user?.id;
-    if (!session?.user && process.env.NODE_ENV === 'development') {
-      const testUserId = request.headers.get('x-test-user-id');
-      if (testUserId === '550e8400-e29b-41d4-a716-446655440000') {
-        userId = testUserId;
-      } else {
-        return Response.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-    } else if (!session?.user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
     // Get worker discovery information
     const addresses = workerRegistry.listWorkerAddresses();

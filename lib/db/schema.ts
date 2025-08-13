@@ -1,12 +1,42 @@
-import { pgTable, text, uuid, serial, integer, timestamp, boolean, primaryKey, jsonb, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, serial, integer, timestamp, boolean, primaryKey, jsonb, unique, customType } from "drizzle-orm/pg-core";
 
-export const tables = pgTable("tables", {
+// Custom vector type for pgvector
+const vector = customType<{ data: number[]; notNull: false; default: false }>({
+  dataType() {
+    return 'vector(1024)'; // Updated for BAAI/bge-m3 (multilingual, 8192 tokens)
+  },
+  toDriver(value: number[]): string {
+    return JSON.stringify(value);
+  },
+  fromDriver(value: unknown): number[] {
+    if (typeof value === 'string') {
+      return JSON.parse(value);
+    }
+    return value as number[];
+  },
+});
+
+export const databases = pgTable("databases", {
   id: serial("id").primaryKey(),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
-  dbName: text("db_name").notNull().unique(),
+  slug: text("slug").notNull().unique(), // URL-safe database identifier
+  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata for RAG indexing
   createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const tables = pgTable("tables", {
+  id: serial("id").primaryKey(),
+  databaseId: integer("database_id").notNull().references(() => databases.id),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  name: text("name").notNull(),
+  dbName: text("db_name").notNull().unique(),
+  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata for RAG indexing
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const fields = pgTable("fields", {
@@ -28,6 +58,11 @@ export const organizations = pgTable("organizations", {
   sharedTools: text("shared_tools").array(),
   sharedServers: text("shared_servers").array(),
   databaseId: text("database_id"),
+  viewConfig: jsonb("view_config"),
+  plan: text("plan").default("free"), // e.g., 'free', 'pro', 'enterprise'
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeSubscriptionStatus: text("stripe_subscription_status"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -66,6 +101,17 @@ export const userOrganizations = pgTable("user_organizations", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const invitations = pgTable("invitations", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  invitedBy: uuid("invited_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  role: text("role").notNull().default("member"), // owner, admin, member
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const teams = pgTable("teams", {
   id: serial("id").primaryKey(),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
@@ -74,8 +120,6 @@ export const teams = pgTable("teams", {
   description: text("description"),
   responsibilities: text("responsibilities").array(),
   goals: text("goals").array(),
-  tools: text("tools").array(),
-  servers: text("servers").array(),
   agentIds: text("agent_ids").array(),
   databaseId: text("database_id"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -112,9 +156,9 @@ export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
   agentId: integer("agent_id").notNull().references(() => agents.id), // WHICH agent executes this
   name: text("name").notNull(),
-  capabilityName: text("capability_name").notNull(), // WHICH capability to use
-  status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed
-  payload: jsonb("payload"), // Input data for the task
+  capabilityName: text("capability_name"), // Optional - system can auto-route if not specified
+  instructions: jsonb("instructions").notNull(), // Step-like config: {instructions: string, tools?: ToolConfig[], servers?: ServerConfig[]}
+  status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed, cancelled, timeout
   result: jsonb("result"), // Final output data
   error: text("error"),
   
@@ -123,20 +167,6 @@ export const tasks = pgTable("tasks", {
   completedAt: timestamp("completed_at"),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const stepExecutions = pgTable("step_executions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  taskId: uuid("task_id").notNull().references(() => tasks.id), // Reference the task directly
-  stepId: text("step_id").notNull(), // References the step ID from capability definition
-  stepType: text("step_type").notNull(), // code_step, tool_step
-  instructions: text("instructions"),
-  inputData: jsonb("input_data"),
-  outputData: jsonb("output_data"),
-  status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed
-  errorMessage: text("error_message"),
-  startedAt: timestamp("started_at"),
-  completedAt: timestamp("completed_at"),
 });
 
 export const accounts = pgTable("accounts", {
@@ -167,4 +197,82 @@ export const verificationTokens = pgTable("verification_tokens", {
   identifier: text("identifier").notNull(),
   token: text("token").notNull(),
   expires: timestamp("expires").notNull(),
+});
+
+// RAG System Tables
+export const ragIndexes = pgTable("rag_indexes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  description: text("description"),
+  
+  // Scoping - configurable domain filtering
+  organizationId: integer("organization_id").references(() => organizations.id),
+  agentId: integer("agent_id").references(() => agents.id),
+  roleId: integer("role_id").references(() => roles.id),
+  
+  // Domain configuration - what to RAG against
+  domainTypes: jsonb("domain_types").notNull(), // ["tables", "files", "agents", "workflows"]
+  domainFilters: jsonb("domain_filters"), // Additional filtering criteria
+  
+  // Embedding configuration
+  embeddingModel: text("embedding_model").default("BAAI/bge-m3"),
+  embeddingDimensions: integer("embedding_dimensions").default(1024),
+  
+  // Status and metadata
+  status: text("status").default("active"), // active, building, error
+  lastIndexedAt: timestamp("last_indexed_at"),
+  documentCount: integer("document_count").default(0),
+  
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const ragDocuments = pgTable("rag_documents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ragIndexId: uuid("rag_index_id").notNull().references(() => ragIndexes.id),
+  
+  // Source identification
+  sourceType: text("source_type").notNull(), // "table", "file", "agent", "workflow"
+  sourceId: text("source_id").notNull(), // ID of the source (table.id, file_path, etc.)
+  sourceName: text("source_name").notNull(), // Human readable name
+  
+  // Content
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  metadata: jsonb("metadata"), // Additional context about the source
+  
+  // Vector embedding using pgvector for fast similarity search
+  embedding: vector("embedding"),
+  
+  // Content hash for change detection
+  contentHash: text("content_hash").notNull(),
+  
+  // Timestamps
+  indexedAt: timestamp("indexed_at").defaultNow(),
+  sourceUpdatedAt: timestamp("source_updated_at"),
+});
+
+export const ragQueryLogs = pgTable("rag_query_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ragIndexId: uuid("rag_index_id").notNull().references(() => ragIndexes.id),
+  
+  // Query details
+  query: text("query").notNull(),
+  queryEmbedding: vector("query_embedding"),
+  
+  // Results
+  resultsCount: integer("results_count").notNull(),
+  topResults: jsonb("top_results"), // Store top matching documents with scores
+  
+  // Context
+  userId: uuid("user_id").references(() => users.id),
+  agentId: integer("agent_id").references(() => agents.id),
+  sessionId: text("session_id"),
+
+  // Search parameters
+  similarityMetric: text("similarity_metric"),
+  threshold: integer("threshold"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
 });

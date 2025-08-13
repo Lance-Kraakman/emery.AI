@@ -1,0 +1,31 @@
+.rbc-calendar {
+  @apply bg-transparent text-white;
+}
+
+.rbc-toolbar {
+  @apply bg-transparent mb-4;
+}
+
+.rbc-toolbar button {
+  @apply bg-gray-700 text-white px-3 py-1 rounded-md;
+}
+
+.rbc-toolbar button:hover {
+  @apply bg-gray-600;
+}
+
+.rbc-header {
+  @apply bg-transparent border-b border-gray-600;
+}
+
+.rbc-day-bg {
+  @apply bg-transparent border-l border-gray-800;
+}
+
+.rbc-month-view {
+  @apply border-gray-800;
+}
+
+.rbc-month-row {
+  @apply border-gray-800;
+}

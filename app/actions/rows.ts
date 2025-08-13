@@ -3,55 +3,15 @@
 // AIDEV-NOTE: Server Actions for row data management - replaces /api/rows route
 // AIDEV-QUESTION: Should we add optimistic locking for concurrent row updates?
 
-import { db } from "@/lib/db/client";
-import { tables, fields } from "@/lib/db/schema";
-import { insertRow, updateRow, deleteRow, getRows } from "@/lib/db/dynamic";
+import { db } from '@/lib/db/client';
+import { tables, fields } from '@/lib/db/schema';
+import { insertRow, updateRow, deleteRow, getRows } from '@/lib/db/dynamic';
+import { processRowData, processPartialRowData } from '@/lib/db/field-processors';
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import type { ActionResult, CreateRowData, UpdateRowData } from "./types";
 
-async function processRowData(tableId: number, data: Record<string, any>) {
-  console.log(`[PROCESS-ROW] Processing data for table ${tableId}:`, JSON.stringify(data, null, 2));
-  
-  const tableFields = await db.select().from(fields).where(eq(fields.tableId, tableId));
-  console.log(`[PROCESS-ROW] Found ${tableFields.length} fields:`, tableFields.map(f => ({ id: f.id, name: f.name, slug: f.slug, type: f.type, required: f.required })));
-  
-  const processedData: Record<string, any> = {};
-  
-  for (const field of tableFields) {
-    const fieldKey = `field_${field.id}`;
-    const value = data[field.slug] || data[field.name];
-    
-    console.log(`[PROCESS-ROW] Field ${field.name} (${fieldKey}): ${field.slug}="${data[field.slug]}" OR ${field.name}="${data[field.name]}" => ${value}`);
-    
-    if (field.required && (value === undefined || value === null || value === "")) {
-      throw new Error(`Field '${field.name}' is required`);
-    }
-    
-    if (value !== undefined && value !== null) {
-      // Handle JSONB fields for relations and files
-      if (field.type === 'relation' || field.type === 'file') {
-        // If value is a string, try to parse it as JSON
-        if (typeof value === 'string') {
-          try {
-            processedData[fieldKey] = JSON.parse(value);
-          } catch {
-            processedData[fieldKey] = value;
-          }
-        } else {
-          processedData[fieldKey] = value;
-        }
-      } else {
-        processedData[fieldKey] = value;
-      }
-    }
-  }
-  
-  console.log(`[PROCESS-ROW] Processed data:`, JSON.stringify(processedData, null, 2));
-  
-  return processedData;
-}
 
 export async function createRow(data: CreateRowData, revalidateUrl?: string): Promise<ActionResult> {
   try {
@@ -74,8 +34,8 @@ export async function createRow(data: CreateRowData, revalidateUrl?: string): Pr
       };
     }
 
-    // Process row data with field mapping and validation
-    const processedData = await processRowData(tableId, rowData);
+    // Process row data with field mapping and validation (with debug logging)
+    const processedData = await processRowData(tableId, rowData, { validateRequired: true, debug: true });
 
     // Insert row into dynamic table
     const newRow = await insertRow(table.dbName, processedData);
@@ -162,32 +122,8 @@ export async function updateRowData(data: UpdateRowData, revalidateUrl?: string)
       };
     }
 
-    // Process row data with field mapping (no required field validation for updates)
-    const tableFields = await db.select().from(fields).where(eq(fields.tableId, tableId));
-    const processedData: Record<string, any> = {};
-    
-    for (const field of tableFields) {
-      const fieldKey = `field_${field.id}`;
-      const value = rowData[field.slug] || rowData[field.name];
-      
-      if (value !== undefined && value !== null) {
-        // Handle JSONB fields for relations and files
-        if (field.type === 'relation' || field.type === 'file') {
-          // If value is a string, try to parse it as JSON
-          if (typeof value === 'string') {
-            try {
-              processedData[fieldKey] = JSON.parse(value);
-            } catch {
-              processedData[fieldKey] = value;
-            }
-          } else {
-            processedData[fieldKey] = value;
-          }
-        } else {
-          processedData[fieldKey] = value;
-        }
-      }
-    }
+    // Process row data with field mapping (with debug logging)
+    const processedData = await processPartialRowData(tableId, rowData, { debug: true });
 
     // Update row in dynamic table
     await updateRow(table.dbName, rowId, processedData);

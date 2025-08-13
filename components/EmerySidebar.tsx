@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -16,56 +16,84 @@ import {
   Target,
   Workflow,
   Plug,
+  Plus,
+  SlidersHorizontal,
+  LogOut,
 } from "lucide-react"
+import { signOut, useSession } from "next-auth/react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { EmeryOrganizationModal } from "./EmeryOrganizationModal"
-import { useEmeryData } from "@/hooks/useEmeryData"
+import { useEmery } from "@/contexts/EmeryContext"
+import { useDataDialogs } from "@/contexts/DataDialogsContext"
 
 const navItems = [
   { href: "/mission-control", label: "Mission Control", icon: Target },
-  { href: "/manage", label: "Orchestration", icon: Workflow },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/organization", label: "Orchestration", icon: Workflow },
+  { href: "/connections", label: "Settings", icon: Settings },
 ]
 
 const orchestrationNavItems = [
-  { href: "/manage?tab=organization", label: "Organization", icon: Building2 },
-  { href: "/manage?tab=teams", label: "Teams", icon: Users },
-  { href: "/manage?tab=agents", label: "Agents", icon: Bot },
+  { href: "/organization", label: "Organization Chart", icon: Building2 },
+  { href: "/teams", label: "Teams", icon: Users },
+  { href: "/agents", label: "Agents", icon: Bot },
 ]
 
 const settingsNavItems = [
   {
     label: "OAuth Connections",
-    href: "/connections", 
+    href: "/connections",
     icon: Plug,
   },
   {
     label: "Users & Permissions",
-    href: "/settings/users-and-permissions", 
+    href: "/organization/settings/users",
     icon: Users,
+  },
+  {
+    label: "System",
+    href: "/settings/system",
+    icon: SlidersHorizontal,
   },
 ]
 
 export function EmerySidebar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const { data, isLoading } = useEmeryData()
+  const { data: sessionData } = useSession()
+  const { data, isLoading } = useEmery()
+  const { setIsCreateDatabaseOpen, setIsCreateTableOpen, setSelectedDatabaseForTable } = useDataDialogs()
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [openCollapsibles, setOpenCollapsibles] = useState<string[]>(
-    pathname === "/mission-control" ? ["Data", ...data.databases.map(db => db.id)] : []
-  )
+  const [openCollapsibles, setOpenCollapsibles] = useState<string[]>([])
+
+  useEffect(() => {
+    const orchestrationPaths = orchestrationNavItems.map(item => item.href)
+    const settingsPaths = settingsNavItems.map(item => item.href)
+
+    if (orchestrationPaths.includes(pathname)) {
+      setOpenCollapsibles(["Orchestration"])
+    } else if (settingsPaths.includes(pathname)) {
+      setOpenCollapsibles(["Settings"])
+    } else if (pathname.startsWith("/data")) {
+      setOpenCollapsibles(["Data", ...data.databases.map(db => db.id.toString())])
+    } else {
+      setOpenCollapsibles([])
+    }
+  }, [pathname, data.databases])
 
   const toggleSidebar = () => {
     setIsCollapsed(!isCollapsed)
   }
 
   const toggleCollapsible = (id: string) => {
+    if (isCollapsed) return
     setOpenCollapsibles(prev => {
       const isOpen = prev.includes(id)
       if (id === "Data") {
-        const dbIds = data.databases.map(db => db.id)
+        const dbIds = data.databases.map(db => db.id.toString())
         return isOpen
           ? prev.filter(item => item !== id && !dbIds.includes(item))
           : [...prev, id, ...dbIds]
@@ -76,29 +104,21 @@ export function EmerySidebar() {
 
   return (
     <div
-      className={`relative min-h-screen border-r bg-card transition-all duration-300 ease-in-out shadow-lg ${
+      className={`relative min-h-screen border-r transition-all duration-300 ease-in-out shadow-lg ${
         isCollapsed ? "w-16" : "w-64"
       }`}
     >
       <div className="flex h-full max-h-screen flex-col gap-2">
-        <div className="flex h-16 items-center px-4">
-          {!isCollapsed && <EmeryOrganizationModal />}
-          {isCollapsed && (
-            <div className="flex-1 flex justify-center">
-              <Bot className="h-6 w-6 text-primary" />
-            </div>
-          )}
-          <Button
-            variant="outline"
-            size="icon"
-            className={`h-8 w-8 ${!isCollapsed ? 'ml-auto' : ''}`}
-            onClick={toggleSidebar}
-          >
+        <div className="flex h-16 items-center border-b px-4 justify-between">
+          <div className="flex items-center gap-2">
+            <EmeryOrganizationModal isCollapsed={isCollapsed} />
+          </div>
+          <Button variant="ghost" size="icon" onClick={toggleSidebar}>
             <PanelLeft className="h-4 w-4" />
           </Button>
         </div>
         <ScrollArea className="flex-1 py-2">
-          <nav className="grid items-start px-4 text-sm font-medium">
+          <nav className="grid items-start text-sm font-medium">
             {navItems.map(({ href, label, icon: Icon }) => {
               const isActive = pathname === href || (href !== '/mission-control' && pathname.startsWith(href))
               
@@ -115,17 +135,18 @@ export function EmerySidebar() {
                     {renderSeparator()}
                     <Collapsible open={!isCollapsed && openCollapsibles.includes(label)} onOpenChange={() => toggleCollapsible(label)}>
                       <CollapsibleTrigger asChild>
-                        <button
-                          className={`flex items-center justify-between w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
+                        <Link
+                          href={href}
+                          className={`flex items-center w-full gap-3 rounded-lg px-3 py-2 text-foreground/70 transition-all hover:text-primary hover:bg-muted ${
                             isActive ? "bg-muted text-primary" : ""
-                          }`}
+                          } ${isCollapsed ? "justify-center" : "justify-between"}`}
                         >
                           <div className="flex items-center gap-3">
                             <Icon className="h-4 w-4" />
                             {!isCollapsed && label}
                           </div>
                           {!isCollapsed && <ChevronDown className="h-4 w-4 transition-transform duration-200 data-[state=open]:rotate-180" />}
-                        </button>
+                        </Link>
                       </CollapsibleTrigger>
                       {!isCollapsed && (
                         <CollapsibleContent className="pl-7 py-1 space-y-1">
@@ -133,8 +154,8 @@ export function EmerySidebar() {
                             <Link
                               key={item.label}
                               href={item.href}
-                              className={`flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs ${
-                                pathname === "/manage" && searchParams.get('tab') === item.href.split("=")[1] ? "bg-accent text-accent-foreground" : ""
+                              className={`flex items-center gap-2 rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted ${
+                                pathname === item.href ? "bg-accent text-accent-foreground" : ""
                               }`}
                             >
                               <item.icon className="h-3 w-3" />
@@ -154,34 +175,35 @@ export function EmerySidebar() {
                         onOpenChange={() => toggleCollapsible("Data")}
                       >
                         <CollapsibleTrigger asChild>
-                          <button
-                            className={`flex items-center justify-between w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
-                              pathname.startsWith("/mission-control") && searchParams?.has('tableId') ? "bg-muted text-primary" : ""
-                            }`}
+                          <Link
+                            href="/data"
+                            className={`flex items-center w-full gap-3 rounded-lg px-3 py-2 text-foreground/70 transition-all hover:text-primary hover:bg-muted ${
+                              pathname.startsWith("/data") ? "bg-muted text-primary" : ""
+                            } ${isCollapsed ? "justify-center" : "justify-between"}`}
                           >
                             <div className="flex items-center gap-3">
                               <Database className="h-4 w-4" />
                               {!isCollapsed && "Data"}
                             </div>
                             {!isCollapsed && <ChevronDown className="h-4 w-4 transition-transform duration-200 data-[state=open]:rotate-180" />}
-                          </button>
+                          </Link>
                         </CollapsibleTrigger>
                         {!isCollapsed && (
                           <CollapsibleContent className="pl-7 py-1 space-y-1">
                             {isLoading ? (
                               <div className="text-xs text-muted-foreground px-3 py-2">Loading tables...</div>
                             ) : data.databases.length === 0 ? (
-                              <div className="text-xs text-muted-foreground px-3 py-2">No tables yet</div>
+                              <div className="text-xs text-muted-foreground px-3 py-2">No databases yet</div>
                             ) : (
                               data.databases.map(db => (
                                 <Collapsible 
                                   key={db.id} 
                                   defaultOpen={pathname.startsWith("/mission-control") && searchParams?.has('tableId')} 
-                                  open={openCollapsibles.includes(db.id)} 
-                                  onOpenChange={() => toggleCollapsible(db.id)}
+                                  open={openCollapsibles.includes(db.id.toString())} 
+                                  onOpenChange={() => toggleCollapsible(db.id.toString())}
                                 >
                                   <CollapsibleTrigger asChild>
-                                    <button className="flex items-center justify-between w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs">
+                                    <button className="flex items-center justify-between w-full gap-3 rounded-lg px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted">
                                       <div className="flex items-center gap-2">
                                         <Database className="h-3 w-3" />
                                         {db.name}
@@ -193,19 +215,38 @@ export function EmerySidebar() {
                                     {db.tables.map(table => (
                                       <Link
                                         key={table.id}
-                                        href={`/mission-control?tableId=${table.id}`}
-                                        className={`flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs ${
-                                          pathname === "/mission-control" && searchParams.get('tableId') === table.id.toString() ? "bg-accent text-accent-foreground" : ""
+                                        href={`/data?tableId=${table.id}`}
+                                        className={`flex items-center gap-2 rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted ${
+                                          pathname === "/data" && searchParams.get('tableId') === table.id.toString() ? "bg-accent text-accent-foreground" : ""
                                         }`}
                                       >
                                         <Table className="h-3 w-3" />
                                         {table.name}
                                       </Link>
                                     ))}
+                                    {/* Add Table button at the bottom of each database */}
+                                    <button
+                                      onClick={() => {
+                                        setSelectedDatabaseForTable(db.id)
+                                        setIsCreateTableOpen(true)
+                                      }}
+                                      className="flex items-center justify-center w-full rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted"
+                                      title="Add Table"
+                                    >
+                                      <Plus className="h-3 w-3" />
+                                    </button>
                                   </CollapsibleContent>
                                 </Collapsible>
                               ))
                             )}
+                            {/* Add Database button at the bottom */}
+                            <button
+                              onClick={() => setIsCreateDatabaseOpen(true)}
+                              className="flex items-center justify-center w-full rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted mt-2"
+                              title="Add Database"
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
                           </CollapsibleContent>
                         )}
                       </Collapsible>
@@ -219,17 +260,18 @@ export function EmerySidebar() {
                     <Separator className="my-2" />
                     <Collapsible open={!isCollapsed && openCollapsibles.includes(label)} onOpenChange={() => toggleCollapsible(label)}>
                       <CollapsibleTrigger asChild>
-                        <button
-                          className={`flex items-center justify-between w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
+                        <Link
+                          href={href}
+                          className={`flex items-center w-full gap-3 rounded-lg px-3 py-2 text-foreground/70 transition-all hover:text-primary hover:bg-muted ${
                             isActive ? "bg-muted text-primary" : ""
-                          }`}
+                          } ${isCollapsed ? "justify-center" : "justify-between"}`}
                         >
                           <div className="flex items-center gap-3">
                             <Icon className="h-4 w-4" />
                             {!isCollapsed && label}
                           </div>
                           {!isCollapsed && <ChevronDown className="h-4 w-4 transition-transform duration-200 data-[state=open]:rotate-180" />}
-                        </button>
+                        </Link>
                       </CollapsibleTrigger>
                       {!isCollapsed && (
                         <CollapsibleContent className="pl-7 py-1 space-y-1">
@@ -237,7 +279,7 @@ export function EmerySidebar() {
                             <Link
                               key={item.label}
                               href={item.href}
-                              className={`flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs ${
+                              className={`flex items-center gap-2 rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted ${
                                 pathname === item.href ? "bg-accent text-accent-foreground" : ""
                               }`}
                             >
@@ -256,9 +298,9 @@ export function EmerySidebar() {
                   {renderSeparator()}
                   <Link
                     href={href}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
+                    className={`flex items-center gap-3 rounded-lg px-4 py-2 text-foreground/70 transition-all hover:text-primary hover:bg-muted ${
                       isActive ? "bg-muted text-primary" : ""
-                    }`}
+                    } ${isCollapsed ? "justify-center" : ""}`}
                   >
                     <Icon className="h-4 w-4" />
                     {!isCollapsed && label}
@@ -266,9 +308,84 @@ export function EmerySidebar() {
                 </div>
               );
             })}
-
           </nav>
         </ScrollArea>
+        
+        {/* User Avatar and Menu at Bottom */}
+        <div className="mt-auto p-4 border-t border-border">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                className={`w-full p-2 h-auto ${
+                  isCollapsed ? "justify-center" : "justify-start gap-4"
+                }`}
+              >
+                <Avatar className="h-10 w-10">
+                  <AvatarImage 
+                    src={sessionData?.user?.image || undefined} 
+                    alt={sessionData?.user?.name || "User"} 
+                  />
+                  <AvatarFallback className="text-xs">
+                    {sessionData?.user?.name?.charAt(0).toUpperCase() || 
+                     sessionData?.user?.email?.charAt(0).toUpperCase() || 
+                     "U"}
+                  </AvatarFallback>
+                </Avatar>
+                {!isCollapsed && (
+                  <div className="flex flex-col items-start text-left">
+                    <span className="text-base font-semibold text-foreground">
+                      {sessionData?.user?.name || "User"}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      {sessionData?.user?.email}
+                    </span>
+                  </div>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent 
+              className="w-56 p-0" 
+              side={isCollapsed ? "right" : "top"} 
+              align={isCollapsed ? "start" : "end"}
+            >
+              <div className="p-3 border-b border-border">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage 
+                      src={sessionData?.user?.image || undefined} 
+                      alt={sessionData?.user?.name || "User"} 
+                    />
+                    <AvatarFallback>
+                      {sessionData?.user?.name?.charAt(0).toUpperCase() || 
+                       sessionData?.user?.email?.charAt(0).toUpperCase() || 
+                       "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">
+                      {sessionData?.user?.name || "User"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {sessionData?.user?.email}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="p-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={() => signOut({ callbackUrl: '/auth/signin' })}
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign Out
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
     </div>
   )

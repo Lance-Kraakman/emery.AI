@@ -1,9 +1,12 @@
 /**
- * Background Agent Scheduler for automatic task execution
+ * Consolidated Agent Scheduler for automatic task execution
  * Handles CRON, DATABASE_EVENT, and WEBHOOK triggers
+ * 
+ * AIDEV-NOTE: Refactored for better separation of concerns and error handling
  */
 
 import cron from 'node-cron';
+import { RRule } from 'rrule';
 import { db } from '@/lib/db/client';
 import { agents, tasks } from '@/lib/db/schema';
 import { sql, eq, and, isNotNull } from 'drizzle-orm';
@@ -11,21 +14,34 @@ import { executeAgentCapabilityViaGRPC } from '@/lib/agents/grpc-executor';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface TriggerConfig {
-  type: 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT';
+  type: 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT' | 'CALENDAR';
   cron?: string;
+  rrule?: string;
   webhook_url?: string;
   webhook_secret?: string;
   table_id?: string;
 }
 
+interface SchedulerJob {
+  agentId: number;
+  agent: any;
+  cronJob?: any;
+  calendarJob?: NodeJS.Timeout;
+  triggerConfig: TriggerConfig;
+}
+
 export class AgentScheduler {
   private isRunning = false;
-  private cronJobs = new Map<number, any>(); // agent_id -> cron job
+  private scheduledJobs = new Map<number, SchedulerJob>(); // agent_id -> scheduled job
   private checkInterval: NodeJS.Timeout | null = null;
   private postgresListener: any = null;
+  private postgresListenerInstance: any = null;
+  
+  // AIDEV-NOTE: Consolidated job management with typed interface
 
   /**
    * Start the background scheduler
+   * AIDEV-NOTE: Consolidated initialization with better error recovery
    */
   async start(): Promise<void> {
     if (this.isRunning) {
@@ -36,26 +52,25 @@ export class AgentScheduler {
     console.log('[SCHEDULER] Starting agent scheduler...');
     this.isRunning = true;
 
+    const initTasks = [
+      this.initializeScheduledJobs(),
+      this.startPeriodicCheck(),
+      this.setupDatabaseEventTriggers()
+    ];
+
     try {
-      // Initialize CRON jobs for existing agents
-      await this.initializeCronJobs();
-      
-      // Start checking for new/updated agents
-      this.startPeriodicCheck();
-      
-      // Setup database event triggers
-      await this.setupDatabaseEventTriggers();
-      
+      await Promise.allSettled(initTasks);
       console.log('[SCHEDULER] Agent scheduler started successfully');
     } catch (error) {
       console.error('[SCHEDULER] Failed to start agent scheduler:', error);
-      this.isRunning = false;
-      throw error;
+      // Don't fail completely if some subsystems fail
+      console.log('[SCHEDULER] Continuing with partial functionality...');
     }
   }
 
   /**
    * Stop the background scheduler
+   * AIDEV-NOTE: Consolidated cleanup with error handling
    */
   async stop(): Promise<void> {
     if (!this.isRunning) {
@@ -65,157 +80,237 @@ export class AgentScheduler {
     console.log('[SCHEDULER] Stopping agent scheduler...');
     this.isRunning = false;
 
-    // Clear all cron jobs
-    this.cronJobs.forEach((job, agentId) => {
-      console.log(`[SCHEDULER] Destroying cron job for agent ${agentId}`);
-      job.destroy();
-    });
-    this.cronJobs.clear();
+    // Consolidated cleanup tasks
+    const cleanupTasks = [
+      this.cleanupScheduledJobs(),
+      this.stopPeriodicCheck(),
+      this.cleanupDatabaseListeners()
+    ];
 
-    // Clear periodic check
+    try {
+      await Promise.allSettled(cleanupTasks);
+      console.log('[SCHEDULER] Agent scheduler stopped successfully');
+    } catch (error) {
+      console.error('[SCHEDULER] Error during scheduler cleanup:', error);
+    }
+  }
+
+  private async cleanupScheduledJobs(): Promise<void> {
+    this.scheduledJobs.forEach((schedulerJob, agentId) => {
+      if (schedulerJob.cronJob) {
+        console.log(`[SCHEDULER] Destroying cron job for agent ${agentId}`);
+        schedulerJob.cronJob.destroy();
+      }
+      if (schedulerJob.calendarJob) {
+        console.log(`[SCHEDULER] Clearing calendar job for agent ${agentId}`);
+        clearTimeout(schedulerJob.calendarJob);
+      }
+    });
+    this.scheduledJobs.clear();
+  }
+
+  private stopPeriodicCheck(): void {
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
       this.checkInterval = null;
     }
+  }
 
-    // Cleanup database listeners
+  private async cleanupDatabaseListeners(): Promise<void> {
+    if (this.postgresListenerInstance) {
+      try {
+        // AIDEV-NOTE: Don't close shared client, just unlisten
+        await this.postgresListenerInstance.unlisten();
+      } catch (error) {
+        console.warn('[SCHEDULER] Error removing database listener:', error);
+      }
+      this.postgresListenerInstance = null;
+    }
     if (this.postgresListener) {
-      await this.postgresListener.close();
       this.postgresListener = null;
     }
-
-    console.log('[SCHEDULER] Agent scheduler stopped');
   }
 
   /**
-   * Initialize CRON jobs for all agents with CRON triggers
+   * Initialize scheduled jobs for all agents with triggers
+   * AIDEV-NOTE: Consolidated initialization for all trigger types
    */
-  private async initializeCronJobs(): Promise<void> {
-    console.log('[SCHEDULER] Initializing CRON jobs for existing agents...');
+  private async initializeScheduledJobs(): Promise<void> {
+    console.log('[SCHEDULER] Initializing scheduled jobs for existing agents...');
     
-    const cronAgents = await db
+    const activeAgents = await this.getActiveAgentsWithTriggers();
+    let initialized = 0;
+
+    for (const agent of activeAgents) {
+      try {
+        const triggerConfig = agent.trigger as TriggerConfig;
+        const schedulerJob: SchedulerJob = {
+          agentId: agent.id,
+          agent,
+          triggerConfig
+        };
+
+        if (triggerConfig.type === 'CRON' && triggerConfig.cron) {
+          schedulerJob.cronJob = await this.createCronJob(agent.id, triggerConfig.cron, agent);
+        } else if (triggerConfig.type === 'CALENDAR' && triggerConfig.rrule) {
+          schedulerJob.calendarJob = this.createCalendarJob(agent.id, triggerConfig.rrule, agent);
+        }
+
+        this.scheduledJobs.set(agent.id, schedulerJob);
+        initialized++;
+      } catch (error) {
+        console.error(`[SCHEDULER] Failed to initialize job for agent ${agent.id}:`, error);
+      }
+    }
+
+    console.log(`[SCHEDULER] Initialized ${initialized} scheduled jobs`);
+  }
+
+  private async getActiveAgentsWithTriggers() {
+    return db
       .select()
       .from(agents)
       .where(
         and(
           eq(agents.status, 'active'),
-          sql`trigger->>'type' = 'CRON'`,
-          isNotNull(sql`trigger->>'cron'`)
+          isNotNull(sql`trigger`)
         )
       );
-
-    let initialized = 0;
-    for (const agent of cronAgents) {
-      try {
-        const triggerConfig = agent.trigger as TriggerConfig;
-        if (triggerConfig.cron) {
-          await this.createCronJob(agent.id, triggerConfig.cron, agent);
-          initialized++;
-        }
-      } catch (error) {
-        console.error(`[SCHEDULER] Failed to initialize cron for agent ${agent.id}:`, error);
-      }
-    }
-
-    console.log(`[SCHEDULER] Initialized ${initialized} CRON jobs`);
   }
 
   /**
    * Create a cron job for an agent
+   * AIDEV-NOTE: Simplified cron job creation with better error handling
    */
-  private async createCronJob(agentId: number, cronExpression: string, agent: any): Promise<void> {
+  private async createCronJob(agentId: number, cronExpression: string, agent: any): Promise<any> {
+    if (!cron.validate(cronExpression)) {
+      throw new Error(`Invalid cron expression: ${cronExpression}`);
+    }
+
+    const job = cron.schedule(
+      cronExpression,
+      () => this.executeAgentForTrigger(agent, {
+        trigger_type: 'CRON',
+        scheduled_time: new Date().toISOString(),
+        cron_expression: cronExpression,
+      }),
+      {
+        name: `agent_${agentId}_cron`,
+        timezone: process.env.SCHEDULER_TIMEZONE || 'UTC',
+      }
+    );
+
+    job.start(); // Start after creation
+    console.log(`[SCHEDULER] Created CRON job for agent ${agentId}: ${cronExpression}`);
+    return job;
+  }
+
+  private createCalendarJob(agentId: number, rruleString: string, agent: any): NodeJS.Timeout | undefined {
     try {
-      // Validate cron expression using node-cron
-      if (!cron.validate(cronExpression)) {
-        throw new Error(`Invalid cron expression: ${cronExpression}`);
-      }
+      const rule = RRule.fromString(rruleString);
+      const now = new Date();
+      const next = rule.after(now);
 
-      // Destroy existing job if any
-      const existingJob = this.cronJobs.get(agentId);
-      if (existingJob) {
-        existingJob.destroy();
-      }
-
-      // Create new cron job
-      const job = cron.schedule(
-        cronExpression,
-        async () => {
-          console.log(`[SCHEDULER-CRON] Executing agent ${agentId} (${agent.name}) via CRON trigger`);
-          await this.executeAgentForTrigger(agent, {
-            trigger_type: 'CRON',
-            scheduled_time: new Date().toISOString(),
-            cron_expression: cronExpression,
+      if (next) {
+        const delay = next.getTime() - now.getTime();
+        console.log(`[SCHEDULER] Scheduling calendar job for agent ${agentId} to run at ${next}`);
+        return setTimeout(() => {
+          this.executeAgentForTrigger(agent, {
+            trigger_type: 'CALENDAR',
+            scheduled_time: next.toISOString(),
+            rrule: rruleString,
           });
-        },
-        {
-          name: `agent_${agentId}_cron`,
-          timezone: process.env.SCHEDULER_TIMEZONE || 'UTC',
-        }
-      );
-
-      this.cronJobs.set(agentId, job);
-      console.log(`[SCHEDULER] Created CRON job for agent ${agentId}: ${cronExpression}`);
+          // Reschedule the next job
+          this.addSchedulerJob(agent);
+        }, delay);
+      }
     } catch (error) {
-      console.error(`[SCHEDULER] Failed to create CRON job for agent ${agentId}:`, error);
-      throw error;
+      console.error(`[SCHEDULER] Invalid rrule string for agent ${agentId}:`, error);
     }
   }
 
   /**
    * Start periodic check for new/updated agents
+   * AIDEV-NOTE: Consolidated periodic checking with better error recovery
    */
   private startPeriodicCheck(): void {
     console.log('[SCHEDULER] Starting periodic check for agent updates...');
     
-    this.checkInterval = setInterval(async () => {
-      try {
-        await this.checkForAgentUpdates();
-      } catch (error) {
+    this.checkInterval = setInterval(() => {
+      this.checkForAgentUpdates().catch(error => {
         console.error('[SCHEDULER] Error during periodic check:', error);
-      }
+      });
     }, 60000); // Check every minute
   }
 
   /**
    * Check for new or updated agents that need scheduling
+   * AIDEV-NOTE: Simplified agent update checking
    */
   private async checkForAgentUpdates(): Promise<void> {
-    const cronAgents = await db
-      .select()
-      .from(agents)
-      .where(
-        and(
-          eq(agents.status, 'active'),
-          sql`trigger->>'type' = 'CRON'`,
-          isNotNull(sql`trigger->>'cron'`)
-        )
-      );
+    const currentAgents = await this.getActiveAgentsWithTriggers();
+    const currentAgentIds = new Set(currentAgents.map(a => a.id));
+    const scheduledAgentIds = new Set(this.scheduledJobs.keys());
 
-    // Check for new agents that don't have cron jobs
-    for (const agent of cronAgents) {
-      if (!this.cronJobs.has(agent.id)) {
-        try {
-          const triggerConfig = agent.trigger as TriggerConfig;
-          if (triggerConfig.cron) {
-            console.log(`[SCHEDULER] Found new CRON agent: ${agent.id} (${agent.name})`);
-            await this.createCronJob(agent.id, triggerConfig.cron, agent);
-          }
-        } catch (error) {
-          console.error(`[SCHEDULER] Failed to create cron for new agent ${agent.id}:`, error);
-        }
+    // Add new agents
+    for (const agent of currentAgents) {
+      if (!scheduledAgentIds.has(agent.id)) {
+        await this.addSchedulerJob(agent);
       }
     }
 
-    // Remove jobs for agents that no longer exist or are inactive
-    const activeAgentIds = new Set(cronAgents.map(a => a.id));
-    const cronJobEntries = Array.from(this.cronJobs.entries());
-    for (const [agentId, job] of cronJobEntries) {
-      if (!activeAgentIds.has(agentId)) {
-        console.log(`[SCHEDULER] Removing CRON job for inactive agent ${agentId}`);
-        job.destroy();
-        this.cronJobs.delete(agentId);
+    // Remove inactive agents
+    for (const agentId of Array.from(scheduledAgentIds)) {
+      if (!currentAgentIds.has(agentId)) {
+        this.removeSchedulerJob(agentId);
       }
     }
+  }
+
+  private async addSchedulerJob(agent: any): Promise<void> {
+    try {
+      const triggerConfig = agent.trigger as TriggerConfig;
+      const schedulerJob: SchedulerJob = {
+        agentId: agent.id,
+        agent,
+        triggerConfig
+      };
+
+      if (triggerConfig.type === 'CRON' && triggerConfig.cron) {
+        schedulerJob.cronJob = await this.createCronJob(agent.id, triggerConfig.cron, agent);
+      } else if (triggerConfig.type === 'CALENDAR' && triggerConfig.rrule) {
+        schedulerJob.calendarJob = this.createCalendarJob(agent.id, triggerConfig.rrule, agent);
+      }
+
+      this.scheduledJobs.set(agent.id, schedulerJob);
+      console.log(`[SCHEDULER] Added new scheduled job for agent ${agent.id} (${agent.name})`);
+    } catch (error) {
+      console.error(`[SCHEDULER] Failed to add job for agent ${agent.id}:`, error);
+    }
+  }
+
+  private removeSchedulerJob(agentId: number): void {
+    const job = this.scheduledJobs.get(agentId);
+    if (job?.cronJob) {
+      job.cronJob.destroy();
+    }
+    if (job?.calendarJob) {
+      clearTimeout(job.calendarJob);
+    }
+    this.scheduledJobs.delete(agentId);
+    console.log(`[SCHEDULER] Removed scheduled job for inactive agent ${agentId}`);
+  }
+
+  async updateAgentTrigger(agentId: number, triggerConfig: TriggerConfig): Promise<void> {
+    const agent = await db.select().from(agents).where(eq(agents.id, agentId)).then(res => res[0]);
+    if (!agent) {
+      throw new Error(`Agent with ID ${agentId} not found`);
+    }
+
+    await db.update(agents).set({ trigger: triggerConfig }).where(eq(agents.id, agentId));
+
+    this.removeSchedulerJob(agentId);
+    await this.addSchedulerJob({ ...agent, trigger: triggerConfig });
   }
 
   /**
@@ -231,24 +326,20 @@ export class AgentScheduler {
       // Setup triggers for agents with DATABASE_EVENT configuration
       await DatabaseTriggerManager.setupTriggersForAgents();
       
-      // Setup PostgreSQL listener
-      const { Client } = await import('pg');
-      this.postgresListener = new Client({
-        connectionString: process.env.DATABASE_URL,
-      });
+      // Setup PostgreSQL listener using shared client pool
+      const { rawClient } = await import('@/lib/db/client');
+      
+      // AIDEV-NOTE: Use raw client for LISTEN instead of creating new connection
+      // This prevents connection leaks by reusing the shared pool
+      this.postgresListener = rawClient;
 
-      await this.postgresListener.connect();
-
-      // Listen for table change notifications
-      await this.postgresListener.query('LISTEN emery_table_changes');
-
-      this.postgresListener.on('notification', async (msg: any) => {
+      // AIDEV-NOTE: Using postgres.js listen() method instead of pg Client
+      // This automatically handles LISTEN command and provides callback for notifications
+      this.postgresListenerInstance = await this.postgresListener.listen('emery_table_changes', async (payload: string) => {
         try {
-          if (msg.channel === 'emery_table_changes') {
-            const payload = JSON.parse(msg.payload);
-            console.log(`[SCHEDULER-DB] Received table change notification:`, payload);
-            await this.handleDatabaseEvent(payload);
-          }
+          const data = JSON.parse(payload);
+          console.log(`[SCHEDULER-DB] Received table change notification:`, data);
+          await this.handleDatabaseEvent(data);
         } catch (error) {
           console.error('[SCHEDULER-DB] Error handling database notification:', error);
         }
@@ -316,7 +407,7 @@ export class AgentScheduler {
       console.log(`[SCHEDULER] Executing agent ${agent.id} capability '${capability.name}' via ${triggerData.trigger_type} trigger`);
 
       const result = await executeAgentCapabilityViaGRPC({
-        agent,
+        agentId: agent.id,
         capabilityName: capability.name,
         triggerData,
         executionId,
@@ -336,6 +427,7 @@ export class AgentScheduler {
           agentId: agent.id,
           name: `Scheduled execution (${triggerData.trigger_type})`,
           capabilityName: 'unknown',
+          instructions: {},
           status: 'failed',
           error: error instanceof Error ? error.message : 'Unknown scheduler error',
           startedAt: new Date(),
@@ -349,22 +441,35 @@ export class AgentScheduler {
 
   /**
    * Get scheduler status
+   * AIDEV-NOTE: Updated to work with consolidated job structure
    */
   getStatus(): {
     isRunning: boolean;
+    totalJobsCount: number;
     cronJobsCount: number;
-    activeJobs: Array<{ agentId: number; cronExpression?: string }>;
+    activeJobs: Array<{ agentId: number; triggerType: string; cronExpression?: string }>;
   } {
-    const activeJobs: Array<{ agentId: number; cronExpression?: string }> = [];
+    const activeJobs: Array<{ agentId: number; triggerType: string; cronExpression?: string }> = [];
+    let cronJobsCount = 0;
     
-    // Note: cron jobs don't expose their expression easily, so we'll track separately if needed
-    this.cronJobs.forEach((job, agentId) => {
-      activeJobs.push({ agentId });
+    this.scheduledJobs.forEach((schedulerJob, agentId) => {
+      const jobInfo = {
+        agentId,
+        triggerType: schedulerJob.triggerConfig.type,
+        cronExpression: schedulerJob.triggerConfig.cron
+      };
+      
+      if (schedulerJob.cronJob) {
+        cronJobsCount++;
+      }
+      
+      activeJobs.push(jobInfo);
     });
 
     return {
       isRunning: this.isRunning,
-      cronJobsCount: this.cronJobs.size,
+      totalJobsCount: this.scheduledJobs.size,
+      cronJobsCount,
       activeJobs,
     };
   }

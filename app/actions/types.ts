@@ -60,7 +60,7 @@ export interface CreateTeamData {
   description?: string;
   responsibilities?: string[];
   goals?: string[];
-  tools?: string[];
+  agentIds?: string[];
 }
 
 export interface CreateAgentData {
@@ -68,8 +68,6 @@ export interface CreateAgentData {
   role?: string;
   description?: string;
   persona?: string;
-  // Remove: model (now per-step)
-  // Remove: goals (not needed)
   tools?: ToolConfig[];
   servers?: ServerConfig[];
   trigger?: TriggerConfig;
@@ -91,7 +89,7 @@ export interface ServerConfig {
 }
 
 export interface TriggerConfig {
-  type: 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT';
+  type: 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT' | 'CALENDAR';
   cron?: string;
   webhook_url?: string;
   webhook_secret?: string;
@@ -114,13 +112,22 @@ export interface StepConfig {
 }
 
 // New Task types aligned with frontend model
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout';
+
+// Task instruction configuration (step-like structure)
+export interface TaskInstructions {
+  instructions: string; // Natural language instructions
+  tools?: ToolConfig[]; // Optional tools the task can use
+  servers?: ServerConfig[]; // Optional servers the task can use
+}
+
 export interface Task {
   id: string;
   agentId: number;
   name: string;
-  capabilityName: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
-  payload: Record<string, any>;
+  capabilityName?: string; // Optional - system can auto-route if not specified
+  instructions: TaskInstructions; // Step-like configuration stored as JSONB
+  status: TaskStatus;
   result?: any;
   error?: string;
   startedAt?: Date;
@@ -129,25 +136,11 @@ export interface Task {
   createdAt: Date;
 }
 
-export interface StepExecution {
-  id: string;
-  taskId: string;
-  stepId: string;
-  stepType: 'code_step' | 'tool_step';
-  instructions?: string;
-  inputData?: Record<string, any>;
-  outputData?: Record<string, any>;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
-  errorMessage?: string;
-  startedAt?: Date;
-  completedAt?: Date;
-}
-
 export interface CreateTaskData {
   agentId: number;
   name: string;
-  capabilityName: string;
-  payload: Record<string, any>;
+  capabilityName?: string; // Optional - system can auto-route
+  instructions: TaskInstructions; // Step-like configuration
   createdBy?: string;
 }
 

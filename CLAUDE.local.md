@@ -46,6 +46,40 @@ Use Client Components when:
 
 Please make descriptive git commits at reasonable intervals. DO NOT add comments that include Claude Code as a collaborator.
 
+#### Pre-commit Testing Protocol
+
+**MANDATORY**: Always run tests before committing to ensure changes don't break existing functionality.
+
+```bash
+# Quick smoke test (no external dependencies)
+uv run python quick_test.py
+
+# If quick tests pass, run full test suite
+uv run python run_tests.py all
+
+# For Python projects specifically:
+uv run pytest tests/ -v
+
+# If any tests fail:
+# 1. Fix the issues immediately
+# 2. Re-run tests to verify fixes
+# 3. Only commit when all tests pass
+```
+
+**Test-Driven Commit Process:**
+1. Make your code changes
+2. Run `uv run python quick_test.py` 
+3. If successful, run `uv run python run_tests.py all`
+4. Fix any failing tests before proceeding
+5. Commit only when all tests pass
+6. Include test status in commit message if relevant
+
+**Failed Test Protocol:**
+- Never commit with failing tests
+- If tests fail due to environmental issues (missing tokens, etc.), document clearly
+- Create separate commits for test fixes vs. feature changes
+- Update tests when changing functionality, don't ignore test failures
+
 ### testing
 
 Please add meaningful unit tests where appropriate. We want to avoid stubbing and mocking EVERYTHING just to get code coverage. We want our test suite to be effective, elegnat, simple, and meaningfull.
@@ -73,6 +107,77 @@ Do not write backwards-compatible software unless specified
 ### python
 
 use `uv` instead of `pip`
+
+#### Python Code Quality Standards
+
+**Imports:**
+- All imports must be at the top of the file - NO inline imports  
+- Group imports: stdlib, third-party, local imports
+- Fail fast on missing dependencies - don't use graceful fallbacks unless truly optional
+- If dependency is required, import directly and let ImportError fail the module load
+- Example:
+  ```python
+  from required_library import RequiredClass
+  from dotenv import load_dotenv  # Will fail if not installed - good!
+  ```
+
+**Type Hints:**
+- Prefer TypedDict over Dict[str, Any] for structured data
+- Use Union types over generic Any when possible
+- Create domain-specific type aliases for better clarity
+- Example:
+  ```python
+  from typing import TypedDict
+  
+  class ExecutionResult(TypedDict, total=False):
+      status: str
+      result: Optional[Any]
+      error: Optional[str]
+  ```
+
+**Error Handling:**
+- Avoid over-defensive patterns like excessive `.get(key, default)` usage
+- Use `obj.get(key) or default` instead of `obj.get(key, default)` for non-None defaults
+- Replace `hasattr(obj, 'attr')` with `getattr(obj, 'attr', None)` where appropriate
+- Use proper exception handling rather than defensive programming
+
+**Function Design:**
+- Keep functions under 50 lines when possible
+- Extract complex logic into helper methods
+- Use descriptive parameter names and return types
+- Single responsibility principle - one function, one purpose
+
+**Documentation:**
+- Use AIDEV-NOTE, AIDEV-TODO, AIDEV-QUESTION comments for searchable inline docs
+- Write concise docstrings focusing on purpose, not implementation
+- Document complex business logic and architectural decisions
+
+**Testing:**
+- Focus on integration testing over unit testing with excessive mocking
+- Test actual behavior, not implementation details
+- Use `uv run pytest` for all test execution
+- Organize tests by functionality, not by file structure
+
+**Code Structure:**
+- Extract constants for magic numbers (MAX_LOG_PREVIEW_LENGTH = 100)
+- Split large files (>300 lines) into focused modules
+- One class per file when possible, related classes can be grouped
+- Use specific exception types instead of generic `Exception`
+- Chain exceptions with `raise ... from e` to preserve stack traces
+
+**Return Values:**
+- Use TypedDict for structured return values instead of Dict[str, Any]
+- Create domain-specific types (CapabilityExecutionResult, OrchestratorResult)
+- Avoid defensive `.get()` calls on known structures
+- Make return types explicit and consistent
+
+**Anti-patterns to Avoid:**
+- Generic `except Exception as e:` without re-raising or logging context
+- Magic numbers scattered throughout code
+- Defensive `.get()` usage on typed structures
+- Files with multiple unrelated classes (>4 classes per file)
+- Hard-coded paths and URLs
+- String concatenation for paths (use pathlib)
 
 ### node / typescript
 

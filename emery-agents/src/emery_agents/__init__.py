@@ -9,14 +9,14 @@ This package provides:
 """
 
 from .core.types import (
-    Agent, AgentStep, StepExecution,
+    Agent, StepExecution,
     StepType, TriggerType, TaskStatus, Task,
-    Capability, Trigger, ExecutionContext,
-    ToolConfig, ServerConfig
+    CapabilityConfig, TriggerConfig, ExecutionContext,
+    ToolConfig, ServerConfig, StepConfig
     # AIDEV-NOTE: Updated to new Task-based model - removed TaskExecution
 )
 from .core.runner import AgentRunner
-from .integrations.smolagents import SmolAgentsIntegration
+from .integrations.smolagents import SmolAgentsOrchestrator
 from .integrations.mcp_servers import MCPServerIntegration
 from .integrations.emery_client import EmeryClientIntegration
 
@@ -27,23 +27,23 @@ __email__ = "lance@aifactory.nz"
 __all__ = [
     # Core types
     "Agent",
-    "AgentStep", 
     "StepExecution",
     "StepType",
     "TriggerType",
     "TaskStatus",
     "Task",
-    "Capability",
-    "Trigger",
+    "CapabilityConfig",
+    "TriggerConfig",
     "ExecutionContext",
     "ToolConfig",
     "ServerConfig",
+    "StepConfig",
     
     # Core runner
     "AgentRunner",
     
     # Integrations
-    "SmolAgentsIntegration",
+    "SmolAgentsOrchestrator",
     "MCPServerIntegration", 
     "EmeryClientIntegration",
 ]

@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db/client";
-import { tables, fields } from "@/lib/db/schema";
-import { insertRow, updateRow, deleteRow, getRows } from "@/lib/db/dynamic";
-import { eq } from "drizzle-orm";
 import { authenticateRequest } from '@/lib/auth/test-auth';
+import { createRow, updateRowData, deleteRowData, getRowsData } from '@/app/actions/rows';
 
 export async function POST(request: NextRequest) {
   try {
     // Authenticate the request
     const authResult = await authenticateRequest(request);
-    if (!authResult.authenticated) {
+    if (!authResult.success) {
       return NextResponse.json(
         { error: authResult.error || 'Authentication required' },
         { status: 401 }
@@ -25,59 +22,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const [table] = await db.select().from(tables).where(eq(tables.id, tableId)).limit(1);
-    if (!table) {
+    // Use server action function to avoid duplication
+    const result = await createRow({ tableId, data });
+    
+    if (!result.success) {
       return NextResponse.json(
-        { error: "Table not found" },
-        { status: 404 }
+        { error: result.error },
+        { status: 400 }
       );
     }
 
-    // Verify table belongs to user's organization
-    if (table.organizationId !== authResult.user.organizationId) {
-      return NextResponse.json(
-        { error: "Access denied: table not in your organization" },
-        { status: 403 }
-      );
-    }
-
-    const tableFields = await db.select().from(fields).where(eq(fields.tableId, tableId));
-    
-    const processedData: Record<string, any> = {};
-    
-    for (const field of tableFields) {
-      const fieldKey = `field_${field.id}`;
-      const value = data[field.slug] || data[field.name];
-      
-      if (field.required && (value === undefined || value === null || value === "")) {
-        return NextResponse.json(
-          { error: `Field '${field.name}' is required` },
-          { status: 400 }
-        );
-      }
-      
-      if (value !== undefined && value !== null) {
-        // Handle JSONB fields for relations and files
-        if (field.type === 'relation' || field.type === 'file') {
-          // If value is a string, try to parse it as JSON
-          if (typeof value === 'string') {
-            try {
-              processedData[fieldKey] = JSON.parse(value);
-            } catch {
-              processedData[fieldKey] = value;
-            }
-          } else {
-            processedData[fieldKey] = value;
-          }
-        } else {
-          processedData[fieldKey] = value;
-        }
-      }
-    }
-
-    await insertRow(table.dbName, processedData);
-
-    return NextResponse.json({ message: "Row created successfully" }, { status: 201 });
+    return NextResponse.json(result.data);
   } catch (error) {
     console.error("Error creating row:", error);
     return NextResponse.json(
@@ -89,9 +44,18 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    // Authenticate the request
+    const authResult = await authenticateRequest(request);
+    if (!authResult.success) {
+      return NextResponse.json(
+        { error: authResult.error || 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const tableId = searchParams.get("tableId");
-    const limit = parseInt(searchParams.get("limit") || "100");
+    const limit = parseInt(searchParams.get("limit") || "1000");
     const offset = parseInt(searchParams.get("offset") || "0");
 
     if (!tableId) {
@@ -101,16 +65,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [table] = await db.select().from(tables).where(eq(tables.id, parseInt(tableId))).limit(1);
-    if (!table) {
-      return NextResponse.json(
-        { error: "Table not found" },
-        { status: 404 }
-      );
-    }
-
-    const rows = await getRows(table.dbName, limit, offset);
-
+    // Use server action function
+    const rows = await getRowsData(parseInt(tableId), limit);
     return NextResponse.json(rows);
   } catch (error) {
     console.error("Error fetching rows:", error);
@@ -123,6 +79,15 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    // Authenticate the request
+    const authResult = await authenticateRequest(request);
+    if (!authResult.success) {
+      return NextResponse.json(
+        { error: authResult.error || 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     const { tableId, rowId, data } = await request.json();
 
     if (!tableId || !rowId) {
@@ -132,42 +97,15 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const [table] = await db.select().from(tables).where(eq(tables.id, tableId)).limit(1);
-    if (!table) {
+    // Use server action function
+    const result = await updateRowData({ tableId, rowId, data });
+    
+    if (!result.success) {
       return NextResponse.json(
-        { error: "Table not found" },
-        { status: 404 }
+        { error: result.error },
+        { status: 400 }
       );
     }
-
-    const tableFields = await db.select().from(fields).where(eq(fields.tableId, tableId));
-    
-    const processedData: Record<string, any> = {};
-    
-    for (const field of tableFields) {
-      const fieldKey = `field_${field.id}`;
-      const value = data[field.slug] || data[field.name];
-      
-      if (value !== undefined && value !== null) {
-        // Handle JSONB fields for relations and files
-        if (field.type === 'relation' || field.type === 'file') {
-          // If value is a string, try to parse it as JSON
-          if (typeof value === 'string') {
-            try {
-              processedData[fieldKey] = JSON.parse(value);
-            } catch {
-              processedData[fieldKey] = value;
-            }
-          } else {
-            processedData[fieldKey] = value;
-          }
-        } else {
-          processedData[fieldKey] = value;
-        }
-      }
-    }
-
-    await updateRow(table.dbName, rowId, processedData);
 
     return NextResponse.json({ message: "Row updated successfully" });
   } catch (error) {
@@ -181,6 +119,15 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    // Authenticate the request
+    const authResult = await authenticateRequest(request);
+    if (!authResult.success) {
+      return NextResponse.json(
+        { error: authResult.error || 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const tableId = searchParams.get("tableId");
     const rowId = searchParams.get("rowId");
@@ -192,15 +139,15 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const [table] = await db.select().from(tables).where(eq(tables.id, parseInt(tableId))).limit(1);
-    if (!table) {
+    // Use server action function
+    const result = await deleteRowData(parseInt(tableId), rowId);
+    
+    if (!result.success) {
       return NextResponse.json(
-        { error: "Table not found" },
-        { status: 404 }
+        { error: result.error },
+        { status: 400 }
       );
     }
-
-    await deleteRow(table.dbName, rowId);
 
     return NextResponse.json({ message: "Row deleted successfully" });
   } catch (error) {

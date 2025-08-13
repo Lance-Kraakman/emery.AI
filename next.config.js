@@ -6,6 +6,12 @@ const nextConfig = {
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
   },
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals = [...config.externals, 'unpdf', '@z-skip/protoc', 'canvas']
+    }
+    return config
+  },
 }
 
 module.exports = nextConfig

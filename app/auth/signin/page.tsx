@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { SignInButton } from "./SignInButton"
+import { Separator } from "@/components/ui/separator"
 
 export default async function SignInPage() {
   const session = await auth()
@@ -20,9 +21,13 @@ export default async function SignInPage() {
             Dynamic database builder for modern teams
           </p>
         </div>
-        <div className="mt-8 space-y-4">
-          <SignInButton provider="github" />
-          <SignInButton provider="google" />
+        
+        <div className="mt-8 space-y-6">
+          {/* OAuth Providers */}
+          <div className="space-y-3">
+            <SignInButton provider="github" />
+            <SignInButton provider="google" />
+          </div>
         </div>
       </div>
     </div>

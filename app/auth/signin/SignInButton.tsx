@@ -8,7 +8,7 @@ interface SignInButtonProps {
 
 export function SignInButton({ provider }: SignInButtonProps) {
   const handleSignIn = () => {
-    signIn(provider, { callbackUrl: "/dashboard" })
+    signIn(provider, { callbackUrl: "/mission-control" })
   }
 
   const buttonConfig = {

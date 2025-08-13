@@ -74,7 +74,7 @@ async function createTestUserWithApiKey(): Promise<{ userId: string, userApiKey:
       id: userId,
       name: TEST_USER_NAME,
       email: TEST_USER_EMAIL,
-      organizationId: 1, // Assume organization 1 exists
+      currentOrganizationId: 1, // Assume organization 1 exists
       apiKey: userApiKey,
       createdAt: new Date(),
     }).returning();
@@ -86,7 +86,7 @@ async function createTestUserWithApiKey(): Promise<{ userId: string, userApiKey:
     return { 
       userId: newUser.id, 
       userApiKey,
-      organizationId: newUser.organizationId || 1 
+      organizationId: newUser.currentOrganizationId || 1 
     };
     
   } catch (error) {

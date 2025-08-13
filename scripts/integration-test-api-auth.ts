@@ -93,7 +93,7 @@ async function runApiAuthIntegrationTest() {
   console.log('=============================================\n');
   
   // Validate configuration
-  if (USER_ACCOUNT_ID === 'YOUR_USER_ID_HERE' || USER_API_KEY === 'YOUR_API_KEY_HERE') {
+  if (USER_ACCOUNT_ID.includes('YOUR_USER_ID_HERE') || USER_API_KEY.includes('YOUR_API_KEY_HERE')) {
     console.log('❌ Configuration incomplete!');
     console.log('   Please run: npx tsx scripts/setup-user-auth.ts');
     console.log('   Then update the constants at the top of this file\n');

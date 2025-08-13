@@ -40,7 +40,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { agentId, name, capabilityName, payload } = body;
+    const { agentId, name, capabilityName, instructions, createdBy } = body;
 
     // Validate required fields
     if (!agentId || !name || !capabilityName) {
@@ -54,7 +54,8 @@ export async function POST(request: NextRequest) {
       agentId: parseInt(agentId),
       name,
       capabilityName,
-      payload: payload || {}
+      instructions: instructions || {},
+      createdBy: createdBy || undefined
     };
 
     const result = await createTask(taskData);

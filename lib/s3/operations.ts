@@ -104,6 +104,6 @@ export function validateFileType(mimeType: string): boolean {
 }
 
 export function validateFileSize(size: number): boolean {
-  const maxSize = parseInt(process.env.MAX_FILE_SIZE || '10485760'); // 10MB default
+  const maxSize = parseInt(process.env.MAX_FILE_SIZE || '5242880'); // 5MB default
   return size <= maxSize;
 }
