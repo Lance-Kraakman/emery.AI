@@ -3,7 +3,7 @@ import { authenticateRequest } from '@/lib/auth/test-auth';
 import { db } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { executeAgentCapabilityViaGRPC } from '@/lib/agents/grpc-executor';
+import { executeAgentCapabilityViaGRPC as executeAgentViaGRPC } from '@/lib/agents/grpc-executor';
 import crypto from 'crypto';
 
 export interface AgentExecuteRequest {
@@ -90,7 +90,7 @@ export async function POST(
       console.log(`[GRPC-INSTRUCTION-EXEC] ${executionId}: Agent ${agentId} executing instruction-based task for user ${userId}`);
     }
     
-    const result = await executeAgentCapabilityViaGRPC({
+    const result = await executeAgentViaGRPC({
       agentId: agentId,
       capabilityName: capability_name,
       instructionConfig: instructions ? {

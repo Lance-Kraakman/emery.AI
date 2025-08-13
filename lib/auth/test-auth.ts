@@ -84,7 +84,7 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
           success: true,
           user: {
             id: user.id,
-            email: user.email,
+            email: user.email || '',
             name: user.name,
             organizationId: user.currentOrganizationId,
             roleId: user.roleId,

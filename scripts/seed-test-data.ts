@@ -306,13 +306,17 @@ async function main() {
     const userInfo = await createTestUser();
     
     // Create test organization  
-    const organization = await createTestOrganization(userInfo);
+    if (!userInfo.apiKey) {
+      throw new Error('User API key not found');
+    }
+    const organization = await createTestOrganization(userInfo as { id: string; apiKey: string });
     
+    // Clean existing data if requested
     // Clean existing data if requested
     if (shouldClean) {
       await cleanDatabase(organization.id);
       // Recreate after cleaning
-      const newOrg = await createTestOrganization(userId);
+      const newOrg = await createTestOrganization(userInfo as { id: string; apiKey: string });
       var finalOrganization = newOrg;
     } else {
       var finalOrganization = organization;
@@ -325,7 +329,7 @@ async function main() {
     await createTestTables();
     
     // Print summary
-    await printSeedSummary(finalOrganization, createdAgents, userInfo.apiKey);
+    await printSeedSummary(finalOrganization, createdAgents, userInfo.apiKey as string);
     
     console.log('\n✅ Seed data creation complete!');
     

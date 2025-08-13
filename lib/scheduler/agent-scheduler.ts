@@ -427,6 +427,7 @@ export class AgentScheduler {
           agentId: agent.id,
           name: `Scheduled execution (${triggerData.trigger_type})`,
           capabilityName: 'unknown',
+          instructions: {},
           status: 'failed',
           error: error instanceof Error ? error.message : 'Unknown scheduler error',
           startedAt: new Date(),

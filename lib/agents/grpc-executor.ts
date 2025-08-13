@@ -6,7 +6,8 @@
 import { db } from '@/lib/db/client';
 import { tasks, agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { AgentWorkerClient, workerRegistry, TaskStatus, TaskStatusEnum } from '@/lib/grpc/client';
+import { AgentWorkerClient, workerRegistry, TaskStatus, TaskStatusEnum, TaskRequest } from '@/lib/grpc/client';
+import type { TaskProgress } from '@/lib/grpc/client';
 import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/lib/grpc/proto-mappers';
 
 export interface AgentCapabilityRequest {
@@ -68,7 +69,7 @@ export async function executeAgentCapabilityViaGRPC(
       throw new Error(`Agent ${agentId} not found`);
     }
     
-    console.log(`[GRPC-CAPABILITY] Loaded agent: ${agent.name} with ${agent.capabilities?.length || 0} capabilities`);
+    console.log(`[GRPC-CAPABILITY] Loaded agent: ${agent.name} with ${Object.keys(agent.capabilities || {}).length} capabilities`);
     
     // Prepare enhanced trigger data
     let taskInstructions = triggerData;
@@ -114,7 +115,7 @@ export async function executeAgentCapabilityViaGRPC(
       timeoutSeconds: 300 // 5 minutes default
     });
     
-    console.log(`[GRPC-CAPABILITY] Sending full agent config with ${agent.capabilities?.length || 0} capabilities`);
+    console.log(`[GRPC-CAPABILITY] Sending full agent config with ${Object.keys(agent.capabilities || {}).length} capabilities`);
     
     // Track step executions for final result
     const stepExecutions: Array<{
@@ -130,7 +131,7 @@ export async function executeAgentCapabilityViaGRPC(
     let finalError: string | null = null;
     
     // Execute task via gRPC with streaming progress updates
-    await workerClient.executeTask(taskRequest, async (progress) => {
+    await workerClient.executeTask(taskRequest as any, async (progress: TaskProgress) => {
       console.log(`[GRPC-PROGRESS] ${executionId}: Step ${progress.step_id} - Status: ${progress.status} (${progress.progress_percent}%)`);
       
       // Map proto progress to TypeScript types

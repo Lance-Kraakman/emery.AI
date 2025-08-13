@@ -6,14 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-export default function AcceptInvitationPage({ params }: { params: { token: string } }) {
+export default function AcceptInvitationPage({ params }: { params: Promise<{ token: string }> }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     startTransition(async () => {
-      const result = await acceptInvitation(params.token);
+      const { token } = await params
+      const result = await acceptInvitation(token);
       if (result.error) {
         setError(result.error);
       } else {
@@ -21,7 +22,7 @@ export default function AcceptInvitationPage({ params }: { params: { token: stri
         router.push("/organization");
       }
     });
-  }, [params.token, router]);
+  }, [params, router]);
 
   return (
     <div className="flex items-center justify-center min-h-screen">

@@ -18,6 +18,8 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
 
 const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any;
 const AgentWorkerService = protoDescriptor.emery.agents.AgentWorker;
+import { TaskProgress } from './generated/agent_worker';
+export type { TaskProgress };
 
 // Type definitions for our gRPC calls
 export interface TaskRequest {
@@ -30,16 +32,6 @@ export interface TaskRequest {
   timeout_seconds?: number;
 }
 
-export interface TaskProgress {
-  task_id: string;
-  status: string; // gRPC enums come as strings when enums: String is set
-  step_id?: string;
-  step_type?: string;
-  output_json?: string;
-  error_message?: string;
-  timestamp_ms: string;
-  progress_percent?: number;
-}
 
 export enum TaskStatus {
   TASK_PENDING = 0,
