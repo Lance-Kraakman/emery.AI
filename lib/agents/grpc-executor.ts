@@ -1,6 +1,6 @@
 /**
- * gRPC-based agent workflow execution system for NextJS.
- * Replaces subprocess execution with gRPC calls to worker instances.
+ * Simplified gRPC-based agent execution system.
+ * Uses smolagents hierarchy for all agent execution via gRPC worker instances.
  */
 
 import { db } from '@/lib/db/client';
@@ -8,54 +8,49 @@ import { tasks } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { AgentWorkerClient, workerRegistry, TaskStatus, TaskStatusEnum } from '@/lib/grpc/client';
 
-export interface AgentCapabilityRequest {
-  agent: any; // Agent from database
-  capabilityName: string;
-  triggerData: Record<string, any>;
-  stepOverrides?: Array<Record<string, any>>;
+export interface AgentExecutionRequest {
+  agentId: number;
+  instructions: string; // All execution is instruction-based now
   executionId: string;
+  metadata?: Record<string, any>; // Optional context metadata
 }
 
-export interface AgentCapabilityResult {
+export interface AgentExecutionResult {
   success: boolean;
   execution_id: string;
-  capability_name: string;
   status: string;
   output_data?: any;
   error?: string;
-  step_executions?: Array<{
-    step_id: string;
-    step_type: string;
-    status: string;
-    output_data?: any;
-    error_message?: string;
-  }>;
 }
 
 /**
- * Execute an agent capability using gRPC worker instances.
+ * Execute an agent via gRPC using simplified smolagents hierarchy.
  * 
- * This function:
- * 1. Gets worker client for agent's organization
- * 2. Creates task record in database  
- * 3. Calls gRPC ExecuteTask with streaming progress
- * 4. Updates database with real-time progress
- * 5. Returns final execution results
+ * All capability routing and step management handled by smolagents internally.
  */
-export async function executeAgentCapabilityViaGRPC(
-  request: AgentCapabilityRequest
-): Promise<AgentCapabilityResult> {
-  const { agent, capabilityName, triggerData, stepOverrides, executionId } = request;
+export async function executeAgentViaGRPC(
+  request: AgentExecutionRequest
+): Promise<AgentExecutionResult> {
+  const { agentId, instructions, executionId, metadata } = request;
   
-  console.log(`[GRPC-CAPABILITY] Starting execution ${executionId} for agent ${agent.id} capability '${capabilityName}'`);
+  console.log(`[GRPC-AGENT] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
   
   try {
+    // Query full agent configuration from database
+    const [agent] = await db.select().from(agents).where(eq(agents.id, agentId)).limit(1);
+    if (!agent) {
+      throw new Error(`Agent ${agentId} not found`);
+    }
+    
+    console.log(`[GRPC-AGENT] Loaded agent: ${agent.name} with ${Object.keys(agent.capabilities || {}).length} capabilities`);
+    
     // Record task start in database
     await db.insert(tasks).values({
       id: executionId,
       agentId: agent.id,
-      name: `gRPC capability execution: ${capabilityName}`,
-      capabilityName: capabilityName,
+      name: `Agent execution: ${instructions.substring(0, 50)}...`,
+      capabilityName: null, // Determined by smolagents
+      instructions: { instructions, metadata },
       status: 'in_progress',
       payload: triggerData,
       startedAt: new Date(),
