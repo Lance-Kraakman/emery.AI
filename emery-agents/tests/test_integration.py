@@ -16,7 +16,7 @@ class TestIntegration:
     """Integration tests for complete workflows using simplified architecture."""
     
     @pytest.mark.asyncio
-    async def test_full_execution_flow(self, sample_agent, sample_trigger_data):
+    async def test_full_execution_flow(self, sample_agent):
         """Test complete execution flow with simplified smolagents hierarchy."""
         # Create real integrations (mocked external calls)
         emery_client = EmeryClientIntegration(agent_id="test_agent_123")
@@ -49,7 +49,7 @@ class TestIntegration:
                     assert task.completedAt is not None
     
     @pytest.mark.asyncio
-    async def test_execution_failure_handling(self, sample_agent, sample_trigger_data):
+    async def test_execution_failure_handling(self, sample_agent):
         """Test execution failure handling."""
         emery_client = EmeryClientIntegration(agent_id="test_agent_123")
         smolagents = SmolAgentsOrchestrator()
@@ -78,7 +78,7 @@ class TestIntegration:
                     assert "Test execution error" in task.error
     
     @pytest.mark.asyncio
-    async def test_agent_hierarchy_setup(self, sample_agent, sample_trigger_data):
+    async def test_agent_hierarchy_setup(self, sample_agent):
         """Test that agent hierarchy is properly set up."""
         emery_client = EmeryClientIntegration(agent_id="test_agent_123")
         smolagents = SmolAgentsOrchestrator()
@@ -107,7 +107,7 @@ class TestIntegration:
     @pytest.mark.smolagents
     @pytest.mark.skipif(not os.getenv("HF_TOKEN"), reason="HF_TOKEN required")
     @pytest.mark.asyncio
-    async def test_real_smolagents_integration(self, sample_agent, sample_trigger_data):
+    async def test_real_smolagents_integration(self, sample_agent):
         """Test with real smolagents (requires HF_TOKEN)."""
         emery_client = EmeryClientIntegration(agent_id="test_agent_123")
         smolagents = SmolAgentsOrchestrator()

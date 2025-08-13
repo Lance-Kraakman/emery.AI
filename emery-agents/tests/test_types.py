@@ -6,7 +6,7 @@ from datetime import datetime
 from emery_agents.core.types import (
     StepType, TriggerType, TaskStatus,
     ToolConfig, ServerConfig, StepConfig, CapabilityConfig,
-    TaskInstructions, Task, Agent, ExecutionContext
+    TaskInstructions, Task, Agent
 )
 
 
@@ -114,27 +114,3 @@ class TestTaskTypes:
         assert agent.status == "active"
 
 
-class TestExecutionContext:
-    """Test execution context type."""
-    
-    def test_execution_context_creation(self, sample_agent, sample_capability):
-        """ExecutionContext creates with proper structure."""
-        task = Task(
-            id="test_task",
-            agentId=123,
-            name="Test",
-            instructions=TaskInstructions(instructions="Test")
-        )
-        
-        context = ExecutionContext(
-            agent=sample_agent,
-            task=task,
-            capability=sample_capability
-        )
-        
-        assert context.agent.id == 123
-        assert context.task.id == "test_task"
-        assert context.capability.name == "test_capability"
-        assert isinstance(context.variables, dict)
-        assert isinstance(context.outputs, dict)
-        assert isinstance(context.step_executions, list)

@@ -19,43 +19,6 @@ class TestAgentWorkerService:
         assert isinstance(service.active_tasks, dict)
         assert len(service.active_tasks) == 0
     
-    def test_capability_selection_single(self, sample_agent):
-        """Test capability selection with single capability."""
-        service = AgentWorkerServiceImplementation("test_org")
-        instructions = TaskInstructions(instructions="Test task")
-        
-        selected = service.select_capability_for_instructions(sample_agent, instructions)
-        assert selected == "test_capability"
-    
-    def test_capability_selection_no_capabilities(self):
-        """Test capability selection with no capabilities."""
-        from emery_agents.core.types import Agent
-        agent = Agent(id=123, name="Empty Agent", capabilities=[])
-        
-        service = AgentWorkerServiceImplementation("test_org")
-        instructions = TaskInstructions(instructions="Test task")
-        
-        selected = service.select_capability_for_instructions(agent, instructions)
-        assert selected == "general_task"
-    
-    def test_capability_selection_keyword_match(self, sample_agent):
-        """Test capability selection by keyword matching."""
-        service = AgentWorkerServiceImplementation("test_org")
-        instructions = TaskInstructions(instructions="Execute test_capability now")
-        
-        selected = service.select_capability_for_instructions(sample_agent, instructions)
-        assert selected == "test_capability"
-    
-    def test_capability_selection_tool_match(self, sample_agent):
-        """Test capability selection by tool matching."""
-        service = AgentWorkerServiceImplementation("test_org")
-        instructions = TaskInstructions(
-            instructions="Use tools",
-            tools=[sample_agent.capabilities[0].steps[0].tools[0]]
-        )
-        
-        selected = service.select_capability_for_instructions(sample_agent, instructions)
-        assert selected == "test_capability"
     
     @pytest.mark.asyncio
     async def test_get_worker_info(self):
