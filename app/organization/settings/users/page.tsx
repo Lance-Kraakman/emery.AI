@@ -1,10 +1,29 @@
 import { getOrganizationMembers, getPendingInvitations, inviteUser } from "@/app/actions/invitations";
+import { getSession } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default async function UserManagementPage() {
+  const session = await getSession();
+
+  if (!session?.user?.currentOrganizationId) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>No Organization Selected</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p>Please select an organization to manage users.</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            You can switch or create organizations using the switcher in the sidebar.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const members = await getOrganizationMembers();
   const pendingInvitations = await getPendingInvitations();
 

@@ -50,7 +50,7 @@ const settingsNavItems = [
   },
   {
     label: "Users & Permissions",
-    href: "/settings/users-and-permissions",
+    href: "/organization/settings/users",
     icon: Users,
   },
   {
@@ -109,19 +109,12 @@ export function EmerySidebar() {
       }`}
     >
       <div className="flex h-full max-h-screen flex-col gap-2">
-        <div
-          className={`flex h-16 items-center px-4 ${
-            isCollapsed ? "justify-center" : "justify-between"
-          }`}
-        >
-          {!isCollapsed && <EmeryOrganizationModal />}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={toggleSidebar}
-          >
-            {isCollapsed ? <Bot className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
+        <div className="flex h-16 items-center border-b px-4 justify-between">
+          <div className="flex items-center gap-2">
+            <EmeryOrganizationModal isCollapsed={isCollapsed} />
+          </div>
+          <Button variant="ghost" size="icon" onClick={toggleSidebar}>
+            <PanelLeft className="h-4 w-4" />
           </Button>
         </div>
         <ScrollArea className="flex-1 py-2">

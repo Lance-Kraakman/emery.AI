@@ -27,25 +27,12 @@ export default async function SetupPage() {
           <p className="text-gray-600 mt-2">
             {isFirstUser 
               ? "Let's set up your organization and create your admin account."
-              : "You need to be assigned to an organization and role to continue."
+              : "Let's get you set up with your first organization."
             }
           </p>
         </div>
 
-        {isFirstUser ? (
-          <SetupForm />
-        ) : (
-          <div className="text-center">
-            <p className="text-gray-600 mb-4">
-              Please contact your administrator to assign you to an organization and role.
-            </p>
-            <div className="bg-gray-50 p-4 rounded">
-              <p className="text-sm text-gray-500">
-                User: {session.user.name || session.user.email}
-              </p>
-            </div>
-          </div>
-        )}
+        <SetupForm />
       </div>
     </div>
   );

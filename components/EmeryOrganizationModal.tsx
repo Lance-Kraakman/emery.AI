@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Bot } from 'lucide-react'
 
-export function EmeryOrganizationModal() {
+export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean }) {
   const { data: session, update } = useSession()
   const [isOpen, setIsOpen] = React.useState(false)
   const [showCreateModal, setShowCreateModal] = React.useState(false)
@@ -71,13 +71,19 @@ export function EmeryOrganizationModal() {
     <>
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogTrigger asChild>
-          <Button variant="ghost" className="w-full justify-start h-12 px-4">
-            <Bot className="h-6 w-6 flex-shrink-0" />
-            <div className="flex flex-col items-start ml-2 min-w-0 flex-1">
-              <span className="truncate font-semibold text-sm">Emery.ai</span>
-              <span className="truncate text-xs text-muted-foreground">{currentOrg.name}</span>
-            </div>
-          </Button>
+          {isCollapsed ? (
+            <Button variant="ghost" size="icon">
+              <Bot className="h-6 w-6" />
+            </Button>
+          ) : (
+            <Button variant="ghost" className="w-full justify-start h-12 px-4">
+              <Bot className="h-6 w-6 flex-shrink-0" />
+              <div className="flex flex-col items-start ml-2 min-w-0 flex-1">
+                <span className="truncate font-semibold text-sm">Emery.ai</span>
+                <span className="truncate text-xs text-muted-foreground">{currentOrg.name}</span>
+              </div>
+            </Button>
+          )}
         </DialogTrigger>
         <DialogContent>
           <DialogHeader>

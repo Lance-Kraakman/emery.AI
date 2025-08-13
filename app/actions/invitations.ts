@@ -86,6 +86,11 @@ export async function acceptInvitation(token: string) {
     role: invitation.role,
   });
 
+  // Set the user's current organization to the one they just joined
+  await db.update(users)
+    .set({ currentOrganizationId: invitation.organizationId })
+    .where(eq(users.id, session.user.id));
+
   // Delete the invitation so it can't be used again
   await db.delete(invitations).where(eq(invitations.id, invitation.id));
 

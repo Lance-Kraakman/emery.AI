@@ -101,23 +101,48 @@ const authOptions = {
                   userRole: currentOrg.userOrg.role
                 } : null;
               }
+
+              // If no current organization is set, but the user has available organizations,
+              // set the first one as the current organization.
+              if (!session.user.currentOrganization && userOrgs.length > 0) {
+                const firstOrg = userOrgs[0];
+                session.user.currentOrganization = {
+                  ...firstOrg.organization,
+                  userRole: firstOrg.userOrg.role
+                };
+                session.user.currentOrganizationId = firstOrg.organization.id;
+
+                // Update the user record in the database
+                await db.update(users)
+                  .set({ currentOrganizationId: firstOrg.organization.id })
+                  .where(eq(users.id, user.id));
+              }
             } catch (orgError) {
               console.warn("Could not load user organizations:", orgError);
               session.user.availableOrganizations = [];
             }
           }
           
-          // Check if this is the first user (potential super admin)
-          if (!userRecord?.currentOrganizationId || !userRecord?.roleId || !session.user.availableOrganizations?.length) {
+          // Check if the user needs to go through the setup process.
+          const userHasNoOrg = !userRecord?.currentOrganizationId
+          const userHasNoRole = !userRecord?.roleId
+          const userHasNoOrgMembership = !session.user.availableOrganizations?.length
+          
+          if (userHasNoOrg || userHasNoRole || userHasNoOrgMembership) {
+            session.user.needsSetup = true
             try {
-              const userCount = await db.select().from(users);
-              session.user.isFirstUser = userCount.length === 1;
-              session.user.needsSetup = true;
+              const userCountResult = await db.select().from(users)
+              session.user.isFirstUser = userCountResult.length === 1
             } catch (countError) {
-              console.warn("Could not check user count in session callback:", countError);
-              session.user.isFirstUser = false;
-              session.user.needsSetup = true; // Assume setup needed if we can't check
+              console.warn(
+                "Could not check user count in session callback:",
+                countError,
+              )
+              session.user.isFirstUser = false
             }
+          } else {
+            session.user.needsSetup = false
+            session.user.isFirstUser = false
           }
         } catch (dbError) {
           console.error("Database error in session callback:", dbError);
