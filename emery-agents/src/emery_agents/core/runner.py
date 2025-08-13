@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 from .types import (
-    Agent, Task, StepExecution, AgentStep, Capability,
+    Agent, Task, StepExecution, StepConfig, CapabilityConfig,
     TaskStatus, ExecutionContext, StepType
 )
 from .context_manager import ExecutionContextManager
@@ -74,12 +74,12 @@ class AgentRunner:
         if not capability:
             # AIDEV-NOTE: Add test capability for infrastructure testing
             if capability_name in ['test_capability', 'test', 'ping', 'health_check']:
-                from .types import Capability, AgentStep, StepType
-                capability = Capability(
+                from .types import CapabilityConfig, StepConfig, StepType
+                capability = CapabilityConfig(
                     name=capability_name,
                     description=f"Test capability for infrastructure validation",
                     steps=[
-                        AgentStep(
+                        StepConfig(
                             id="test_step_1",
                             type=StepType.CODE_STEP,
                             instructions="Return success response with trigger data"
@@ -160,7 +160,7 @@ class AgentRunner:
     
     async def _execute_step(
         self, 
-        step: AgentStep, 
+        step: StepConfig, 
         step_context: Dict[str, Any],
         context_manager: ExecutionContextManager
     ) -> StepExecution:
@@ -259,10 +259,10 @@ class AgentRunner:
     
     def _apply_step_overrides(
         self, 
-        step: AgentStep, 
+        step: StepConfig, 
         overrides: Optional[List[Dict[str, Any]]], 
         step_index: int
-    ) -> AgentStep:
+    ) -> StepConfig:
         """Apply any step-level parameter overrides from the execution request."""
         if not overrides or step_index >= len(overrides):
             return step
@@ -270,7 +270,7 @@ class AgentRunner:
         override = overrides[step_index]
         
         # Create a copy of the step with overrides applied
-        return AgentStep(
+        return StepConfig(
             id=step.id,
             type=StepType(override.get('type', step.type.value)),
             instructions=override.get('instructions', step.instructions),
