@@ -1,198 +1,156 @@
-"""Test SmolAgents integration."""
+"""Test simplified hierarchical SmolAgents integration."""
 
 import pytest
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
-from emery_agents.integrations.smolagents import (
-    SmolAgentsOrchestrator, TaskExecutorAgent, CapabilityAgent, DefaultTaskExecutorAgent
-)
+from emery_agents.integrations.smolagents import SmolAgentsOrchestrator
 from emery_agents.core.types import StepType, TaskInstructions
 
 
-class TestTaskExecutorAgent:
-    """Test TaskExecutorAgent functionality."""
-    
-    def test_initialization(self):
-        """TaskExecutorAgent initializes correctly."""
-        executor = TaskExecutorAgent()
-        assert executor.manager_agent is None
-        assert isinstance(executor.capability_agents, dict)
-        assert executor.default_executor is None
-        assert isinstance(executor.tools_registry, dict)
-
-
-class TestCapabilityAgent:
-    """Test CapabilityAgent functionality."""
-    
-    def test_initialization(self, sample_capability):
-        """CapabilityAgent initializes with capability."""
-        agent = CapabilityAgent(sample_capability)
-        assert agent.capability == sample_capability
-        assert agent.agent is None
-        assert isinstance(agent.tools, list)
-        assert isinstance(agent.servers, list)
-    
-    @pytest.mark.smolagents
-    @pytest.mark.skipif(not os.getenv("HF_TOKEN"), reason="HF_TOKEN required")
-    def test_setup_agent_code_step(self, sample_capability):
-        """Setup agent for CODE_STEP capability."""
-        # Modify capability to have code step
-        sample_capability.steps[0].type = StepType.CODE_STEP
-        
-        agent = CapabilityAgent(sample_capability)
-        agent.setup_agent()
-        
-        assert agent.agent is not None
-    
-    @pytest.mark.smolagents
-    @pytest.mark.skipif(not os.getenv("HF_TOKEN"), reason="HF_TOKEN required") 
-    def test_setup_agent_tool_step(self, sample_capability):
-        """Setup agent for TOOL_STEP capability."""
-        # Modify capability to have tool step
-        sample_capability.steps[0].type = StepType.TOOL_STEP
-        
-        agent = CapabilityAgent(sample_capability)
-        agent.setup_agent()
-        
-        assert agent.agent is not None
-    
-    def test_setup_agent_no_token(self, sample_capability):
-        """Setup agent fails without HF_TOKEN."""
-        with patch.dict(os.environ, {}, clear=True):
-            agent = CapabilityAgent(sample_capability)
-            with pytest.raises(RuntimeError, match="HF_TOKEN"):
-                agent.setup_agent()
-    
-    @pytest.mark.smolagents
-    @pytest.mark.skipif(not os.getenv("HF_TOKEN"), reason="HF_TOKEN required")
-    @pytest.mark.asyncio
-    async def test_execute_capability(self, sample_capability):
-        """Execute capability agent."""
-        agent = CapabilityAgent(sample_capability)
-        
-        # Mock the agent execution
-        mock_agent = MagicMock()
-        mock_agent.run = Mock(return_value="Test result")
-        agent.agent = mock_agent
-        
-        result = await agent.execute("Test instructions", {"context": "data"})
-        
-        assert result["status"] == "completed"
-        assert result["capability_used"] == "test_capability"
-        assert "output" in result
-
-
-class TestDefaultTaskExecutorAgent:
-    """Test DefaultTaskExecutorAgent functionality."""
-    
-    def test_initialization(self):
-        """DefaultTaskExecutorAgent initializes correctly."""
-        executor = DefaultTaskExecutorAgent()
-        assert executor.agent is None
-    
-    @pytest.mark.smolagents
-    @pytest.mark.skipif(not os.getenv("HF_TOKEN"), reason="HF_TOKEN required")
-    def test_setup_agent(self):
-        """Setup default executor agent."""
-        executor = DefaultTaskExecutorAgent()
-        executor.setup_agent()
-        
-        assert executor.agent is not None
-    
-    @pytest.mark.smolagents  
-    @pytest.mark.skipif(not os.getenv("HF_TOKEN"), reason="HF_TOKEN required")
-    @pytest.mark.asyncio
-    async def test_execute_default(self):
-        """Execute with default agent."""
-        executor = DefaultTaskExecutorAgent()
-        
-        # Mock the agent
-        mock_agent = MagicMock()
-        mock_agent.run = Mock(return_value="Default result")
-        executor.agent = mock_agent
-        
-        result = await executor.execute("Test instructions", {"context": "data"})
-        
-        assert result["status"] == "completed"
-        assert result["capability_used"] == "default_executor"
-
-
 class TestSmolAgentsOrchestrator:
-    """Test SmolAgentsOrchestrator functionality."""
+    """Test simplified SmolAgentsOrchestrator."""
     
     def test_initialization(self):
         """SmolAgentsOrchestrator initializes correctly."""
         orchestrator = SmolAgentsOrchestrator()
-        assert isinstance(orchestrator.task_executor, TaskExecutorAgent)
-        assert isinstance(orchestrator.default_executor, DefaultTaskExecutorAgent)
-        assert isinstance(orchestrator.tools_registry, dict)
+        assert orchestrator.agent is None
     
     def test_setup_agent_orchestrator(self, sample_agent):
-        """Setup agent orchestrator with capabilities."""
+        """Setup agent hierarchy that mirrors our system structure."""
         orchestrator = SmolAgentsOrchestrator()
-        orchestrator.setup_agent_orchestrator(sample_agent)
         
-        assert len(orchestrator.task_executor.capability_agents) == 1
-        assert "test_capability" in orchestrator.task_executor.capability_agents
-        assert orchestrator.task_executor.default_executor is not None
+        with patch.dict(os.environ, {"HF_TOKEN": "test-token"}, clear=True):
+            orchestrator.setup_agent_orchestrator(sample_agent)
+            
+            # Verify main agent created
+            assert orchestrator.agent is not None
+            
+            # Check managed agents (capabilities)
+            managed_agents = orchestrator.agent.managed_agents
+            assert len(managed_agents) == 1
+            
+            # Check capability agent structure (managed_agents might be dict or list)
+            if isinstance(managed_agents, dict):
+                capability_agent = list(managed_agents.values())[0]
+            else:
+                capability_agent = managed_agents[0]
+            assert hasattr(capability_agent, 'name')
+            assert hasattr(capability_agent, 'managed_agents')  # Should have step agents
+            
+            # Check step agents
+            step_agents = capability_agent.managed_agents
+            assert len(step_agents) == 1  # One step in sample capability
+            
+            if isinstance(step_agents, dict):
+                step_agent = list(step_agents.values())[0]
+            else:
+                step_agent = step_agents[0]
+            assert hasattr(step_agent, 'name')
+            assert hasattr(step_agent, 'description')
     
-    def test_setup_empty_capabilities(self):
-        """Setup with agent having no capabilities."""
-        from emery_agents.core.types import Agent
-        agent = Agent(id=123, name="Empty Agent", capabilities=[])
-        
+    def test_setup_no_token(self, sample_agent):
+        """Setup fails without HF_TOKEN."""
         orchestrator = SmolAgentsOrchestrator()
-        orchestrator.setup_agent_orchestrator(agent)
         
-        assert len(orchestrator.task_executor.capability_agents) == 0
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(EnvironmentError, match="HF_TOKEN"):
+                orchestrator.setup_agent_orchestrator(sample_agent)
     
+    def test_create_step_agent_code_step(self, sample_capability):
+        """Create step agent for CODE_STEP."""
+        orchestrator = SmolAgentsOrchestrator()
+        
+        # Modify step to be CODE_STEP
+        sample_capability.steps[0].type = StepType.CODE_STEP
+        
+        step_agent = orchestrator._create_step_agent(sample_capability.steps[0], "test-token")
+        assert step_agent is not None
+        # Should be CodeAgent for CODE_STEP
+    
+    def test_create_step_agent_tool_step(self, sample_capability):
+        """Create step agent for TOOL_STEP."""
+        orchestrator = SmolAgentsOrchestrator()
+        
+        # Modify step to be TOOL_STEP  
+        sample_capability.steps[0].type = StepType.TOOL_STEP
+        
+        step_agent = orchestrator._create_step_agent(sample_capability.steps[0], "test-token")
+        assert step_agent is not None
+        # Should be ToolCallingAgent for TOOL_STEP
+    
+    def test_load_tool_python_repl(self):
+        """Test loading python_repl tool."""
+        orchestrator = SmolAgentsOrchestrator()
+        
+        mock_tool_config = Mock()
+        mock_tool_config.name = "python_repl"
+        
+        with patch('smolagents.PythonInterpreterTool') as mock_tool_class:
+            mock_tool_instance = Mock()
+            mock_tool_class.return_value = mock_tool_instance
+            
+            tool = orchestrator._load_tool(mock_tool_config)
+            
+            assert tool == mock_tool_instance
+            mock_tool_class.assert_called_once()
+    
+    def test_load_tool_unknown(self):
+        """Test loading unknown tool returns None."""
+        orchestrator = SmolAgentsOrchestrator()
+        
+        mock_tool_config = Mock()
+        mock_tool_config.name = "unknown_tool"
+        
+        tool = orchestrator._load_tool(mock_tool_config)
+        assert tool is None
+    
+    @pytest.mark.asyncio
+    async def test_execute_not_setup(self):
+        """Execute fails when agent not set up."""
+        orchestrator = SmolAgentsOrchestrator()
+        instructions = TaskInstructions(instructions="Test task")
+        
+        with pytest.raises(RuntimeError, match="Agent not set up"):
+            await orchestrator.execute_with_orchestrator(instructions, {})
     
     @pytest.mark.smolagents
     @pytest.mark.skipif(not os.getenv("HF_TOKEN"), reason="HF_TOKEN required")
-    def test_legacy_get_agent(self):
-        """Test legacy _get_agent method."""
+    @pytest.mark.asyncio
+    async def test_execute_success(self, sample_agent):
+        """Execute with hierarchical agent system."""
         orchestrator = SmolAgentsOrchestrator()
+        orchestrator.setup_agent_orchestrator(sample_agent)
         
-        code_agent = orchestrator._get_agent(StepType.CODE_STEP)
-        assert code_agent is not None
+        # Mock the main agent
+        mock_result = "Hierarchical execution result"
+        async def mock_run(instructions):
+            return mock_result
+        orchestrator.agent.run = mock_run
         
-        tool_agent = orchestrator._get_agent(StepType.TOOL_STEP)  
-        assert tool_agent is not None
-    
-    def test_tool_registry(self):
-        """Test tool registry functionality."""
-        orchestrator = SmolAgentsOrchestrator()
+        instructions = TaskInstructions(instructions="Test hierarchical execution")
+        result = await orchestrator.execute_with_orchestrator(instructions, {"context": "test"})
         
-        # Register tool
-        mock_tool = Mock()
-        orchestrator.register_tool("test_tool", mock_tool)
-        
-        # Verify registration
-        assert "test_tool" in orchestrator.tools_registry
-        assert orchestrator.tools_registry["test_tool"] == mock_tool
-        
-        # List tools
-        tools = orchestrator.list_available_tools()
-        assert "test_tool" in tools
+        assert result["status"] == "success"
+        assert result["orchestrator"] == "smolagents_hierarchy"
+        assert result["result"]["output"] == mock_result
     
     @pytest.mark.asyncio
-    async def test_load_tool_found(self):
-        """Test loading registered tool."""
+    async def test_execute_failure(self, sample_agent):
+        """Execute handles failures."""
         orchestrator = SmolAgentsOrchestrator()
         
-        # Register tool
-        mock_tool = Mock()
-        orchestrator.register_tool("existing_tool", mock_tool)
-        
-        # Load tool
-        loaded_tool = await orchestrator._load_tool("existing_tool")
-        assert loaded_tool == mock_tool
-    
-    @pytest.mark.asyncio
-    async def test_load_tool_not_found(self):
-        """Test loading non-existent tool."""
-        orchestrator = SmolAgentsOrchestrator()
-        
-        loaded_tool = await orchestrator._load_tool("nonexistent_tool")
-        assert loaded_tool is None
+        with patch.dict(os.environ, {"HF_TOKEN": "test-token"}, clear=True):
+            orchestrator.setup_agent_orchestrator(sample_agent)
+            
+            # Mock failure
+            async def mock_run_error(instructions):
+                raise Exception("Test error")
+            orchestrator.agent.run = mock_run_error
+            
+            instructions = TaskInstructions(instructions="Test failure")
+            result = await orchestrator.execute_with_orchestrator(instructions, {"context": "test"})
+            
+            assert result["status"] == "failed"
+            assert "Test error" in result["error"]
+            assert result["orchestrator"] == "smolagents_hierarchy"
