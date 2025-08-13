@@ -111,14 +111,14 @@ use `uv` instead of `pip`
 #### Python Code Quality Standards
 
 **Imports:**
-- All imports must be at the top of the file - NO inline imports
+- All imports must be at the top of the file - NO inline imports  
 - Group imports: stdlib, third-party, local imports
-- Use graceful fallback for optional dependencies:
+- Fail fast on missing dependencies - don't use graceful fallbacks unless truly optional
+- If dependency is required, import directly and let ImportError fail the module load
+- Example:
   ```python
-  try:
-      from optional_library import SomeClass
-  except ImportError:
-      SomeClass = None
+  from required_library import RequiredClass
+  from dotenv import load_dotenv  # Will fail if not installed - good!
   ```
 
 **Type Hints:**
