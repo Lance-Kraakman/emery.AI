@@ -72,7 +72,10 @@ const TEST_AGENTS = [
             id: 'health_step',
             type: 'TOOL_STEP',
             instructions: 'Check system health and return status',
-            tools: ['gmail', 'slack'],
+            tools: [
+              { name: 'gmail' },
+              { name: 'slack' }
+            ],
             servers: []
           }
         ]
@@ -108,7 +111,9 @@ const TEST_AGENTS = [
             id: 'send_via_gmail',
             type: 'TOOL_STEP',
             instructions: 'Send email via Gmail API',
-            tools: ['gmail'],
+            tools: [
+              { name: 'gmail' }
+            ],
             servers: []
           }
         ]

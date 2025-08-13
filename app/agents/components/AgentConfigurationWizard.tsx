@@ -6,16 +6,11 @@ import { createAgent, updateAgent } from '@/app/actions/agents';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { FormField } from '@/components/ui/form-field';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, Check, ExternalLink, Zap, Code, Database, MessageSquare, Globe, FileText, Brain, Settings } from 'lucide-react';
-import Link from 'next/link';
+import { AlertCircle, Code, Database, MessageSquare, Globe, FileText, Brain, Settings } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { Capability } from './CapabilityEditor';
 import ScheduleManager from './ScheduleManager';
@@ -29,34 +24,15 @@ const generateUniqueId = (prefix: string) => {
 import {
   PREDEFINED_TOOLS,
   PREDEFINED_TRIGGERS,
-  getToolsByCategory,
-  getToolCategories,
   type ToolDefinition,
-  type TriggerDefinition
 } from '@/lib/agents/tools-registry';
 
 // AIDEV-NOTE: Enhanced agent configuration wizard with OAuth-aware tool selection
-
 interface AgentConfigurationWizardProps {
   onClose: () => void;
   agent?: Agent | null;
   onSuccess?: () => void;
 }
-
-
-const getCategoryIcon = (category: string) => {
-  const icons = {
-    data: Database,
-    communication: MessageSquare,
-    code: Code,
-    analysis: Brain,
-    web: Globe,
-    file: FileText,
-    ai: Brain,
-    system: Settings
-  };
-  return icons[category as keyof typeof icons] || Settings;
-};
 
 export default function AgentConfigurationWizard({ 
   onClose, 
@@ -148,14 +124,6 @@ export default function AgentConfigurationWizard({
   }, [agent]);
 
 
-  const handleToolToggle = (toolName: string) => {
-    setFormData(prev => ({
-      ...prev,
-      selectedTools: prev.selectedTools.includes(toolName)
-        ? prev.selectedTools.filter(t => t !== toolName)
-        : [...prev.selectedTools, toolName]
-    }));
-  };
 
   const handleSubmit = async () => {
     try {
@@ -187,7 +155,7 @@ export default function AgentConfigurationWizard({
 
       // Create trigger config
       const trigger = {
-        type: formData.triggerType as 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT',
+        type: formData.triggerType as 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT' | 'CALENDAR',
         ...formData.triggerConfig,
         // Include task definition for non-manual triggers
         ...(formData.triggerType !== 'MANUAL' && {

@@ -89,7 +89,7 @@ export interface ServerConfig {
 }
 
 export interface TriggerConfig {
-  type: 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT';
+  type: 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT' | 'CALENDAR';
   cron?: string;
   webhook_url?: string;
   webhook_secret?: string;
@@ -125,20 +125,6 @@ export interface Task {
   completedAt?: Date;
   createdBy?: string;
   createdAt: Date;
-}
-
-export interface StepExecution {
-  id: string;
-  taskId: string;
-  stepId: string;
-  stepType: 'code_step' | 'tool_step';
-  instructions?: string;
-  inputData?: Record<string, any>;
-  outputData?: Record<string, any>;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
-  errorMessage?: string;
-  startedAt?: Date;
-  completedAt?: Date;
 }
 
 export interface CreateTaskData {

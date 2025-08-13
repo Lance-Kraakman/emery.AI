@@ -5,7 +5,7 @@ import { tasks, stepExecutions, agents } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
-import type { ActionResult, CreateTaskData, Task, StepExecution } from "./types";
+import type { ActionResult, CreateTaskData } from "./types";
 
 export async function createTask(data: CreateTaskData): Promise<ActionResult> {
   try {

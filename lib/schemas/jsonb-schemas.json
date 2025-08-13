@@ -1,0 +1,238 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Emery Database JSONB Schemas",
+  "description": "JSON schemas for JSONB fields stored in PostgreSQL database",
+  
+  "definitions": {
+    "ToolConfig": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the tool (e.g., 'gmail', 'slack')"
+        },
+        "version": {
+          "type": "string",
+          "description": "Optional version specification"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Tool-specific configuration parameters"
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+
+    "ServerConfig": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the server/service (e.g., 'pipedream', 'filesystem')"
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "Optional endpoint URL for the server"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Server-specific configuration parameters"
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+
+    "StepConfig": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for this step within the capability"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["CODE_STEP", "TOOL_STEP"],
+          "description": "Type of step execution"
+        },
+        "instructions": {
+          "type": "string",
+          "description": "Instructions for what this step should accomplish"
+        },
+        "model": {
+          "type": "string",
+          "description": "Optional AI model to use for this specific step"
+        },
+        "tools": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ToolConfig" },
+          "description": "Tools available to this step"
+        },
+        "servers": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ServerConfig" },
+          "description": "Servers/services available to this step"
+        }
+      },
+      "required": ["id", "type", "instructions"],
+      "additionalProperties": false
+    },
+
+    "CapabilityConfig": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the capability (used for execution)"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this capability does"
+        },
+        "steps": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/StepConfig" },
+          "minItems": 1,
+          "description": "Ordered list of steps to execute for this capability"
+        }
+      },
+      "required": ["name", "description", "steps"],
+      "additionalProperties": false
+    },
+
+    "TriggerConfig": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["MANUAL", "CRON", "WEBHOOK", "DATABASE_EVENT", "CALENDAR"],
+          "description": "Type of trigger for agent execution"
+        },
+        "cron": {
+          "type": "string",
+          "description": "Cron expression for CRON triggers"
+        },
+        "webhook_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL for webhook triggers"
+        },
+        "webhook_secret": {
+          "type": "string",
+          "description": "Secret for webhook signature verification"
+        },
+        "table_id": {
+          "type": "integer",
+          "description": "Table ID for DATABASE_EVENT triggers"
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    }
+  },
+
+  "schemas": {
+    "agent_tools": {
+      "$id": "#/schemas/agent_tools",
+      "description": "Schema for agents.tools JSONB field",
+      "type": "array",
+      "items": { "$ref": "#/definitions/ToolConfig" }
+    },
+
+    "agent_servers": {
+      "$id": "#/schemas/agent_servers", 
+      "description": "Schema for agents.servers JSONB field",
+      "type": "array",
+      "items": { "$ref": "#/definitions/ServerConfig" }
+    },
+
+    "agent_capabilities": {
+      "$id": "#/schemas/agent_capabilities",
+      "description": "Schema for agents.capabilities JSONB field", 
+      "type": "array",
+      "items": { "$ref": "#/definitions/CapabilityConfig" }
+    },
+
+    "agent_trigger": {
+      "$id": "#/schemas/agent_trigger",
+      "description": "Schema for agents.trigger JSONB field",
+      "$ref": "#/definitions/TriggerConfig"
+    },
+
+    "task_payload": {
+      "$id": "#/schemas/task_payload",
+      "description": "Schema for tasks.payload JSONB field",
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Input data for task execution - flexible structure"
+    },
+
+    "task_result": {
+      "$id": "#/schemas/task_result", 
+      "description": "Schema for tasks.result JSONB field",
+      "anyOf": [
+        { "type": "object", "additionalProperties": true },
+        { "type": "array" },
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" }
+      ],
+      "description": "Output data from task execution - flexible structure"
+    },
+
+    "step_input_data": {
+      "$id": "#/schemas/step_input_data",
+      "description": "Schema for step_executions.input_data JSONB field",
+      "type": "object", 
+      "additionalProperties": true,
+      "description": "Input data for step execution"
+    },
+
+    "step_output_data": {
+      "$id": "#/schemas/step_output_data",
+      "description": "Schema for step_executions.output_data JSONB field", 
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Output data from step execution"
+    },
+
+    "organization_view_config": {
+      "$id": "#/schemas/organization_view_config",
+      "description": "Schema for organizations.view_config JSONB field",
+      "type": "object",
+      "additionalProperties": true,
+      "description": "UI view configuration for organization dashboard"
+    },
+
+    "rag_domain_types": {
+      "$id": "#/schemas/rag_domain_types",
+      "description": "Schema for rag_indexes.domain_types JSONB field",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["tables", "files", "agents", "workflows"]
+      },
+      "description": "Types of data sources to include in RAG index"
+    },
+
+    "rag_domain_filters": {
+      "$id": "#/schemas/rag_domain_filters",
+      "description": "Schema for rag_indexes.domain_filters JSONB field", 
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Additional filtering criteria for RAG indexing"
+    },
+
+    "rag_document_metadata": {
+      "$id": "#/schemas/rag_document_metadata",
+      "description": "Schema for rag_documents.metadata JSONB field",
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Additional context metadata for RAG documents"
+    }
+  }
+}

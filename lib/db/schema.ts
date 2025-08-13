@@ -59,6 +59,10 @@ export const organizations = pgTable("organizations", {
   sharedServers: text("shared_servers").array(),
   databaseId: text("database_id"),
   viewConfig: jsonb("view_config"),
+  plan: text("plan").default("free"), // e.g., 'free', 'pro', 'enterprise'
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeSubscriptionStatus: text("stripe_subscription_status"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -95,6 +99,17 @@ export const userOrganizations = pgTable("user_organizations", {
   role: text("role").notNull().default("member"), // owner, admin, member
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const invitations = pgTable("invitations", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  invitedBy: uuid("invited_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  role: text("role").notNull().default("member"), // owner, admin, member
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const teams = pgTable("teams", {

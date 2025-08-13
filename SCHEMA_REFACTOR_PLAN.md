@@ -145,8 +145,6 @@ interface Agent {
   role?: string;
   description?: string; 
   persona?: string;
-  // model removed - now per-step
-  // goals removed - not needed
   tools?: ToolConfig[];
   servers?: ServerConfig[];
   capabilities?: Capability[];
