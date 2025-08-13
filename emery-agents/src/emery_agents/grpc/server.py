@@ -9,6 +9,12 @@ import logging
 import time
 from typing import AsyncIterator, Dict, Any
 
+# Constants
+MAX_LOG_PREVIEW_LENGTH = 100
+SHORT_LOG_PREVIEW_LENGTH = 50
+DEFAULT_MAX_CONCURRENT_TASKS = 10
+PROGRESS_INITIAL = 10.0
+
 import grpc
 from grpc import aio
 
@@ -21,7 +27,7 @@ from .proto_mappers import parse_task_request, create_task_progress
 
 # Import core execution system
 from ..core.runner import AgentRunner
-from ..core.types import TaskStatus, Agent, TaskInstructions
+from ..core.types import TaskStatus, Agent, TaskInstructions, OrchestratorResult
 from ..integrations.emery_client import EmeryClientIntegration
 from ..integrations.smolagents import SmolAgentsOrchestrator
 from ..integrations.mcp_servers import MCPServerIntegration
@@ -39,7 +45,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
     environment variables, eliminating configuration anti-patterns.
     """
     
-    def __init__(self, organization_id: str, max_concurrent_tasks: int = 10):
+    def __init__(self, organization_id: str, max_concurrent_tasks: int = DEFAULT_MAX_CONCURRENT_TASKS):
         self.organization_id = organization_id
         self.max_concurrent_tasks = max_concurrent_tasks
         self.worker_id = f"worker_{organization_id}_{int(time.time())}"
@@ -57,7 +63,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         instructions = instruction_config.instructions.lower()
         capabilities = agent.capabilities or []
         
-        logger.info(f"[CAPABILITY-ROUTING] Selecting capability for instructions: '{instruction_config.instructions[:50]}...'")
+        logger.info(f"[CAPABILITY-ROUTING] Selecting capability for instructions: '{instruction_config.instructions[:SHORT_LOG_PREVIEW_LENGTH]}...'")
         logger.info(f"[CAPABILITY-ROUTING] Available capabilities: {[cap.name for cap in capabilities]}")
         
         if not capabilities:
@@ -147,7 +153,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         elif instruction_config:
             # Instruction-based execution with smolagents orchestrator
             logger.info(f"[TASK-START] {task_id}: Agent {agent.name} executing instruction-based task (smolagents orchestrator)")
-            logger.info(f"[TASK-INSTRUCTIONS] {task_id}: '{instruction_config.instructions[:100]}...'")
+            logger.info(f"[TASK-INSTRUCTIONS] {task_id}: '{instruction_config.instructions[:MAX_LOG_PREVIEW_LENGTH]}...'")
             execution_mode = "smolagents_orchestrator"
         else:
             raise ValueError("Either capability_name or instruction_config must be provided")
@@ -188,7 +194,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                     step_id="orchestrator_init",
                     step_type="INIT",
                     output_data={"message": "Smolagents orchestrator initialized"},
-                    progress_percent=10.0
+                    progress_percent=PROGRESS_INITIAL
                 )
                 
                 # Execute using orchestrator
@@ -198,17 +204,18 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                 )
                 
                 # Convert orchestrator result to expected format
-                if task_result.get("status") == "success":
+                # task_result is now properly typed as OrchestratorResult
+                if task_result["status"] == "success":
                     final_result = {
-                        "capability_name": task_result.get("selected_capability") or "orchestrator",
-                        "result": task_result.get("result") or {},
+                        "capability_name": task_result.get("selected_capability", "orchestrator"),
+                        "result": task_result.get("result", {}),
                         "orchestrator_used": True,
                         "status": "completed"
                     }
                     final_status = TaskStatus.COMPLETED
                 else:
                     final_result = {
-                        "error": task_result.get("error") or "Unknown orchestrator error",
+                        "error": task_result.get("error", "Unknown orchestrator error"),
                         "orchestrator_used": True,
                         "status": "failed"
                     }
@@ -234,7 +241,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                     step_id="runner_init", 
                     step_type="INIT",
                     output_data={"message": "Agent runner initialized"},
-                    progress_percent=10.0
+                    progress_percent=PROGRESS_INITIAL
                 )
                 
                 # Execute the capability using the agent runner
