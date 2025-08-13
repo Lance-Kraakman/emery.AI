@@ -200,15 +200,15 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                 # Convert orchestrator result to expected format
                 if task_result.get("status") == "success":
                     final_result = {
-                        "capability_name": task_result.get("selected_capability", "orchestrator"),
-                        "result": task_result.get("result", {}),
+                        "capability_name": task_result.get("selected_capability") or "orchestrator",
+                        "result": task_result.get("result") or {},
                         "orchestrator_used": True,
                         "status": "completed"
                     }
                     final_status = TaskStatus.COMPLETED
                 else:
                     final_result = {
-                        "error": task_result.get("error", "Unknown orchestrator error"),
+                        "error": task_result.get("error") or "Unknown orchestrator error",
                         "orchestrator_used": True,
                         "status": "failed"
                     }
@@ -251,7 +251,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             
             # Progress updates for each step execution (only for legacy mode)
             # AIDEV-NOTE: The runner executes steps internally, we report final results
-            if execution_mode == "direct_capability" and hasattr(task_result, 'step_executions') and task_result.step_executions:
+            if execution_mode == "direct_capability" and getattr(task_result, 'step_executions', None):
                 for i, step_exec in enumerate(task_result.step_executions):
                     step_count = i + 1
                     progress_percent = (step_count / len(task_result.step_executions)) * 80 + 10  # 10-90%
@@ -265,7 +265,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                         task_id=task_id,
                         status=step_status,
                         step_id=step_exec.step_id,
-                        step_type=step_exec.step_type.value if hasattr(step_exec.step_type, 'value') else str(step_exec.step_type),
+                        step_type=getattr(step_exec.step_type, 'value', str(step_exec.step_type)),
                         output_data=step_exec.output_data,
                         error_message=step_exec.error_message or '',
                         progress_percent=progress_percent

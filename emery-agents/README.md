@@ -1,23 +1,27 @@
 # Emery Agents
 
-Agent execution system for Emery with smolagents and MCP integration.
+Distributed agent execution system with gRPC communication and multi-step workflow orchestration.
 
-## Overview
+## Architecture
 
-Emery Agents provides a robust multi-step agent workflow execution system that integrates with:
+- **Core**: Type definitions, execution orchestration, context management
+- **gRPC**: Protocol buffers communication for distributed workers
+- **Integrations**: SmolAgents AI models, MCP servers, Emery client
+- **Utils**: Templated prompts and utilities
 
-- **smolagents**: AI agent capabilities (CodeAgent, ToolCallingAgent)
-- **MCP Servers**: External service integration via Pipedream Connect
-- **Emery API**: Seamless integration with the main Emery application
+## Key Components
 
-## Features
+### AgentRunner
+Orchestrates multi-step workflows with proper state management. Executes capabilities by routing steps to appropriate engines (SmolAgents, MCP).
 
-- 🔄 **Multi-step Workflows**: Execute complex agent workflows with multiple steps
-- 🤖 **AI Agent Types**: Support for CodeAgent and ToolCallingAgent via smolagents
-- 🌐 **OAuth Integration**: Secure external service calls via Emery's Pipedream Connect
-- 📊 **Execution Tracking**: Detailed tracking of execution progress and results
-- 🛠️ **Flexible Tools**: Dynamic tool loading and configuration
-- 📨 **Step Dependencies**: Context passing between workflow steps
+### SmolAgentsOrchestrator  
+Manages AI agent hierarchy with TaskExecutorAgent → CapabilityAgents → DefaultTaskExecutorAgent routing.
+
+### gRPC Server
+Production server receiving complete agent configuration via protocol buffers, eliminating environment variable dependencies.
+
+### ExecutionContextManager
+Provides persistent context between agent steps using temporary working directories with JSON state files.
 
 ## Installation
 
@@ -165,12 +169,39 @@ servers=["gmail", "slack", "github"]
 
 ## Development
 
-### Running Tests
+### Testing
 
+#### Quick Tests
 ```bash
-cd emery-agents
-uv run pytest tests/
+# Smoke tests without external dependencies
+uv run quick_test.py
 ```
+
+#### Comprehensive Tests
+```bash
+# All tests with coverage
+uv run run_tests.py all --coverage
+
+# Unit tests only
+uv run run_tests.py unit --verbose
+
+# Integration tests
+uv run run_tests.py integration
+
+# SmolAgents tests (requires HF_TOKEN)
+export HF_TOKEN="your_token"
+uv run run_tests.py smolagents
+
+# gRPC tests
+uv run run_tests.py grpc
+```
+
+#### Test Structure
+- `tests/test_types.py` - Type definitions validation
+- `tests/test_runner.py` - Core orchestrator functionality
+- `tests/test_smolagents.py` - SmolAgents integration
+- `tests/test_grpc.py` - gRPC server tests
+- `tests/test_integration.py` - End-to-end workflows
 
 ### Code Quality
 

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from .types import Task, ExecutionContext, Agent
+from .types import Task, ExecutionContext, Agent, CapabilityConfig
 
 logger = logging.getLogger(__name__)
 
@@ -28,16 +28,17 @@ class ExecutionContextManager:
     - execution_log.json: Execution progress log
     """
     
-    def __init__(self, task: Task, agent: Agent):
+    def __init__(self, task: Task, agent: Agent, trigger_data: Dict[str, Any] = None):
         self.task = task
         self.agent = agent
+        self.trigger_data = trigger_data or {}
         # Create execution context
-        from .types import CapabilityConfig  # Avoid circular import
         capability = None
-        for cap in agent.capabilities:
-            if cap.name == task.capabilityName:
-                capability = cap
-                break
+        if agent.capabilities:
+            for cap in agent.capabilities:
+                if cap.name == task.capabilityName:
+                    capability = cap
+                    break
         self.context = ExecutionContext(
             agent=agent,
             task=task,
@@ -74,7 +75,7 @@ class ExecutionContextManager:
             "agent_id": self.agent.id,
             "capability_name": self.task.capabilityName,
             "started_at": self.task.startedAt.isoformat() if self.task.startedAt else None,
-            "variables": self.task.payload.copy(),
+            "variables": self.trigger_data.copy(),
             "step_outputs": {},
             "current_step": None,
             "completed_steps": []
@@ -107,7 +108,7 @@ class ExecutionContextManager:
             with open(self.context_file, 'r') as f:
                 context = json.load(f)
             
-            logger.debug(f"Context loaded: {len(context.get('variables', {}))} variables")
+            logger.debug(f"Context loaded: {len(context.get('variables') or {})} variables")
             return context
             
         except FileNotFoundError:
@@ -178,7 +179,7 @@ class ExecutionContextManager:
         # Prepare context for smolagents
         smolagents_context = {
             # Current variables (includes previous step outputs)
-            **context.get("variables", {}),
+            **(context.get("variables") or {}),
             
             # Execution metadata
             "execution_id": self.task.id,
@@ -187,10 +188,10 @@ class ExecutionContextManager:
             "current_step": step_id,
             
             # Previous step outputs (if agents need specific access)
-            "previous_steps": context.get("step_outputs", {}),
+            "previous_steps": context.get("step_outputs") or {},
             
             # Completed steps list
-            "completed_steps": context.get("completed_steps", [])
+            "completed_steps": context.get("completed_steps") or []
         }
         
         logger.debug(f"Context prepared for step {step_id}: {len(smolagents_context)} items")
@@ -199,7 +200,7 @@ class ExecutionContextManager:
     def mark_step_completed(self, step_id: str) -> None:
         """Mark a step as completed in the context."""
         context = self.get_context()
-        completed_steps = context.get("completed_steps", [])
+        completed_steps = context.get("completed_steps") or []
         
         if step_id not in completed_steps:
             completed_steps.append(step_id)

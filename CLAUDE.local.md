@@ -74,6 +74,56 @@ Do not write backwards-compatible software unless specified
 
 use `uv` instead of `pip`
 
+#### Python Code Quality Standards
+
+**Imports:**
+- All imports must be at the top of the file - NO inline imports
+- Group imports: stdlib, third-party, local imports
+- Use graceful fallback for optional dependencies:
+  ```python
+  try:
+      from optional_library import SomeClass
+  except ImportError:
+      SomeClass = None
+  ```
+
+**Type Hints:**
+- Prefer TypedDict over Dict[str, Any] for structured data
+- Use Union types over generic Any when possible
+- Create domain-specific type aliases for better clarity
+- Example:
+  ```python
+  from typing import TypedDict
+  
+  class ExecutionResult(TypedDict, total=False):
+      status: str
+      result: Optional[Any]
+      error: Optional[str]
+  ```
+
+**Error Handling:**
+- Avoid over-defensive patterns like excessive `.get(key, default)` usage
+- Use `obj.get(key) or default` instead of `obj.get(key, default)` for non-None defaults
+- Replace `hasattr(obj, 'attr')` with `getattr(obj, 'attr', None)` where appropriate
+- Use proper exception handling rather than defensive programming
+
+**Function Design:**
+- Keep functions under 50 lines when possible
+- Extract complex logic into helper methods
+- Use descriptive parameter names and return types
+- Single responsibility principle - one function, one purpose
+
+**Documentation:**
+- Use AIDEV-NOTE, AIDEV-TODO, AIDEV-QUESTION comments for searchable inline docs
+- Write concise docstrings focusing on purpose, not implementation
+- Document complex business logic and architectural decisions
+
+**Testing:**
+- Focus on integration testing over unit testing with excessive mocking
+- Test actual behavior, not implementation details
+- Use `uv run pytest` for all test execution
+- Organize tests by functionality, not by file structure
+
 ### node / typescript
 
 use `pnpm` instead of `npm`

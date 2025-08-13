@@ -1,0 +1,104 @@
+[
+  {
+    "name": "code_generation",
+    "description": "Generate clean, efficient code in multiple programming languages",
+    "steps": [
+      {
+        "id": "analyze_requirements",
+        "type": "CODE_STEP",
+        "instructions": "Analyze the requirements and plan the code structure",
+        "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+      },
+      {
+        "id": "generate_code",
+        "type": "CODE_STEP", 
+        "instructions": "Generate the actual code implementation",
+        "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+      },
+      {
+        "id": "test_code",
+        "type": "CODE_STEP",
+        "instructions": "Create comprehensive tests for the generated code",
+        "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+      }
+    ]
+  },
+  {
+    "name": "data_processing",
+    "description": "Process and transform data from various sources",
+    "steps": [
+      {
+        "id": "validate_input",
+        "type": "TOOL_STEP",
+        "instructions": "Validate and clean input data",
+        "tools": [{"name": "data_validator"}]
+      },
+      {
+        "id": "transform_data",
+        "type": "CODE_STEP",
+        "instructions": "Apply necessary transformations to the data",
+        "model": "Qwen/Qwen2.5-72B-Instruct"
+      },
+      {
+        "id": "output_results",
+        "type": "TOOL_STEP",
+        "instructions": "Export processed data to specified format",
+        "tools": [{"name": "data_exporter"}]
+      }
+    ]
+  },
+  {
+    "name": "api_integration",
+    "description": "Integrate with external APIs and services",
+    "steps": [
+      {
+        "id": "authenticate",
+        "type": "TOOL_STEP",
+        "instructions": "Handle API authentication and token management",
+        "servers": [{"name": "oauth_server"}]
+      },
+      {
+        "id": "make_requests",
+        "type": "TOOL_STEP",
+        "instructions": "Make API requests and handle responses",
+        "tools": [{"name": "http_client"}]
+      },
+      {
+        "id": "process_responses",
+        "type": "CODE_STEP",
+        "instructions": "Process and format API responses",
+        "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
+      }
+    ]
+  },
+  {
+    "name": "content_creation",
+    "description": "Create various types of content including text, documentation, and reports",
+    "steps": [
+      {
+        "id": "research_topic",
+        "type": "TOOL_STEP",
+        "instructions": "Research the topic and gather relevant information",
+        "tools": [{"name": "web_search"}, {"name": "knowledge_base"}]
+      },
+      {
+        "id": "structure_content",
+        "type": "CODE_STEP",
+        "instructions": "Structure and organize the content logically",
+        "model": "Qwen/Qwen2.5-72B-Instruct"
+      },
+      {
+        "id": "write_content",
+        "type": "CODE_STEP",
+        "instructions": "Write the final content with proper formatting",
+        "model": "Qwen/Qwen2.5-72B-Instruct"
+      },
+      {
+        "id": "review_quality",
+        "type": "CODE_STEP",
+        "instructions": "Review and improve content quality",
+        "model": "Qwen/Qwen2.5-72B-Instruct"
+      }
+    ]
+  }
+]

@@ -1,7 +1,4 @@
-"""
-Core agent execution system for Emery.
-Handles orchestration of multi-step agent workflows.
-"""
+"""Core agent execution orchestrator for multi-step workflows."""
 
 import asyncio
 import logging
@@ -11,7 +8,7 @@ from typing import Dict, Any, List, Optional
 
 from .types import (
     Agent, Task, StepExecution, StepConfig, CapabilityConfig,
-    TaskStatus, ExecutionContext, StepType
+    TaskStatus, ExecutionContext, StepType, TaskInstructions
 )
 from .context_manager import ExecutionContextManager
 from ..integrations.smolagents import SmolAgentsOrchestrator
@@ -23,15 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class AgentRunner:
-    """
-    Core agent execution orchestrator.
-    
-    Coordinates the execution of multi-step agent workflows by:
-    1. Managing execution state and context
-    2. Routing steps to appropriate execution engines (smolagents, MCP)
-    3. Handling step dependencies and data flow
-    4. Reporting progress and results back to Emery
-    """
+    """Orchestrates multi-step agent workflows with proper state management."""
     
     def __init__(
         self, 
@@ -45,6 +34,26 @@ class AgentRunner:
         
         logger.info("AgentRunner initialized")
     
+    def _find_or_create_capability(self, agent: Agent, capability_name: str) -> CapabilityConfig:
+        """Find capability in agent or create test capability."""
+        if agent.capabilities:
+            for cap in agent.capabilities:
+                if cap.name == capability_name:
+                    return cap
+        
+        if capability_name in ['test_capability', 'test', 'ping', 'health_check']:
+            return CapabilityConfig(
+                name=capability_name,
+                description="Test capability for infrastructure validation",
+                steps=[StepConfig(
+                    id="test_step_1",
+                    type=StepType.CODE_STEP,
+                    instructions="Return success response with trigger data"
+                )]
+            )
+        
+        raise ValueError(f"Capability '{capability_name}' not found in agent {agent.id}")
+    
     async def execute_capability(
         self, 
         agent: Agent, 
@@ -52,59 +61,24 @@ class AgentRunner:
         trigger_data: Dict[str, Any],
         step_overrides: Optional[List[Dict[str, Any]]] = None
     ) -> Task:
-        """
-        Execute a specific agent capability with all its steps.
-        
-        Args:
-            agent: Agent configuration
-            capability_name: Name of the capability to execute
-            trigger_data: Data from the trigger that started this execution
-            step_overrides: Optional step-level parameter overrides
-            
-        Returns:
-            Task with results from all steps
-        """
-        # Find the capability to execute
-        capability = None
-        for cap in agent.capabilities:
-            if cap.name == capability_name:
-                capability = cap
-                break
-        
-        if not capability:
-            # AIDEV-NOTE: Add test capability for infrastructure testing
-            if capability_name in ['test_capability', 'test', 'ping', 'health_check']:
-                from .types import CapabilityConfig, StepConfig, StepType
-                capability = CapabilityConfig(
-                    name=capability_name,
-                    description=f"Test capability for infrastructure validation",
-                    steps=[
-                        StepConfig(
-                            id="test_step_1",
-                            type=StepType.CODE_STEP,
-                            instructions="Return success response with trigger data"
-                        )
-                    ]
-                )
-                logger.info(f"Using built-in test capability: {capability_name}")
-            else:
-                raise ValueError(f"Capability '{capability_name}' not found in agent {agent.id}")
-        
+        """Execute agent capability with all its steps."""
+        capability = self._find_or_create_capability(agent, capability_name)
         execution_id = str(uuid.uuid4())
-        logger.info(f"Starting capability execution {execution_id} for agent {agent.id}, capability: {capability_name}")
+        
+        logger.info(f"Starting execution {execution_id} for agent {agent.id}, capability: {capability_name}")
         
         task = Task(
             id=execution_id,
-            agentId=int(agent.id),  # Convert to int to match schema
+            agentId=int(agent.id),
             name=f"Capability execution: {capability_name}",
+            instructions=TaskInstructions(instructions=f"Execute capability: {capability_name}"),
             capabilityName=capability_name,
             status=TaskStatus.IN_PROGRESS,
-            payload=trigger_data,
             startedAt=datetime.now()
         )
         
         # Use context manager for persistent state between steps
-        with ExecutionContextManager(task, agent) as context_manager:
+        with ExecutionContextManager(task, agent, trigger_data) as context_manager:
             try:
                 # Execute each step in the capability sequence
                 for i, step in enumerate(capability.steps):
@@ -142,7 +116,7 @@ class AgentRunner:
                     task.status = TaskStatus.COMPLETED
                     # Get final context as output
                     final_context = context_manager.get_context()
-                    task.result = final_context.get("step_outputs", {})
+                    task.result = final_context["step_outputs"] if "step_outputs" in final_context else {}
                 
             except Exception as e:
                 logger.exception(f"Task execution {execution_id} failed with exception")
@@ -179,7 +153,7 @@ class AgentRunner:
             id=str(uuid.uuid4()),
             taskId=step_context.get('execution_id', ''),
             stepId=step.id,
-            stepType=step.type.value if hasattr(step.type, 'value') else str(step.type),  # Convert enum to string
+            stepType=step.type.value,
             instructions=step.instructions,
             inputData=step_context,
             startedAt=datetime.now()
@@ -234,7 +208,7 @@ class AgentRunner:
                         step_execution.outputData = {
                             "success": True,
                             "message": "Test capability executed successfully",
-                            "trigger_data": context_manager.context.task.payload,
+                            "trigger_data": context_manager.trigger_data,
                             "timestamp": datetime.now().isoformat(),
                             "step_id": step.id
                         }
@@ -270,11 +244,10 @@ class AgentRunner:
         # Create a copy of the step with overrides applied
         return StepConfig(
             id=step.id,
-            type=StepType(override.get('type', step.type.value)),
-            instructions=override.get('instructions', step.instructions),
-            tools=override.get('tools', step.tools),
-            servers=override.get('servers', step.servers)
-            # AIDEV-NOTE: Simplified step configuration with StepType enum
+            type=StepType(override['type']) if 'type' in override else step.type,
+            instructions=override['instructions'] if 'instructions' in override else step.instructions,
+            tools=override['tools'] if 'tools' in override else step.tools,
+            servers=override['servers'] if 'servers' in override else step.servers
         )
     
     async def _report_execution_results(self, task: Task) -> None:

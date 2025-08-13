@@ -1,32 +1,59 @@
 """
 Type definitions for Emery Agents system.
-EXACTLY matches the TypeScript types from app/actions/types.ts
+
+Matches TypeScript types from app/actions/types.ts for consistency.
 """
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Any, Optional, Union
+from typing import Any, Dict, List, Optional, TypedDict, Union
 from datetime import datetime
-import uuid
+
+# TypedDict definitions to replace generic Dict[str, Any]
+class ExecutionResult(TypedDict, total=False):
+    """Result of step or capability execution."""
+    status: str
+    result: Optional[Any]
+    error: Optional[str]
+    capability_used: Optional[str]
+    step_type: Optional[str]
+    tools_used: Optional[List[str]]
+    model: Optional[str]
+
+class ContextData(TypedDict, total=False):
+    """Execution context data structure."""
+    variables: Dict[str, Any]
+    step_outputs: Dict[str, Any]
+    completed_steps: List[str]
+    execution_id: str
+    model: Optional[str]
+    
+class TriggerData(TypedDict, total=False):
+    """Trigger event data."""
+    trigger_type: str
+    user_request: Optional[str]
+    webhook_data: Optional[Dict[str, Any]]
+    cron_data: Optional[Dict[str, Any]]
+    database_event: Optional[Dict[str, Any]]
 
 
 class StepType(Enum):
-    """Step types - matches frontend StepConfig.type"""
-    CODE_STEP = "CODE_STEP"  # UPDATED: matches frontend exactly
-    TOOL_STEP = "TOOL_STEP"  # UPDATED: matches frontend exactly
+    """Step execution types."""
+    CODE_STEP = "CODE_STEP"
+    TOOL_STEP = "TOOL_STEP"
 
 
 class TriggerType(Enum):
-    """Trigger types - matches frontend TriggerConfig.type"""
+    """Agent trigger types."""
     MANUAL = "MANUAL"
-    CRON = "CRON" 
+    CRON = "CRON"
     WEBHOOK = "WEBHOOK"
     DATABASE_EVENT = "DATABASE_EVENT"
-    CALENDAR = "CALENDAR"  # NEW: added CALENDAR support
+    CALENDAR = "CALENDAR"
 
 
 class TaskStatus(Enum):
-    """Task status - matches frontend Task.status"""
+    """Task execution status."""
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -37,108 +64,108 @@ class TaskStatus(Enum):
 
 @dataclass
 class TriggerConfig:
-    """Matches frontend TriggerConfig exactly"""
+    """Agent trigger configuration."""
     type: TriggerType
     cron: Optional[str] = None
     webhook_url: Optional[str] = None
     webhook_secret: Optional[str] = None
-    table_id: Optional[int] = None  # UPDATED: int not str
+    table_id: Optional[int] = None
 
 
 @dataclass
 class ToolConfig:
-    """Matches frontend ToolConfig exactly"""
+    """Tool configuration."""
     name: str
     version: Optional[str] = None
-    config: Optional[Dict[str, Any]] = None  # UPDATED: Optional, not default_factory
+    config: Optional[Dict[str, Any]] = None
 
 
 @dataclass
 class ServerConfig:
-    """Matches frontend ServerConfig exactly"""
+    """Server configuration."""
     name: str
     endpoint: Optional[str] = None
-    config: Optional[Dict[str, Any]] = None  # UPDATED: Optional, not default_factory
+    config: Optional[Dict[str, Any]] = None
 
 
 @dataclass
 class StepConfig:
-    """Matches frontend StepConfig exactly"""
+    """Step execution configuration."""
     id: str
     type: StepType
     instructions: str
-    model: Optional[str] = None  # Per-step model specification
-    tools: Optional[List[ToolConfig]] = None  # UPDATED: Optional to match frontend
-    servers: Optional[List[ServerConfig]] = None  # UPDATED: Optional to match frontend
+    model: Optional[str] = None
+    tools: Optional[List[ToolConfig]] = None
+    servers: Optional[List[ServerConfig]] = None
 
 
 @dataclass
 class CapabilityConfig:
-    """Matches frontend CapabilityConfig exactly"""
+    """Agent capability configuration."""
     name: str
     description: str
-    steps: List[StepConfig]  # UPDATED: required, matches frontend
+    steps: List[StepConfig]
 
 
 @dataclass
 class TaskInstructions:
-    """Task instruction configuration - step-like structure"""
-    instructions: str  # Natural language instructions
-    tools: Optional[List[ToolConfig]] = None  # Optional tools
-    servers: Optional[List[ServerConfig]] = None  # Optional servers
+    """Task instruction configuration."""
+    instructions: str
+    tools: Optional[List[ToolConfig]] = None
+    servers: Optional[List[ServerConfig]] = None
 
 @dataclass
 class Task:
-    """Matches frontend Task exactly"""
+    """Task execution definition."""
     id: str
-    agentId: int  # UPDATED: camelCase to match frontend
+    agentId: int
     name: str
-    instructions: TaskInstructions  # Step-like configuration
-    capabilityName: Optional[str] = None  # Optional - system can auto-route
+    instructions: TaskInstructions
+    capabilityName: Optional[str] = None
     status: TaskStatus = TaskStatus.PENDING
     result: Optional[Any] = None
     error: Optional[str] = None
-    startedAt: Optional[datetime] = None  # UPDATED: camelCase
-    completedAt: Optional[datetime] = None  # UPDATED: camelCase
-    createdBy: Optional[str] = None  # UPDATED: camelCase
-    createdAt: Optional[datetime] = None  # UPDATED: camelCase
+    startedAt: Optional[datetime] = None
+    completedAt: Optional[datetime] = None
+    createdBy: Optional[str] = None
+    createdAt: Optional[datetime] = None
 
 
 @dataclass
 class CreateTaskData:
-    """Matches frontend CreateTaskData exactly"""
+    """Task creation data."""
     agentId: int
     name: str
-    instructions: TaskInstructions  # Step-like configuration
-    capabilityName: Optional[str] = None  # Optional - system can auto-route
+    instructions: TaskInstructions
+    capabilityName: Optional[str] = None
     createdBy: Optional[str] = None
 
 
 @dataclass
 class Agent:
-    """Agent configuration - matches database structure"""
-    id: Optional[int] = None  # Database ID (optional for creation)
+    """Agent configuration."""
+    id: Optional[int] = None
     name: str = ""
     role: Optional[str] = None
     description: Optional[str] = None
     persona: Optional[str] = None
-    ownerId: Optional[str] = None  # UPDATED: camelCase
-    tools: Optional[List[ToolConfig]] = None  # UPDATED: Optional
-    servers: Optional[List[ServerConfig]] = None  # UPDATED: Optional
+    ownerId: Optional[str] = None
+    tools: Optional[List[ToolConfig]] = None
+    servers: Optional[List[ServerConfig]] = None
     trigger: Optional[TriggerConfig] = None
-    capabilities: Optional[List[CapabilityConfig]] = None  # UPDATED: Optional
-    databaseId: Optional[str] = None  # UPDATED: camelCase
+    capabilities: Optional[List[CapabilityConfig]] = None
+    databaseId: Optional[str] = None
     status: Optional[str] = "active"
-    organizationId: Optional[int] = None  # UPDATED: camelCase
-    roleId: Optional[int] = None  # UPDATED: camelCase
-    apiKey: Optional[str] = None  # UPDATED: camelCase
-    lastUsedAt: Optional[datetime] = None  # UPDATED: camelCase
-    createdAt: Optional[datetime] = None  # UPDATED: camelCase
+    organizationId: Optional[int] = None
+    roleId: Optional[int] = None
+    apiKey: Optional[str] = None
+    lastUsedAt: Optional[datetime] = None
+    createdAt: Optional[datetime] = None
 
 
 @dataclass
 class CreateAgentData:
-    """Matches frontend CreateAgentData exactly"""
+    """Agent creation data."""
     name: str
     role: Optional[str] = None
     description: Optional[str] = None
@@ -153,30 +180,28 @@ class CreateAgentData:
 
 @dataclass
 class StepExecution:
-    """Matches frontend StepExecution exactly"""
+    """Step execution tracking."""
     id: str
-    taskId: str  # UPDATED: camelCase to match frontend
-    stepId: str  # UPDATED: camelCase to match frontend
-    stepType: str  # UPDATED: lowercase string to match frontend ('code_step', 'tool_step')
+    taskId: str
+    stepId: str
+    stepType: str
     instructions: Optional[str] = None
-    inputData: Optional[Dict[str, Any]] = None  # UPDATED: camelCase
-    outputData: Optional[Dict[str, Any]] = None  # UPDATED: camelCase
+    inputData: Optional[Dict[str, Any]] = None
+    outputData: Optional[Dict[str, Any]] = None
     status: TaskStatus = TaskStatus.PENDING
-    errorMessage: Optional[str] = None  # UPDATED: camelCase
-    startedAt: Optional[datetime] = None  # UPDATED: camelCase
-    completedAt: Optional[datetime] = None  # UPDATED: camelCase
+    errorMessage: Optional[str] = None
+    startedAt: Optional[datetime] = None
+    completedAt: Optional[datetime] = None
 
 
 @dataclass
 class ExecutionContext:
-    """Context passed between agent steps during execution"""
+    """Agent execution context."""
     agent: Agent
     task: Task
-    capability: CapabilityConfig  # UPDATED: CapabilityConfig not quoted string
+    capability: CapabilityConfig
     variables: Dict[str, Any] = field(default_factory=dict)
-    outputs: Dict[str, Any] = field(default_factory=dict)  # Outputs from previous steps
-    step_executions: List[StepExecution] = field(default_factory=list)  # Track step executions
+    outputs: Dict[str, Any] = field(default_factory=dict)
+    step_executions: List[StepExecution] = field(default_factory=list)
 
 
-# AIDEV-NOTE: These types NOW EXACTLY mirror the TypeScript definitions for consistency
-# All camelCase fields match frontend, all types match JSONB storage format

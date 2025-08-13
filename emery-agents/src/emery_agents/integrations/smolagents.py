@@ -1,128 +1,279 @@
-"""
-Integration with smolagents library for AI agent execution.
-Provides orchestrator-based capability routing using managed agents.
-"""
+"""Integration with smolagents library for AI agent execution."""
 
 import logging
+import os
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from ..core.types import StepType, Agent, CapabilityConfig, TaskInstructions
+from ..core.types import StepType, Agent, CapabilityConfig, TaskInstructions, ExecutionResult, ContextData
+from ..utils.prompts import (
+    render_task_executor_selection,
+    render_capability_execution,
+    render_default_execution
+)
 
 logger = logging.getLogger(__name__)
+
+# Load .env file if it exists
+try:
+    from dotenv import load_dotenv
+    env_path = "/Users/lancekraakman/orchastrate/emery-agents/src/emery_agents/.env.local"
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        logger.info(f"Loaded .env file from {env_path}")
+    else:
+        logger.debug("No .env.local file found")
+except ImportError:
+    logger.debug("python-dotenv not available, skipping .env loading")
+
+
+class TaskExecutorAgent:
+    """Top-level manager that delegates tasks to capability agents."""
+    
+    def __init__(self):
+        self.manager_agent = None  # The actual smolagents manager agent
+        self.capability_agents = {}  # capability_name -> CapabilityAgent
+        self.default_executor = None  # DefaultTaskExecutorAgent
+        self.tools_registry = {}
+        logger.info("TaskExecutorAgent initialized")
+
+
+class CapabilityAgent:
+    """Agent representing a specific capability with tools and servers."""
+    
+    def __init__(self, capability: CapabilityConfig):
+        self.capability = capability
+        self.agent = None  # The actual smolagents agent instance
+        self.tools = []
+        self.servers = []
+        logger.info(f"CapabilityAgent initialized for: {capability.name}")
+    
+    def setup_agent(self):
+        """Set up the smolagents agent with capability-specific configuration."""
+        try:
+            from smolagents import CodeAgent, ToolCallingAgent
+            from smolagents.models import InferenceClientModel
+            
+            if not os.getenv("HF_TOKEN"):
+                raise RuntimeError("HF_TOKEN environment variable is required")
+            
+            # Determine agent type based on capability steps
+            has_code_steps = any(step.type == StepType.CODE_STEP for step in self.capability.steps)
+            has_tool_steps = any(step.type == StepType.TOOL_STEP for step in self.capability.steps)
+            
+            # Use the most appropriate model for this capability's first step
+            model_name = "Qwen/Qwen2.5-Coder-32B-Instruct"
+            if self.capability.steps and self.capability.steps[0].model:
+                model_name = self.capability.steps[0].model
+            
+            # Create HuggingFace model instance
+            model = InferenceClientModel(model_name, token=os.getenv("HF_TOKEN"))
+            
+            # Create appropriate agent type
+            if has_code_steps and has_tool_steps:
+                self.agent = ToolCallingAgent(tools=[], model=model)
+            elif has_code_steps:
+                self.agent = CodeAgent(tools=[], model=model)
+            else:
+                self.agent = ToolCallingAgent(tools=[], model=model)
+            
+            # Configure tools and servers for this capability
+            self._setup_tools_and_servers()
+            
+            logger.info(f"CapabilityAgent setup completed for: {self.capability.name}")
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to setup agent: {e}")
+    
+    def _setup_tools_and_servers(self):
+        """Set up tools and servers specific to this capability."""
+        # Collect all tools from capability steps
+        for step in self.capability.steps:
+            if step.tools:
+                for tool_config in step.tools:
+                    # TODO: Load and configure actual tools
+                    logger.debug(f"Tool configured for {self.capability.name}: {tool_config.name}")
+            
+            if step.servers:
+                for server_config in step.servers:
+                    # TODO: Load and configure actual servers
+                    logger.debug(f"Server configured for {self.capability.name}: {server_config.name}")
+    
+    async def execute(self, instructions: str, context: ContextData) -> ExecutionResult:
+        """Execute task instructions using this capability agent."""
+        if not self.agent:
+            self.setup_agent()
+        
+        try:
+            # Use templated prompt for cleaner, more maintainable code
+            execution_prompt = render_capability_execution(
+                capability_name=self.capability.name,
+                capability_description=self.capability.description,
+                instructions=instructions,
+                context=context
+            )
+            
+            result = await self.agent.run(execution_prompt)
+            
+            return {
+                "capability_used": self.capability.name,
+                "output": result,
+                "status": "completed",
+                "agent_type": type(self.agent).__name__
+            }
+            
+        except Exception as e:
+            logger.error(f"CapabilityAgent execution failed for {self.capability.name}: {e}")
+            return {
+                "capability_used": self.capability.name,
+                "error": str(e),
+                "status": "failed"
+            }
+
+
+class DefaultTaskExecutorAgent:
+    """
+    Default agent that directly executes tasks when no specific capability matches.
+    
+    This agent:
+    1. Handles tasks that don't match any specific capability
+    2. Executes instructions directly with available tools
+    3. Serves as the fallback execution path
+    """
+    
+    def __init__(self):
+        self.agent = None
+        logger.info("DefaultTaskExecutorAgent initialized")
+    
+    def setup_agent(self):
+        """Set up the default execution agent."""
+        try:
+            from smolagents import ToolCallingAgent
+            from smolagents.models import InferenceClientModel
+            
+            if not os.getenv("HF_TOKEN"):
+                raise RuntimeError("HF_TOKEN environment variable is required")
+            
+            # Create HuggingFace model instance for general tasks
+            model = InferenceClientModel("Qwen/Qwen2.5-72B-Instruct", token=os.getenv("HF_TOKEN"))
+            
+            # Use versatile model for general task execution
+            self.agent = ToolCallingAgent(
+                tools=[],  # Tools can be added later as needed
+                model=model
+            )
+            
+            logger.info("DefaultTaskExecutorAgent setup completed")
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to setup default agent: {e}")
+    
+    async def execute(self, instructions: str, context: ContextData) -> ExecutionResult:
+        """Execute task instructions directly without specific capability routing."""
+        if not self.agent:
+            self.setup_agent()
+        
+        try:
+            # Use templated prompt for cleaner, more maintainable code
+            execution_prompt = render_default_execution(
+                instructions=instructions,
+                context=context,
+                available_tools=self.list_available_tools() if hasattr(self, 'list_available_tools') else None
+            )
+            
+            result = await self.agent.run(execution_prompt)
+            
+            return {
+                "capability_used": "default_executor",
+                "output": result,
+                "status": "completed",
+                "agent_type": "DefaultTaskExecutorAgent"
+            }
+            
+        except Exception as e:
+            logger.error(f"DefaultTaskExecutorAgent execution failed: {e}")
+            return {
+                "capability_used": "default_executor",
+                "error": str(e),
+                "status": "failed"
+            }
 
 
 class SmolAgentsOrchestrator:
     """
-    Smolagents-based orchestrator for intelligent capability routing and execution.
+    Main orchestrator that coordinates the agent hierarchy.
     
-    Uses smolagents' ManagedAgent and orchestrator patterns to:
-    1. Convert each capability into a managed sub-agent
-    2. Use an orchestrator agent to route instructions to the best sub-agent
-    3. Execute instructions using smolagents' agent composition
+    Manages:
+    1. TaskExecutorAgent (top-level manager)
+    2. CapabilityAgents (one per capability)
+    3. DefaultTaskExecutorAgent (fallback)
     """
     
     def __init__(self):
-        self.orchestrator_agent = None
-        self.managed_agents = {}  # capability_name -> ManagedAgent
+        self.task_executor = TaskExecutorAgent()
+        self.default_executor = DefaultTaskExecutorAgent()
         self.tools_registry = {}
         logger.info("SmolAgentsOrchestrator initialized")
     
     def setup_agent_orchestrator(self, agent: Agent) -> None:
         """
-        Set up the smolagents orchestrator with managed sub-agents for each capability.
+        Set up the agent hierarchy with TaskExecutorAgent managing CapabilityAgents.
         
         Args:
             agent: The agent configuration with capabilities
         """
-        import os
+        logger.info(f"Setting up agent hierarchy for {agent.name} with {len(agent.capabilities or [])} capabilities")
         
-        if not os.getenv("HF_TOKEN"):
-            raise RuntimeError("HF_TOKEN environment variable is required. Get your token from https://huggingface.co/settings/tokens")
-        
-        try:
-            from smolagents import CodeAgent, ToolCallingAgent
-            # TODO: Import ManagedAgent and orchestrator when available in smolagents
-            
-            logger.info(f"Setting up orchestrator for agent {agent.name} with {len(agent.capabilities)} capabilities")
-            
-            # Create managed agents for each capability
+        # Create CapabilityAgent for each capability
+        if agent.capabilities:
             for capability in agent.capabilities:
-                self._create_managed_agent_for_capability(capability)
-            
-            # Create the orchestrator agent that routes to sub-agents
-            self._create_orchestrator_agent(agent)
-            
-            logger.info("Smolagents orchestrator setup complete")
-            
-        except ImportError as e:
-            raise RuntimeError(f"smolagents library not available: {e}")
-    
-    def _create_managed_agent_for_capability(self, capability: CapabilityConfig) -> None:
-        """
-        Create a managed sub-agent for a specific capability.
+                capability_agent = CapabilityAgent(capability)
+                self.task_executor.capability_agents[capability.name] = capability_agent
+                logger.info(f"Created CapabilityAgent: {capability.name}")
         
-        Args:
-            capability: The capability configuration
-        """
-        try:
-            from smolagents import CodeAgent, ToolCallingAgent
-            
-            # For now, use basic agent types - this will be enhanced when ManagedAgent is available
-            # Determine agent type based on capability steps
-            has_code_steps = any(step.type == StepType.CODE_STEP for step in capability.steps)
-            has_tool_steps = any(step.type == StepType.TOOL_STEP for step in capability.steps)
-            
-            agent_kwargs = {
-                "model": "Qwen/Qwen2.5-Coder-32B-Instruct",
-                "token": os.getenv("HF_TOKEN")
-            }
-            
-            if has_code_steps and has_tool_steps:
-                # Use ToolCallingAgent as it can handle both
-                sub_agent = ToolCallingAgent(**agent_kwargs)
-            elif has_code_steps:
-                sub_agent = CodeAgent(**agent_kwargs)
-            else:
-                sub_agent = ToolCallingAgent(**agent_kwargs)
-            
-            # Add tools for this capability
-            for step in capability.steps:
-                if step.tools:
-                    for tool_config in step.tools:
-                        # TODO: Load and add tools based on tool_config
-                        pass
-            
-            self.managed_agents[capability.name] = {
-                'agent': sub_agent,
-                'capability': capability,
-                'description': capability.description
-            }
-            
-            logger.info(f"Created managed agent for capability: {capability.name}")
-            
-        except Exception as e:
-            logger.error(f"Failed to create managed agent for capability {capability.name}: {e}")
+        # Set up the TaskExecutorAgent with managed agents
+        self._setup_task_executor_agent(agent)
+        
+        # Store reference to default executor
+        self.task_executor.default_executor = self.default_executor
+        
+        logger.info("Agent hierarchy setup complete")
     
-    def _create_orchestrator_agent(self, agent: Agent) -> None:
+    def _setup_task_executor_agent(self, agent: Agent) -> None:
         """
-        Create the main orchestrator agent that routes instructions to sub-agents.
+        Set up the TaskExecutorAgent as a manager agent with CapabilityAgents as managed_agents.
         
         Args:
             agent: The main agent configuration
         """
         try:
             from smolagents import ToolCallingAgent
+            from smolagents.models import InferenceClientModel
+            # TODO: Use ManagedAgent when available in smolagents
             
-            # Create orchestrator with routing capabilities
-            self.orchestrator_agent = ToolCallingAgent(
-                model="Qwen/Qwen2.5-72B-Instruct",  # Use larger model for routing decisions
-                token=os.getenv("HF_TOKEN")
+            if not os.getenv("HF_TOKEN"):
+                raise RuntimeError("HF_TOKEN environment variable is required")
+            
+            # Create HuggingFace model instance for management decisions
+            model = InferenceClientModel("Qwen/Qwen2.5-72B-Instruct", token=os.getenv("HF_TOKEN"))
+            
+            # Create the manager agent
+            self.task_executor.manager_agent = ToolCallingAgent(
+                tools=[],  # No tools needed for management decisions
+                model=model
             )
             
-            logger.info("Created orchestrator agent")
+            # TODO: Configure managed_agents parameter when available
+            # For now, we manage the routing logic ourselves but through proper agent calls
             
+            logger.info("TaskExecutorAgent setup completed")
+            
+        except ImportError as e:
+            logger.warning(f"smolagents not available: {e}")
+            # Continue without smolagents - will use fallback logic
         except Exception as e:
-            logger.error(f"Failed to create orchestrator agent: {e}")
+            logger.error(f"Failed to setup TaskExecutorAgent: {e}")
+            raise
     
     async def execute_with_orchestrator(
         self, 
@@ -130,7 +281,12 @@ class SmolAgentsOrchestrator:
         trigger_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Execute instructions using the smolagents orchestrator pattern.
+        Execute instructions using the agent hierarchy pattern.
+        
+        TaskExecutorAgent manages the execution by:
+        1. Deciding which CapabilityAgent to use 
+        2. Delegating to appropriate CapabilityAgent
+        3. Falling back to DefaultTaskExecutorAgent if no capability matches
         
         Args:
             instructions: The task instructions with natural language and optional tools/servers
@@ -139,88 +295,90 @@ class SmolAgentsOrchestrator:
         Returns:
             Dict with execution results
         """
-        logger.info(f"Orchestrator executing: {instructions.instructions[:100]}...")
+        logger.info(f"Agent hierarchy executing: {instructions.instructions[:100]}...")
         
         try:
-            # Step 1: Use orchestrator to select the best capability (sub-agent)
-            selected_capability = await self._route_to_best_capability(instructions)
+            # Step 1: Use TaskExecutorAgent to select the appropriate capability or default
+            selected_capability = await self._manager_select_capability(instructions)
             
-            # Step 2: Execute using the selected sub-agent
-            if selected_capability in self.managed_agents:
-                result = await self._execute_with_sub_agent(
-                    selected_capability, 
-                    instructions, 
-                    trigger_data
-                )
+            # Step 2: Execute using the selected capability agent or default executor
+            if selected_capability and selected_capability in self.task_executor.capability_agents:
+                capability_agent = self.task_executor.capability_agents[selected_capability]
+                result = await capability_agent.execute(instructions.instructions, trigger_data)
+                
+                logger.info(f"Executed with CapabilityAgent: {selected_capability}")
             else:
-                # Fallback: execute directly with orchestrator
-                result = await self._execute_directly_with_orchestrator(
-                    instructions, 
-                    trigger_data
-                )
+                # Use DefaultTaskExecutorAgent for direct execution
+                result = await self.default_executor.execute(instructions.instructions, trigger_data)
+                
+                logger.info("Executed with DefaultTaskExecutorAgent")
             
             return {
                 "status": "success",
-                "selected_capability": selected_capability,
+                "selected_capability": selected_capability or "default_executor",
                 "result": result,
-                "orchestrator": "smolagents"
+                "orchestrator": "agent_hierarchy"
             }
             
         except Exception as e:
-            logger.exception(f"Orchestrator execution failed: {e}")
+            logger.exception(f"Agent hierarchy execution failed: {e}")
             return {
                 "status": "failed",
                 "error": str(e),
-                "orchestrator": "smolagents"
+                "orchestrator": "agent_hierarchy"
             }
     
-    async def _route_to_best_capability(self, instructions: TaskInstructions) -> str:
+    async def _manager_select_capability(self, instructions: TaskInstructions) -> Optional[str]:
         """
-        Use orchestrator agent to intelligently route to the best capability.
+        Use TaskExecutorAgent (manager agent) to intelligently select the best capability.
         
         Args:
             instructions: The task instructions
             
         Returns:
-            Name of the selected capability
+            Name of the selected capability or None for default execution
         """
-        # Create routing prompt with available capabilities
-        capabilities_desc = []
-        for name, managed_agent in self.managed_agents.items():
-            capabilities_desc.append(f"- {name}: {managed_agent['description']}")
+        if not self.task_executor.capability_agents:
+            logger.info("No capability agents available, using default executor")
+            return None
         
-        routing_prompt = f"""
-        You are an intelligent agent orchestrator. Given the user instructions and available capabilities, 
-        select the BEST capability to handle the request.
-        
-        User Instructions: "{instructions.instructions}"
-        
-        Available Capabilities:
-        {chr(10).join(capabilities_desc)}
-        
-        Respond with ONLY the capability name (no explanation).
-        If no capability is perfect, choose the most relevant one.
-        """
+        # Prepare capabilities list for templated prompt
+        capabilities = [
+            {
+                "name": name,
+                "description": capability_agent.capability.description
+            }
+            for name, capability_agent in self.task_executor.capability_agents.items()
+        ]
         
         try:
-            if self.orchestrator_agent:
-                # Use orchestrator to make intelligent routing decision
-                selected = await self.orchestrator_agent.run(routing_prompt)
+            if self.task_executor.manager_agent:
+                # Use templated prompt for cleaner, more maintainable code
+                selection_prompt = render_task_executor_selection(
+                    instructions=instructions.instructions,
+                    capabilities=capabilities
+                )
+                
+                # Use manager agent to make intelligent selection
+                selected = await self.task_executor.manager_agent.run(selection_prompt)
                 selected = selected.strip()
                 
                 # Validate selection
-                if selected in self.managed_agents:
-                    logger.info(f"Orchestrator selected capability: {selected}")
+                if selected == "DEFAULT":
+                    logger.info("Manager agent selected: DefaultTaskExecutorAgent")
+                    return None
+                elif selected in self.task_executor.capability_agents:
+                    logger.info(f"Manager agent selected CapabilityAgent: {selected}")
                     return selected
             
             # Fallback to simple keyword matching
             return self._fallback_capability_selection(instructions)
             
         except Exception as e:
-            logger.warning(f"Orchestrator routing failed, using fallback: {e}")
+            logger.warning(f"Manager agent selection failed, using fallback: {e}")
             return self._fallback_capability_selection(instructions)
     
-    def _fallback_capability_selection(self, instructions: TaskInstructions) -> str:
+    def _fallback_capability_selection(self, instructions: TaskInstructions) -> Optional[str]:
         """
         Fallback capability selection using simple keyword matching.
         
@@ -228,119 +386,33 @@ class SmolAgentsOrchestrator:
             instructions: The task instructions
             
         Returns:
-            Name of the selected capability
+            Name of the selected capability or None for default execution
         """
-        if not self.managed_agents:
-            return "general_task"
+        if not self.task_executor.capability_agents:
+            logger.info("Fallback: No capability agents available, using default")
+            return None
         
         instructions_lower = instructions.instructions.lower()
         
         # Simple keyword matching
-        for capability_name, managed_agent in self.managed_agents.items():
+        for capability_name, capability_agent in self.task_executor.capability_agents.items():
             if capability_name.lower() in instructions_lower:
                 logger.info(f"Fallback selected capability by name: {capability_name}")
                 return capability_name
             
-            if managed_agent['description'] and any(
+            description = capability_agent.capability.description
+            if description and any(
                 word in instructions_lower 
-                for word in managed_agent['description'].lower().split()[:3]
+                for word in description.lower().split()[:3]
             ):
                 logger.info(f"Fallback selected capability by description: {capability_name}")
                 return capability_name
         
-        # Return first capability as ultimate fallback
-        first_capability = list(self.managed_agents.keys())[0]
-        logger.info(f"Using first capability as fallback: {first_capability}")
-        return first_capability
+        # Use default executor as ultimate fallback
+        logger.info("Fallback: No capability match found, using default executor")
+        return None
     
-    async def _execute_with_sub_agent(
-        self, 
-        capability_name: str, 
-        instructions: TaskInstructions,
-        trigger_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Execute using a specific sub-agent (capability).
-        
-        Args:
-            capability_name: Name of the capability to use
-            instructions: Task instructions
-            trigger_data: Additional context
-            
-        Returns:
-            Execution results
-        """
-        managed_agent_info = self.managed_agents[capability_name]
-        sub_agent = managed_agent_info['agent']
-        capability = managed_agent_info['capability']
-        
-        logger.info(f"Executing with sub-agent: {capability_name}")
-        
-        # Create execution prompt that includes the capability context
-        execution_prompt = f"""
-        You are executing as the '{capability_name}' capability: {capability.description}
-        
-        User Instructions: {instructions.instructions}
-        
-        Additional Context: {trigger_data}
-        
-        Execute the requested task according to your capability specialization.
-        """
-        
-        try:
-            result = await sub_agent.run(execution_prompt)
-            return {
-                "capability_used": capability_name,
-                "output": result,
-                "status": "completed"
-            }
-        except Exception as e:
-            logger.error(f"Sub-agent execution failed for {capability_name}: {e}")
-            return {
-                "capability_used": capability_name,
-                "error": str(e),
-                "status": "failed"
-            }
-    
-    async def _execute_directly_with_orchestrator(
-        self, 
-        instructions: TaskInstructions,
-        trigger_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Execute directly with orchestrator when no suitable sub-agent exists.
-        
-        Args:
-            instructions: Task instructions
-            trigger_data: Additional context
-            
-        Returns:
-            Execution results
-        """
-        logger.info("Executing directly with orchestrator agent")
-        
-        execution_prompt = f"""
-        User Instructions: {instructions.instructions}
-        
-        Additional Context: {trigger_data}
-        
-        Execute the requested task.
-        """
-        
-        try:
-            result = await self.orchestrator_agent.run(execution_prompt)
-            return {
-                "capability_used": "orchestrator_direct",
-                "output": result,
-                "status": "completed"
-            }
-        except Exception as e:
-            logger.error(f"Direct orchestrator execution failed: {e}")
-            return {
-                "capability_used": "orchestrator_direct", 
-                "error": str(e),
-                "status": "failed"
-            }
+    # Legacy methods for backward compatibility with existing runner code
     
     def _get_agent(self, step_type: StepType, model: Optional[str] = None):
         """
@@ -377,10 +449,8 @@ class SmolAgentsOrchestrator:
             else:
                 raise ValueError(f"Unsupported step type for smolagents: {step_type}")
                 
-        except ImportError:
-            raise RuntimeError(
-                "smolagents library not available. Install with: uv add smolagents"
-            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to create agent: {e}")
     
     async def execute_step(
         self, 
@@ -486,8 +556,9 @@ class SmolAgentsOrchestrator:
         return list(self.tools_registry.keys())
 
 
-# AIDEV-NOTE: This integration provides the bridge to smolagents library
+# AIDEV-NOTE: This integration provides proper agent hierarchy using smolagents
+# AIDEV-NOTE: Architecture: TaskExecutorAgent -> CapabilityAgents -> DefaultTaskExecutorAgent
 # AIDEV-NOTE: Uses HuggingFace models (Qwen series) exclusively via HF_TOKEN env var
-# AIDEV-TODO: Implement comprehensive tool registry with common tools
-# AIDEV-TODO: Add support for tool configuration and parameters
-# AIDEV-QUESTION: Should we cache agent instances or create new ones each time?
+# AIDEV-TODO: Implement ManagedAgent when available in smolagents for true managed_agents pattern
+# AIDEV-TODO: Implement comprehensive tool registry with dynamic tool loading
+# AIDEV-TODO: Add support for tool configuration and parameters in CapabilityAgents
