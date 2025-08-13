@@ -4,7 +4,14 @@ Leverages existing Emery OAuth proxy system for external service calls.
 """
 
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TypedDict
+
+class ServiceInfo(TypedDict):
+    service: str
+    actions: List[Dict[str, Any]]
+
+class AgentCapabilities(TypedDict):
+    connected_services: List[ServiceInfo]
 
 from .emery_client import EmeryClientIntegration
 
@@ -48,7 +55,7 @@ class MCPServerIntegration:
             service_name = self._map_server_to_service(server_name)
             
             # Execute via Emery's OAuth proxy
-            result = await self.emery_client.execute_oauth_action(
+            result = await self.emery_client.proxy_oauth_call(
                 service=service_name,
                 action=action,
                 params=params
@@ -56,6 +63,7 @@ class MCPServerIntegration:
             
             logger.info(f"MCP server action {server_name}.{action} completed successfully")
             return {
+                "success": True,
                 "result": result,
                 "server": server_name,
                 "action": action,
@@ -65,6 +73,7 @@ class MCPServerIntegration:
         except Exception as e:
             logger.exception(f"MCP server action failed: {e}")
             return {
+                "success": False,
                 "error": str(e),
                 "server": server_name,
                 "action": action,
@@ -91,10 +100,12 @@ class MCPServerIntegration:
             "google_drive": "google_drive",
             "discord": "discord",
             "twitter": "twitter",
-            "x": "twitter"
+            "x": "twitter",
+            "filesystem": "filesystem",
+            "file": "filesystem"
         }
         
-        return server_mapping.get(server_name.lower(), server_name)
+        return server_mapping.get(server_name.lower()) or server_name
     
     async def list_available_servers(self) -> List[str]:
         """
@@ -109,8 +120,10 @@ class MCPServerIntegration:
             
             # Extract connected services
             connected_services = []
-            for service in capabilities.get("connected_services", []):
-                connected_services.append(service.get("service", ""))
+            if "connected_services" in capabilities:
+                for service in capabilities["connected_services"]:
+                    if "service" in service:
+                        connected_services.append(service["service"])
             
             logger.info(f"Available MCP servers: {connected_services}")
             return connected_services
@@ -136,9 +149,10 @@ class MCPServerIntegration:
             capabilities = await self.emery_client.get_agent_capabilities()
             
             # Find actions for this service
-            for service in capabilities.get("connected_services", []):
-                if service.get("service") == service_name:
-                    return service.get("actions", [])
+            if "connected_services" in capabilities:
+                for service in capabilities["connected_services"]:
+                    if service.get("service") == service_name:
+                        return service.get("actions") or []
             
             return []
             
@@ -156,6 +170,14 @@ class MCPServerIntegration:
         """
         self.server_registry[name] = config
         logger.info(f"Registered MCP server: {name}")
+    
+    def get_server_config(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get configuration for a registered server."""
+        return self.server_registry.get(name)
+    
+    def list_servers(self) -> List[str]:
+        """Get list of registered server names."""
+        return list(self.server_registry.keys())
     
     def list_registered_servers(self) -> List[str]:
         """Get list of registered server names."""

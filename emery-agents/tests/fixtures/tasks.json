@@ -1,0 +1,76 @@
+[
+  {
+    "id": "task_001",
+    "agentId": 1,
+    "name": "Send Welcome Email",
+    "instructions": {
+      "instructions": "Send a welcome email to new users who signed up today",
+      "tools": [{"name": "gmail_api"}],
+      "servers": [{"name": "gmail"}]
+    },
+    "capabilityName": "email_management",
+    "status": "pending"
+  },
+  {
+    "id": "task_002", 
+    "agentId": 2,
+    "name": "Analyze Sales Data",
+    "instructions": {
+      "instructions": "Analyze this month's sales data and identify trends",
+      "tools": [{"name": "pandas"}, {"name": "matplotlib"}]
+    },
+    "capabilityName": "data_analysis",
+    "status": "pending"
+  },
+  {
+    "id": "task_003",
+    "agentId": 3,
+    "name": "Generate Python Function",
+    "instructions": {
+      "instructions": "Create a Python function that calculates the fibonacci sequence up to n numbers"
+    },
+    "capabilityName": "code_generation",
+    "status": "pending"
+  },
+  {
+    "id": "task_004",
+    "agentId": 1,
+    "name": "Process Customer Feedback",
+    "instructions": {
+      "instructions": "Read customer feedback emails and categorize them by sentiment and topic"
+    },
+    "capabilityName": "email_management",
+    "status": "in_progress",
+    "startedAt": "2024-01-15T10:30:00Z"
+  },
+  {
+    "id": "task_005",
+    "agentId": 2,
+    "name": "Create Monthly Report",
+    "instructions": {
+      "instructions": "Generate a comprehensive monthly performance report with visualizations"
+    },
+    "capabilityName": "data_analysis",
+    "status": "completed",
+    "startedAt": "2024-01-14T09:00:00Z",
+    "completedAt": "2024-01-14T10:45:00Z",
+    "result": {
+      "report_generated": true,
+      "charts_created": 5,
+      "insights_found": 12
+    }
+  },
+  {
+    "id": "task_006",
+    "agentId": 3,
+    "name": "Multi-step Workflow",
+    "instructions": {
+      "instructions": "Coordinate a complex workflow involving data processing, API calls, and report generation"
+    },
+    "capabilityName": "task_orchestration", 
+    "status": "failed",
+    "startedAt": "2024-01-13T14:20:00Z",
+    "completedAt": "2024-01-13T14:35:00Z",
+    "error": "API authentication failed in step 2"
+  }
+]
