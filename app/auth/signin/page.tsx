@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { SignInButton } from "./SignInButton"
-import { EmailSignInForm } from "./EmailSignInForm"
 import { Separator } from "@/components/ui/separator"
 
 export default async function SignInPage() {
@@ -29,19 +28,6 @@ export default async function SignInPage() {
             <SignInButton provider="github" />
             <SignInButton provider="google" />
           </div>
-          
-          {/* Separator */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <Separator className="w-full" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-gray-50 text-gray-500">Or sign in with email</span>
-            </div>
-          </div>
-          
-          {/* Email Sign In Form */}
-          <EmailSignInForm />
         </div>
       </div>
     </div>

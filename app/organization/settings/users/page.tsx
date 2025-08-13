@@ -1,12 +1,12 @@
 import { getOrganizationMembers, getPendingInvitations, inviteUser } from "@/app/actions/invitations";
-import { getSession } from "@/lib/auth";
+import { auth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default async function UserManagementPage() {
-  const session = await getSession();
+  const session = await auth();
 
   if (!session?.user?.currentOrganizationId) {
     return (
