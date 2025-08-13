@@ -14,13 +14,13 @@ async function checkUsers() {
     })
     .from(users)
     .leftJoin(roles, eq(users.roleId, roles.id))
-    .leftJoin(organizations, eq(users.organizationId, organizations.id));
+    .leftJoin(organizations, eq(users.currentOrganizationId, organizations.id));
 
     console.log('Found users:');
     allUsers.forEach((record, index) => {
       console.log(`${index + 1}. User: ${record.user.name || 'No name'} (${record.user.email})`);
       console.log(`   ID: ${record.user.id}`);
-      console.log(`   Organization: ${record.organization?.name || 'None assigned'} (ID: ${record.user.organizationId || 'null'})`);
+      console.log(`   Organization: ${record.organization?.name || 'None assigned'} (ID: ${record.user.currentOrganizationId || 'null'})`);
       console.log(`   Role: ${record.role?.name || 'None assigned'} (ID: ${record.user.roleId || 'null'})`);
       console.log(`   Role Permissions: ${record.role?.permissions?.join(', ') || 'None'}\n`);
     });

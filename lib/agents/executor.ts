@@ -56,7 +56,7 @@ export async function executeAgentCapability(
       name: `Capability execution: ${capabilityName}`,
       capabilityName: capabilityName,
       status: 'in_progress',
-      payload: triggerData,
+      instructions: {},
       startedAt: new Date(),
       createdBy: agent.ownerId,
     });

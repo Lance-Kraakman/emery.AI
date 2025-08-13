@@ -4,20 +4,21 @@
 // AIDEV-TODO: Add transaction support for table creation/deletion with dynamic tables
 
 import { db } from "@/lib/db/client";
-import { tables, organizations } from "@/lib/db/schema";
+import { tables, databases } from "@/lib/db/schema";
 import { createDynamicTable, dropDynamicTable } from "@/lib/db/dynamic";
 import { generateTableName } from "@/utils/slugify";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireAuth, requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
+import { autoReindexService } from "@/lib/rag/auto-reindex";
 import type { ActionResult, CreateTableData } from "./types";
 
-export async function createTable(data: CreateTableData): Promise<ActionResult> {
+export async function createTable(data: CreateTableData & { databaseId: number; description?: string }, revalidateUrl?: string): Promise<ActionResult> {
   try {
     const session = await requirePermission("create_table");
     const currentOrg = await requireCurrentOrganization();
-    const { name } = data;
+    const { name, databaseId, description } = data;
 
     if (!name) {
       return {
@@ -26,20 +27,53 @@ export async function createTable(data: CreateTableData): Promise<ActionResult> 
       };
     }
 
+    if (!databaseId) {
+      return {
+        success: false,
+        error: "Database selection is required. Tables must belong to a database.",
+      };
+    }
+
+    // Verify the specified database exists and belongs to the current organization
+    const [targetDatabase] = await db
+      .select()
+      .from(databases)
+      .where(and(eq(databases.id, databaseId), eq(databases.organizationId, currentOrg.id)))
+      .limit(1);
+    
+    if (!targetDatabase) {
+      return {
+        success: false,
+        error: "Selected database not found or access denied.",
+      };
+    }
+
     const dbName = generateTableName(name);
 
     // Create dynamic table first
     await createDynamicTable(dbName);
 
+    const metadata = description ? { description } : null;
+
     // Then create metadata entry using current organization
     const [newTable] = await db.insert(tables).values({
+      databaseId: databaseId,
       organizationId: currentOrg.id,
       name,
       dbName,
+      metadata,
       createdBy: session.user.id,
     }).returning();
 
-    revalidatePath('/mission-control');
+    // Trigger RAG reindexing for tables domain in this organization
+    autoReindexService.debouncedReindex(currentOrg.id, 'tables').catch(console.error);
+    
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/data'); // Default path for table operations
+    }
     
     return {
       success: true,
@@ -56,14 +90,19 @@ export async function createTable(data: CreateTableData): Promise<ActionResult> 
 
 export async function createTableAction(formData: FormData) {
   const name = formData.get('name') as string;
+  const databaseId = parseInt(formData.get('databaseId') as string);
 
-  const result = await createTable({ name });
+  if (!databaseId) {
+    throw new Error("Database ID is required");
+  }
+
+  const result = await createTable({ name, databaseId });
   
   if (!result.success) {
     throw new Error(result.error);
   }
 
-  revalidatePath('/mission-control');
+  // Note: revalidatePath is handled in the main createTable function
   return result;
 }
 
@@ -72,11 +111,28 @@ export async function getTables() {
     const currentOrg = await requireCurrentOrganization();
     
     const tableList = await db
-      .select()
+      .select({
+        id: tables.id,
+        databaseId: tables.databaseId,
+        organizationId: tables.organizationId,
+        name: tables.name,
+        dbName: tables.dbName,
+        metadata: tables.metadata,
+        createdBy: tables.createdBy,
+        createdAt: tables.createdAt,
+        updatedAt: tables.updatedAt,
+        database: {
+          id: databases.id,
+          name: databases.name,
+          slug: databases.slug,
+          metadata: databases.metadata,
+        }
+      })
       .from(tables)
+      .leftJoin(databases, eq(tables.databaseId, databases.id))
       .where(eq(tables.organizationId, currentOrg.id));
 
-    console.log(`[GET-TABLES] Found ${tableList.length} tables:`, tableList.map(t => ({ id: t.id, name: t.name, dbName: t.dbName })));
+    console.log(`[GET-TABLES] Found ${tableList.length} tables:`, tableList.map(t => ({ id: t.id, name: t.name, dbName: t.dbName, database: t.database?.name })));
     return tableList;
   } catch (error) {
     console.error("Error fetching tables:", error);
@@ -90,7 +146,7 @@ export async function getTables() {
   }
 }
 
-export async function deleteTable(tableId: number): Promise<ActionResult> {
+export async function deleteTable(tableId: number, revalidateUrl?: string): Promise<ActionResult> {
   try {
     const session = await requirePermission("manage_tables");
     const currentOrg = await requireCurrentOrganization();
@@ -127,10 +183,20 @@ export async function deleteTable(tableId: number): Promise<ActionResult> {
     // Drop dynamic table first
     await dropDynamicTable(table.dbName);
     
+    // Trigger RAG reindexing for tables domain in this organization
+    autoReindexService.debouncedReindex(currentOrg.id, 'tables').catch(error => {
+      console.error('Failed to trigger RAG reindexing after table deletion:', error)
+    })
+    
     // Then delete metadata
     await db.delete(tables).where(eq(tables.id, tableId));
 
-    revalidatePath('/mission-control');
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/data'); // Default path for table operations
+    }
     
     return {
       success: true,
@@ -154,6 +220,6 @@ export async function deleteTableAction(formData: FormData) {
     throw new Error(result.error);
   }
 
-  revalidatePath('/mission-control');
+  // Note: revalidatePath is handled in the main deleteTable function
   return result;
 }

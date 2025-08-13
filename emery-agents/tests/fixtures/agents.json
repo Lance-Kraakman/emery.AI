@@ -1,0 +1,99 @@
+[
+  {
+    "id": 1,
+    "name": "Email Assistant",
+    "role": "assistant", 
+    "description": "Helps with email management and communication",
+    "persona": "Friendly and efficient email assistant",
+    "tools": [
+      {"name": "gmail_api", "version": "1.0"}
+    ],
+    "servers": [
+      {"name": "gmail", "endpoint": "https://gmail.googleapis.com"}
+    ],
+    "capabilities": [
+      {
+        "name": "email_management",
+        "description": "Manage emails including sending, reading, and organizing",
+        "steps": [
+          {
+            "id": "read_emails",
+            "type": "TOOL_STEP",
+            "instructions": "Read and analyze incoming emails",
+            "tools": [{"name": "gmail_api"}]
+          },
+          {
+            "id": "respond_emails", 
+            "type": "CODE_STEP",
+            "instructions": "Generate appropriate email responses",
+            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "name": "Data Analyst",
+    "role": "analyst",
+    "description": "Analyzes data and generates insights",
+    "persona": "Thorough and analytical data expert",
+    "tools": [
+      {"name": "pandas", "version": "2.0"},
+      {"name": "matplotlib", "version": "3.7"}
+    ],
+    "capabilities": [
+      {
+        "name": "data_analysis",
+        "description": "Comprehensive data analysis and visualization",
+        "steps": [
+          {
+            "id": "load_data",
+            "type": "CODE_STEP", 
+            "instructions": "Load and clean data from various sources"
+          },
+          {
+            "id": "analyze_data",
+            "type": "CODE_STEP",
+            "instructions": "Perform statistical analysis and create visualizations"
+          },
+          {
+            "id": "generate_report",
+            "type": "CODE_STEP",
+            "instructions": "Generate comprehensive analysis report"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "name": "Task Coordinator",
+    "role": "coordinator",
+    "description": "Coordinates multiple tasks and workflows",
+    "persona": "Organized and efficient task manager",
+    "capabilities": [
+      {
+        "name": "task_orchestration",
+        "description": "Orchestrate complex multi-step workflows",
+        "steps": [
+          {
+            "id": "plan_workflow",
+            "type": "TOOL_STEP",
+            "instructions": "Plan and organize workflow steps"
+          },
+          {
+            "id": "execute_tasks",
+            "type": "TOOL_STEP", 
+            "instructions": "Execute individual tasks in sequence"
+          },
+          {
+            "id": "monitor_progress",
+            "type": "TOOL_STEP",
+            "instructions": "Monitor and report on progress"
+          }
+        ]
+      }
+    ]
+  }
+]

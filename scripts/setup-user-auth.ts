@@ -25,7 +25,7 @@ async function setupUserAuth() {
         id: users.id,
         email: users.email,
         name: users.name,
-        organizationId: users.organizationId,
+        organizationId: users.currentOrganizationId,
         hasApiKey: users.apiKey,
       })
       .from(users);

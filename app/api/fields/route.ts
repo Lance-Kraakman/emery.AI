@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   try {
     // Authenticate the request
     const authResult = await authenticateRequest(request);
-    if (!authResult.authenticated) {
+    if (!authResult.success) {
       return NextResponse.json(
         { error: authResult.error || 'Authentication required' },
         { status: 401 }
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify table belongs to user's organization
-    if (table.organizationId !== authResult.user.organizationId) {
+    if (!authResult.user || table.organizationId !== authResult.user.organizationId) {
       return NextResponse.json(
         { error: "Access denied: table not in your organization" },
         { status: 403 }

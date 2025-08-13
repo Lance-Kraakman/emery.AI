@@ -6,14 +6,16 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
+import { autoReindexService } from "@/lib/rag/auto-reindex";
+import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
 import type { ActionResult, CreateAgentData } from "./types";
 
-// Simple API key generator
+// AIDEV-NOTE: Simple API key generator for agent authentication - use more secure method in production
 function generateApiKey(): string {
   return 'ag_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
-export async function createAgent(data: CreateAgentData): Promise<ActionResult> {
+export async function createAgent(data: CreateAgentData, revalidateUrl?: string): Promise<ActionResult> {
   try {
     const session = await requirePermission("manage_agents");
     const { 
@@ -52,7 +54,17 @@ export async function createAgent(data: CreateAgentData): Promise<ActionResult> 
       apiKey: generateApiKey(),
     }).returning();
 
-    revalidatePath('/mission-control');
+    // Trigger RAG reindexing for agents domain in this organization
+    if (session.user.currentOrganizationId) {
+      autoReindexService.debouncedReindex(session.user.currentOrganizationId, 'agents').catch(console.error);
+    }
+
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/manage'); // Default path for agent operations
+    }
     
     return {
       success: true,
@@ -67,57 +79,104 @@ export async function createAgent(data: CreateAgentData): Promise<ActionResult> 
   }
 }
 
-export async function createAgentAction(formData: FormData) {
-  const name = formData.get('name') as string;
-  const role = formData.get('role') as string;
-  const description = formData.get('description') as string;
-  const persona = formData.get('persona') as string;
-  const status = formData.get('status') as string;
-  const toolsStr = formData.get('tools') as string;
-  const serversStr = formData.get('servers') as string;
-  
-  // Parse tools into ToolConfig[] format
-  const tools = toolsStr 
-    ? toolsStr.split(',')
-        .map(t => t.trim())
-        .filter(t => t)
-        .map(toolName => ({ name: toolName })) // Simple format, can be enhanced later
-    : undefined;
-  
-  // Parse servers into ServerConfig[] format  
-  const servers = serversStr 
-    ? serversStr.split(',')
-        .map(s => s.trim())
-        .filter(s => s)
-        .map(serverName => ({ name: serverName })) // Simple format, can be enhanced later
-    : undefined;
-
-  const result = await createAgent({ 
-    name, 
-    role, 
-    description, 
-    persona, 
-    tools, 
-    servers, 
-    status 
-  });
-  
-  if (!result.success) {
-    throw new Error(result.error);
+export async function addCapabilityToAgent(agentId: number, capability: { name: string; description: string; tools: string[]; servers: any[] }) {
+  'use server';
+  const agent = await db.select().from(agents).where(eq(agents.id, agentId));
+  if (agent.length === 0) {
+    throw new Error("Agent not found");
   }
-
-  revalidatePath('/mission-control');
-  return result;
+  const existingCapabilities = (agent[0].capabilities as any[]) || [];
+  const newCapabilities = [...existingCapabilities, capability];
+  await db.update(agents).set({ capabilities: newCapabilities }).where(eq(agents.id, agentId));
 }
 
-export async function getAgents() {
+export async function createAgentAction(formData: FormData): Promise<ActionResult> {
   try {
     const currentOrg = await requireCurrentOrganization();
     
+    // Parse form data
+    const rawData = parseFormDataToAgent(formData);
+    const dataWithOrg = { ...rawData, organizationId: currentOrg.id };
+    
+    // Validate using Zod schema
+    const validatedData = createAgentSchema.parse(dataWithOrg);
+    
+    // Parse tools and servers from form if they exist
+    const toolsStr = formData.get('tools') as string;
+    const serversStr = formData.get('servers') as string;
+    
+    const tools = toolsStr 
+      ? toolsStr.split(',')
+          .map(t => t.trim())
+          .filter(t => t)
+          .map(toolName => ({ name: toolName })) // Simple format, can be enhanced later
+      : undefined;
+    
+    const servers = serversStr 
+      ? serversStr.split(',')
+          .map(s => s.trim())
+          .filter(s => s)
+          .map(serverName => ({ name: serverName })) // Simple format, can be enhanced later
+      : undefined;
+
+    const result = await createAgent({ 
+      ...validatedData,
+      tools, 
+      servers,
+      status: 'active'
+    });
+    
+    return result;
+  } catch (error) {
+    console.error("Error in createAgentAction:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to create agent",
+    };
+  }
+}
+
+import { and, like, sql, desc } from "drizzle-orm";
+import { teams } from "@/lib/db/schema";
+
+export async function getAgents(filters: { teamId?: number | string, searchQuery?: string } = {}) {
+  try {
+    const currentOrg = await requireCurrentOrganization();
+    const { teamId, searchQuery } = filters;
+
+    const conditions = [eq(agents.organizationId, currentOrg.id)];
+
+    if (searchQuery) {
+      conditions.push(like(agents.name, `%${searchQuery}%`));
+    }
+
+    if (teamId && teamId !== 'all') {
+      const teamIdNumber = Number(teamId);
+      if (isNaN(teamIdNumber)) {
+        console.warn(`Invalid teamId provided: ${teamId}`);
+        return [];
+      }
+      
+      const team = await db.select({ agentIds: teams.agentIds }).from(teams).where(eq(teams.id, teamIdNumber));
+      if (team.length > 0 && team[0].agentIds) {
+        const agentIdsAsNumbers = team[0].agentIds.map(id => Number(id));
+        if(agentIdsAsNumbers.length > 0) {
+          conditions.push(sql`${agents.id} IN ${agentIdsAsNumbers}`);
+        } else {
+          // No agents in this team, return empty
+          return [];
+        }
+      } else {
+        // Team not found or has no agents, return empty
+        return [];
+      }
+    }
+
     const organizationAgents = await db
       .select()
       .from(agents)
-      .where(eq(agents.organizationId, currentOrg.id));
+      .where(and(...conditions))
+      .orderBy(desc(agents.createdAt));
 
     return organizationAgents;
   } catch (error) {
@@ -144,7 +203,7 @@ export async function getAgent(agentId: number) {
   }
 }
 
-export async function updateAgent(agentId: number, data: Partial<CreateAgentData>): Promise<ActionResult> {
+export async function updateAgent(agentId: number, data: Partial<CreateAgentData>, revalidateUrl?: string): Promise<ActionResult> {
   try {
     if (!agentId) {
       return {
@@ -159,7 +218,12 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       .where(eq(agents.id, agentId))
       .returning();
 
-    revalidatePath('/mission-control');
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/manage'); // Default path for agent operations
+    }
     
     return {
       success: true,
@@ -174,7 +238,7 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
   }
 }
 
-export async function deleteAgent(agentId: number): Promise<ActionResult> {
+export async function deleteAgent(agentId: number, revalidateUrl?: string): Promise<ActionResult> {
   try {
     if (!agentId) {
       return {
@@ -185,7 +249,12 @@ export async function deleteAgent(agentId: number): Promise<ActionResult> {
 
     await db.delete(agents).where(eq(agents.id, agentId));
 
-    revalidatePath('/mission-control');
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/manage'); // Default path for agent operations
+    }
     
     return {
       success: true,

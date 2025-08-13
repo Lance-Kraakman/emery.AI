@@ -18,11 +18,15 @@ service AgentWorker {
 message TaskRequest {
   string task_id = 1;              // Unique task identifier
   int32 agent_id = 2;              // Agent to execute the task
-  string capability_name = 3;      // Which capability to execute
-  string trigger_data_json = 4;    // Input payload as JSON string
-  string organization_id = 5;      // Organization for multi-tenant routing
-  string owner_id = 6;             // Agent owner ID for OAuth credentials
-  int32 timeout_seconds = 7;       // Task execution timeout (default: 300)
+  oneof execution_mode {
+    string capability_name = 3;     // Direct capability execution
+    InstructionConfig instruction_config = 9; // Instruction-based execution with auto-routing
+  }
+  AgentConfig agent_config = 4;    // Complete agent configuration
+  TriggerData trigger_data = 5;    // Structured trigger data
+  string organization_id = 6;      // Organization for multi-tenant routing
+  string owner_id = 7;             // Agent owner ID for OAuth credentials
+  int32 timeout_seconds = 8;       // Task execution timeout (default: 300)
 }
 
 // Streaming progress updates during task execution
@@ -89,4 +93,64 @@ message ErrorResponse {
   string code = 1;                 // Error code (e.g., "TASK_NOT_FOUND")
   string message = 2;              // Human-readable error message
   string details = 3;              // Additional error details
+}
+
+// Complete agent configuration
+message AgentConfig {
+  string name = 1;
+  string role = 2;
+  string description = 3;
+  string persona = 4;
+  repeated ToolConfig tools = 5;
+  repeated ServerConfig servers = 6;
+  repeated CapabilityConfig capabilities = 7;
+}
+
+// Capability configuration with steps
+message CapabilityConfig {
+  string name = 1;
+  string description = 2;
+  repeated StepConfig steps = 3;
+}
+
+// Individual step configuration
+message StepConfig {
+  string id = 1;
+  StepType type = 2;
+  string instructions = 3;
+  string model = 4;
+  repeated ToolConfig tools = 5;
+  repeated ServerConfig servers = 6;
+}
+
+// Tool configuration
+message ToolConfig {
+  string name = 1;
+  string version = 2;
+  map<string, string> config = 3;
+}
+
+// Server configuration  
+message ServerConfig {
+  string name = 1;
+  string endpoint = 2;
+  map<string, string> config = 3;
+}
+
+// Step execution types
+enum StepType {
+  CODE_STEP = 0;
+  TOOL_STEP = 1;
+}
+
+// Trigger data payload
+message TriggerData {
+  map<string, string> payload = 1;
+}
+
+// Instruction-based execution configuration for auto-routing
+message InstructionConfig {
+  string instructions = 1;           // Natural language instructions
+  repeated ToolConfig tools = 2;     // Optional tools for this task
+  repeated ServerConfig servers = 3; // Optional servers for this task
 }

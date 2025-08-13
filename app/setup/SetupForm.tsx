@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from "react";
-import { setupInitialAdmin } from "@/app/actions/setup";
-import { useRouter } from "next/navigation";
+import { createOrganization } from "@/app/actions/setup";
+import { redirect, useRouter } from "next/navigation";
 
 export function SetupForm() {
   const [loading, setLoading] = useState(false);
@@ -14,13 +14,10 @@ export function SetupForm() {
     setError(null);
 
     try {
-      const result = await setupInitialAdmin({
-        organizationName: formData.get('organizationName') as string,
-        organizationMission: formData.get('organizationMission') as string,
-      });
+      const result = await createOrganization(formData);
 
       if (result.success) {
-        router.push("/dashboard");
+        redirect("/mission-control");
       } else {
         setError(result.error || "Setup failed");
       }
@@ -75,12 +72,7 @@ export function SetupForm() {
       </button>
 
       <div className="text-xs text-gray-500 mt-4">
-        <p>This will:</p>
-        <ul className="list-disc list-inside mt-2 space-y-1">
-          <li>Create your organization</li>
-          <li>Set up standard roles (Super Admin, Admin, Editor, Viewer)</li>
-          <li>Make you the Super Admin with full permissions</li>
-        </ul>
+        <p>This will create your first organization and set you as the owner.</p>
       </div>
     </form>
   );

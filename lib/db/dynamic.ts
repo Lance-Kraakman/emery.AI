@@ -1,13 +1,7 @@
-import { db } from "./client";
+import { db, rawClient } from "./client";
 import { sql } from "drizzle-orm";
-import postgres from "postgres";
 
-// Create a shared postgres client pool for raw SQL operations
-const rawClient = postgres(process.env.DATABASE_URL!, {
-  max: 10, // Maximum 10 connections in pool
-  idle_timeout: 20, // Close idle connections after 20 seconds
-  max_lifetime: 60 * 30, // Close connections after 30 minutes
-});
+// AIDEV-NOTE: Use shared raw client from client.ts to prevent connection leaks
 
 export async function createDynamicTable(tableName: string) {
   await db.execute(sql.raw(`

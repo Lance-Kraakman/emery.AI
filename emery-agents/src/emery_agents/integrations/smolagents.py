@@ -1,161 +1,215 @@
 """
-Integration with smolagents library for AI agent execution.
-Provides CodeAgent and ToolCallingAgent capabilities.
+Simple hierarchical smolagents integration that directly models our system.
+
+Architecture mirrors our system exactly:
+Agent (CodeAgent)
+  └── managed_agents: {capability_name: CapabilityAgent, ...}
+      └── Each CapabilityAgent (CodeAgent)  
+          └── managed_agents: [StepAgent1, StepAgent2, ...]
+              └── Each StepAgent (CodeAgent/ToolCallingAgent) with step-specific tools/servers
+
+ONE AGENT CALL: agent.run(instructions) - smolagents handles all internal routing
 """
 
 import logging
+import os
 from typing import Dict, Any, List, Optional
 
-from ..core.types import StepType
+# Constants
+DEFAULT_HF_MODEL_CODE = "Qwen/Qwen2.5-Coder-32B-Instruct"
+DEFAULT_HF_MODEL_GENERAL = "Qwen/Qwen2.5-72B-Instruct"
+
+from ..core.types import (
+    StepType, Agent, CapabilityConfig, TaskInstructions, 
+    ContextData, OrchestratorResult
+)
+from smolagents import CodeAgent, ToolCallingAgent
+from smolagents.models import InferenceClientModel
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
+# Load .env file if it exists
+env_path = "/Users/lancekraakman/orchastrate/emery-agents/src/emery_agents/.env.local"
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+    logger.info(f"Loaded .env file from {env_path}")
 
-class SmolAgentsIntegration:
+
+class SmolAgentsOrchestrator:
     """
-    Integration with smolagents library.
+    Simple smolagents orchestrator that directly models our system architecture.
     
-    Handles execution of AI agent steps using smolagents' CodeAgent and 
-    ToolCallingAgent classes with dynamic tool loading.
+    Creates: Agent → CapabilityAgents → StepAgents hierarchy
     """
     
     def __init__(self):
-        self.agents = {}
-        self.tools_registry = {}
-        logger.info("SmolAgentsIntegration initialized")
+        self.agent: Optional[CodeAgent] = None
+        logger.info("SmolAgentsOrchestrator initialized")
     
-    def _get_agent(self, step_type: StepType, model: Optional[str] = None):
+    def setup_agent_orchestrator(self, agent: Agent) -> None:
         """
-        Get appropriate smolagents agent instance.
+        Set up the agent hierarchy that directly mirrors our system structure.
         
         Args:
-            step_type: Type of step (CODE_STEP or TOOL_STEP)
-            model: Model identifier (e.g., "claude-3-sonnet-20240229")
-            
-        Returns:
-            Appropriate smolagents agent instance
+            agent: Agent configuration with capabilities → steps → tools/servers
         """
-        try:
-            # Import smolagents dynamically to avoid hard dependency
-            from smolagents import CodeAgent, ToolCallingAgent
-            
-            if step_type == StepType.CODE_STEP:
-                return CodeAgent(model=model or "claude-3-sonnet-20240229")
-            elif step_type == StepType.TOOL_STEP:
-                return ToolCallingAgent(model=model or "claude-3-sonnet-20240229")
-            else:
-                raise ValueError(f"Unsupported step type for smolagents: {step_type}")
-                
-        except ImportError:
-            raise RuntimeError(
-                "smolagents library not available. Install with: uv add smolagents"
+        hf_token = os.getenv("HF_TOKEN")
+        if not hf_token:
+            raise EnvironmentError("HF_TOKEN environment variable is required")
+        
+        logger.info(f"Setting up agent hierarchy for: {agent.name}")
+        
+        # Create capability agents
+        capability_agents = []
+        if agent.capabilities:
+            for capability in agent.capabilities:
+                capability_agent = self._create_capability_agent(capability, hf_token)
+                capability_agent.name = capability.name
+                capability_agent.description = capability.description or f"Handles {capability.name} capability"
+                capability_agents.append(capability_agent)
+                logger.info(f"Created capability agent: {capability.name} with {len(capability.steps)} steps")
+        
+        # Create the top-level agent
+        model = InferenceClientModel(DEFAULT_HF_MODEL_GENERAL, token=hf_token)
+        
+        self.agent = CodeAgent(
+            tools=[],
+            model=model,
+            managed_agents=capability_agents,
+            additional_authorized_imports=["time", "json", "os", "sys"]
+        )
+        
+        logger.info(f"Agent created with {len(capability_agents)} capability agents")
+    
+    def _create_capability_agent(self, capability: CapabilityConfig, hf_token: str) -> CodeAgent:
+        """Create a capability agent with managed step agents."""
+        
+        # Create step agents for this capability
+        step_agents = []
+        for step in capability.steps:
+            step_agent = self._create_step_agent(step, hf_token)
+            step_agent.name = step.id
+            step_agent.description = step.instructions
+            step_agents.append(step_agent)
+            logger.debug(f"Created step agent: {step.id} ({step.type.value})")
+        
+        # Create capability agent with step agents as managed_agents
+        model = InferenceClientModel(DEFAULT_HF_MODEL_GENERAL, token=hf_token)
+        
+        capability_agent = CodeAgent(
+            tools=[],
+            model=model,
+            managed_agents=step_agents,
+            additional_authorized_imports=["time", "json", "os", "sys"]
+        )
+        
+        return capability_agent
+    
+    def _create_step_agent(self, step, hf_token: str) -> CodeAgent | ToolCallingAgent:
+        """Create a step agent with step-specific tools and servers."""
+        
+        # Choose model based on step
+        model_name = step.model or (
+            DEFAULT_HF_MODEL_CODE if step.type == StepType.CODE_STEP 
+            else DEFAULT_HF_MODEL_GENERAL
+        )
+        model = InferenceClientModel(model_name, token=hf_token)
+        
+        # Load step-specific tools
+        step_tools = []
+        if step.tools:
+            for tool_config in step.tools:
+                tool_instance = self._load_tool(tool_config)
+                if tool_instance:
+                    step_tools.append(tool_instance)
+                    logger.debug(f"Loaded tool: {tool_config.name}")
+        
+        # Create appropriate agent type
+        if step.type == StepType.CODE_STEP:
+            return CodeAgent(
+                tools=step_tools,
+                model=model,
+                additional_authorized_imports=["time", "json", "os", "sys"]
+            )
+        else:
+            return ToolCallingAgent(
+                tools=step_tools,
+                model=model
             )
     
-    async def execute_step(
-        self, 
-        step_type: StepType,
-        instructions: str,
-        tools: List[str],
-        context: Dict[str, Any],
-        model: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Execute a step using smolagents.
-        
-        Args:
-            step_type: Type of step to execute (CODE_STEP or TOOL_STEP)
-            instructions: Instructions for the agent
-            tools: List of tool names to load
-            context: Current execution context/variables
-            model: Model to use for execution
-            
-        Returns:
-            Dict with execution results
-        """
-        logger.info(f"Executing {step_type.value} step with {len(tools)} tools")
+    def _load_tool(self, tool_config):
+        """Load a tool instance from configuration."""
+        tool_name = tool_config.name if hasattr(tool_config, 'name') else str(tool_config)
         
         try:
-            # Get agent instance
-            agent = self._get_agent(step_type, model)
+            # Basic tool mappings - expand as needed
+            if tool_name == "python_repl":
+                from smolagents import PythonInterpreterTool
+                return PythonInterpreterTool()
+            elif tool_name == "web_search":
+                from smolagents import DuckDuckGoSearchTool
+                return DuckDuckGoSearchTool()
+            elif tool_name == "speech_to_text":
+                from smolagents import SpeechToTextTool
+                return SpeechToTextTool()
             
-            # Load tools
-            for tool_name in tools:
-                tool = await self._load_tool(tool_name)
-                if tool:
-                    agent.add_tool(tool)
-                    logger.debug(f"Loaded tool: {tool_name}")
-            
-            # Prepare execution context
-            execution_context = {
-                **context,
-                "instructions": instructions
-            }
-            
-            # Execute the agent
-            logger.info(f"Running {step_type.value} with instructions: {instructions[:100]}...")
-            result = await agent.run(instructions, **execution_context)
-            
-            # Format results
-            output = {
-                "result": result,
-                "step_type": step_type.value,
-                "tools_used": tools,
-                "model": model,
-                "status": "success"
-            }
-            
-            logger.info(f"Step execution completed successfully")
-            return output
-            
-        except Exception as e:
-            logger.exception(f"Step execution failed: {e}")
-            return {
-                "error": str(e),
-                "step_type": step_type.value,
-                "status": "failed"
-            }
-    
-    async def _load_tool(self, tool_name: str):
-        """
-        Load a tool by name from the tools registry.
-        
-        Args:
-            tool_name: Name of the tool to load
-            
-        Returns:
-            Tool instance or None if not found
-        """
-        # Check if tool is already loaded
-        if tool_name in self.tools_registry:
-            return self.tools_registry[tool_name]
-        
-        try:
-            # AIDEV-TODO: Implement dynamic tool loading based on tool_name
-            # For now, return None - tools will need to be registered separately
-            logger.warning(f"Tool {tool_name} not found in registry")
+            logger.warning(f"Tool {tool_name} not found in mappings")
             return None
             
+        except ImportError as e:
+            logger.warning(f"Could not import tool {tool_name}: {e}")
+            return None
         except Exception as e:
             logger.error(f"Failed to load tool {tool_name}: {e}")
             return None
     
-    def register_tool(self, name: str, tool_instance):
+    async def execute_with_orchestrator(
+        self, 
+        instructions: TaskInstructions,
+    ) -> OrchestratorResult:
         """
-        Register a tool in the tools registry.
+        Execute instructions using the hierarchical agent system.
         
-        Args:
-            name: Tool name
-            tool_instance: Tool instance
+        ONE AGENT CALL - smolagents handles all internal routing through the hierarchy.
         """
-        self.tools_registry[name] = tool_instance
-        logger.info(f"Registered tool: {name}")
-    
-    def list_available_tools(self) -> List[str]:
-        """Get list of available tool names."""
-        return list(self.tools_registry.keys())
+        if not self.agent:
+            raise RuntimeError("Agent not set up. Call setup_agent_orchestrator() first.")
+        
+        logger.info(f"Executing task: {instructions.instructions[:100]}...")
+        
+        try:
+            # Single agent call - smolagents manages the hierarchy internally
+            result = await self.agent.run(instructions.instructions)
+            
+            return {
+                "status": "success",
+                "selected_capability": "smolagents_managed",
+                "result": {
+                    "capability_used": "smolagents_hierarchy",
+                    "status": "completed",
+                    "output": result,
+                    "agent_type": "HierarchicalAgent"
+                },
+                "orchestrator": "smolagents_hierarchy"
+            }
+            
+        except Exception as e:
+            logger.exception(f"Execution failed: {e}")
+            
+            return {
+                "status": "failed",
+                "error": str(e),
+                "result": {
+                    "capability_used": "smolagents_hierarchy", 
+                    "status": "failed",
+                    "error": str(e),
+                    "agent_type": "HierarchicalAgent"
+                },
+                "orchestrator": "smolagents_hierarchy"
+            }
 
 
-# AIDEV-NOTE: This integration provides the bridge to smolagents library
-# AIDEV-TODO: Implement comprehensive tool registry with common tools
-# AIDEV-TODO: Add support for tool configuration and parameters
-# AIDEV-QUESTION: Should we cache agent instances or create new ones each time?
+# AIDEV-NOTE: Simplified architecture directly models our system structure
+# AIDEV-NOTE: Agent → CapabilityAgents → StepAgents with tools at step level
+# AIDEV-NOTE: One agent call, smolagents handles all internal context and routing

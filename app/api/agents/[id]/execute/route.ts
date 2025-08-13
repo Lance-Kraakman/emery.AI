@@ -1,13 +1,19 @@
 import { NextRequest } from 'next/server';
-import { auth } from '@/lib/auth';
+import { authenticateRequest } from '@/lib/auth/test-auth';
 import { db } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { executeAgentCapabilityViaGRPC } from '@/lib/agents/grpc-executor';
+import { executeAgentCapabilityViaGRPC as executeAgentViaGRPC } from '@/lib/agents/grpc-executor';
+import crypto from 'crypto';
 
 export interface AgentExecuteRequest {
-  // New capability execution (main approach)
-  capability_name: string;
+  // Capability execution approaches
+  capability_name?: string; // Optional - for direct capability execution
+  instructions?: string; // Optional - for instruction-based execution with auto-routing
+  tools?: Array<{name: string, version?: string, config?: Record<string, any>}>; // Optional tools for instruction-based execution
+  servers?: Array<{name: string, endpoint?: string, config?: Record<string, any>}>; // Optional servers for instruction-based execution
+  
+  // Legacy support
   trigger_data?: Record<string, any>;
   step_overrides?: Array<Record<string, any>>;
   
@@ -34,22 +40,13 @@ export async function POST(
 ): Promise<Response> {
   const params = await context.params;
   try {
-    const session = await auth();
+    const authResult = await authenticateRequest(request);
     
-    // AIDEV-NOTE: Development bypass for testing - remove in production
-    let userId = session?.user?.id;
-    if (!session?.user && process.env.NODE_ENV === 'development') {
-      // Allow testing with test user ID via header
-      const testUserId = request.headers.get('x-test-user-id');
-      if (testUserId === '550e8400-e29b-41d4-a716-446655440000') {
-        userId = testUserId;
-        console.log('⚠️  Using development test user bypass for execute');
-      } else {
-        return Response.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-    } else if (!session?.user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!authResult.success || !authResult.user) {
+      return Response.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
     }
+    
+    const userId = authResult.user.id;
 
     const agentId = parseInt(params.id);
     if (isNaN(agentId)) {
@@ -75,23 +72,32 @@ export async function POST(
     }
 
     const body: AgentExecuteRequest = await request.json();
-    const { capability_name, trigger_data, step_overrides, webhook_url, timeout = 30000 } = body;
+    const { capability_name, instructions, tools, servers, trigger_data, step_overrides, webhook_url, timeout = 30000 } = body;
 
-    if (!capability_name) {
+    if (!capability_name && !instructions) {
       return Response.json({ 
-        error: 'capability_name is required' 
+        error: 'Either capability_name or instructions is required' 
       }, { status: 400 });
     }
 
-    // Generate execution ID for tracking
-    const executionId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Generate execution ID for tracking (UUID format for database compatibility)
+    const executionId = crypto.randomUUID();
 
-    // Execute agent capability via gRPC worker
-    console.log(`[GRPC-CAPABILITY-EXEC] ${executionId}: Agent ${agentId} executing capability '${capability_name}' for user ${userId}`);
+    // Execute agent capability or instruction-based task via gRPC worker
+    if (capability_name) {
+      console.log(`[GRPC-CAPABILITY-EXEC] ${executionId}: Agent ${agentId} executing capability '${capability_name}' for user ${userId}`);
+    } else {
+      console.log(`[GRPC-INSTRUCTION-EXEC] ${executionId}: Agent ${agentId} executing instruction-based task for user ${userId}`);
+    }
     
-    const result = await executeAgentCapabilityViaGRPC({
-      agent,
+    const result = await executeAgentViaGRPC({
+      agentId: agentId,
       capabilityName: capability_name,
+      instructionConfig: instructions ? {
+        instructions,
+        tools: tools || [],
+        servers: servers || [],
+      } : undefined,
       triggerData: trigger_data || {},
       stepOverrides: step_overrides,
       executionId,

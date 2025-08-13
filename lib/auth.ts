@@ -8,6 +8,35 @@ import { eq } from "drizzle-orm"
 import { getServerSession } from "next-auth"
 import { getSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react"
 
+// AIDEV-NOTE: Development bypass for testing - allows tests to authenticate as specific user
+export function getTestUserId(): string {
+  return "550e8400-e29b-41d4-a716-446655440000";
+}
+
+export function isDevelopmentBypass(): boolean {
+  return process.env.NODE_ENV === "development";
+}
+
+// AIDEV-NOTE: Reusable development bypass for API routes
+export async function getUserIdFromRequest(request: Request): Promise<string | null> {
+  const session = await auth();
+  
+  // Return authenticated user ID if available
+  if (session?.user?.id) {
+    return session.user.id;
+  }
+  
+  // Development bypass for testing
+  if (isDevelopmentBypass()) {
+    const testUserId = request.headers.get('x-test-user-id');
+    if (testUserId === getTestUserId()) {
+      return testUserId;
+    }
+  }
+  
+  return null;
+}
+
 const authOptions = {
   adapter: DrizzleAdapter(db, {
     usersTable: users,
@@ -72,23 +101,42 @@ const authOptions = {
                   userRole: currentOrg.userOrg.role
                 } : null;
               }
+
+              // If no current organization is set, but the user has available organizations,
+              // set the first one as the current organization.
+              if (!session.user.currentOrganization && userOrgs.length > 0) {
+                const firstOrg = userOrgs[0];
+                session.user.currentOrganization = {
+                  ...firstOrg.organization,
+                  userRole: firstOrg.userOrg.role
+                };
+                session.user.currentOrganizationId = firstOrg.organization.id;
+
+                // Update the user record in the database
+                await db.update(users)
+                  .set({ currentOrganizationId: firstOrg.organization.id })
+                  .where(eq(users.id, user.id));
+              }
             } catch (orgError) {
               console.warn("Could not load user organizations:", orgError);
               session.user.availableOrganizations = [];
             }
           }
           
-          // Check if this is the first user (potential super admin)
-          if (!userRecord?.currentOrganizationId || !userRecord?.roleId || !session.user.availableOrganizations?.length) {
+          // After attempting to set the organization, check if the user still needs setup.
+          const needsSetup = !session.user.currentOrganizationId || !userRecord.roleId;
+          session.user.needsSetup = needsSetup;
+
+          if (needsSetup) {
             try {
-              const userCount = await db.select().from(users);
-              session.user.isFirstUser = userCount.length === 1;
-              session.user.needsSetup = true;
+              const userCountResult = await db.select().from(users);
+              session.user.isFirstUser = userCountResult.length === 1;
             } catch (countError) {
               console.warn("Could not check user count in session callback:", countError);
               session.user.isFirstUser = false;
-              session.user.needsSetup = true; // Assume setup needed if we can't check
             }
+          } else {
+            session.user.isFirstUser = false;
           }
         } catch (dbError) {
           console.error("Database error in session callback:", dbError);

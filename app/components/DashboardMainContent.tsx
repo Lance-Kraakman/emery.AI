@@ -38,7 +38,7 @@ export default function DashboardMainContent() {
         ) : (
           <>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-              <div className="bg-card rounded-lg border p-6">
+              <div className="rounded-lg border p-6">
                 <h3 className="font-semibold mb-2">Tables</h3>
                 <p className="text-2xl font-bold text-primary">
                   {data.databases.reduce((acc, db) => acc + db.tables.length, 0)}
@@ -48,13 +48,13 @@ export default function DashboardMainContent() {
                 </p>
               </div>
               
-              <div className="bg-card rounded-lg border p-6">
+              <div className="rounded-lg border p-6">
                 <h3 className="font-semibold mb-2">Agents</h3>
                 <p className="text-2xl font-bold text-primary">{data.agents.length}</p>
                 <p className="text-sm text-muted-foreground">Active automation agents</p>
               </div>
               
-              <div className="bg-card rounded-lg border p-6">
+              <div className="rounded-lg border p-6">
                 <h3 className="font-semibold mb-2">Organization</h3>
                 <p className="text-lg font-medium">{data.organization?.name || 'Loading...'}</p>
                 <p className="text-sm text-muted-foreground">Current workspace</p>
@@ -65,7 +65,7 @@ export default function DashboardMainContent() {
               <div>
                 <h2 className="text-xl font-semibold mb-4">Recent Tables</h2>
                 {data.databases.length === 0 ? (
-                  <div className="bg-card rounded-lg border p-6 text-center">
+                  <div className="rounded-lg border p-6 text-center">
                     <p className="text-muted-foreground mb-4">No tables yet</p>
                     <p className="text-sm text-muted-foreground">
                       Create your first table using the sidebar or{' '}
@@ -83,7 +83,7 @@ export default function DashboardMainContent() {
                         <a
                           key={table.id}
                           href={`/mission-control?tableId=${table.id}`}
-                          className="bg-card rounded-lg border p-4 hover:shadow-md transition-shadow"
+                          className="rounded-lg border p-4 hover:shadow-md transition-shadow"
                         >
                           <h4 className="font-medium mb-1">{table.name}</h4>
                           <p className="text-sm text-muted-foreground">
@@ -104,7 +104,7 @@ export default function DashboardMainContent() {
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                   <a 
                     href="/manage?tab=agents"
-                    className="bg-card rounded-lg border p-4 hover:shadow-md transition-shadow text-center"
+                    className="rounded-lg border p-4 hover:shadow-md transition-shadow text-center"
                   >
                     <div className="text-2xl mb-2">🤖</div>
                     <h4 className="font-medium">Manage Agents</h4>
@@ -113,7 +113,7 @@ export default function DashboardMainContent() {
                   
                   <a 
                     href="/manage?tab=organization"
-                    className="bg-card rounded-lg border p-4 hover:shadow-md transition-shadow text-center"
+                    className="rounded-lg border p-4 hover:shadow-md transition-shadow text-center"
                   >
                     <div className="text-2xl mb-2">🏢</div>
                     <h4 className="font-medium">Organization</h4>
@@ -122,7 +122,7 @@ export default function DashboardMainContent() {
                   
                   <a 
                     href="/connections"
-                    className="bg-card rounded-lg border p-4 hover:shadow-md transition-shadow text-center"
+                    className="rounded-lg border p-4 hover:shadow-md transition-shadow text-center"
                   >
                     <div className="text-2xl mb-2">🔗</div>
                     <h4 className="font-medium">OAuth Connections</h4>
@@ -131,7 +131,7 @@ export default function DashboardMainContent() {
                   
                   <a 
                     href="/settings"
-                    className="bg-card rounded-lg border p-4 hover:shadow-md transition-shadow text-center"
+                    className="rounded-lg border p-4 hover:shadow-md transition-shadow text-center"
                   >
                     <div className="text-2xl mb-2">⚙️</div>
                     <h4 className="font-medium">Settings</h4>

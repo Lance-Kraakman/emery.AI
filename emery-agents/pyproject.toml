@@ -18,6 +18,9 @@ dependencies = [
     "grpcio>=1.60.0",
     "grpcio-tools>=1.60.0",
     "protobuf>=4.25.0",
+    "smolagents>=1.20.0",
+    "jinja2>=3.1.6",
+    "python-dotenv>=1.1.1",
 ]
 
 [project.optional-dependencies]
@@ -47,6 +50,7 @@ packages = ["src/emery_agents"]
 dev-dependencies = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
     "mypy>=1.7.0",
     "black>=23.11.0",
     "isort>=5.12.0",
@@ -74,7 +78,11 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
+markers = [
+    "integration: marks tests as integration tests",
+    "smolagents: marks tests that require smolagents and HF_TOKEN",
+    "grpc: marks tests that require gRPC dependencies"
+]
 
 [project.scripts]
-emery-agents = "emery_agents.cli:main"
-emery-worker = "emery_agents.grpc.server_simple:main"
+emery-worker = "emery_agents.grpc.server:main"

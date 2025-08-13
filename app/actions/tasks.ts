@@ -1,21 +1,21 @@
 'use server'
 
 import { db } from "@/lib/db/client";
-import { tasks, stepExecutions, agents } from "@/lib/db/schema";
+import { tasks, agents } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
-import type { ActionResult, CreateTaskData, Task, StepExecution } from "./types";
+import type { ActionResult, CreateTaskData } from "./types";
 
 export async function createTask(data: CreateTaskData): Promise<ActionResult> {
   try {
     const session = await requirePermission("manage_agents");
-    const { agentId, name, capabilityName, payload, createdBy } = data;
+    const { agentId, name, capabilityName, instructions, createdBy } = data;
 
-    if (!name || !capabilityName) {
+    if (!name || !instructions?.instructions) {
       return {
         success: false,
-        error: "Task name and capability name are required",
+        error: "Task name and instructions are required",
       };
     }
 
@@ -43,8 +43,8 @@ export async function createTask(data: CreateTaskData): Promise<ActionResult> {
     const [newTask] = await db.insert(tasks).values({
       agentId,
       name,
-      capabilityName,
-      payload,
+      capabilityName: capabilityName || null, // Allow null for auto-routing
+      instructions,
       status: "pending",
       createdBy: createdBy || session.user.id,
     }).returning();
@@ -121,50 +121,9 @@ export async function getTask(taskId: string): Promise<ActionResult> {
   }
 }
 
-export async function getTaskWithSteps(taskId: string): Promise<ActionResult> {
-  try {
-    await requirePermission("manage_agents");
-
-    // Get task
-    const [task] = await db
-      .select()
-      .from(tasks)
-      .where(eq(tasks.id, taskId))
-      .limit(1);
-
-    if (!task) {
-      return {
-        success: false,
-        error: "Task not found",
-      };
-    }
-
-    // Get step executions
-    const steps = await db
-      .select()
-      .from(stepExecutions)
-      .where(eq(stepExecutions.taskId, taskId))
-      .orderBy(stepExecutions.startedAt);
-
-    return {
-      success: true,
-      data: {
-        task,
-        steps,
-      },
-    };
-  } catch (error) {
-    console.error("Error fetching task with steps:", error);
-    return {
-      success: false,
-      error: "Failed to fetch task details",
-    };
-  }
-}
-
 export async function updateTaskStatus(
   taskId: string, 
-  status: 'pending' | 'in_progress' | 'completed' | 'failed',
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout',
   result?: any,
   error?: string
 ): Promise<ActionResult> {
@@ -177,7 +136,7 @@ export async function updateTaskStatus(
       updateData.startedAt = new Date();
     }
     
-    if (status === 'completed' || status === 'failed') {
+    if (['completed', 'failed', 'cancelled', 'timeout'].includes(status)) {
       updateData.completedAt = new Date();
     }
     
@@ -221,8 +180,6 @@ export async function deleteTask(taskId: string): Promise<ActionResult> {
       };
     }
 
-    // Delete step executions first (foreign key constraint)
-    await db.delete(stepExecutions).where(eq(stepExecutions.taskId, taskId));
     
     // Delete the task
     await db.delete(tasks).where(eq(tasks.id, taskId));
@@ -260,6 +217,8 @@ export async function getTaskStats(agentId?: number): Promise<ActionResult> {
       in_progress: allTasks.filter(t => t.status === 'in_progress').length,
       completed: allTasks.filter(t => t.status === 'completed').length,
       failed: allTasks.filter(t => t.status === 'failed').length,
+      cancelled: allTasks.filter(t => t.status === 'cancelled').length,
+      timeout: allTasks.filter(t => t.status === 'timeout').length,
     };
 
     return {

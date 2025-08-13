@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { auth } from '@/lib/auth';
+import { authenticateRequest } from '@/lib/auth/test-auth';
 import { db } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -41,22 +41,13 @@ export async function GET(
 ): Promise<Response> {
   const params = await context.params;
   try {
-    const session = await auth();
+    const authResult = await authenticateRequest(request);
     
-    // AIDEV-NOTE: Development bypass for testing - remove in production
-    let userId = session?.user?.id;
-    if (!session?.user && process.env.NODE_ENV === 'development') {
-      // Allow testing with test user ID via header
-      const testUserId = request.headers.get('x-test-user-id');
-      if (testUserId === '550e8400-e29b-41d4-a716-446655440000') {
-        userId = testUserId;
-        console.log('⚠️  Using development test user bypass');
-      } else {
-        return Response.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-    } else if (!session?.user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!authResult.success || !authResult.user) {
+      return Response.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
     }
+    
+    const userId = authResult.user.id;
 
     const agentId = parseInt(params.id);
     if (isNaN(agentId)) {
@@ -83,7 +74,7 @@ export async function GET(
     // Get owner's connected services
     const connections = await getUserConnections(agent.ownerId);
     const connectedServices: ConnectedService[] = connections.map(conn => ({
-      service: conn.app?.key || conn.app?.name || 'unknown',
+      service: (conn.app as any)?.key || (conn.app as any)?.name || 'unknown',
       account_name: conn.account_name || 'Unknown Account',
       status: conn.status as 'connected' | 'error' | 'disconnected',
       connected_at: conn.created_at,

@@ -5,6 +5,7 @@ interface OrganizationWithRole {
   name: string
   mission?: string | null
   userRole: string
+  viewConfig?: Record<string, any> | null
   createdAt?: Date | null
 }
 
