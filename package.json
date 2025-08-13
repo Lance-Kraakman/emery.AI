@@ -109,6 +109,7 @@
     "react-timezone-select": "^3.2.8",
     "recharts": "^3.1.2",
     "remark-gfm": "^4.0.1",
+    "resend": "^6.0.1",
     "rrule": "^2.8.1",
     "sonner": "^2.0.7",
     "swr": "^2.3.5",

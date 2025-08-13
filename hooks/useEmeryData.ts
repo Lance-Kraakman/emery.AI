@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { getTables } from '@/app/actions/tables';
 import { getDatabases } from '@/app/actions/databases';
 import { getAgents } from '@/app/actions/agents';
@@ -60,6 +61,7 @@ export interface EmeryData {
 
 export function useEmeryData() {
   const { data: session } = useSession();
+  const router = useRouter();
   const [data, setData] = useState<EmeryData>({
     databases: [],
     agents: [],
@@ -69,6 +71,12 @@ export function useEmeryData() {
   const [error, setError] = useState<string | null>(null);
 
   const currentOrg = session?.user?.currentOrganization;
+
+  useEffect(() => {
+    if (session?.user?.needsSetup && !session?.user?.currentOrganization) {
+      router.push('/setup');
+    }
+  }, [session, router]);
 
   const fetchData = useCallback(async () => {
     if (!session?.user || !currentOrg) {

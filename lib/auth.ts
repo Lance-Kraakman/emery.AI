@@ -123,26 +123,20 @@ const authOptions = {
             }
           }
           
-          // Check if the user needs to go through the setup process.
-          const userHasNoOrg = !userRecord?.currentOrganizationId
-          const userHasNoRole = !userRecord?.roleId
-          const userHasNoOrgMembership = !session.user.availableOrganizations?.length
-          
-          if (userHasNoOrg || userHasNoRole || userHasNoOrgMembership) {
-            session.user.needsSetup = true
+          // After attempting to set the organization, check if the user still needs setup.
+          const needsSetup = !session.user.currentOrganizationId || !userRecord.roleId;
+          session.user.needsSetup = needsSetup;
+
+          if (needsSetup) {
             try {
-              const userCountResult = await db.select().from(users)
-              session.user.isFirstUser = userCountResult.length === 1
+              const userCountResult = await db.select().from(users);
+              session.user.isFirstUser = userCountResult.length === 1;
             } catch (countError) {
-              console.warn(
-                "Could not check user count in session callback:",
-                countError,
-              )
-              session.user.isFirstUser = false
+              console.warn("Could not check user count in session callback:", countError);
+              session.user.isFirstUser = false;
             }
           } else {
-            session.user.needsSetup = false
-            session.user.isFirstUser = false
+            session.user.isFirstUser = false;
           }
         } catch (dbError) {
           console.error("Database error in session callback:", dbError);

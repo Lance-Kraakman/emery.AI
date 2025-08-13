@@ -4,12 +4,13 @@ import { db } from "@/lib/db/client";
 import { invitations, userOrganizations, users } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getSession } from "@/lib/auth";
+import { auth } from "@/lib/auth";
 import { nanoid } from "nanoid";
+import { sendInvitationEmail } from "@/lib/email";
 
 // This would typically be in a more central place
 async function requireCurrentOrganization() {
-  const session = await getSession();
+  const session = await auth();
   if (!session?.user?.currentOrganizationId) {
     throw new Error("No active organization selected");
   }
@@ -41,8 +42,8 @@ export async function inviteUser(formData: FormData) {
   });
 
   // In a real app, you'd email the invitation link:
-  // const invitationLink = `${process.env.NEXT_PUBLIC_URL}/invitations/${token}`;
-  // await sendInvitationEmail(email, invitationLink);
+  const invitationLink = `${process.env.NEXT_PUBLIC_URL}/invitations/${token}`;
+  await sendInvitationEmail(email, invitationLink);
   console.log(`Invitation link for ${email}: /invitations/${token}`);
 
   revalidatePath("/organization/settings/users");
@@ -50,7 +51,7 @@ export async function inviteUser(formData: FormData) {
 }
 
 export async function acceptInvitation(token: string) {
-  const session = await getSession();
+  const session = await auth();
   if (!session?.user) {
     // If user is not logged in, we can't proceed.
     // The UI should handle redirecting to login/signup.
