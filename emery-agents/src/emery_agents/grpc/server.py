@@ -21,9 +21,9 @@ from .proto_mappers import parse_task_request, create_task_progress
 
 # Import core execution system
 from ..core.runner import AgentRunner
-from ..core.types import TaskStatus
+from ..core.types import TaskStatus, Agent, TaskInstructions
 from ..integrations.emery_client import EmeryClientIntegration
-from ..integrations.smolagents import SmolAgentsIntegration
+from ..integrations.smolagents import SmolAgentsOrchestrator
 from ..integrations.mcp_servers import MCPServerIntegration
 
 # Setup logging
@@ -48,12 +48,68 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         
         # Initialize integrations that don't depend on specific agent config
         # AIDEV-NOTE: We initialize these once and reuse for all agent executions
-        logger.info(f"Initializing worker {self.worker_id} for organization {organization_id}")
         
-        # AIDEV-TODO: Initialize smolagents and MCP integrations here
-        # For now, we'll initialize them per-task to get basic functionality working
+    def select_capability_for_instructions(self, agent: Agent, instruction_config: TaskInstructions) -> str:
+        """
+        Select the best capability for instruction-based execution using intelligent routing.
+        This can be enhanced with smolagents or other AI-based routing in the future.
+        """
+        instructions = instruction_config.instructions.lower()
+        capabilities = agent.capabilities or []
         
-        logger.info(f"Worker {self.worker_id} initialized for organization {organization_id}")
+        logger.info(f"[CAPABILITY-ROUTING] Selecting capability for instructions: '{instruction_config.instructions[:50]}...'")
+        logger.info(f"[CAPABILITY-ROUTING] Available capabilities: {[cap.name for cap in capabilities]}")
+        
+        if not capabilities:
+            logger.warning(f"[CAPABILITY-ROUTING] No capabilities available, using fallback")
+            return 'general_task'
+        
+        if len(capabilities) == 1:
+            selected = capabilities[0].name
+            logger.info(f"[CAPABILITY-ROUTING] Only one capability available: {selected}")
+            return selected
+        
+        # Keyword-based routing (can be enhanced with AI/ML later)
+        for capability in capabilities:
+            capability_name = capability.name.lower()
+            capability_desc = capability.description.lower() if capability.description else ''
+            
+            # Direct name match
+            if capability_name in instructions:
+                logger.info(f"[CAPABILITY-ROUTING] Matched by name: '{capability.name}'")
+                return capability.name
+            
+            # Description keyword match
+            if capability_desc and any(word in instructions for word in capability_desc.split()[:3]):
+                logger.info(f"[CAPABILITY-ROUTING] Matched by description: '{capability.name}'")
+                return capability.name
+        
+        # Tool-based routing
+        if instruction_config.tools:
+            for capability in capabilities:
+                for step in capability.steps:
+                    if step.tools:
+                        for step_tool in step.tools:
+                            for req_tool in instruction_config.tools:
+                                if step_tool.name == req_tool.name:
+                                    logger.info(f"[CAPABILITY-ROUTING] Matched by tool '{req_tool.name}': '{capability.name}'")
+                                    return capability.name
+        
+        # Server-based routing
+        if instruction_config.servers:
+            for capability in capabilities:
+                for step in capability.steps:
+                    if step.servers:
+                        for step_server in step.servers:
+                            for req_server in instruction_config.servers:
+                                if step_server.name == req_server.name:
+                                    logger.info(f"[CAPABILITY-ROUTING] Matched by server '{req_server.name}': '{capability.name}'")
+                                    return capability.name
+        
+        # Fallback to first capability
+        selected = capabilities[0].name
+        logger.info(f"[CAPABILITY-ROUTING] Using fallback capability: '{selected}'")
+        return selected
     
     async def ExecuteTask(
         self, 
@@ -79,16 +135,31 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         
         task_id = task_data['task_id']
         agent = task_data['agent']
-        capability_name = task_data['capability_name'] 
+        capability_name = task_data['capability_name']  # May be None for instruction-based execution
+        instruction_config = task_data['instruction_config']  # May be None for direct execution
         trigger_data = task_data['trigger_data']
         
-        logger.info(f"[TASK-START] {task_id}: Agent {agent.name} executing capability '{capability_name}'")
+        # Determine execution approach
+        if capability_name:
+            # Direct capability execution (legacy mode)
+            logger.info(f"[TASK-START] {task_id}: Agent {agent.name} executing capability '{capability_name}' (direct)")
+            execution_mode = "direct_capability"
+        elif instruction_config:
+            # Instruction-based execution with smolagents orchestrator
+            logger.info(f"[TASK-START] {task_id}: Agent {agent.name} executing instruction-based task (smolagents orchestrator)")
+            logger.info(f"[TASK-INSTRUCTIONS] {task_id}: '{instruction_config.instructions[:100]}...'")
+            execution_mode = "smolagents_orchestrator"
+        else:
+            raise ValueError("Either capability_name or instruction_config must be provided")
+        
         logger.info(f"[TASK-CONFIG] {task_id}: Agent has {len(agent.capabilities)} capabilities, {len(agent.tools or [])} tools")
         
         # Track active task
         self.active_tasks[task_id] = {
             'agent': agent,
             'capability_name': capability_name,
+            'instruction_config': instruction_config,
+            'execution_mode': execution_mode,
             'start_time': time.time()
         }
         
@@ -102,38 +173,85 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                 progress_percent=0.0
             )
             
-            # Initialize integrations for this task execution
-            # AIDEV-NOTE: We create these per-task to ensure clean state
-            emery_client = EmeryClientIntegration(agent_id=str(agent.id))
-            smolagents = SmolAgentsIntegration()
-            mcp_servers = MCPServerIntegration(emery_client)
+            if execution_mode == "smolagents_orchestrator":
+                # Use smolagents orchestrator for intelligent execution
+                logger.info(f"[TASK-EXECUTE] {task_id}: Starting smolagents orchestrator execution")
+                
+                # Initialize smolagents orchestrator
+                orchestrator = SmolAgentsOrchestrator()
+                orchestrator.setup_agent_orchestrator(agent)
+                
+                # Progress update for orchestrator initialization  
+                yield create_task_progress(
+                    task_id=task_id,
+                    status=TaskStatus.IN_PROGRESS,
+                    step_id="orchestrator_init",
+                    step_type="INIT",
+                    output_data={"message": "Smolagents orchestrator initialized"},
+                    progress_percent=10.0
+                )
+                
+                # Execute using orchestrator
+                task_result = await orchestrator.execute_with_orchestrator(
+                    instructions=instruction_config,
+                    trigger_data=trigger_data
+                )
+                
+                # Convert orchestrator result to expected format
+                if task_result.get("status") == "success":
+                    final_result = {
+                        "capability_name": task_result.get("selected_capability", "orchestrator"),
+                        "result": task_result.get("result", {}),
+                        "orchestrator_used": True,
+                        "status": "completed"
+                    }
+                    final_status = TaskStatus.COMPLETED
+                else:
+                    final_result = {
+                        "error": task_result.get("error", "Unknown orchestrator error"),
+                        "orchestrator_used": True,
+                        "status": "failed"
+                    }
+                    final_status = TaskStatus.FAILED
+                    
+            else:
+                # Legacy direct capability execution
+                logger.info(f"[TASK-EXECUTE] {task_id}: Starting direct capability execution for '{capability_name}'")
+                
+                # Initialize integrations for this task execution
+                emery_client = EmeryClientIntegration(agent_id=str(agent.id))
+                # Note: Using orchestrator class for backward compatibility, but will execute single capability
+                smolagents = SmolAgentsOrchestrator()  
+                mcp_servers = MCPServerIntegration(emery_client)
+                
+                # Create agent runner with integrations
+                runner = AgentRunner(emery_client, smolagents, mcp_servers)
+                
+                # Progress update for runner initialization
+                yield create_task_progress(
+                    task_id=task_id,
+                    status=TaskStatus.IN_PROGRESS,
+                    step_id="runner_init", 
+                    step_type="INIT",
+                    output_data={"message": "Agent runner initialized"},
+                    progress_percent=10.0
+                )
+                
+                # Execute the capability using the agent runner
+                task_result = await runner.execute_capability(
+                    agent=agent,
+                    capability_name=capability_name,
+                    trigger_data=trigger_data,
+                    step_overrides=None  # AIDEV-TODO: Add step overrides support to proto
+                )
+                
+                # Convert runner result to expected format
+                final_result = task_result
+                final_status = TaskStatus.COMPLETED if task_result.get("status") == "completed" else TaskStatus.FAILED
             
-            # Create agent runner with integrations
-            runner = AgentRunner(emery_client, smolagents, mcp_servers)
-            
-            # Progress update for runner initialization
-            yield create_task_progress(
-                task_id=task_id,
-                status=TaskStatus.IN_PROGRESS,
-                step_id="runner_init",
-                step_type="INIT",
-                output_data={"message": "Agent runner initialized"},
-                progress_percent=10.0
-            )
-            
-            # Execute the capability using the agent runner
-            logger.info(f"[TASK-EXECUTE] {task_id}: Starting capability execution")
-            task_result = await runner.execute_capability(
-                agent=agent,
-                capability_name=capability_name,
-                trigger_data=trigger_data,
-                step_overrides=None  # AIDEV-TODO: Add step overrides support to proto
-            )
-            
-            # Progress updates for each step execution
+            # Progress updates for each step execution (only for legacy mode)
             # AIDEV-NOTE: The runner executes steps internally, we report final results
-            step_count = 0
-            if hasattr(task_result, 'step_executions') and task_result.step_executions:
+            if execution_mode == "direct_capability" and hasattr(task_result, 'step_executions') and task_result.step_executions:
                 for i, step_exec in enumerate(task_result.step_executions):
                     step_count = i + 1
                     progress_percent = (step_count / len(task_result.step_executions)) * 80 + 10  # 10-90%
@@ -153,16 +271,14 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                         progress_percent=progress_percent
                     )
             
-            # Final completion update
-            final_status = TaskStatus.COMPLETED if task_result.status == TaskStatus.COMPLETED else TaskStatus.FAILED
-            
+            # Final completion update using new final_result and final_status variables
             yield create_task_progress(
                 task_id=task_id,
                 status=final_status,
                 step_id="completion",
                 step_type="COMPLETE",
-                output_data=task_result.result,
-                error_message=task_result.error or '',
+                output_data=final_result,
+                error_message=final_result.get("error", "") if isinstance(final_result, dict) else "",
                 progress_percent=100.0
             )
             

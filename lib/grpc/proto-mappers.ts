@@ -42,6 +42,7 @@ import {
   TaskRequest,
   TaskProgress as TaskProgressProto,
   TriggerData,
+  InstructionConfig as InstructionConfigProto,
   StepType
 } from './generated/agent_worker';
 
@@ -117,12 +118,34 @@ export function mapAgentToProto(agent: AgentData): AgentConfigProto {
 }
 
 /**
+ * Map instruction config to protobuf InstructionConfig
+ */
+export function mapInstructionConfigToProto(instructionConfig: {
+  instructions: string;
+  tools?: ToolConfig[];
+  servers?: ServerConfig[];
+}): InstructionConfigProto {
+  return {
+    instructions: instructionConfig.instructions,
+    tools: instructionConfig.tools?.map(mapToolToProto) || [],
+    servers: instructionConfig.servers?.map(mapServerToProto) || []
+  };
+}
+
+/**
  * Create complete TaskRequest proto message from TypeScript types
+ * Supports both direct capability execution and instruction-based auto-routing
  */
 export function createTaskRequest(params: {
   taskId: string;
   agentId: number;
-  capabilityName: string;
+  // Execution mode - use one of the following
+  capabilityName?: string;  // Direct capability execution
+  instructionConfig?: {     // Instruction-based execution with auto-routing
+    instructions: string;
+    tools?: ToolConfig[];
+    servers?: ServerConfig[];
+  };
   agent: AgentData;
   triggerData: Record<string, any>;
   organizationId: string;
@@ -139,16 +162,27 @@ export function createTaskRequest(params: {
     payload: triggerPayload
   };
 
-  return {
+  // Build the base request
+  const request: TaskRequest = {
     task_id: params.taskId,
     agent_id: params.agentId,
-    capability_name: params.capabilityName,
     agent_config: mapAgentToProto(params.agent),
     trigger_data: triggerData,
     organization_id: params.organizationId,
     owner_id: params.ownerId,
     timeout_seconds: params.timeoutSeconds || 300
   };
+
+  // Set execution mode (oneof field)
+  if (params.capabilityName) {
+    request.capability_name = params.capabilityName;
+  } else if (params.instructionConfig) {
+    request.instruction_config = mapInstructionConfigToProto(params.instructionConfig);
+  } else {
+    throw new Error('Either capabilityName or instructionConfig must be provided');
+  }
+
+  return request;
 }
 
 /**

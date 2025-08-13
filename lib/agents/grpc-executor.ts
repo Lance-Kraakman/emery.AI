@@ -11,7 +11,12 @@ import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/l
 
 export interface AgentCapabilityRequest {
   agentId: number; // Agent ID to load from database
-  capabilityName: string;
+  capabilityName?: string; // Optional - for direct capability execution
+  instructionConfig?: { // Optional - for instruction-based execution with auto-routing
+    instructions: string;
+    tools: Array<{name: string, version?: string, config?: Record<string, any>}>;
+    servers: Array<{name: string, endpoint?: string, config?: Record<string, any>}>;
+  };
   triggerData: Record<string, any>;
   stepOverrides?: Array<Record<string, any>>;
   executionId: string;
@@ -46,9 +51,15 @@ export interface AgentCapabilityResult {
 export async function executeAgentCapabilityViaGRPC(
   request: AgentCapabilityRequest
 ): Promise<AgentCapabilityResult> {
-  const { agentId, capabilityName, triggerData, stepOverrides, executionId } = request;
+  const { agentId, capabilityName, instructionConfig, triggerData, stepOverrides, executionId } = request;
   
-  console.log(`[GRPC-CAPABILITY] Starting execution ${executionId} for agent ${agentId} capability '${capabilityName}'`);
+  if (instructionConfig && !capabilityName) {
+    console.log(`[GRPC-CAPABILITY] Starting instruction-based execution ${executionId} for agent ${agentId}: "${instructionConfig.instructions}"`);
+  } else if (capabilityName) {
+    console.log(`[GRPC-CAPABILITY] Starting execution ${executionId} for agent ${agentId} capability '${capabilityName}'`);
+  } else {
+    throw new Error('Either capabilityName or instructionConfig must be provided');
+  }
   
   try {
     // Query full agent configuration from database
@@ -58,14 +69,29 @@ export async function executeAgentCapabilityViaGRPC(
     }
     
     console.log(`[GRPC-CAPABILITY] Loaded agent: ${agent.name} with ${agent.capabilities?.length || 0} capabilities`);
+    
+    // Prepare enhanced trigger data
+    let taskInstructions = triggerData;
+    
+    if (instructionConfig) {
+      // For instruction-based execution, enhance trigger data with instructions context
+      taskInstructions = {
+        ...triggerData,
+        user_instructions: instructionConfig.instructions,
+        available_tools: instructionConfig.tools,
+        available_servers: instructionConfig.servers,
+      };
+      console.log(`[GRPC-CAPABILITY] Sending instruction-based request to backend for routing`);
+    }
+    
     // Record task start in database
     await db.insert(tasks).values({
       id: executionId,
       agentId: agent.id,
-      name: `gRPC capability execution: ${capabilityName}`,
-      capabilityName: capabilityName,
+      name: instructionConfig ? `Instruction-based task: ${instructionConfig.instructions.substring(0, 50)}...` : `gRPC capability execution: ${capabilityName}`,
+      capabilityName: capabilityName || null, // Will be determined by backend if null
+      instructions: instructionConfig || { instructions: triggerData?.instructions || 'Direct capability execution' },
       status: 'in_progress',
-      payload: triggerData,
       startedAt: new Date(),
       createdBy: agent.ownerId,
     });
@@ -78,9 +104,11 @@ export async function executeAgentCapabilityViaGRPC(
     const taskRequest = createTaskRequest({
       taskId: executionId,
       agentId: agent.id,
+      // Pass either capability name or instruction config - backend will handle routing
       capabilityName: capabilityName,
+      instructionConfig: instructionConfig,
       agent: agent as AgentData,
-      triggerData: triggerData,
+      triggerData: taskInstructions,
       organizationId: organizationId,
       ownerId: agent.ownerId!,
       timeoutSeconds: 300 // 5 minutes default
@@ -156,7 +184,7 @@ export async function executeAgentCapabilityViaGRPC(
     return {
       success: finalStatus === 'completed',
       execution_id: executionId,
-      capability_name: capabilityName,
+      capability_name: capabilityName || 'auto-routed',
       status: finalStatus,
       output_data: finalOutputData,
       error: finalError || undefined,
@@ -182,7 +210,7 @@ export async function executeAgentCapabilityViaGRPC(
     return {
       success: false,
       execution_id: executionId,
-      capability_name: capabilityName,
+      capability_name: capabilityName || 'unknown',
       status: 'failed',
       error: error instanceof Error ? error.message : String(error),
       step_executions: [],
@@ -247,7 +275,11 @@ export async function cancelTaskViaGRPC(
   }
 }
 
+// AIDEV-NOTE: Capability routing logic moved to Python backend using smolagents
+// The backend will handle intelligent capability selection based on instructions
+
 // AIDEV-NOTE: This replaces subprocess execution with gRPC streaming calls
 // AIDEV-TODO: Add connection pooling and retry logic for production use
 // AIDEV-TODO: Implement proper service discovery for multi-tenant worker routing
 // AIDEV-TODO: Add task execution metrics and monitoring
+// AIDEV-TODO: Enhance capability routing with AI/ML-based semantic matching

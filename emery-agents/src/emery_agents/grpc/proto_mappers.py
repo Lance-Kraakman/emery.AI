@@ -16,7 +16,7 @@ from datetime import datetime
 from .generated import agent_worker_pb2
 from ..core.types import (
     Agent, ToolConfig, ServerConfig, StepConfig, CapabilityConfig,
-    StepType, Task, TaskStatus
+    StepType, Task, TaskStatus, TaskInstructions
 )
 
 
@@ -96,6 +96,15 @@ def map_proto_trigger_data(proto_trigger: agent_worker_pb2.TriggerData) -> Dict[
     return result
 
 
+def map_proto_instruction_config(proto_instruction: agent_worker_pb2.InstructionConfig) -> TaskInstructions:
+    """Convert protobuf InstructionConfig to Python TaskInstructions"""
+    return TaskInstructions(
+        instructions=proto_instruction.instructions,
+        tools=[map_proto_tool_to_dataclass(tool) for tool in proto_instruction.tools] if proto_instruction.tools else None,
+        servers=[map_proto_server_to_dataclass(server) for server in proto_instruction.servers] if proto_instruction.servers else None
+    )
+
+
 def map_task_status_to_proto(status: TaskStatus) -> int:
     """Convert Python TaskStatus to protobuf enum value"""
     status_map = {
@@ -149,10 +158,25 @@ def parse_task_request(request: agent_worker_pb2.TaskRequest) -> Dict[str, Any]:
     # Convert trigger data
     trigger_data = map_proto_trigger_data(request.trigger_data)
     
+    # Handle execution mode (oneof field)
+    capability_name = None
+    instruction_config = None
+    
+    # Check which execution mode is set (protobuf oneof field)
+    execution_mode = request.WhichOneof('execution_mode')
+    
+    if execution_mode == 'capability_name':
+        capability_name = request.capability_name
+    elif execution_mode == 'instruction_config':
+        instruction_config = map_proto_instruction_config(request.instruction_config)
+    else:
+        raise ValueError("Either capability_name or instruction_config must be provided")
+    
     return {
         'task_id': request.task_id,
         'agent_id': request.agent_id,
-        'capability_name': request.capability_name,
+        'capability_name': capability_name,           # Optional - for direct execution
+        'instruction_config': instruction_config,     # Optional - for auto-routing
         'agent': agent,
         'trigger_data': trigger_data,
         'organization_id': request.organization_id,

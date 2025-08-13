@@ -18,7 +18,10 @@ service AgentWorker {
 message TaskRequest {
   string task_id = 1;              // Unique task identifier
   int32 agent_id = 2;              // Agent to execute the task
-  string capability_name = 3;      // Which capability to execute
+  oneof execution_mode {
+    string capability_name = 3;     // Direct capability execution
+    InstructionConfig instruction_config = 9; // Instruction-based execution with auto-routing
+  }
   AgentConfig agent_config = 4;    // Complete agent configuration
   TriggerData trigger_data = 5;    // Structured trigger data
   string organization_id = 6;      // Organization for multi-tenant routing
@@ -143,4 +146,11 @@ enum StepType {
 // Trigger data payload
 message TriggerData {
   map<string, string> payload = 1;
+}
+
+// Instruction-based execution configuration for auto-routing
+message InstructionConfig {
+  string instructions = 1;           // Natural language instructions
+  repeated ToolConfig tools = 2;     // Optional tools for this task
+  repeated ServerConfig servers = 3; // Optional servers for this task
 }

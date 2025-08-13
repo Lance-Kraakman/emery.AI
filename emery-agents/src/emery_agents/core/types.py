@@ -81,14 +81,21 @@ class CapabilityConfig:
 
 
 @dataclass
+class TaskInstructions:
+    """Task instruction configuration - step-like structure"""
+    instructions: str  # Natural language instructions
+    tools: Optional[List[ToolConfig]] = None  # Optional tools
+    servers: Optional[List[ServerConfig]] = None  # Optional servers
+
+@dataclass
 class Task:
     """Matches frontend Task exactly"""
     id: str
     agentId: int  # UPDATED: camelCase to match frontend
     name: str
-    capabilityName: str  # UPDATED: camelCase to match frontend
-    status: TaskStatus
-    payload: Dict[str, Any]  # UPDATED: required, matches frontend
+    instructions: TaskInstructions  # Step-like configuration
+    capabilityName: Optional[str] = None  # Optional - system can auto-route
+    status: TaskStatus = TaskStatus.PENDING
     result: Optional[Any] = None
     error: Optional[str] = None
     startedAt: Optional[datetime] = None  # UPDATED: camelCase
@@ -102,8 +109,8 @@ class CreateTaskData:
     """Matches frontend CreateTaskData exactly"""
     agentId: int
     name: str
-    capabilityName: str
-    payload: Dict[str, Any]
+    instructions: TaskInstructions  # Step-like configuration
+    capabilityName: Optional[str] = None  # Optional - system can auto-route
     createdBy: Optional[str] = None
 
 

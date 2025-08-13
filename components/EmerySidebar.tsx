@@ -137,7 +137,7 @@ export function EmerySidebar() {
                       <CollapsibleTrigger asChild>
                         <Link
                           href={href}
-                          className={`flex items-center w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
+                          className={`flex items-center w-full gap-3 rounded-lg px-3 py-2 text-foreground/70 transition-all hover:text-primary hover:bg-muted ${
                             isActive ? "bg-muted text-primary" : ""
                           } ${isCollapsed ? "justify-center" : "justify-between"}`}
                         >
@@ -154,7 +154,7 @@ export function EmerySidebar() {
                             <Link
                               key={item.label}
                               href={item.href}
-                              className={`flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs ${
+                              className={`flex items-center gap-2 rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted ${
                                 pathname === item.href ? "bg-accent text-accent-foreground" : ""
                               }`}
                             >
@@ -177,7 +177,7 @@ export function EmerySidebar() {
                         <CollapsibleTrigger asChild>
                           <Link
                             href="/data"
-                            className={`flex items-center w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
+                            className={`flex items-center w-full gap-3 rounded-lg px-3 py-2 text-foreground/70 transition-all hover:text-primary hover:bg-muted ${
                               pathname.startsWith("/data") ? "bg-muted text-primary" : ""
                             } ${isCollapsed ? "justify-center" : "justify-between"}`}
                           >
@@ -203,7 +203,7 @@ export function EmerySidebar() {
                                   onOpenChange={() => toggleCollapsible(db.id.toString())}
                                 >
                                   <CollapsibleTrigger asChild>
-                                    <button className="flex items-center justify-between w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs">
+                                    <button className="flex items-center justify-between w-full gap-3 rounded-lg px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted">
                                       <div className="flex items-center gap-2">
                                         <Database className="h-3 w-3" />
                                         {db.name}
@@ -216,7 +216,7 @@ export function EmerySidebar() {
                                       <Link
                                         key={table.id}
                                         href={`/data?tableId=${table.id}`}
-                                        className={`flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs ${
+                                        className={`flex items-center gap-2 rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted ${
                                           pathname === "/data" && searchParams.get('tableId') === table.id.toString() ? "bg-accent text-accent-foreground" : ""
                                         }`}
                                       >
@@ -230,7 +230,7 @@ export function EmerySidebar() {
                                         setSelectedDatabaseForTable(db.id)
                                         setIsCreateTableOpen(true)
                                       }}
-                                      className="flex items-center justify-center w-full rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs hover:bg-accent"
+                                      className="flex items-center justify-center w-full rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted"
                                       title="Add Table"
                                     >
                                       <Plus className="h-3 w-3" />
@@ -242,7 +242,7 @@ export function EmerySidebar() {
                             {/* Add Database button at the bottom */}
                             <button
                               onClick={() => setIsCreateDatabaseOpen(true)}
-                              className="flex items-center justify-center w-full rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs hover:bg-accent mt-2"
+                              className="flex items-center justify-center w-full rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted mt-2"
                               title="Add Database"
                             >
                               <Plus className="h-3 w-3" />
@@ -262,7 +262,7 @@ export function EmerySidebar() {
                       <CollapsibleTrigger asChild>
                         <Link
                           href={href}
-                          className={`flex items-center w-full gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
+                          className={`flex items-center w-full gap-3 rounded-lg px-3 py-2 text-foreground/70 transition-all hover:text-primary hover:bg-muted ${
                             isActive ? "bg-muted text-primary" : ""
                           } ${isCollapsed ? "justify-center" : "justify-between"}`}
                         >
@@ -279,7 +279,7 @@ export function EmerySidebar() {
                             <Link
                               key={item.label}
                               href={item.href}
-                              className={`flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-primary text-xs ${
+                              className={`flex items-center gap-2 rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted ${
                                 pathname === item.href ? "bg-accent text-accent-foreground" : ""
                               }`}
                             >
@@ -298,7 +298,7 @@ export function EmerySidebar() {
                   {renderSeparator()}
                   <Link
                     href={href}
-                    className={`flex items-center gap-3 rounded-lg px-4 py-2 text-muted-foreground transition-all hover:text-primary ${
+                    className={`flex items-center gap-3 rounded-lg px-4 py-2 text-foreground/70 transition-all hover:text-primary hover:bg-muted ${
                       isActive ? "bg-muted text-primary" : ""
                     } ${isCollapsed ? "justify-center" : ""}`}
                   >
@@ -318,10 +318,10 @@ export function EmerySidebar() {
               <Button
                 variant="ghost"
                 className={`w-full p-2 h-auto ${
-                  isCollapsed ? "justify-center" : "justify-start gap-3"
+                  isCollapsed ? "justify-center" : "justify-start gap-4"
                 }`}
               >
-                <Avatar className="h-8 w-8">
+                <Avatar className="h-10 w-10">
                   <AvatarImage 
                     src={sessionData?.user?.image || undefined} 
                     alt={sessionData?.user?.name || "User"} 
@@ -334,10 +334,10 @@ export function EmerySidebar() {
                 </Avatar>
                 {!isCollapsed && (
                   <div className="flex flex-col items-start text-left">
-                    <span className="text-sm font-medium text-foreground">
+                    <span className="text-base font-semibold text-foreground">
                       {sessionData?.user?.name || "User"}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-sm text-muted-foreground">
                       {sessionData?.user?.email}
                     </span>
                   </div>

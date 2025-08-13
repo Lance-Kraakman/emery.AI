@@ -54,8 +54,8 @@ async function testAgentExecutionWithAPI(userApiKey, agentId = 1) {
     console.log(`✅ Agent has ${capabilities.capabilities?.length || 0} capabilities`);
     console.log(`✅ Connected services: ${capabilities.connected_services?.length || 0}`);
 
-    // Test 3: Execute a test capability
-    console.log('\n🚀 Test 3: Execute test capability');
+    // Test 3: Execute instruction-based task (auto-routing)
+    console.log('\n🚀 Test 3: Execute instruction-based task');
     const executeRes = await fetch(`${API_BASE}/api/agents/${testAgent.id}/execute`, {
       method: 'POST',
       headers: {
@@ -63,7 +63,7 @@ async function testAgentExecutionWithAPI(userApiKey, agentId = 1) {
         'Authorization': `Bearer ${userApiKey}`
       },
       body: JSON.stringify({
-        capability_name: 'test_capability',
+        instructions: 'Generate a summary report of system status and health',
         trigger_data: {
           message: 'Hello from API test script',
           timestamp: new Date().toISOString()
