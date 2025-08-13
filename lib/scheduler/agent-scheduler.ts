@@ -407,7 +407,7 @@ export class AgentScheduler {
       console.log(`[SCHEDULER] Executing agent ${agent.id} capability '${capability.name}' via ${triggerData.trigger_type} trigger`);
 
       const result = await executeAgentCapabilityViaGRPC({
-        agent,
+        agentId: agent.id,
         capabilityName: capability.name,
         triggerData,
         executionId,

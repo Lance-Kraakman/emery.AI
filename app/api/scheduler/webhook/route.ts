@@ -124,7 +124,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       console.log(`[SCHEDULER-WEBHOOK] Executing agent ${agent.id} (${agent.name}) via webhook trigger`);
 
       const result = await executeAgentCapabilityViaGRPC({
-        agent,
+        agentId: agent.id,
         capabilityName: capability.name,
         triggerData: {
           trigger_type: 'WEBHOOK',
@@ -168,7 +168,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       console.log(`[SCHEDULER-WEBHOOK] Executing agent ${agent.id} (${agent.name}) via webhook trigger (unsigned)`);
 
       const result = await executeAgentCapabilityViaGRPC({
-        agent,
+        agentId: agent.id,
         capabilityName: capability.name,
         triggerData: {
           trigger_type: 'WEBHOOK',

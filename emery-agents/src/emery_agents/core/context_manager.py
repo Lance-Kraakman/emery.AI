@@ -32,10 +32,10 @@ class ExecutionContextManager:
         self.task = task
         self.agent = agent
         # Create execution context
-        from .types import Capability  # Avoid circular import
+        from .types import CapabilityConfig  # Avoid circular import
         capability = None
         for cap in agent.capabilities:
-            if cap.name == task.capability_name:
+            if cap.name == task.capabilityName:
                 capability = cap
                 break
         self.context = ExecutionContext(
@@ -51,13 +51,13 @@ class ExecutionContextManager:
         # Initialize working directory
         self._setup_working_directory()
         
-        logger.info(f"Context manager initialized for task execution {task_execution.id}")
+        logger.info(f"Context manager initialized for task execution {self.task.id}")
     
     def _setup_working_directory(self):
         """Create temporary working directory for this execution."""
         # Create base temp directory
         self.base_dir = Path(tempfile.mkdtemp(
-            prefix=f"emery_agent_{self.agent.id}_{self.task_execution.id}_"
+            prefix=f"emery_agent_{self.agent.id}_{self.task.id}_"
         ))
         
         # Create subdirectories
@@ -70,11 +70,11 @@ class ExecutionContextManager:
         
         # Initialize context file with task execution data
         initial_context = {
-            "execution_id": self.task_execution.id,
+            "execution_id": self.task.id,
             "agent_id": self.agent.id,
-            "capability_name": self.task_execution.capability_name,
-            "started_at": self.task_execution.started_at.isoformat() if self.task_execution.started_at else None,
-            "variables": self.task_execution.input_data.copy(),
+            "capability_name": self.task.capabilityName,
+            "started_at": self.task.startedAt.isoformat() if self.task.startedAt else None,
+            "variables": self.task.payload.copy(),
             "step_outputs": {},
             "current_step": None,
             "completed_steps": []
@@ -84,9 +84,9 @@ class ExecutionContextManager:
         
         # Initialize execution log
         initial_log = {
-            "execution_id": self.task_execution.id,
+            "execution_id": self.task.id,
             "agent_name": self.agent.name,
-            "capability_name": self.task_execution.capability_name,
+            "capability_name": self.task.capabilityName,
             "started_at": datetime.now().isoformat(),
             "steps": [],
             "status": "in_progress"
@@ -181,9 +181,9 @@ class ExecutionContextManager:
             **context.get("variables", {}),
             
             # Execution metadata
-            "execution_id": self.task_execution.id,
+            "execution_id": self.task.id,
             "agent_id": self.agent.id,
-            "capability_name": self.task_execution.capability_name,
+            "capability_name": self.task.capabilityName,
             "current_step": step_id,
             
             # Previous step outputs (if agents need specific access)

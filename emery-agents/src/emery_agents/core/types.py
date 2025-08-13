@@ -31,6 +31,8 @@ class TaskStatus(Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
+    TIMEOUT = "timeout"
 
 
 @dataclass

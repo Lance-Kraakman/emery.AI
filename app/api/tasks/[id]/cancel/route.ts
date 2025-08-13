@@ -61,7 +61,7 @@ export async function POST(
     }
 
     // Check if task is still running
-    if (task.status === 'completed' || task.status === 'failed') {
+    if (['completed', 'failed', 'cancelled', 'timeout'].includes(task.status)) {
       return Response.json({ 
         error: `Task is already ${task.status} and cannot be cancelled` 
       }, { status: 400 });

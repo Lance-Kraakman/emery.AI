@@ -95,12 +95,12 @@ class AgentRunner:
         
         task = Task(
             id=execution_id,
-            agent_id=int(agent.id),  # Convert to int to match schema
+            agentId=int(agent.id),  # Convert to int to match schema
             name=f"Capability execution: {capability_name}",
-            capability_name=capability_name,
+            capabilityName=capability_name,
             status=TaskStatus.IN_PROGRESS,
             payload=trigger_data,
-            started_at=datetime.now()
+            startedAt=datetime.now()
         )
         
         # Use context manager for persistent state between steps
@@ -124,17 +124,17 @@ class AgentRunner:
                     context_manager.context.step_executions.append(step_result)
                     
                     # Save step output to persistent context
-                    if step_result.output_data:
-                        context_manager.save_step_output(step.id, step_result.output_data)
+                    if step_result.outputData:
+                        context_manager.save_step_output(step.id, step_result.outputData)
                     
                     # Mark step as completed
                     context_manager.mark_step_completed(step.id)
                     
                     # Stop execution if step failed
                     if step_result.status == TaskStatus.FAILED:
-                        logger.error(f"Step {step.id} failed: {step_result.error_message}")
+                        logger.error(f"Step {step.id} failed: {step_result.errorMessage}")
                         task.status = TaskStatus.FAILED
-                        task.error = f"Step {step.id} failed: {step_result.error_message}"
+                        task.error = f"Step {step.id} failed: {step_result.errorMessage}"
                         break
                 
                 # Mark execution as completed if all steps succeeded
@@ -150,7 +150,7 @@ class AgentRunner:
                 task.error = str(e)
             
             finally:
-                task.completed_at = datetime.now()
+                task.completedAt = datetime.now()
                 
                 # Report execution results back to Emery
                 await self._report_execution_results(task)
@@ -177,14 +177,12 @@ class AgentRunner:
         """
         step_execution = StepExecution(
             id=str(uuid.uuid4()),
-            task_id=step_context.get('execution_id', ''),
-            step_id=step.id,
-            step_type=step.type,  # Use the StepType enum
+            taskId=step_context.get('execution_id', ''),
+            stepId=step.id,
+            stepType=step.type.value if hasattr(step.type, 'value') else str(step.type),  # Convert enum to string
             instructions=step.instructions,
-            tools=step.tools,
-            servers=step.servers,
-            input_data=step_context,
-            started_at=datetime.now()
+            inputData=step_context,
+            startedAt=datetime.now()
         )
         
         try:
@@ -203,7 +201,7 @@ class AgentRunner:
                     context=step_context,  # Use persistent context
                     model=step_context.get('model')  # Get model from context
                 )
-                step_execution.output_data = result
+                step_execution.outputData = result
                 
             elif step.type == StepType.TOOL_STEP:
                 # Use smolagents ToolCallingAgent or MCP servers
@@ -216,7 +214,7 @@ class AgentRunner:
                         context=step_context,
                         model=step_context.get('model')
                     )
-                    step_execution.output_data = result
+                    step_execution.outputData = result
                 elif step.servers and self.mcp_servers:
                     # Use MCP servers for external service integrations
                     server_results = {}
@@ -228,31 +226,31 @@ class AgentRunner:
                         )
                         server_results[server] = result
                     
-                    step_execution.output_data = server_results
+                    step_execution.outputData = server_results
                 else:
                     # No tools or servers - check if this is a test step
                     if step.id == "test_step_1" or "test" in step.id.lower():
                         # Return successful test response
-                        step_execution.output_data = {
+                        step_execution.outputData = {
                             "success": True,
                             "message": "Test capability executed successfully",
-                            "trigger_data": context_manager.context.payload,
+                            "trigger_data": context_manager.context.task.payload,
                             "timestamp": datetime.now().isoformat(),
                             "step_id": step.id
                         }
                     else:
                         # No tools or servers - just pass through
-                        step_execution.output_data = step_context
+                        step_execution.outputData = step_context
             
             step_execution.status = TaskStatus.COMPLETED
             
         except Exception as e:
             logger.exception(f"Step {step.id} execution failed")
-            step_execution.status = TaskStatus.ERROR
-            step_execution.error_message = str(e)
+            step_execution.status = TaskStatus.FAILED
+            step_execution.errorMessage = str(e)
         
         finally:
-            step_execution.completed_at = datetime.now()
+            step_execution.completedAt = datetime.now()
         
         logger.info(f"Step {step.id} completed with status: {step_execution.status}")
         return step_execution

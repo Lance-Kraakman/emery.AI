@@ -112,12 +112,14 @@ export interface StepConfig {
 }
 
 // New Task types aligned with frontend model
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout';
+
 export interface Task {
   id: string;
   agentId: number;
   name: string;
   capabilityName: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  status: TaskStatus;
   payload: Record<string, any>;
   result?: any;
   error?: string;

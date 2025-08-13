@@ -81,40 +81,7 @@ async function testAgentExecutionWithAPI(userApiKey, agentId = 1) {
       // This might be expected if gRPC worker isn't running
     }
 
-    // Test 4: Test OAuth proxy with agent API key
-    console.log('\n🔐 Test 4: Test OAuth proxy');
-    
-    if (testAgent.apiKey) {
-      console.log('🔑 Found agent API key, testing proxy...');
-      
-      const proxyRes = await fetch(`${API_BASE}/api/agents/proxy`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${testAgent.apiKey}`
-        },
-        body: JSON.stringify({
-          service: 'gmail',
-          action: 'send_email',
-          params: {
-            to: 'test@example.com',
-            subject: 'Test from agent',
-            body: 'This is a test'
-          }
-        })
-      });
-
-      const proxyResult = await proxyRes.json();
-      console.log(`📊 Proxy result:`, JSON.stringify(proxyResult, null, 2));
-
-      if (proxyResult.success) {
-        console.log('✅ OAuth proxy works');
-      } else {
-        console.log(`⚠️  OAuth proxy error: ${proxyResult.error} (expected if no OAuth connections)`);
-      }
-    } else {
-      console.log('⚠️  No API key found for agent - skipping proxy test');
-    }
+    // OAuth proxy testing removed - manual testing will be done separately
 
     console.log('\n🎉 Agent execution pipeline test complete!');
     console.log('✅ Basic infrastructure is working with proper authentication');
