@@ -30,7 +30,9 @@ export enum StepType {
 export interface TaskRequest {
   task_id: string;
   agent_id: number;
-  capability_name: string;
+  // execution_mode - oneof field (use only one of the following)
+  capability_name?: string;        // Direct capability execution
+  instruction_config?: InstructionConfig; // Instruction-based execution with auto-routing
   agent_config: AgentConfig;
   trigger_data: TriggerData;
   organization_id: string;
@@ -118,6 +120,12 @@ export interface ServerConfig {
 
 export interface TriggerData {
   payload: Record<string, string>;
+}
+
+export interface InstructionConfig {
+  instructions: string;           // Natural language instructions
+  tools: ToolConfig[];           // Optional tools for this task
+  servers: ServerConfig[];       // Optional servers for this task
 }
 
 // Service interface (for reference)

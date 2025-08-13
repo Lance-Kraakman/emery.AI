@@ -14,7 +14,7 @@ from .types import (
     TaskStatus, ExecutionContext, StepType
 )
 from .context_manager import ExecutionContextManager
-from ..integrations.smolagents import SmolAgentsIntegration
+from ..integrations.smolagents import SmolAgentsOrchestrator
 from ..integrations.mcp_servers import MCPServerIntegration
 from ..integrations.emery_client import EmeryClientIntegration
 
@@ -36,7 +36,7 @@ class AgentRunner:
     def __init__(
         self, 
         emery_client: EmeryClientIntegration,
-        smolagents: Optional[SmolAgentsIntegration] = None,
+        smolagents: Optional[SmolAgentsOrchestrator] = None,
         mcp_servers: Optional[MCPServerIntegration] = None
     ):
         self.emery_client = emery_client

@@ -16,7 +16,7 @@ from .core.types import (
     # AIDEV-NOTE: Updated to new Task-based model - removed TaskExecution
 )
 from .core.runner import AgentRunner
-from .integrations.smolagents import SmolAgentsIntegration
+from .integrations.smolagents import SmolAgentsOrchestrator
 from .integrations.mcp_servers import MCPServerIntegration
 from .integrations.emery_client import EmeryClientIntegration
 
@@ -43,7 +43,7 @@ __all__ = [
     "AgentRunner",
     
     # Integrations
-    "SmolAgentsIntegration",
+    "SmolAgentsOrchestrator",
     "MCPServerIntegration", 
     "EmeryClientIntegration",
 ]

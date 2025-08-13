@@ -114,13 +114,20 @@ export interface StepConfig {
 // New Task types aligned with frontend model
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout';
 
+// Task instruction configuration (step-like structure)
+export interface TaskInstructions {
+  instructions: string; // Natural language instructions
+  tools?: ToolConfig[]; // Optional tools the task can use
+  servers?: ServerConfig[]; // Optional servers the task can use
+}
+
 export interface Task {
   id: string;
   agentId: number;
   name: string;
-  capabilityName: string;
+  capabilityName?: string; // Optional - system can auto-route if not specified
+  instructions: TaskInstructions; // Step-like configuration stored as JSONB
   status: TaskStatus;
-  payload: Record<string, any>;
   result?: any;
   error?: string;
   startedAt?: Date;
@@ -132,8 +139,8 @@ export interface Task {
 export interface CreateTaskData {
   agentId: number;
   name: string;
-  capabilityName: string;
-  payload: Record<string, any>;
+  capabilityName?: string; // Optional - system can auto-route
+  instructions: TaskInstructions; // Step-like configuration
   createdBy?: string;
 }
 

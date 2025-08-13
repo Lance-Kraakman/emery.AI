@@ -1,21 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Agent, Team } from '@/types/db';
 import { Search, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
 import { Loading } from '@/components/ui/loading';
-import AgentFormDialogImproved from './AgentFormDialogImproved';
 import AgentConfigurationWizard from './AgentConfigurationWizard';
 import AgentDetailsView from './AgentDetailsView';
 import { getAgents } from '@/app/actions/agents';
 
 // AIDEV-NOTE: Agent dashboard refactored to use consistent design system patterns and improved UX
-
 interface AgentDashboardClientProps {
   initialAgents: Agent[];
   teams: Team[];
@@ -97,11 +94,9 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
                 setEditingAgent(null);
                 setIsWizardOpen(true);
               }}
-              variant="default"
-              size="sm"
             >
-              <Plus size={16} />
-              New
+              <Plus size={16} className="mr-2" />
+              New Agent
             </Button>
             <Select value={selectedTeam} onValueChange={setSelectedTeam}>
               <SelectTrigger>
@@ -125,17 +120,21 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
               {loading ? (
                 <Loading text="Loading agents..." />
               ) : filteredAgents.length === 0 ? (
-                <EmptyState
-                  title="No agents found"
-                  description="Create your first agent to get started"
-                  action={{
-                    label: "Create Agent",
-                    onClick: () => {
+                <div className="text-center p-8">
+                  <h3 className="text-xl font-semibold text-foreground mb-2">No agents found</h3>
+                  <p className="text-md text-muted-foreground mb-4">
+                    Create your first agent to get started
+                  </p>
+                  <Button
+                    onClick={() => {
                       setEditingAgent(null);
                       setIsWizardOpen(true);
-                    }
-                  }}
-                />
+                    }}
+                  >
+                    <Plus size={16} className="mr-2" />
+                    Create Agent
+                  </Button>
+                </div>
               ) : (
                 filteredAgents.map((agent) => (
                   <Card
@@ -198,11 +197,12 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
                 }}
               />
             ) : (
-              <EmptyState
-                title="Select an agent"
-                description="Choose an agent from the list to view details and manage capabilities"
-                className="text-left justify-start"
-              />
+              <div className="text-center p-8 h-full flex flex-col items-center justify-center">
+                <h3 className="text-2xl font-bold text-foreground mb-2">Select an agent</h3>
+                <p className="text-lg text-muted-foreground">
+                  Choose an agent from the list to view details and manage capabilities
+                </p>
+              </div>
             )}
           </CardContent>
         </Card>

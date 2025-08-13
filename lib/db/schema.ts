@@ -156,9 +156,9 @@ export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
   agentId: integer("agent_id").notNull().references(() => agents.id), // WHICH agent executes this
   name: text("name").notNull(),
-  capabilityName: text("capability_name").notNull(), // WHICH capability to use
+  capabilityName: text("capability_name"), // Optional - system can auto-route if not specified
+  instructions: jsonb("instructions").notNull(), // Step-like config: {instructions: string, tools?: ToolConfig[], servers?: ServerConfig[]}
   status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed, cancelled, timeout
-  payload: jsonb("payload"), // Input data for the task
   result: jsonb("result"), // Final output data
   error: text("error"),
   
