@@ -167,7 +167,7 @@ export function createTaskRequest(params: {
     task_id: params.taskId,
     agent_id: params.agentId,
     agent_config: mapAgentToProto(params.agent),
-    trigger_data: triggerData,
+    trigger_data: triggerData as any,
     organization_id: params.organizationId,
     owner_id: params.ownerId,
     timeout_seconds: params.timeoutSeconds || 300
@@ -220,7 +220,7 @@ export function mapProtoStatusToTaskStatus(protoStatus: number | string): TaskSt
  */
 export function mapTaskProgressFromProto(progress: TaskProgressProto): Partial<Task> {
   const update: Partial<Task> = {
-    status: mapProtoStatusToTaskStatus(progress.status)
+    status: mapProtoStatusToTaskStatus(progress.status as any)
   };
 
   // Parse JSON output if available

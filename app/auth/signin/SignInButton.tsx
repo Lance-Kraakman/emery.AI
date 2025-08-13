@@ -3,7 +3,7 @@
 import { signIn } from "next-auth/react"
 
 interface SignInButtonProps {
-  provider: "github" | "google" | "email"
+  provider: "github" | "google"
 }
 
 export function SignInButton({ provider }: SignInButtonProps) {
