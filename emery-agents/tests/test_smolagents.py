@@ -147,25 +147,6 @@ class TestSmolAgentsOrchestrator:
         
         assert len(orchestrator.task_executor.capability_agents) == 0
     
-    def test_fallback_capability_selection(self, sample_agent):
-        """Test fallback capability selection logic."""
-        orchestrator = SmolAgentsOrchestrator()
-        orchestrator.setup_agent_orchestrator(sample_agent)
-        
-        instructions = TaskInstructions(instructions="test_capability execution")
-        selected = orchestrator._fallback_capability_selection(instructions)
-        
-        assert selected == "test_capability"
-    
-    def test_fallback_no_match(self, sample_agent):
-        """Test fallback when no capability matches."""
-        orchestrator = SmolAgentsOrchestrator()
-        orchestrator.setup_agent_orchestrator(sample_agent)
-        
-        instructions = TaskInstructions(instructions="completely unrelated task")
-        selected = orchestrator._fallback_capability_selection(instructions)
-        
-        assert selected is None
     
     @pytest.mark.smolagents
     @pytest.mark.skipif(not os.getenv("HF_TOKEN"), reason="HF_TOKEN required")

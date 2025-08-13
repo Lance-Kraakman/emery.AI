@@ -2,7 +2,6 @@
 
 import logging
 import os
-from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 # Constants
@@ -19,35 +18,19 @@ from ..utils.prompts import (
     render_capability_execution,
     render_default_execution
 )
+from smolagents import CodeAgent, ToolCallingAgent
+from smolagents.models import InferenceClientModel
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-# Import optional dependencies at module level with graceful fallback
-try:
-    from dotenv import load_dotenv
-except ImportError:
-    load_dotenv = None
-
-try:
-    from smolagents import CodeAgent, ToolCallingAgent
-    from smolagents.models import InferenceClientModel
-    SMOLAGENTS_AVAILABLE = True
-except ImportError:
-    CodeAgent = None
-    ToolCallingAgent = None
-    InferenceClientModel = None
-    SMOLAGENTS_AVAILABLE = False
-
 # Load .env file if it exists
-if load_dotenv is not None:
-    env_path = "/Users/lancekraakman/orchastrate/emery-agents/src/emery_agents/.env.local"
-    if os.path.exists(env_path):
-        load_dotenv(env_path)
-        logger.info(f"Loaded .env file from {env_path}")
-    else:
-        logger.debug("No .env.local file found")
+env_path = "/Users/lancekraakman/orchastrate/emery-agents/src/emery_agents/.env.local"
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+    logger.info(f"Loaded .env file from {env_path}")
 else:
-    logger.debug("python-dotenv not available, skipping .env loading")
+    logger.debug("No .env.local file found")
 
 
 class TaskExecutorAgent:
@@ -73,9 +56,6 @@ class CapabilityAgent:
     
     def setup_agent(self):
         """Set up the smolagents agent with capability-specific configuration."""
-        if not SMOLAGENTS_AVAILABLE:
-            raise ImportError("smolagents library not available")
-        
         hf_token = os.getenv("HF_TOKEN")
         if not hf_token:
             raise EnvironmentError("HF_TOKEN environment variable is required")
@@ -106,8 +86,8 @@ class CapabilityAgent:
             
             logger.info(f"CapabilityAgent setup completed for: {self.capability.name}")
             
-        except (ImportError, EnvironmentError):
-            raise  # Re-raise these specific exceptions
+        except EnvironmentError:
+            raise  # Re-raise environment errors
         except Exception as e:
             logger.exception(f"Unexpected error setting up agent: {e}")
             raise RuntimeError(f"Failed to setup agent: {e}") from e
@@ -174,15 +154,13 @@ class DefaultTaskExecutorAgent:
     
     def setup_agent(self):
         """Set up the default execution agent."""
+        hf_token = os.getenv("HF_TOKEN")
+        if not hf_token:
+            raise EnvironmentError("HF_TOKEN environment variable is required")
+        
         try:
-            from smolagents import ToolCallingAgent
-            from smolagents.models import InferenceClientModel
-            
-            if not os.getenv("HF_TOKEN"):
-                raise RuntimeError("HF_TOKEN environment variable is required")
-            
             # Create HuggingFace model instance for general tasks
-            model = InferenceClientModel("Qwen/Qwen2.5-72B-Instruct", token=os.getenv("HF_TOKEN"))
+            model = InferenceClientModel(DEFAULT_HF_MODEL_GENERAL, token=hf_token)
             
             # Use versatile model for general task execution
             self.agent = ToolCallingAgent(
@@ -273,16 +251,15 @@ class SmolAgentsOrchestrator:
         Args:
             agent: The main agent configuration
         """
+        hf_token = os.getenv("HF_TOKEN")
+        if not hf_token:
+            raise EnvironmentError("HF_TOKEN environment variable is required")
+        
         try:
-            from smolagents import ToolCallingAgent
-            from smolagents.models import InferenceClientModel
             # TODO: Use ManagedAgent when available in smolagents
             
-            if not os.getenv("HF_TOKEN"):
-                raise RuntimeError("HF_TOKEN environment variable is required")
-            
             # Create HuggingFace model instance for management decisions
-            model = InferenceClientModel("Qwen/Qwen2.5-72B-Instruct", token=os.getenv("HF_TOKEN"))
+            model = InferenceClientModel(DEFAULT_HF_MODEL_GENERAL, token=hf_token)
             
             # Create the manager agent
             self.task_executor.manager_agent = ToolCallingAgent(
@@ -398,46 +375,10 @@ class SmolAgentsOrchestrator:
                     logger.info(f"Manager agent selected CapabilityAgent: {selected}")
                     return selected
             
-            # Fallback to simple keyword matching
-            return self._fallback_capability_selection(instructions)
-            
         except Exception as e:
             logger.warning(f"Manager agent selection failed, using fallback: {e}")
-            return self._fallback_capability_selection(instructions)
-    
-    def _fallback_capability_selection(self, instructions: TaskInstructions) -> Optional[str]:
-        """
-        Fallback capability selection using simple keyword matching.
-        
-        Args:
-            instructions: The task instructions
-            
-        Returns:
-            Name of the selected capability or None for default execution
-        """
-        if not self.task_executor.capability_agents:
-            logger.info("Fallback: No capability agents available, using default")
             return None
-        
-        instructions_lower = instructions.instructions.lower()
-        
-        # Simple keyword matching
-        for capability_name, capability_agent in self.task_executor.capability_agents.items():
-            if capability_name.lower() in instructions_lower:
-                logger.info(f"Fallback selected capability by name: {capability_name}")
-                return capability_name
-            
-            description = capability_agent.capability.description
-            if description and any(
-                word in instructions_lower 
-                for word in description.lower().split()[:3]
-            ):
-                logger.info(f"Fallback selected capability by description: {capability_name}")
-                return capability_name
-        
-        # Use default executor as ultimate fallback
-        logger.info("Fallback: No capability match found, using default executor")
-        return None
+
     
     # Legacy methods for backward compatibility with existing runner code
     
@@ -451,23 +392,17 @@ class SmolAgentsOrchestrator:
             
         Returns:
             Appropriate smolagents agent instance
-        """
-        import os
+        """        
+        hf_token = os.getenv("HF_TOKEN")
+        if not hf_token:
+            raise EnvironmentError("HF_TOKEN environment variable is required. Get your token from https://huggingface.co/settings/tokens")
         
         try:
-            # Import smolagents dynamically to avoid hard dependency
-            from smolagents import CodeAgent, ToolCallingAgent
-            
-            # Require HF_TOKEN for operation
-            if not os.getenv("HF_TOKEN"):
-                raise RuntimeError("HF_TOKEN environment variable is required. Get your token from https://huggingface.co/settings/tokens")
-            
-            # Use Qwen model as default
-            default_model = "Qwen/Qwen2.5-Coder-32B-Instruct"
-            effective_model = model or default_model
+            # Use default model if none specified
+            effective_model = model or DEFAULT_HF_MODEL_CODE
             
             # Configure HF token
-            agent_kwargs = {"model": effective_model, "token": os.getenv("HF_TOKEN")}
+            agent_kwargs = {"model": effective_model, "token": hf_token}
             
             if step_type == StepType.CODE_STEP:
                 return CodeAgent(**agent_kwargs)
@@ -476,8 +411,10 @@ class SmolAgentsOrchestrator:
             else:
                 raise ValueError(f"Unsupported step type for smolagents: {step_type}")
                 
+        except EnvironmentError:
+            raise  # Re-raise environment errors
         except Exception as e:
-            raise RuntimeError(f"Failed to create agent: {e}")
+            raise RuntimeError(f"Failed to create agent: {e}") from e
     
     async def execute_step(
         self, 
