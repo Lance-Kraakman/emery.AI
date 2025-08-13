@@ -9,25 +9,6 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, TypedDict, Union
 from datetime import datetime
 
-# TypedDict definitions to replace generic Dict[str, Any]
-class ExecutionResult(TypedDict, total=False):
-    """Result of step or capability execution."""
-    status: str
-    result: Optional[Any]
-    error: Optional[str]
-    capability_used: Optional[str]
-    step_type: Optional[str]
-    tools_used: Optional[List[str]]
-    model: Optional[str]
-
-class CapabilityExecutionResult(TypedDict, total=False):
-    """Result from capability agent execution."""
-    capability_used: str
-    status: str  # "completed" or "failed"
-    output: Optional[Any]
-    error: Optional[str] 
-    agent_type: Optional[str]
-
 class OrchestratorResult(TypedDict, total=False):
     """Result from orchestrator execution."""
     status: str  # "success" or "failed" 

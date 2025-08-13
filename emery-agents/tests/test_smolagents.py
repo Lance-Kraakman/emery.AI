@@ -112,7 +112,7 @@ class TestSmolAgentsOrchestrator:
         instructions = TaskInstructions(instructions="Test task")
         
         with pytest.raises(RuntimeError, match="Agent not set up"):
-            await orchestrator.execute_with_orchestrator(instructions, {})
+            await orchestrator.execute_with_orchestrator(instructions)
     
     @pytest.mark.smolagents
     @pytest.mark.skipif(not os.getenv("HF_TOKEN"), reason="HF_TOKEN required")
@@ -129,7 +129,7 @@ class TestSmolAgentsOrchestrator:
         orchestrator.agent.run = mock_run
         
         instructions = TaskInstructions(instructions="Test hierarchical execution")
-        result = await orchestrator.execute_with_orchestrator(instructions, {"context": "test"})
+        result = await orchestrator.execute_with_orchestrator(instructions)
         
         assert result["status"] == "success"
         assert result["orchestrator"] == "smolagents_hierarchy"
@@ -149,7 +149,7 @@ class TestSmolAgentsOrchestrator:
             orchestrator.agent.run = mock_run_error
             
             instructions = TaskInstructions(instructions="Test failure")
-            result = await orchestrator.execute_with_orchestrator(instructions, {"context": "test"})
+            result = await orchestrator.execute_with_orchestrator(instructions)
             
             assert result["status"] == "failed"
             assert "Test error" in result["error"]

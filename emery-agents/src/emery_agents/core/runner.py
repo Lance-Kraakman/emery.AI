@@ -57,7 +57,6 @@ class AgentRunner:
         self, 
         agent: Agent, 
         capability_name: str,
-        trigger_data: Dict[str, Any],
         step_overrides: Optional[List[Dict[str, Any]]] = None
     ) -> Task:
         """Execute agent capability using simplified smolagents hierarchy."""
@@ -88,7 +87,6 @@ class AgentRunner:
             # ONE AGENT CALL - smolagents handles all steps internally
             result = await self.smolagents.execute_with_orchestrator(
                 instructions=instructions,
-                trigger_data=trigger_data
             )
             
             # Update task status based on result

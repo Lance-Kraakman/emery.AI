@@ -39,8 +39,7 @@ class TestIntegration:
                     
                     task = await runner.execute_capability(
                         sample_agent,
-                        "test",  # Use test capability
-                        sample_trigger_data
+                        "test"  # Use test capability
                     )
                     
                     assert task.id is not None
@@ -72,8 +71,7 @@ class TestIntegration:
                     
                     task = await runner.execute_capability(
                         sample_agent,
-                        "test",
-                        sample_trigger_data
+                        "test"
                     )
                     
                     assert task.status == TaskStatus.FAILED
@@ -100,8 +98,7 @@ class TestIntegration:
                         
                         await runner.execute_capability(
                             sample_agent,
-                            "test",
-                            sample_trigger_data
+                            "test"
                         )
                         
                         # Verify hierarchy was set up with our agent
@@ -121,8 +118,7 @@ class TestIntegration:
             # This will use real smolagents with HF_TOKEN
             task = await runner.execute_capability(
                 sample_agent,
-                "test",
-                sample_trigger_data
+                "test"
             )
             
             # Should complete (success or failure both acceptable for integration test)

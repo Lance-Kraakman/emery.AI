@@ -21,7 +21,7 @@ DEFAULT_HF_MODEL_GENERAL = "Qwen/Qwen2.5-72B-Instruct"
 
 from ..core.types import (
     StepType, Agent, CapabilityConfig, TaskInstructions, 
-    ContextData, CapabilityExecutionResult, OrchestratorResult
+    ContextData, OrchestratorResult
 )
 from smolagents import CodeAgent, ToolCallingAgent
 from smolagents.models import InferenceClientModel
@@ -167,7 +167,6 @@ class SmolAgentsOrchestrator:
     async def execute_with_orchestrator(
         self, 
         instructions: TaskInstructions,
-        trigger_data: ContextData
     ) -> OrchestratorResult:
         """
         Execute instructions using the hierarchical agent system.

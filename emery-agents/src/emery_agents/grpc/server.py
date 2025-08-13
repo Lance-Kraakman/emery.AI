@@ -26,11 +26,8 @@ from .generated import agent_worker_pb2_grpc
 from .proto_mappers import parse_task_request, create_task_progress
 
 # Import core execution system
-from ..core.runner import AgentRunner
 from ..core.types import TaskStatus, Agent, TaskInstructions, OrchestratorResult
-from ..integrations.emery_client import EmeryClientIntegration
 from ..integrations.smolagents import SmolAgentsOrchestrator
-from ..integrations.mcp_servers import MCPServerIntegration
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -145,16 +142,12 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         instruction_config = task_data['instruction_config']  # May be None for direct execution
         trigger_data = task_data['trigger_data']
         
-        # Determine execution approach
+        # Log execution details
         if capability_name:
-            # Direct capability execution (legacy mode)
-            logger.info(f"[TASK-START] {task_id}: Agent {agent.name} executing capability '{capability_name}' (direct)")
-            execution_mode = "direct_capability"
+            logger.info(f"[TASK-START] {task_id}: Agent {agent.name} executing capability '{capability_name}'")
         elif instruction_config:
-            # Instruction-based execution with smolagents orchestrator
-            logger.info(f"[TASK-START] {task_id}: Agent {agent.name} executing instruction-based task (smolagents orchestrator)")
+            logger.info(f"[TASK-START] {task_id}: Agent {agent.name} executing instruction-based task")
             logger.info(f"[TASK-INSTRUCTIONS] {task_id}: '{instruction_config.instructions[:MAX_LOG_PREVIEW_LENGTH]}...'")
-            execution_mode = "smolagents_orchestrator"
         else:
             raise ValueError("Either capability_name or instruction_config must be provided")
         
@@ -165,7 +158,6 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             'agent': agent,
             'capability_name': capability_name,
             'instruction_config': instruction_config,
-            'execution_mode': execution_mode,
             'start_time': time.time()
         }
         
@@ -179,104 +171,44 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                 progress_percent=0.0
             )
             
-            if execution_mode == "smolagents_orchestrator":
-                # Use smolagents orchestrator for intelligent execution
-                logger.info(f"[TASK-EXECUTE] {task_id}: Starting smolagents orchestrator execution")
-                
-                # Initialize smolagents orchestrator
-                orchestrator = SmolAgentsOrchestrator()
-                orchestrator.setup_agent_orchestrator(agent)
-                
-                # Progress update for orchestrator initialization  
-                yield create_task_progress(
-                    task_id=task_id,
-                    status=TaskStatus.IN_PROGRESS,
-                    step_id="orchestrator_init",
-                    step_type="INIT",
-                    output_data={"message": "Smolagents orchestrator initialized"},
-                    progress_percent=PROGRESS_INITIAL
-                )
-                
-                # Execute using orchestrator
-                task_result = await orchestrator.execute_with_orchestrator(
-                    instructions=instruction_config,
-                    trigger_data=trigger_data
-                )
-                
-                # Convert orchestrator result to expected format
-                # task_result is now properly typed as OrchestratorResult
-                if task_result["status"] == "success":
-                    final_result = {
-                        "capability_name": task_result.get("selected_capability", "orchestrator"),
-                        "result": task_result.get("result", {}),
-                        "orchestrator_used": True,
-                        "status": "completed"
-                    }
-                    final_status = TaskStatus.COMPLETED
-                else:
-                    final_result = {
-                        "error": task_result.get("error", "Unknown orchestrator error"),
-                        "orchestrator_used": True,
-                        "status": "failed"
-                    }
-                    final_status = TaskStatus.FAILED
-                    
-            else:
-                # Legacy direct capability execution
-                logger.info(f"[TASK-EXECUTE] {task_id}: Starting direct capability execution for '{capability_name}'")
-                
-                # Initialize integrations for this task execution
-                emery_client = EmeryClientIntegration(agent_id=str(agent.id))
-                # Note: Using orchestrator class for backward compatibility, but will execute single capability
-                smolagents = SmolAgentsOrchestrator()  
-                mcp_servers = MCPServerIntegration(emery_client)
-                
-                # Create agent runner with integrations
-                runner = AgentRunner(emery_client, smolagents, mcp_servers)
-                
-                # Progress update for runner initialization
-                yield create_task_progress(
-                    task_id=task_id,
-                    status=TaskStatus.IN_PROGRESS,
-                    step_id="runner_init", 
-                    step_type="INIT",
-                    output_data={"message": "Agent runner initialized"},
-                    progress_percent=PROGRESS_INITIAL
-                )
-                
-                # Execute the capability using the agent runner
-                task_result = await runner.execute_capability(
-                    agent=agent,
-                    capability_name=capability_name,
-                    trigger_data=trigger_data,
-                    step_overrides=None  # AIDEV-TODO: Add step overrides support to proto
-                )
-                
-                # Convert runner result to expected format
-                final_result = task_result
-                final_status = TaskStatus.COMPLETED if task_result.get("status") == "completed" else TaskStatus.FAILED
+            # Use simplified smolagents orchestrator for all execution
+            logger.info(f"[TASK-EXECUTE] {task_id}: Starting smolagents orchestrator execution")
             
-            # Progress updates for each step execution (only for legacy mode)
-            # AIDEV-NOTE: The runner executes steps internally, we report final results
-            if execution_mode == "direct_capability" and getattr(task_result, 'step_executions', None):
-                for i, step_exec in enumerate(task_result.step_executions):
-                    step_count = i + 1
-                    progress_percent = (step_count / len(task_result.step_executions)) * 80 + 10  # 10-90%
-                    
-                    # Map step status to TaskStatus
-                    step_status = TaskStatus.COMPLETED if step_exec.status == TaskStatus.COMPLETED else TaskStatus.IN_PROGRESS
-                    if step_exec.status == TaskStatus.FAILED:
-                        step_status = TaskStatus.FAILED
-                    
-                    yield create_task_progress(
-                        task_id=task_id,
-                        status=step_status,
-                        step_id=step_exec.step_id,
-                        step_type=getattr(step_exec.step_type, 'value', str(step_exec.step_type)),
-                        output_data=step_exec.output_data,
-                        error_message=step_exec.error_message or '',
-                        progress_percent=progress_percent
-                    )
+            # Initialize smolagents orchestrator
+            orchestrator = SmolAgentsOrchestrator()
+            orchestrator.setup_agent_orchestrator(agent)
+            
+            # Progress update for orchestrator initialization  
+            yield create_task_progress(
+                task_id=task_id,
+                status=TaskStatus.IN_PROGRESS,
+                step_id="orchestrator_init",
+                step_type="INIT",
+                output_data={"message": "Smolagents orchestrator initialized"},
+                progress_percent=PROGRESS_INITIAL
+            )
+            
+            # Execute using orchestrator
+            task_result = await orchestrator.execute_with_orchestrator(
+                instructions=instruction_config
+            )
+            
+            # Convert orchestrator result to expected format
+            if task_result["status"] == "success":
+                final_result = {
+                    "capability_name": task_result.get("selected_capability", "orchestrator"),
+                    "result": task_result.get("result", {}),
+                    "orchestrator_used": True,
+                    "status": "completed"
+                }
+                final_status = TaskStatus.COMPLETED
+            else:
+                final_result = {
+                    "error": task_result.get("error", "Unknown orchestrator error"),
+                    "orchestrator_used": True,
+                    "status": "failed"
+                }
+                final_status = TaskStatus.FAILED
             
             # Final completion update using new final_result and final_status variables
             yield create_task_progress(
