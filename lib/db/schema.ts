@@ -157,7 +157,7 @@ export const tasks = pgTable("tasks", {
   agentId: integer("agent_id").notNull().references(() => agents.id), // WHICH agent executes this
   name: text("name").notNull(),
   capabilityName: text("capability_name").notNull(), // WHICH capability to use
-  status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed
+  status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed, cancelled, timeout
   payload: jsonb("payload"), // Input data for the task
   result: jsonb("result"), // Final output data
   error: text("error"),
@@ -167,20 +167,6 @@ export const tasks = pgTable("tasks", {
   completedAt: timestamp("completed_at"),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const stepExecutions = pgTable("step_executions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  taskId: uuid("task_id").notNull().references(() => tasks.id), // Reference the task directly
-  stepId: text("step_id").notNull(), // References the step ID from capability definition
-  stepType: text("step_type").notNull(), // code_step, tool_step
-  instructions: text("instructions"),
-  inputData: jsonb("input_data"),
-  outputData: jsonb("output_data"),
-  status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed
-  errorMessage: text("error_message"),
-  startedAt: timestamp("started_at"),
-  completedAt: timestamp("completed_at"),
 });
 
 export const accounts = pgTable("accounts", {

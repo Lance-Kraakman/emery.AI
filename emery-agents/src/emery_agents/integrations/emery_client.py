@@ -106,17 +106,16 @@ class EmeryClientIntegration:
         try:
             # AIDEV-TODO: Implement API endpoint for reporting execution results
             # For now, just log the results
-            logger.info(f"Task execution {task_execution.id} completed with status: {task_execution.status}")
-            logger.info(f"Capability executed: {task_execution.capability_name}")
+            logger.info(f"Task execution {task.id} completed with status: {task.status}")
+            logger.info(f"Capability executed: {task.capabilityName}")
             
-            if task_execution.error_message:
-                logger.error(f"Task execution error: {task_execution.error_message}")
+            if task.error:
+                logger.error(f"Task execution error: {task.error}")
             
-            # Log step results
-            for step in task_execution.step_executions:
-                logger.info(f"Step {step.step_id}: {step.status}")
-                if step.error_message:
-                    logger.error(f"Step error: {step.error_message}")
+            # Log task completion
+            logger.info(f"Task {task.id}: {task.status}")
+            if task.error:
+                logger.error(f"Task error: {task.error}")
             
         except Exception as e:
             logger.exception(f"Failed to report execution results: {e}")

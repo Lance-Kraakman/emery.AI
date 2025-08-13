@@ -77,5 +77,4 @@ addopts = "-v --tb=short"
 asyncio_mode = "auto"
 
 [project.scripts]
-emery-agents = "emery_agents.cli:main"
-emery-worker = "emery_agents.grpc.server_simple:main"
+emery-worker = "emery_agents.grpc.server:main"

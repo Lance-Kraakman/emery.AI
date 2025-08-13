@@ -82,7 +82,7 @@ export async function POST(
     console.log(`[GRPC-CAPABILITY-EXEC] ${executionId}: Agent ${agentId} executing capability '${capability_name}' for user ${userId}`);
     
     const result = await executeAgentCapabilityViaGRPC({
-      agent,
+      agentId: agentId,
       capabilityName: capability_name,
       triggerData: trigger_data || {},
       stepOverrides: step_overrides,

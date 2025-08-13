@@ -36,7 +36,6 @@ const TEST_AGENTS = [
     name: 'Test Assistant',
     description: 'A general-purpose test agent for development',
     persona: 'You are a helpful test assistant that can perform various tasks.',
-    model: 'claude-3-sonnet-20240229',
     capabilities: [
       {
         name: 'test_capability',
@@ -46,6 +45,7 @@ const TEST_AGENTS = [
             id: 'test_step_1',
             type: 'TOOL_STEP',
             instructions: 'Return success response with trigger data',
+            model: 'claude-3-sonnet-20240229',
             tools: [],
             servers: []
           }
@@ -59,6 +59,7 @@ const TEST_AGENTS = [
             id: 'ping_step',
             type: 'CODE_STEP',
             instructions: 'Return a pong response',
+            model: 'claude-3-sonnet-20240229',
             tools: [],
             servers: []
           }
@@ -70,31 +71,22 @@ const TEST_AGENTS = [
         steps: [
           {
             id: 'health_step',
-            type: 'TOOL_STEP',
+            type: 'CODE_STEP',
             instructions: 'Check system health and return status',
-            tools: [
-              { name: 'gmail' },
-              { name: 'slack' }
-            ],
+            model: 'claude-3-sonnet-20240229',
+            tools: [],
             servers: []
           }
         ]
       }
     ],
-    tools: [
-      { name: 'gmail', description: 'Gmail integration' },
-      { name: 'slack', description: 'Slack integration' },
-      { name: 'github', description: 'GitHub integration' }
-    ],
-    servers: [
-      { name: 'pipedream', description: 'Pipedream Connect server' }
-    ]
+    tools: [],
+    servers: []
   },
   {
     name: 'Email Agent',
     description: 'Specialized agent for email automation',
     persona: 'You are an email automation specialist.',
-    model: 'claude-3-haiku-20240307',
     capabilities: [
       {
         name: 'send_email',
@@ -104,24 +96,22 @@ const TEST_AGENTS = [
             id: 'compose_email',
             type: 'CODE_STEP',
             instructions: 'Compose email content',
+            model: 'claude-3-haiku-20240307',
             tools: [],
             servers: []
           },
           {
-            id: 'send_via_gmail',
-            type: 'TOOL_STEP',
-            instructions: 'Send email via Gmail API',
-            tools: [
-              { name: 'gmail' }
-            ],
+            id: 'format_response',
+            type: 'CODE_STEP',
+            instructions: 'Format the email response for output',
+            model: 'claude-3-haiku-20240307',
+            tools: [],
             servers: []
           }
         ]
       }
     ],
-    tools: [
-      { name: 'gmail', description: 'Gmail integration' }
-    ],
+    tools: [],
     servers: []
   }
 ];
@@ -232,14 +222,13 @@ async function createTestAgents(userId: string, organizationId: number) {
       name: agentConfig.name,
       description: agentConfig.description,
       persona: agentConfig.persona,
-      model: agentConfig.model,
       capabilities: agentConfig.capabilities,
       tools: agentConfig.tools,
       servers: agentConfig.servers,
       ownerId: userId,
       organizationId: organizationId,
       apiKey: apiKey,
-      isActive: true
+      status: 'active'
     }).returning();
     
     createdAgents.push(agent);
