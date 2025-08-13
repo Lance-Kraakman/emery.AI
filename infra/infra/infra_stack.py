@@ -23,8 +23,7 @@ class InfraStack(Stack):
         # Create an ECS cluster to host our services
         cluster = ecs.Cluster(
             self, "EmeryCluster",
-            vpc=vpc,
-            container_insights=True # Enable CloudWatch Container Insights
+            vpc=vpc
         )
 
         # Create a PostgreSQL database instance in RDS
@@ -60,7 +59,10 @@ class InfraStack(Stack):
             memory_limit_mib=1024,
             desired_count=1, # Start with one instance
             task_image_options=ecs_patterns.ApplicationLoadBalancedTaskImageOptions(
-                image=ecs.ContainerImage.from_asset("../"), # Points to the Dockerfile in the root
+                image=ecs.ContainerImage.from_asset(
+                    "../", # Points to the Dockerfile in the root
+                    exclude=[".venv", "node_modules", "cdk.out", ".git", "infra"]
+                ),
                 container_port=3000,
                 secrets={
                     "DATABASE_URL": ecs.Secret.from_secrets_manager(
@@ -97,7 +99,8 @@ class InfraStack(Stack):
         db_instance.connections.allow_default_port_from(agent_service.service)
 
         # Pass the public DNS of the agent service's NLB to the frontend service
-        frontend_service.task_definition.add_environment(
-            "GRPC_AGENT_URL",
-            f"http://{agent_service.load_balancer.load_balancer_dns_name}"
-        )
+        if frontend_service.task_definition.default_container:
+            frontend_service.task_definition.default_container.add_environment(
+                "GRPC_AGENT_URL",
+                f"http://{agent_service.load_balancer.load_balancer_dns_name}"
+            )

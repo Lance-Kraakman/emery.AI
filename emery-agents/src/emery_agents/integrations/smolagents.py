@@ -5,7 +5,15 @@ import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from ..core.types import StepType, Agent, CapabilityConfig, TaskInstructions, ExecutionResult, ContextData
+# Constants
+MAX_LOG_PREVIEW_LENGTH = 100
+DEFAULT_HF_MODEL_CODE = "Qwen/Qwen2.5-Coder-32B-Instruct"
+DEFAULT_HF_MODEL_GENERAL = "Qwen/Qwen2.5-72B-Instruct"
+
+from ..core.types import (
+    StepType, Agent, CapabilityConfig, TaskInstructions, 
+    ExecutionResult, ContextData, CapabilityExecutionResult, OrchestratorResult
+)
 from ..utils.prompts import (
     render_task_executor_selection,
     render_capability_execution,
@@ -14,16 +22,31 @@ from ..utils.prompts import (
 
 logger = logging.getLogger(__name__)
 
-# Load .env file if it exists
+# Import optional dependencies at module level with graceful fallback
 try:
     from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+try:
+    from smolagents import CodeAgent, ToolCallingAgent
+    from smolagents.models import InferenceClientModel
+    SMOLAGENTS_AVAILABLE = True
+except ImportError:
+    CodeAgent = None
+    ToolCallingAgent = None
+    InferenceClientModel = None
+    SMOLAGENTS_AVAILABLE = False
+
+# Load .env file if it exists
+if load_dotenv is not None:
     env_path = "/Users/lancekraakman/orchastrate/emery-agents/src/emery_agents/.env.local"
     if os.path.exists(env_path):
         load_dotenv(env_path)
         logger.info(f"Loaded .env file from {env_path}")
     else:
         logger.debug("No .env.local file found")
-except ImportError:
+else:
     logger.debug("python-dotenv not available, skipping .env loading")
 
 
@@ -50,24 +73,25 @@ class CapabilityAgent:
     
     def setup_agent(self):
         """Set up the smolagents agent with capability-specific configuration."""
+        if not SMOLAGENTS_AVAILABLE:
+            raise ImportError("smolagents library not available")
+        
+        hf_token = os.getenv("HF_TOKEN")
+        if not hf_token:
+            raise EnvironmentError("HF_TOKEN environment variable is required")
+        
         try:
-            from smolagents import CodeAgent, ToolCallingAgent
-            from smolagents.models import InferenceClientModel
-            
-            if not os.getenv("HF_TOKEN"):
-                raise RuntimeError("HF_TOKEN environment variable is required")
-            
             # Determine agent type based on capability steps
             has_code_steps = any(step.type == StepType.CODE_STEP for step in self.capability.steps)
             has_tool_steps = any(step.type == StepType.TOOL_STEP for step in self.capability.steps)
             
             # Use the most appropriate model for this capability's first step
-            model_name = "Qwen/Qwen2.5-Coder-32B-Instruct"
+            model_name = DEFAULT_HF_MODEL_CODE
             if self.capability.steps and self.capability.steps[0].model:
                 model_name = self.capability.steps[0].model
             
             # Create HuggingFace model instance
-            model = InferenceClientModel(model_name, token=os.getenv("HF_TOKEN"))
+            model = InferenceClientModel(model_name, token=hf_token)
             
             # Create appropriate agent type
             if has_code_steps and has_tool_steps:
@@ -82,8 +106,11 @@ class CapabilityAgent:
             
             logger.info(f"CapabilityAgent setup completed for: {self.capability.name}")
             
+        except (ImportError, EnvironmentError):
+            raise  # Re-raise these specific exceptions
         except Exception as e:
-            raise RuntimeError(f"Failed to setup agent: {e}")
+            logger.exception(f"Unexpected error setting up agent: {e}")
+            raise RuntimeError(f"Failed to setup agent: {e}") from e
     
     def _setup_tools_and_servers(self):
         """Set up tools and servers specific to this capability."""
@@ -99,7 +126,7 @@ class CapabilityAgent:
                     # TODO: Load and configure actual servers
                     logger.debug(f"Server configured for {self.capability.name}: {server_config.name}")
     
-    async def execute(self, instructions: str, context: ContextData) -> ExecutionResult:
+    async def execute(self, instructions: str, context: ContextData) -> CapabilityExecutionResult:
         """Execute task instructions using this capability agent."""
         if not self.agent:
             self.setup_agent()
@@ -168,7 +195,7 @@ class DefaultTaskExecutorAgent:
         except Exception as e:
             raise RuntimeError(f"Failed to setup default agent: {e}")
     
-    async def execute(self, instructions: str, context: ContextData) -> ExecutionResult:
+    async def execute(self, instructions: str, context: ContextData) -> CapabilityExecutionResult:
         """Execute task instructions directly without specific capability routing."""
         if not self.agent:
             self.setup_agent()
@@ -278,8 +305,8 @@ class SmolAgentsOrchestrator:
     async def execute_with_orchestrator(
         self, 
         instructions: TaskInstructions,
-        trigger_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        trigger_data: ContextData
+    ) -> OrchestratorResult:
         """
         Execute instructions using the agent hierarchy pattern.
         
@@ -295,7 +322,7 @@ class SmolAgentsOrchestrator:
         Returns:
             Dict with execution results
         """
-        logger.info(f"Agent hierarchy executing: {instructions.instructions[:100]}...")
+        logger.info(f"Agent hierarchy executing: {instructions.instructions[:MAX_LOG_PREVIEW_LENGTH]}...")
         
         try:
             # Step 1: Use TaskExecutorAgent to select the appropriate capability or default
@@ -493,7 +520,7 @@ class SmolAgentsOrchestrator:
             }
             
             # Execute the agent
-            logger.info(f"Running {step_type.value} with instructions: {instructions[:100]}...")
+            logger.info(f"Running {step_type.value} with instructions: {instructions[:MAX_LOG_PREVIEW_LENGTH]}...")
             result = await agent.run(instructions, **execution_context)
             
             # Format results

@@ -20,6 +20,22 @@ class ExecutionResult(TypedDict, total=False):
     tools_used: Optional[List[str]]
     model: Optional[str]
 
+class CapabilityExecutionResult(TypedDict, total=False):
+    """Result from capability agent execution."""
+    capability_used: str
+    status: str  # "completed" or "failed"
+    output: Optional[Any]
+    error: Optional[str] 
+    agent_type: Optional[str]
+
+class OrchestratorResult(TypedDict, total=False):
+    """Result from orchestrator execution."""
+    status: str  # "success" or "failed" 
+    selected_capability: str
+    result: Optional[Any]
+    error: Optional[str]
+    orchestrator: str
+
 class ContextData(TypedDict, total=False):
     """Execution context data structure."""
     variables: Dict[str, Any]
