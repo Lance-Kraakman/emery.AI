@@ -39,7 +39,7 @@ from dotenv import load_dotenv
 
 # Load .env.local from the project root for local development
 # This is safe for production as it doesn't override existing environment variables
-dotenv_path = Path(__file__).parent.parent.parent.parent / ".env.local"
+dotenv_path = Path("/Users/lancekraakman/orchastrate/.env.local")
 if dotenv_path.exists():
     load_dotenv(dotenv_path=dotenv_path)
 

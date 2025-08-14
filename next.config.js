@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   // App router is now stable in Next.js 15
   env: {
     DATABASE_URL: process.env.DATABASE_URL,
