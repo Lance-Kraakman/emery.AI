@@ -456,18 +456,26 @@ export class AgentScheduler {
             throw new Error(`Agent ${task.agentId} not found`);
           }
 
-          // Execute task using simplified executor
-          const instructions = typeof task.instructions === 'object' && task.instructions && (task.instructions as any).instructions
-            ? (task.instructions as any).instructions
-            : 'Execute pending task';
+          // Execute task using simplified executor with JSONB instructions
+          const taskInstructions = task.instructions as any;
+          const instructions = taskInstructions?.instructions || 'Execute pending task';
+          const tools = taskInstructions?.tools || [];
+          const servers = taskInstructions?.servers || [];
+          const metadata = { 
+            trigger_type: 'MANUAL', 
+            task_id: task.id,
+            ...taskInstructions?.metadata 
+          };
 
           console.log(`[SCHEDULER] Executing pending task ${task.id} for agent ${agent.id}`);
 
           const result = await executeAgentViaGRPC({
             agentId: agent.id,
             instructions,
+            tools,
+            servers,
             executionId: task.id,
-            metadata: { trigger_type: 'MANUAL', task_id: task.id }
+            metadata
           });
 
           console.log(`[SCHEDULER] Pending task ${task.id} completed: ${result.success ? 'SUCCESS' : 'FAILED'}`);
@@ -519,13 +527,18 @@ export class AgentScheduler {
     } catch (error) {
       console.error(`[SCHEDULER] Failed to execute agent ${agent.id}:`, error);
 
-      // Create failed task record with simplified structure
+      // Create failed task record with JSONB structure
       try {
         await db.insert(tasks).values({
           agentId: agent.id,
           name: `Scheduled execution (${metadata.trigger_type || 'UNKNOWN'})`,
           capabilityName: null,
-          instructions: { instructions: `Failed ${metadata.trigger_type} execution`, metadata },
+          instructions: { 
+            instructions: `Failed ${metadata.trigger_type} execution`,
+            tools: [],
+            servers: [],
+            metadata 
+          },
           status: 'failed',
           error: error instanceof Error ? error.message : 'Unknown scheduler error',
           startedAt: new Date(),
