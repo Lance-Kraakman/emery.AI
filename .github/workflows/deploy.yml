@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       env_name: ${{ steps.get_env.outputs.env_name }}
+      aws_region: ${{ steps.get_env.outputs.aws_region }}
     steps:
       - name: Identify Environment
         id: get_env
@@ -23,6 +24,7 @@ jobs:
           elif [ "${{ github.ref_name }}" = "develop" ]; then
             echo "env_name=dev" >> $GITHUB_OUTPUT
           fi
+          echo "aws_region=${{ vars.AWS_REGION || 'ap-southeast-2' }}" >> $GITHUB_OUTPUT
 
   deploy:
     needs: get-environment
@@ -53,7 +55,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws-region: ${{ needs.get-environment.outputs.aws_region }}
 
       - name: Bootstrap CDK Environment
         working-directory: ./infra
@@ -65,4 +67,4 @@ jobs:
         working-directory: ./infra
         run: |
           source .venv/bin/activate
-          cdk deploy --all --require-approval never -c env=${{ needs.get-environment.outputs.env_name }} -c aws_account_id=${{ secrets.AWS_ACCOUNT_ID }} -c region=${{ vars.AWS_REGION || 'us-east-1' }}
+          cdk deploy --all --require-approval never -c env=${{ needs.get-environment.outputs.env_name }} -c aws_account_id=${{ secrets.AWS_ACCOUNT_ID }} -c region=${{ needs.get-environment.outputs.aws_region }}
