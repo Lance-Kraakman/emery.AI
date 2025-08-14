@@ -16,7 +16,6 @@ export interface AgentExecutionRequest {
   tools?: Array<{name: string, version?: string, config?: Record<string, any>}>; // Optional tools
   servers?: Array<{name: string, endpoint?: string, config?: Record<string, any>}>; // Optional servers
   executionId: string;
-  metadata?: Record<string, any>; // Optional context metadata
 }
 
 export interface AgentExecutionResult {
@@ -35,7 +34,7 @@ export interface AgentExecutionResult {
 export async function executeAgentViaGRPC(
   request: AgentExecutionRequest
 ): Promise<AgentExecutionResult> {
-  const { agentId, instructions, tools, servers, executionId, metadata } = request;
+  const { agentId, instructions, tools, servers, executionId } = request;
   
   console.log(`[GRPC-AGENT] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
   
@@ -61,8 +60,7 @@ export async function executeAgentViaGRPC(
           instructions: { 
             instructions, 
             tools: tools || [], 
-            servers: servers || [], 
-            metadata 
+            servers: servers || []
           },
         })
         .where(eq(tasks.id, executionId));
@@ -77,8 +75,7 @@ export async function executeAgentViaGRPC(
         instructions: { 
           instructions, 
           tools: tools || [], 
-          servers: servers || [], 
-          metadata 
+          servers: servers || []
         },
         status: 'in_progress',
         startedAt: new Date(),
@@ -100,7 +97,7 @@ export async function executeAgentViaGRPC(
         servers: servers || [] 
       },
       agent: agent as AgentData,
-      triggerData: metadata || {},
+      triggerData: {}, // Empty object for proto compatibility
       organizationId: organizationId,
       ownerId: agent.ownerId!,
       timeoutSeconds: 300

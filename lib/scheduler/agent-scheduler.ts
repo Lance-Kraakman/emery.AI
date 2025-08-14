@@ -239,7 +239,8 @@ export class AgentScheduler {
     this.checkInterval = setInterval(() => {
       Promise.allSettled([
         this.checkForAgentUpdates(),
-        this.processPendingTasks()
+        this.processPendingTasks(),
+        this.checkOrphanedTasks()
       ]).catch(error => {
         console.error('[SCHEDULER] Error during periodic check:', error);
       });
@@ -424,12 +425,49 @@ export class AgentScheduler {
   }
 
   /**
+   * Check for orphaned in_progress tasks and reset them to pending
+   * AIDEV-NOTE: Detects tasks that have been in_progress too long (likely from crashed workers)
+   */
+  async checkOrphanedTasks(): Promise<void> {
+    try {
+      // Tasks in_progress for more than 10 minutes are likely orphaned
+      const orphanThreshold = new Date(Date.now() - 10 * 60 * 1000); // 10 minutes ago
+      
+      const orphanedTasks = await db
+        .select()
+        .from(tasks)
+        .where(
+          sql`status = 'in_progress' AND started_at < ${orphanThreshold}`
+        )
+        .limit(5); // Don't overwhelm the system
+
+      if (orphanedTasks.length > 0) {
+        console.log(`[SCHEDULER] Found ${orphanedTasks.length} orphaned tasks, resetting to pending`);
+        
+        for (const task of orphanedTasks) {
+          await db.update(tasks)
+            .set({
+              status: 'pending',
+              error: 'Task appeared orphaned - worker may have crashed',
+              startedAt: null
+            })
+            .where(eq(tasks.id, task.id));
+          
+          console.log(`[SCHEDULER] Reset orphaned task ${task.id} to pending`);
+        }
+      }
+    } catch (error) {
+      console.error('[SCHEDULER] Error checking orphaned tasks:', error);
+    }
+  }
+
+  /**
    * Process pending tasks for immediate execution
    * AIDEV-NOTE: Handles manually created tasks that need immediate execution
    */
   async processPendingTasks(): Promise<void> {
     try {
-      // Get all pending tasks
+      // Only process truly pending tasks - in_progress tasks should be handled by active gRPC workers
       const pendingTasks = await db
         .select()
         .from(tasks)
@@ -461,11 +499,6 @@ export class AgentScheduler {
           const instructions = taskInstructions?.instructions || 'Execute pending task';
           const tools = taskInstructions?.tools || [];
           const servers = taskInstructions?.servers || [];
-          const metadata = { 
-            trigger_type: 'MANUAL', 
-            task_id: task.id,
-            ...taskInstructions?.metadata 
-          };
 
           console.log(`[SCHEDULER] Executing pending task ${task.id} for agent ${agent.id}`);
 
@@ -474,8 +507,7 @@ export class AgentScheduler {
             instructions,
             tools,
             servers,
-            executionId: task.id,
-            metadata
+            executionId: task.id
           });
 
           console.log(`[SCHEDULER] Pending task ${task.id} completed: ${result.success ? 'SUCCESS' : 'FAILED'}`);
@@ -515,8 +547,7 @@ export class AgentScheduler {
       const result = await executeAgentViaGRPC({
         agentId: agent.id,
         instructions,
-        executionId,
-        metadata
+        executionId
       });
 
       console.log(`[SCHEDULER] Agent execution completed: ${result.success ? 'SUCCESS' : 'FAILED'}`);
@@ -536,8 +567,7 @@ export class AgentScheduler {
           instructions: { 
             instructions: `Failed ${metadata.trigger_type} execution`,
             tools: [],
-            servers: [],
-            metadata 
+            servers: []
           },
           status: 'failed',
           error: error instanceof Error ? error.message : 'Unknown scheduler error',

@@ -120,14 +120,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         instructions,
         tools: [], // Webhook can specify tools if needed
         servers: [], // Webhook can specify servers if needed
-        executionId,
-        metadata: {
-          trigger_type: 'WEBHOOK',
-          webhook_payload: webhookPayload,
-          timestamp: new Date().toISOString(),
-          user_agent: request.headers.get('user-agent'),
-          source_ip: request.headers.get('x-forwarded-for') || 'unknown',
-        }
+        executionId
       });
 
       return Response.json({
@@ -157,14 +150,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         instructions,
         tools: [], // Webhook can specify tools if needed
         servers: [], // Webhook can specify servers if needed
-        executionId,
-        metadata: {
-          trigger_type: 'WEBHOOK',
-          webhook_payload: webhookPayload,
-          timestamp: new Date().toISOString(),
-          user_agent: request.headers.get('user-agent'),
-          source_ip: request.headers.get('x-forwarded-for') || 'unknown',
-        }
+        executionId
       });
 
       return Response.json({

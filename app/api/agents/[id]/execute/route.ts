@@ -83,8 +83,7 @@ export async function POST(
       instructions,
       tools,
       servers,
-      executionId,
-      metadata: metadata || { trigger_type: 'API' }
+      executionId
     });
 
     // If webhook URL provided, send result asynchronously
