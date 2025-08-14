@@ -9,27 +9,30 @@ from constructs import Construct
 
 class InfraStack(Stack):
 
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+    def __init__(self, scope: Construct, construct_id: str, env_name: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
+
+        prefix = env_name.capitalize()
 
         # Create a new VPC for our application
         # This will create public and private subnets across 2 Availability Zones by default
         vpc = ec2.Vpc(
-            self, "EmeryVpc",
+            self, f"{prefix}EmeryVpc",
             max_azs=2,
             nat_gateways=1,
         )
 
         # Create an ECS cluster to host our services
         cluster = ecs.Cluster(
-            self, "EmeryCluster",
-            vpc=vpc
+            self, f"{prefix}EmeryCluster",
+            vpc=vpc,
+            cluster_name=f"{prefix}EmeryCluster"
         )
 
         # Create a PostgreSQL database instance in RDS
         # This will be placed in the private subnets of our VPC
         db_instance = rds.DatabaseInstance(
-            self, "PostgresDB",
+            self, f"{prefix}PostgresDB",
             engine=rds.DatabaseInstanceEngine.postgres(
                 version=rds.PostgresEngineVersion.VER_16_3
             ),
@@ -40,9 +43,9 @@ class InfraStack(Stack):
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),
-            database_name="emery",
+            database_name=f"emery_{env_name}",
             # The secret will be automatically created and stored in AWS Secrets Manager
-            credentials=rds.Credentials.from_generated_secret("db_master_user"),
+            credentials=rds.Credentials.from_generated_secret(f"db_master_user_{env_name}"),
             multi_az=False, # For cost-effectiveness in dev/staging. Set to True for production.
             allocated_storage=20, # 20 GB
             max_allocated_storage=100,
@@ -53,8 +56,9 @@ class InfraStack(Stack):
 
         # Create the Fargate service for the Next.js frontend
         frontend_service = ecs_patterns.ApplicationLoadBalancedFargateService(
-            self, "FrontendService",
+            self, f"{prefix}FrontendService",
             cluster=cluster,
+            service_name=f"{prefix}-Frontend",
             cpu=512,
             memory_limit_mib=1024,
             desired_count=1, # Start with one instance
@@ -78,8 +82,9 @@ class InfraStack(Stack):
 
         # Create the Fargate service for the Python gRPC backend
         agent_service = ecs_patterns.NetworkLoadBalancedFargateService(
-            self, "AgentService",
+            self, f"{prefix}AgentService",
             cluster=cluster,
+            service_name=f"{prefix}-Agent",
             cpu=256,
             memory_limit_mib=512,
             desired_count=1,

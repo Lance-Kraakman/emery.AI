@@ -10,6 +10,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: ${{ steps.get_env.outputs.env_name }}
     # These permissions are needed for the AWS OIDC provider
     permissions:
       id-token: write
@@ -26,7 +27,7 @@ jobs:
           elif [ "${{ github.ref_name }}" = "staging" ]; then
             echo "env_name=staging" >> $GITHUB_OUTPUT
           elif [ "${{ github.ref_name }}" = "develop" ]; then
-            echo "env_name=development" >> $GITHUB_OUTPUT
+            echo "env_name=dev" >> $GITHUB_OUTPUT
           fi
 
       - name: Setup Python
@@ -50,9 +51,17 @@ jobs:
           # If you use poetry or another tool, the command would be different, e.g.:
           # pip install poetry && poetry install
 
-      - name: Synth CDK Template
+      - name: Configure AWS Credentials
+        if: steps.get_env.outputs.env_name
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Deploy CDK Stack
         if: steps.get_env.outputs.env_name
         working-directory: ./infra
         run: |
           source .venv/bin/activate
-          cdk synth --all -c env=${{ steps.get_env.outputs.env_name }}
+          cdk deploy --all --require-approval never -c env=${{ steps.get_env.outputs.env_name }} -c aws_account_id=${{ secrets.AWS_ACCOUNT_ID }} -c region=${{ vars.AWS_REGION || 'us-east-1' }}

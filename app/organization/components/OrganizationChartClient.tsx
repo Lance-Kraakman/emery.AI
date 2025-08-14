@@ -6,7 +6,6 @@ import {
   Node, 
   Edge, 
   Controls, 
-  Background, 
   useNodesState, 
   useEdgesState,
   ConnectionMode,
@@ -20,19 +19,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { 
-  Settings, 
   Search, 
-  ZoomIn, 
-  ZoomOut, 
-  Maximize,
   Eye,
   Edit3,
   Activity,
   RotateCcw,
 } from 'lucide-react';
 import { getTasks } from '@/app/actions/tasks';
-
-import { Agent, Team } from '@/types/db';
 import { Task } from '@/app/actions/types';
 import TeamNode from './TeamNode';
 import AgentNode from './AgentNode';

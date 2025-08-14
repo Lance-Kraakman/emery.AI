@@ -16,8 +16,7 @@ import type { FieldData, RowData } from "@/types/db"
 
 export function DataViewsClientSimplified() {
   const searchParams = useSearchParams()
-  const router = useRouter()
-  const { data, isLoading: dataLoading, error: dataError, refetch } = useEmeryData()
+  const { data, isLoading: dataLoading, error: dataError } = useEmeryData()
   
   const tableIdParam = searchParams.get("tableId")
   const initialTableId = tableIdParam ? parseInt(tableIdParam) : undefined
