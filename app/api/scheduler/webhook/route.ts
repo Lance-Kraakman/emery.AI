@@ -7,7 +7,7 @@ import { NextRequest } from 'next/server';
 import { db } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
 import { sql, eq, and } from 'drizzle-orm';
-import { executeAgentCapabilityViaGRPC } from '@/lib/agents/grpc-executor';
+import { executeAgentViaGRPC } from '@/lib/agents/grpc-executor';
 import { v4 as uuidv4 } from 'uuid';
 import { createHmac, timingSafeEqual } from 'crypto';
 
@@ -109,31 +109,23 @@ export async function POST(request: NextRequest): Promise<Response> {
         }, { status: 400 });
       }
 
-      // Execute agent capability
-      const capabilities = Array.isArray(agent.capabilities) ? agent.capabilities : [];
-      if (capabilities.length === 0) {
-        return Response.json({ 
-          success: false,
-          error: 'Agent has no capabilities configured' 
-        }, { status: 400 });
-      }
-
-      const capability = capabilities[0]; // Execute first capability
+      // Execute agent using simplified executor
       const executionId = uuidv4();
+      const instructions = `Execute webhook trigger with payload`;
 
       console.log(`[SCHEDULER-WEBHOOK] Executing agent ${agent.id} (${agent.name}) via webhook trigger`);
 
-      const result = await executeAgentCapabilityViaGRPC({
+      const result = await executeAgentViaGRPC({
         agentId: agent.id,
-        capabilityName: capability.name,
-        triggerData: {
+        instructions,
+        executionId,
+        metadata: {
           trigger_type: 'WEBHOOK',
           webhook_payload: webhookPayload,
           timestamp: new Date().toISOString(),
           user_agent: request.headers.get('user-agent'),
           source_ip: request.headers.get('x-forwarded-for') || 'unknown',
-        },
-        executionId,
+        }
       });
 
       return Response.json({
@@ -143,7 +135,6 @@ export async function POST(request: NextRequest): Promise<Response> {
           execution_id: executionId,
           agent_id: agent.id,
           agent_name: agent.name,
-          capability: capability.name,
           result: result.success,
           error: result.error,
         },
@@ -153,31 +144,23 @@ export async function POST(request: NextRequest): Promise<Response> {
       // No signature verification required - parse body directly
       const webhookPayload = await request.json();
 
-      // Execute agent capability
-      const capabilities = Array.isArray(agent.capabilities) ? agent.capabilities : [];
-      if (capabilities.length === 0) {
-        return Response.json({ 
-          success: false,
-          error: 'Agent has no capabilities configured' 
-        }, { status: 400 });
-      }
-
-      const capability = capabilities[0]; // Execute first capability
+      // Execute agent using simplified executor
       const executionId = uuidv4();
+      const instructions = `Execute webhook trigger with payload`;
 
       console.log(`[SCHEDULER-WEBHOOK] Executing agent ${agent.id} (${agent.name}) via webhook trigger (unsigned)`);
 
-      const result = await executeAgentCapabilityViaGRPC({
+      const result = await executeAgentViaGRPC({
         agentId: agent.id,
-        capabilityName: capability.name,
-        triggerData: {
+        instructions,
+        executionId,
+        metadata: {
           trigger_type: 'WEBHOOK',
           webhook_payload: webhookPayload,
           timestamp: new Date().toISOString(),
           user_agent: request.headers.get('user-agent'),
           source_ip: request.headers.get('x-forwarded-for') || 'unknown',
-        },
-        executionId,
+        }
       });
 
       return Response.json({
@@ -187,7 +170,6 @@ export async function POST(request: NextRequest): Promise<Response> {
           execution_id: executionId,
           agent_id: agent.id,
           agent_name: agent.name,
-          capability: capability.name,
           result: result.success,
           error: result.error,
         },

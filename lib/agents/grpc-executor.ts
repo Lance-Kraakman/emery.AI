@@ -4,9 +4,11 @@
  */
 
 import { db } from '@/lib/db/client';
-import { tasks } from '@/lib/db/schema';
+import { tasks, agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { AgentWorkerClient, workerRegistry, TaskStatus, TaskStatusEnum } from '@/lib/grpc/client';
+import { AgentWorkerClient, workerRegistry, TaskStatus, TaskStatusEnum, TaskRequest } from '@/lib/grpc/client';
+import type { TaskProgress } from '@/lib/grpc/client';
+import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/lib/grpc/proto-mappers';
 
 export interface AgentExecutionRequest {
   agentId: number;
@@ -52,7 +54,6 @@ export async function executeAgentViaGRPC(
       capabilityName: null, // Determined by smolagents
       instructions: { instructions, metadata },
       status: 'in_progress',
-      payload: triggerData,
       startedAt: new Date(),
       createdBy: agent.ownerId,
     });
@@ -61,102 +62,63 @@ export async function executeAgentViaGRPC(
     const organizationId = agent.organizationId?.toString() || 'default';
     const workerClient = workerRegistry.getWorkerForOrganization(organizationId);
     
-    // Prepare gRPC task request
-    const taskRequest = {
-      task_id: executionId,
-      agent_id: agent.id,
-      capability_name: capabilityName,
-      trigger_data_json: JSON.stringify(triggerData),
-      organization_id: organizationId,
-      owner_id: agent.ownerId,
-      timeout_seconds: 300 // 5 minutes default
-    };
-    
-    // Track step executions for final result
-    const stepExecutions: Array<{
-      step_id: string;
-      step_type: string;
-      status: string;
-      output_data?: any;
-      error_message?: string;
-    }> = [];
+    // Create proto task request with full agent configuration
+    const taskRequest = createTaskRequest({
+      taskId: executionId,
+      agentId: agent.id,
+      instructionConfig: { instructions, tools: [], servers: [] },
+      agent: agent as AgentData,
+      triggerData: metadata || {},
+      organizationId: organizationId,
+      ownerId: agent.ownerId!,
+      timeoutSeconds: 300
+    });
     
     let finalStatus = 'in_progress';
     let finalOutputData: any = null;
     let finalError: string | null = null;
     
     // Execute task via gRPC with streaming progress updates
-    await workerClient.executeTask(taskRequest, async (progress) => {
+    await workerClient.executeTask(taskRequest as any, async (progress: TaskProgress) => {
       console.log(`[GRPC-PROGRESS] ${executionId}: Step ${progress.step_id} - Status: ${progress.status} (${progress.progress_percent}%)`);
-      console.log(`[GRPC-DEBUG] ${executionId}: Progress object:`, JSON.stringify({
-        status: progress.status,
-        step_id: progress.step_id,
-        error_message: progress.error_message,
-        output_json: progress.output_json?.substring(0, 100)
-      }));
       
-      // Parse output data if available
-      let outputData = null;
-      if (progress.output_json) {
-        try {
-          outputData = JSON.parse(progress.output_json);
-        } catch (e) {
-          console.warn(`[GRPC-PROGRESS] ${executionId}: Failed to parse output JSON:`, progress.output_json);
-        }
-      }
-      
-      // Add to step executions if this is a work step
-      if (progress.step_id && progress.step_type && progress.step_id !== 'initialization') {
-        stepExecutions.push({
-          step_id: progress.step_id,
-          step_type: progress.step_type,
-          status: (progress.status === 'TASK_COMPLETED' || progress.status === TaskStatus.TASK_COMPLETED) ? 'completed' : 
-                  (progress.status === 'TASK_FAILED' || progress.status === TaskStatus.TASK_FAILED) ? 'failed' : 'in_progress',
-          output_data: outputData,
-          error_message: progress.error_message || undefined
-        });
-      }
+      // Map proto progress to TypeScript types
+      const taskUpdate = mapTaskProgressFromProto(progress);
       
       // Update final status based on progress
-      // Note: gRPC returns status as string enum names, not numeric values
-      console.log(`[GRPC-STATUS-CHECK] ${executionId}: Comparing status '${progress.status}' (type: ${typeof progress.status})`);
-      
-      if (progress.status === 'TASK_COMPLETED' || progress.status === TaskStatus.TASK_COMPLETED) {
+      if (taskUpdate.status === 'completed') {
         console.log(`[GRPC-STATUS] ${executionId}: Task COMPLETED detected!`);
         finalStatus = 'completed';
-        finalOutputData = outputData;
-      } else if (progress.status === 'TASK_FAILED' || progress.status === TaskStatus.TASK_FAILED) {
+        finalOutputData = taskUpdate.result;
+      } else if (taskUpdate.status === 'failed') {
         console.log(`[GRPC-STATUS] ${executionId}: Task FAILED detected!`);
         finalStatus = 'failed';
-        finalError = progress.error_message || 'Task failed';
+        finalError = taskUpdate.error || 'Task failed';
       }
       
       // Update task status in database for real-time tracking
       await db.update(tasks)
         .set({
-          status: finalStatus === 'completed' ? 'completed' : 
-                 finalStatus === 'failed' ? 'failed' : 'in_progress',
-          result: finalStatus === 'completed' ? finalOutputData : undefined,
-          error: finalError || undefined,
-          completedAt: (finalStatus === 'completed' || finalStatus === 'failed') ? new Date() : undefined,
+          status: taskUpdate.status || 'in_progress',
+          result: taskUpdate.result,
+          error: taskUpdate.error,
+          completedAt: taskUpdate.completedAt,
         })
         .where(eq(tasks.id, executionId));
     });
     
-    console.log(`[GRPC-CAPABILITY] Execution ${executionId} completed with status: ${finalStatus}`);
+    console.log(`[GRPC-AGENT] Execution ${executionId} completed with status: ${finalStatus}`);
     
     return {
       success: finalStatus === 'completed',
       execution_id: executionId,
-      capability_name: capabilityName,
       status: finalStatus,
       output_data: finalOutputData,
       error: finalError || undefined,
-      step_executions: stepExecutions,
     };
     
   } catch (error) {
-    console.error(`[GRPC-CAPABILITY-ERROR] ${executionId}:`, error);
+    console.error(`[GRPC-AGENT-ERROR] ${executionId}:`, error);
     
     // Update database with error
     try {
@@ -168,16 +130,14 @@ export async function executeAgentViaGRPC(
         })
         .where(eq(tasks.id, executionId));
     } catch (dbError) {
-      console.error(`[GRPC-CAPABILITY-DB-ERROR] ${executionId}:`, dbError);
+      console.error(`[GRPC-AGENT-DB-ERROR] ${executionId}:`, dbError);
     }
     
     return {
       success: false,
       execution_id: executionId,
-      capability_name: capabilityName,
       status: 'failed',
       error: error instanceof Error ? error.message : String(error),
-      step_executions: [],
     };
   }
 }
@@ -222,7 +182,7 @@ export async function cancelTaskViaGRPC(
     if (response.success) {
       await db.update(tasks)
         .set({
-          status: 'failed', // Use 'failed' for cancelled tasks
+          status: 'cancelled',
           error: `Cancelled: ${reason || 'User requested cancellation'}`,
           completedAt: new Date(),
         })
@@ -239,7 +199,6 @@ export async function cancelTaskViaGRPC(
   }
 }
 
-// AIDEV-NOTE: This replaces subprocess execution with gRPC streaming calls
+// AIDEV-NOTE: Simplified gRPC execution using smolagents hierarchy
+// AIDEV-NOTE: All capability routing handled by smolagents backend
 // AIDEV-TODO: Add connection pooling and retry logic for production use
-// AIDEV-TODO: Implement proper service discovery for multi-tenant worker routing
-// AIDEV-TODO: Add task execution metrics and monitoring
