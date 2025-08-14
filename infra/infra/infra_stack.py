@@ -91,9 +91,7 @@ class InfraStack(Stack):
                 ),
                 container_port=3000,
                 secrets={
-                    "DATABASE_URL": ecs.Secret.from_secrets_manager(
-                        db_instance.secret, "postgres_connection_string"
-                    ),
+                    "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
                     **app_secrets_map
                 }
             ),
@@ -115,9 +113,6 @@ class InfraStack(Stack):
                 image=ecs.ContainerImage.from_asset("../emery-agents"), # Points to the Dockerfile in emery-agents
                 container_port=50051,
                 secrets={
-                    "DATABASE_URL": ecs.Secret.from_secrets_manager(
-                        db_instance.secret, "postgres_connection_string"
-                    ),
                     **app_secrets_map
                 }
             ),
