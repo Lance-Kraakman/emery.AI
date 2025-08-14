@@ -3,19 +3,6 @@ Production gRPC server implementation for agent worker instances.
 Uses proto-first architecture with simplified smolagents hierarchy for all execution.
 All capability routing and step management handled internally by smolagents.
 """
-from pathlib import Path
-from dotenv import load_dotenv
-
-# Load .env.local from the project root for local development
-# This is safe for production as it doesn't override existing environment variables
-# AIDEV-NOTE: This must be at the top of the file to ensure env vars are loaded before any other imports
-dotenv_path = Path("/Users/lancekraakman/orchastrate/.env.local")
-if dotenv_path.exists():
-    print("loading server config")
-    load_dotenv(dotenv_path=dotenv_path, override=True)
-else:
-    print("no .env at hardcoded location")
-
 import asyncio
 import json
 import logging

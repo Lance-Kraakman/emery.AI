@@ -16,4 +16,4 @@ COPY ./src ./src
 EXPOSE 50051
 
 # Command to run the gRPC server
-CMD ["python", "src/emery_agents/grpc/server_simple.py"]
+CMD ["python", "src/emery_agents/grpc/server.py"]
