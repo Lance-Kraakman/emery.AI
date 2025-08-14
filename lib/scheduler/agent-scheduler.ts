@@ -10,7 +10,7 @@ import { RRule } from 'rrule';
 import { db } from '@/lib/db/client';
 import { agents, tasks } from '@/lib/db/schema';
 import { sql, eq, and, isNotNull } from 'drizzle-orm';
-import { executeAgentCapabilityViaGRPC } from '@/lib/agents/grpc-executor';
+import { executeAgentViaGRPC } from '@/lib/agents/grpc-executor';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface TriggerConfig {
@@ -230,14 +230,17 @@ export class AgentScheduler {
   }
 
   /**
-   * Start periodic check for new/updated agents
-   * AIDEV-NOTE: Consolidated periodic checking with better error recovery
+   * Start periodic check for new/updated agents and pending tasks
+   * AIDEV-NOTE: Consolidated periodic checking with manual task processing
    */
   private startPeriodicCheck(): void {
-    console.log('[SCHEDULER] Starting periodic check for agent updates...');
+    console.log('[SCHEDULER] Starting periodic check for agent updates and pending tasks...');
     
     this.checkInterval = setInterval(() => {
-      this.checkForAgentUpdates().catch(error => {
+      Promise.allSettled([
+        this.checkForAgentUpdates(),
+        this.processPendingTasks()
+      ]).catch(error => {
         console.error('[SCHEDULER] Error during periodic check:', error);
       });
     }, 60000); // Check every minute
@@ -311,6 +314,37 @@ export class AgentScheduler {
 
     this.removeSchedulerJob(agentId);
     await this.addSchedulerJob({ ...agent, trigger: triggerConfig });
+  }
+
+  /**
+   * Manually trigger processing of pending tasks
+   * AIDEV-NOTE: Allows immediate execution of pending tasks without waiting for periodic check
+   */
+  async processPendingTasksManually(): Promise<{ processed: number; errors: number }> {
+    console.log('[SCHEDULER] Manual processing of pending tasks requested');
+    
+    try {
+      const pendingTasksBefore = await db
+        .select()
+        .from(tasks)
+        .where(eq(tasks.status, 'pending'));
+      
+      await this.processPendingTasks();
+      
+      const pendingTasksAfter = await db
+        .select()
+        .from(tasks)
+        .where(eq(tasks.status, 'pending'));
+      
+      const processed = pendingTasksBefore.length - pendingTasksAfter.length;
+      const errors = pendingTasksAfter.length;
+      
+      console.log(`[SCHEDULER] Manual processing completed: ${processed} processed, ${errors} remaining`);
+      return { processed, errors };
+    } catch (error) {
+      console.error('[SCHEDULER] Error during manual pending task processing:', error);
+      return { processed: 0, errors: -1 };
+    }
   }
 
   /**
@@ -390,27 +424,91 @@ export class AgentScheduler {
   }
 
   /**
-   * Execute an agent capability for a trigger
+   * Process pending tasks for immediate execution
+   * AIDEV-NOTE: Handles manually created tasks that need immediate execution
    */
-  private async executeAgentForTrigger(agent: any, triggerData: Record<string, any>): Promise<void> {
+  async processPendingTasks(): Promise<void> {
     try {
-      // Get the first capability (or could be configurable per trigger)
-      const capabilities = Array.isArray(agent.capabilities) ? agent.capabilities : [];
-      if (capabilities.length === 0) {
-        console.warn(`[SCHEDULER] Agent ${agent.id} has no capabilities`);
+      // Get all pending tasks
+      const pendingTasks = await db
+        .select()
+        .from(tasks)
+        .where(eq(tasks.status, 'pending'))
+        .limit(10); // Process up to 10 tasks per cycle
+
+      if (pendingTasks.length === 0) {
         return;
       }
 
-      const capability = capabilities[0]; // Execute first capability
+      console.log(`[SCHEDULER] Processing ${pendingTasks.length} pending tasks`);
+
+      // Process each pending task
+      for (const task of pendingTasks) {
+        try {
+          // Mark task as in_progress
+          await db.update(tasks)
+            .set({ status: 'in_progress', startedAt: new Date() })
+            .where(eq(tasks.id, task.id));
+
+          // Get agent for this task
+          const [agent] = await db.select().from(agents).where(eq(agents.id, task.agentId)).limit(1);
+          if (!agent) {
+            throw new Error(`Agent ${task.agentId} not found`);
+          }
+
+          // Execute task using simplified executor
+          const instructions = typeof task.instructions === 'object' && task.instructions && (task.instructions as any).instructions
+            ? (task.instructions as any).instructions
+            : 'Execute pending task';
+
+          console.log(`[SCHEDULER] Executing pending task ${task.id} for agent ${agent.id}`);
+
+          const result = await executeAgentViaGRPC({
+            agentId: agent.id,
+            instructions,
+            executionId: task.id,
+            metadata: { trigger_type: 'MANUAL', task_id: task.id }
+          });
+
+          console.log(`[SCHEDULER] Pending task ${task.id} completed: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+
+        } catch (error) {
+          console.error(`[SCHEDULER] Failed to execute pending task ${task.id}:`, error);
+          
+          // Mark task as failed
+          await db.update(tasks)
+            .set({
+              status: 'failed',
+              error: error instanceof Error ? error.message : 'Unknown execution error',
+              completedAt: new Date()
+            })
+            .where(eq(tasks.id, task.id));
+        }
+      }
+    } catch (error) {
+      console.error('[SCHEDULER] Error processing pending tasks:', error);
+    }
+  }
+
+  /**
+   * Execute an agent for a trigger (simplified)
+   * AIDEV-NOTE: Uses simplified executor without legacy patterns
+   */
+  private async executeAgentForTrigger(agent: any, metadata: Record<string, any>): Promise<void> {
+    try {
       const executionId = uuidv4();
+      const triggerType = metadata.trigger_type || 'SCHEDULED';
+      
+      // Create instruction based on trigger type
+      const instructions = `Execute scheduled task for ${triggerType} trigger`;
 
-      console.log(`[SCHEDULER] Executing agent ${agent.id} capability '${capability.name}' via ${triggerData.trigger_type} trigger`);
+      console.log(`[SCHEDULER] Executing agent ${agent.id} (${agent.name}) via ${triggerType} trigger`);
 
-      const result = await executeAgentCapabilityViaGRPC({
+      const result = await executeAgentViaGRPC({
         agentId: agent.id,
-        capabilityName: capability.name,
-        triggerData,
+        instructions,
         executionId,
+        metadata
       });
 
       console.log(`[SCHEDULER] Agent execution completed: ${result.success ? 'SUCCESS' : 'FAILED'}`);
@@ -421,13 +519,13 @@ export class AgentScheduler {
     } catch (error) {
       console.error(`[SCHEDULER] Failed to execute agent ${agent.id}:`, error);
 
-      // Create failed task record
+      // Create failed task record with simplified structure
       try {
         await db.insert(tasks).values({
           agentId: agent.id,
-          name: `Scheduled execution (${triggerData.trigger_type})`,
-          capabilityName: 'unknown',
-          instructions: {},
+          name: `Scheduled execution (${metadata.trigger_type || 'UNKNOWN'})`,
+          capabilityName: null,
+          instructions: { instructions: `Failed ${metadata.trigger_type} execution`, metadata },
           status: 'failed',
           error: error instanceof Error ? error.message : 'Unknown scheduler error',
           startedAt: new Date(),
@@ -481,5 +579,7 @@ export const agentScheduler = new AgentScheduler();
 // AIDEV-NOTE: The scheduler automatically handles:
 // 1. CRON triggers - time-based scheduling with cron expressions
 // 2. DATABASE_EVENT triggers - table change notifications via PostgreSQL LISTEN/NOTIFY
-// 3. Dynamic updates - periodically checks for new/updated/deleted agents
-// 4. Graceful cleanup - properly destroys cron jobs and database connections
+// 3. PENDING TASKS - processes manually created tasks for immediate execution
+// 4. Dynamic updates - periodically checks for new/updated/deleted agents
+// 5. Graceful cleanup - properly destroys cron jobs and database connections
+// 6. Simplified execution - uses smolagents hierarchy via simplified gRPC executor

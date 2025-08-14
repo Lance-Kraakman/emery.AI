@@ -3,21 +3,12 @@ import { authenticateRequest } from '@/lib/auth/test-auth';
 import { db } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { executeAgentCapabilityViaGRPC as executeAgentViaGRPC } from '@/lib/agents/grpc-executor';
+import { executeAgentViaGRPC } from '@/lib/agents/grpc-executor';
 import crypto from 'crypto';
 
 export interface AgentExecuteRequest {
-  // Capability execution approaches
-  capability_name?: string; // Optional - for direct capability execution
-  instructions?: string; // Optional - for instruction-based execution with auto-routing
-  tools?: Array<{name: string, version?: string, config?: Record<string, any>}>; // Optional tools for instruction-based execution
-  servers?: Array<{name: string, endpoint?: string, config?: Record<string, any>}>; // Optional servers for instruction-based execution
-  
-  // Legacy support
-  trigger_data?: Record<string, any>;
-  step_overrides?: Array<Record<string, any>>;
-  
-  // Common options
+  instructions: string; // All execution is instruction-based now
+  metadata?: Record<string, any>; // Optional context metadata
   webhook_url?: string;
   timeout?: number;
 }
@@ -30,9 +21,8 @@ export interface AgentExecuteResponse {
 }
 
 /**
- * Execute an agent capability via emery-agents package
- * This is the secure endpoint for triggering specific agent capabilities
- * with multi-step workflows and context persistence
+ * Execute an agent via simplified smolagents hierarchy
+ * All capability routing handled internally by smolagents
  */
 export async function POST(
   request: NextRequest,
@@ -72,35 +62,25 @@ export async function POST(
     }
 
     const body: AgentExecuteRequest = await request.json();
-    const { capability_name, instructions, tools, servers, trigger_data, step_overrides, webhook_url, timeout = 30000 } = body;
+    const { instructions, metadata, webhook_url, timeout = 30000 } = body;
 
-    if (!capability_name && !instructions) {
+    if (!instructions) {
       return Response.json({ 
-        error: 'Either capability_name or instructions is required' 
+        error: 'Instructions are required' 
       }, { status: 400 });
     }
 
     // Generate execution ID for tracking (UUID format for database compatibility)
     const executionId = crypto.randomUUID();
 
-    // Execute agent capability or instruction-based task via gRPC worker
-    if (capability_name) {
-      console.log(`[GRPC-CAPABILITY-EXEC] ${executionId}: Agent ${agentId} executing capability '${capability_name}' for user ${userId}`);
-    } else {
-      console.log(`[GRPC-INSTRUCTION-EXEC] ${executionId}: Agent ${agentId} executing instruction-based task for user ${userId}`);
-    }
+    // Execute agent via simplified gRPC worker
+    console.log(`[GRPC-AGENT-EXEC] ${executionId}: Agent ${agentId} executing task for user ${userId}`);
     
     const result = await executeAgentViaGRPC({
       agentId: agentId,
-      capabilityName: capability_name,
-      instructionConfig: instructions ? {
-        instructions,
-        tools: tools || [],
-        servers: servers || [],
-      } : undefined,
-      triggerData: trigger_data || {},
-      stepOverrides: step_overrides,
+      instructions,
       executionId,
+      metadata: metadata || { trigger_type: 'API' }
     });
 
     // If webhook URL provided, send result asynchronously
@@ -111,7 +91,6 @@ export async function POST(
           const webhookPayload = {
             execution_id: executionId,
             agent_id: agentId,
-            capability_name,
             result: result.output_data,
             timestamp: new Date().toISOString(),
           };
