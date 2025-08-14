@@ -4,6 +4,7 @@ from aws_cdk import (
     aws_ecs as ecs,
     aws_ecs_patterns as ecs_patterns,
     aws_rds as rds,
+    aws_s3 as s3,
 )
 from constructs import Construct
 
@@ -108,4 +109,31 @@ class InfraStack(Stack):
             frontend_service.task_definition.default_container.add_environment(
                 "GRPC_AGENT_URL",
                 f"http://{agent_service.load_balancer.load_balancer_dns_name}"
+            )
+
+        # Create an S3 bucket for file storage
+        storage_bucket = s3.Bucket(
+            self, f"{prefix}StorageBucket",
+            bucket_name=f"{prefix.lower()}-emery-storage-{self.account}",
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            enforce_ssl=True,
+            versioned=True, # Good practice for production
+        )
+
+        # Grant both services read/write access to the bucket
+        storage_bucket.grant_read_write(frontend_service.task_definition.task_role)
+        storage_bucket.grant_read_write(agent_service.task_definition.task_role)
+
+        # Inject the bucket name as an environment variable into both services
+        if frontend_service.task_definition.default_container:
+            frontend_service.task_definition.default_container.add_environment(
+                "S3_BUCKET_NAME",
+                storage_bucket.bucket_name
+            )
+        
+        if agent_service.task_definition.default_container:
+            agent_service.task_definition.default_container.add_environment(
+                "S3_BUCKET_NAME",
+                storage_bucket.bucket_name
             )
