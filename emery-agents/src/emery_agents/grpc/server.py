@@ -41,7 +41,10 @@ from dotenv import load_dotenv
 # This is safe for production as it doesn't override existing environment variables
 dotenv_path = Path("/Users/lancekraakman/orchastrate/.env.local")
 if dotenv_path.exists():
-    load_dotenv(dotenv_path=dotenv_path)
+    print("loading server config")
+    load_dotenv(dotenv_path=dotenv_path, override=True)
+else:
+    print("no .env at hardcoded location")
 
 class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer):
     """
