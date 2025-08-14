@@ -15,6 +15,10 @@
     ]
   },
   "context": {
+    "dev_account": "YOUR_DEV_ACCOUNT_ID",
+    "staging_account": "YOUR_STAGING_ACCOUNT_ID",
+    "prod_account": "YOUR_PROD_ACCOUNT_ID",
+    "region": "us-east-1",
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
     "@aws-cdk/core:checkSecretUsage": true,
     "@aws-cdk/core:target-partitions": [
