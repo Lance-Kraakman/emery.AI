@@ -5,6 +5,7 @@ from aws_cdk import (
     aws_ecs_patterns as ecs_patterns,
     aws_rds as rds,
     aws_s3 as s3,
+    aws_secretsmanager as secretsmanager,
 )
 from constructs import Construct
 
@@ -55,12 +56,25 @@ class InfraStack(Stack):
             delete_automated_backups=True, # For dev/staging. Set to False for production.
         )
 
-        # Define the application secrets from a single secret in AWS Secrets Manager
-        # This secret should contain a JSON object with all the necessary env vars
-        app_secrets = ecs.Secret.from_secrets_manager_secret_name(
-            self, "AppSecrets",
+        # Look up the application secrets from AWS Secrets Manager
+        app_secrets_object = secretsmanager.Secret.from_secret_name_v2(
+            self, "AppSecretsObject",
             secret_name=f"emery-app-secrets/{env_name}"
         )
+
+        # Define the secrets mapping for the ECS task definition
+        app_secrets_map = {
+            "NEXTAUTH_SECRET": ecs.Secret.from_secrets_manager(app_secrets_object, "NEXTAUTH_SECRET"),
+            "GITHUB_CLIENT_ID": ecs.Secret.from_secrets_manager(app_secrets_object, "GITHUB_CLIENT_ID"),
+            "GITHUB_CLIENT_SECRET": ecs.Secret.from_secrets_manager(app_secrets_object, "GITHUB_CLIENT_SECRET"),
+            "PIPEDREAM_PROJECT_ID": ecs.Secret.from_secrets_manager(app_secrets_object, "PIPEDREAM_PROJECT_ID"),
+            "PIPEDREAM_CLIENT_ID": ecs.Secret.from_secrets_manager(app_secrets_object, "PIPEDREAM_CLIENT_ID"),
+            "PIPEDREAM_CLIENT_SECRET": ecs.Secret.from_secrets_manager(app_secrets_object, "PIPEDREAM_CLIENT_SECRET"),
+            "PIPEDREAM_API_KEY": ecs.Secret.from_secrets_manager(app_secrets_object, "PIPEDREAM_API_KEY"),
+            "OPENAI_API_KEY": ecs.Secret.from_secrets_manager(app_secrets_object, "OPENAI_API_KEY"),
+            "HF_TOKEN": ecs.Secret.from_secrets_manager(app_secrets_object, "HF_TOKEN"),
+            "RESEND_API_KEY": ecs.Secret.from_secrets_manager(app_secrets_object, "RESEND_API_KEY"),
+        }
 
         # Create the Fargate service for the Next.js frontend
         frontend_service = ecs_patterns.ApplicationLoadBalancedFargateService(
@@ -80,7 +94,7 @@ class InfraStack(Stack):
                     "DATABASE_URL": ecs.Secret.from_secrets_manager(
                         db_instance.secret, "postgres_connection_string"
                     ),
-                    **app_secrets.as_environment_variables()
+                    **app_secrets_map
                 }
             ),
             public_load_balancer=True,
@@ -104,7 +118,7 @@ class InfraStack(Stack):
                     "DATABASE_URL": ecs.Secret.from_secrets_manager(
                         db_instance.secret, "postgres_connection_string"
                     ),
-                    **app_secrets.as_environment_variables()
+                    **app_secrets_map
                 }
             ),
             public_load_balancer=True,
