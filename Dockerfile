@@ -13,9 +13,10 @@ RUN apk add --no-cache git && \
     npm i -g pnpm && \
     pnpm install --frozen-lockfile
 
-# Set a dummy DATABASE_URL during build to allow Next.js to build.
-# The real value will be injected at runtime.
+# Set dummy secrets during build to allow Next.js to build.
+# The real values will be injected at runtime.
 ARG DATABASE_URL="postgresql://dummy:dummy@dummy:5432/dummy"
+ARG HF_TOKEN="dummy"
 RUN pnpm run build
 
 # 3. Production image

@@ -55,6 +55,13 @@ class InfraStack(Stack):
             delete_automated_backups=True, # For dev/staging. Set to False for production.
         )
 
+        # Define the application secrets from a single secret in AWS Secrets Manager
+        # This secret should contain a JSON object with all the necessary env vars
+        app_secrets = ecs.Secret.from_secrets_manager_secret_name(
+            self, "AppSecrets",
+            secret_name=f"emery-app-secrets/{env_name}"
+        )
+
         # Create the Fargate service for the Next.js frontend
         frontend_service = ecs_patterns.ApplicationLoadBalancedFargateService(
             self, f"{prefix}FrontendService",
@@ -72,7 +79,8 @@ class InfraStack(Stack):
                 secrets={
                     "DATABASE_URL": ecs.Secret.from_secrets_manager(
                         db_instance.secret, "postgres_connection_string"
-                    )
+                    ),
+                    **app_secrets.as_environment_variables()
                 }
             ),
             public_load_balancer=True,
@@ -95,7 +103,8 @@ class InfraStack(Stack):
                 secrets={
                     "DATABASE_URL": ecs.Secret.from_secrets_manager(
                         db_instance.secret, "postgres_connection_string"
-                    )
+                    ),
+                    **app_secrets.as_environment_variables()
                 }
             ),
             public_load_balancer=True,
