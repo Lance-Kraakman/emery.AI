@@ -55,6 +55,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
+      - name: Bootstrap CDK Environment
+        working-directory: ./infra
+        run: |
+          source .venv/bin/activate
+          cdk bootstrap
+
       - name: Deploy CDK Stack
         working-directory: ./infra
         run: |
