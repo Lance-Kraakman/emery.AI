@@ -8,7 +8,10 @@ RUN apk add --no-cache git && npm i -g pnpm && pnpm fetch
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY . .
-RUN apk add --no-cache git && npm i -g pnpm && pnpm install --frozen-lockfile
+RUN apk add --no-cache git && \
+    git config --global url."https://github.com/".insteadOf "git@github.com:" && \
+    npm i -g pnpm && \
+    pnpm install --frozen-lockfile
 RUN pnpm run build
 
 # 3. Production image
