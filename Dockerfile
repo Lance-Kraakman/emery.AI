@@ -2,13 +2,13 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
-RUN npm i -g pnpm && pnpm fetch
+RUN apk add --no-cache git && npm i -g pnpm && pnpm fetch
 
 # 2. Build the application
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY . .
-RUN npm i -g pnpm && pnpm install --frozen-lockfile
+RUN apk add --no-cache git && npm i -g pnpm && pnpm install --frozen-lockfile
 RUN pnpm run build
 
 # 3. Production image
