@@ -14,9 +14,18 @@ RUN apk add --no-cache git && \
     pnpm install --frozen-lockfile
 
 # Set dummy secrets during build to allow Next.js to build.
-# The real values will be injected at runtime.
+# The real values will be injected at runtime from AWS Secrets Manager.
 ARG DATABASE_URL="postgresql://dummy:dummy@dummy:5432/dummy"
+ARG NEXTAUTH_SECRET="dummy"
+ARG GITHUB_CLIENT_ID="dummy"
+ARG GITHUB_CLIENT_SECRET="dummy"
+ARG PIPEDREAM_PROJECT_ID="dummy"
+ARG PIPEDREAM_CLIENT_ID="dummy"
+ARG PIPEDREAM_CLIENT_SECRET="dummy"
+ARG PIPEDREAM_API_KEY="dummy"
+ARG OPENAI_API_KEY="dummy"
 ARG HF_TOKEN="dummy"
+ARG RESEND_API_KEY="dummy"
 RUN pnpm run build
 
 # 3. Production image

@@ -34,8 +34,14 @@ from ..integrations.smolagents import SmolAgentsOrchestrator
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from dotenv import load_dotenv  # Will fail if not installed - good!
-load_dotenv("../.env.local")
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env.local from the project root for local development
+# This is safe for production as it doesn't override existing environment variables
+dotenv_path = Path(__file__).parent.parent.parent.parent / ".env.local"
+if dotenv_path.exists():
+    load_dotenv(dotenv_path=dotenv_path)
 
 class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer):
     """
