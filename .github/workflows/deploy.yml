@@ -10,6 +10,10 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # These permissions are needed for the AWS OIDC provider
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -19,29 +23,36 @@ jobs:
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
             echo "env_name=production" >> $GITHUB_OUTPUT
-            echo "deploy_message=Simulating CDK deployment to PRODUCTION environment." >> $GITHUB_OUTPUT
           elif [ "${{ github.ref_name }}" = "staging" ]; then
             echo "env_name=staging" >> $GITHUB_OUTPUT
-            echo "deploy_message=Simulating CDK deployment to STAGING environment." >> $GITHUB_OUTPUT
           elif [ "${{ github.ref_name }}" = "develop" ]; then
             echo "env_name=development" >> $GITHUB_OUTPUT
-            echo "deploy_message=Simulating CDK deployment to DEVELOPMENT environment." >> $GITHUB_OUTPUT
           fi
 
-      - name: Setup Node.js
+      - name: Setup Python
         if: steps.get_env.outputs.env_name
-        uses: actions/setup-node@v4
+        uses: actions/setup-python@v5
         with:
-          node-version: '20'
+          python-version: '3.12'
 
-      - name: Simulate CDK Install
+      - name: Install CDK and Python Dependencies
         if: steps.get_env.outputs.env_name
+        working-directory: ./infra
         run: |
-          echo "This step would normally run 'npm install' in the 'infra' directory."
-          echo "Current environment: ${{ steps.get_env.outputs.env_name }}"
+          npm install -g aws-cdk
+          python3 -m venv .venv
+          source .venv/bin/activate
+          # Assuming requirements.txt will be created from pyproject.toml
+          # If you use pip-tools or similar, you might generate it here.
+          # For now, we'll assume manual creation or a different dependency manager.
+          # If you have a requirements.txt, uncomment the line below
+          pip install -r requirements.txt
+          # If you use poetry or another tool, the command would be different, e.g.:
+          # pip install poetry && poetry install
 
-      - name: Simulate CDK Deploy
+      - name: Synth CDK Template
         if: steps.get_env.outputs.env_name
+        working-directory: ./infra
         run: |
-          echo "${{ steps.get_env.outputs.deploy_message }}"
-          echo "This step would normally run 'cdk deploy -c env=${{ steps.get_env.outputs.env_name }} ...'"
+          source .venv/bin/activate
+          cdk synth

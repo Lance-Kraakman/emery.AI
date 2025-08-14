@@ -284,6 +284,75 @@ For development without full OAuth setup:
 - Add `x-test-user-id` header to bypass authentication
 - Webhook verification can be disabled for local testing
 
+## Development Workflow
+
+### NextJS Component Architecture Rules
+Follow these patterns for consistent component usage:
+
+**Use Server Actions when:**
+- Using App Router for internal-only actions
+- Want type-safe, co-located DB logic (Drizzle)
+- Don't need custom HTTP headers/status codes
+- Handling form submissions or component-triggered mutations
+
+**Use API Routes when:**
+- Need to expose HTTP endpoint (mobile clients, webhooks)
+- Require custom HTTP responses (headers, status)
+- Action called via fetch or by external services
+- Need independent testing (Postman, curl)
+
+**Use Server Components when:**
+- No interactivity needed (no event listeners)
+- Want server-side data fetching (DB queries)
+- Want better performance and smaller bundles
+- Using Server Actions, file system, or sensitive logic
+
+**Use Client Components when:**
+- Need interactivity (onClick, useState, useEffect)
+- Using browser-only APIs (localStorage, window)
+- Component relies on real-time updates, sockets, animations
+- Handling forms with client-side validation
+
+### Pre-commit Testing Protocol
+
+**MANDATORY**: Always run tests before committing to ensure changes don't break existing functionality.
+
+```bash
+# Quick smoke test (no external dependencies)
+uv run python quick_test.py
+
+# If quick tests pass, run full test suite
+uv run python run_tests.py all
+
+# For Python projects specifically:
+uv run pytest tests/ -v
+```
+
+**Test-Driven Commit Process:**
+1. Make your code changes
+2. Run `uv run python quick_test.py`
+3. If successful, run `uv run python run_tests.py all`
+4. Fix any failing tests before proceeding
+5. Commit only when all tests pass
+6. Include test status in commit message if relevant
+
+### Python Code Quality Standards
+
+**Type Hints:**
+- Prefer TypedDict over Dict[str, Any] for structured data
+- Use Union types over generic Any when possible
+- Create domain-specific type aliases for better clarity
+
+**Error Handling:**
+- Avoid over-defensive patterns like excessive `.get(key, default)` usage
+- Use proper exception handling rather than defensive programming
+- Chain exceptions with `raise ... from e` to preserve stack traces
+
+**Function Design:**
+- Keep functions under 50 lines when possible
+- Extract complex logic into helper methods
+- Single responsibility principle - one function, one purpose
+
 ## Important Implementation Details
 
 ### Error Handling
@@ -476,3 +545,93 @@ Extended shadcn/ui Button with application-specific variants:
 - **Error Boundary Implementation**: Consistent error handling across components
 - **Testing Strategy**: Unit tests for extracted hooks and components
 - **Performance Monitoring**: Bundle size analysis and optimization
+
+## Agent Scheduler & gRPC Executor Architecture (2025-01)
+
+### Simplified Execution Architecture
+
+The agent execution system has been consolidated to use a unified pattern:
+
+#### Simplified gRPC Executor (`lib/agents/grpc-executor.ts`)
+- **Single Function**: `executeAgentViaGRPC()` handles all agent execution
+- **JSONB Instructions Structure**: Database field storing `{instructions, tools[], servers[], metadata}`
+- **Real-time Progress**: gRPC streaming provides step-by-step execution updates
+- **Automatic Recording**: All executions stored in database with complete audit trail
+
+```typescript
+interface AgentExecutionRequest {
+  agentId: number;
+  instructions: string; // Main instruction text
+  tools?: Array<{name: string, version?: string, config?: Record<string, any>}>; // Optional tools
+  servers?: Array<{name: string, endpoint?: string, config?: Record<string, any>}>; // Optional servers
+  executionId: string;
+  metadata?: Record<string, any>; // Optional context metadata
+}
+```
+
+#### Enhanced Agent Scheduler (`lib/scheduler/agent-scheduler.ts`)
+- **Pending Task Processing**: `processPendingTasks()` runs automatically every minute
+- **Manual Execution**: `processPendingTasksManually()` for immediate task execution
+- **Multiple Trigger Types**: CRON, DATABASE_EVENT, WEBHOOK, and MANUAL triggers
+- **Dynamic Agent Discovery**: Automatically detects new/updated/deleted agents
+- **JSONB Task Instructions**: Supports complex task configuration with tools and servers
+
+#### Legacy Pattern Removal
+All legacy execution patterns have been removed:
+- ❌ `triggerData: trigger_data || {}` fallback patterns
+- ❌ `stepOverrides: step_overrides` legacy parameters  
+- ❌ `executeAgentCapabilityViaGRPC()` (replaced by simplified `executeAgentViaGRPC()`)
+- ❌ Capability-specific routing (now handled by smolagents hierarchy)
+
+#### API Endpoint Consistency
+All agent execution now uses the same simplified pattern:
+- `/api/agents/[id]/execute` - Direct agent execution with tools/servers support
+- `/api/scheduler` - Manual pending task processing with `processPendingTasks` action
+- `/api/scheduler/webhook` - Webhook triggers using simplified execution
+
+#### Database Task Schema
+Tasks are stored with JSONB instructions supporting the complete execution context:
+```sql
+tasks.instructions JSONB: {
+  instructions: string,     -- Main task description
+  tools: ToolConfig[],     -- Optional tool configurations
+  servers: ServerConfig[], -- Optional server configurations  
+  metadata: object         -- Execution context (trigger_type, user_id, etc.)
+}
+```
+
+### Scheduler Operation Modes
+
+#### Automatic Processing (Every Minute)
+- Checks for new pending tasks and executes them immediately
+- Processes up to 10 tasks per cycle to prevent overload
+- Updates task status in real-time during execution
+
+#### Manual Processing (On-Demand)
+```bash
+# Trigger immediate processing of all pending tasks
+curl -X POST "http://localhost:3000/api/scheduler" \
+  -H "Content-Type: application/json" \
+  -d '{"action": "processPendingTasks"}'
+```
+
+#### CRON Scheduled Jobs
+- Dynamic CRON job management with node-cron
+- Automatic job cleanup when agents are deleted/deactivated
+- Timezone support with `SCHEDULER_TIMEZONE` environment variable
+
+#### Database Event Triggers
+- PostgreSQL LISTEN/NOTIFY for real-time table change detection
+- Agents triggered when specific tables are modified
+- Supports INSERT, UPDATE, DELETE operations
+
+### AIDEV Anchor Comments
+The codebase uses searchable AIDEV comments for inline documentation:
+- `AIDEV-NOTE:` - Important architectural decisions and explanations
+- `AIDEV-TODO:` - Known improvement opportunities
+- `AIDEV-QUESTION:` - Areas needing architectural decisions
+
+Search for these patterns when working on complex areas:
+```bash
+grep -r "AIDEV-" --include="*.ts" --include="*.py" .
+```
