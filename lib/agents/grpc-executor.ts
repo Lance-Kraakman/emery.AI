@@ -6,13 +6,15 @@
 import { db } from '@/lib/db/client';
 import { tasks, agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { AgentWorkerClient, workerRegistry, TaskStatus, TaskStatusEnum, TaskRequest } from '@/lib/grpc/client';
+import {  workerRegistry } from '@/lib/grpc/client';
 import type { TaskProgress } from '@/lib/grpc/client';
 import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/lib/grpc/proto-mappers';
 
 export interface AgentExecutionRequest {
   agentId: number;
-  instructions: string; // All execution is instruction-based now
+  instructions: string; // Main instruction text
+  tools?: Array<{name: string, version?: string, config?: Record<string, any>}>; // Optional tools
+  servers?: Array<{name: string, endpoint?: string, config?: Record<string, any>}>; // Optional servers
   executionId: string;
   metadata?: Record<string, any>; // Optional context metadata
 }
@@ -33,7 +35,7 @@ export interface AgentExecutionResult {
 export async function executeAgentViaGRPC(
   request: AgentExecutionRequest
 ): Promise<AgentExecutionResult> {
-  const { agentId, instructions, executionId, metadata } = request;
+  const { agentId, instructions, tools, servers, executionId, metadata } = request;
   
   console.log(`[GRPC-AGENT] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
   
@@ -46,13 +48,18 @@ export async function executeAgentViaGRPC(
     
     console.log(`[GRPC-AGENT] Loaded agent: ${agent.name} with ${Object.keys(agent.capabilities || {}).length} capabilities`);
     
-    // Record task start in database
+    // Record task start in database with JSONB instructions
     await db.insert(tasks).values({
       id: executionId,
       agentId: agent.id,
       name: `Agent execution: ${instructions.substring(0, 50)}...`,
       capabilityName: null, // Determined by smolagents
-      instructions: { instructions, metadata },
+      instructions: { 
+        instructions, 
+        tools: tools || [], 
+        servers: servers || [], 
+        metadata 
+      },
       status: 'in_progress',
       startedAt: new Date(),
       createdBy: agent.ownerId,
@@ -66,7 +73,11 @@ export async function executeAgentViaGRPC(
     const taskRequest = createTaskRequest({
       taskId: executionId,
       agentId: agent.id,
-      instructionConfig: { instructions, tools: [], servers: [] },
+      instructionConfig: { 
+        instructions, 
+        tools: tools || [], 
+        servers: servers || [] 
+      },
       agent: agent as AgentData,
       triggerData: metadata || {},
       organizationId: organizationId,
@@ -198,7 +209,3 @@ export async function cancelTaskViaGRPC(
     };
   }
 }
-
-// AIDEV-NOTE: Simplified gRPC execution using smolagents hierarchy
-// AIDEV-NOTE: All capability routing handled by smolagents backend
-// AIDEV-TODO: Add connection pooling and retry logic for production use

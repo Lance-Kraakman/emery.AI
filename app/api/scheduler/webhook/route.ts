@@ -118,6 +118,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       const result = await executeAgentViaGRPC({
         agentId: agent.id,
         instructions,
+        tools: [], // Webhook can specify tools if needed
+        servers: [], // Webhook can specify servers if needed
         executionId,
         metadata: {
           trigger_type: 'WEBHOOK',
@@ -153,6 +155,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       const result = await executeAgentViaGRPC({
         agentId: agent.id,
         instructions,
+        tools: [], // Webhook can specify tools if needed
+        servers: [], // Webhook can specify servers if needed
         executionId,
         metadata: {
           trigger_type: 'WEBHOOK',
