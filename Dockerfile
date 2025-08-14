@@ -12,6 +12,10 @@ RUN apk add --no-cache git && \
     git config --global url."https://github.com/".insteadOf "git@github.com:" && \
     npm i -g pnpm && \
     pnpm install --frozen-lockfile
+
+# Set a dummy DATABASE_URL during build to allow Next.js to build.
+# The real value will be injected at runtime.
+ARG DATABASE_URL="postgresql://dummy:dummy@dummy:5432/dummy"
 RUN pnpm run build
 
 # 3. Production image
