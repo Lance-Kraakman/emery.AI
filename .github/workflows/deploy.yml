@@ -8,17 +8,11 @@ on:
       - develop
 
 jobs:
-  deploy:
+  get-environment:
     runs-on: ubuntu-latest
-    environment: ${{ steps.get_env.outputs.env_name }}
-    # These permissions are needed for the AWS OIDC provider
-    permissions:
-      id-token: write
-      contents: read
+    outputs:
+      env_name: ${{ steps.get_env.outputs.env_name }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Identify Environment
         id: get_env
         run: |
@@ -30,29 +24,31 @@ jobs:
             echo "env_name=dev" >> $GITHUB_OUTPUT
           fi
 
+  deploy:
+    needs: get-environment
+    runs-on: ubuntu-latest
+    environment: ${{ needs.get-environment.outputs.env_name }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Setup Python
-        if: steps.get_env.outputs.env_name
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Install CDK and Python Dependencies
-        if: steps.get_env.outputs.env_name
         working-directory: ./infra
         run: |
           npm install -g aws-cdk
           python3 -m venv .venv
           source .venv/bin/activate
-          # Assuming requirements.txt will be created from pyproject.toml
-          # If you use pip-tools or similar, you might generate it here.
-          # For now, we'll assume manual creation or a different dependency manager.
-          # If you have a requirements.txt, uncomment the line below
           pip install -r requirements.txt
-          # If you use poetry or another tool, the command would be different, e.g.:
-          # pip install poetry && poetry install
 
       - name: Configure AWS Credentials
-        if: steps.get_env.outputs.env_name
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -60,8 +56,7 @@ jobs:
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: Deploy CDK Stack
-        if: steps.get_env.outputs.env_name
         working-directory: ./infra
         run: |
           source .venv/bin/activate
-          cdk deploy --all --require-approval never -c env=${{ steps.get_env.outputs.env_name }} -c aws_account_id=${{ secrets.AWS_ACCOUNT_ID }} -c region=${{ vars.AWS_REGION || 'us-east-1' }}
+          cdk deploy --all --require-approval never -c env=${{ needs.get-environment.outputs.env_name }} -c aws_account_id=${{ secrets.AWS_ACCOUNT_ID }} -c region=${{ vars.AWS_REGION || 'us-east-1' }}
