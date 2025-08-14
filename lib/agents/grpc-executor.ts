@@ -48,22 +48,43 @@ export async function executeAgentViaGRPC(
     
     console.log(`[GRPC-AGENT] Loaded agent: ${agent.name} with ${Object.keys(agent.capabilities || {}).length} capabilities`);
     
-    // Record task start in database with JSONB instructions
-    await db.insert(tasks).values({
-      id: executionId,
-      agentId: agent.id,
-      name: `Agent execution: ${instructions.substring(0, 50)}...`,
-      capabilityName: null, // Determined by smolagents
-      instructions: { 
-        instructions, 
-        tools: tools || [], 
-        servers: servers || [], 
-        metadata 
-      },
-      status: 'in_progress',
-      startedAt: new Date(),
-      createdBy: agent.ownerId,
-    });
+    // Check if task already exists (for pending task processing)
+    const [existingTask] = await db.select().from(tasks).where(eq(tasks.id, executionId)).limit(1);
+    
+    if (existingTask) {
+      // Update existing pending task (from scheduler)
+      console.log(`[GRPC-AGENT] ${executionId}: Updating existing pending task`);
+      await db.update(tasks)
+        .set({
+          status: 'in_progress',
+          startedAt: new Date(),
+          instructions: { 
+            instructions, 
+            tools: tools || [], 
+            servers: servers || [], 
+            metadata 
+          },
+        })
+        .where(eq(tasks.id, executionId));
+    } else {
+      // Create new task for direct executions
+      console.log(`[GRPC-AGENT] ${executionId}: Creating new task record`);
+      await db.insert(tasks).values({
+        id: executionId,
+        agentId: agent.id,
+        name: `Agent execution: ${instructions.substring(0, 50)}...`,
+        capabilityName: null, // Determined by smolagents
+        instructions: { 
+          instructions, 
+          tools: tools || [], 
+          servers: servers || [], 
+          metadata 
+        },
+        status: 'in_progress',
+        startedAt: new Date(),
+        createdBy: agent.ownerId,
+      });
+    }
     
     // Get worker client for this agent's organization
     const organizationId = agent.organizationId?.toString() || 'default';
