@@ -13,35 +13,24 @@ app = cdk.App()
 env_name = app.node.try_get_context("env")
 
 if not env_name:
-    # If no environment is specified, we can default to 'dev' for local development
-    # or raise an error if we want to be strict in CI/CD.
-    # For this workflow, we'll rely on the CI to always pass the context.
-    # You can uncomment the line below to raise an error.
-    # raise ValueError("Environment context variable 'env' is required. e.g., cdk deploy -c env=development")
+    # Default to 'dev' for local use if no context is provided
     print("No 'env' context variable passed, using default 'dev' for local synthesis.")
-    env_name = "development"
+    env_name = "dev"
 
-
-# Map the logical environment name to the correct AWS account ID from the context
-account_map = {
-    "development": app.node.try_get_context("dev_account"),
-    "staging": app.node.try_get_context("staging_account"),
-    "production": app.node.try_get_context("prod_account"),
-}
-
-aws_account = account_map.get(env_name)
+# Get the single AWS account and region from the context
+aws_account = app.node.try_get_context("aws_account_id")
 aws_region = app.node.try_get_context("region")
 
 if not aws_account or not aws_region:
-    raise ValueError(f"Could not find account or region in cdk.json context for environment '{env_name}'")
+    raise ValueError("Could not find 'aws_account_id' or 'region' in cdk.json context.")
 
-
-# Define the CDK Environment object
+# Define the CDK Environment object. All deployments will go to this account.
 cdk_env = cdk.Environment(account=aws_account, region=aws_region)
 
 # Create a unique stack name based on the environment
 stack_name = f"Emery-Infra-{env_name.capitalize()}"
 
-InfraStack(app, stack_name, env=cdk_env)
+# Pass the environment name to the stack for resource prefixing
+InfraStack(app, stack_name, env_name=env_name, env=cdk_env)
 
 app.synth()

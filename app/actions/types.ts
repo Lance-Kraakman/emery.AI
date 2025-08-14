@@ -1,4 +1,5 @@
 // AIDEV-NOTE: Shared types for Server Actions - ensures type safety across actions
+// frontend types ysed by the applications
 export interface ActionResult<T = any> {
   success: boolean;
   data?: T;

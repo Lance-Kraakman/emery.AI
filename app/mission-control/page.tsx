@@ -36,7 +36,6 @@ function SaveRevertActions() {
         className="h-8 px-3"
         title="Revert changes"
         onClick={() => {
-          // Handle revert action
           console.log('Revert clicked')
         }}
       >
@@ -58,7 +57,6 @@ function CustomCanvas() {
 
   return (
     <div className="w-full md:w-2/3 border border-border rounded-lg shadow-sm flex flex-col">
-      {/* Custom header with artifact details */}
       <div className="flex items-center justify-between p-4 border-b border-border rounded-t-lg">
         <div>
           <h2 className="font-semibold text-foreground">
