@@ -34,6 +34,8 @@ from ..integrations.smolagents import SmolAgentsOrchestrator
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+from dotenv import load_dotenv  # Will fail if not installed - good!
+load_dotenv("../.env.local")
 
 class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer):
     """
