@@ -8,7 +8,7 @@ RUN npm i -g pnpm && pnpm fetch
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY . .
-RUN npm i -g pnpm && pnpm install --frozen-lockfile --offline
+RUN npm i -g pnpm && pnpm install --frozen-lockfile
 RUN pnpm run build
 
 # 3. Production image
