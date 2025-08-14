@@ -110,6 +110,11 @@ class InfraStack(Stack):
                 "GRPC_AGENT_URL",
                 f"http://{agent_service.load_balancer.load_balancer_dns_name}"
             )
+            # Also inject the frontend's own public URL for NextAuth
+            frontend_service.task_definition.default_container.add_environment(
+                "NEXTAUTH_URL",
+                f"http://{frontend_service.load_balancer.load_balancer_dns_name}"
+            )
 
         # Create an S3 bucket for file storage
         storage_bucket = s3.Bucket(

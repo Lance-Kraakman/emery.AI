@@ -430,14 +430,14 @@ export class AgentScheduler {
    */
   async checkOrphanedTasks(): Promise<void> {
     try {
-      // Tasks in_progress for more than 10 minutes are likely orphaned
-      const orphanThreshold = new Date(Date.now() - 10 * 60 * 1000); // 10 minutes ago
+      // Tasks in_progress for more than 5 minutes are likely orphaned (reduced threshold)
+      const orphanThreshold = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
       
       const orphanedTasks = await db
         .select()
         .from(tasks)
         .where(
-          sql`status = 'in_progress' AND started_at < ${orphanThreshold}`
+          sql`status = 'in_progress' AND started_at < ${orphanThreshold.toISOString()}`
         )
         .limit(5); // Don't overwhelm the system
 
