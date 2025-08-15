@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.583.0",
     "drizzle-kit": "^0.20.14",
     "pg": "^8.11.3"
   }

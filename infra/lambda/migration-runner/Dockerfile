@@ -12,4 +12,4 @@ RUN pnpm install
 COPY index.mjs .
 
 # Set the command to run the Lambda function
-CMD [ "index.handler" ]
+CMD [ "node", "index.mjs" ]
