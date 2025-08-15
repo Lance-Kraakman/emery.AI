@@ -157,6 +157,24 @@ class InfraStack(Stack):
         # Allow the frontend service to connect to the database
         db_instance.connections.allow_default_port_from(frontend_service.service)
 
+        # Create the Fargate service for the scheduler
+        scheduler_service = ecs.FargateService(
+            self, f"{prefix}SchedulerService",
+            cluster=cluster,
+            service_name=f"{prefix}-Scheduler",
+            task_definition=frontend_service.task_definition,
+            desired_count=1,
+            vpc_subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
+            ),
+        )
+
+        # Override the command to run the scheduler
+        scheduler_service.task_definition.default_container.add_override("command", ["scheduler"])
+
+        # Allow the scheduler service to connect to the database
+        db_instance.connections.allow_default_port_from(scheduler_service)
+
         # Create the Fargate service for the Python gRPC backend
         agent_service = ecs_patterns.NetworkLoadBalancedFargateService(
             self, f"{prefix}AgentService",

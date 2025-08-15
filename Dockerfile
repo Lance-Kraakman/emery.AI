@@ -42,5 +42,8 @@ COPY --from=builder /app/.next/static ./.next/static
 # Copy public assets
 COPY --from=builder /app/public ./public
 
+# Copy the entrypoint script
+COPY entrypoint.sh .
+
 EXPOSE 3000
-CMD ["node", "server.js"]
+ENTRYPOINT ["./entrypoint.sh"]
