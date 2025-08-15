@@ -81,6 +81,7 @@ export class AgentWorkerClient {
 
   constructor(workerAddress: string) {
     this.address = workerAddress;
+    console.log(`[GRPC-CLIENT] Creating new client for address: ${workerAddress}`);
     this.client = new AgentWorkerService(
       workerAddress,
       grpc.credentials.createInsecure() // AIDEV-TODO: Add TLS in production
@@ -94,6 +95,7 @@ export class AgentWorkerClient {
     request: TaskRequest,
     onProgress: (progress: TaskProgress) => void
   ): Promise<void> {
+    console.log(`[GRPC-CLIENT] Executing task ${request.task_id} on worker ${this.address}`);
     return new Promise((resolve, reject) => {
       const call = this.client.ExecuteTask(request);
 
@@ -108,7 +110,10 @@ export class AgentWorkerClient {
       });
 
       call.on('error', (error: grpc.ServiceError) => {
-        console.error(`[GRPC-ERROR] Task ${request.task_id}:`, error);
+        console.error(`[GRPC-ERROR] Task ${request.task_id} failed:`, error);
+        if (error.code === grpc.status.UNAVAILABLE) {
+          console.error(`[GRPC-CLIENT] Worker at ${this.address} is unavailable. Please ensure the worker is running.`);
+        }
         reject(error);
       });
     });
