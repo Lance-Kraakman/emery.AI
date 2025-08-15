@@ -236,6 +236,16 @@ export class AgentScheduler {
   private startPeriodicCheck(): void {
     console.log('[SCHEDULER] Starting periodic check for agent updates and pending tasks...');
     
+    // Run immediately on startup
+    Promise.allSettled([
+      this.checkForAgentUpdates(),
+      this.processPendingTasks(),
+      this.checkOrphanedTasks()
+    ]).catch(error => {
+      console.error('[SCHEDULER] Error during initial check:', error);
+    });
+    
+    // Then run every minute
     this.checkInterval = setInterval(() => {
       Promise.allSettled([
         this.checkForAgentUpdates(),
@@ -244,7 +254,8 @@ export class AgentScheduler {
       ]).catch(error => {
         console.error('[SCHEDULER] Error during periodic check:', error);
       });
-    }, 60000); // Check every minute
+    }, 6000
+  ); // Check every minute
   }
 
   /**
@@ -431,7 +442,7 @@ export class AgentScheduler {
   async checkOrphanedTasks(): Promise<void> {
     try {
       // Tasks in_progress for more than 5 minutes are likely orphaned (reduced threshold)
-      const orphanThreshold = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
+      const orphanThreshold = new Date(Date.now() - 1 * 60 * 1000); // 5 minutes ago
       
       const orphanedTasks = await db
         .select()
