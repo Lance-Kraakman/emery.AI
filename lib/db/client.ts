@@ -33,6 +33,23 @@ export { client as rawClient }; // Export raw client for dynamic operations
 
 export type DbClient = typeof db;
 
+// AIDEV-NOTE: Create dedicated LISTEN/NOTIFY clients with same configuration
+export function createNotificationClient(): postgres.Sql {
+  return postgres(connectionString!, {
+    max: 1, // Only 1 connection for LISTEN/NOTIFY
+    idle_timeout: 0, // Keep connection alive for listening
+    max_lifetime: 60 * 60, // Close connection after 1 hour
+    connect_timeout: 10, // Same timeout as main client
+    prepare: false, // Same as main client
+    onnotice: (notice) => {
+      // Same notice handling as main client
+      if (notice.severity === 'WARNING' || notice.severity === 'NOTICE') {
+        console.log(`[POSTGRES-NOTIFY-${notice.severity}]:`, notice.message);
+      }
+    }
+  });
+}
+
 // AIDEV-NOTE: Connection monitoring utility for debugging connection leaks
 export async function getConnectionStats() {
   try {

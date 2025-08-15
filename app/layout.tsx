@@ -2,7 +2,6 @@ import './globals.css'
 import AuthProvider from '@/components/AuthProvider'
 
 // Initialize agent scheduler on server startup
-import '@/lib/scheduler'
 import AnimatedBackground from './components/AnimatedBackground'
 import { Metadata } from 'next'
 import { EmeryProviders } from '@/components/EmeryProviders'
