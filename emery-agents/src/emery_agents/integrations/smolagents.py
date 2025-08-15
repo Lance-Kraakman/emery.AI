@@ -1,12 +1,15 @@
 import logging
 import os
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 
-from ..core.types import (
-    StepType, Agent, CapabilityConfig, TaskInstructions, OrchestratorResult
-)
 from smolagents import CodeAgent, ToolCallingAgent
 from smolagents.models import InferenceClientModel
+
+from ..core.types import (
+    StepType, Agent, CapabilityConfig, TaskInstructions, OrchestratorResult, ToolConfig
+)
+from ..tools.converters import ToolConfigConverter
+from ..tools import tool_registry
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -90,23 +93,23 @@ class SmolAgentsOrchestrator:
                 model=model
             )
     
-    def _load_tool(self, tool_config):
-        tool_name = tool_config.name if hasattr(tool_config, 'name') else str(tool_config)
+    def _load_tool(self, tool_config: Union[ToolConfig, Dict[str, Any]]) -> Optional[Any]:
+        """Load tool using the centralized tool registry."""
+        tool_name = ToolConfigConverter.get_tool_name(tool_config)
+        
         try:
-            if tool_name == "python_repl":
-                from smolagents import PythonInterpreterTool
-                return PythonInterpreterTool()
-            elif tool_name == "web_search":
-                from smolagents import DuckDuckGoSearchTool
-                return DuckDuckGoSearchTool()
-            elif tool_name == "speech_to_text":
-                from smolagents import SpeechToTextTool
-                return SpeechToTextTool()
-            logger.warning(f"Tool {tool_name} not found in mappings")
-            return None
-        except ImportError as e:
-            logger.warning(f"Could not import tool {tool_name}: {e}")
-            return None
+            # Convert tool config to registry format
+            config_dict = ToolConfigConverter.from_agent_config(tool_config)
+            
+            # Find tool type by name
+            tool_type = ToolConfigConverter.find_tool_type_by_name(tool_name)
+            if not tool_type:
+                logger.warning(f"Tool {tool_name} not found in registry")
+                return None
+            
+            logger.info(f"Creating tool {tool_name} via registry")
+            return tool_registry.create_tool_instance(tool_type, config_dict)
+            
         except Exception as e:
             logger.error(f"Failed to load tool {tool_name}: {e}")
             return None

@@ -69,22 +69,7 @@ Common test fixtures available in `conftest.py`:
 - `sample_capability` - Capability with steps
 - `mock_integrations` - Mocked external services
 
-### Example Test
-```python
-import pytest
-from emery_agents.core.runner import AgentRunner
-from emery_agents.core.types import Agent, CapabilityConfig
 
-@pytest.mark.asyncio
-async def test_capability_execution(sample_agent, mock_integrations):
-    runner = AgentRunner(**mock_integrations)
-    result = await runner.execute_capability(
-        sample_agent, 
-        "test_capability",
-        {"test": "data"}
-    )
-    assert result.status == TaskStatus.COMPLETED
-```
 
 ## Test Data
 

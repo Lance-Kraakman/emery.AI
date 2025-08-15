@@ -71,7 +71,7 @@ class TriggerConfig:
 
 @dataclass
 class ToolConfig:
-    """Tool configuration."""
+    """Tool configuration matching frontend ToolConfig interface."""
     name: str
     version: Optional[str] = None
     config: Optional[Dict[str, Any]] = None
