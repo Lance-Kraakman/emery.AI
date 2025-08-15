@@ -157,20 +157,34 @@ class InfraStack(Stack):
         # Allow the frontend service to connect to the database
         db_instance.connections.allow_default_port_from(frontend_service.service)
 
+        # Create a new Task Definition for the scheduler
+        scheduler_task_definition = ecs.FargateTaskDefinition(
+            self, f"{prefix}SchedulerTaskDef",
+            cpu=512,
+            memory_limit_mib=1024,
+        )
+
+        scheduler_task_definition.add_container(
+            f"{prefix}SchedulerContainer",
+            image=frontend_service.task_definition.default_container.image,
+            command=["scheduler"],
+            secrets={
+                "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
+                **app_secrets_map
+            },
+        )
+
         # Create the Fargate service for the scheduler
         scheduler_service = ecs.FargateService(
             self, f"{prefix}SchedulerService",
             cluster=cluster,
             service_name=f"{prefix}-Scheduler",
-            task_definition=frontend_service.task_definition,
+            task_definition=scheduler_task_definition,
             desired_count=1,
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),
         )
-
-        # Override the command to run the scheduler
-        scheduler_service.task_definition.default_container.add_override("command", ["scheduler"])
 
         # Allow the scheduler service to connect to the database
         db_instance.connections.allow_default_port_from(scheduler_service)
