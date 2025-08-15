@@ -124,18 +124,10 @@ export class DatabaseDispatcher {
    */
   private async processDatabaseEvent(event: DatabaseEventPayload): Promise<void> {
     console.log(`[DATABASE-DISPATCHER] 🗃️ Processing ${event.operation} on ${event.table_name}`);
-    console.log(`[DATABASE-DISPATCHER] 🔍 Event payload:`, JSON.stringify(event, null, 2));
 
     // Special handling for tasks table - automatically execute new tasks
     if (event.table_name === 'tasks' && event.operation === 'INSERT' && event.new_data) {
-      console.log(`[DATABASE-DISPATCHER] 🎯 Calling processNewTask for task`);
       await this.processNewTask(event.new_data);
-    } else {
-      console.log(`[DATABASE-DISPATCHER] ⚠️ Task condition not met:`, {
-        table_name: event.table_name,
-        operation: event.operation,
-        has_new_data: !!event.new_data
-      });
     }
 
     // Process regular database event agents

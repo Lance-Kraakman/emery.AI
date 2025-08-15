@@ -6,8 +6,14 @@ from aws_cdk import (
     aws_rds as rds,
     aws_s3 as s3,
     aws_secretsmanager as secretsmanager,
+    aws_lambda as lambda_,
+    aws_iam as iam,
+    custom_resources,
+    Aws,
+    Duration,
 )
 from constructs import Construct
+import os
 
 class InfraStack(Stack):
 
@@ -55,6 +61,56 @@ class InfraStack(Stack):
             auto_minor_version_upgrade=True,
             delete_automated_backups=True, # For dev/staging. Set to False for production.
         )
+
+        # Lambda function for running migrations
+        migration_lambda = lambda_.DockerImageFunction(
+            self, f"{prefix}MigrationRunnerLambda",
+            code=lambda_.DockerImageCode.from_image_asset(os.path.join(os.path.dirname(__file__), "..", "lambda", "migration-runner")),
+            vpc=vpc,
+            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS),
+            environment={
+                "DB_SECRET_ARN": db_instance.secret.secret_arn
+            },
+            timeout=Duration.minutes(5),
+        )
+
+        # Grant the Lambda function access to the database secret
+        db_instance.secret.grant_read(migration_lambda)
+
+        # Allow the Lambda function to connect to the database
+        db_instance.connections.allow_default_port_from(migration_lambda)
+
+        # Custom resource to trigger the migration Lambda
+        migration_trigger = custom_resources.AwsCustomResource(
+            self, f"{prefix}MigrationTrigger",
+            on_create=custom_resources.AwsSdkCall(
+                service="Lambda",
+                action="invoke",
+                parameters={
+                    "FunctionName": migration_lambda.function_name,
+                    "InvocationType": "RequestResponse",
+                },
+                physical_resource_id=custom_resources.PhysicalResourceId.of(f"{prefix}MigrationTrigger-{Aws.STACK_ID}")
+            ),
+            on_update=custom_resources.AwsSdkCall(
+                service="Lambda",
+                action="invoke",
+                parameters={
+                    "FunctionName": migration_lambda.function_name,
+                    "InvocationType": "RequestResponse",
+                },
+                physical_resource_id=custom_resources.PhysicalResourceId.of(f"{prefix}MigrationTrigger-{Aws.STACK_ID}")
+            ),
+            policy=custom_resources.AwsCustomResourcePolicy.from_statements([
+                iam.PolicyStatement(
+                    actions=["lambda:InvokeFunction"],
+                    resources=[migration_lambda.function_arn],
+                )
+            ]),
+        )
+
+        migration_trigger.node.add_dependency(db_instance)
+        migration_trigger.node.add_dependency(migration_lambda)
 
         # Look up the application secrets from AWS Secrets Manager
         app_secrets_object = secretsmanager.Secret.from_secret_name_v2(

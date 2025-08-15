@@ -3,17 +3,29 @@ FROM python:3.11-slim
 
 WORKDIR /usr/src/app
 
-# Using 'uv' from Astral for faster installs
-# First copy only dependency files to leverage Docker layer caching
-COPY ./pyproject.toml ./uv.lock* ./
+# Install uv for faster Python package installation
 RUN pip install uv
-RUN uv pip sync --system pyproject.toml
+
+# Copy dependency files for layer caching
+COPY ./pyproject.toml ./uv.lock ./README.md ./
+
+# Install dependencies using uv
+RUN uv sync --frozen --no-dev
 
 # Copy the application code
 COPY ./src ./src
 
+# Set environment variables
+ENV PYTHONPATH=/usr/src/app/src
+ENV WORKER_PORT=50051
+ENV ORGANIZATION_ID=default
+
 # The port your gRPC server listens on
 EXPOSE 50051
 
+# Health check to ensure the service is running
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD python -c "import grpc; channel = grpc.insecure_channel('localhost:50051'); channel.close()" || exit 1
+
 # Command to run the gRPC server
-CMD ["python", "src/emery_agents/grpc/server.py"]
+CMD ["uv", "run", "emery-worker"]
