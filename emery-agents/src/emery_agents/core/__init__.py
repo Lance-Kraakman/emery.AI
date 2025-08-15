@@ -7,7 +7,6 @@ from .types import (
     ToolConfig, ServerConfig, StepConfig
     # AIDEV-NOTE: Updated to new Task-based model - removed TaskExecution
 )
-from .runner import AgentRunner
 
 __all__ = [
     "Agent",
@@ -22,5 +21,4 @@ __all__ = [
     "ToolConfig",
     "ServerConfig",
     "StepConfig",
-    "AgentRunner",
 ]
