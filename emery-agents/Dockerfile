@@ -28,4 +28,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD python -c "import grpc; channel = grpc.insecure_channel('localhost:50051'); channel.close()" || exit 1
 
 # Command to run the gRPC server
-CMD ["uv", "run", "emery-worker"]
+CMD ["python", "-m", "emery_agents.grpc.main"]
