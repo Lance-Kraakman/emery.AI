@@ -132,6 +132,12 @@ class InfraStack(Stack):
             "RESEND_API_KEY": ecs.Secret.from_secrets_manager(app_secrets_object, "RESEND_API_KEY"),
         }
 
+        # Define the Docker image for the frontend and scheduler
+        app_image = ecs.ContainerImage.from_asset(
+            "../", # Points to the Dockerfile in the root
+            exclude=[".venv", "node_modules", "cdk.out", ".git", "infra"]
+        )
+
         # Create the Fargate service for the Next.js frontend
         frontend_service = ecs_patterns.ApplicationLoadBalancedFargateService(
             self, f"{prefix}FrontendService",
@@ -141,10 +147,7 @@ class InfraStack(Stack):
             memory_limit_mib=1024,
             desired_count=1, # Start with one instance
             task_image_options=ecs_patterns.ApplicationLoadBalancedTaskImageOptions(
-                image=ecs.ContainerImage.from_asset(
-                    "../", # Points to the Dockerfile in the root
-                    exclude=[".venv", "node_modules", "cdk.out", ".git", "infra"]
-                ),
+                image=app_image,
                 container_port=3000,
                 secrets={
                     "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
@@ -166,7 +169,7 @@ class InfraStack(Stack):
 
         scheduler_task_definition.add_container(
             f"{prefix}SchedulerContainer",
-            image=frontend_service.task_definition.default_container.image,
+            image=app_image,
             command=["scheduler"],
             secrets={
                 "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
