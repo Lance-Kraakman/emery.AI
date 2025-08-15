@@ -13,12 +13,8 @@ from .core.types import (
     StepType, TriggerType, TaskStatus, Task,
     CapabilityConfig, TriggerConfig, ExecutionContext,
     ToolConfig, ServerConfig, StepConfig
-    # AIDEV-NOTE: Updated to new Task-based model - removed TaskExecution
 )
-from .core.runner import AgentRunner
 from .integrations.smolagents import SmolAgentsOrchestrator
-from .integrations.mcp_servers import MCPServerIntegration
-from .integrations.emery_client import EmeryClientIntegration
 
 __version__ = "0.1.0"
 __author__ = "Lance Kraakman"
@@ -39,11 +35,6 @@ __all__ = [
     "ServerConfig",
     "StepConfig",
     
-    # Core runner
-    "AgentRunner",
-    
     # Integrations
     "SmolAgentsOrchestrator",
-    "MCPServerIntegration", 
-    "EmeryClientIntegration",
 ]

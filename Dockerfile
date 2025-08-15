@@ -32,6 +32,8 @@ RUN pnpm run build
 FROM --platform=linux/amd64 node:20-alpine AS runner
 WORKDIR /app
 
+RUN npm i -g pnpm
+
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED 1
 
