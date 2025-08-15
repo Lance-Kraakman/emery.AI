@@ -11,9 +11,6 @@ Distributed agent execution system with gRPC communication and multi-step workfl
 
 ## Key Components
 
-### AgentRunner
-Orchestrates multi-step workflows with proper state management. Executes capabilities by routing steps to appropriate engines (SmolAgents, MCP).
-
 ### SmolAgentsOrchestrator  
 Manages AI agent hierarchy with TaskExecutorAgent → CapabilityAgents → DefaultTaskExecutorAgent routing.
 
@@ -44,7 +41,7 @@ uv sync --dev
 
 ```python
 import asyncio
-from emery_agents import AgentRunner, Agent, AgentStep, AgentType
+from emery_agents import Agent, AgentStep, AgentType
 from emery_agents.integrations import (
     EmeryClientIntegration, 
     SmolAgentsIntegration, 
@@ -60,9 +57,7 @@ async def main():
     smolagents = SmolAgentsIntegration()
     mcp_servers = MCPServerIntegration(emery_client)
     
-    # Create runner
-    runner = AgentRunner(emery_client, smolagents, mcp_servers)
-    
+    # Create runner    
     # Define agent with steps
     agent = Agent(
         id="123",
@@ -239,8 +234,8 @@ See the `examples/` directory for:
 │   NextJS App    │    │  emery-agents    │    │   smolagents    │
 │                 │    │                  │    │                 │
 │ ┌─────────────┐ │    │ ┌──────────────┐ │    │ ┌─────────────┐ │
-│ │ Agent API   │ │────│ │ AgentRunner  │ │────│ │ CodeAgent   │ │
-│ │ Routes      │ │    │ │              │ │    │ │ ToolCalling │ │
+│ │ Agent API   │ │────│ │ Orchastator  │ │────│ │ CodeAgent   │ │
+│ │ Routes      │ │    │ │ Smol         │ │    │ │ ToolCalling │ │
 │ └─────────────┘ │    │ └──────────────┘ │    │ └─────────────┘ │
 │                 │    │                  │    │                 │
 │ ┌─────────────┐ │    │ ┌──────────────┐ │    └─────────────────┘
