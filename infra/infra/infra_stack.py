@@ -173,7 +173,7 @@ class InfraStack(Stack):
         )
 
         # Allow the frontend service to connect to the database
-        db_instance.connections.allow_default_port_from(frontend_service.service)
+        frontend_service.service.connections.allow_to_default_port(db_instance)
 
         # Create a new Task Definition for the scheduler
         scheduler_task_definition = ecs.FargateTaskDefinition(
@@ -208,7 +208,7 @@ class InfraStack(Stack):
         )
 
         # Allow the scheduler service to connect to the database
-        db_instance.connections.allow_default_port_from(scheduler_service)
+        scheduler_service.connections.allow_to_default_port(db_instance)
 
         # Add dependencies to ensure services start in the correct order
         frontend_service.service.node.add_dependency(migration_trigger)
@@ -233,7 +233,7 @@ class InfraStack(Stack):
         )
 
         # Allow the agent service to connect to the database
-        db_instance.connections.allow_default_port_from(agent_service.service)
+        agent_service.service.connections.allow_to_default_port(db_instance)
 
         # Add dependency for the agent service
         agent_service.service.node.add_dependency(migration_trigger)
