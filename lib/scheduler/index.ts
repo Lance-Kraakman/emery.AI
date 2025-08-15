@@ -1,10 +1,9 @@
 /**
- * Scheduler module exports and auto-initialization
+ * Scheduler module exports - Simplified Event-Driven Architecture
  */
 
-export { AgentScheduler, agentScheduler } from './agent-scheduler';
-export { initializeScheduler, isSchedulerInitialized } from './startup';
-export { DatabaseTriggerManager } from './database-triggers';
-
-// Import startup to trigger auto-initialization
-import './startup';
+export { SimplifiedAgentScheduler, simplifiedAgentScheduler } from './simplified-agent-scheduler';
+export { TaskExecutionPipeline, taskExecutionPipeline } from './task-execution-pipeline';
+export { manualDispatcher } from './dispatchers/manual-dispatcher';
+export { databaseDispatcher } from './dispatchers/database-dispatcher';
+export { calendarDispatcher } from './dispatchers/calendar-dispatcher';

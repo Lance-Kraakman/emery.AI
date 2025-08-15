@@ -586,7 +586,6 @@ All legacy execution patterns have been removed:
 #### API Endpoint Consistency
 All agent execution now uses the same simplified pattern:
 - `/api/agents/[id]/execute` - Direct agent execution with tools/servers support
-- `/api/scheduler` - Manual pending task processing with `processPendingTasks` action
 - `/api/scheduler/webhook` - Webhook triggers using simplified execution
 
 #### Database Task Schema
@@ -606,14 +605,6 @@ tasks.instructions JSONB: {
 - Checks for new pending tasks and executes them immediately
 - Processes up to 10 tasks per cycle to prevent overload
 - Updates task status in real-time during execution
-
-#### Manual Processing (On-Demand)
-```bash
-# Trigger immediate processing of all pending tasks
-curl -X POST "http://localhost:3000/api/scheduler" \
-  -H "Content-Type: application/json" \
-  -d '{"action": "processPendingTasks"}'
-```
 
 #### CRON Scheduled Jobs
 - Dynamic CRON job management with node-cron

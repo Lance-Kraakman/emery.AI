@@ -1,6 +1,5 @@
-import asyncio
-import json
 import logging
+import sys
 import time
 from typing import AsyncIterator, Dict, Any
 import grpc
@@ -36,8 +35,6 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         request: agent_worker_pb2.TaskRequest, 
         context: grpc.aio.ServicerContext
     ) -> AsyncIterator[agent_worker_pb2.TaskProgress]:
-        print("=== PYTHON WORKER: STARTING TASK EXECUTION ===")
-        logger.info("=== STARTING TASK EXECUTION ===")
         
         task_data = parse_task_request(request)
         task_id = task_data['task_id']
@@ -45,44 +42,45 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         capability_name = task_data.get('capability_name')
         instruction_config = task_data.get('instruction_config')
 
-        print(f"PYTHON WORKER: Task ID: {task_id}")
-        print(f"PYTHON WORKER: Agent: {agent.name if agent else 'None'}")
-        print(f"PYTHON WORKER: Capability: {capability_name}")
-        print(f"PYTHON WORKER: Instruction config: {instruction_config}")
+        print(f"🚀 [TASK-{task_id[:8]}] Starting execution for agent: {agent.name if agent else 'Unknown'}")
+        print(f"📋 [TASK-{task_id[:8]}] Instructions: {instruction_config}..." if instruction_config else "No instruction config")
+        sys.stdout.flush()
         
-        logger.info(f"Task ID: {task_id}")
-        logger.info(f"Agent: {agent.name if agent else 'None'}")
-        logger.info(f"Capability: {capability_name}")
+        logger.info(f"Starting task execution: {task_id[:8]} for agent {agent.name if agent else 'Unknown'}")
         logger.info(f"Instruction config: {instruction_config}")
         
         self.active_tasks[task_id] = {'agent': agent, 'start_time': time.time()}
 
         try:
-            print("PYTHON WORKER: About to yield initialization progress...")
-            logger.info("Yielding initialization progress...")
+            print(f"⚡ [TASK-{task_id[:8]}] Initializing...")
+            sys.stdout.flush()
             yield create_task_progress(task_id=task_id, status=TaskStatus.IN_PROGRESS, step_id="initialization", progress_percent=0.0)
             
-            print("PYTHON WORKER: Creating SmolAgentsOrchestrator...")
-            logger.info("Creating SmolAgentsOrchestrator...")
+            print(f"🤖 [TASK-{task_id[:8]}] Creating SmolAgents orchestrator...")
+            sys.stdout.flush()
             orchestrator = SmolAgentsOrchestrator()
             
-            print("PYTHON WORKER: Setting up agent orchestrator...")
-            logger.info("Setting up agent orchestrator...")
+            print(f"🔧 [TASK-{task_id[:8]}] Setting up agent hierarchy...")
+            sys.stdout.flush()
             orchestrator.setup_agent_orchestrator(agent)
-            print("PYTHON WORKER: Agent orchestrator setup completed!")
             
-            logger.info("Yielding orchestrator init progress...")
+            print(f"✅ [TASK-{task_id[:8]}] Orchestrator ready")
+            sys.stdout.flush()
             yield create_task_progress(task_id=task_id, status=TaskStatus.IN_PROGRESS, step_id="orchestrator_init", output_data={"message": "Orchestrator initialized"}, progress_percent=10.0)
             
             if not instruction_config:
-                logger.info(f"No instruction config provided, creating default for capability: {capability_name}")
+                print(f"⚠️  [TASK-{task_id[:8]}] No instruction config, using default for capability: {capability_name}")
                 instruction_config = TaskInstructions(instructions=f"Execute capability: {capability_name}")
             else:
-                logger.info(f"Using provided instruction config: {instruction_config}")
+                print(f"📝 [TASK-{task_id[:8]}] Using provided instructions")
+                sys.stdout.flush()
             
-            logger.info("Starting orchestrator execution...")
+            print(f"🎯 [TASK-{task_id[:8]}] Executing with orchestrator...")
+            sys.stdout.flush()
             task_result = await orchestrator.execute_with_orchestrator(instructions=instruction_config)
-            logger.info(f"Orchestrator execution completed: {task_result}")
+            
+            print(f"🏁 [TASK-{task_id[:8]}] Execution completed: {task_result.get('status', 'unknown')}")
+            sys.stdout.flush()
             
             if task_result["status"] == "success":
                 final_result = {"status": "completed", "result": task_result.get("result", {})}
@@ -93,12 +91,12 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             
             yield create_task_progress(task_id=task_id, status=final_status, step_id="completion", output_data=final_result, progress_percent=100.0)
         except Exception as e:
-            print(f"PYTHON WORKER: EXCEPTION in task {task_id}: {str(e)}")
-            print(f"PYTHON WORKER: Exception type: {type(e).__name__}")
+            print(f"❌ [TASK-{task_id[:8]}] Failed: {str(e)}")
             import traceback
-            print(f"PYTHON WORKER: Traceback: {traceback.format_exc()}")
+            print(f"📍 [TASK-{task_id[:8]}] Traceback: {traceback.format_exc()}")
+            sys.stdout.flush()
             
-            logger.exception(f"Task {task_id} failed")
+            logger.exception(f"Task {task_id[:8]} failed")
             yield create_task_progress(task_id=task_id, status=TaskStatus.FAILED, error_message=str(e))
         finally:
             if task_id in self.active_tasks:

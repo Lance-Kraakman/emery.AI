@@ -12,13 +12,13 @@ def main():
     """
     Entry point for the production gRPC worker server.
     """
-    print("PYTHON WORKER: Starting main() function")
-    logger.info("PYTHON WORKER: Starting main() function")
-    logger.info("--- Environment Variables ---")
-    for key, value in os.environ.items():
-        logger.info(f"{key}: {value}")
-    logger.info("---------------------------")
-    print("PYTHON WORKER: Environment variables logged")
+    logger.info("Starting gRPC worker server")
+    
+    # Only log critical environment variables
+    hf_token = os.environ.get('HF_TOKEN')
+    worker_address = os.environ.get('WORKER_ADDRESS', 'localhost:50051')
+    logger.info(f"HF_TOKEN: {'✓ Available' if hf_token else '✗ Missing'}")
+    logger.info(f"Worker address: {worker_address}")
 
     port = int(os.environ.get('WORKER_PORT', '50051'))
     organization_id = os.environ.get('ORGANIZATION_ID', 'default')

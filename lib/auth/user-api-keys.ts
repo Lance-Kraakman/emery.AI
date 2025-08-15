@@ -4,7 +4,6 @@
  * Per-user API keys provide access to management APIs like:
  * - /api/agents (create, list agents)  
  * - /api/tasks (list, create tasks)
- * - /api/scheduler/status (control scheduler)
  * - /api/tables (create, list tables)
  *
  * Per-agent API keys (separate system) are used for:
