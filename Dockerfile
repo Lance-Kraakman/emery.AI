@@ -1,11 +1,11 @@
 # 1. Install dependencies
-FROM node:20-alpine AS deps
+FROM --platform=linux/amd64 node:20-alpine AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN apk add --no-cache git && npm i -g pnpm && pnpm fetch
 
 # 2. Build the application
-FROM node:20-alpine AS builder
+FROM --platform=linux/amd64 node:20-alpine AS builder
 WORKDIR /app
 COPY . .
 RUN apk add --no-cache git && \
@@ -29,7 +29,7 @@ ARG RESEND_API_KEY="dummy"
 RUN pnpm run build
 
 # 3. Production image
-FROM node:20-alpine AS runner
+FROM --platform=linux/amd64 node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

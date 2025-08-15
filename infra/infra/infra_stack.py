@@ -64,12 +64,33 @@ class InfraStack(Stack):
             delete_automated_backups=True, # For dev/staging. Set to False for production.
         )
 
+        # Create a shared security group for DB clients
+        db_client_sg = ec2.SecurityGroup(
+            self, f"{prefix}DbClientSg",
+            vpc=vpc,
+            description="Security group for clients connecting to the RDS database"
+        )
+
+        # Allow traffic from the shared SG to the database
+        db_instance.connections.allow_default_port_from(db_client_sg)
+
+        # Create a dedicated security group for the migration Lambda
+        migration_lambda_sg = ec2.SecurityGroup(
+            self, f"{prefix}MigrationLambdaSg",
+            vpc=vpc,
+            description="Security group for the database migration Lambda"
+        )
+
+        # Allow the Lambda to connect to the database
+        db_instance.connections.allow_default_port_from(migration_lambda_sg)
+
         # Lambda function for running migrations
         migration_lambda = lambda_.DockerImageFunction(
             self, f"{prefix}MigrationRunnerLambda",
             code=lambda_.DockerImageCode.from_image_asset(os.path.join(os.path.dirname(__file__), "..", "lambda", "migration-runner")),
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS),
+            security_groups=[migration_lambda_sg],
             environment={
                 "DB_SECRET_ARN": db_instance.secret.secret_arn
             },
@@ -82,9 +103,6 @@ class InfraStack(Stack):
 
         # Grant the Lambda function access to the database secret
         db_instance.secret.grant_read(migration_lambda)
-
-        # Allow the Lambda function to connect to the database
-        db_instance.connections.allow_default_port_from(migration_lambda)
 
         # Custom resource to trigger the migration Lambda
         migration_trigger = custom_resources.AwsCustomResource(
@@ -161,6 +179,7 @@ class InfraStack(Stack):
                 }
             ),
             public_load_balancer=True,
+            security_groups=[db_client_sg],
         )
 
         # Configure the health check for the frontend service
@@ -171,9 +190,6 @@ class InfraStack(Stack):
             unhealthy_threshold_count=5,
             interval=Duration.seconds(60),
         )
-
-        # Allow the frontend service to connect to the database
-        frontend_service.service.connections.allow_to_default_port(db_instance)
 
         # Create a new Task Definition for the scheduler
         scheduler_task_definition = ecs.FargateTaskDefinition(
@@ -205,10 +221,8 @@ class InfraStack(Stack):
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),
+            security_groups=[db_client_sg],
         )
-
-        # Allow the scheduler service to connect to the database
-        scheduler_service.connections.allow_to_default_port(db_instance)
 
         # Add dependencies to ensure services start in the correct order
         frontend_service.service.node.add_dependency(migration_trigger)
@@ -230,10 +244,8 @@ class InfraStack(Stack):
                 }
             ),
             public_load_balancer=True,
+            security_groups=[db_client_sg],
         )
-
-        # Allow the agent service to connect to the database
-        agent_service.service.connections.allow_to_default_port(db_instance)
 
         # Add dependency for the agent service
         agent_service.service.node.add_dependency(migration_trigger)

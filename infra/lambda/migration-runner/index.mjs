@@ -14,7 +14,7 @@ async function getDatabaseUrl() {
 
 async function runMigrations() {
   const databaseUrl = await getDatabaseUrl();
-  const command = "pnpm drizzle-kit migrate";
+  const command = "pnpm drizzle-kit push:pg";
   
   try {
     const output = execSync(command, {
