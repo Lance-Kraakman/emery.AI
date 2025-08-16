@@ -37,15 +37,19 @@ aws ecr describe-images --repository-name emery-frontend --image-ids imageTag=ma
 
 ```mermaid
 graph TD
-    A[Push to Branch / Manual Trigger] --> B[Determine Environment]
-    B --> C[Configure AWS Credentials]
-    C --> D[Login to ECR]
-    D --> E[Verify ECR Images Exist]
-    E --> F{Images Exist?}
-    F -->|Yes| G[Set Image URIs for CDK]
-    F -->|No| H[FAIL: Build images first]
-    G --> I[Deploy with CDK using ECR images]
-    I --> J[Output Deployment Summary]
+    A[Push to Branch] --> B[Docker Build & Test Workflow]
+    B --> C{Build Success?}
+    C -->|No| D[FAIL: Fix build issues]
+    C -->|Yes| E[Deploy CDK Application Workflow]
+    E --> F[Check Build Success]
+    F --> G[Determine Environment]
+    G --> H[Configure AWS Credentials]
+    H --> I[Login to ECR]
+    I --> J[Verify ECR Images with Commit Hash]
+    J --> K{Images Exist?}
+    K -->|Yes| L[Deploy with CDK using Exact Images]
+    K -->|No| M[FAIL: Images missing]
+    L --> N[Output Deployment Summary with Commit Info]
 ```
 
 ## Benefits
@@ -112,10 +116,27 @@ AWS_ACCOUNT_ID=123456789012
 3. **Monitor deployment logs** for ECR image verification steps
 4. **Enjoy predictable, fast deployments** using standard AWS patterns! 🚀
 
-## Workflow Dependencies
+## Automatic Workflow Dependencies
 
-**IMPORTANT**: Always run workflows in this order:
-1. `Docker Build and Test` → Builds and pushes images to ECR
-2. `Deploy CDK Application` → Uses ECR images for deployment
+**NEW**: Workflows now run automatically in the correct order:
 
-The deployment will fail with clear error messages if ECR images don't exist.
+### 🔄 **Automatic Chain**
+1. **Push to branch** → Triggers `Docker Build & Test` workflow
+2. **Build completes successfully** → Automatically triggers `Deploy CDK Application` workflow  
+3. **Build fails** → Deployment workflow won't run (prevents bad deployments)
+
+### 🎯 **Exact Version Deployment**
+- Images are tagged with git commit hash: `{branch}-{commit-sha}`
+- Example: `develop-a1b2c3d` (develop branch, commit a1b2c3d)
+- **Guarantees** exact same code deployed that was tested
+
+### 🛡️ **Fail-Safe Features**
+- Deploy only runs if Docker build succeeds
+- Deploy verifies exact commit hash images exist
+- Clear error messages if dependencies missing
+
+### 📱 **Manual Override Available**  
+You can still manually trigger deployment via GitHub Actions UI for:
+- Hotfixes without rebuilding
+- Rolling back to previous versions
+- Testing different environments
