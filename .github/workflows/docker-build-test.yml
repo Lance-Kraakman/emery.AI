@@ -32,36 +32,21 @@ jobs:
             echo "env_name=dev" >> $GITHUB_OUTPUT
           fi
 
-  build-and-test:
+  setup-repositories:
     needs: get-environment
     runs-on: ubuntu-latest
     environment: ${{ needs.get-environment.outputs.env_name }}
     permissions:
       contents: read
       id-token: write
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            network=host
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          # Support both IAM roles (preferred) and access keys (fallback)
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Log in to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Create ECR repositories if they don't exist
         run: |
@@ -71,8 +56,34 @@ jobs:
           aws ecr describe-repositories --repository-names ${{ env.AGENT_REPO }} || \
           aws ecr create-repository --repository-name ${{ env.AGENT_REPO }} --image-scanning-configuration scanOnPush=true
 
-      - name: Extract metadata (frontend)
-        id: meta-frontend
+  build-frontend:
+    needs: [get-environment, setup-repositories]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.get-environment.outputs.env_name }}
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Extract metadata
+        id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}
@@ -82,46 +93,21 @@ jobs:
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Extract metadata (agent)
-        id: meta-agent
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and test frontend image
+      - name: Build and push frontend image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta-frontend.outputs.tags }}
-          labels: ${{ steps.meta-frontend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
           build-args: |
             BUILDKIT_INLINE_CACHE=1
 
-      - name: Build and test agent image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./emery-agents
-          file: ./emery-agents/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta-agent.outputs.tags }}
-          labels: ${{ steps.meta-agent.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
-
-      - name: Run security scan on frontend image
+      - name: Run security scan
         if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@master
         with:
@@ -129,21 +115,13 @@ jobs:
           format: 'sarif'
           output: 'trivy-results-frontend.sarif'
 
-      - name: Run security scan on agent image
-        if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:${{ github.sha }}
-          format: 'sarif'
-          output: 'trivy-results-agent.sarif'
-
-      - name: Upload Trivy scan results to GitHub Security tab
+      - name: Upload security scan results
         if: github.event_name != 'pull_request'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results-frontend.sarif'
 
-      - name: Test frontend container
+      - name: Test container functionality
         if: github.event_name == 'pull_request'
         run: |
           IMAGE_TAG=$(echo "${{ github.head_ref }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
@@ -153,9 +131,74 @@ jobs:
             -e NODE_ENV="test" \
             --entrypoint="" \
             ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${IMAGE_TAG} \
-            sh -c "echo 'Frontend container test passed'"
+            sh -c "echo '✅ Frontend container test passed'"
 
-      - name: Test agent container
+  build-agent:
+    needs: [get-environment, setup-repositories]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.get-environment.outputs.env_name }}
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push agent image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./emery-agents
+          file: ./emery-agents/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=agent
+          cache-to: type=gha,mode=max,scope=agent
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+      - name: Run security scan
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results-agent.sarif'
+
+      - name: Upload security scan results
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results-agent.sarif'
+
+      - name: Test container functionality
         if: github.event_name == 'pull_request'
         run: |
           IMAGE_TAG=$(echo "${{ github.head_ref }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
@@ -163,4 +206,4 @@ jobs:
             -e HF_TOKEN="test-token" \
             --entrypoint="" \
             ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:${IMAGE_TAG} \
-            sh -c "python -c 'import emery_agents; print(\"Agent container test passed\")'"
+            sh -c "python -c 'import emery_agents; print(\"✅ Agent container test passed\")'"
