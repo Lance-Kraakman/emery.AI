@@ -4,6 +4,7 @@ from aws_cdk import (
     aws_ec2 as ec2,
     aws_ecs as ecs,
     aws_ecs_patterns as ecs_patterns,
+    aws_elasticloadbalancingv2 as elbv2,
     aws_logs as logs,
     aws_rds as rds,
     aws_s3 as s3,
@@ -270,7 +271,7 @@ class InfraStack(Stack):
         # AIDEV-NOTE: Configure target group health check for gRPC service
         # Critical fix: Very lenient health check for initial deployment stability
         agent_service.target_group.configure_health_check(
-            protocol="TCP",
+            protocol=elbv2.Protocol.TCP,
             port="50051",
             healthy_threshold_count=2,    # Minimum healthy checks needed
             unhealthy_threshold_count=10, # Very tolerant of startup issues
