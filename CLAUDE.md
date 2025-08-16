@@ -318,40 +318,142 @@ Follow these patterns for consistent component usage:
 **MANDATORY**: Always run tests before committing to ensure changes don't break existing functionality.
 
 ```bash
-# Quick smoke test (no external dependencies)
-uv run python quick_test.py
+# Run focused unit tests for specific modules
+uv run python -m pytest tests/test_module_name.py -v
 
-# If quick tests pass, run full test suite
-uv run python run_tests.py all
+# Run all unit tests
+uv run python -m pytest tests/ -v
 
-# For Python projects specifically:
-uv run pytest tests/ -v
+# Run tests with coverage
+uv run python -m pytest tests/ --cov=src/emery_agents --cov-report=term-missing
 ```
 
 **Test-Driven Commit Process:**
 1. Make your code changes
-2. Run `uv run python quick_test.py`
-3. If successful, run `uv run python run_tests.py all`
+2. Run relevant unit tests: `uv run python -m pytest tests/test_[module].py -v`
+3. If successful, run full test suite: `uv run python -m pytest tests/ -v`
 4. Fix any failing tests before proceeding
 5. Commit only when all tests pass
 6. Include test status in commit message if relevant
 
+**Unit Test Framework Guidelines:**
+- Create focused, concise unit tests instead of debug scripts
+- Use pytest fixtures for common test data
+- Mock external dependencies and environment variables
+- Test both success and error cases
+- Each test should test one specific behavior
+
 ### Python Code Quality Standards
 
-**Type Hints:**
-- Prefer TypedDict over Dict[str, Any] for structured data
-- Use Union types over generic Any when possible
-- Create domain-specific type aliases for better clarity
+**Mandatory Code Structure:**
+- **All imports at top of file** - No inline imports except in functions when truly necessary
+- **Type hints on all functions** - Include parameter types and return types
+- **Fail fast on dependencies** - Import required libraries directly, let ImportError fail module load
+- **Clear, maintainable code** - Write self-documenting code with meaningful variable names
+- **Short comments only** - Prefer descriptive code over extensive comments
+- **Functional code patterns** - Use pure functions where possible, avoid excessive state mutation
+
+**Type Definitions and Hints:**
+- **Use @dataclass for structured data** - Prefer dataclasses over Dict[str, Any] for configuration objects
+- **Use TypedDict only for result dictionaries** - For return values and loose data structures
+- **Declare types explicitly** - Create specific type definitions rather than using generic types
+- **Use types everywhere possible** - All function parameters, return values, and class attributes
+- **Use Union types** over generic Any when multiple types are acceptable
+- **Create domain-specific Enums** - For status values, types, and categories
+- Example:
+  ```python
+  from dataclasses import dataclass
+  from typing import TypedDict, Optional, List
+  from enum import Enum
+  
+  class TaskStatus(Enum):
+      PENDING = "pending"
+      COMPLETED = "completed"
+      FAILED = "failed"
+  
+  @dataclass
+  class TaskConfig:
+      """Task configuration object."""
+      name: str
+      instructions: str
+      timeout: int = 30
+      tools: Optional[List[str]] = None
+  
+  class ExecutionResult(TypedDict, total=False):
+      """Execution result dictionary."""
+      status: str
+      result: Optional[Any]
+      error: Optional[str]
+  
+  def process_task(config: TaskConfig) -> ExecutionResult:
+      # Clear function signature with explicit types
+  ```
+
+**Imports and Dependencies:**
+- All imports must be at the top of the file - NO inline imports
+- Group imports: stdlib, third-party, local imports
+- Fail fast on missing dependencies - don't use graceful fallbacks unless truly optional
+- If dependency is required, import directly and let ImportError fail the module load
+- Example:
+  ```python
+  # Standard library
+  import os
+  import json
+  from typing import Dict, Any
+  
+  # Third-party (fail fast if missing)
+  from smolagents import HfApiModel
+  from transformers import pipeline
+  
+  # Local imports
+  from emery_agents.core.types import ToolConfig
+  ```
 
 **Error Handling:**
 - Avoid over-defensive patterns like excessive `.get(key, default)` usage
+- Use `obj.get(key) or default` instead of `obj.get(key, default)` for non-None defaults
+- Replace `hasattr(obj, 'attr')` with `getattr(obj, 'attr', None)` where appropriate
 - Use proper exception handling rather than defensive programming
 - Chain exceptions with `raise ... from e` to preserve stack traces
+- Use specific exception types instead of generic `Exception`
 
 **Function Design:**
 - Keep functions under 50 lines when possible
 - Extract complex logic into helper methods
+- **Explicit type annotations on all parameters and returns** - Never use untyped functions
+- Use descriptive parameter names that indicate their purpose
 - Single responsibility principle - one function, one purpose
+- **Pass @dataclass objects instead of dictionaries** - For complex parameter sets
+- **Return @dataclass or TypedDict** - For structured return values, prefer dataclass for configuration, TypedDict for results
+- Example:
+  ```python
+  @dataclass
+  class ProcessingConfig:
+      input_file: str
+      output_dir: str
+      max_retries: int = 3
+  
+  def process_data(config: ProcessingConfig) -> ExecutionResult:
+      # Function with explicit types and structured parameters
+  ```
+
+**Code Organization:**
+- Extract constants for magic numbers (MAX_LOG_PREVIEW_LENGTH = 100)
+- Split large files (>300 lines) into focused modules
+- One class per file when possible, related classes can be grouped
+- Use AIDEV-NOTE, AIDEV-TODO, AIDEV-QUESTION comments for searchable inline docs
+
+**Anti-patterns to Avoid:**
+- Generic `except Exception as e:` without re-raising or logging context
+- Magic numbers scattered throughout code
+- **Using Dict[str, Any] instead of @dataclass** - Always create explicit types for structured data
+- **Untyped function parameters or returns** - All functions must have explicit type annotations
+- Defensive `.get()` usage on typed structures (use dataclass attributes directly)
+- **Passing multiple loose parameters** - Use @dataclass for complex parameter sets
+- Files with multiple unrelated classes (>4 classes per file)
+- Hard-coded paths and URLs
+- String concatenation for paths (use pathlib)
+- Backwards compatibility fallbacks unless explicitly required
 
 ## Important Implementation Details
 

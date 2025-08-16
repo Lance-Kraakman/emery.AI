@@ -4,7 +4,7 @@
  * Runs the simplified event-driven scheduler as an independent process
  */
 
-import { simplifiedAgentScheduler } from '@/lib/scheduler';
+import { simplifiedAgentScheduler } from '../lib/scheduler';
 
 // Environment validation
 if (!process.env.DATABASE_URL) {

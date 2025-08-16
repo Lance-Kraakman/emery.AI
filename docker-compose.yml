@@ -11,6 +11,11 @@ services:
     volumes:
       - db:/var/lib/postgresql/data
       - ./initdb.d:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d emery"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   minio:
     image: minio/minio:latest
@@ -31,25 +36,24 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:3000"
-    environment:
-      DATABASE_URL: "postgresql://postgres:dashlet@db:5432/emery"
-      S3_BUCKET_NAME: "emery-local"
-      GRPC_AGENT_URL: "agent:50051"
-      NEXTAUTH_URL: "http://localhost:3000"
-      # Add other required environment variables from .env.local or .env.example
+      - "3000:3000"
+    env_file:
+      - .env.docker
     depends_on:
-      - db
-      - agent
+      db:
+        condition: service_healthy
+      agent:
+        condition: service_started
 
   scheduler:
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    environment:
-      DATABASE_URL: "postgresql://postgres:dashlet@db:5432/emery"
-      # Add other required environment variables
+    ports:
+      - "127.0.0.1:50052:50052"
+    env_file:
+      - .env.docker
     command: "scheduler"
     depends_on:
       - db
@@ -61,9 +65,10 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:50051:50051"
+    env_file:
+      - .env.docker
     environment:
       S3_BUCKET_NAME: "emery-local"
-      # Add other required environment variables
     depends_on:
       - db
 
