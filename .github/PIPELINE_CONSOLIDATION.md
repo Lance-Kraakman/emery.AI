@@ -18,7 +18,7 @@
 ### 🔍 **Smart Image Detection**
 ```bash
 # The workflow automatically checks if ECR images exist:
-aws ecr describe-images --repository-name emery-frontend --image-ids imageTag=main
+aws ecr describe-images --repository-name emery/frontend --image-ids imageTag=main
 ```
 
 ### 🚀 **Standard ECR Deployment Strategy**
@@ -87,8 +87,8 @@ git push origin develop  # → dev environment
 ### Local Testing
 ```bash
 # Set environment variables to use ECR images
-export FRONTEND_IMAGE_URI="123456.dkr.ecr.ap-southeast-2.amazonaws.com/emery-frontend:main"
-export AGENT_IMAGE_URI="123456.dkr.ecr.ap-southeast-2.amazonaws.com/emery-agent:main"
+export FRONTEND_IMAGE_URI="123456.dkr.ecr.ap-southeast-2.amazonaws.com/emery/frontend:main"
+export AGENT_IMAGE_URI="123456.dkr.ecr.ap-southeast-2.amazonaws.com/emery/agent:main"
 
 # Deploy with CDK (will use ECR images)
 cd infra && cdk deploy

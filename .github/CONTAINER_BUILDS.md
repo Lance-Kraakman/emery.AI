@@ -44,12 +44,12 @@ We now have a complete CI/CD pipeline that:
 ## Container Images
 
 ### Frontend Image
-- **Registry:** `{account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery-frontend`
+- **Registry:** `{account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery/frontend`
 - **Tags:** `main`, `develop`, `pr-123`, `main-sha123abc`
 - **Platforms:** linux/amd64, linux/arm64
 
 ### Agent Image  
-- **Registry:** `{account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery-agent`
+- **Registry:** `{account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery/agent`
 - **Tags:** `main`, `develop`, `pr-123`, `main-sha123abc`
 - **Platforms:** linux/amd64, linux/arm64
 
@@ -61,18 +61,18 @@ We now have a complete CI/CD pipeline that:
 aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin {account-id}.dkr.ecr.ap-southeast-2.amazonaws.com
 
 # Pull latest images for local testing
-docker pull {account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery-frontend:main
-docker pull {account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery-agent:main
+docker pull {account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery/frontend:main
+docker pull {account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery/agent:main
 
 # Run locally
-docker run -p 3000:3000 {account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery-frontend:main
+docker run -p 3000:3000 {account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery/frontend:main
 ```
 
 ### For AWS Deployment
 ```bash
 # Deploy using pre-built ECR images
-export FRONTEND_IMAGE_URI="{account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery-frontend:main"
-export AGENT_IMAGE_URI="{account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery-agent:main"
+export FRONTEND_IMAGE_URI="{account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery/frontend:main"
+export AGENT_IMAGE_URI="{account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery/agent:main"
 cd infra && cdk deploy
 ```
 
@@ -117,8 +117,8 @@ AWS_ACCOUNT_ID=123456789012
 
 ### Optional Environment Variables
 ```
-FRONTEND_IMAGE_URI=123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/emery-frontend:tag
-AGENT_IMAGE_URI=123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/emery-agent:tag
+FRONTEND_IMAGE_URI=123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/emery/frontend:tag
+AGENT_IMAGE_URI=123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/emery/agent:tag
 ```
 
 ## Cache Strategy

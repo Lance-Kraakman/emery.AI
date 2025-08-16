@@ -23,8 +23,8 @@ on:
 
 env:
   AWS_REGION: ap-southeast-2
-  ECR_FRONTEND_REPO: emery-frontend
-  ECR_AGENT_REPO: emery-agent
+  ECR_FRONTEND_REPO: emery/frontend
+  ECR_AGENT_REPO: emery/agent
 
 jobs:
   check-docker-build:
