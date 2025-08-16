@@ -180,11 +180,6 @@ class InfraStack(Stack):
             ),
             public_load_balancer=True,
             security_groups=[db_client_sg],
-            # AIDEV-NOTE: Fix deployment stability warnings
-            deployment_configuration=ecs.DeploymentConfiguration(
-                minimum_healthy_percent=50,
-                maximum_percent=200
-            ),
         )
 
         # Configure the health check for the frontend service
@@ -195,6 +190,13 @@ class InfraStack(Stack):
             unhealthy_threshold_count=5,
             interval=Duration.seconds(60),
         )
+        
+        # AIDEV-NOTE: Configure deployment settings for frontend service stability
+        cfn_frontend_service = frontend_service.service.node.default_child
+        cfn_frontend_service.deployment_configuration = {
+            "minimumHealthyPercent": 50,
+            "maximumPercent": 200
+        }
 
         # Create a new Task Definition for the scheduler
         scheduler_task_definition = ecs.FargateTaskDefinition(
@@ -227,12 +229,14 @@ class InfraStack(Stack):
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),
             security_groups=[db_client_sg],
-            # AIDEV-NOTE: Fix deployment stability warnings
-            deployment_configuration=ecs.DeploymentConfiguration(
-                minimum_healthy_percent=50,
-                maximum_percent=200
-            ),
         )
+        
+        # AIDEV-NOTE: Configure deployment settings for scheduler service stability
+        cfn_scheduler_service = scheduler_service.node.default_child
+        cfn_scheduler_service.deployment_configuration = {
+            "minimumHealthyPercent": 50,
+            "maximumPercent": 200
+        }
 
         # Add dependencies to ensure services start in the correct order
         frontend_service.service.node.add_dependency(migration_trigger)
@@ -258,11 +262,6 @@ class InfraStack(Stack):
             # AIDEV-NOTE: Critical fix for ECS service stability
             # Increased grace period to allow for gRPC service startup and target registration
             health_check_grace_period=Duration.seconds(300),  # 5 minutes
-            # AIDEV-NOTE: Fix deployment stability warnings
-            deployment_configuration=ecs.DeploymentConfiguration(
-                minimum_healthy_percent=0,  # Allow stopping old tasks before starting new ones
-                maximum_percent=100        # Prevent resource contention during deployment
-            ),
         )
 
         # Add dependency for the agent service
@@ -278,6 +277,13 @@ class InfraStack(Stack):
             interval=Duration.seconds(30),
             timeout=Duration.seconds(30), # Longer timeout for gRPC connections
         )
+        
+        # AIDEV-NOTE: Configure deployment settings for agent service stability
+        cfn_agent_service = agent_service.service.node.default_child
+        cfn_agent_service.deployment_configuration = {
+            "minimumHealthyPercent": 0,   # Allow stopping old tasks before starting new ones
+            "maximumPercent": 100        # Prevent resource contention during deployment
+        }
         
         # AIDEV-NOTE: ECS container health check is handled by Dockerfile HEALTHCHECK
 
