@@ -103,7 +103,6 @@ class HuggingFaceTool:
         """Execute the tool's main functionality."""
         if not self.pipeline:
             return {"error": f"Pipeline not initialized for {self.tool_type.value}"}
-        
         try:
             # Route to specific implementation based on tool type
             if self.tool_type in [ToolType.TEXT_GENERATION, ToolType.TEXT_CLASSIFICATION, 
@@ -177,10 +176,8 @@ class HuggingFaceTool:
 def create_hf_pipeline_tool(config: ToolConfig) -> Optional[HuggingFaceTool]:
     """
     Factory function to create HuggingFace pipeline tools.
-    
     Args:
         config: Tool configuration specifying the task type and parameters
-        
     Returns:
         HuggingFaceTool instance or None if creation fails
     """

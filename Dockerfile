@@ -13,9 +13,10 @@ RUN apk add --no-cache git && \
     npm i -g pnpm && \
     pnpm install
 
-# AIDEV-NOTE: Removed dummy secrets to fix Docker security warnings
+# AIDEV-NOTE: Set minimal build environment variables for Next.js build
 # The real values will be injected at runtime from AWS Secrets Manager.
-# Next.js build now works without these values due to .env.local loading in lib/db/client.ts
+ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
+ENV NEXTAUTH_SECRET="build-dummy-secret"
 RUN pnpm run build
 
 # 3. Production image
