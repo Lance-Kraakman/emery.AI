@@ -17,6 +17,11 @@ RUN apk add --no-cache git && \
 # The real values will be injected at runtime from AWS Secrets Manager.
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
 ENV NEXTAUTH_SECRET="build-dummy-secret"
+ENV HF_TOKEN="build-dummy-token"
+ENV NEXTAUTH_URL="http://localhost:3000"
+ENV GITHUB_CLIENT_ID="build-dummy-client-id"
+ENV GITHUB_CLIENT_SECRET="build-dummy-client-secret"
+ENV RESEND_API_KEY="build-dummy-resend-key"
 RUN pnpm run build
 
 # 3. Production image
