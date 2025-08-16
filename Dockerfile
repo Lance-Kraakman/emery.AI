@@ -2,16 +2,25 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
-RUN apk add --no-cache git && npm i -g pnpm && pnpm fetch
+RUN apk add --no-cache git && \
+    npm i -g pnpm && \
+    pnpm fetch --prod
 
 # 2. Build the application
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY . .
+
+# Copy lockfiles and install dependencies using cache
+COPY package.json pnpm-lock.yaml ./
+COPY --from=deps /app/.pnpm-store /app/.pnpm-store
 RUN apk add --no-cache git && \
     git config --global url."https://github.com/".insteadOf "git@github.com:" && \
     npm i -g pnpm && \
-    pnpm install
+    pnpm config set store-dir /app/.pnpm-store && \
+    pnpm install --frozen-lockfile
+
+# Copy source code after dependencies are installed
+COPY . .
 
 # AIDEV-NOTE: Set minimal build environment variables for Next.js build
 # The real values will be injected at runtime from AWS Secrets Manager.
