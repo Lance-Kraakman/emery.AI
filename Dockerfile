@@ -1,11 +1,11 @@
 # 1. Install dependencies
-FROM --platform=linux/amd64 node:20-alpine AS deps
+FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN apk add --no-cache git && npm i -g pnpm && pnpm fetch
 
 # 2. Build the application
-FROM --platform=linux/amd64 node:20-alpine AS builder
+FROM node:20-alpine AS builder
 WORKDIR /app
 COPY . .
 RUN apk add --no-cache git && \
@@ -13,29 +13,19 @@ RUN apk add --no-cache git && \
     npm i -g pnpm && \
     pnpm install
 
-# Set dummy secrets during build to allow Next.js to build.
+# AIDEV-NOTE: Removed dummy secrets to fix Docker security warnings
 # The real values will be injected at runtime from AWS Secrets Manager.
-ARG DATABASE_URL="postgresql://dummy:dummy@dummy:5432/dummy"
-ARG NEXTAUTH_SECRET="dummy"
-ARG GITHUB_CLIENT_ID="dummy"
-ARG GITHUB_CLIENT_SECRET="dummy"
-ARG PIPEDREAM_PROJECT_ID="dummy"
-ARG PIPEDREAM_CLIENT_ID="dummy"
-ARG PIPEDREAM_CLIENT_SECRET="dummy"
-ARG PIPEDREAM_API_KEY="dummy"
-ARG OPENAI_API_KEY="dummy"
-ARG HF_TOKEN="dummy"
-ARG RESEND_API_KEY="dummy"
+# Next.js build now works without these values due to .env.local loading in lib/db/client.ts
 RUN pnpm run build
 
 # 3. Production image
-FROM --platform=linux/amd64 node:20-alpine AS runner
+FROM node:20-alpine AS runner
 WORKDIR /app
 
 RUN npm i -g pnpm
 
 ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # AIDEV-NOTE: Use normal Next.js build (not standalone) with full dependencies
 COPY --from=builder /app/package.json ./package.json

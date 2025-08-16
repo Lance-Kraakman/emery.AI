@@ -180,6 +180,11 @@ class InfraStack(Stack):
             ),
             public_load_balancer=True,
             security_groups=[db_client_sg],
+            # AIDEV-NOTE: Fix deployment stability warnings
+            deployment_configuration=ecs.DeploymentConfiguration(
+                minimum_healthy_percent=50,
+                maximum_percent=200
+            ),
         )
 
         # Configure the health check for the frontend service
@@ -222,6 +227,11 @@ class InfraStack(Stack):
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),
             security_groups=[db_client_sg],
+            # AIDEV-NOTE: Fix deployment stability warnings
+            deployment_configuration=ecs.DeploymentConfiguration(
+                minimum_healthy_percent=50,
+                maximum_percent=200
+            ),
         )
 
         # Add dependencies to ensure services start in the correct order
@@ -233,8 +243,8 @@ class InfraStack(Stack):
             self, f"{prefix}AgentService",
             cluster=cluster,
             service_name=f"{prefix}-Agent",
-            cpu=256,
-            memory_limit_mib=512,
+            cpu=512,  # AIDEV-NOTE: Increased CPU for better startup performance
+            memory_limit_mib=1024,  # AIDEV-NOTE: Increased memory for smolagents dependencies
             desired_count=1,
             task_image_options=ecs_patterns.NetworkLoadBalancedTaskImageOptions(
                 image=ecs.ContainerImage.from_asset("../emery-agents"), # Points to the Dockerfile in emery-agents
@@ -245,10 +255,31 @@ class InfraStack(Stack):
             ),
             public_load_balancer=True,
             security_groups=[db_client_sg],
+            # AIDEV-NOTE: Critical fix for ECS service stability
+            # Increased grace period to allow for gRPC service startup and target registration
+            health_check_grace_period=Duration.seconds(300),  # 5 minutes
+            # AIDEV-NOTE: Fix deployment stability warnings
+            deployment_configuration=ecs.DeploymentConfiguration(
+                minimum_healthy_percent=0,  # Allow stopping old tasks before starting new ones
+                maximum_percent=100        # Prevent resource contention during deployment
+            ),
         )
 
         # Add dependency for the agent service
         agent_service.service.node.add_dependency(migration_trigger)
+
+        # AIDEV-NOTE: Configure target group health check for gRPC service
+        # Critical fix: Very lenient health check for initial deployment stability
+        agent_service.target_group.configure_health_check(
+            protocol="TCP",
+            port="50051",
+            healthy_threshold_count=2,    # Minimum healthy checks needed
+            unhealthy_threshold_count=10, # Very tolerant of startup issues
+            interval=Duration.seconds(30),
+            timeout=Duration.seconds(30), # Longer timeout for gRPC connections
+        )
+        
+        # AIDEV-NOTE: ECS container health check is handled by Dockerfile HEALTHCHECK
 
         # Pass the public DNS of the agent service's NLB to the frontend service
         if frontend_service.task_definition.default_container:
