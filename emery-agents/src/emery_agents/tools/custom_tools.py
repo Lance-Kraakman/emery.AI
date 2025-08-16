@@ -8,12 +8,7 @@ import logging
 import json
 import os
 from typing import Dict, Any, Optional
-
-try:
-    import requests
-    REQUESTS_AVAILABLE = True
-except ImportError:
-    REQUESTS_AVAILABLE = False
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +41,6 @@ class PipedreamConnectorTool(BaseTool):
     
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        if not REQUESTS_AVAILABLE:
-            raise ImportError("requests library required for PipedreamConnectorTool")
         
         # Use existing proxy endpoint from Emery infrastructure
         self.api_base_url = config.get("api_base_url", "http://localhost:3000/api/agents/proxy")

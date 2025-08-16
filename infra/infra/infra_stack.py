@@ -20,6 +20,16 @@ import os
 
 class InfraStack(Stack):
 
+    def _get_agent_image(self) -> ecs.ContainerImage:
+        """Get agent container image from ECR or build from source"""
+        agent_image_uri = os.environ.get('AGENT_IMAGE_URI')
+        if agent_image_uri:
+            print(f"Using pre-built agent image from ECR: {agent_image_uri}")
+            return ecs.ContainerImage.from_registry(agent_image_uri)
+        else:
+            print("Building agent image from source")
+            return ecs.ContainerImage.from_asset("../emery-agents")
+
     def __init__(self, scope: Construct, construct_id: str, env_name: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
@@ -158,10 +168,17 @@ class InfraStack(Stack):
         }
 
         # Define the Docker image for the frontend and scheduler
-        app_image = ecs.ContainerImage.from_asset(
-            "../", # Points to the Dockerfile in the root
-            exclude=[".venv", "node_modules", "cdk.out", ".git", "infra"]
-        )
+        # AIDEV-NOTE: Use AWS ECR if available, otherwise build from source
+        frontend_image_uri = os.environ.get('FRONTEND_IMAGE_URI')
+        if frontend_image_uri:
+            app_image = ecs.ContainerImage.from_registry(frontend_image_uri)
+            print(f"Using pre-built frontend image from ECR: {frontend_image_uri}")
+        else:
+            app_image = ecs.ContainerImage.from_asset(
+                "../", # Points to the Dockerfile in the root
+                exclude=[".venv", "node_modules", "cdk.out", ".git", "infra"]
+            )
+            print("Building frontend image from source")
 
         # Create the Fargate service for the Next.js frontend
         frontend_service = ecs_patterns.ApplicationLoadBalancedFargateService(
@@ -252,7 +269,7 @@ class InfraStack(Stack):
             memory_limit_mib=1024,  # AIDEV-NOTE: Increased memory for smolagents dependencies
             desired_count=1,
             task_image_options=ecs_patterns.NetworkLoadBalancedTaskImageOptions(
-                image=ecs.ContainerImage.from_asset("../emery-agents"), # Points to the Dockerfile in emery-agents
+                image=self._get_agent_image(),
                 container_port=50051,
                 secrets={
                     **app_secrets_map

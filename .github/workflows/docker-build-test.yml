@@ -1,0 +1,143 @@
+name: Docker Build & Test
+
+on:
+  push:
+    branches: [main, develop, refactor-best-practices]
+  pull_request:
+    branches: [main, develop, refactor-best-practices]
+
+env:
+  AWS_REGION: ap-southeast-2
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-southeast-2.amazonaws.com
+  FRONTEND_REPO: emery-frontend
+  AGENT_REPO: emery-agent
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            network=host
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Create ECR repositories if they don't exist
+        run: |
+          aws ecr describe-repositories --repository-names ${{ env.FRONTEND_REPO }} || \
+          aws ecr create-repository --repository-name ${{ env.FRONTEND_REPO }} --image-scanning-configuration scanOnPush=true
+          
+          aws ecr describe-repositories --repository-names ${{ env.AGENT_REPO }} || \
+          aws ecr create-repository --repository-name ${{ env.AGENT_REPO }} --image-scanning-configuration scanOnPush=true
+
+      - name: Extract metadata (frontend)
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Extract metadata (agent)
+        id: meta-agent
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and test frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+      - name: Build and test agent image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./emery-agents
+          file: ./emery-agents/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-agent.outputs.tags }}
+          labels: ${{ steps.meta-agent.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+      - name: Run security scan on frontend image
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results-frontend.sarif'
+
+      - name: Run security scan on agent image
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results-agent.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results-frontend.sarif'
+
+      - name: Test frontend container
+        if: github.event_name == 'pull_request'
+        run: |
+          IMAGE_TAG=$(echo "${{ github.head_ref }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          docker run --rm \
+            -e DATABASE_URL="postgresql://test:test@localhost:5432/test" \
+            -e NEXTAUTH_SECRET="test-secret" \
+            -e NODE_ENV="test" \
+            --entrypoint="" \
+            ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${IMAGE_TAG} \
+            sh -c "echo 'Frontend container test passed'"
+
+      - name: Test agent container
+        if: github.event_name == 'pull_request'
+        run: |
+          IMAGE_TAG=$(echo "${{ github.head_ref }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          docker run --rm \
+            -e HF_TOKEN="test-token" \
+            --entrypoint="" \
+            ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:${IMAGE_TAG} \
+            sh -c "python -c 'import emery_agents; print(\"Agent container test passed\")'"

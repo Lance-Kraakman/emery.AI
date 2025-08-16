@@ -180,7 +180,6 @@ class ToolRegistry:
     AIDEV-NOTE: This registry automatically discovers smolagents tools
     and provides a clean interface for tool configuration and instantiation.
     """
-    
     def __init__(self):
         self._tool_configs: Dict[ToolType, ToolConfig] = {}
         self._tool_factories: Dict[ToolType, ToolFactory] = {}
