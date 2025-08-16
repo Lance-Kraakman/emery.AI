@@ -2,7 +2,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-// Load environment variables
+// Load environment variables only if not already set
 if (!process.env.DATABASE_URL) {
   require('dotenv').config({ path: '.env.local' });
 }
@@ -13,15 +13,17 @@ if (!connectionString) {
   throw new Error('DATABASE_URL environment variable is not set');
 }
 
-// AIDEV-NOTE: Create shared postgres client with proper connection pooling to prevent leaks
+console.log('[DATABASE] Connecting to:', connectionString.replace(/:[^:@]*@/, ':***@'));
+
+// AIDEV-NOTE: Create postgres client optimized for Docker deployment
 const client = postgres(connectionString, {
-  max: 20, // Maximum 20 connections in pool (within PostgreSQL limit of 100)
-  idle_timeout: 20, // Close idle connections after 20 seconds
-  max_lifetime: 60 * 30, // Close connections after 30 minutes
-  connect_timeout: 10, // 10 second connection timeout
-  prepare: false, // Disable prepared statements to reduce connection overhead
+  max: 5, // Small pool for container environment
+  idle_timeout: 30, 
+  max_lifetime: 60 * 60,
+  connect_timeout: 30, // Longer timeout for Docker networking
+  prepare: false, // Disable prepared statements
+  ssl: false, // No SSL for internal Docker networking
   onnotice: (notice) => {
-    // Log PostgreSQL notices for debugging
     if (notice.severity === 'WARNING' || notice.severity === 'NOTICE') {
       console.log(`[POSTGRES-${notice.severity}]:`, notice.message);
     }

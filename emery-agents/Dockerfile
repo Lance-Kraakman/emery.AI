@@ -10,7 +10,7 @@ RUN pip install uv
 COPY ./pyproject.toml ./uv.lock ./README.md ./
 
 # Install dependencies using uv
-RUN uv sync --frozen --no-dev
+RUN uv pip install . --system
 
 # Copy the application code
 COPY ./src ./src

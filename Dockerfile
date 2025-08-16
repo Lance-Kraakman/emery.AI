@@ -11,7 +11,7 @@ COPY . .
 RUN apk add --no-cache git && \
     git config --global url."https://github.com/".insteadOf "git@github.com:" && \
     npm i -g pnpm && \
-    pnpm install --frozen-lockfile
+    pnpm install
 
 # Set dummy secrets during build to allow Next.js to build.
 # The real values will be injected at runtime from AWS Secrets Manager.
@@ -37,12 +37,16 @@ RUN npm i -g pnpm
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED 1
 
-# Copy the standalone output
-COPY --from=builder /app/.next/standalone ./
-# Copy static assets
-COPY --from=builder /app/.next/static ./.next/static
-# Copy public assets
+# AIDEV-NOTE: Use normal Next.js build (not standalone) with full dependencies
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/proto ./proto
 
 # Copy the entrypoint script
 COPY entrypoint.sh .

@@ -1,8 +1,9 @@
 """Test fixtures and configuration."""
 
 import pytest
+import os
 from typing import Dict, Any
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 from emery_agents.core.types import (
     Agent, CapabilityConfig, StepConfig, StepType,
@@ -111,3 +112,23 @@ def mock_integrations(mock_emery_client, mock_smolagents, mock_mcp_servers):
 def temp_working_dir(tmp_path):
     """Temporary working directory."""
     return tmp_path / "emery_test_workspace"
+
+
+@pytest.fixture
+def hf_token():
+    """Provide HF token for tests."""
+    return "test-token"
+
+
+@pytest.fixture
+def mock_hf_env(hf_token):
+    """Mock HF_TOKEN environment variable."""
+    with patch.dict(os.environ, {'HF_TOKEN': hf_token}):
+        yield
+
+
+@pytest.fixture
+def pipedream_env():
+    """Mock Pipedream environment variables."""
+    with patch.dict(os.environ, {'PIPEDREAM_API_KEY': 'test-api-key'}):
+        yield

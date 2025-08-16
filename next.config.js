@@ -1,12 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  // AIDEV-NOTE: Removed standalone mode to fix postgres-js Docker compatibility
+  // AIDEV-NOTE: Removed env config to allow runtime environment variable loading
   // App router is now stable in Next.js 15
-  env: {
-    DATABASE_URL: process.env.DATABASE_URL,
-    NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
-  },
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.externals = [...config.externals, 'unpdf', '@z-skip/protoc', 'canvas']

@@ -3,5 +3,6 @@
 if [ "$1" = "scheduler" ]; then
   exec pnpm scheduler:start
 else
-  exec node server.js
+  # AIDEV-NOTE: Use pnpm start for normal Next.js mode (not standalone)
+  exec pnpm start
 fi
