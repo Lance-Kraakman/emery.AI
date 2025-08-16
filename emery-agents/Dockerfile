@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM --platform=linux/amd64 python:3.11-slim
+FROM python:3.11-slim
 
 WORKDIR /usr/src/app
 
@@ -24,8 +24,9 @@ ENV ORGANIZATION_ID=default
 EXPOSE 50051
 
 # Health check to ensure the service is running
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD python -c "import grpc; channel = grpc.insecure_channel('localhost:50051'); channel.close()" || exit 1
+# AIDEV-NOTE: Extended timeouts for AWS ECS deployment stability
+HEALTHCHECK --interval=30s --timeout=15s --start-period=120s --retries=5 \
+  CMD python -c "import socket; s=socket.socket(); s.settimeout(10); s.connect(('0.0.0.0', 50051)); s.close()" || exit 1
 
 # Command to run the gRPC server
 CMD ["python", "-m", "emery_agents.grpc.main"]
