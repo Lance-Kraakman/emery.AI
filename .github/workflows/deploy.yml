@@ -1,7 +1,10 @@
 name: Deploy CDK Application
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Docker Build & Test"]
+    types:
+      - completed
     branches:
       - main
       - staging
@@ -24,11 +27,28 @@ env:
   ECR_AGENT_REPO: emery-agent
 
 jobs:
+  check-docker-build:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_run'
+    steps:
+      - name: Check Docker Build Success
+        run: |
+          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "❌ Docker Build & Test workflow failed. Cannot proceed with deployment."
+            echo "Please check the Docker build logs and fix any issues."
+            exit 1
+          fi
+          echo "✅ Docker Build & Test workflow completed successfully"
+
   get-environment:
     runs-on: ubuntu-latest
+    needs: [check-docker-build]
+    if: always() && (needs.check-docker-build.result == 'success' || github.event_name == 'workflow_dispatch')
     outputs:
       env_name: ${{ steps.get_env.outputs.env_name }}
       aws_region: ${{ steps.get_env.outputs.aws_region }}
+      branch_name: ${{ steps.get_env.outputs.branch_name }}
+      commit_sha: ${{ steps.get_env.outputs.commit_sha }}
     steps:
       - name: Identify Environment
         id: get_env
@@ -36,12 +56,24 @@ jobs:
           # Use manual input if workflow_dispatch, otherwise determine from branch
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "env_name=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref_name }}" = "main" ]; then
-            echo "env_name=production" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref_name }}" = "staging" ]; then
-            echo "env_name=staging" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref_name }}" = "develop" ]; then
-            echo "env_name=dev" >> $GITHUB_OUTPUT
+            echo "branch_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "commit_sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # For workflow_run events, get branch and SHA from the triggering workflow
+            BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
+            COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
+            echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+            echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+            
+            if [ "${BRANCH_NAME}" = "main" ]; then
+              echo "env_name=production" >> $GITHUB_OUTPUT
+            elif [ "${BRANCH_NAME}" = "staging" ]; then
+              echo "env_name=staging" >> $GITHUB_OUTPUT
+            elif [ "${BRANCH_NAME}" = "develop" ]; then
+              echo "env_name=dev" >> $GITHUB_OUTPUT
+            else
+              echo "env_name=dev" >> $GITHUB_OUTPUT
+            fi
           fi
           echo "aws_region=${{ env.AWS_REGION }}" >> $GITHUB_OUTPUT
 
@@ -85,39 +117,49 @@ jobs:
       - name: Verify required ECR images exist
         id: check-images
         run: |
-          BRANCH_NAME=${{ github.ref_name }}
+          BRANCH_NAME=${{ needs.get-environment.outputs.branch_name }}
+          COMMIT_SHA=${{ needs.get-environment.outputs.commit_sha }}
           AWS_ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}
           ECR_REGISTRY=${AWS_ACCOUNT_ID}.dkr.ecr.${{ needs.get-environment.outputs.aws_region }}.amazonaws.com
           
-          # Define required image URIs
-          FRONTEND_URI="${ECR_REGISTRY}/${{ env.ECR_FRONTEND_REPO }}:${BRANCH_NAME}"
-          AGENT_URI="${ECR_REGISTRY}/${{ env.ECR_AGENT_REPO }}:${BRANCH_NAME}"
+          # Create image tags with commit hash for precise versioning
+          # Docker metadata action creates tags like: develop-a1b2c3d (branch-sha format)
+          COMMIT_TAG="${BRANCH_NAME}-${COMMIT_SHA:0:7}"
           
-          echo "🔍 Checking for required ECR images..."
+          # Define required image URIs using commit hash tags
+          FRONTEND_URI="${ECR_REGISTRY}/${{ env.ECR_FRONTEND_REPO }}:${COMMIT_TAG}"
+          AGENT_URI="${ECR_REGISTRY}/${{ env.ECR_AGENT_REPO }}:${COMMIT_TAG}"
+          
+          echo "🔍 Checking for required ECR images with commit hash..."
+          echo "Branch: ${BRANCH_NAME}"
+          echo "Commit: ${COMMIT_SHA:0:7}"
           echo "Frontend image: ${FRONTEND_URI}"
           echo "Agent image: ${AGENT_URI}"
           
           # Verify frontend image exists (required)
-          if aws ecr describe-images --repository-name ${{ env.ECR_FRONTEND_REPO }} --image-ids imageTag=${BRANCH_NAME} >/dev/null 2>&1; then
+          if aws ecr describe-images --repository-name ${{ env.ECR_FRONTEND_REPO }} --image-ids imageTag=${COMMIT_TAG} >/dev/null 2>&1; then
             echo "✅ Found required frontend image: ${FRONTEND_URI}"
             echo "frontend_image_uri=${FRONTEND_URI}" >> $GITHUB_OUTPUT
           else
             echo "❌ ERROR: Required frontend image not found: ${FRONTEND_URI}"
-            echo "Please run the 'Docker Build and Test' workflow first to build and publish images."
+            echo "Expected tag: ${COMMIT_TAG}"
+            echo "Please ensure the Docker Build & Test workflow completed successfully."
             exit 1
           fi
           
           # Verify agent image exists (required)
-          if aws ecr describe-images --repository-name ${{ env.ECR_AGENT_REPO }} --image-ids imageTag=${BRANCH_NAME} >/dev/null 2>&1; then
+          if aws ecr describe-images --repository-name ${{ env.ECR_AGENT_REPO }} --image-ids imageTag=${COMMIT_TAG} >/dev/null 2>&1; then
             echo "✅ Found required agent image: ${AGENT_URI}"
             echo "agent_image_uri=${AGENT_URI}" >> $GITHUB_OUTPUT
           else
             echo "❌ ERROR: Required agent image not found: ${AGENT_URI}"
-            echo "Please run the 'Docker Build and Test' workflow first to build and publish images."
+            echo "Expected tag: ${COMMIT_TAG}"
+            echo "Please ensure the Docker Build & Test workflow completed successfully."
             exit 1
           fi
           
-          echo "🎉 All required ECR images found and ready for deployment!"
+          echo "🎉 All required ECR images found with exact commit hash!"
+          echo "Using precise image versions for deployment."
 
       - name: Bootstrap CDK Environment
         working-directory: ./infra
@@ -150,6 +192,8 @@ jobs:
           echo "✅ CDK Deployment completed successfully!"
           echo "🌍 Environment: ${{ needs.get-environment.outputs.env_name }}"
           echo "📍 Region: ${{ needs.get-environment.outputs.aws_region }}"
-          echo "📦 Frontend: Used ECR image ${{ steps.check-images.outputs.frontend_image_uri }}"
-          echo "📦 Agent: Used ECR image ${{ steps.check-images.outputs.agent_image_uri }}"
-          echo "⚡ Fast deployment completed using pre-built container images!"
+          echo "🌿 Branch: ${{ needs.get-environment.outputs.branch_name }}"
+          echo "📝 Commit: ${{ needs.get-environment.outputs.commit_sha }}"
+          echo "📦 Frontend: ${{ steps.check-images.outputs.frontend_image_uri }}"
+          echo "📦 Agent: ${{ steps.check-images.outputs.agent_image_uri }}"
+          echo "⚡ Deployment completed using exact commit version!"
