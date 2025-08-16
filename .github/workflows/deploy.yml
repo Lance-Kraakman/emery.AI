@@ -6,6 +6,22 @@ on:
       - main
       - staging
       - develop
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+        - dev
+        - staging
+        - production
+
+env:
+  AWS_REGION: ap-southeast-2
+  ECR_FRONTEND_REPO: emery-frontend
+  ECR_AGENT_REPO: emery-agent
 
 jobs:
   get-environment:
@@ -17,14 +33,17 @@ jobs:
       - name: Identify Environment
         id: get_env
         run: |
-          if [ "${{ github.ref_name }}" = "main" ]; then
+          # Use manual input if workflow_dispatch, otherwise determine from branch
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "env_name=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_name }}" = "main" ]; then
             echo "env_name=production" >> $GITHUB_OUTPUT
           elif [ "${{ github.ref_name }}" = "staging" ]; then
             echo "env_name=staging" >> $GITHUB_OUTPUT
           elif [ "${{ github.ref_name }}" = "develop" ]; then
             echo "env_name=dev" >> $GITHUB_OUTPUT
           fi
-          echo "aws_region=${{ vars.AWS_REGION || 'ap-southeast-2' }}" >> $GITHUB_OUTPUT
+          echo "aws_region=${{ env.AWS_REGION }}" >> $GITHUB_OUTPUT
 
   deploy:
     needs: get-environment
@@ -53,9 +72,52 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
+          # Support both IAM roles (preferred) and access keys (fallback)
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ needs.get-environment.outputs.aws_region }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Verify required ECR images exist
+        id: check-images
+        run: |
+          BRANCH_NAME=${{ github.ref_name }}
+          AWS_ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}
+          ECR_REGISTRY=${AWS_ACCOUNT_ID}.dkr.ecr.${{ needs.get-environment.outputs.aws_region }}.amazonaws.com
+          
+          # Define required image URIs
+          FRONTEND_URI="${ECR_REGISTRY}/${{ env.ECR_FRONTEND_REPO }}:${BRANCH_NAME}"
+          AGENT_URI="${ECR_REGISTRY}/${{ env.ECR_AGENT_REPO }}:${BRANCH_NAME}"
+          
+          echo "🔍 Checking for required ECR images..."
+          echo "Frontend image: ${FRONTEND_URI}"
+          echo "Agent image: ${AGENT_URI}"
+          
+          # Verify frontend image exists (required)
+          if aws ecr describe-images --repository-name ${{ env.ECR_FRONTEND_REPO }} --image-ids imageTag=${BRANCH_NAME} >/dev/null 2>&1; then
+            echo "✅ Found required frontend image: ${FRONTEND_URI}"
+            echo "frontend_image_uri=${FRONTEND_URI}" >> $GITHUB_OUTPUT
+          else
+            echo "❌ ERROR: Required frontend image not found: ${FRONTEND_URI}"
+            echo "Please run the 'Docker Build and Test' workflow first to build and publish images."
+            exit 1
+          fi
+          
+          # Verify agent image exists (required)
+          if aws ecr describe-images --repository-name ${{ env.ECR_AGENT_REPO }} --image-ids imageTag=${BRANCH_NAME} >/dev/null 2>&1; then
+            echo "✅ Found required agent image: ${AGENT_URI}"
+            echo "agent_image_uri=${AGENT_URI}" >> $GITHUB_OUTPUT
+          else
+            echo "❌ ERROR: Required agent image not found: ${AGENT_URI}"
+            echo "Please run the 'Docker Build and Test' workflow first to build and publish images."
+            exit 1
+          fi
+          
+          echo "🎉 All required ECR images found and ready for deployment!"
 
       - name: Bootstrap CDK Environment
         working-directory: ./infra
@@ -65,6 +127,29 @@ jobs:
 
       - name: Deploy CDK Stack
         working-directory: ./infra
+        env:
+          # Use verified ECR images (guaranteed to exist after previous step)
+          FRONTEND_IMAGE_URI: ${{ steps.check-images.outputs.frontend_image_uri }}
+          AGENT_IMAGE_URI: ${{ steps.check-images.outputs.agent_image_uri }}
         run: |
           source .venv/bin/activate
-          cdk deploy --all --require-approval never -c env=${{ needs.get-environment.outputs.env_name }} -c aws_account_id=${{ secrets.AWS_ACCOUNT_ID }} -c region=${{ needs.get-environment.outputs.aws_region }}
+          
+          echo "🚀 Deploying CDK stack with ECR images..."
+          echo "Environment: ${{ needs.get-environment.outputs.env_name }}"
+          echo "Region: ${{ needs.get-environment.outputs.aws_region }}"
+          echo "📦 Frontend image: $FRONTEND_IMAGE_URI"
+          echo "📦 Agent image: $AGENT_IMAGE_URI"
+          
+          cdk deploy --all --require-approval never \
+            -c env=${{ needs.get-environment.outputs.env_name }} \
+            -c aws_account_id=${{ secrets.AWS_ACCOUNT_ID }} \
+            -c region=${{ needs.get-environment.outputs.aws_region }}
+
+      - name: Output deployment info
+        run: |
+          echo "✅ CDK Deployment completed successfully!"
+          echo "🌍 Environment: ${{ needs.get-environment.outputs.env_name }}"
+          echo "📍 Region: ${{ needs.get-environment.outputs.aws_region }}"
+          echo "📦 Frontend: Used ECR image ${{ steps.check-images.outputs.frontend_image_uri }}"
+          echo "📦 Agent: Used ECR image ${{ steps.check-images.outputs.agent_image_uri }}"
+          echo "⚡ Fast deployment completed using pre-built container images!"
