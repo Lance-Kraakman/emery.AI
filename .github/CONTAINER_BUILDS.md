@@ -9,7 +9,7 @@ We now have a complete CI/CD pipeline that:
 - ✅ **Shares build cache between GitHub and AWS**
 - ✅ **Publishes images to AWS ECR (Elastic Container Registry)**
 - ✅ **Uses pre-built ECR images for ECS deployment**
-- ✅ **Runs security scans with Trivy**
+- ⏸️ **Security scanning temporarily disabled**
 - ✅ **Native AWS integration for optimal performance**
 
 ## Workflows
@@ -21,7 +21,7 @@ We now have a complete CI/CD pipeline that:
 - **Parallel builds**: Frontend and agent images built simultaneously
 - **Faster completion**: ~50% reduction in total build time
 - **Independent caching**: Separate cache scopes for each image type
-- **Security scans**: Trivy scans on both images in parallel
+- **Security scans**: Temporarily disabled (can be re-enabled later)
 - **Container testing**: Functionality tests for both images
 - **ECR publishing**: Publishes to AWS ECR with commit hash tags
 
@@ -94,9 +94,9 @@ cd infra && cdk deploy
 - Reduced AWS build minutes
 - Shared cache eliminates redundant builds
 
-### 🔒 **Security**
-- Trivy security scanning on all images
-- Vulnerability reports in GitHub Security tab
+### 🔒 **Security** (Temporarily Disabled)
+- Security scanning will be re-enabled once image tagging is fixed
+- Can be uncommented in workflow when ready
 
 ### 🧪 **Better Testing**
 - Container functionality tests on every PR
@@ -149,12 +149,14 @@ AGENT_IMAGE_URI=123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/emery-agent:ta
 2. Check image exists in registry
 3. Validate CDK permissions
 
-## Security Scanning
+## Security Scanning (Temporarily Disabled)
 
-All images are scanned with Trivy for:
+Security scanning with Trivy has been temporarily disabled due to image tagging issues.
+
+**When re-enabled, it will scan for:**
 - CVE vulnerabilities
 - Secret detection
 - License compliance
 - Configuration issues
 
-Results appear in GitHub Security tab under "Code scanning alerts".
+**To re-enable:** Uncomment the security scan steps in the workflow files.

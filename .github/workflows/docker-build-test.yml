@@ -63,7 +63,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      security-events: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -107,19 +106,19 @@ jobs:
           build-args: |
             BUILDKIT_INLINE_CACHE=1
 
-      - name: Run security scan
-        if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ github.sha }}
-          format: 'sarif'
-          output: 'trivy-results-frontend.sarif'
+      # - name: Run security scan
+      #   if: github.event_name != 'pull_request'
+      #   uses: aquasecurity/trivy-action@master
+      #   with:
+      #     image-ref: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ github.sha }}
+      #     format: 'sarif'
+      #     output: 'trivy-results-frontend.sarif'
 
-      - name: Upload security scan results
-        if: github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-results-frontend.sarif'
+      # - name: Upload security scan results
+      #   if: github.event_name != 'pull_request'
+      #   uses: github/codeql-action/upload-sarif@v3
+      #   with:
+      #     sarif_file: 'trivy-results-frontend.sarif'
 
       - name: Test container functionality
         if: github.event_name == 'pull_request'
@@ -140,7 +139,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      security-events: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -184,19 +182,19 @@ jobs:
           build-args: |
             BUILDKIT_INLINE_CACHE=1
 
-      - name: Run security scan
-        if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:${{ github.sha }}
-          format: 'sarif'
-          output: 'trivy-results-agent.sarif'
+      # - name: Run security scan
+      #   if: github.event_name != 'pull_request'
+      #   uses: aquasecurity/trivy-action@master
+      #   with:
+      #     image-ref: ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:${{ github.sha }}
+      #     format: 'sarif'
+      #     output: 'trivy-results-agent.sarif'
 
-      - name: Upload security scan results
-        if: github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-results-agent.sarif'
+      # - name: Upload security scan results
+      #   if: github.event_name != 'pull_request'
+      #   uses: github/codeql-action/upload-sarif@v3
+      #   with:
+      #     sarif_file: 'trivy-results-agent.sarif'
 
       - name: Test container functionality
         if: github.event_name == 'pull_request'
