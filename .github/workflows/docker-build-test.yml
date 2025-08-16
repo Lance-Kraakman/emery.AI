@@ -14,8 +14,28 @@ env:
   AGENT_REPO: emery-agent
 
 jobs:
-  build-and-test:
+  get-environment:
     runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.get_env.outputs.env_name }}
+    steps:
+      - name: Identify Environment
+        id: get_env
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "env_name=production" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_name }}" = "staging" ]; then
+            echo "env_name=staging" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_name }}" = "develop" ]; then
+            echo "env_name=dev" >> $GITHUB_OUTPUT
+          else
+            echo "env_name=dev" >> $GITHUB_OUTPUT
+          fi
+
+  build-and-test:
+    needs: get-environment
+    runs-on: ubuntu-latest
+    environment: ${{ needs.get-environment.outputs.env_name }}
     permissions:
       contents: read
       id-token: write
