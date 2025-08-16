@@ -29,7 +29,7 @@ We now have a complete CI/CD pipeline that:
 - Docker layer caching speeds up builds by 60-80%
 - Independent cache scopes: `frontend` and `agent` 
 - No cache conflicts between image types
-- Single platform builds (amd64) for faster iteration
+- Single platform builds (arm64) for better runner availability
 - ECR registry cache + GitHub Actions cache for optimal performance
 
 ### 2. `deploy.yml` - CDK Deployment
@@ -47,12 +47,12 @@ We now have a complete CI/CD pipeline that:
 ### Frontend Image
 - **Registry:** `{account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery/frontend`
 - **Tags:** `main`, `develop`, `pr-123`, `main-sha123abc`
-- **Platforms:** linux/amd64, linux/arm64
+- **Platforms:** linux/arm64
 
 ### Agent Image  
 - **Registry:** `{account-id}.dkr.ecr.ap-southeast-2.amazonaws.com/emery/agent`
 - **Tags:** `main`, `develop`, `pr-123`, `main-sha123abc`
-- **Platforms:** linux/amd64, linux/arm64
+- **Platforms:** linux/arm64
 
 ## Usage
 
@@ -89,7 +89,7 @@ cd infra && cdk deploy
 ### 🚀 **Faster Deployments**
 - **Parallel builds**: Frontend and agent built simultaneously
 - **Optimized Docker layers**: Dependencies cached separately from source code
-- **Single platform**: linux/amd64 only for faster iteration (was 15+ min → ~5-7 min)
+- **Single platform**: linux/arm64 for better GitHub runner availability (was 15+ min → ~5-7 min)
 - **No Docker build time** during AWS deployment
 - **~70% faster total pipeline**: From build to deployment
 
