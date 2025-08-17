@@ -216,17 +216,8 @@ class InfraStack(Stack):
             "maximumPercent": 200
         }
         
-        # AIDEV-NOTE: Configure ECS container health check for frontend service
-        if frontend_service.task_definition.default_container:
-            frontend_service.task_definition.default_container.add_health_check(
-                ecs.HealthCheck(
-                    command=["CMD-SHELL", "curl -f http://localhost:3000/ || exit 1"],
-                    interval=Duration.seconds(30),
-                    timeout=Duration.seconds(10),
-                    retries=3,
-                    start_period=Duration.seconds(60)  # Allow time for Next.js startup
-                )
-            )
+        # AIDEV-NOTE: ECS health checks configured in task definition, not here
+        # Health check is configured via healthCheck property in container definition
 
         # Create a new Task Definition for the scheduler
         scheduler_task_definition = ecs.FargateTaskDefinition(
