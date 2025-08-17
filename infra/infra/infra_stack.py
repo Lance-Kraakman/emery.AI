@@ -239,16 +239,8 @@ class InfraStack(Stack):
             )
         )
         
-        # AIDEV-NOTE: Configure ECS container health check for scheduler service
-        scheduler_container.add_health_check(
-            ecs.HealthCheck(
-                command=["CMD-SHELL", "python -c \"import sys; sys.exit(0)\" || exit 1"],  # Simple Python health check
-                interval=Duration.seconds(30),
-                timeout=Duration.seconds(10),
-                retries=3,
-                start_period=Duration.seconds(60)  # Allow time for scheduler startup
-            )
-        )
+        # AIDEV-NOTE: ECS health checks should be configured in container definition, not added afterwards
+        # For scheduler, we rely on ECS service health monitoring instead of custom health checks
 
         # Create the Fargate service for the scheduler
         scheduler_service = ecs.FargateService(
