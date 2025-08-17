@@ -1,9 +1,7 @@
 import { NextRequest } from 'next/server';
-import { getUserIdFromRequest } from '@/lib/auth';
-import { db } from '@/lib/db/client';
-import { agents } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
-import { getWorkerHealthForOrganization } from '@/lib/agents/grpc-executor';
+
+// AIDEV-NOTE: Force dynamic rendering to prevent build-time database connections
+export const dynamic = 'force-dynamic';
 
 /**
  * Get worker health status for an agent's organization
@@ -14,6 +12,13 @@ export async function GET(
 ): Promise<Response> {
   const params = await context.params;
   try {
+    // Dynamic imports to prevent build-time database connections
+    const { getUserIdFromRequest } = await import('@/lib/auth');
+    const { db } = await import('@/lib/db/client');
+    const { agents } = await import('@/lib/db/schema');
+    const { eq } = await import('drizzle-orm');
+    const { getWorkerHealthForOrganization } = await import('@/lib/agents/grpc-executor');
+    
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });

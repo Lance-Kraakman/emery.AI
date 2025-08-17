@@ -7,7 +7,10 @@ COPY package.json pnpm-lock.yaml ./
 RUN apk add --no-cache git
 RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
 RUN npm i -g pnpm
-RUN pnpm install --frozen-lockfile
+
+# AIDEV-NOTE: Use Docker cache mount for pnpm store to significantly speed up installs
+RUN --mount=type=cache,target=/root/.local/share/pnpm \
+    pnpm install --frozen-lockfile
 
 # Copy source code after dependencies are installed
 COPY . .
