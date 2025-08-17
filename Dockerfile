@@ -37,9 +37,10 @@ RUN npm i -g pnpm && apk add --no-cache curl
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# AIDEV-NOTE: Use Next.js standalone build for web app + bundled scheduler
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+# AIDEV-NOTE: Use regular Next.js build with node_modules (faster build time)
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/public ./public
 
 # AIDEV-NOTE: Copy bundled scheduler (single file, no dependencies needed)
