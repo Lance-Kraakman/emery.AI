@@ -112,11 +112,8 @@ export class SimplifiedAgentScheduler {
       
     } catch (error) {
       console.error('[SCHEDULER] ❌ Error processing existing pending tasks:', error);
-      // Don't throw - scheduler should still start even if this fails
     }
   }
-
-
 }
 
 // Global simplified scheduler instance
