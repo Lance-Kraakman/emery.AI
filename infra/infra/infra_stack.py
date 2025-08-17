@@ -202,11 +202,11 @@ class InfraStack(Stack):
 
         # Configure the health check for the frontend service
         frontend_service.target_group.configure_health_check(
-            path="/",
-            timeout=Duration.seconds(30),
+            path="/api/health",
+            timeout=Duration.seconds(10),
             healthy_threshold_count=2,
-            unhealthy_threshold_count=5,
-            interval=Duration.seconds(60),
+            unhealthy_threshold_count=3,
+            interval=Duration.seconds(30),
         )
         
         # AIDEV-NOTE: Configure deployment settings for frontend service stability
@@ -347,14 +347,14 @@ class InfraStack(Stack):
             )
 
         # AIDEV-NOTE: Configure target group health check for gRPC service
-        # Critical fix: Very lenient health check for initial deployment stability
+        # Optimized for faster deployment recognition while maintaining stability
         agent_service.target_group.configure_health_check(
             protocol=elbv2.Protocol.TCP,
             port="50051",
             healthy_threshold_count=2,    # Minimum healthy checks needed
-            unhealthy_threshold_count=10, # Very tolerant of startup issues
-            interval=Duration.seconds(30),
-            timeout=Duration.seconds(30), # Longer timeout for gRPC connections
+            unhealthy_threshold_count=5,  # Reasonable tolerance for startup issues
+            interval=Duration.seconds(15), # Faster check interval
+            timeout=Duration.seconds(10),  # Shorter timeout for faster recognition
         )
         
         # AIDEV-NOTE: Configure deployment settings for agent service stability
