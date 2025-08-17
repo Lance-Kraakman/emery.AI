@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // AIDEV-NOTE: Enable standalone mode for minimal Docker production builds
-  output: 'standalone',
+  // AIDEV-NOTE: Disable standalone mode to speed up builds - use regular node_modules copy
+  // output: 'standalone',
   // AIDEV-NOTE: Removed env config to allow runtime environment variable loading
   // App router is now stable in Next.js 15
   webpack: (config, { isServer }) => {
