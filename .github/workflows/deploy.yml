@@ -9,6 +9,17 @@ on:
       - main
       - staging
       - develop
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
 
 env:
   AWS_REGION: ap-southeast-2
@@ -21,17 +32,20 @@ jobs:
     steps:
       - name: Check Docker Build Success
         run: |
-          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "✅ Manual deployment triggered - skipping Docker build check"
+          elif [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
             echo "❌ Docker Build & Test workflow failed. Cannot proceed with deployment."
             echo "Please check the Docker build logs and fix any issues."
             exit 1
+          else
+            echo "✅ Docker Build & Test workflow completed successfully"
           fi
-          echo "✅ Docker Build & Test workflow completed successfully"
 
   get-environment:
     runs-on: ubuntu-latest
     needs: [check-docker-build]
-    if: always() && needs.check-docker-build.result == 'success'
+    if: always() && (needs.check-docker-build.result == 'success' || github.event_name == 'workflow_dispatch')
     outputs:
       env_name: ${{ steps.get_env.outputs.env_name }}
       aws_region: ${{ steps.get_env.outputs.aws_region }}
@@ -41,20 +55,30 @@ jobs:
       - name: Identify Environment
         id: get_env
         run: |
-          # For workflow_run events, get branch and SHA from the triggering workflow
-          BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
-          COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
-          echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
-          echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
-          
-          if [ "${BRANCH_NAME}" = "main" ]; then
-            echo "env_name=production" >> $GITHUB_OUTPUT
-          elif [ "${BRANCH_NAME}" = "staging" ]; then
-            echo "env_name=staging" >> $GITHUB_OUTPUT
-          elif [ "${BRANCH_NAME}" = "develop" ]; then
-            echo "env_name=dev" >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # For manual dispatch, use current branch and commit
+            BRANCH_NAME="${{ github.ref_name }}"
+            COMMIT_SHA="${{ github.sha }}"
+            ENV_NAME="${{ github.event.inputs.environment }}"
+            echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+            echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+            echo "env_name=${ENV_NAME}" >> $GITHUB_OUTPUT
           else
-            echo "env_name=dev" >> $GITHUB_OUTPUT
+            # For workflow_run events, get branch and SHA from the triggering workflow
+            BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
+            COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
+            echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+            echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+            
+            if [ "${BRANCH_NAME}" = "main" ]; then
+              echo "env_name=production" >> $GITHUB_OUTPUT
+            elif [ "${BRANCH_NAME}" = "staging" ]; then
+              echo "env_name=staging" >> $GITHUB_OUTPUT
+            elif [ "${BRANCH_NAME}" = "develop" ]; then
+              echo "env_name=dev" >> $GITHUB_OUTPUT
+            else
+              echo "env_name=dev" >> $GITHUB_OUTPUT
+            fi
           fi
           echo "aws_region=${{ env.AWS_REGION }}" >> $GITHUB_OUTPUT
 

@@ -4,10 +4,10 @@ WORKDIR /app
 
 # Copy package files first for better caching
 COPY package.json pnpm-lock.yaml ./
-RUN apk add --no-cache git && \
-    git config --global url."https://github.com/".insteadOf "git@github.com:" && \
-    npm i -g pnpm && \
-    pnpm install --frozen-lockfile
+RUN apk add --no-cache git
+RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
+RUN npm i -g pnpm
+RUN pnpm install --frozen-lockfile
 
 # Copy source code after dependencies are installed
 COPY . .
