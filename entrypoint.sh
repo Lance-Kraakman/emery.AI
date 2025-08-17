@@ -1,8 +1,9 @@
 #!/bin/sh
 
 if [ "$1" = "scheduler" ]; then
-  exec pnpm scheduler:start
+  # AIDEV-NOTE: Run bundled scheduler (single file, no dependencies)
+  exec node scheduler.js
 else
-  # AIDEV-NOTE: Use pnpm start for normal Next.js mode (not standalone)
-  exec pnpm start
+  # AIDEV-NOTE: Use standalone Node.js server for minimal production deployment
+  exec node server.js
 fi
