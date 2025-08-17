@@ -1,10 +1,10 @@
-name: Docker Build & Test
+name: Build & Deploy
 
 on:
   push:
-    branches: [main, develop, refactor-best-practices]
+    branches: [main, staging, develop]
   pull_request:
-    branches: [main, develop, refactor-best-practices]
+    branches: [main, staging, develop]
 
 env:
   AWS_REGION: ap-southeast-2
@@ -205,3 +205,48 @@ jobs:
             --entrypoint="" \
             ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:${IMAGE_TAG} \
             sh -c "python -c 'import emery_agents; print(\"✅ Agent container test passed\")'"
+
+  # Deploy job - runs after successful build
+  deploy:
+    needs: [build-frontend, build-agent]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && contains(fromJson('["main", "staging", "develop"]'), github.ref_name)
+    environment: ${{ github.ref_name == 'main' && 'production' || github.ref_name == 'staging' && 'staging' || 'dev' }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install CDK and Python Dependencies
+        working-directory: ./infra
+        run: |
+          npm install -g aws-cdk
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy CDK Stack
+        working-directory: ./infra
+        env:
+          # Use branch name as image tag
+          FRONTEND_IMAGE_URI: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ github.ref_name }}
+          AGENT_IMAGE_URI: ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:${{ github.ref_name }}
+        run: |
+          source .venv/bin/activate
+          echo "🚀 Deploying to ${{ github.ref_name == 'main' && 'production' || github.ref_name == 'staging' && 'staging' || 'dev' }} environment..."
+          cdk deploy --require-approval never --all
