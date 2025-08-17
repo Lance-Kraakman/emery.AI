@@ -6,9 +6,6 @@ import { auth } from '@/lib/auth';
 import AgentDashboardClient from './components/AgentDashboardClient';
 
 // AIDEV-NOTE: Agents page refactored to use consistent design patterns and improved error handling
-// AIDEV-NOTE: Page is dynamic due to session/organization context requirements
-
-export const dynamic = 'force-dynamic';
 
 export default async function AgentsPage() {
   // Get current user's organization
