@@ -30,7 +30,7 @@ function parseConnectionString(dbUrl: string): string {
   return dbUrl;
 }
 
-// AIDEV-NOTE: Simple standard database connection - no lazy loading complexity
+// AIDEV-NOTE: Use dummy connection during build to prevent timeouts
 const rawConnectionString = process.env.DATABASE_URL;
 if (!rawConnectionString) {
   throw new Error('DATABASE_URL environment variable is not set');
@@ -38,11 +38,15 @@ if (!rawConnectionString) {
 
 const connectionString = parseConnectionString(rawConnectionString);
 
+// AIDEV-NOTE: For build-time dummy URLs, use a very short timeout to fail fast
+const isBuildDummyUrl = connectionString.includes('build:build@localhost');
+const connectTimeout = isBuildDummyUrl ? 1 : 30; // 1 second for dummy, 30 for real
+
 export const rawClient = postgres(connectionString, {
   max: 5, // Small pool for container environment
   idle_timeout: 30, 
   max_lifetime: 60 * 60,
-  connect_timeout: 30, // Longer timeout for Docker networking
+  connect_timeout: connectTimeout, // Short timeout for build-time dummy URLs
   prepare: false, // Disable prepared statements
   ssl: connectionString.includes('rds.amazonaws.com') ? 'require' : false, // SSL for AWS RDS, none for local Docker
   onnotice: (notice) => {
