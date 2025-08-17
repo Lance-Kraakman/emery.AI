@@ -159,7 +159,7 @@ export async function getAgents(filters: { teamId?: number | string, searchQuery
       
       const team = await db.select({ agentIds: teams.agentIds }).from(teams).where(eq(teams.id, teamIdNumber));
       if (team.length > 0 && team[0].agentIds) {
-        const agentIdsAsNumbers = team[0].agentIds.map(id => Number(id));
+        const agentIdsAsNumbers = team[0].agentIds.map((id: any) => Number(id));
         if(agentIdsAsNumbers.length > 0) {
           conditions.push(sql`${agents.id} IN ${agentIdsAsNumbers}`);
         } else {

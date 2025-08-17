@@ -3,6 +3,7 @@ import { checkSetupStatus } from "@/app/actions/setup";
 import { redirect } from "next/navigation";
 import { SetupForm } from "./SetupForm";
 
+
 export default async function SetupPage() {
   const session = await auth();
   

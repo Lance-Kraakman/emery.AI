@@ -30,38 +30,68 @@ function parseConnectionString(dbUrl: string): string {
   return dbUrl;
 }
 
-const rawConnectionString = process.env.DATABASE_URL;
+// AIDEV-NOTE: Lazy initialization that only creates connection when needed
+let _client: postgres.Sql | null = null;
+let _db: ReturnType<typeof drizzle> | null = null;
 
-if (!rawConnectionString) {
-  throw new Error('DATABASE_URL environment variable is not set');
+function initClient() {
+  if (_client) return _client;
+  
+  const rawConnectionString = process.env.DATABASE_URL;
+  if (!rawConnectionString) {
+    throw new Error('DATABASE_URL environment variable is not set');
+  }
+  
+  const connectionString = parseConnectionString(rawConnectionString);
+  console.log('[DATABASE] Connecting to:', connectionString.replace(/:[^:@]*@/, ':***@'));
+  
+  _client = postgres(connectionString, {
+    max: 5, // Small pool for container environment
+    idle_timeout: 30, 
+    max_lifetime: 60 * 60,
+    connect_timeout: 30, // Longer timeout for Docker networking
+    prepare: false, // Disable prepared statements
+    ssl: connectionString.includes('rds.amazonaws.com') ? 'require' : false, // SSL for AWS RDS, none for local Docker
+    onnotice: (notice) => {
+      if (notice.severity === 'WARNING' || notice.severity === 'NOTICE') {
+        console.log(`[POSTGRES-${notice.severity}]:`, notice.message);
+      }
+    }
+  });
+  
+  return _client;
 }
 
-const connectionString = parseConnectionString(rawConnectionString);
+function initDb() {
+  if (_db) return _db;
+  _db = drizzle(initClient(), { schema });
+  return _db;
+}
 
-console.log('[DATABASE] Connecting to:', connectionString.replace(/:[^:@]*@/, ':***@'));
+// AIDEV-NOTE: Export getters that initialize lazily but maintain types
+export const db = new Proxy({} as any, {
+  get: (target, prop) => (initDb() as any)[prop],
+  has: (target, prop) => prop in initDb(),
+  ownKeys: (target) => Reflect.ownKeys(initDb()),
+  getOwnPropertyDescriptor: (target, prop) => Reflect.getOwnPropertyDescriptor(initDb(), prop)
+}) as ReturnType<typeof drizzle<typeof schema>>;
 
-// AIDEV-NOTE: Create postgres client optimized for both Docker and AWS deployment
-const client = postgres(connectionString, {
-  max: 5, // Small pool for container environment
-  idle_timeout: 30, 
-  max_lifetime: 60 * 60,
-  connect_timeout: 30, // Longer timeout for Docker networking
-  prepare: false, // Disable prepared statements
-  ssl: connectionString.includes('rds.amazonaws.com') ? 'require' : false, // SSL for AWS RDS, none for local Docker
-  onnotice: (notice) => {
-    if (notice.severity === 'WARNING' || notice.severity === 'NOTICE') {
-      console.log(`[POSTGRES-${notice.severity}]:`, notice.message);
-    }
-  }
-});
-
-export const db = drizzle(client, { schema });
-export { client as rawClient }; // Export raw client for dynamic operations
+export const rawClient = new Proxy({} as any, {
+  get: (target, prop) => (initClient() as any)[prop],
+  has: (target, prop) => prop in initClient(),
+  ownKeys: (target) => Reflect.ownKeys(initClient()),
+  getOwnPropertyDescriptor: (target, prop) => Reflect.getOwnPropertyDescriptor(initClient(), prop)
+}) as postgres.Sql;
 
 export type DbClient = typeof db;
 
 // AIDEV-NOTE: Create dedicated LISTEN/NOTIFY clients with same configuration
 export function createNotificationClient(): postgres.Sql {
+  const rawConnectionString = process.env.DATABASE_URL;
+  if (!rawConnectionString) {
+    throw new Error('DATABASE_URL environment variable is not set');
+  }
+  const connectionString = parseConnectionString(rawConnectionString);
   return postgres(connectionString, {
     max: 1, // Only 1 connection for LISTEN/NOTIFY
     idle_timeout: 0, // Keep connection alive for listening
@@ -80,7 +110,7 @@ export function createNotificationClient(): postgres.Sql {
 // AIDEV-NOTE: Connection monitoring utility for debugging connection leaks
 export async function getConnectionStats() {
   try {
-    const result = await client`
+    const result = await rawClient`
       SELECT 
         count(*) as total_connections,
         count(*) FILTER (WHERE state = 'active') as active_connections,
