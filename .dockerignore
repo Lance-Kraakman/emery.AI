@@ -7,5 +7,30 @@ node_modules
 .git
 .gitignore
 
-# Infra
-infra/cdk.out
+# Infrastructure (entire directory - 20GB)
+infra/
+
+# Python agents (not needed for frontend build)
+emery-agents/
+
+# Build artifacts
+dist/
+*.tsbuildinfo
+
+# Development files
+.env.local
+.env.development
+.env.test
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
