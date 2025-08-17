@@ -46,6 +46,9 @@ COPY --from=builder /app/public ./public
 # AIDEV-NOTE: Copy bundled scheduler (single file, no dependencies needed)
 COPY --from=builder /app/dist/scheduler.js ./scheduler.js
 
+# AIDEV-NOTE: Copy proto files needed by scheduler at runtime
+COPY --from=builder /app/proto ./proto
+
 # Copy the entrypoint script
 COPY entrypoint.sh .
 
