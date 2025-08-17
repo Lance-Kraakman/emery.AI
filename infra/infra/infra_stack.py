@@ -309,18 +309,8 @@ class InfraStack(Stack):
             "maximumPercent": 100        # Prevent resource contention during deployment
         }
         
-        # AIDEV-NOTE: Configure ECS container health check for agent service
-        # This is separate from the target group health check and ensures container health
-        if agent_service.task_definition.default_container:
-            agent_service.task_definition.default_container.add_health_check(
-                ecs.HealthCheck(
-                    command=["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(5); s.connect(('127.0.0.1', 50051)); s.close()\" || exit 1"],
-                    interval=Duration.seconds(30),
-                    timeout=Duration.seconds(10),
-                    retries=3,
-                    start_period=Duration.seconds(120)  # Allow time for gRPC server startup
-                )
-            )
+        # AIDEV-NOTE: ECS health checks should be configured in container definition, not added afterwards
+        # For agent gRPC service, we rely on ECS service health monitoring
 
         # Pass the public DNS of the agent service's NLB to the frontend service
         if frontend_service.task_definition.default_container:
