@@ -216,8 +216,24 @@ class InfraStack(Stack):
             "maximumPercent": 200
         }
         
-        # AIDEV-NOTE: ECS health checks configured in task definition, not here
-        # Health check is configured via healthCheck property in container definition
+        # AIDEV-NOTE: Add ECR permissions to task execution role for pulling images
+        if frontend_image_uri:  # Only needed when using ECR images
+            frontend_service.task_definition.execution_role.add_managed_policy(
+                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
+            )
+            # Add specific ECR permissions
+            frontend_service.task_definition.execution_role.add_to_policy(
+                iam.PolicyStatement(
+                    effect=iam.Effect.ALLOW,
+                    actions=[
+                        "ecr:GetAuthorizationToken",
+                        "ecr:BatchCheckLayerAvailability", 
+                        "ecr:GetDownloadUrlForLayer",
+                        "ecr:BatchGetImage"
+                    ],
+                    resources=["*"]
+                )
+            )
 
         # Create a new Task Definition for the scheduler
         scheduler_task_definition = ecs.FargateTaskDefinition(
@@ -255,6 +271,25 @@ class InfraStack(Stack):
             security_groups=[db_client_sg],
         )
         
+        # AIDEV-NOTE: Add ECR permissions to scheduler task execution role for pulling images
+        if frontend_image_uri:  # Only needed when using ECR images
+            scheduler_task_definition.execution_role.add_managed_policy(
+                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
+            )
+            # Add specific ECR permissions
+            scheduler_task_definition.execution_role.add_to_policy(
+                iam.PolicyStatement(
+                    effect=iam.Effect.ALLOW,
+                    actions=[
+                        "ecr:GetAuthorizationToken",
+                        "ecr:BatchCheckLayerAvailability", 
+                        "ecr:GetDownloadUrlForLayer",
+                        "ecr:BatchGetImage"
+                    ],
+                    resources=["*"]
+                )
+            )
+
         # AIDEV-NOTE: Configure deployment settings for scheduler service stability
         cfn_scheduler_service = scheduler_service.node.default_child
         cfn_scheduler_service.deployment_configuration = {
@@ -290,6 +325,26 @@ class InfraStack(Stack):
 
         # Add dependency for the agent service
         agent_service.service.node.add_dependency(migration_trigger)
+
+        # AIDEV-NOTE: Add ECR permissions to agent task execution role for pulling images
+        agent_image_uri = os.environ.get('AGENT_IMAGE_URI')
+        if agent_image_uri:  # Only needed when using ECR images
+            agent_service.task_definition.execution_role.add_managed_policy(
+                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
+            )
+            # Add specific ECR permissions
+            agent_service.task_definition.execution_role.add_to_policy(
+                iam.PolicyStatement(
+                    effect=iam.Effect.ALLOW,
+                    actions=[
+                        "ecr:GetAuthorizationToken",
+                        "ecr:BatchCheckLayerAvailability", 
+                        "ecr:GetDownloadUrlForLayer",
+                        "ecr:BatchGetImage"
+                    ],
+                    resources=["*"]
+                )
+            )
 
         # AIDEV-NOTE: Configure target group health check for gRPC service
         # Critical fix: Very lenient health check for initial deployment stability
