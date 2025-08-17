@@ -346,16 +346,9 @@ class InfraStack(Stack):
                 )
             )
 
-        # AIDEV-NOTE: Configure target group health check for gRPC service
-        # Optimized for faster deployment recognition while maintaining stability
-        agent_service.target_group.configure_health_check(
-            protocol=elbv2.Protocol.TCP,
-            port="50051",
-            healthy_threshold_count=2,    # Minimum healthy checks needed
-            unhealthy_threshold_count=5,  # Reasonable tolerance for startup issues
-            interval=Duration.seconds(15), # Faster check interval
-            timeout=Duration.seconds(10),  # Shorter timeout for faster recognition
-        )
+        # AIDEV-NOTE: No health checks for gRPC service - relies on ECS task health only
+        # The gRPC agent is internal-only, accessed by frontend via internal network
+        # TCP health checks on gRPC can be unreliable during model loading
         
         # AIDEV-NOTE: Configure deployment settings for agent service stability
         cfn_agent_service = agent_service.service.node.default_child
