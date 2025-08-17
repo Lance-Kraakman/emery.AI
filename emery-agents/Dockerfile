@@ -9,8 +9,9 @@ RUN pip install uv
 # Copy dependency files for layer caching
 COPY ./pyproject.toml ./uv.lock ./README.md ./
 
-# Install dependencies using uv
-RUN uv pip install . --system
+# AIDEV-NOTE: Use Docker cache mount for uv cache to significantly speed up installs
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install . --system
 
 # Copy the application code
 COPY ./src ./src

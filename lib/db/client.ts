@@ -30,58 +30,29 @@ function parseConnectionString(dbUrl: string): string {
   return dbUrl;
 }
 
-// AIDEV-NOTE: Lazy initialization that only creates connection when needed
-let _client: postgres.Sql | null = null;
-let _db: ReturnType<typeof drizzle> | null = null;
+// AIDEV-NOTE: Simple standard database connection - no lazy loading complexity
+const rawConnectionString = process.env.DATABASE_URL;
+if (!rawConnectionString) {
+  throw new Error('DATABASE_URL environment variable is not set');
+}
 
-function initClient() {
-  if (_client) return _client;
-  
-  const rawConnectionString = process.env.DATABASE_URL;
-  if (!rawConnectionString) {
-    throw new Error('DATABASE_URL environment variable is not set');
-  }
-  
-  const connectionString = parseConnectionString(rawConnectionString);
-  console.log('[DATABASE] Connecting to:', connectionString.replace(/:[^:@]*@/, ':***@'));
-  
-  _client = postgres(connectionString, {
-    max: 5, // Small pool for container environment
-    idle_timeout: 30, 
-    max_lifetime: 60 * 60,
-    connect_timeout: 30, // Longer timeout for Docker networking
-    prepare: false, // Disable prepared statements
-    ssl: connectionString.includes('rds.amazonaws.com') ? 'require' : false, // SSL for AWS RDS, none for local Docker
-    onnotice: (notice) => {
-      if (notice.severity === 'WARNING' || notice.severity === 'NOTICE') {
-        console.log(`[POSTGRES-${notice.severity}]:`, notice.message);
-      }
+const connectionString = parseConnectionString(rawConnectionString);
+
+export const rawClient = postgres(connectionString, {
+  max: 5, // Small pool for container environment
+  idle_timeout: 30, 
+  max_lifetime: 60 * 60,
+  connect_timeout: 30, // Longer timeout for Docker networking
+  prepare: false, // Disable prepared statements
+  ssl: connectionString.includes('rds.amazonaws.com') ? 'require' : false, // SSL for AWS RDS, none for local Docker
+  onnotice: (notice) => {
+    if (notice.severity === 'WARNING' || notice.severity === 'NOTICE') {
+      console.log(`[POSTGRES-${notice.severity}]:`, notice.message);
     }
-  });
-  
-  return _client;
-}
+  }
+});
 
-function initDb() {
-  if (_db) return _db;
-  _db = drizzle(initClient(), { schema });
-  return _db;
-}
-
-// AIDEV-NOTE: Export getters that initialize lazily but maintain types
-export const db = new Proxy({} as any, {
-  get: (target, prop) => (initDb() as any)[prop],
-  has: (target, prop) => prop in initDb(),
-  ownKeys: (target) => Reflect.ownKeys(initDb()),
-  getOwnPropertyDescriptor: (target, prop) => Reflect.getOwnPropertyDescriptor(initDb(), prop)
-}) as ReturnType<typeof drizzle<typeof schema>>;
-
-export const rawClient = new Proxy({} as any, {
-  get: (target, prop) => (initClient() as any)[prop],
-  has: (target, prop) => prop in initClient(),
-  ownKeys: (target) => Reflect.ownKeys(initClient()),
-  getOwnPropertyDescriptor: (target, prop) => Reflect.getOwnPropertyDescriptor(initClient(), prop)
-}) as postgres.Sql;
+export const db = drizzle(rawClient, { schema });
 
 export type DbClient = typeof db;
 
