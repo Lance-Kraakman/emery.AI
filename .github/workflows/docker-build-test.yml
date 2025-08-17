@@ -106,20 +106,6 @@ jobs:
           build-args: |
             BUILDKIT_INLINE_CACHE=1
 
-      # - name: Run security scan
-      #   if: github.event_name != 'pull_request'
-      #   uses: aquasecurity/trivy-action@master
-      #   with:
-      #     image-ref: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ github.sha }}
-      #     format: 'sarif'
-      #     output: 'trivy-results-frontend.sarif'
-
-      # - name: Upload security scan results
-      #   if: github.event_name != 'pull_request'
-      #   uses: github/codeql-action/upload-sarif@v3
-      #   with:
-      #     sarif_file: 'trivy-results-frontend.sarif'
-
       - name: Test container functionality
         if: github.event_name == 'pull_request'
         run: |
@@ -182,20 +168,6 @@ jobs:
           build-args: |
             BUILDKIT_INLINE_CACHE=1
 
-      # - name: Run security scan
-      #   if: github.event_name != 'pull_request'
-      #   uses: aquasecurity/trivy-action@master
-      #   with:
-      #     image-ref: ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:${{ github.sha }}
-      #     format: 'sarif'
-      #     output: 'trivy-results-agent.sarif'
-
-      # - name: Upload security scan results
-      #   if: github.event_name != 'pull_request'
-      #   uses: github/codeql-action/upload-sarif@v3
-      #   with:
-      #     sarif_file: 'trivy-results-agent.sarif'
-
       - name: Test container functionality
         if: github.event_name == 'pull_request'
         run: |
@@ -243,7 +215,6 @@ jobs:
       - name: Deploy CDK Stack
         working-directory: ./infra
         env:
-          # Use branch name as image tag
           FRONTEND_IMAGE_URI: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ github.ref_name }}
           AGENT_IMAGE_URI: ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:${{ github.ref_name }}
         run: |
