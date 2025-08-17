@@ -23,10 +23,8 @@ ENV ORGANIZATION_ID=default
 # The port your gRPC server listens on
 EXPOSE 50051
 
-# Health check to ensure the service is running
-# AIDEV-NOTE: Extended timeouts for AWS ECS deployment stability
-HEALTHCHECK --interval=30s --timeout=15s --start-period=120s --retries=5 \
-  CMD python -c "import socket; s=socket.socket(); s.settimeout(10); s.connect(('0.0.0.0', 50051)); s.close()" || exit 1
+# AIDEV-NOTE: Health checks are managed by ECS/CDK, not Dockerfile
+# Removed HEALTHCHECK to avoid conflicts with ECS container health checks
 
 # Command to run the gRPC server
 CMD ["python", "-m", "emery_agents.grpc.main"]

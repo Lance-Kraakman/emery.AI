@@ -27,7 +27,7 @@ RUN pnpm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 
-RUN npm i -g pnpm
+RUN npm i -g pnpm && apk add --no-cache curl
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

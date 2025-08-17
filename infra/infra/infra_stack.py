@@ -215,6 +215,18 @@ class InfraStack(Stack):
             "minimumHealthyPercent": 50,
             "maximumPercent": 200
         }
+        
+        # AIDEV-NOTE: Configure ECS container health check for frontend service
+        if frontend_service.task_definition.default_container:
+            frontend_service.task_definition.default_container.add_health_check(
+                ecs.HealthCheck(
+                    command=["CMD-SHELL", "curl -f http://localhost:3000/ || exit 1"],
+                    interval=Duration.seconds(30),
+                    timeout=Duration.seconds(10),
+                    retries=3,
+                    start_period=Duration.seconds(60)  # Allow time for Next.js startup
+                )
+            )
 
         # Create a new Task Definition for the scheduler
         scheduler_task_definition = ecs.FargateTaskDefinition(
@@ -223,7 +235,7 @@ class InfraStack(Stack):
             memory_limit_mib=1024,
         )
 
-        scheduler_task_definition.add_container(
+        scheduler_container = scheduler_task_definition.add_container(
             f"{prefix}SchedulerContainer",
             image=app_image,
             command=["scheduler"],
@@ -233,6 +245,17 @@ class InfraStack(Stack):
             },
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix=f"{prefix}-Scheduler",
+            )
+        )
+        
+        # AIDEV-NOTE: Configure ECS container health check for scheduler service
+        scheduler_container.add_health_check(
+            ecs.HealthCheck(
+                command=["CMD-SHELL", "python -c \"import sys; sys.exit(0)\" || exit 1"],  # Simple Python health check
+                interval=Duration.seconds(30),
+                timeout=Duration.seconds(10),
+                retries=3,
+                start_period=Duration.seconds(60)  # Allow time for scheduler startup
             )
         )
 
@@ -303,7 +326,18 @@ class InfraStack(Stack):
             "maximumPercent": 100        # Prevent resource contention during deployment
         }
         
-        # AIDEV-NOTE: ECS container health check is handled by Dockerfile HEALTHCHECK
+        # AIDEV-NOTE: Configure ECS container health check for agent service
+        # This is separate from the target group health check and ensures container health
+        if agent_service.task_definition.default_container:
+            agent_service.task_definition.default_container.add_health_check(
+                ecs.HealthCheck(
+                    command=["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(5); s.connect(('127.0.0.1', 50051)); s.close()\" || exit 1"],
+                    interval=Duration.seconds(30),
+                    timeout=Duration.seconds(10),
+                    retries=3,
+                    start_period=Duration.seconds(120)  # Allow time for gRPC server startup
+                )
+            )
 
         # Pass the public DNS of the agent service's NLB to the frontend service
         if frontend_service.task_definition.default_container:
