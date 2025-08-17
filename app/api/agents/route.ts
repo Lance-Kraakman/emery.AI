@@ -3,6 +3,9 @@
  * Supports REST API access for agent operations
  */
 
+// AIDEV-NOTE: Force dynamic rendering to prevent build-time database connections
+export const dynamic = 'force-dynamic';
+
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { db } from '@/lib/db/client';
