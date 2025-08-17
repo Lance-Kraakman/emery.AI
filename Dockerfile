@@ -23,6 +23,9 @@ ENV GITHUB_CLIENT_SECRET="build-dummy-client-secret"
 ENV RESEND_API_KEY="build-dummy-resend-key"
 RUN pnpm run build
 
+# AIDEV-NOTE: Build bundled scheduler (single 1.3MB file, no dependencies)
+RUN pnpm scheduler:build
+
 # 2. Production image
 FROM node:20-alpine AS runner
 WORKDIR /app
@@ -32,16 +35,13 @@ RUN npm i -g pnpm && apk add --no-cache curl
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# AIDEV-NOTE: Use normal Next.js build (not standalone) with full dependencies
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
-COPY --from=builder /app/tsconfig.json ./tsconfig.json
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
+# AIDEV-NOTE: Use Next.js standalone build for web app + bundled scheduler
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/lib ./lib
-COPY --from=builder /app/proto ./proto
+
+# AIDEV-NOTE: Copy bundled scheduler (single file, no dependencies needed)
+COPY --from=builder /app/dist/scheduler.js ./scheduler.js
 
 # Copy the entrypoint script
 COPY entrypoint.sh .
