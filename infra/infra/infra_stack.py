@@ -95,7 +95,8 @@ class InfraStack(Stack):
             vpc=vpc,
             instance_type=ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO),
             machine_image=ec2.MachineImage.latest_amazon_linux2(),
-            subnet_selection=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC)
+            subnet_selection=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
+            key_name="dev-bastion-machine"  # Use your specific key pair
         )
         
         # Allow bastion to connect to database
