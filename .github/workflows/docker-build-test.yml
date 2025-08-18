@@ -196,6 +196,24 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install Node Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare Lambda Build
+        run: pnpm setup:lambda
+
       - name: Install CDK and Python Dependencies
         working-directory: ./infra
         run: |
