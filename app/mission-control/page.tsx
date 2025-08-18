@@ -216,14 +216,16 @@ function CustomChat() {
     
     if (e.key === 'ArrowUp') {
       e.preventDefault()
-      setSelectedSuggestionIndex(prev => 
-        prev < suggestions.length - 1 ? prev + 1 : prev
-      )
+      setSelectedSuggestionIndex(prev => {
+        if (prev === -1) return suggestions.length - 1 // Start at bottom/last item
+        return prev > 0 ? prev - 1 : suggestions.length - 1 // Go up, wrap to bottom
+      })
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setSelectedSuggestionIndex(prev => 
-        prev > -1 ? prev - 1 : -1
-      )
+      setSelectedSuggestionIndex(prev => {
+        if (prev === -1) return 0 // Start at top/first item
+        return prev < suggestions.length - 1 ? prev + 1 : 0 // Go down, wrap to top
+      })
     } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
       e.preventDefault()
       handleSuggestionClick(suggestions[selectedSuggestionIndex])
