@@ -6,7 +6,7 @@ RUN npm install -g pnpm
 
 WORKDIR ${LAMBDA_TASK_ROOT}
 
-# Copy migration-specific files
+# Copy migration-specific files (copied to Lambda directory)
 COPY drizzle.config.ts ./
 COPY lib/db ./lib/db/
 COPY drizzle ./drizzle/
@@ -15,11 +15,11 @@ COPY drizzle ./drizzle/
 RUN mkdir -p lib/db/migrations
 
 # Copy Lambda-specific package.json and install minimal dependencies
-COPY infra/lambda/migration-runner/package.json ./
+COPY package.json ./
 RUN pnpm install
 
 # Copy Lambda handler
-COPY infra/lambda/migration-runner/index.mjs ./
+COPY index.mjs ./
 
 # Set the Lambda runtime handler
 CMD [ "index.handler" ]
