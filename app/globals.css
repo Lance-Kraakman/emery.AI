@@ -421,11 +421,6 @@
   field-sizing: initial !important;
 }
 
-/* Allow scroll when content exceeds max height */
-[data-llamaindex-chat-input] textarea:focus-within,
-[data-llamaindex-chat-input] textarea:focus {
-  overflow-y: auto !important;
-}
 
 /* Chat input form container styling */
 .chat-input-container {
