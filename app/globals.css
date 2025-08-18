@@ -395,13 +395,15 @@
 
 /* Single-line auto-expanding textarea */
 [data-llamaindex-chat-input] textarea {
-  height: calc(1.5em + 1.5rem) !important; /* 1 line + padding */
-  min-height: calc(1.5em + 1.5rem) !important;
+  height: calc(1.25em + 1rem) !important; /* Minimal height: line + small padding */
+  min-height: calc(1.25em + 1rem) !important;
   max-height: 120px !important;
-  line-height: 1.5 !important;
+  line-height: 1.25 !important;
   overflow-y: hidden !important;
   resize: none !important;
   box-sizing: border-box !important;
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
 }
 
 /* Allow scroll when content exceeds max height */
