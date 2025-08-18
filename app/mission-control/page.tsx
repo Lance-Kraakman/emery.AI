@@ -210,7 +210,7 @@ function CustomChat() {
   const handleSuggestionClick = (suggestion: string) => {
     // This would typically send the suggestion to the chat handler
     console.log('Suggestion clicked:', suggestion)
-    setShowSuggestions(false)
+    // Keep suggestions visible - don't hide them
     // You might want to programmatically set the input value and submit
     // This depends on how the ChatInput component exposes its API
   }
@@ -239,7 +239,7 @@ function CustomChat() {
         )}
         
         <div className="px-4 pb-4">
-          <div className="relative bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 shadow-sm">
+          <div className="relative bg-background rounded-xl border border-input shadow-sm">
             <ChatInput className="bg-transparent border-0">
               <ChatInput.Form className="relative flex items-center gap-2">
                 <div className="relative flex-1">
