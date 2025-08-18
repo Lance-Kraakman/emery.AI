@@ -11,6 +11,7 @@ emery-agents/
 # Build artifacts
 dist/
 *.tsbuildinfo
+cdk.out/
 
 # Development files
 .env.local
