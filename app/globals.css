@@ -360,65 +360,11 @@
   outline-offset: 2px;
 }
 
-/* Chat Input Field Customization - Remove all container backgrounds */
-[data-llamaindex-chat-input],
-[data-llamaindex-chat-input] > div,
-[data-llamaindex-chat-input] form,
-[data-llamaindex-chat-input] .chat-input-form,
-[data-llamaindex-chat-input] [role="form"] {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  outline: none !important;
-}
-
-/* Only style the actual input field */
-[data-llamaindex-chat-input] textarea,
-[data-llamaindex-chat-input] input {
-  background: hsl(var(--background)) !important;
-  border: 1px solid hsl(var(--input)) !important;
-  border-radius: 0.75rem !important;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
-  transition: all 0.2s ease-in-out !important;
-  min-height: auto !important;
-  height: auto !important;
-  resize: none !important;
-  line-height: 1.25 !important;
-}
-
-[data-llamaindex-chat-input] textarea:focus,
-[data-llamaindex-chat-input] input:focus {
-  border-color: hsl(var(--ring)) !important;
-  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2) !important;
-  outline: none !important;
-}
-
-/* Absolutely prevent textarea expansion */
-[data-llamaindex-chat-input] textarea,
-[data-llamaindex-chat-input] textarea:focus,
-[data-llamaindex-chat-input] textarea:active,
-[data-llamaindex-chat-input] textarea:hover {
-  height: 32px !important;
-  min-height: 32px !important;
-  max-height: 32px !important; 
-  line-height: 20px !important;
-  overflow-y: hidden !important;
-  overflow-x: auto !important;
-  resize: none !important;
-  box-sizing: border-box !important;
-  padding: 6px 16px !important;
-  
-  /* Completely disable auto-sizing */
-  field-sizing: initial !important;
-  white-space: nowrap !important;
-  
-  /* Override any JavaScript height changes */
-  transition: none !important;
-}
-
-/* Prevent any CSS that might change height */
-[data-llamaindex-chat-input] * {
-  field-sizing: initial !important;
+/* Clean chat input styling */
+.chat-input:focus {
+  border-color: hsl(var(--ring));
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
 }
 
 
