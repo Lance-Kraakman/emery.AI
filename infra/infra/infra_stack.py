@@ -64,7 +64,7 @@ class InfraStack(Stack):
             ),
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(
-                subnet_type=ec2.SubnetType.PUBLIC
+                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),
             database_name=f"emery_{env_name}",
             publicly_accessible=True,  # AIDEV-NOTE: Quick & dirty - makes DB publicly accessible
