@@ -42,7 +42,7 @@ importers:
         specifier: ^3.1.18
         version: 3.1.18(@llamaindex/core@0.6.19)(@llamaindex/env@0.1.30)
       '@nanostores/react':
-        specifier: github:ai/react
+        specifier: https://github.com/ai/react.git
         version: git+https://git@github.com:ai/react.git#a6ad745cc307881916944ee4d6ba04bdda978dc6(nanostores@1.0.1)(react@18.3.1)
       '@pipedream/sdk':
         specifier: 2.0.0-rc.3
