@@ -51,6 +51,10 @@ COPY --from=builder /app/tsconfig.json ./tsconfig.json
 # AIDEV-NOTE: Copy proto files needed by scheduler at runtime
 COPY --from=builder /app/proto ./proto
 
+# AIDEV-NOTE: Copy database migration files
+COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
+COPY --from=builder /app/drizzle ./drizzle
+
 # Copy the entrypoint script
 COPY entrypoint.sh .
 
