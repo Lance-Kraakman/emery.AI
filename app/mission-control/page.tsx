@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense } from 'react'
+import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   ChatCanvas,
@@ -9,7 +9,7 @@ import {
   ChatSection,
   useChatCanvas,
 } from '@llamaindex/chat-ui'
-import { X, Code, FileText, Send } from 'lucide-react'
+import { X, Code, FileText, Send, Database, BarChart, Users, Lightbulb } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useChatRSC } from './use-chat-rsc'
 import DashboardMainContent from '../components/DashboardMainContent'
@@ -136,9 +136,67 @@ export default function Page(): JSX.Element {
   )
 }
 
+// Compact Suggestions Component
+function CompactSuggestions({ onSuggestionClick }: { onSuggestionClick: (suggestion: string) => void }) {
+  const suggestions = [
+    {
+      icon: <Database className="h-3 w-3" />,
+      title: "Analyze database performance and optimization opportunities",
+      prompt: "Analyze the current database performance and suggest optimizations for our main tables and queries."
+    },
+    {
+      icon: <BarChart className="h-3 w-3" />,
+      title: "Generate comprehensive analytics report with KPIs and trends",
+      prompt: "Generate a comprehensive analytics report showing key performance indicators, user engagement metrics, and business trends from our data."
+    },
+    {
+      icon: <Users className="h-3 w-3" />,
+      title: "Analyze user behavior patterns and engagement strategies",
+      prompt: "Analyze user behavior patterns, identify high-value user segments, and suggest strategies to improve user retention and engagement."
+    },
+    {
+      icon: <Code className="h-3 w-3" />,
+      title: "Review code architecture and suggest best practices",
+      prompt: "Perform a code architecture review, identify potential improvements, and suggest best practices for scalability and maintainability."
+    }
+  ]
+
+  return (
+    <div className="px-4 pb-2">
+      <div className="mb-2">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <Lightbulb className="h-3 w-3" />
+          Suggestions
+        </div>
+      </div>
+      <div className="space-y-1">
+        {suggestions.map((suggestion, index) => (
+          <button
+            key={index}
+            className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm rounded-lg border border-border/50 bg-card/30 hover:bg-card/60 hover:border-border transition-all duration-150 focus:outline-none focus:ring-1 focus:ring-ring"
+            onClick={() => onSuggestionClick(suggestion.prompt)}
+          >
+            <div className="flex-shrink-0 text-muted-foreground">
+              {suggestion.icon}
+            </div>
+            <span className="flex-1 text-foreground truncate">
+              {suggestion.title}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function CustomChat() {
   const handler = useChatRSC()
+  const [showSuggestions, setShowSuggestions] = useState(true)
+
+  const handleSuggestionClick = (suggestion: string) => {
+    console.log('Suggestion clicked:', suggestion)
+    // Keep suggestions visible for now
+  }
 
   return (
     <ChatSection
@@ -157,6 +215,11 @@ function CustomChat() {
           </div>
         </div>
         <ChatMessages className="flex-1 min-h-0 overflow-y-auto bg-transparent" />
+        
+        {showSuggestions && (
+          <CompactSuggestions onSuggestionClick={handleSuggestionClick} />
+        )}
+        
         <ChatInput className="px-4 pb-4 bg-transparent border-0 shadow-none">
           <ChatInput.Form className="relative flex items-center gap-2 bg-transparent">
             <div className="relative flex-1">
