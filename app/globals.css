@@ -393,11 +393,21 @@
   outline: none !important;
 }
 
-/* Auto-expanding textarea behavior */
+/* Single-line auto-expanding textarea */
 [data-llamaindex-chat-input] textarea {
-  field-sizing: content !important;
-  overflow-y: auto !important;
+  height: calc(1.5em + 1.5rem) !important; /* 1 line + padding */
+  min-height: calc(1.5em + 1.5rem) !important;
   max-height: 120px !important;
+  line-height: 1.5 !important;
+  overflow-y: hidden !important;
+  resize: none !important;
+  box-sizing: border-box !important;
+}
+
+/* Allow scroll when content exceeds max height */
+[data-llamaindex-chat-input] textarea:focus-within,
+[data-llamaindex-chat-input] textarea:focus {
+  overflow-y: auto !important;
 }
 
 /* Chat input form container styling */

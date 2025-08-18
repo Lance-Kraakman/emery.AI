@@ -269,14 +269,9 @@ function CustomChat() {
             <ChatInput.Form className="relative flex items-center gap-2 bg-transparent">
               <div className="relative flex-1">
                 <ChatInput.Field
-                  className="w-full resize-none rounded-xl border border-input bg-background p-4 pr-14 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground leading-tight"
+                  className="w-full resize-none rounded-xl border border-input bg-background py-3 px-4 pr-14 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground"
                   placeholder="Ask me anything..."
-                  style={{ 
-                    minHeight: 'auto',
-                    height: 'auto',
-                    maxHeight: '120px',
-                    overflowY: 'auto'
-                  }}
+                  rows={1}
                 />
                 <ChatInput.Submit className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm">
                   <Send className="h-4 w-4" />
