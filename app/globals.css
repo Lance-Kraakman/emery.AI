@@ -271,6 +271,28 @@
     background-clip: text;
     -webkit-text-fill-color: transparent;
   }
+  
+  /* Line clamp utilities */
+  .line-clamp-1 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+  
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  
+  .line-clamp-3 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
 
   .animate-accordion-down {
     animation: accordion-down 0.2s ease-out;
@@ -336,6 +358,53 @@
   border-color: hsl(var(--ring));
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
+}
+
+/* Chat Input Field Customization */
+[data-llamaindex-chat-input] {
+  background: transparent !important;
+}
+
+[data-llamaindex-chat-input] textarea,
+[data-llamaindex-chat-input] input {
+  background: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--input)) !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+[data-llamaindex-chat-input] textarea:focus,
+[data-llamaindex-chat-input] input:focus {
+  border-color: hsl(var(--ring)) !important;
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2) !important;
+  outline: none !important;
+}
+
+/* Remove any conflicting background containers */
+[data-llamaindex-chat-input] > div {
+  background: transparent !important;
+}
+
+/* Chat input form container styling */
+.chat-input-container {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Quick suggestions styling */
+.quick-suggestions-card {
+  transition: all 0.2s ease-in-out;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card) / 0.5);
+}
+
+.quick-suggestions-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border-color: hsl(var(--ring) / 0.5);
 }
 
 /* PDF Viewer Styling */
