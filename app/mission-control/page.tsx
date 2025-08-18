@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useEffect } from 'react'
+import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   ChatCanvas,
@@ -204,54 +204,6 @@ function CustomChat() {
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
 
-  // Aggressively force textarea height
-  useEffect(() => {
-    const forceHeight = () => {
-      // Try multiple selectors to find the textarea
-      const selectors = [
-        '[data-llamaindex-chat-input] textarea',
-        'textarea[placeholder*="Ask"]',
-        '.chat-input textarea',
-        'textarea'
-      ]
-      
-      let found = false
-      selectors.forEach(selector => {
-        const textareas = document.querySelectorAll(selector)
-        textareas.forEach(textarea => {
-          if (textarea.closest('.chat-input') || textarea.placeholder?.includes('Ask')) {
-            textarea.style.setProperty('height', '32px', 'important')
-            textarea.style.setProperty('min-height', '32px', 'important')
-            textarea.style.setProperty('max-height', '32px', 'important')
-            console.log('Forced height on:', selector, textarea)
-            found = true
-          }
-        })
-      })
-    }
-
-    // Force height every 100ms aggressively
-    const interval = setInterval(forceHeight, 100)
-
-    // Force height on input events
-    const handleInput = (e: Event) => {
-      const target = e.target as HTMLTextAreaElement
-      if (target.tagName === 'TEXTAREA') {
-        target.style.setProperty('height', '32px', 'important')
-        console.log('Input event forced height')
-      }
-    }
-
-    document.addEventListener('input', handleInput, true)
-    
-    // Initial force
-    forceHeight()
-    
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener('input', handleInput, true)
-    }
-  }, [])
   
   const suggestions = [
     "Analyze the current database performance and suggest optimizations for our main tables and queries.",
@@ -314,13 +266,12 @@ function CustomChat() {
           />
         )}
         <div onKeyDown={handleKeyDown}>
-          <ChatInput className="px-4 pb-4 bg-transparent border-0 shadow-none">
-            <ChatInput.Form className="relative flex items-center gap-2 bg-transparent">
+          <ChatInput className="px-4 pb-4">
+            <ChatInput.Form className="relative flex items-end gap-3">
               <div className="relative flex-1">
                 <ChatInput.Field
-                  className="w-full resize-none rounded-xl border border-input bg-background py-1 px-4 pr-14 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground"
+                  className="w-full resize-none rounded-xl border border-input bg-background px-4 py-3 pr-14 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground min-h-[44px] max-h-32"
                   placeholder="Ask me anything..."
-                  rows={1}
                 />
                 <ChatInput.Submit className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm">
                   <Send className="h-4 w-4" />
