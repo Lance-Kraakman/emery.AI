@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   ChatCanvas,
@@ -203,6 +203,45 @@ function CustomChat() {
   const handler = useChatRSC()
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
+
+  // Force textarea height to stay at 32px
+  useEffect(() => {
+    const forceHeight = () => {
+      const textareas = document.querySelectorAll('[data-llamaindex-chat-input] textarea')
+      textareas.forEach(textarea => {
+        textarea.style.height = '32px'
+        textarea.style.minHeight = '32px'
+        textarea.style.maxHeight = '32px'
+      })
+    }
+
+    // Force height on any DOM changes
+    const observer = new MutationObserver(forceHeight)
+    observer.observe(document.body, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+      attributeFilter: ['style']
+    })
+
+    // Force height on input events
+    const handleInput = (e: Event) => {
+      const target = e.target as HTMLTextAreaElement
+      if (target.matches('[data-llamaindex-chat-input] textarea')) {
+        target.style.height = '32px'
+      }
+    }
+
+    document.addEventListener('input', handleInput)
+    
+    // Initial force
+    forceHeight()
+    
+    return () => {
+      observer.disconnect()
+      document.removeEventListener('input', handleInput)
+    }
+  }, [])
   
   const suggestions = [
     "Analyze the current database performance and suggest optimizations for our main tables and queries.",
