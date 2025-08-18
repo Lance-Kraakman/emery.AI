@@ -10,9 +10,12 @@ from aws_cdk import (
     aws_s3 as s3,
     aws_secretsmanager as secretsmanager,
     aws_iam as iam,
+    aws_cloudfront as cloudfront,
+    aws_cloudfront_origins as origins,
     custom_resources,
     Aws,
     Duration,
+    CfnOutput,
 )
 from constructs import Construct
 import os
@@ -270,6 +273,39 @@ class InfraStack(Stack):
                 ],
                 resources=["*"]
             )
+        )
+
+        # Create CloudFront distribution for static URL routing
+        cloudfront_distribution = cloudfront.Distribution(
+            self, f"{prefix}CloudFrontDistribution",
+            default_behavior=cloudfront.BehaviorOptions(
+                origin=origins.LoadBalancerV2Origin(
+                    frontend_service.load_balancer,
+                    protocol_policy=origins.OriginProtocolPolicy.HTTP_ONLY
+                ),
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+                cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,  # Disable caching for dynamic content
+                compress=True,
+                origin_request_policy=cloudfront.OriginRequestPolicy.CORS_S3_ORIGIN
+            ),
+            comment=f"CloudFront distribution for {prefix} Emery application",
+            enabled=True,
+            price_class=cloudfront.PriceClass.PRICE_CLASS_100  # Use only North America and Europe for cost savings
+        )
+
+        # Output the CloudFront URL for easy access
+        CfnOutput(
+            self, f"{prefix}CloudFrontURL",
+            value=f"https://{cloudfront_distribution.distribution_domain_name}",
+            description="Static CloudFront URL for the application (never changes)"
+        )
+
+        # Also output the direct ALB URL for comparison
+        CfnOutput(
+            self, f"{prefix}DirectALBURL", 
+            value=f"http://{frontend_service.load_balancer.load_balancer_dns_name}",
+            description="Direct Application Load Balancer URL"
         )
 
         # Create a new Task Definition for the scheduler
