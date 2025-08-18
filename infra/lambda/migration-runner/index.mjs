@@ -24,7 +24,7 @@ async function runMigrations() {
       env: { 
         ...process.env, 
         DATABASE_URL: databaseUrl,
-        NODE_ENV: "production"
+        NODE_ENV: process.env.NODE_ENV || "production"
       },
       stdio: "pipe",
       encoding: "utf8",
