@@ -112,7 +112,10 @@ class InfraStack(Stack):
         # Lambda function for running migrations
         migration_lambda = lambda_.DockerImageFunction(
             self, f"{prefix}MigrationRunnerLambda",
-            code=lambda_.DockerImageCode.from_image_asset(os.path.join(os.path.dirname(__file__), "..", "lambda", "migration-runner")),
+            code=lambda_.DockerImageCode.from_image_asset(
+                directory=os.path.join(os.path.dirname(__file__), "..", ".."),  # Project root
+                file="infra/lambda/migration-runner/Dockerfile"
+            ),
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS),
             security_groups=[migration_lambda_sg],
