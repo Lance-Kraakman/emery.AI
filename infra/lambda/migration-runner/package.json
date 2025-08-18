@@ -12,6 +12,7 @@
     "@aws-sdk/client-secrets-manager": "^3.583.0",
     "drizzle-kit": "^0.28.1",
     "drizzle-orm": "^0.44.4",
-    "postgres": "^3.4.7"
+    "postgres": "^3.4.7",
+    "dotenv": "^16.0.0"
   }
 }

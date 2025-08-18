@@ -9,8 +9,9 @@ WORKDIR ${LAMBDA_TASK_ROOT}
 # Copy migration-specific files
 COPY drizzle.config.ts ./
 COPY lib/db ./lib/db/
+COPY drizzle ./drizzle/
 
-# Create migrations directory if it doesn't exist
+# Create migrations directory if it doesn't exist (fallback)
 RUN mkdir -p lib/db/migrations
 
 # Copy Lambda-specific package.json and install minimal dependencies
