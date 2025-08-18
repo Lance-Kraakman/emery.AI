@@ -360,7 +360,18 @@
   outline-offset: 2px;
 }
 
-/* Clean chat input styling */
+/* Chat Input Field Clean Styling */
+[data-llamaindex-chat-input],
+[data-llamaindex-chat-input] > div,
+[data-llamaindex-chat-input] form,
+[data-llamaindex-chat-input] [role="form"] {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Clean chat input focus styling */
 .chat-input:focus {
   border-color: hsl(var(--ring));
   outline: 2px solid hsl(var(--ring));
