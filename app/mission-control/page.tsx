@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense } from 'react'
+import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   ChatCanvas,
@@ -9,8 +9,9 @@ import {
   ChatSection,
   useChatCanvas,
 } from '@llamaindex/chat-ui'
-import { X, Code, FileText, Send } from 'lucide-react'
+import { X, Code, FileText, Send, Lightbulb, Database, BarChart, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { useChatRSC } from './use-chat-rsc'
 import DashboardMainContent from '../components/DashboardMainContent'
 
@@ -136,8 +137,83 @@ export default function Page(): JSX.Element {
   )
 }
 
+// Quick Actions / Suggestions Component
+function QuickSuggestions({ onSuggestionClick }: { onSuggestionClick: (suggestion: string) => void }) {
+  const suggestions = [
+    {
+      icon: <Database className="h-4 w-4" />,
+      title: "Analyze Database Performance",
+      description: "Review query performance and optimization opportunities",
+      prompt: "Analyze the current database performance and suggest optimizations for our main tables and queries."
+    },
+    {
+      icon: <BarChart className="h-4 w-4" />,
+      title: "Generate Analytics Report",
+      description: "Create comprehensive metrics and insights dashboard",
+      prompt: "Generate a comprehensive analytics report showing key performance indicators, user engagement metrics, and business trends from our data."
+    },
+    {
+      icon: <Users className="h-4 w-4" />,
+      title: "User Behavior Analysis",
+      description: "Understand user patterns and engagement",
+      prompt: "Analyze user behavior patterns, identify high-value user segments, and suggest strategies to improve user retention and engagement."
+    },
+    {
+      icon: <Code className="h-4 w-4" />,
+      title: "Code Review & Architecture",
+      description: "Review codebase architecture and best practices",
+      prompt: "Perform a code architecture review, identify potential improvements, and suggest best practices for scalability and maintainability."
+    }
+  ]
+
+  return (
+    <div className="px-4 pb-4">
+      <div className="mb-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Lightbulb className="h-4 w-4" />
+          Quick Actions
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {suggestions.map((suggestion, index) => (
+          <Card
+            key={index}
+            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:border-ring/50 bg-card/50"
+            onClick={() => onSuggestionClick(suggestion.prompt)}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 p-2 rounded-lg bg-primary/10 text-primary">
+                  {suggestion.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-medium text-foreground mb-1">
+                    {suggestion.title}
+                  </h3>
+                  <p className="text-xs text-muted-foreground line-clamp-2">
+                    {suggestion.description}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function CustomChat() {
   const handler = useChatRSC()
+  const [showSuggestions, setShowSuggestions] = useState(true)
+
+  const handleSuggestionClick = (suggestion: string) => {
+    // This would typically send the suggestion to the chat handler
+    console.log('Suggestion clicked:', suggestion)
+    setShowSuggestions(false)
+    // You might want to programmatically set the input value and submit
+    // This depends on how the ChatInput component exposes its API
+  }
 
   return (
     <ChatSection
@@ -156,22 +232,30 @@ function CustomChat() {
           </div>
         </div>
         <ChatMessages className="flex-1 min-h-0 overflow-y-auto bg-transparent" />
+        
+        {/* Show suggestions when chat is empty */}
+        {showSuggestions && (
+          <QuickSuggestions onSuggestionClick={handleSuggestionClick} />
+        )}
+        
         <ChatInput className="px-4 pb-4">
-          <ChatInput.Form className="relative flex items-end gap-3">
+          <ChatInput.Form className="relative flex items-center gap-2">
             <div className="relative flex-1">
               <ChatInput.Field
-                className="w-full resize-none rounded-lg border border-border bg-transparent p-3 pr-12 text-sm"
+                className="w-full resize-none rounded-xl border border-input bg-background p-4 pr-14 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                 placeholder="Ask me anything..."
+                style={{ background: 'hsl(var(--background))', minHeight: '52px' }}
               />
+              <ChatInput.Submit className="absolute right-2 top-1/2 -translate-y-1/2">
+                <Button
+                  type="submit"
+                  size="icon"
+                  className="h-8 w-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </ChatInput.Submit>
             </div>
-            <ChatInput.Submit>
-              <Button
-                type="submit"
-                className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-white"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </ChatInput.Submit>
           </ChatInput.Form>
         </ChatInput>
       </div>

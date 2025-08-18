@@ -98,6 +98,12 @@ class InfraStack(Stack):
             description="Allow gRPC traffic on port 50051"
         )
 
+        # Define the Docker image for the frontend, scheduler, and migration
+        # AIDEV-NOTE: Use ECR image as expected by CI/CD workflow
+        frontend_image_uri = os.environ.get('FRONTEND_IMAGE_URI')
+        app_image = ecs.ContainerImage.from_registry(frontend_image_uri)
+        print(f"Using pre-built frontend image from ECR: {frontend_image_uri}")
+
         # Create a one-time migration task using the same app image
         migration_task_definition = ecs.FargateTaskDefinition(
             self, f"{prefix}MigrationTaskDef",
@@ -196,18 +202,6 @@ class InfraStack(Stack):
             "RESEND_API_KEY": ecs.Secret.from_secrets_manager(app_secrets_object, "RESEND_API_KEY"),
         }
 
-        # Define the Docker image for the frontend and scheduler
-        # AIDEV-NOTE: Use AWS ECR if available, otherwise build from source
-        frontend_image_uri = os.environ.get('FRONTEND_IMAGE_URI')
-        if frontend_image_uri:
-            app_image = ecs.ContainerImage.from_registry(frontend_image_uri)
-            print(f"Using pre-built frontend image from ECR: {frontend_image_uri}")
-        else:
-            app_image = ecs.ContainerImage.from_asset(
-                "../", # Points to the Dockerfile in the root
-                exclude=[".venv", "node_modules", "cdk.out", ".git", "infra"]
-            )
-            print("Building frontend image from source")
 
         # Create the Fargate service for the Next.js frontend
         frontend_service = ecs_patterns.ApplicationLoadBalancedFargateService(
@@ -246,23 +240,22 @@ class InfraStack(Stack):
         }
         
         # AIDEV-NOTE: Add ECR permissions to task execution role for pulling images
-        if frontend_image_uri:  # Only needed when using ECR images
-            frontend_service.task_definition.execution_role.add_managed_policy(
-                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
+        frontend_service.task_definition.execution_role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
+        )
+        # Add specific ECR permissions
+        frontend_service.task_definition.execution_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "ecr:GetAuthorizationToken",
+                    "ecr:BatchCheckLayerAvailability", 
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchGetImage"
+                ],
+                resources=["*"]
             )
-            # Add specific ECR permissions
-            frontend_service.task_definition.execution_role.add_to_policy(
-                iam.PolicyStatement(
-                    effect=iam.Effect.ALLOW,
-                    actions=[
-                        "ecr:GetAuthorizationToken",
-                        "ecr:BatchCheckLayerAvailability", 
-                        "ecr:GetDownloadUrlForLayer",
-                        "ecr:BatchGetImage"
-                    ],
-                    resources=["*"]
-                )
-            )
+        )
 
         # Create a new Task Definition for the scheduler
         scheduler_task_definition = ecs.FargateTaskDefinition(
@@ -301,23 +294,22 @@ class InfraStack(Stack):
         )
         
         # AIDEV-NOTE: Add ECR permissions to scheduler task execution role for pulling images
-        if frontend_image_uri:  # Only needed when using ECR images
-            scheduler_task_definition.execution_role.add_managed_policy(
-                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
+        scheduler_task_definition.execution_role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
+        )
+        # Add specific ECR permissions
+        scheduler_task_definition.execution_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "ecr:GetAuthorizationToken",
+                    "ecr:BatchCheckLayerAvailability", 
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchGetImage"
+                ],
+                resources=["*"]
             )
-            # Add specific ECR permissions
-            scheduler_task_definition.execution_role.add_to_policy(
-                iam.PolicyStatement(
-                    effect=iam.Effect.ALLOW,
-                    actions=[
-                        "ecr:GetAuthorizationToken",
-                        "ecr:BatchCheckLayerAvailability", 
-                        "ecr:GetDownloadUrlForLayer",
-                        "ecr:BatchGetImage"
-                    ],
-                    resources=["*"]
-                )
-            )
+        )
 
         # AIDEV-NOTE: Configure deployment settings for scheduler service stability
         cfn_scheduler_service = scheduler_service.node.default_child
@@ -357,23 +349,22 @@ class InfraStack(Stack):
 
         # AIDEV-NOTE: Add ECR permissions to agent task execution role for pulling images
         agent_image_uri = os.environ.get('AGENT_IMAGE_URI')
-        if agent_image_uri:  # Only needed when using ECR images
-            agent_service.task_definition.execution_role.add_managed_policy(
-                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
+        agent_service.task_definition.execution_role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
+        )
+        # Add specific ECR permissions
+        agent_service.task_definition.execution_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "ecr:GetAuthorizationToken",
+                    "ecr:BatchCheckLayerAvailability", 
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchGetImage"
+                ],
+                resources=["*"]
             )
-            # Add specific ECR permissions
-            agent_service.task_definition.execution_role.add_to_policy(
-                iam.PolicyStatement(
-                    effect=iam.Effect.ALLOW,
-                    actions=[
-                        "ecr:GetAuthorizationToken",
-                        "ecr:BatchCheckLayerAvailability", 
-                        "ecr:GetDownloadUrlForLayer",
-                        "ecr:BatchGetImage"
-                    ],
-                    resources=["*"]
-                )
-            )
+        )
 
         # AIDEV-NOTE: No health checks for gRPC service - relies on ECS task health only
         # The gRPC agent is internal-only, accessed by frontend via internal network
