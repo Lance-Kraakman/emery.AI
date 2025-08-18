@@ -6,16 +6,16 @@ RUN npm install -g pnpm
 
 WORKDIR ${LAMBDA_TASK_ROOT}
 
-# Copy migration files from project root (CDK builds from project root now)
+# Copy migration files (copied to build directory by prepare script)
 COPY drizzle.config.ts ./
-COPY lib/db ./lib/db/
-COPY drizzle ./drizzle/
+COPY lib/ ./lib/
+COPY drizzle/ ./drizzle/
 
 # Copy Lambda-specific files
-COPY infra/lambda/migration-runner/package.json ./
+COPY package.json ./
 RUN pnpm install
 
-COPY infra/lambda/migration-runner/index.mjs ./
+COPY index.mjs ./
 
 # Set the Lambda runtime handler
 CMD [ "index.handler" ]
