@@ -204,42 +204,52 @@ function CustomChat() {
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
 
-  // Force textarea height to stay at 32px
+  // Aggressively force textarea height
   useEffect(() => {
     const forceHeight = () => {
-      const textareas = document.querySelectorAll('[data-llamaindex-chat-input] textarea')
-      textareas.forEach(textarea => {
-        textarea.style.height = '32px'
-        textarea.style.minHeight = '32px'
-        textarea.style.maxHeight = '32px'
+      // Try multiple selectors to find the textarea
+      const selectors = [
+        '[data-llamaindex-chat-input] textarea',
+        'textarea[placeholder*="Ask"]',
+        '.chat-input textarea',
+        'textarea'
+      ]
+      
+      let found = false
+      selectors.forEach(selector => {
+        const textareas = document.querySelectorAll(selector)
+        textareas.forEach(textarea => {
+          if (textarea.closest('.chat-input') || textarea.placeholder?.includes('Ask')) {
+            textarea.style.setProperty('height', '32px', 'important')
+            textarea.style.setProperty('min-height', '32px', 'important')
+            textarea.style.setProperty('max-height', '32px', 'important')
+            console.log('Forced height on:', selector, textarea)
+            found = true
+          }
+        })
       })
     }
 
-    // Force height on any DOM changes
-    const observer = new MutationObserver(forceHeight)
-    observer.observe(document.body, {
-      attributes: true,
-      childList: true,
-      subtree: true,
-      attributeFilter: ['style']
-    })
+    // Force height every 100ms aggressively
+    const interval = setInterval(forceHeight, 100)
 
     // Force height on input events
     const handleInput = (e: Event) => {
       const target = e.target as HTMLTextAreaElement
-      if (target.matches('[data-llamaindex-chat-input] textarea')) {
-        target.style.height = '32px'
+      if (target.tagName === 'TEXTAREA') {
+        target.style.setProperty('height', '32px', 'important')
+        console.log('Input event forced height')
       }
     }
 
-    document.addEventListener('input', handleInput)
+    document.addEventListener('input', handleInput, true)
     
     // Initial force
     forceHeight()
     
     return () => {
-      observer.disconnect()
-      document.removeEventListener('input', handleInput)
+      clearInterval(interval)
+      document.removeEventListener('input', handleInput, true)
     }
   }, [])
   
