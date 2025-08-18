@@ -64,9 +64,10 @@ class InfraStack(Stack):
             ),
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(
-                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
+                subnet_type=ec2.SubnetType.PUBLIC
             ),
             database_name=f"emery_{env_name}",
+            publicly_accessible=True,  # AIDEV-NOTE: Quick & dirty - makes DB publicly accessible
             # The secret will be automatically created and stored in AWS Secrets Manager
             credentials=rds.Credentials.from_generated_secret(f"db_master_user_{env_name}"),
             multi_az=False, # For cost-effectiveness in dev/staging. Set to True for production.
@@ -89,18 +90,11 @@ class InfraStack(Stack):
         # Allow traffic from the shared SG to the database
         db_instance.connections.allow_default_port_from(db_client_sg)
 
-        # AIDEV-NOTE: Temporary bastion host for database access during development
-        # Remove this in production or when database access is no longer needed
-        bastion_host = ec2.BastionHostLinux(
-            self, f"{prefix}DatabaseBastion",
-            vpc=vpc,
-            instance_type=ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO),
-            machine_image=ec2.MachineImage.latest_amazon_linux2(),
-            subnet_selection=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC)
-        )
+        # AIDEV-NOTE: Database is now public - no bastion needed
+        # For production, move back to private subnets and use bastion/VPN
         
-        # Allow bastion to connect to database
-        db_instance.connections.allow_default_port_from(bastion_host)
+        # Allow public internet access to database (quick & dirty for development)
+        db_instance.connections.allow_default_port_from(ec2.Peer.any_ipv4(), "Allow public PostgreSQL access")
 
         # Create security group for agent gRPC service
         agent_grpc_sg = ec2.SecurityGroup(
