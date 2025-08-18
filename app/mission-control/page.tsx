@@ -266,8 +266,8 @@ function CustomChat() {
           />
         )}
         <div onKeyDown={handleKeyDown}>
-          <ChatInput className="px-4 pb-4">
-            <ChatInput.Form className="relative flex items-end gap-3">
+          <ChatInput className="px-4 pb-4 bg-transparent border-0 shadow-none">
+            <ChatInput.Form className="relative flex items-end gap-3 bg-transparent">
               <div className="relative flex-1">
                 <ChatInput.Field
                   className="w-full resize-none rounded-xl border border-input bg-background px-4 py-3 pr-14 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground min-h-[44px] max-h-32"
