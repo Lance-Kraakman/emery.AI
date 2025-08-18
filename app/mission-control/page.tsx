@@ -137,7 +137,13 @@ export default function Page(): JSX.Element {
 }
 
 // Compact Suggestions Component
-function CompactSuggestions({ onSuggestionClick }: { onSuggestionClick: (suggestion: string) => void }) {
+function CompactSuggestions({ 
+  onSuggestionClick, 
+  selectedIndex = -1 
+}: { 
+  onSuggestionClick: (suggestion: string) => void;
+  selectedIndex?: number;
+}) {
   const suggestions = [
     {
       icon: <Database className="h-3 w-3" />,
@@ -162,18 +168,22 @@ function CompactSuggestions({ onSuggestionClick }: { onSuggestionClick: (suggest
   ]
 
   return (
-    <div className="px-4 pb-2">
+    <div className="px-4">
       <div className="mb-2">
         <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <Lightbulb className="h-3 w-3" />
           Suggestions
         </div>
       </div>
-      <div className="space-y-1">
+      <div>
         {suggestions.map((suggestion, index) => (
           <button
             key={index}
-            className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm rounded-lg border border-border/50 bg-card/30 hover:bg-card/60 hover:border-border transition-all duration-150 focus:outline-none focus:ring-1 focus:ring-ring"
+            className={`w-full flex items-center gap-2 px-0 py-2.5 text-left text-sm transition-colors duration-150 focus:outline-none border-b border-border/30 last:border-b-0 ${
+              selectedIndex === index 
+                ? 'bg-muted/70 text-foreground' 
+                : 'hover:bg-muted/50'
+            }`}
             onClick={() => onSuggestionClick(suggestion.prompt)}
           >
             <div className="flex-shrink-0 text-muted-foreground">
@@ -192,9 +202,39 @@ function CompactSuggestions({ onSuggestionClick }: { onSuggestionClick: (suggest
 function CustomChat() {
   const handler = useChatRSC()
   const [showSuggestions, setShowSuggestions] = useState(true)
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
+  
+  const suggestions = [
+    "Analyze the current database performance and suggest optimizations for our main tables and queries.",
+    "Generate a comprehensive analytics report showing key performance indicators, user engagement metrics, and business trends from our data.",
+    "Analyze user behavior patterns, identify high-value user segments, and suggest strategies to improve user retention and engagement.",
+    "Perform a code architecture review, identify potential improvements, and suggest best practices for scalability and maintainability."
+  ]
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions) return
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedSuggestionIndex(prev => 
+        prev < suggestions.length - 1 ? prev + 1 : prev
+      )
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedSuggestionIndex(prev => 
+        prev > -1 ? prev - 1 : -1
+      )
+    } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
+      e.preventDefault()
+      handleSuggestionClick(suggestions[selectedSuggestionIndex])
+    } else if (e.key === 'Escape') {
+      setSelectedSuggestionIndex(-1)
+    }
+  }
 
   const handleSuggestionClick = (suggestion: string) => {
     console.log('Suggestion clicked:', suggestion)
+    setSelectedSuggestionIndex(-1)
     // Keep suggestions visible for now
   }
 
@@ -217,22 +257,26 @@ function CustomChat() {
         <ChatMessages className="flex-1 min-h-0 overflow-y-auto bg-transparent" />
         
         {showSuggestions && (
-          <CompactSuggestions onSuggestionClick={handleSuggestionClick} />
+          <CompactSuggestions 
+            onSuggestionClick={handleSuggestionClick} 
+            selectedIndex={selectedSuggestionIndex}
+          />
         )}
-        
-        <ChatInput className="px-4 pb-4 bg-transparent border-0 shadow-none">
-          <ChatInput.Form className="relative flex items-center gap-2 bg-transparent">
-            <div className="relative flex-1">
-              <ChatInput.Field
-                className="w-full resize-none rounded-xl border border-input bg-background p-4 pr-14 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground min-h-[52px]"
-                placeholder="Ask me anything..."
-              />
-              <ChatInput.Submit className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm">
-                <Send className="h-4 w-4" />
-              </ChatInput.Submit>
-            </div>
-          </ChatInput.Form>
-        </ChatInput>
+        <div onKeyDown={handleKeyDown}>
+          <ChatInput className="px-4 pb-4 bg-transparent border-0 shadow-none">
+            <ChatInput.Form className="relative flex items-center gap-2 bg-transparent">
+              <div className="relative flex-1">
+                <ChatInput.Field
+                  className="w-full resize-none rounded-xl border border-input bg-background p-4 pr-14 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground min-h-[52px]"
+                  placeholder="Ask me anything..."
+                />
+                <ChatInput.Submit className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm">
+                  <Send className="h-4 w-4" />
+                </ChatInput.Submit>
+              </div>
+            </ChatInput.Form>
+          </ChatInput>
+        </div>
       </div>
       <CustomCanvas />
     </ChatSection>
