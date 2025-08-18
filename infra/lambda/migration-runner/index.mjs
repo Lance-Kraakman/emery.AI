@@ -6,65 +6,38 @@ const secretsManager = new SecretsManagerClient();
 async function getDatabaseUrl() {
   const secretArn = process.env.DB_SECRET_ARN;
   const secret = await secretsManager.send(new GetSecretValueCommand({ SecretId: secretArn }));
-  const secretDict = JSON.parse(secret.SecretString);
-
-  const { username, password, host, port, dbname } = secretDict;
-  return `postgresql://${username}:${password}@${host}:${port}/${dbname}`;
+  const secretString = secret.SecretString;
+  
+  console.log("Retrieved database secret from AWS Secrets Manager");
+  
+  // Return the JSON string - our drizzle config will parse it
+  return secretString;
 }
 
 async function runMigrations() {
   const databaseUrl = await getDatabaseUrl();
-  console.log("Database URL configured successfully");
+  console.log("Starting proper database migration with drizzle-kit...");
   
-  // For now, let's just test the connection and create basic tables
   try {
-    console.log("Starting migration process...");
+    // Run the actual migration command that the main app uses
+    const output = execSync("pnpm db:migrate", {
+      env: { 
+        ...process.env, 
+        DATABASE_URL: databaseUrl,
+        NODE_ENV: "production"
+      },
+      stdio: "pipe",
+      encoding: "utf8",
+      cwd: "/var/task"
+    });
     
-    // Simple approach: just ensure the basic schema exists
-    const { Client } = await import('pg');
-    const client = new Client({ connectionString: databaseUrl });
-    
-    await client.connect();
-    console.log("Connected to database successfully");
-    
-    // Create basic tables if they don't exist
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name TEXT,
-        email TEXT UNIQUE,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-    
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS accounts (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-        provider TEXT,
-        provider_account_id TEXT,
-        access_token TEXT,
-        refresh_token TEXT,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-    
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS sessions (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-        expires TIMESTAMP,
-        session_token TEXT UNIQUE,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-    
-    await client.end();
-    console.log("Basic migration completed successfully");
+    console.log("Migration completed successfully!");
+    console.log("Migration output:", output);
     
   } catch (error) {
     console.error("Migration failed:", error.message);
-    console.error("Stack:", error.stack);
+    if (error.stdout) console.error("STDOUT:", error.stdout);
+    if (error.stderr) console.error("STDERR:", error.stderr);
     throw error;
   }
 }
