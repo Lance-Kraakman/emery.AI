@@ -208,12 +208,6 @@ jobs:
           node-version: 20
           cache: 'pnpm'
 
-      - name: Install Node Dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Prepare Lambda Build
-        run: pnpm setup:lambda
-
       - name: Install CDK and Python Dependencies
         working-directory: ./infra
         run: |

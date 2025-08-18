@@ -13,7 +13,6 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "setup:lambda": "node scripts/prepare-lambda-build.js",
     "test:agent-api": "node scripts/test-agent-execution-api.js",
     "grpc:generate": "npm run grpc:generate:js && npm run grpc:generate:python",
     "grpc:generate:js": "grpc_tools_node_protoc --js_out=import_style=commonjs,binary:lib/grpc/generated --grpc_out=grpc_js:lib/grpc/generated --plugin=protoc-gen-grpc=./node_modules/.bin/grpc_tools_node_protoc_plugin -I proto proto/agent_worker.proto",

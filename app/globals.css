@@ -332,13 +332,6 @@
   background-color: transparent !important;
 }
 
-.chat-input {
-  background-color: transparent;
-  border: 1px solid hsl(var(--border));
-  color: hsl(var(--foreground));
-  border-radius: var(--radius-md);
-}
-
 .chat-input:focus {
   border-color: hsl(var(--ring));
   outline: 2px solid hsl(var(--ring));
