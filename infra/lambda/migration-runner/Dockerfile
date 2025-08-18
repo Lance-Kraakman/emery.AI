@@ -1,15 +1,15 @@
-FROM node:20-alpine
+FROM public.ecr.aws/lambda/nodejs:20
 
+# Install pnpm
 RUN npm install -g pnpm
 
-WORKDIR /var/task
-
-# Install Node.js dependencies
-COPY package.json .
+# Copy package.json and install dependencies
+COPY package.json ${LAMBDA_TASK_ROOT}/
+WORKDIR ${LAMBDA_TASK_ROOT}
 RUN pnpm install
 
-# Copy the handler code
-COPY index.mjs .
+# Copy the Lambda handler
+COPY index.mjs ${LAMBDA_TASK_ROOT}/
 
-# Set the command to run the Lambda function
-CMD [ "node", "index.mjs" ]
+# Set the Lambda runtime handler
+CMD [ "index.handler" ]
