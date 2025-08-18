@@ -6,7 +6,6 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { autoReindexService } from "@/lib/rag/auto-reindex";
 import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
 import type { ActionResult, CreateAgentData } from "./types";
 
@@ -54,10 +53,7 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
       apiKey: generateApiKey(),
     }).returning();
 
-    // Trigger RAG reindexing for agents domain in this organization
-    if (session.user.currentOrganizationId) {
-      autoReindexService.debouncedReindex(session.user.currentOrganizationId, 'agents').catch(console.error);
-    }
+    // Note: RAG reindexing is now handled automatically by database triggers
 
     // Revalidate the appropriate path
     if (revalidateUrl) {

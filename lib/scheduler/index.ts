@@ -7,3 +7,6 @@ export { TaskExecutionPipeline, taskExecutionPipeline } from './task-execution-p
 export { manualDispatcher } from './dispatchers/manual-dispatcher';
 export { databaseDispatcher } from './dispatchers/database-dispatcher';
 export { calendarDispatcher } from './dispatchers/calendar-dispatcher';
+
+// RAG indexing dispatcher
+export { ragDispatcher } from '@/lib/rag/dispatchers/rag-dispatcher';
