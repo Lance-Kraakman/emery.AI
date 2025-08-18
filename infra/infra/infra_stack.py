@@ -85,6 +85,20 @@ class InfraStack(Stack):
         # Allow traffic from the shared SG to the database
         db_instance.connections.allow_default_port_from(db_client_sg)
 
+        # Create security group for agent gRPC service
+        agent_grpc_sg = ec2.SecurityGroup(
+            self, f"{prefix}AgentGrpcSg",
+            vpc=vpc,
+            description="Security group for agent gRPC service"
+        )
+
+        # Allow inbound traffic on port 50051 for gRPC service
+        agent_grpc_sg.add_ingress_rule(
+            peer=ec2.Peer.any_ipv4(),
+            connection=ec2.Port.tcp(50051),
+            description="Allow gRPC traffic on port 50051"
+        )
+
         # Create a dedicated security group for the migration Lambda
         migration_lambda_sg = ec2.SecurityGroup(
             self, f"{prefix}MigrationLambdaSg",
@@ -317,7 +331,7 @@ class InfraStack(Stack):
                 }
             ),
             public_load_balancer=True,
-            security_groups=[db_client_sg],
+            security_groups=[db_client_sg, agent_grpc_sg],
             # AIDEV-NOTE: Critical fix for ECS service stability
             # Increased grace period to allow for gRPC service startup and target registration
             health_check_grace_period=Duration.seconds(300),  # 5 minutes
