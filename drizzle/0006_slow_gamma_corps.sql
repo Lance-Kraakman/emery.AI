@@ -1,0 +1,1 @@
+ALTER TABLE "organizations" ADD COLUMN "view_config" jsonb;

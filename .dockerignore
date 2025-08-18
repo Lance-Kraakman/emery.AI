@@ -1,16 +1,11 @@
-# Dependencies
+# Lambda-specific dockerignore - allows infra/
 node_modules
 .next
 .DS_Store
-
-# Git
 .git
 .gitignore
 
-# Infrastructure (entire directory - 20GB)
-infra/
-
-# Python agents (not needed for frontend build)
+# Python agents (not needed for migration)
 emery-agents/
 
 # Build artifacts

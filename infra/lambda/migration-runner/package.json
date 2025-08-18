@@ -2,14 +2,16 @@
   "name": "migration-runner",
   "version": "1.0.0",
   "description": "Lambda function to run database migrations",
-  "main": "index.js",
+  "main": "index.mjs",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "db:migrate": "drizzle-kit migrate"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.583.0",
-    "pg": "^8.11.3"
+    "drizzle-kit": "^0.28.1",
+    "drizzle-orm": "^0.44.4",
+    "postgres": "^3.4.7"
   }
 }
