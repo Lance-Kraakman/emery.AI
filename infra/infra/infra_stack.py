@@ -114,7 +114,8 @@ class InfraStack(Stack):
             self, f"{prefix}MigrationRunnerLambda",
             code=lambda_.DockerImageCode.from_image_asset(
                 directory=os.path.join(os.path.dirname(__file__), "..", ".."),  # Project root
-                file="infra/lambda/migration-runner/Dockerfile"
+                file="infra/lambda/migration-runner/Dockerfile",
+                exclude=["cdk.out", "node_modules", ".next", ".git", "emery-agents", ".venv", "*.log"]
             ),
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS),
