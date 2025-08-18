@@ -393,9 +393,12 @@
   outline: none !important;
 }
 
-/* Absolute minimal textarea height */
-[data-llamaindex-chat-input] textarea {
-  height: 32px !important; /* Hard-coded minimal height */
+/* Absolutely prevent textarea expansion */
+[data-llamaindex-chat-input] textarea,
+[data-llamaindex-chat-input] textarea:focus,
+[data-llamaindex-chat-input] textarea:active,
+[data-llamaindex-chat-input] textarea:hover {
+  height: 32px !important;
   min-height: 32px !important;
   max-height: 32px !important; 
   line-height: 20px !important;
@@ -403,16 +406,19 @@
   overflow-x: auto !important;
   resize: none !important;
   box-sizing: border-box !important;
-  padding: 6px 16px !important; /* Minimal padding */
+  padding: 6px 16px !important;
   
-  /* Remove field-sizing to prevent auto-expansion */
+  /* Completely disable auto-sizing */
   field-sizing: initial !important;
   white-space: nowrap !important;
+  
+  /* Override any JavaScript height changes */
+  transition: none !important;
 }
 
-/* Enable multi-line mode only when user presses Enter (creates \n) */
-[data-llamaindex-chat-input] textarea:focus {
-  white-space: pre-wrap !important; /* Allow wrapping only when focused */
+/* Prevent any CSS that might change height */
+[data-llamaindex-chat-input] * {
+  field-sizing: initial !important;
 }
 
 /* Allow scroll when content exceeds max height */
