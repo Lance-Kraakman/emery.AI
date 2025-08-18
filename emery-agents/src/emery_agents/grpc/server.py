@@ -122,22 +122,17 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             return agent_worker_pb2.CancelTaskResponse(success=False, message=f"Task {task_id} not found")
 
 async def serve(port: int, organization_id: str):
-    print(f"PYTHON WORKER: Creating server for port {port}, org {organization_id}")
     server = aio.server()
     
-    print("PYTHON WORKER: Creating service implementation...")
     service_impl = AgentWorkerServiceImplementation(organization_id)
     
-    print("PYTHON WORKER: Adding servicer to server...")
     agent_worker_pb2_grpc.add_AgentWorkerServicer_to_server(service_impl, server)
     
     listen_addr = f'[::]:{port}'
-    print(f"PYTHON WORKER: Adding insecure port {listen_addr}")
     server.add_insecure_port(listen_addr)
     
-    print(f"PYTHON WORKER: Starting server on {listen_addr}")
     logger.info(f"Server starting on {listen_addr}")
     
     await server.start()
-    print("PYTHON WORKER: Server started successfully, waiting for termination...")
+    logger.info("server started succesfully, waiting for termination")
     await server.wait_for_termination()
