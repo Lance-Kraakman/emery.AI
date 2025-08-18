@@ -12,6 +12,9 @@ emery-agents/
 dist/
 *.tsbuildinfo
 
+# Infrastructure directory (not needed for frontend)
+infra/
+
 # Development files
 .env.local
 .env.development

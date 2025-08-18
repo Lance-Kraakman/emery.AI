@@ -3,6 +3,12 @@
 const fs = require('fs');
 const path = require('path');
 
+// Skip gracefully if infra directory doesn't exist (e.g., during Docker build)
+if (!fs.existsSync(path.join(__dirname, '..', 'infra'))) {
+  console.log('ℹ️  Skipping Lambda build preparation (infra directory not found)');
+  process.exit(0);
+}
+
 const PROJECT_ROOT = path.join(__dirname, '..');
 const BUILD_DIR = path.join(PROJECT_ROOT, 'infra/lambda/migration-runner/build');
 
