@@ -214,12 +214,12 @@ function CustomChat() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!showSuggestions) return
     
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'ArrowUp') {
       e.preventDefault()
       setSelectedSuggestionIndex(prev => 
         prev < suggestions.length - 1 ? prev + 1 : prev
       )
-    } else if (e.key === 'ArrowUp') {
+    } else if (e.key === 'ArrowDown') {
       e.preventDefault()
       setSelectedSuggestionIndex(prev => 
         prev > -1 ? prev - 1 : -1
