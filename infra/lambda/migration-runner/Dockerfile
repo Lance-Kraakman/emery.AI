@@ -1,7 +1,6 @@
 FROM public.ecr.aws/lambda/nodejs:20
 
-# Install required tools
-RUN dnf install -y git && dnf clean all
+# Install pnpm
 RUN npm install -g pnpm
 
 WORKDIR ${LAMBDA_TASK_ROOT}
