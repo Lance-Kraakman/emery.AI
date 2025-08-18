@@ -393,22 +393,21 @@
   outline: none !important;
 }
 
-/* Fixed single-line textarea - minimal height */
+/* Absolute minimal textarea height */
 [data-llamaindex-chat-input] textarea {
-  height: calc(1.2em + 0.5rem) !important; /* Minimal: just text + tiny padding */
-  min-height: calc(1.2em + 0.5rem) !important;
-  max-height: calc(1.2em + 0.5rem) !important; /* Prevent expansion */
-  line-height: 1.2 !important;
+  height: 32px !important; /* Hard-coded minimal height */
+  min-height: 32px !important;
+  max-height: 32px !important; 
+  line-height: 20px !important;
   overflow-y: hidden !important;
-  overflow-x: auto !important; /* Allow horizontal scroll */
+  overflow-x: auto !important;
   resize: none !important;
   box-sizing: border-box !important;
-  padding-top: 0.25rem !important;
-  padding-bottom: 0.25rem !important;
+  padding: 6px 16px !important; /* Minimal padding */
   
   /* Remove field-sizing to prevent auto-expansion */
   field-sizing: initial !important;
-  white-space: nowrap !important; /* Keep text on one line */
+  white-space: nowrap !important;
 }
 
 /* Enable multi-line mode only when user presses Enter (creates \n) */
