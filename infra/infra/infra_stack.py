@@ -281,13 +281,13 @@ class InfraStack(Stack):
             default_behavior=cloudfront.BehaviorOptions(
                 origin=origins.LoadBalancerV2Origin(
                     frontend_service.load_balancer,
-                    protocol_policy=origins.OriginProtocolPolicy.HTTP_ONLY
+                    protocol_policy=cloudfront.OriginProtocolPolicy.HTTP_ONLY
                 ),
                 viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
                 cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,  # Disable caching for dynamic content
                 compress=True,
-                origin_request_policy=cloudfront.OriginRequestPolicy.CORS_S3_ORIGIN
+                origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER
             ),
             comment=f"CloudFront distribution for {prefix} Emery application",
             enabled=True,
