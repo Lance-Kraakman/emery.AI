@@ -157,13 +157,20 @@ function CustomChat() {
         </div>
         <ChatMessages className="flex-1 min-h-0 overflow-y-auto bg-transparent" />
         <ChatInput className="px-4 pb-4">
-          <ChatInput.Form className="flex items-center gap-3">
-            <ChatInput.Field
-              className="flex-1 border-none bg-gray-50 rounded-lg px-4 py-2"
-              placeholder="Ask me anything..."
-            />
-            <ChatInput.Submit className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2">
-              <Send className="h-4 w-4" />
+          <ChatInput.Form className="relative flex items-end gap-3">
+            <div className="relative flex-1">
+              <ChatInput.Field
+                className="w-full resize-none rounded-lg border border-border bg-transparent p-3 pr-12 text-sm"
+                placeholder="Ask me anything..."
+              />
+            </div>
+            <ChatInput.Submit>
+              <Button
+                type="submit"
+                className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-white"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
             </ChatInput.Submit>
           </ChatInput.Form>
         </ChatInput>

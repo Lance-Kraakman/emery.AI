@@ -1,25 +1,44 @@
-import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
-import { execSync } from "child_process";
+import { execSync } from 'child_process';
+import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 
-const secretsManager = new SecretsManagerClient();
+const secretsClient = new SecretsManagerClient({ region: process.env.AWS_REGION || 'us-east-1' });
 
 async function getDatabaseUrl() {
   const secretArn = process.env.DB_SECRET_ARN;
-  const secret = await secretsManager.send(new GetSecretValueCommand({ SecretId: secretArn }));
-  const secretString = secret.SecretString;
   
-  console.log("Retrieved database secret from AWS Secrets Manager");
-  
-  // Return the JSON string - our drizzle config will parse it
-  return secretString;
+  if (!secretArn) {
+    throw new Error('DB_SECRET_ARN environment variable is required');
+  }
+
+  try {
+    const command = new GetSecretValueCommand({ SecretId: secretArn });
+    const response = await secretsClient.send(command);
+    
+    if (!response.SecretString) {
+      throw new Error('Secret value is empty');
+    }
+
+    // Parse the RDS secret JSON
+    const secret = JSON.parse(response.SecretString);
+    const { username, password, engine, host, port, dbname } = secret;
+    
+    if (!username || !password || !host || !port || !dbname) {
+      throw new Error('Secret is missing required database connection fields');
+    }
+
+    return `postgresql://${username}:${password}@${host}:${port}/${dbname}`;
+  } catch (error) {
+    console.error('Failed to retrieve database URL from secrets manager:', error);
+    throw error;
+  }
 }
 
 async function runMigrations() {
   const databaseUrl = await getDatabaseUrl();
-  console.log("Starting proper database migration with drizzle-kit...");
+  
+  console.log("Starting database migration...");
   
   try {
-    // Run the actual migration command that the main app uses
     const output = execSync("pnpm db:migrate", {
       env: { 
         ...process.env, 
@@ -30,26 +49,48 @@ async function runMigrations() {
       encoding: "utf8",
       cwd: "/var/task"
     });
-    
-    console.log("Migration completed successfully!");
+
     console.log("Migration output:", output);
+    console.log("✅ Database migrations completed successfully");
     
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        message: "Database migrations completed successfully",
+        output: output
+      })
+    };
   } catch (error) {
-    console.error("Migration failed:", error.message);
-    if (error.stdout) console.error("STDOUT:", error.stdout);
-    if (error.stderr) console.error("STDERR:", error.stderr);
-    throw error;
+    console.error("❌ Migration failed:", error);
+    
+    return {
+      statusCode: 500,
+      body: JSON.stringify({
+        message: "Database migration failed",
+        error: error.message,
+        output: error.stdout?.toString() || '',
+        stderr: error.stderr?.toString() || ''
+      })
+    };
   }
 }
 
 export async function handler(event, context) {
   console.log("## EVENT");
-  console.log(JSON.stringify(event));
-
-  const requestType = event.RequestType;
-  if (requestType === "Create" || requestType === "Update") {
-    await runMigrations();
+  console.log(JSON.stringify(event, null, 2));
+  
+  try {
+    const result = await runMigrations();
+    console.log("Migration result:", result);
+    return result;
+  } catch (error) {
+    console.error("Handler error:", error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({
+        message: "Lambda execution failed",
+        error: error.message
+      })
+    };
   }
-
-  return { Status: "SUCCESS" };
 }
