@@ -72,6 +72,8 @@ class InfraStack(Stack):
             allow_major_version_upgrade=False,
             auto_minor_version_upgrade=True,
             delete_automated_backups=True, # For dev/staging. Set to False for production.
+            enable_performance_insights=True, # Enable Performance Insights for database monitoring
+            backup_retention=Duration.days(7), # Enable backups for better data management
         )
 
         # Create a shared security group for DB clients
@@ -83,6 +85,19 @@ class InfraStack(Stack):
 
         # Allow traffic from the shared SG to the database
         db_instance.connections.allow_default_port_from(db_client_sg)
+
+        # AIDEV-NOTE: Temporary bastion host for database access during development
+        # Remove this in production or when database access is no longer needed
+        bastion_host = ec2.BastionHostLinux(
+            self, f"{prefix}DatabaseBastion",
+            vpc=vpc,
+            instance_type=ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO),
+            machine_image=ec2.MachineImage.latest_amazon_linux2(),
+            subnet_selection=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC)
+        )
+        
+        # Allow bastion to connect to database
+        db_instance.connections.allow_default_port_from(bastion_host)
 
         # Create security group for agent gRPC service
         agent_grpc_sg = ec2.SecurityGroup(
