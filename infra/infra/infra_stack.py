@@ -67,7 +67,6 @@ class InfraStack(Stack):
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),
             database_name=f"emery_{env_name}",
-            publicly_accessible=True,  # AIDEV-NOTE: Quick & dirty - makes DB publicly accessible
             # The secret will be automatically created and stored in AWS Secrets Manager
             credentials=rds.Credentials.from_generated_secret(f"db_master_user_{env_name}"),
             multi_az=False, # For cost-effectiveness in dev/staging. Set to True for production.
@@ -90,11 +89,17 @@ class InfraStack(Stack):
         # Allow traffic from the shared SG to the database
         db_instance.connections.allow_default_port_from(db_client_sg)
 
-        # AIDEV-NOTE: Database is now public - no bastion needed
-        # For production, move back to private subnets and use bastion/VPN
+        # Create bastion host for secure database access
+        bastion_host = ec2.BastionHostLinux(
+            self, f"{prefix}DatabaseBastion",
+            vpc=vpc,
+            instance_type=ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO),
+            machine_image=ec2.MachineImage.latest_amazon_linux2(),
+            subnet_selection=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC)
+        )
         
-        # Allow public internet access to database (quick & dirty for development)
-        db_instance.connections.allow_default_port_from(ec2.Peer.any_ipv4(), "Allow public PostgreSQL access")
+        # Allow bastion to connect to database
+        db_instance.connections.allow_default_port_from(bastion_host, "Allow bastion host access")
 
         # Create security group for agent gRPC service
         agent_grpc_sg = ec2.SecurityGroup(
@@ -300,6 +305,20 @@ class InfraStack(Stack):
             self, f"{prefix}DirectALBURL", 
             value=f"http://{frontend_service.load_balancer.load_balancer_dns_name}",
             description="Direct Application Load Balancer URL"
+        )
+
+        # Output bastion host information for SSH tunnel
+        CfnOutput(
+            self, f"{prefix}BastionHostIP",
+            value=bastion_host.instance_public_ip,
+            description="Bastion host public IP for SSH tunnel to database"
+        )
+
+        # Output database connection details
+        CfnOutput(
+            self, f"{prefix}DatabaseEndpoint",
+            value=db_instance.instance_endpoint.hostname,
+            description="Database endpoint for SSH tunnel connection"
         )
 
         # Create a new Task Definition for the scheduler
