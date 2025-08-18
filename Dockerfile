@@ -25,8 +25,7 @@ ENV GITHUB_CLIENT_SECRET="build-dummy-client-secret"
 ENV RESEND_API_KEY="build-dummy-resend-key"
 RUN pnpm run build
 
-# AIDEV-NOTE: Build bundled scheduler (single 1.3MB file, no dependencies)
-RUN pnpm scheduler:build
+# AIDEV-NOTE: Skip bundled scheduler, use tsx directly to avoid bundling issues
 
 # 2. Production image
 FROM node:20-alpine AS runner
@@ -43,8 +42,11 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/public ./public
 
-# AIDEV-NOTE: Copy bundled scheduler (single file, no dependencies needed)
-COPY --from=builder /app/dist/scheduler.js ./scheduler.js
+# AIDEV-NOTE: Copy source files needed for tsx execution
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/app ./app
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 # AIDEV-NOTE: Copy proto files needed by scheduler at runtime
 COPY --from=builder /app/proto ./proto

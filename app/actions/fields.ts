@@ -10,7 +10,6 @@ import { slugify } from "@/utils/slugify";
 import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
-import { autoReindexService } from "@/lib/rag/auto-reindex";
 import type { ActionResult, CreateFieldData } from "./types";
 import type { FieldData } from "@/types/db";
 
@@ -68,8 +67,7 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
     // Add field to dynamic table
     await addFieldToTable(table.dbName, newField.id, type, required);
 
-    // Trigger RAG reindexing for tables domain (since table schema changed)
-    autoReindexService.debouncedReindex(table.organizationId, 'tables').catch(console.error);
+    // Note: RAG reindexing is now handled automatically by database triggers
 
     // Revalidate the appropriate path
     if (revalidateUrl) {

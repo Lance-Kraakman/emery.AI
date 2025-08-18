@@ -6,7 +6,6 @@ import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createTeamSchema, updateTeamSchema, parseFormDataToTeam } from "@/lib/schemas";
 import type { ActionResult, CreateTeamData, TeamMembershipData } from "./types";
-import { autoReindexService } from "@/lib/rag/auto-reindex";
 
 export async function createTeam(data: CreateTeamData): Promise<ActionResult> {
   try {
@@ -32,7 +31,7 @@ export async function createTeam(data: CreateTeamData): Promise<ActionResult> {
     revalidatePath('/dashboard');
     revalidatePath('/teams');
 
-    await autoReindexService.debouncedReindex(organizationId, 'teams')
+    // Note: RAG reindexing is now handled automatically by database triggers
     
     return {
       success: true,
@@ -123,7 +122,7 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
     revalidatePath('/teams');
 
     if (updatedTeam.organizationId) {
-      await autoReindexService.debouncedReindex(updatedTeam.organizationId, 'teams')
+      // Note: RAG reindexing is now handled automatically by database triggers
     }
     
     return {
@@ -154,7 +153,7 @@ export async function deleteTeam(teamId: number): Promise<ActionResult> {
     revalidatePath('/teams');
 
     if (deletedTeam?.organizationId) {
-      await autoReindexService.debouncedReindex(deletedTeam.organizationId, 'teams')
+      // Note: RAG reindexing is now handled automatically by database triggers
     }
     
     return {

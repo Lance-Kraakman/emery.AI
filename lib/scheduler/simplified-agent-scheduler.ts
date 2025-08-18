@@ -5,6 +5,7 @@
 import { manualDispatcher } from './dispatchers/manual-dispatcher';
 import { databaseDispatcher } from './dispatchers/database-dispatcher';
 import { calendarDispatcher } from './dispatchers/calendar-dispatcher';
+import { ragDispatcher } from '@/lib/rag/dispatchers/rag-dispatcher';
 import { taskExecutionPipeline } from './task-execution-pipeline';
 import { db } from '@/lib/db/client';
 import { tasks } from '@/lib/db/schema';
@@ -30,11 +31,12 @@ export class SimplifiedAgentScheduler {
       await Promise.allSettled([
         manualDispatcher.start(),
         databaseDispatcher.start(), 
-        calendarDispatcher.start()
+        calendarDispatcher.start(),
+        ragDispatcher.start()
       ]);
 
       console.log('[SCHEDULER] ✅ All dispatchers started successfully');
-      console.log('[SCHEDULER] 📋 Trigger types supported: MANUAL, DATABASE_EVENT, CALENDAR');
+      console.log('[SCHEDULER] 📋 Trigger types supported: MANUAL, DATABASE_EVENT, CALENDAR, RAG_REINDEX');
       
       // Process any existing pending tasks
       await this.processExistingPendingTasks();
@@ -58,7 +60,8 @@ export class SimplifiedAgentScheduler {
       await Promise.allSettled([
         manualDispatcher.stop(),
         databaseDispatcher.stop(),
-        calendarDispatcher.stop()
+        calendarDispatcher.stop(),
+        ragDispatcher.stop()
       ]);
 
       this.isRunning = false;

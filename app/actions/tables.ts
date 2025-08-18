@@ -11,7 +11,6 @@ import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireAuth, requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { autoReindexService } from "@/lib/rag/auto-reindex";
 import type { ActionResult, CreateTableData } from "./types";
 
 export async function createTable(data: CreateTableData & { databaseId: number; description?: string }, revalidateUrl?: string): Promise<ActionResult> {
@@ -65,8 +64,7 @@ export async function createTable(data: CreateTableData & { databaseId: number; 
       createdBy: session.user.id,
     }).returning();
 
-    // Trigger RAG reindexing for tables domain in this organization
-    autoReindexService.debouncedReindex(currentOrg.id, 'tables').catch(console.error);
+    // Note: RAG reindexing is now handled automatically by database triggers
     
     // Revalidate the appropriate path
     if (revalidateUrl) {
@@ -183,10 +181,7 @@ export async function deleteTable(tableId: number, revalidateUrl?: string): Prom
     // Drop dynamic table first
     await dropDynamicTable(table.dbName);
     
-    // Trigger RAG reindexing for tables domain in this organization
-    autoReindexService.debouncedReindex(currentOrg.id, 'tables').catch(error => {
-      console.error('Failed to trigger RAG reindexing after table deletion:', error)
-    })
+    // Note: RAG reindexing is now handled automatically by database triggers
     
     // Then delete metadata
     await db.delete(tables).where(eq(tables.id, tableId));

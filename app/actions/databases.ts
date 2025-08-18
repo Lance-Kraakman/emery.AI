@@ -6,7 +6,6 @@ import { eq, and } from "drizzle-orm"
 import { auth } from "@/lib/auth"
 import { z } from "zod"
 import { revalidatePath } from "next/cache"
-import { autoReindexService } from "@/lib/rag/auto-reindex"
 
 // AIDEV-NOTE: Database management server actions with metadata support for RAG indexing
 
@@ -114,15 +113,7 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
       })
       .returning()
 
-    // Trigger RAG reindexing for the organization if database has description
-    if (result[0] && metadata?.description) {
-      try {
-        await autoReindexService.debouncedReindex(session.user.currentOrganizationId, 'databases')
-      } catch (error) {
-        console.error('Failed to trigger RAG reindexing:', error)
-        // Don't fail the whole operation if indexing fails
-      }
-    }
+    // Note: RAG reindexing is now handled automatically by database triggers
 
     // Revalidate the appropriate path
     if (revalidateUrl) {
@@ -176,15 +167,7 @@ export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>,
       return { success: false, error: "Database not found" }
     }
 
-    // Trigger RAG reindexing for the organization if database has description
-    if (result[0] && metadata?.description) {
-      try {
-        await autoReindexService.debouncedReindex(session.user.currentOrganizationId, 'databases')
-      } catch (error) {
-        console.error('Failed to trigger RAG reindexing:', error)
-        // Don't fail the whole operation if indexing fails
-      }
-    }
+    // Note: RAG reindexing is now handled automatically by database triggers
 
     // Revalidate the appropriate path
     if (revalidateUrl) {
@@ -239,13 +222,7 @@ export async function deleteDatabase(id: number, revalidateUrl?: string) {
       return { success: false, error: "Database not found" }
     }
 
-    // Trigger RAG reindexing for the organization
-    try {
-      await autoReindexService.debouncedReindex(session.user.currentOrganizationId, 'databases')
-    } catch (error) {
-      console.error('Failed to trigger RAG reindexing:', error)
-      // Don't fail the whole operation if indexing fails
-    }
+    // Note: RAG reindexing is now handled automatically by database triggers
 
     // Revalidate the appropriate path
     if (revalidateUrl) {
