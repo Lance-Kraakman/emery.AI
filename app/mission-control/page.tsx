@@ -238,24 +238,20 @@ function CustomChat() {
           <QuickSuggestions onSuggestionClick={handleSuggestionClick} />
         )}
         
-        <div className="px-4 pb-4">
-          <div className="relative bg-background rounded-xl border border-input shadow-sm">
-            <ChatInput className="bg-transparent border-0">
-              <ChatInput.Form className="relative flex items-center gap-2">
-                <div className="relative flex-1">
-                  <ChatInput.Field
-                    className="w-full resize-none bg-transparent border-0 p-4 pr-14 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-0"
-                    placeholder="Ask me anything..."
-                    style={{ minHeight: '52px' }}
-                  />
-                  <ChatInput.Submit className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm">
-                    <Send className="h-4 w-4" />
-                  </ChatInput.Submit>
-                </div>
-              </ChatInput.Form>
-            </ChatInput>
-          </div>
-        </div>
+        <ChatInput className="px-4 pb-4">
+          <ChatInput.Form className="relative flex items-center gap-2">
+            <div className="relative flex-1">
+              <ChatInput.Field
+                className="w-full resize-none rounded-xl border border-input bg-background p-4 pr-14 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 placeholder:text-muted-foreground"
+                placeholder="Ask me anything..."
+                style={{ minHeight: '52px' }}
+              />
+              <ChatInput.Submit className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm">
+                <Send className="h-4 w-4" />
+              </ChatInput.Submit>
+            </div>
+          </ChatInput.Form>
+        </ChatInput>
       </div>
       <CustomCanvas />
     </ChatSection>
