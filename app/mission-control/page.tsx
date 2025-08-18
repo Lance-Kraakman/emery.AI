@@ -238,8 +238,8 @@ function CustomChat() {
           <QuickSuggestions onSuggestionClick={handleSuggestionClick} />
         )}
         
-        <ChatInput className="px-4 pb-4">
-          <ChatInput.Form className="relative flex items-center gap-2">
+        <ChatInput className="px-4 pb-4 bg-transparent border-0 shadow-none">
+          <ChatInput.Form className="relative flex items-center gap-2 bg-transparent">
             <div className="relative flex-1">
               <ChatInput.Field
                 className="w-full resize-none rounded-xl border border-input bg-background p-4 pr-14 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground"

@@ -360,11 +360,19 @@
   outline-offset: 2px;
 }
 
-/* Chat Input Field Customization */
-[data-llamaindex-chat-input] {
+/* Chat Input Field Customization - Remove all container backgrounds */
+[data-llamaindex-chat-input],
+[data-llamaindex-chat-input] > div,
+[data-llamaindex-chat-input] form,
+[data-llamaindex-chat-input] .chat-input-form,
+[data-llamaindex-chat-input] [role="form"] {
   background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
 
+/* Only style the actual input field */
 [data-llamaindex-chat-input] textarea,
 [data-llamaindex-chat-input] input {
   background: hsl(var(--background)) !important;
@@ -379,11 +387,6 @@
   border-color: hsl(var(--ring)) !important;
   box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2) !important;
   outline: none !important;
-}
-
-/* Remove any conflicting background containers */
-[data-llamaindex-chat-input] > div {
-  background: transparent !important;
 }
 
 /* Chat input form container styling */
