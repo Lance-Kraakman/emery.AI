@@ -52,14 +52,15 @@ class InfraStack(Stack):
             cluster_name=f"{prefix}EmeryCluster"
         )
 
-        # Create parameter group to allow non-SSL connections for development
+        # Create parameter group to allow non-SSL connections and preload extensions
         db_parameter_group = rds.ParameterGroup(
             self, f"{prefix}PostgresParams",
             engine=rds.DatabaseInstanceEngine.postgres(
                 version=rds.PostgresEngineVersion.VER_16_3
             ),
             parameters={
-                "rds.force_ssl": "0"  # Allow non-SSL connections for development
+                "rds.force_ssl": "0",  # Allow non-SSL connections for development
+                "shared_preload_libraries": "vector"  # Preload pgvector extension
             }
         )
 
