@@ -6,7 +6,7 @@ if [ "$1" = "scheduler" ]; then
 elif [ "$1" = "migrate" ]; then
   # Run database migrations with AWS Secrets Manager support
   echo "Running database migrations..."
-  exec node scripts/migrate.js
+  exec npx tsx scripts/migrate.ts
 else
   # AIDEV-NOTE: Use regular Next.js start command
   exec pnpm start
