@@ -19,8 +19,35 @@ from aws_cdk import (
 )
 from constructs import Construct
 import os
+import hashlib
 
 class InfraStack(Stack):
+
+    def _get_migration_hash(self) -> str:
+        """Generate hash of migration files to force migration trigger on schema changes"""
+        migration_path = "../drizzle"
+        hash_input = ""
+        
+        try:
+            if os.path.exists(migration_path):
+                import glob
+                for file_path in sorted(glob.glob(f"{migration_path}/*.sql")):
+                    with open(file_path, 'r') as f:
+                        hash_input += f.read()
+            
+            # Also include the schema file to detect changes
+            schema_path = "../lib/db/schema.ts"
+            if os.path.exists(schema_path):
+                with open(schema_path, 'r') as f:
+                    hash_input += f.read()
+                    
+        except Exception as e:
+            print(f"Warning: Could not read migration files for hashing: {e}")
+            # Fallback to current timestamp to ensure migrations run
+            import time
+            hash_input = str(time.time())
+        
+        return hashlib.md5(hash_input.encode()).hexdigest()[:8]
 
     def _get_agent_image(self) -> ecs.ContainerImage:
         """Get agent container image from ECR or build from source"""
@@ -219,48 +246,8 @@ class InfraStack(Stack):
             )
         )
 
-        # Custom resource to run one-shot migration tasks
-        migration_trigger = custom_resources.AwsCustomResource(
-            self, f"{prefix}MigrationTrigger",
-            on_create=custom_resources.AwsSdkCall(
-                service="ECS",
-                action="runTask",
-                parameters={
-                    "cluster": cluster.cluster_arn,
-                    "taskDefinition": migration_task_definition.task_definition_arn,
-                    "launchType": "FARGATE",
-                    "networkConfiguration": migration_network_config
-                },
-                physical_resource_id=custom_resources.PhysicalResourceId.of(f"{prefix}MigrationTrigger-v3-{Aws.STACK_ID}")
-            ),
-            on_update=custom_resources.AwsSdkCall(
-                service="ECS",
-                action="runTask",
-                parameters={
-                    "cluster": cluster.cluster_arn,
-                    "taskDefinition": migration_task_definition.task_definition_arn,
-                    "launchType": "FARGATE",
-                    "networkConfiguration": migration_network_config
-                },
-                physical_resource_id=custom_resources.PhysicalResourceId.of(f"{prefix}MigrationTrigger-v3-{Aws.STACK_ID}")
-            ),
-            policy=custom_resources.AwsCustomResourcePolicy.from_statements([
-                iam.PolicyStatement(
-                    actions=["ecs:RunTask"],
-                    resources=[migration_task_definition.task_definition_arn],
-                ),
-                iam.PolicyStatement(
-                    actions=["iam:PassRole"],
-                    resources=[
-                        migration_task_definition.task_role.role_arn,
-                        migration_task_definition.execution_role.role_arn
-                    ],
-                )
-            ]),
-        )
-
-        migration_trigger.node.add_dependency(db_instance)
-        migration_trigger.node.add_dependency(migration_task_definition)
+        # AIDEV-NOTE: Migration now handled by init containers in each service
+        # No separate migration trigger needed - migrations run before each service starts
 
         # Look up the application secrets from AWS Secrets Manager
         app_secrets_object = secretsmanager.Secret.from_secret_name_v2(
@@ -283,22 +270,57 @@ class InfraStack(Stack):
         }
 
 
-        # Create the Fargate service for the Next.js frontend
+        # Create custom task definition with init container for migrations
+        frontend_task_definition = ecs.FargateTaskDefinition(
+            self, f"{prefix}FrontendTaskDef",
+            cpu=512,
+            memory_limit_mib=1024,
+        )
+
+        # Add migration init container (runs first, must complete successfully)
+        migration_init_container = frontend_task_definition.add_container(
+            f"{prefix}MigrationInitContainer",
+            image=app_image,
+            command=["migrate"],
+            secrets={
+                "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
+            },
+            logging=ecs.LogDrivers.aws_logs(
+                stream_prefix=f"{prefix}-Migration-Init",
+            ),
+            essential=False  # If this fails, don't start the main container
+        )
+
+        # Add main frontend container (starts after init container succeeds)
+        frontend_container = frontend_task_definition.add_container(
+            f"{prefix}FrontendContainer",
+            image=app_image,
+            port_mappings=[ecs.PortMapping(container_port=3000)],
+            secrets={
+                "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
+                **app_secrets_map
+            },
+            logging=ecs.LogDrivers.aws_logs(
+                stream_prefix=f"{prefix}-Frontend",
+            ),
+            essential=True
+        )
+
+        # Init container dependency: main container waits for migration
+        frontend_container.add_container_dependencies([
+            ecs.ContainerDependency(
+                container=migration_init_container,
+                condition=ecs.ContainerDependencyCondition.SUCCESS
+            )
+        ])
+
+        # Create the Fargate service using custom task definition
         frontend_service = ecs_patterns.ApplicationLoadBalancedFargateService(
             self, f"{prefix}FrontendService",
             cluster=cluster,
             service_name=f"{prefix}-Frontend",
-            cpu=512,
-            memory_limit_mib=1024,
-            desired_count=1, # Start with one instance
-            task_image_options=ecs_patterns.ApplicationLoadBalancedTaskImageOptions(
-                image=app_image,
-                container_port=3000,
-                secrets={
-                    "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
-                    **app_secrets_map
-                }
-            ),
+            task_definition=frontend_task_definition,
+            desired_count=1,
             public_load_balancer=True,
             security_groups=[db_client_sg],
         )
@@ -398,11 +420,25 @@ class InfraStack(Stack):
             description="Migration task definition ARN for manual execution"
         )
 
-        # Create a new Task Definition for the scheduler
+        # Create a new Task Definition for the scheduler with migration init container
         scheduler_task_definition = ecs.FargateTaskDefinition(
             self, f"{prefix}SchedulerTaskDef",
             cpu=512,
             memory_limit_mib=1024,
+        )
+
+        # Add migration init container for scheduler
+        scheduler_migration_init = scheduler_task_definition.add_container(
+            f"{prefix}SchedulerMigrationInit",
+            image=app_image,
+            command=["migrate"],
+            secrets={
+                "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
+            },
+            logging=ecs.LogDrivers.aws_logs(
+                stream_prefix=f"{prefix}-Scheduler-Migration",
+            ),
+            essential=False
         )
 
         scheduler_container = scheduler_task_definition.add_container(
@@ -415,8 +451,17 @@ class InfraStack(Stack):
             },
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix=f"{prefix}-Scheduler",
-            )
+            ),
+            essential=True
         )
+
+        # Scheduler waits for migration
+        scheduler_container.add_container_dependencies([
+            ecs.ContainerDependency(
+                container=scheduler_migration_init,
+                condition=ecs.ContainerDependencyCondition.SUCCESS
+            )
+        ])
         
         # AIDEV-NOTE: ECS health checks should be configured in container definition, not added afterwards
         # For scheduler, we rely on ECS service health monitoring instead of custom health checks
@@ -459,9 +504,7 @@ class InfraStack(Stack):
             "maximumPercent": 200
         }
 
-        # Add dependencies to ensure services start in the correct order
-        frontend_service.service.node.add_dependency(migration_trigger)
-        scheduler_service.node.add_dependency(migration_trigger)
+        # AIDEV-NOTE: No service dependencies needed - init containers handle migration timing
 
         # Create the Fargate service for the Python gRPC backend
         agent_service = ecs_patterns.NetworkLoadBalancedFargateService(
@@ -485,8 +528,7 @@ class InfraStack(Stack):
             health_check_grace_period=Duration.seconds(300),  # 5 minutes
         )
 
-        # Add dependency for the agent service
-        agent_service.service.node.add_dependency(migration_trigger)
+        # AIDEV-NOTE: Agent service doesn't need database migrations
 
         # AIDEV-NOTE: Add ECR permissions to agent task execution role for pulling images
         agent_image_uri = os.environ.get('AGENT_IMAGE_URI')
