@@ -12,6 +12,11 @@ interface DatabaseSecret {
 export function parseConnectionString(dbUrl: string): string {
   // Check if it's already a proper connection string
   if (dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://')) {
+    // Add SSL for RDS connections if not already present
+    if (dbUrl.includes('rds.amazonaws.com') && !dbUrl.includes('sslmode=')) {
+      const separator = dbUrl.includes('?') ? '&' : '?';
+      return `${dbUrl}${separator}sslmode=require`;
+    }
     return dbUrl;
   }
   
@@ -19,8 +24,14 @@ export function parseConnectionString(dbUrl: string): string {
   try {
     const secret = JSON.parse(dbUrl) as DatabaseSecret;
     if (secret.host && secret.username && secret.password && secret.dbname && secret.port) {
-      const connectionString = `postgresql://${secret.username}:${secret.password}@${secret.host}:${secret.port}/${secret.dbname}`;
-      console.log('[DATABASE] Parsed AWS RDS secret into connection string');
+      let connectionString = `postgresql://${secret.username}:${secret.password}@${secret.host}:${secret.port}/${secret.dbname}`;
+      
+      // Add SSL for RDS connections
+      if (secret.host.includes('rds.amazonaws.com')) {
+        connectionString += '?sslmode=require';
+      }
+      
+      console.log('[DATABASE] Parsed AWS RDS secret into connection string with SSL');
       return connectionString;
     }
   } catch (e) {
