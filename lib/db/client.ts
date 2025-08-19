@@ -28,7 +28,7 @@ export const rawClient = postgres(connectionString, {
   max_lifetime: 60 * 60,
   connect_timeout: connectTimeout, // Short timeout for build-time dummy URLs
   prepare: false, // Disable prepared statements
-  ssl: connectionString.includes('rds.amazonaws.com') ? 'require' : false, // SSL for AWS RDS, none for local Docker
+  ssl: false, // SSL disabled for development to avoid certificate issues
   onnotice: (notice) => {
     if (notice.severity === 'WARNING' || notice.severity === 'NOTICE') {
       console.log(`[POSTGRES-${notice.severity}]:`, notice.message);
