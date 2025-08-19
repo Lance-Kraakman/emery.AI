@@ -3,8 +3,6 @@ name: Build & Deploy
 on:
   push:
     branches: [main, staging, develop]
-  pull_request:
-    branches: [main, staging, develop]
 
 env:
   AWS_REGION: ap-southeast-2
