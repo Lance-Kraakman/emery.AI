@@ -1,42 +1,24 @@
 #!/usr/bin/env node
 
-// Migration wrapper that converts AWS Secrets Manager JSON to DATABASE_URL
+// Migration wrapper that uses our existing database client parser
 const { execSync } = require('child_process');
 
 console.log('Starting database migration...');
 
 try {
-  // Get DATABASE_URL from environment (this contains JSON from AWS Secrets Manager)
-  const databaseCredentials = process.env.DATABASE_URL;
+  // Import our existing parseConnectionString function
+  const { parseConnectionString } = require('../lib/db/client-parser');
   
-  if (!databaseCredentials) {
+  // Get DATABASE_URL from environment (this contains JSON from AWS Secrets Manager)
+  const rawConnectionString = process.env.DATABASE_URL;
+  
+  if (!rawConnectionString) {
     throw new Error('DATABASE_URL environment variable not found');
   }
 
-  let connectionString;
+  // Use our existing parser to handle both JSON and connection string formats
+  const connectionString = parseConnectionString(rawConnectionString);
   
-  try {
-    // Try to parse as JSON first (AWS Secrets Manager format)
-    const credentials = JSON.parse(databaseCredentials);
-    const { username, password, host, port, dbname } = credentials;
-    
-    if (!username || !password || !host || !port || !dbname) {
-      throw new Error('Missing required database credentials in JSON');
-    }
-    
-    // Construct PostgreSQL connection string
-    connectionString = `postgresql://${username}:${password}@${host}:${port}/${dbname}`;
-    console.log(`✅ Parsed database credentials from AWS Secrets Manager`);
-    console.log(`   Host: ${host}`);
-    console.log(`   Database: ${dbname}`);
-    console.log(`   User: ${username}`);
-    
-  } catch (parseError) {
-    // If it's not JSON, assume it's already a connection string
-    connectionString = databaseCredentials;
-    console.log('✅ Using DATABASE_URL as connection string');
-  }
-
   // Set the parsed connection string
   process.env.DATABASE_URL = connectionString;
   
