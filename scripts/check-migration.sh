@@ -1,147 +1,85 @@
 #!/bin/bash
-
-# Script to check migration status and manually re-run if needed
+# Minimal migration runner - checks status and runs migration task
 # Usage: ./scripts/check-migration.sh [environment]
 
 ENVIRONMENT=${1:-dev}
-STACK_NAME="${ENVIRONMENT^}InfraStack"  # Convert to title case (dev -> Dev)
+ENV_PREFIX="$(echo ${ENVIRONMENT:0:1} | tr '[:lower:]' '[:upper:]')$(echo ${ENVIRONMENT:1})"
+STACK_NAME="Emery-Infra-$ENV_PREFIX"
 
-echo "🔍 Checking migration status for $ENVIRONMENT environment..."
+# Read config from CDK
+ACCOUNT_ID=$(grep -o '"aws_account_id": "[^"]*"' infra/cdk.json | cut -d'"' -f4)
+REGION=$(grep -o '"region": "[^"]*"' infra/cdk.json | cut -d'"' -f4)
 
-# Get stack outputs
-echo "📋 Getting stack outputs..."
-CLUSTER_ARN=$(aws cloudformation describe-stacks --stack-name $STACK_NAME \
-  --query 'Stacks[0].Outputs[?OutputKey==`'${ENVIRONMENT^}'EmeryCluster`].OutputValue' \
-  --output text 2>/dev/null)
+echo "Migration runner for $ENVIRONMENT environment"
 
-MIGRATION_TASK_DEF=$(aws cloudformation describe-stacks --stack-name $STACK_NAME \
-  --query 'Stacks[0].Outputs[?OutputKey==`'${ENVIRONMENT^}'MigrationTaskDefinitionArn`].OutputValue' \
-  --output text 2>/dev/null)
+# Get cluster
+CLUSTER_ARN="arn:aws:ecs:$REGION:$ACCOUNT_ID:cluster/${ENV_PREFIX}EmeryCluster"
 
-LOG_GROUP=$(aws cloudformation describe-stacks --stack-name $STACK_NAME \
-  --query 'Stacks[0].Outputs[?OutputKey==`'${ENVIRONMENT^}'MigrationLogGroup`].OutputValue' \
-  --output text 2>/dev/null)
+# Check migration task definition (CDK uses longer names)
+MIGRATION_TASK_DEF=$(aws ecs list-task-definitions --query 'taskDefinitionArns[]' --output text | tr '\t' '\n' | grep -i migration | tail -1)
 
-if [ -z "$CLUSTER_ARN" ] || [ -z "$MIGRATION_TASK_DEF" ]; then
-  echo "❌ Could not find stack outputs. Is the stack deployed?"
-  echo "   Stack name: $STACK_NAME"
+if [ "$MIGRATION_TASK_DEF" = "None" ] || [ -z "$MIGRATION_TASK_DEF" ]; then
+  echo "❌ No migration task definition found. Deploy the stack first."
   exit 1
 fi
 
-echo "✅ Found stack resources:"
-echo "   Cluster: $CLUSTER_ARN"
-echo "   Migration Task: $MIGRATION_TASK_DEF"
-echo "   Log Group: $LOG_GROUP"
+echo "✅ Found migration task: $(basename $MIGRATION_TASK_DEF)"
 
-# Check for recent migration tasks
-echo ""
-echo "🔍 Checking recent migration tasks..."
+# Check recent runs  
+TASK_FAMILY=$(echo $MIGRATION_TASK_DEF | cut -d'/' -f2 | cut -d':' -f1)
 RECENT_TASKS=$(aws ecs list-tasks --cluster $CLUSTER_ARN \
-  --family "${ENVIRONMENT^}MigrationTaskDef" \
-  --max-items 5 --query 'taskArns[]' --output text)
+  --family "$TASK_FAMILY" --query 'taskArns[]' --output text 2>/dev/null)
 
-if [ -z "$RECENT_TASKS" ]; then
-  echo "⚠️  No migration tasks found. Migration may not have run."
-else
-  echo "📝 Recent migration tasks:"
+if [ -n "$RECENT_TASKS" ]; then
+  echo "📋 Recent migration runs:"
   for task in $RECENT_TASKS; do
-    TASK_ARN=$(basename $task)
-    TASK_STATUS=$(aws ecs describe-tasks --cluster $CLUSTER_ARN --tasks $task \
+    STATUS=$(aws ecs describe-tasks --cluster $CLUSTER_ARN --tasks $task \
       --query 'tasks[0].lastStatus' --output text)
-    CREATED_AT=$(aws ecs describe-tasks --cluster $CLUSTER_ARN --tasks $task \
-      --query 'tasks[0].createdAt' --output text)
-    echo "   📋 $TASK_ARN - Status: $TASK_STATUS - Created: $CREATED_AT"
+    echo "   $(basename $task): $STATUS"
   done
-fi
-
-# Check migration logs
-echo ""
-echo "📋 Checking migration logs..."
-if [ -n "$LOG_GROUP" ]; then
-  LOG_STREAMS=$(aws logs describe-log-streams --log-group-name "$LOG_GROUP" \
-    --order-by LastEventTime --descending --max-items 3 \
-    --query 'logStreams[].logStreamName' --output text 2>/dev/null)
-  
-  if [ -n "$LOG_STREAMS" ]; then
-    echo "📋 Recent log streams:"
-    for stream in $LOG_STREAMS; do
-      echo "   📝 $stream"
-      echo "      Latest logs:"
-      aws logs get-log-events --log-group-name "$LOG_GROUP" --log-stream-name "$stream" \
-        --limit 10 --query 'events[].message' --output text 2>/dev/null | sed 's/^/         /'
-      echo ""
-    done
-  else
-    echo "⚠️  No log streams found in $LOG_GROUP"
-  fi
 else
-  echo "❌ Log group not found in stack outputs"
+  echo "⚠️  No migration runs found"
 fi
 
-# Function to manually run migration
-run_migration() {
+# Run migration
+read -p "Run migration now? (y/N): " -n 1 -r
+echo ""
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+  exit 0
+fi
+
+# Get VPC resources
+VPC_ID=$(aws cloudformation describe-stack-resources --stack-name $STACK_NAME \
+  --logical-resource-id "${ENV_PREFIX}EmeryVpc" --query 'StackResources[0].PhysicalResourceId' --output text)
+
+PRIVATE_SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=*Private*" \
+  --query 'Subnets[].SubnetId' --output text | tr '\t' ',')
+
+DB_CLIENT_SG=$(aws cloudformation describe-stack-resources --stack-name $STACK_NAME \
+  --logical-resource-id "${ENV_PREFIX}DbClientSg" --query 'StackResources[0].PhysicalResourceId' --output text)
+
+# Scale migration service to 1 to run migration
+echo "🚀 Starting migration..."
+aws ecs update-service \
+  --cluster $CLUSTER_ARN \
+  --service "${ENV_PREFIX}-Migration" \
+  --desired-count 1 > /dev/null
+
+if [ $? -eq 0 ]; then
+  # Find the actual log group name
+  LOG_GROUP=$(aws logs describe-log-groups --query 'logGroups[?contains(logGroupName, `Migration`)].logGroupName' --output text | grep -v lambda | head -1)
+  
+  echo "✅ Migration service scaled to 1"
+  echo "Monitor: aws ecs describe-services --cluster $CLUSTER_ARN --services ${ENV_PREFIX}-Migration"
+  if [ -n "$LOG_GROUP" ]; then
+    echo "Logs: aws logs tail $LOG_GROUP --follow"
+  else
+    echo "Logs: Check CloudWatch for migration logs"
+  fi
   echo ""
-  echo "🚀 Running migration task manually..."
-  
-  # Get VPC subnets for the task
-  VPC_ID=$(aws cloudformation describe-stack-resources --stack-name $STACK_NAME \
-    --logical-resource-id "${ENVIRONMENT^}EmeryVpc" \
-    --query 'StackResources[0].PhysicalResourceId' --output text)
-  
-  PRIVATE_SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=*Private*" \
-    --query 'Subnets[].SubnetId' --output text | tr '\t' ',')
-  
-  DB_CLIENT_SG=$(aws cloudformation describe-stack-resources --stack-name $STACK_NAME \
-    --logical-resource-id "${ENVIRONMENT^}DbClientSg" \
-    --query 'StackResources[0].PhysicalResourceId' --output text)
-  
-  if [ -z "$PRIVATE_SUBNETS" ] || [ -z "$DB_CLIENT_SG" ]; then
-    echo "❌ Could not find VPC resources for migration task"
-    exit 1
-  fi
-  
-  echo "📋 Using subnets: $PRIVATE_SUBNETS"
-  echo "📋 Using security group: $DB_CLIENT_SG"
-  
-  TASK_ARN=$(aws ecs run-task \
-    --cluster $CLUSTER_ARN \
-    --task-definition $MIGRATION_TASK_DEF \
-    --launch-type FARGATE \
-    --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNETS],securityGroups=[$DB_CLIENT_SG],assignPublicIp=DISABLED}" \
-    --query 'tasks[0].taskArn' --output text)
-  
-  if [ $? -eq 0 ]; then
-    echo "✅ Migration task started: $TASK_ARN"
-    echo "📋 Monitor progress with:"
-    echo "   aws ecs describe-tasks --cluster $CLUSTER_ARN --tasks $TASK_ARN"
-    echo "📋 View logs with:"
-    echo "   aws logs tail $LOG_GROUP --follow"
-  else
-    echo "❌ Failed to start migration task"
-    exit 1
-  fi
-}
-
-# Ask if user wants to run migration
-echo ""
-read -p "🤔 Do you want to manually run the migration task? (y/N): " -n 1 -r
-echo ""
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-  run_migration
+  echo "💡 To stop migration service after completion:"
+  echo "   aws ecs update-service --cluster $CLUSTER_ARN --service ${ENV_PREFIX}-Migration --desired-count 0"
 else
-  echo "👋 Migration not run. Use the commands above to monitor existing tasks."
+  echo "❌ Failed to start migration"
+  exit 1
 fi
-
-echo ""
-echo "🔧 Useful commands:"
-echo "   # View all tasks in cluster:"
-echo "   aws ecs list-tasks --cluster $CLUSTER_ARN"
-echo ""
-echo "   # Describe specific task:"
-echo "   aws ecs describe-tasks --cluster $CLUSTER_ARN --tasks <task-arn>"
-echo ""
-echo "   # View migration logs:"
-echo "   aws logs tail $LOG_GROUP --follow"
-echo ""
-echo "   # Manually run migration:"
-echo "   ./scripts/check-migration.sh $ENVIRONMENT"

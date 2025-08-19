@@ -152,14 +152,15 @@ class InfraStack(Stack):
         app_image = ecs.ContainerImage.from_registry(frontend_image_uri)
         print(f"Using pre-built frontend image from ECR: {frontend_image_uri}")
 
-        # Create a one-time migration task using the same app image
+        # Create migration task definition with proper network configuration
         migration_task_definition = ecs.FargateTaskDefinition(
             self, f"{prefix}MigrationTaskDef",
             cpu=256,
             memory_limit_mib=512,
         )
 
-        migration_task_definition.add_container(
+        # Add migration container
+        migration_container = migration_task_definition.add_container(
             f"{prefix}MigrationContainer",
             image=app_image,
             command=["migrate"],
@@ -172,7 +173,21 @@ class InfraStack(Stack):
                     self, f"{prefix}MigrationLogGroup",
                     removal_policy=RemovalPolicy.RETAIN  # Keep logs for troubleshooting
                 )
-            )
+            ),
+            essential=True
+        )
+
+        # Create a migration service with desired count 0 (for manual scaling)
+        migration_service = ecs.FargateService(
+            self, f"{prefix}MigrationService",
+            cluster=cluster,
+            service_name=f"{prefix}-Migration",
+            task_definition=migration_task_definition,
+            desired_count=0,  # Start with 0, scale to 1 to run migration
+            vpc_subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
+            ),
+            security_groups=[db_client_sg],
         )
 
         # AIDEV-NOTE: Add ECR permissions to migration task execution role for pulling images
@@ -193,55 +208,34 @@ class InfraStack(Stack):
             )
         )
 
-        # Custom resource to run the migration task
+        # Custom resource to trigger migration by scaling the service
         migration_trigger = custom_resources.AwsCustomResource(
             self, f"{prefix}MigrationTrigger",
             on_create=custom_resources.AwsSdkCall(
                 service="ECS",
-                action="runTask",
+                action="updateService",
                 parameters={
                     "cluster": cluster.cluster_arn,
-                    "taskDefinition": migration_task_definition.task_definition_arn,
-                    "launchType": "FARGATE",
-                    "networkConfiguration": {
-                        "awsvpcConfiguration": {
-                            "subnets": [subnet.subnet_id for subnet in vpc.private_subnets],
-                            "securityGroups": [db_client_sg.security_group_id],
-                            "assignPublicIp": "DISABLED"
-                        }
-                    }
+                    "service": migration_service.service_arn,
+                    "desiredCount": 1
                 },
                 physical_resource_id=custom_resources.PhysicalResourceId.of(f"{prefix}MigrationTrigger-{Aws.STACK_ID}")
             ),
             on_update=custom_resources.AwsSdkCall(
                 service="ECS",
-                action="runTask",
+                action="updateService",
                 parameters={
                     "cluster": cluster.cluster_arn,
-                    "taskDefinition": migration_task_definition.task_definition_arn,
-                    "launchType": "FARGATE",
-                    "networkConfiguration": {
-                        "awsvpcConfiguration": {
-                            "subnets": [subnet.subnet_id for subnet in vpc.private_subnets],
-                            "securityGroups": [db_client_sg.security_group_id],
-                            "assignPublicIp": "DISABLED"
-                        }
-                    }
+                    "service": migration_service.service_arn,
+                    "desiredCount": 1
                 },
                 physical_resource_id=custom_resources.PhysicalResourceId.of(f"{prefix}MigrationTrigger-{Aws.STACK_ID}")
             ),
             policy=custom_resources.AwsCustomResourcePolicy.from_statements([
                 iam.PolicyStatement(
-                    actions=["ecs:RunTask"],
-                    resources=[migration_task_definition.task_definition_arn],
+                    actions=["ecs:UpdateService"],
+                    resources=[migration_service.service_arn],
                 ),
-                iam.PolicyStatement(
-                    actions=["iam:PassRole"],
-                    resources=[
-                        migration_task_definition.task_role.role_arn,
-                        migration_task_definition.execution_role.role_arn
-                    ],
-                )
             ]),
         )
 
