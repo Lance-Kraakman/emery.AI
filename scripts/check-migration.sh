@@ -48,17 +48,32 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
   exit 0
 fi
 
-# Get VPC resources (same as CDK uses)
+# Get exact resource IDs from CloudFormation (matching CDK naming)
 VPC_ID=$(aws cloudformation describe-stack-resources --stack-name $STACK_NAME \
-  --logical-resource-id "${ENV_PREFIX}EmeryVpc" --query 'StackResources[0].PhysicalResourceId' --output text)
+  --query 'StackResources[?contains(LogicalResourceId, `${ENV_PREFIX}EmeryVpc`) && ResourceType==`AWS::EC2::VPC`].PhysicalResourceId' --output text)
 
-PRIVATE_SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=*Private*" \
-  --query 'Subnets[].SubnetId' --output text | tr '\t' ',')
+# Get private subnet IDs directly from CloudFormation  
+SUBNET1=$(aws cloudformation describe-stack-resources --stack-name $STACK_NAME \
+  --query 'StackResources[?contains(LogicalResourceId, `PrivateSubnet1Subnet`)].PhysicalResourceId' --output text)
+SUBNET2=$(aws cloudformation describe-stack-resources --stack-name $STACK_NAME \
+  --query 'StackResources[?contains(LogicalResourceId, `PrivateSubnet2Subnet`)].PhysicalResourceId' --output text)
+
+PRIVATE_SUBNETS="$SUBNET1,$SUBNET2"
 
 DB_CLIENT_SG=$(aws cloudformation describe-stack-resources --stack-name $STACK_NAME \
-  --logical-resource-id "${ENV_PREFIX}DbClientSg" --query 'StackResources[0].PhysicalResourceId' --output text)
+  --query 'StackResources[?contains(LogicalResourceId, `DbClientSg`) && ResourceType==`AWS::EC2::SecurityGroup`].PhysicalResourceId' --output text)
 
-# Run one-shot migration task
+echo "Debug info:"
+echo "  VPC: $VPC_ID"
+echo "  Private subnets: $PRIVATE_SUBNETS"
+echo "  Security group: $DB_CLIENT_SG"
+
+if [ -z "$PRIVATE_SUBNETS" ] || [ "$PRIVATE_SUBNETS" = "None" ]; then
+  echo "❌ No private subnets found"
+  exit 1
+fi
+
+# Run one-shot migration task  
 echo "🚀 Starting migration..."
 TASK_ARN=$(aws ecs run-task \
   --cluster $CLUSTER_ARN \
