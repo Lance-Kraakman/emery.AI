@@ -2,6 +2,7 @@
 
 // Migration wrapper that uses our existing database client parser
 import { execSync } from 'child_process';
+import postgres from 'postgres';
 import { parseConnectionString } from '../lib/db/client-parser';
 
 console.log('Starting database migration...');
@@ -20,7 +21,23 @@ try {
   // Set the parsed connection string
   process.env.DATABASE_URL = connectionString;
   
-  // Run the actual migration (extensions are preloaded via RDS parameter group)
+  // First, create required extensions
+  console.log('🔧 Creating database extensions...');
+  const sql = postgres(connectionString, { 
+    max: 1,
+    ssl: false,
+    connect_timeout: 30
+  });
+  
+  try {
+    await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
+    await sql`CREATE EXTENSION IF NOT EXISTS "vector"`;
+    console.log('✅ Extensions created successfully!');
+  } finally {
+    await sql.end();
+  }
+  
+  // Run the actual migration
   console.log('🚀 Running Drizzle migrations...');
   execSync('pnpm db:migrate', { 
     stdio: 'inherit',
