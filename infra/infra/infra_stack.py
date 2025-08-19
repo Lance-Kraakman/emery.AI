@@ -151,7 +151,7 @@ class InfraStack(Stack):
             machine_image=ec2.MachineImage.latest_amazon_linux2(),
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
             security_group=bastion_sg,
-            key_name="dev-bastion-machine",  # Use your specific key pair
+            key_name=f"{env_name}-bastion-machine",  # Environment-specific key pair
             user_data=ec2.UserData.for_linux()
         )
         
