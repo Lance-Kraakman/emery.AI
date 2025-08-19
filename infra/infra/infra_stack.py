@@ -219,7 +219,7 @@ class InfraStack(Stack):
                     "launchType": "FARGATE",
                     "networkConfiguration": migration_network_config
                 },
-                physical_resource_id=custom_resources.PhysicalResourceId.of(f"{prefix}MigrationTrigger-{Aws.STACK_ID}")
+                physical_resource_id=custom_resources.PhysicalResourceId.of(f"{prefix}MigrationTrigger-v2-{Aws.STACK_ID}")
             ),
             on_update=custom_resources.AwsSdkCall(
                 service="ECS",
@@ -230,7 +230,7 @@ class InfraStack(Stack):
                     "launchType": "FARGATE",
                     "networkConfiguration": migration_network_config
                 },
-                physical_resource_id=custom_resources.PhysicalResourceId.of(f"{prefix}MigrationTrigger-{Aws.STACK_ID}")
+                physical_resource_id=custom_resources.PhysicalResourceId.of(f"{prefix}MigrationTrigger-v2-{Aws.STACK_ID}")
             ),
             policy=custom_resources.AwsCustomResourcePolicy.from_statements([
                 iam.PolicyStatement(
