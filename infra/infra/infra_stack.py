@@ -112,7 +112,21 @@ class InfraStack(Stack):
             machine_image=ec2.MachineImage.latest_amazon_linux2(),
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
             security_group=bastion_sg,
-            key_name="dev-bastion-machine"  # Use your specific key pair
+            key_name="dev-bastion-machine",  # Use your specific key pair
+            user_data=ec2.UserData.for_linux()
+        )
+        
+        # Add user data to install PostgreSQL 14 client for SCRAM authentication support
+        bastion_host.user_data.add_commands(
+            "# Enable PostgreSQL 14 from Amazon Linux Extras",
+            "amazon-linux-extras enable postgresql14",
+            "yum clean metadata",
+            "# Install PostgreSQL 14 client",
+            "yum install -y postgresql",
+            "# Install AWS CLI v2 for secrets management",
+            "yum install -y awscli",
+            "# Verify PostgreSQL 14 installation",
+            "psql --version > /home/ec2-user/psql-version.txt"
         )
         
         # Allow bastion to connect to database
@@ -156,7 +170,7 @@ class InfraStack(Stack):
                 stream_prefix=f"{prefix}-Migration",
                 log_group=logs.LogGroup(
                     self, f"{prefix}MigrationLogGroup",
-                    removal_policy=RemovalPolicy.DESTROY
+                    removal_policy=RemovalPolicy.RETAIN  # Keep logs for troubleshooting
                 )
             )
         )
@@ -336,6 +350,20 @@ class InfraStack(Stack):
             self, f"{prefix}DatabaseEndpoint",
             value=db_instance.instance_endpoint.hostname,
             description="Database endpoint for SSH tunnel connection"
+        )
+
+        # Output migration log group for troubleshooting
+        CfnOutput(
+            self, f"{prefix}MigrationLogGroup",
+            value=f"/aws/ecs/{prefix}-Migration",
+            description="CloudWatch log group for migration task troubleshooting"
+        )
+
+        # Output migration task definition ARN for manual re-runs
+        CfnOutput(
+            self, f"{prefix}MigrationTaskDefinitionArn",
+            value=migration_task_definition.task_definition_arn,
+            description="Migration task definition ARN for manual execution"
         )
 
         # Create a new Task Definition for the scheduler
