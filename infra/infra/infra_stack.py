@@ -19,8 +19,35 @@ from aws_cdk import (
 )
 from constructs import Construct
 import os
+import time
+import hashlib
+import glob
 
 class InfraStack(Stack):
+
+    def _get_migration_hash(self) -> str:
+        """Generate hash of migration files to force migration trigger on schema changes"""
+        migration_path = "../drizzle"
+        hash_input = ""
+        
+        try:
+            if os.path.exists(migration_path):
+                for file_path in sorted(glob.glob(f"{migration_path}/*.sql")):
+                    with open(file_path, 'r') as f:
+                        hash_input += f.read()
+            
+            # Also include the schema file to detect changes
+            schema_path = "../lib/db/schema.ts"
+            if os.path.exists(schema_path):
+                with open(schema_path, 'r') as f:
+                    hash_input += f.read()
+                    
+        except Exception as e:
+            print(f"Warning: Could not read migration files for hashing: {e}")
+            # Fallback to current timestamp to ensure migrations run
+            hash_input = str(time.time())
+        
+        return hashlib.md5(hash_input.encode()).hexdigest()[:8]
 
     def _get_agent_image(self) -> ecs.ContainerImage:
         """Get agent container image from ECR or build from source"""
