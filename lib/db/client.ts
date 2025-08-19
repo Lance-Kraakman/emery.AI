@@ -8,7 +8,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 // AIDEV-NOTE: Import shared parser function
-const { parseConnectionString } = require('./client-parser');
+import { parseConnectionString } from './client-parser';
 
 // AIDEV-NOTE: Use dummy connection during build to prevent timeouts
 const rawConnectionString = process.env.DATABASE_URL;
