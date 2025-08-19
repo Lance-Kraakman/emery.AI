@@ -59,8 +59,7 @@ class InfraStack(Stack):
                 version=rds.PostgresEngineVersion.VER_16_3
             ),
             parameters={
-                "rds.force_ssl": "0",  # Allow non-SSL connections for development
-                "shared_preload_libraries": "vector,uuid-ossp"  # Preload pgvector and uuid-ossp extensions
+                "rds.force_ssl": "0"  # Allow non-SSL connections for development
             }
         )
 
