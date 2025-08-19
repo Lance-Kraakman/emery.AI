@@ -153,6 +153,71 @@ aws ecs list-tasks --cluster DevEmeryCluster
 aws logs filter-log-events --log-group-name /ecs/DevMigration
 ```
 
+## Database Migration System
+
+### Overview
+
+The application uses an automated migration system that:
+- **Automatic**: Runs during every deployment before services start
+- **Manual**: Can be triggered on-demand for testing/debugging
+- **Extensions**: Automatically installs pgvector and uuid-ossp extensions
+- **SSL**: Disabled for development (safe in private VPC)
+
+### Automatic Migrations
+
+Migrations run automatically during deployment via CDK Custom Resource:
+- **Triggers**: On stack create/update
+- **Timing**: Before frontend/scheduler services start  
+- **Logs**: Stored in CloudWatch with retention for troubleshooting
+
+### Manual Migration Trigger
+
+To run migrations manually for testing:
+
+```bash
+# Run migration task manually
+./scripts/check-migration.sh dev
+
+# Check migration logs
+aws logs tail "Emery-Infra-Dev-DevMigrationLogGroupAEF8E648-XgtlOBz08Nm2" --follow
+```
+
+### Migration Process
+
+1. **Extension Creation**: Installs `uuid-ossp` and `vector` extensions
+2. **Schema Migration**: Runs Drizzle migrations to create/update tables
+3. **Logging**: All output captured in CloudWatch for debugging
+
+### Troubleshooting Migrations
+
+**Check Recent Migration Status:**
+```bash
+# List recent migration tasks
+aws ecs list-tasks --cluster "arn:aws:ecs:ap-southeast-2:473004513440:cluster/DevEmeryCluster" --query 'taskArns[]'
+
+# Check specific task status
+aws ecs describe-tasks --cluster <cluster-arn> --tasks <task-arn>
+```
+
+**Common Migration Issues:**
+- **Extension errors**: pgvector or uuid-ossp not installed → Fixed automatically by migration script
+- **Network timeouts**: Security group/subnet misconfiguration → Check VPC setup
+- **SSL errors**: Certificate issues → SSL disabled for development environment
+- **Permission errors**: Database access denied → Check RDS security groups
+
+**Migration Logs Location:**
+- **CloudWatch Group**: `Emery-Infra-Dev-DevMigrationLogGroupAEF8E648-XgtlOBz08Nm2`
+- **Retention**: 2 years for troubleshooting
+- **Access**: Via AWS Console or CLI
+
+### Database Extensions
+
+The migration system automatically installs:
+- **pgvector**: For vector embeddings and similarity search
+- **uuid-ossp**: For UUID generation functions
+
+These are created with `CREATE EXTENSION IF NOT EXISTS` for idempotency.
+
 ## Security Notes
 
 - Database is in private subnets (not accessible from internet)
