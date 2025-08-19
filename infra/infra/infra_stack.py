@@ -175,6 +175,24 @@ class InfraStack(Stack):
             )
         )
 
+        # AIDEV-NOTE: Add ECR permissions to migration task execution role for pulling images
+        migration_task_definition.execution_role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
+        )
+        # Add specific ECR permissions
+        migration_task_definition.execution_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "ecr:GetAuthorizationToken",
+                    "ecr:BatchCheckLayerAvailability", 
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchGetImage"
+                ],
+                resources=["*"]
+            )
+        )
+
         # Custom resource to run the migration task
         migration_trigger = custom_resources.AwsCustomResource(
             self, f"{prefix}MigrationTrigger",
