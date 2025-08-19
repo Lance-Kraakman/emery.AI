@@ -4,11 +4,12 @@
  */
 
 import { createNotificationClient, rawClient } from '@/lib/db/client';
-import { taskExecutionPipeline, type TaskCreationRequest } from '../task-execution-pipeline';
+import { taskExecutionPipeline } from '../task-execution-pipeline';
 import type { ToolConfig, ServerConfig } from '@/app/actions/types';
 import type postgres from 'postgres';
 
 export interface ManualTaskRequest {
+  taskId: string;
   agentId: number;
   instructions: string;
   tools?: ToolConfig[];
@@ -81,30 +82,19 @@ export class ManualDispatcher {
    * Execute a manual task immediately
    */
   private async executeManualTask(request: ManualTaskRequest): Promise<void> {
-    console.log(`[MANUAL-DISPATCHER] 🚀 Executing manual task for agent ${request.agentId}`);
+    console.log(`[MANUAL-DISPATCHER] 🚀 Executing existing manual task ${request.taskId} for agent ${request.agentId}`);
     
-    const taskRequest: TaskCreationRequest = {
-      agentId: request.agentId,
-      instructions: request.instructions,
-      triggerType: 'MANUAL',
-      tools: request.tools,
-      servers: request.servers,
-      metadata: {
-        userId: request.userId,
-        executedAt: new Date().toISOString()
-      }
-    };
-
     try {
-      const result = await taskExecutionPipeline.createAndExecuteTask(taskRequest);
+      // Execute the existing pending task instead of creating a new one
+      const result = await taskExecutionPipeline.executeExistingTask(request.taskId);
       
       if (result.success) {
-        console.log(`[MANUAL-DISPATCHER] ✅ Manual task ${result.taskId.substring(0, 8)} completed successfully`);
+        console.log(`[MANUAL-DISPATCHER] ✅ Successfully executed task ${request.taskId.substring(0, 8)}`);
       } else {
-        console.log(`[MANUAL-DISPATCHER] ❌ Manual task ${result.taskId.substring(0, 8)} failed: ${result.error}`);
+        console.error(`[MANUAL-DISPATCHER] ❌ Failed to execute task ${request.taskId.substring(0, 8)}:`, result.error);
       }
     } catch (error) {
-      console.error('[MANUAL-DISPATCHER] ❌ Error executing manual task:', error);
+      console.error(`[MANUAL-DISPATCHER] ❌ Error executing manual task ${request.taskId.substring(0, 8)}:`, error);
     }
   }
 

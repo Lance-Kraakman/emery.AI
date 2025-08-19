@@ -1,9 +1,43 @@
--- Migration: Add PostgreSQL triggers for RAG re-indexing notifications
--- This enables the RAG dispatcher to automatically re-index when data changes
+-- Database triggers for real-time task notifications
+-- This trigger sends a notification when a new task is created
+
+-- Function to send task notification
+CREATE OR REPLACE FUNCTION notify_new_task()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Send notification for manual tasks (dispatcher expects manual_task_created)
+    PERFORM pg_notify(
+        'manual_task_created',
+        json_build_object(
+            'taskId', NEW.id,
+            'agentId', NEW.agent_id,
+            'instructions', (NEW.instructions->>'instructions'),
+            'tools', COALESCE(NEW.instructions->'tools', '[]'::jsonb),
+            'servers', COALESCE(NEW.instructions->'servers', '[]'::jsonb),
+            'userId', NEW.created_by
+        )::text
+    );
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger on tasks table
+DROP TRIGGER IF EXISTS trigger_new_task_created ON tasks;
+CREATE TRIGGER trigger_new_task_created
+    AFTER INSERT ON tasks
+    FOR EACH ROW
+    EXECUTE FUNCTION notify_new_task();
+
+-- STATUS CHANGE TRIGGER REMOVED TO PREVENT INFINITE LOOPS
+-- Tasks should only be processed once when initially created
+-- If retry functionality is needed, it should be handled explicitly via API
 
 -- =============================================================================
--- RAG RE-INDEXING TRIGGER FUNCTIONS
+-- RAG RE-INDEXING TRIGGERS
 -- =============================================================================
+-- Automatically notify the RAG dispatcher when data changes that affect indexes
+-- Uses PostgreSQL LISTEN/NOTIFY for real-time event-driven re-indexing
 
 -- Generic function for organization-level changes
 CREATE OR REPLACE FUNCTION notify_rag_reindex_organization()
@@ -53,10 +87,6 @@ BEGIN
   RETURN COALESCE(NEW, OLD);
 END;
 $$ LANGUAGE plpgsql;
-
--- =============================================================================
--- RAG RE-INDEXING TRIGGERS
--- =============================================================================
 
 -- Organizations trigger
 DROP TRIGGER IF EXISTS rag_reindex_organization_trigger ON organizations;
