@@ -15,7 +15,7 @@ export function parseConnectionString(dbUrl: string): string {
     // Add SSL for RDS connections if not already present
     if (dbUrl.includes('rds.amazonaws.com') && !dbUrl.includes('sslmode=')) {
       const separator = dbUrl.includes('?') ? '&' : '?';
-      return `${dbUrl}${separator}sslmode=require`;
+      return `${dbUrl}${separator}sslmode=require&sslcert=&sslkey=&sslrootcert=&sslcrl=`;
     }
     return dbUrl;
   }
@@ -26,9 +26,9 @@ export function parseConnectionString(dbUrl: string): string {
     if (secret.host && secret.username && secret.password && secret.dbname && secret.port) {
       let connectionString = `postgresql://${secret.username}:${secret.password}@${secret.host}:${secret.port}/${secret.dbname}`;
       
-      // Add SSL for RDS connections
+      // Add SSL for RDS connections with certificate verification disabled
       if (secret.host.includes('rds.amazonaws.com')) {
-        connectionString += '?sslmode=require';
+        connectionString += '?sslmode=require&sslcert=&sslkey=&sslrootcert=&sslcrl=';
       }
       
       console.log('[DATABASE] Parsed AWS RDS secret into connection string with SSL');
