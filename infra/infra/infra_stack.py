@@ -354,7 +354,7 @@ class InfraStack(Stack):
 
         # Output migration log group for troubleshooting
         CfnOutput(
-            self, f"{prefix}MigrationLogGroup",
+            self, f"{prefix}MigrationLogGroupOutput",
             value=f"/aws/ecs/{prefix}-Migration",
             description="CloudWatch log group for migration task troubleshooting"
         )
