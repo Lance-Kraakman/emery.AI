@@ -12,10 +12,10 @@ interface DatabaseSecret {
 export function parseConnectionString(dbUrl: string): string {
   // Check if it's already a proper connection string
   if (dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://')) {
-    // Add SSL for RDS connections if not already present
+    // Disable SSL for development RDS connections to avoid certificate issues
     if (dbUrl.includes('rds.amazonaws.com') && !dbUrl.includes('sslmode=')) {
       const separator = dbUrl.includes('?') ? '&' : '?';
-      return `${dbUrl}${separator}sslmode=require&sslcert=&sslkey=&sslrootcert=&sslcrl=`;
+      return `${dbUrl}${separator}sslmode=disable`;
     }
     return dbUrl;
   }
@@ -26,12 +26,12 @@ export function parseConnectionString(dbUrl: string): string {
     if (secret.host && secret.username && secret.password && secret.dbname && secret.port) {
       let connectionString = `postgresql://${secret.username}:${secret.password}@${secret.host}:${secret.port}/${secret.dbname}`;
       
-      // Add SSL for RDS connections with certificate verification disabled
+      // Disable SSL for development to avoid certificate issues
       if (secret.host.includes('rds.amazonaws.com')) {
-        connectionString += '?sslmode=require&sslcert=&sslkey=&sslrootcert=&sslcrl=';
+        connectionString += '?sslmode=disable';
       }
       
-      console.log('[DATABASE] Parsed AWS RDS secret into connection string with SSL');
+      console.log('[DATABASE] Parsed AWS RDS secret into connection string (SSL disabled for dev)');
       return connectionString;
     }
   } catch (e) {
