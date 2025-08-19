@@ -172,14 +172,17 @@ Migrations run automatically during deployment via CDK Custom Resource:
 
 ### Manual Migration Trigger
 
-To run migrations manually for testing:
+Migrations now run automatically via init containers during deployment. To check migration status:
 
 ```bash
-# Run migration task manually
-./scripts/check-migration.sh dev
+# Check frontend migration logs
+aws logs tail "/aws/ecs/Dev-Migration-Init" --follow
 
-# Check migration logs
-aws logs tail "Emery-Infra-Dev-DevMigrationLogGroupAEF8E648-XgtlOBz08Nm2" --follow
+# Check scheduler migration logs  
+aws logs tail "/aws/ecs/Dev-Scheduler-Migration" --follow
+
+# View recent migration executions
+aws logs describe-log-streams --log-group-name "/aws/ecs/Dev-Migration-Init" --order-by LastEventTime --descending --max-items 5
 ```
 
 ### Migration Process
