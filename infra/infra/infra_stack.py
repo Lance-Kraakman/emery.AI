@@ -52,6 +52,17 @@ class InfraStack(Stack):
             cluster_name=f"{prefix}EmeryCluster"
         )
 
+        # Create parameter group to allow non-SSL connections for development
+        db_parameter_group = rds.ParameterGroup(
+            self, f"{prefix}PostgresParams",
+            engine=rds.DatabaseInstanceEngine.postgres(
+                version=rds.PostgresEngineVersion.VER_16_3
+            ),
+            parameters={
+                "rds.force_ssl": "0"  # Allow non-SSL connections for development
+            }
+        )
+
         # Create a PostgreSQL database instance in RDS
         # This will be placed in the private subnets of our VPC
         db_instance = rds.DatabaseInstance(
@@ -69,6 +80,7 @@ class InfraStack(Stack):
             database_name=f"emery_{env_name}",
             # The secret will be automatically created and stored in AWS Secrets Manager
             credentials=rds.Credentials.from_generated_secret(f"db_master_user_{env_name}"),
+            parameter_group=db_parameter_group,  # Use custom parameter group
             multi_az=False, # For cost-effectiveness in dev/staging. Set to True for production.
             allocated_storage=20, # 20 GB
             max_allocated_storage=100,
