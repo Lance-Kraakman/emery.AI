@@ -48,7 +48,7 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
   exit 0
 fi
 
-# Get VPC resources
+# Get VPC resources (same as CDK uses)
 VPC_ID=$(aws cloudformation describe-stack-resources --stack-name $STACK_NAME \
   --logical-resource-id "${ENV_PREFIX}EmeryVpc" --query 'StackResources[0].PhysicalResourceId' --output text)
 
@@ -58,27 +58,26 @@ PRIVATE_SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID
 DB_CLIENT_SG=$(aws cloudformation describe-stack-resources --stack-name $STACK_NAME \
   --logical-resource-id "${ENV_PREFIX}DbClientSg" --query 'StackResources[0].PhysicalResourceId' --output text)
 
-# Scale migration service to 1 to run migration
+# Run one-shot migration task
 echo "🚀 Starting migration..."
-aws ecs update-service \
+TASK_ARN=$(aws ecs run-task \
   --cluster $CLUSTER_ARN \
-  --service "${ENV_PREFIX}-Migration" \
-  --desired-count 1 > /dev/null
+  --task-definition $MIGRATION_TASK_DEF \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNETS],securityGroups=[$DB_CLIENT_SG],assignPublicIp=DISABLED}" \
+  --query 'tasks[0].taskArn' --output text)
 
 if [ $? -eq 0 ]; then
   # Find the actual log group name
   LOG_GROUP=$(aws logs describe-log-groups --query 'logGroups[?contains(logGroupName, `Migration`)].logGroupName' --output text | grep -v lambda | head -1)
   
-  echo "✅ Migration service scaled to 1"
-  echo "Monitor: aws ecs describe-services --cluster $CLUSTER_ARN --services ${ENV_PREFIX}-Migration"
+  echo "✅ Migration task started: $(basename $TASK_ARN)"
+  echo "Monitor: aws ecs describe-tasks --cluster $CLUSTER_ARN --tasks $TASK_ARN"
   if [ -n "$LOG_GROUP" ]; then
     echo "Logs: aws logs tail $LOG_GROUP --follow"
   else
     echo "Logs: Check CloudWatch for migration logs"
   fi
-  echo ""
-  echo "💡 To stop migration service after completion:"
-  echo "   aws ecs update-service --cluster $CLUSTER_ARN --service ${ENV_PREFIX}-Migration --desired-count 0"
 else
   echo "❌ Failed to start migration"
   exit 1
