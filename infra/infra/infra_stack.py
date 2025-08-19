@@ -89,13 +89,29 @@ class InfraStack(Stack):
         # Allow traffic from the shared SG to the database
         db_instance.connections.allow_default_port_from(db_client_sg)
 
-        # Create bastion host for secure database access
-        bastion_host = ec2.BastionHostLinux(
+        # Create security group for bastion host
+        bastion_sg = ec2.SecurityGroup(
+            self, f"{prefix}BastionSecurityGroup",
+            vpc=vpc,
+            description="Security group for bastion host",
+            allow_all_outbound=True
+        )
+        
+        # Allow SSH access from anywhere (for development)
+        bastion_sg.add_ingress_rule(
+            ec2.Peer.any_ipv4(),
+            ec2.Port.tcp(22),
+            "Allow SSH access"
+        )
+
+        # Create bastion host for secure database access  
+        bastion_host = ec2.Instance(
             self, f"{prefix}DatabaseBastion",
             vpc=vpc,
             instance_type=ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO),
             machine_image=ec2.MachineImage.latest_amazon_linux2(),
-            subnet_selection=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
+            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
+            security_group=bastion_sg,
             key_name="dev-bastion-machine"  # Use your specific key pair
         )
         
