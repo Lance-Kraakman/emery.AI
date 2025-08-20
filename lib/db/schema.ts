@@ -155,6 +155,7 @@ export const agents = pgTable("agents", {
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
   agentId: integer("agent_id").notNull().references(() => agents.id), // WHICH agent executes this
+  organizationId: integer("organization_id").notNull().references(() => organizations.id), // Organization for RLS
   name: text("name").notNull(),
   capabilityName: text("capability_name"), // Optional - system can auto-route if not specified
   instructions: jsonb("instructions").notNull(), // Step-like config: {instructions: string, tools?: ToolConfig[], servers?: ServerConfig[]}
@@ -231,6 +232,7 @@ export const ragIndexes = pgTable("rag_indexes", {
 export const ragDocuments = pgTable("rag_documents", {
   id: uuid("id").primaryKey().defaultRandom(),
   ragIndexId: uuid("rag_index_id").notNull().references(() => ragIndexes.id),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id), // Denormalized for performance
   
   // Source identification
   sourceType: text("source_type").notNull(), // "table", "file", "agent", "workflow"
@@ -256,6 +258,7 @@ export const ragDocuments = pgTable("rag_documents", {
 export const ragQueryLogs = pgTable("rag_query_logs", {
   id: uuid("id").primaryKey().defaultRandom(),
   ragIndexId: uuid("rag_index_id").notNull().references(() => ragIndexes.id),
+  organizationId: integer("organization_id").references(() => organizations.id), // Denormalized for performance
   
   // Query details
   query: text("query").notNull(),

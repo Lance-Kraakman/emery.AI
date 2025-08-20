@@ -47,6 +47,7 @@ export class TaskExecutionPipeline {
       await db.insert(tasks).values({
         id: taskId,
         agentId: request.agentId,
+        organizationId: agent.organizationId!, // Get from agent for RLS
         name: `${request.triggerType}: ${request.instructions.substring(0, 50)}...`,
         capabilityName: null, // Determined by smolagents
         instructions: {

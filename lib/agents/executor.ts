@@ -53,6 +53,7 @@ export async function executeAgentCapability(
     await db.insert(tasks).values({
       id: executionId,
       agentId: agent.id,
+      organizationId: agent.organizationId!, // Get from agent for RLS
       name: `Capability execution: ${capabilityName}`,
       capabilityName: capabilityName,
       status: 'in_progress',
