@@ -4,7 +4,8 @@ import { db } from "@/lib/db/client";
 import { roles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import type { ActionResult, CreateRoleData } from "./types";
+import type { ActionResult } from "./types";
+import type { CreateRoleData } from "@/lib/domain/entities/role";
 
 export async function createRole(data: CreateRoleData): Promise<ActionResult> {
   try {
