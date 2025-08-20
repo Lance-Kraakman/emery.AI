@@ -17,7 +17,7 @@ export interface RagIndex {
   id: string
   name: string
   description?: string
-  organizationId?: number
+  organizationId: number  // Required for RLS compliance
   agentId?: number
   roleId?: number
   domainTypes: string[]
@@ -79,7 +79,7 @@ export class RagService {
   async createIndex(params: {
     name: string
     description?: string
-    organizationId?: number
+    organizationId: number  // Required for RLS compliance
     agentId?: number
     roleId?: number
     domainTypes: string[] // ["tables", "files", "agents", "workflows", "teams"]
@@ -115,7 +115,7 @@ export class RagService {
       id: index.id,
       name: index.name,
       description: index.description || undefined,
-      organizationId: index.organizationId || undefined,
+      organizationId: index.organizationId,  // Required field, never null
       agentId: index.agentId || undefined,
       roleId: index.roleId || undefined,
       domainTypes: index.domainTypes as string[],
@@ -144,7 +144,7 @@ export class RagService {
       id: index.id,
       name: index.name,
       description: index.description || undefined,
-      organizationId: index.organizationId || undefined,
+      organizationId: index.organizationId,  // Required field, never null
       agentId: index.agentId || undefined,
       roleId: index.roleId || undefined,
       domainTypes: index.domainTypes as string[],
@@ -222,9 +222,7 @@ export class RagService {
   // Index organization tables with batch processing
   private async indexTables(indexId: string, ragIndex: RagIndex): Promise<number> {
     const conditions = []
-    if (ragIndex.organizationId) {
-      conditions.push(eq(tables.organizationId, ragIndex.organizationId))
-    }
+    conditions.push(eq(tables.organizationId, ragIndex.organizationId))
 
     const tablesToIndex = await db.select({
       id: tables.id,
@@ -253,6 +251,7 @@ export class RagService {
           value: schemaContent,
         })
         return {
+          organizationId: ragIndex.organizationId,  // Required for RLS compliance
           sourceId: table.id.toString(),
           sourceName: table.name,
           title: `Table: ${table.name} (Database: ${table.databaseName || 'Unknown'})`,
@@ -279,9 +278,7 @@ export class RagService {
   // Index databases with metadata
   private async indexDatabases(indexId: string, ragIndex: RagIndex): Promise<number> {
     const conditions = []
-    if (ragIndex.organizationId) {
-      conditions.push(eq(databases.organizationId, ragIndex.organizationId))
-    }
+    conditions.push(eq(databases.organizationId, ragIndex.organizationId))
 
     const databasesToIndex = await db.select({
       id: databases.id,
@@ -304,6 +301,7 @@ export class RagService {
           value: databaseContent,
         })
         return {
+          organizationId: ragIndex.organizationId,  // Required for RLS compliance
           sourceId: database.id.toString(),
           sourceName: database.name,
           title: `Database: ${database.name}`,
@@ -325,9 +323,6 @@ export class RagService {
 
   // Index agents for workflow context
   private async indexOrganizations(indexId: string, ragIndex: RagIndex): Promise<number> {
-    if (!ragIndex.organizationId) {
-      return 0
-    }
 
     // Get organization data
     const [organization] = await db
@@ -353,6 +348,7 @@ export class RagService {
       value: organizationContent,
     })
     const newDocument = {
+      organizationId: ragIndex.organizationId,  // Required for RLS compliance
       sourceId: organization.id.toString(),
       sourceName: organization.name,
       title: `Organization: ${organization.name}`,
@@ -371,9 +367,6 @@ export class RagService {
   }
 
   private async indexAgents(indexId: string, ragIndex: RagIndex): Promise<number> {
-    if (!ragIndex.organizationId) {
-      return 0
-    }
 
     // Get agents for this organization
     const organizationAgents = await db
@@ -405,6 +398,7 @@ export class RagService {
           value: agentContent,
         })
         return {
+          organizationId: ragIndex.organizationId,  // Required for RLS compliance
           sourceId: agent.id.toString(),
           sourceName: agent.name,
           title: `Agent: ${agent.name}`,
@@ -428,9 +422,6 @@ export class RagService {
   }
 
   private async indexTeams(indexId: string, ragIndex: RagIndex): Promise<number> {
-    if (!ragIndex.organizationId) {
-      return 0
-    }
 
     // Get teams for this organization
     const organizationTeams = await db
@@ -451,6 +442,7 @@ export class RagService {
           value: teamContent,
         })
         return {
+          organizationId: ragIndex.organizationId,  // Required for RLS compliance
           sourceId: team.id.toString(),
           sourceName: team.name,
           title: `Team: ${team.name}`,
@@ -745,9 +737,6 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
 
   // Index files with content extraction
   private async indexFiles(indexId: string, ragIndex: RagIndex): Promise<number> {
-    if (!ragIndex.organizationId) {
-      return 0
-    }
 
     console.log('[FILE-INDEX] Starting file indexing for organization', ragIndex.organizationId)
 
@@ -830,6 +819,7 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${processedChunks.length} from ${
                     })
 
                     allNewDocuments.push({
+                      organizationId: ragIndex.organizationId,  // Required for RLS compliance
                       sourceId: `${file.id}-chunk-${chunkIndex}`,
                       sourceName: file.name,
                       title: `File: ${file.name} (Chunk ${chunkIndex + 1}/${processedChunks.length}) - ${field.database_name} → ${field.table_name} → ${field.field_name}`,
