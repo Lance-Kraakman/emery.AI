@@ -42,6 +42,7 @@ export async function createTask(data: CreateTaskData): Promise<ActionResult> {
 
     const [newTask] = await db.insert(tasks).values({
       agentId,
+      organizationId: agent.organizationId!, // Required for RLS
       name,
       capabilityName: capabilityName || null, // Allow null for auto-routing
       instructions,

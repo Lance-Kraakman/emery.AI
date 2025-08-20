@@ -1,7 +1,11 @@
--- Database triggers for real-time task notifications
--- This trigger sends a notification when a new task is created
+-- Database Notification Triggers for Real-Time Task Processing
+-- Handles real-time notifications for task scheduling and RAG re-indexing
 
--- Function to send task notification
+-- =============================================================================
+-- TASK NOTIFICATION TRIGGERS
+-- =============================================================================
+
+-- Function to send task notification for manual dispatcher
 CREATE OR REPLACE FUNCTION notify_new_task()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -22,16 +26,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Create trigger on tasks table
+-- Create trigger on tasks table for new task notifications
 DROP TRIGGER IF EXISTS trigger_new_task_created ON tasks;
 CREATE TRIGGER trigger_new_task_created
     AFTER INSERT ON tasks
     FOR EACH ROW
     EXECUTE FUNCTION notify_new_task();
-
--- STATUS CHANGE TRIGGER REMOVED TO PREVENT INFINITE LOOPS
--- Tasks should only be processed once when initially created
--- If retry functionality is needed, it should be handled explicitly via API
 
 -- =============================================================================
 -- RAG RE-INDEXING TRIGGERS

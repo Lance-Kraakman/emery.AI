@@ -70,6 +70,7 @@ export async function executeAgentViaGRPC(
       await db.insert(tasks).values({
         id: executionId,
         agentId: agent.id,
+        organizationId: agent.organizationId!, // Required for RLS
         name: `Agent execution: ${instructions.substring(0, 50)}...`,
         capabilityName: null, // Determined by smolagents
         instructions: { 
