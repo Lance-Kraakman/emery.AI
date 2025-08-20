@@ -5,11 +5,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
 const s3Client = new S3Client({
-  region: process.env.AWS_REGION || 'us-east-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  },
+  region: process.env.AWS_REGION || 'ap-southeast-2',
   endpoint: process.env.S3_ENDPOINT_URL,
   forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
 });
