@@ -257,6 +257,7 @@ export class RagService {
           sourceName: table.name,
           title: `Table: ${table.name} (Database: ${table.databaseName || 'Unknown'})`,
           content: schemaContent,
+          organizationId: table.organizationId,
           metadata: {
             tableId: table.id,
             tableName: table.name,
@@ -264,7 +265,6 @@ export class RagService {
             databaseName: table.databaseName,
             databaseSlug: table.databaseSlug,
             tableMetadata: table.metadata,
-            organizationId: table.organizationId,
             fieldCount: tableFields.length,
           },
           embedding,
@@ -308,11 +308,11 @@ export class RagService {
           sourceName: database.name,
           title: `Database: ${database.name}`,
           content: databaseContent,
+          organizationId: database.organizationId,
           metadata: {
             databaseId: database.id,
             slug: database.slug,
             databaseMetadata: database.metadata,
-            organizationId: database.organizationId,
           },
           embedding,
           contentHash: crypto.createHash('md5').update(databaseContent).digest('hex'),
@@ -357,8 +357,8 @@ export class RagService {
       sourceName: organization.name,
       title: `Organization: ${organization.name}`,
       content: organizationContent,
+      organizationId: organization.id,
       metadata: {
-        organizationId: organization.id,
         sharedToolsCount: organization.sharedTools?.length || 0,
         sharedServersCount: organization.sharedServers?.length || 0,
         createdAt: organization.createdAt,
@@ -409,11 +409,11 @@ export class RagService {
           sourceName: agent.name,
           title: `Agent: ${agent.name}`,
           content: agentContent,
+          organizationId: ragIndex.organizationId!,
           metadata: {
             agentId: agent.id,
             role: agent.role,
             status: agent.status,
-            organizationId: ragIndex.organizationId,
             toolCount: Array.isArray(agent.tools) ? agent.tools.length : 0,
             serverCount: Array.isArray(agent.servers) ? agent.servers.length : 0,
             capabilityCount: Array.isArray(agent.capabilities) ? agent.capabilities.length : 0,
@@ -455,9 +455,9 @@ export class RagService {
           sourceName: team.name,
           title: `Team: ${team.name}`,
           content: teamContent,
+          organizationId: ragIndex.organizationId!,
           metadata: {
             teamId: team.id,
-            organizationId: ragIndex.organizationId,
             agentCount: Array.isArray(team.agentIds) ? team.agentIds.length : 0,
           },
           embedding,
@@ -834,6 +834,7 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${processedChunks.length} from ${
                       sourceName: file.name,
                       title: `File: ${file.name} (Chunk ${chunkIndex + 1}/${processedChunks.length}) - ${field.database_name} → ${field.table_name} → ${field.field_name}`,
                       content: enhancedContent,
+                      organizationId: ragIndex.organizationId!,
                       metadata: {
                         fileId: file.id,
                         fileName: file.name,
@@ -848,7 +849,6 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${processedChunks.length} from ${
                         fieldId: field.field_id,
                         fieldName: field.field_name,
                         uploadedAt: file.uploadedAt,
-                        organizationId: ragIndex.organizationId,
                         contextPath: `${field.database_name} → ${field.table_name} → ${field.field_name}`,
                         llamaIndexMetadata: chunk.metadata,
                         processingMethod: 'llamaindex'
