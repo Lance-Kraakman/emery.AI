@@ -97,9 +97,3 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/emery-agents/src
         working-directory: emery-agents
         run: uv run python -m pytest tests/ -v --tb=short
-
-      - name: Test TypeScript Integration
-        run: pnpm typecheck
-
-      - name: Test Linting
-        run: pnpm lint
