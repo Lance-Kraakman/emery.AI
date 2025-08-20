@@ -1,4 +1,4 @@
-name: Integration Tests
+name: Tests
 
 on:
   push:
@@ -13,7 +13,7 @@ env:
   POSTGRES_DB: emery_test
 
 jobs:
-  integration-tests:
+  tests:
     runs-on: ubuntu-latest
     
     services:
@@ -97,3 +97,12 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/emery-agents/src
         working-directory: emery-agents
         run: uv run python -m pytest tests/ -v --tb=short
+
+      - name: Run TypeScript Unit Tests
+        run: pnpm test:run
+
+      - name: Test TypeScript Integration
+        run: pnpm typecheck
+
+      - name: Test Linting
+        run: pnpm lint

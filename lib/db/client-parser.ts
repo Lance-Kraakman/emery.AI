@@ -10,6 +10,11 @@ interface DatabaseSecret {
 }
 
 export function parseConnectionString(dbUrl: string): string {
+  // Handle null or undefined input
+  if (!dbUrl) {
+    return dbUrl;
+  }
+  
   // Check if it's already a proper connection string
   if (dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://')) {
     // Disable SSL for development RDS connections to avoid certificate issues
@@ -23,8 +28,10 @@ export function parseConnectionString(dbUrl: string): string {
   // Try to parse as JSON (AWS RDS secret format)
   try {
     const secret = JSON.parse(dbUrl) as DatabaseSecret;
-    if (secret.host && secret.username && secret.password && secret.dbname && secret.port) {
-      let connectionString = `postgresql://${secret.username}:${secret.password}@${secret.host}:${secret.port}/${secret.dbname}`;
+    if (secret.host && secret.username && secret.password && secret.dbname) {
+      // Default port to 5432 if not provided
+      const port = secret.port || 5432;
+      let connectionString = `postgresql://${secret.username}:${secret.password}@${secret.host}:${port}/${secret.dbname}`;
       
       // Disable SSL for development to avoid certificate issues
       if (secret.host.includes('rds.amazonaws.com')) {
