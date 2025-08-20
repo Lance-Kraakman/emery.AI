@@ -2,6 +2,21 @@ import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+export async function sendVerificationRequestEmail({ identifier: email, url }: { identifier: string; url: string; }) {
+  const { host } = new URL(url);
+  try {
+    await resend.emails.send({
+      from: 'onboarding@resend.dev',
+      to: email,
+      subject: `Sign in to ${host}`,
+      html: `<p>Click the link below to sign in to your account.</p><p><a href="${url}">Sign in</a></p>`,
+    });
+  } catch (error) {
+    console.error('Error sending verification email:', error);
+    throw new Error("Failed to send verification email.");
+  }
+}
+
 export async function sendInvitationEmail(email: string, invitationLink: string) {
   const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
   const imageUrl = `${baseUrl}/assets/mission.png`;

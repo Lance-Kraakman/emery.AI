@@ -1,8 +1,10 @@
 import NextAuth from "next-auth"
 import GitHubProvider from "next-auth/providers/github"
 import GoogleProvider from "next-auth/providers/google"
+import EmailProvider from "next-auth/providers/email"
 import { DrizzleAdapter } from "@auth/drizzle-adapter"
 import { db } from "./db/client"
+import { sendVerificationRequestEmail } from "./email"
 import { users, accounts, sessions, verificationTokens, roles, organizations, userOrganizations } from "./db/schema"
 import { eq } from "drizzle-orm"
 import { getServerSession } from "next-auth"
@@ -57,6 +59,11 @@ const authOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+    EmailProvider({
+      server: process.env.EMAIL_SERVER,
+      from: process.env.EMAIL_FROM,
+      sendVerificationRequest: sendVerificationRequestEmail,
     }),
   ],
   callbacks: {
