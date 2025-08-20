@@ -80,6 +80,15 @@ export async function createTestDb() {
       INSERT INTO users (id, name, email, current_organization_id) VALUES 
         ('550e8400-e29b-41d4-a716-446655440000', 'Test User', 'test@example.com', 1)
       ON CONFLICT (id) DO NOTHING;
+      
+      -- Create user-organization relationship (required for repository tests)
+      INSERT INTO user_organizations (user_id, organization_id, role) VALUES
+        ('550e8400-e29b-41d4-a716-446655440000', 1, 'owner')
+      ON CONFLICT DO NOTHING;
+      
+      -- IMPORTANT: Sync sequences after manual inserts
+      SELECT setval('organizations_id_seq', (SELECT MAX(id) FROM organizations), true);
+      SELECT setval('user_organizations_id_seq', (SELECT MAX(id) FROM user_organizations), true);
     `);
     
     console.log('✅ Test database setup complete with real migration files!');
@@ -118,8 +127,14 @@ export async function createTestDb() {
         DELETE FROM users WHERE id != '550e8400-e29b-41d4-a716-446655440000';
         DELETE FROM organizations WHERE id != 1;
         
-        -- Reset sequences (use IF EXISTS to handle PGlite differences)
-        SELECT setval('organizations_id_seq', 2, false) WHERE EXISTS (SELECT 1 FROM pg_class WHERE relname = 'organizations_id_seq');
+        -- Restore test user-organization relationship
+        INSERT INTO user_organizations (user_id, organization_id, role) VALUES
+          ('550e8400-e29b-41d4-a716-446655440000', 1, 'owner')
+        ON CONFLICT DO NOTHING;
+        
+        -- Reset sequences to proper values based on existing data
+        SELECT setval('organizations_id_seq', COALESCE((SELECT MAX(id) FROM organizations), 1), true) WHERE EXISTS (SELECT 1 FROM pg_class WHERE relname = 'organizations_id_seq');
+        SELECT setval('user_organizations_id_seq', COALESCE((SELECT MAX(id) FROM user_organizations), 1), true) WHERE EXISTS (SELECT 1 FROM pg_class WHERE relname = 'user_organizations_id_seq');
         SELECT setval('databases_id_seq', 1, false) WHERE EXISTS (SELECT 1 FROM pg_class WHERE relname = 'databases_id_seq');
         SELECT setval('tables_id_seq', 1, false) WHERE EXISTS (SELECT 1 FROM pg_class WHERE relname = 'tables_id_seq');
         SELECT setval('fields_id_seq', 1, false) WHERE EXISTS (SELECT 1 FROM pg_class WHERE relname = 'fields_id_seq');
@@ -128,7 +143,6 @@ export async function createTestDb() {
         SELECT setval('teams_id_seq', 1, false) WHERE EXISTS (SELECT 1 FROM pg_class WHERE relname = 'teams_id_seq');
         SELECT setval('team_memberships_id_seq', 1, false) WHERE EXISTS (SELECT 1 FROM pg_class WHERE relname = 'team_memberships_id_seq');
         SELECT setval('invitations_id_seq', 1, false) WHERE EXISTS (SELECT 1 FROM pg_class WHERE relname = 'invitations_id_seq');
-        SELECT setval('user_organizations_id_seq', 1, false) WHERE EXISTS (SELECT 1 FROM pg_class WHERE relname = 'user_organizations_id_seq');
       `);
     }
   };

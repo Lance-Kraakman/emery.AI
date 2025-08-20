@@ -1,16 +1,16 @@
 "use server";
 
-import { db } from "@/lib/db/client";
-import { organizations } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { getOrganizationRepository } from "@/lib/application/di/container";
 import { revalidatePath } from "next/cache";
+
+// Import the DI setup to ensure container is initialized
+import "@/lib/application/di/setup";
 
 export async function updateOrganizationViewConfig(organizationId: number, viewConfig: any) {
   try {
-    await db
-      .update(organizations)
-      .set({ viewConfig })
-      .where(eq(organizations.id, organizationId));
+    const orgRepo = getOrganizationRepository();
+    
+    await orgRepo.update(organizationId, { viewConfig });
 
     revalidatePath(`/organization`);
     
