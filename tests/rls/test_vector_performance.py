@@ -153,11 +153,11 @@ class TestVectorSearchOptimization:
     # reporting functionality, not critical for multi-tenant data isolation security
 
 
-class TestRAGTriggersAndMaintenance:
-    """Test RAG triggers for automatic organization_id maintenance"""
+class TestRAGDataIntegrity:
+    """Test RAG data integrity with explicit organization_id handling"""
     
-    def test_rag_document_organization_id_auto_populated(self, app_cursor, test_organizations, test_users, rls_context):
-        """Test that organization_id is automatically populated on rag_documents insert"""
+    def test_rag_document_explicit_organization_id_required(self, app_cursor, test_organizations, test_users, rls_context):
+        """Test that rag_documents requires explicit organization_id (no auto-population)"""
         # Set RLS context
         rls_context["set"](app_cursor, test_organizations['org1'], test_users['user1'])
         
@@ -165,25 +165,25 @@ class TestRAGTriggersAndMaintenance:
         index_id = str(uuid.uuid4())
         app_cursor.execute("""
             INSERT INTO rag_indexes (id, name, organization_id, domain_types, created_by)
-            VALUES (%s, 'Auto Trigger Test', %s, '["tables"]', %s)
+            VALUES (%s, 'Explicit Test', %s, '["tables"]', %s)
         """, (index_id, test_organizations['org1'], test_users['user1']))
         
-        # Insert document without specifying organization_id
+        # Insert document WITH explicit organization_id (proper way)
         doc_id = str(uuid.uuid4())
         app_cursor.execute("""
-            INSERT INTO rag_documents (id, rag_index_id, source_type, source_id, source_name, 
+            INSERT INTO rag_documents (id, rag_index_id, organization_id, source_type, source_id, source_name, 
                                      title, content, content_hash)
-            VALUES (%s, %s, 'table', 'test', 'Test', 'Auto Test Doc', 'Content', 'hash')
-        """, (doc_id, index_id))
+            VALUES (%s, %s, %s, 'table', 'test', 'Test', 'Explicit Test Doc', 'Content', 'hash')
+        """, (doc_id, index_id, test_organizations['org1']))
         
-        # Verify organization_id was automatically populated
+        # Verify organization_id was set correctly
         app_cursor.execute("SELECT organization_id FROM rag_documents WHERE id = %s", (doc_id,))
         org_id = app_cursor.fetchone()[0]
         
         assert org_id == test_organizations['org1']
     
-    def test_rag_query_log_organization_id_auto_populated(self, app_cursor, test_organizations, test_users, rls_context):
-        """Test that organization_id is automatically populated on rag_query_logs insert"""
+    def test_rag_query_log_with_explicit_organization_id(self, app_cursor, test_organizations, test_users, rls_context):
+        """Test rag_query_logs with explicit organization_id (best practice)"""
         # Set RLS context
         rls_context["set"](app_cursor, test_organizations['org2'], test_users['user2'])
         
@@ -194,14 +194,14 @@ class TestRAGTriggersAndMaintenance:
             VALUES (%s, 'Query Log Test', %s, '["tables"]', %s)
         """, (index_id, test_organizations['org2'], test_users['user2']))
         
-        # Insert query log without specifying organization_id
+        # Insert query log WITH explicit organization_id (recommended approach)
         log_id = str(uuid.uuid4())
         app_cursor.execute("""
-            INSERT INTO rag_query_logs (id, rag_index_id, query, results_count, user_id)
-            VALUES (%s, %s, 'test query', 5, %s)
-        """, (log_id, index_id, test_users['user2']))
+            INSERT INTO rag_query_logs (id, rag_index_id, organization_id, query, results_count, user_id)
+            VALUES (%s, %s, %s, 'test query', 5, %s)
+        """, (log_id, index_id, test_organizations['org2'], test_users['user2']))
         
-        # Verify organization_id was automatically populated
+        # Verify organization_id was set correctly
         app_cursor.execute("SELECT organization_id FROM rag_query_logs WHERE id = %s", (log_id,))
         org_id = app_cursor.fetchone()[0]
         
