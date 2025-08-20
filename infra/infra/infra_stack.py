@@ -507,6 +507,10 @@ class InfraStack(Stack):
             )
             # Also inject the frontend's own public URL for NextAuth (use CloudFront URL)
             frontend_service.task_definition.default_container.add_environment(
+                "NEXT_PUBLIC_URL",
+                f"https://{cloudfront_distribution.distribution_domain_name}"
+            )
+            frontend_service.task_definition.default_container.add_environment(
                 "NEXTAUTH_URL",
                 f"https://{cloudfront_distribution.distribution_domain_name}"
             )

@@ -23,6 +23,10 @@ ENV NEXTAUTH_URL="http://localhost:3000"
 ENV GITHUB_CLIENT_ID="build-dummy-client-id"
 ENV GITHUB_CLIENT_SECRET="build-dummy-client-secret"
 ENV RESEND_API_KEY="build-dummy-resend-key"
+
+ARG NEXT_PUBLIC_URL
+ENV NEXT_PUBLIC_URL=$NEXT_PUBLIC_URL
+
 RUN pnpm run build
 
 # AIDEV-NOTE: Skip bundled scheduler, use tsx directly to avoid bundling issues
