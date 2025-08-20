@@ -44,8 +44,11 @@ describe('Database Operations', () => {
       expect(users.rows[0].current_organization_id).toBe(1)
     })
 
-    it('should be able to create new user with custom ID', async () => {
-      const userId = 'test-user-2-' + Date.now()
+    it('should be able to create new user with UUID', async () => {
+      // Generate a proper UUID for testing
+      const uuidResult = await testDb.client.query('SELECT gen_random_uuid() as uuid')
+      const userId = uuidResult.rows[0].uuid
+      
       const result = await testDb.client.query(
         'INSERT INTO users (id, name, email, current_organization_id) VALUES ($1, $2, $3, $4) RETURNING id, name',
         [userId, 'Jane Doe', 'jane@example.com', 1]
@@ -59,9 +62,16 @@ describe('Database Operations', () => {
 
   describe('Dynamic Tables System', () => {
     it('should create table metadata', async () => {
+      // Create database first (required by new schema)
+      const dbResult = await testDb.client.query(
+        'INSERT INTO databases (name, slug, organization_id, created_by) VALUES ($1, $2, $3, $4) RETURNING id',
+        ['Test Database', 'test-db', 1, '550e8400-e29b-41d4-a716-446655440000']
+      )
+      const databaseId = dbResult.rows[0].id
+      
       const result = await testDb.client.query(
-        'INSERT INTO tables (name, organization_id) VALUES ($1, $2) RETURNING id, name',
-        ['Customer Table', 1]
+        'INSERT INTO tables (name, db_name, database_id, organization_id, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id, name',
+        ['Customer Table', 'customer_table', databaseId, 1, '550e8400-e29b-41d4-a716-446655440000']
       )
       
       expect(result.rows).toHaveLength(1)
@@ -70,17 +80,24 @@ describe('Database Operations', () => {
     })
 
     it('should create fields for table', async () => {
+      // Create database first
+      const dbResult = await testDb.client.query(
+        'INSERT INTO databases (name, slug, organization_id, created_by) VALUES ($1, $2, $3, $4) RETURNING id',
+        ['Test Database 2', 'test-db-2', 1, '550e8400-e29b-41d4-a716-446655440000']
+      )
+      const databaseId = dbResult.rows[0].id
+      
       // Create table first
       const tableResult = await testDb.client.query(
-        'INSERT INTO tables (name, organization_id) VALUES ($1, $2) RETURNING id',
-        ['Product Table', 1]
+        'INSERT INTO tables (name, db_name, database_id, organization_id, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+        ['Product Table', 'product_table', databaseId, 1, '550e8400-e29b-41d4-a716-446655440000']
       )
       const tableId = tableResult.rows[0].id
 
-      // Add fields
+      // Add fields (using slug field from new schema)
       await testDb.client.query(
-        'INSERT INTO fields (name, type, table_id) VALUES ($1, $2, $3), ($4, $5, $6)',
-        ['name', 'text', tableId, 'price', 'number', tableId]
+        'INSERT INTO fields (name, slug, type, table_id) VALUES ($1, $2, $3, $4), ($5, $6, $7, $8)',
+        ['name', 'name', 'text', tableId, 'price', 'price', 'number', tableId]
       )
 
       const fields = await testDb.client.query(
