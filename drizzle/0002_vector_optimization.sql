@@ -40,7 +40,7 @@ RETURNS TABLE (
     content text,
     source_type text,
     source_name text,
-    similarity numeric
+    similarity double precision
 ) AS $$
 BEGIN
     RETURN QUERY
