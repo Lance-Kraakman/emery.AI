@@ -134,11 +134,7 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
   async update(id: number, data: UpdateOrganizationData): Promise<Organization> {
     const [result] = await this.db
       .update(organizations)
-      .set({
-        ...data,
-        // Always update the timestamp on updates
-        updatedAt: new Date()
-      })
+      .set(data)
       .where(eq(organizations.id, id))
       .returning();
 
@@ -205,10 +201,7 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
   async updateMemberRole(organizationId: number, userId: string, role: string): Promise<void> {
     const result = await this.db
       .update(userOrganizations)
-      .set({ 
-        role,
-        updatedAt: new Date()
-      })
+      .set({ role })
       .where(and(
         eq(userOrganizations.organizationId, organizationId),
         eq(userOrganizations.userId, userId)
