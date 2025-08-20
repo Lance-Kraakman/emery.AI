@@ -48,11 +48,7 @@ export interface UpdateRowData {
   data: Record<string, any>;
 }
 
-export interface CreateOrganizationData {
-  name: string;
-  mission?: string;
-  sharedTools?: string[];
-}
+// CreateOrganizationData moved to domain entities: @/lib/domain/entities/organization
 
 export interface CreateTeamData {
   organizationId: number;
@@ -145,19 +141,11 @@ export interface CreateTaskData {
   createdBy?: string;
 }
 
-export interface CreateRoleData {
-  name: string;
-  permissions: string[];
-  organizationId?: number;
-}
+// CreateRoleData moved to domain entities: @/lib/domain/entities/role
 
 export interface TeamMembershipData {
   teamId: number;
   userId: string;
 }
 
-export interface UpdateUserData {
-  organizationId?: number;
-  roleId?: number;
-  jobTitle?: string;
-}
+// UpdateUserData moved to domain entities: @/lib/domain/entities/user

@@ -5,7 +5,8 @@ import { db } from "@/lib/db/client";
 import { users, roles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import type { ActionResult, UpdateUserData } from "./types";
+import type { ActionResult } from "./types";
+import type { UpdateUserData } from "@/lib/domain/entities/user";
 
 export async function assignUserRole(userId: string, roleId: number): Promise<ActionResult> {
   try {
