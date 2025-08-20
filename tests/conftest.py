@@ -101,7 +101,8 @@ def test_organizations(db_cursor) -> Dict[str, int]:
     
     yield orgs
     
-    # Cleanup (delete dependent records first)
+    # Cleanup (delete dependent records first - foreign key order matters)
+    db_cursor.execute("DELETE FROM rag_query_logs WHERE rag_index_id IN (SELECT id FROM rag_indexes WHERE organization_id IN (%s, %s))", (orgs['org1'], orgs['org2']))
     db_cursor.execute("DELETE FROM rag_documents WHERE organization_id IN (%s, %s)", (orgs['org1'], orgs['org2']))
     db_cursor.execute("DELETE FROM rag_indexes WHERE organization_id IN (%s, %s)", (orgs['org1'], orgs['org2']))
     db_cursor.execute("DELETE FROM organizations WHERE id IN (%s, %s)", (orgs['org1'], orgs['org2']))
@@ -138,7 +139,8 @@ def test_users(db_cursor, test_organizations) -> Dict[str, str]:
     
     yield users
     
-    # Cleanup (delete dependent records first)
+    # Cleanup (delete dependent records first - foreign key order matters)
+    db_cursor.execute("DELETE FROM rag_query_logs WHERE rag_index_id IN (SELECT id FROM rag_indexes WHERE organization_id IN (%s, %s))", (test_organizations['org1'], test_organizations['org2']))
     db_cursor.execute("DELETE FROM rag_documents WHERE organization_id IN (%s, %s)", (test_organizations['org1'], test_organizations['org2']))
     db_cursor.execute("DELETE FROM rag_indexes WHERE organization_id IN (%s, %s)", (test_organizations['org1'], test_organizations['org2']))
     db_cursor.execute("DELETE FROM users WHERE id IN (%s, %s)", (users['user1'], users['user2']))
