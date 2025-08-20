@@ -76,10 +76,10 @@ jobs:
             sleep 2
           done
 
-      - name: Run database migrations
+      - name: Run database migrations with extensions
         env:
           DATABASE_URL: postgresql://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5434/${{ env.POSTGRES_DB }}
-        run: pnpm db:migrate
+        run: npx tsx scripts/migrate.ts
 
       - name: Run RLS Integration Tests
         env:

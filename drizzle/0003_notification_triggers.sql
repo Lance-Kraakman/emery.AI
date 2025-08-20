@@ -101,7 +101,7 @@ CREATE TRIGGER rag_reindex_agents_trigger
   AFTER INSERT OR UPDATE OR DELETE ON agents
   FOR EACH ROW EXECUTE FUNCTION notify_rag_reindex_agents();--> statement-breakpoint
 
--- Tables trigger (for schema changes)
+-- Tables trigger
 DROP TRIGGER IF EXISTS rag_reindex_tables_trigger ON tables;--> statement-breakpoint
 CREATE TRIGGER rag_reindex_tables_trigger
   AFTER INSERT OR UPDATE OR DELETE ON tables
