@@ -1,5 +1,5 @@
 {
-  "id": "a5c29640-c8de-4aaf-97ae-ac93a8345cb1",
+  "id": "4b18e91f-06e0-48cf-bcb6-332b9b1255f8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -186,7 +186,7 @@
           "name": "organization_id",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "role_id": {
           "name": "role_id",
@@ -667,6 +667,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "source_type": {
           "name": "source_type",
           "type": "text",
@@ -743,6 +749,19 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "rag_documents_organization_id_organizations_id_fk": {
+          "name": "rag_documents_organization_id_organizations_id_fk",
+          "tableFrom": "rag_documents",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -778,7 +797,7 @@
           "name": "organization_id",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "agent_id": {
           "name": "agent_id",
@@ -937,6 +956,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "query": {
           "name": "query",
           "type": "text",
@@ -1007,6 +1032,19 @@
           "tableTo": "rag_indexes",
           "columnsFrom": [
             "rag_index_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "rag_query_logs_organization_id_organizations_id_fk": {
+          "name": "rag_query_logs_organization_id_organizations_id_fk",
+          "tableFrom": "rag_query_logs",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "organization_id"
           ],
           "columnsTo": [
             "id"
@@ -1293,6 +1331,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "name": {
           "name": "name",
           "type": "text",
@@ -1364,6 +1408,19 @@
           "tableTo": "agents",
           "columnsFrom": [
             "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "tasks_organization_id_organizations_id_fk": {
+          "name": "tasks_organization_id_organizations_id_fk",
+          "tableFrom": "tasks",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "organization_id"
           ],
           "columnsTo": [
             "id"
