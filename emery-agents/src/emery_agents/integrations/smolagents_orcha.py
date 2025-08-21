@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional, Union
 from smolagents import CodeAgent, ToolCallingAgent
 from smolagents.models import InferenceClientModel
 
-from ..core.types import (
+from ..domain.entities.models import (
     StepType, Agent, CapabilityConfig, TaskInstructions, OrchestratorResult, ToolConfig
 )
 from ..tools.converters import ToolConfigConverter
@@ -130,10 +130,12 @@ class SmolAgentsOrchestrator:
                 "result": {
                     "output": result,
                 },
+                "orchestrator": "smolagents_hierarchy",
             }
         except Exception as e:
             logger.exception(f"Execution failed: {e}")
             return {
                 "status": "failed",
                 "error": str(e),
+                "orchestrator": "smolagents_hierarchy",
             }

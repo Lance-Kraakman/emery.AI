@@ -14,7 +14,7 @@ try:
 except ImportError:
     EmeryPythonClient = None
 
-from ..core.types import Task
+from ..domain.entities.models import Task
 
 logger = logging.getLogger(__name__)
 

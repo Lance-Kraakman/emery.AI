@@ -14,7 +14,7 @@ from typing import Dict, Any, List
 from datetime import datetime
 
 from emery_agents.grpc.generated import agent_worker_pb2
-from ..core.types import (
+from ..domain.entities.models import (
     Agent, ToolConfig, ServerConfig, StepConfig, CapabilityConfig,
     StepType, Task, TaskStatus, TaskInstructions
 )

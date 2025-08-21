@@ -9,7 +9,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from emery_agents.tools import tool_registry, ToolType, ToolCategory
-from emery_agents.core.types import ToolConfig as CoreToolConfig
+from emery_agents.domain.entities.models import ToolConfig as CoreToolConfig
 from emery_agents.integrations.smolagents_orcha import SmolAgentsOrchestrator
 
 
@@ -40,6 +40,7 @@ class TestFrontendToolConfigIntegration:
         assert core_tool_config.version == "1.0"
         assert core_tool_config.config["agent_id"] == "test-agent-123"
     
+    @patch.dict('os.environ', {'PIPEDREAM_API_KEY': 'test-key'})
     def test_pipedream_connector_with_frontend_config(self):
         """Test Pipedream connector with frontend-style configuration."""
         # Frontend configuration as it would come from TaskFormDialog.tsx
@@ -65,6 +66,7 @@ class TestFrontendToolConfigIntegration:
         assert pipedream_tool.config["use_test_auth"] is True
     
     @patch('requests.post')
+    @patch.dict('os.environ', {'PIPEDREAM_API_KEY': 'test-key'})
     def test_pipedream_connector_oauth_proxy_call(self, mock_post):
         """Test that Pipedream connector calls the OAuth proxy correctly."""
         # Mock successful API response
@@ -124,7 +126,7 @@ class TestFrontendToolConfigIntegration:
     
     def test_smolagents_integration_with_frontend_tools(self):
         """Test that SmolAgents can load tools from frontend configuration."""
-        from emery_agents.core.types import Agent, CapabilityConfig, StepConfig, StepType
+        from emery_agents.domain.entities.models import Agent, CapabilityConfig, StepConfig, StepType
         
         # Create agent with frontend-style tool configuration
         agent = Agent(
@@ -255,7 +257,7 @@ class TestTaskFormDialogIntegration:
     
     def test_agent_tools_display(self):
         """Test that agent tools are displayed correctly in frontend format."""
-        from emery_agents.core.types import Agent
+        from emery_agents.domain.entities.models import Agent
         
         # Create agent with tools (as stored in database)
         agent = Agent(

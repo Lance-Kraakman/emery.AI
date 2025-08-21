@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
-from emery_agents.core.types import Agent, CapabilityConfig, StepConfig, StepType, ToolConfig
+from emery_agents.domain.entities.models import Agent, CapabilityConfig, StepConfig, StepType, ToolConfig
 from emery_agents.integrations.smolagents_orcha import SmolAgentsOrchestrator
 
 

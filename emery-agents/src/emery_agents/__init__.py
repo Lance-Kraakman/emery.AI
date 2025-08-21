@@ -8,7 +8,7 @@ This package provides:
 - Execution tracking and reporting
 """
 
-from .core.types import (
+from .domain.entities.models import (
     Agent, StepExecution,
     StepType, TriggerType, TaskStatus, Task,
     CapabilityConfig, TriggerConfig, ExecutionContext,

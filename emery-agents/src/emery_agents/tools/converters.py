@@ -5,7 +5,7 @@ Handles conversion between different tool configuration formats.
 """
 
 from typing import Dict, Any, Optional, Union
-from ..core.types import ToolConfig
+from ..domain.entities.models import ToolConfig
 from .tool_registry import ToolType, tool_registry
 
 

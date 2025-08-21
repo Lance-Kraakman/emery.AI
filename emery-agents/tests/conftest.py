@@ -5,7 +5,7 @@ import os
 from typing import Dict, Any
 from unittest.mock import AsyncMock, Mock, patch
 
-from emery_agents.core.types import (
+from emery_agents.domain.entities.models import (
     Agent, CapabilityConfig, StepConfig, StepType,
     TaskInstructions, TriggerConfig, TriggerType,
     ToolConfig, ServerConfig

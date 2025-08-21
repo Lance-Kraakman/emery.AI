@@ -3,7 +3,7 @@
 import pytest
 from emery_agents.tools.converters import ToolConfigConverter
 from emery_agents.tools import ToolType
-from emery_agents.core.types import ToolConfig
+from emery_agents.domain.entities.models import ToolConfig
 
 
 class TestToolConfigConverter:

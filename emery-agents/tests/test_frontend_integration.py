@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
-from emery_agents.core.types import ToolConfig
+from emery_agents.domain.entities.models import ToolConfig
 from emery_agents.tools import tool_registry, ToolType
 
 
@@ -70,7 +70,7 @@ class TestFrontendIntegration:
     
     def test_agent_tools_display_format(self):
         """Test agent tools format for frontend display."""
-        from emery_agents.core.types import Agent
+        from emery_agents.domain.entities.models import Agent
         
         agent = Agent(
             id=123,
