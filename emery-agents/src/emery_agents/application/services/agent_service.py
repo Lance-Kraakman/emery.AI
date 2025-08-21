@@ -94,6 +94,11 @@ class AgentService:
     
     def _load_tool(self, tool_config: Union[ToolConfig, Dict[str, Any]]) -> Optional[Any]:
         """Load tool using the tool repository."""
+        tool_name = ToolConfigConverter.get_tool_name(tool_config)
+        tool_type = self.tool_repository.find_tool_type_by_name(tool_name)
+        if not tool_type:
+            logger.warning(f"Tool {tool_name} not found in registry")
+            return None
         return self.tool_repository.create_tool_instance(tool_config)
     
     async def execute_task(

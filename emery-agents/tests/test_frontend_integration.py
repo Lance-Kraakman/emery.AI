@@ -1,9 +1,11 @@
 """Unit tests for frontend integration."""
 
 import pytest
+import os
 from unittest.mock import patch, MagicMock
 from emery_agents.domain.entities.models import ToolConfig
-from emery_agents.tools import tool_registry, ToolType
+from emery_agents.domain.entities.tools import ToolType
+from emery_agents.infrastructure.repositories.tool_repository import ToolRegistryRepository
 
 
 class TestFrontendIntegration:
@@ -62,7 +64,10 @@ class TestFrontendIntegration:
             "test_user_id": "550e8400-e29b-41d4-a716-446655440000"
         }
         
-        tool = tool_registry.create_tool_instance(ToolType.PIPEDREAM_CONNECTOR, config)
+        tool_repo = ToolRegistryRepository()
+        tool = tool_repo.create_tool_instance(
+            {'name': 'pipedream_connector', 'config': config}
+        )
         result = tool.forward("gmail", "send_email", {"to": "test@example.com"})
         
         assert result["status"] == "success"

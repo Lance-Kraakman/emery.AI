@@ -76,7 +76,6 @@ class ToolConfig:
     version: Optional[str] = None
     config: Optional[Dict[str, Any]] = None
 
-
 @dataclass
 class ServerConfig:
     """Server configuration."""

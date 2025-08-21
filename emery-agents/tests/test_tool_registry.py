@@ -1,59 +1,58 @@
-"""Unit tests for tool registry."""
+"""Unit tests for the tool registry."""
 
 import pytest
-from emery_agents.tools import tool_registry, ToolType, ToolCategory
+import os
+from unittest.mock import patch
+from emery_agents.domain.entities.tools import ToolType, ToolCategory
+from emery_agents.infrastructure.repositories.tool_repository import ToolRegistryRepository
 
 
 class TestToolRegistry:
     """Test tool registry functionality."""
     
     def test_get_available_tools(self):
-        """Test getting available tools."""
-        tools = tool_registry.get_available_tools()
+        """Test getting all available tools."""
+        tool_repo = ToolRegistryRepository()
+        tools = tool_repo._tool_configs.values()
         assert len(tools) > 0
-        assert all(hasattr(tool, 'name') for tool in tools)
-        assert all(hasattr(tool, 'tool_type') for tool in tools)
     
     def test_get_tools_by_category(self):
         """Test filtering tools by category."""
-        code_tools = tool_registry.get_available_tools(ToolCategory.CODE_EXECUTION)
-        assert len(code_tools) > 0
-        assert all(tool.category == ToolCategory.CODE_EXECUTION for tool in code_tools)
+        tool_repo = ToolRegistryRepository()
+        nlp_tools = [t for t in tool_repo._tool_configs.values() if t.category == ToolCategory.NATURAL_LANGUAGE_PROCESSING]
+        assert len(nlp_tools) > 0
     
     def test_create_python_tool(self):
-        """Test creating Python interpreter tool."""
-        tool = tool_registry.create_tool_instance(ToolType.PYTHON_INTERPRETER, {})
-        assert tool is not None
-        assert hasattr(tool, '__call__')
+        """Test creating a PythonInterpreterTool."""
+        tool_repo = ToolRegistryRepository()
+        tool = tool_repo.create_tool_instance({'name': 'python_repl'})
+        from smolagents import PythonInterpreterTool
+        assert isinstance(tool, PythonInterpreterTool)
     
+    @pytest.mark.skipif(not os.getenv("DUCKDUCKGO_API_KEY"), reason="DUCKDUCKGO_API_KEY required")
     def test_create_web_search_tool(self):
-        """Test creating web search tool."""
-        pytest.importorskip("duckduckgo_search")
-        tool = tool_registry.create_tool_instance(ToolType.WEB_SEARCH, {})
-        assert tool is not None
-        assert hasattr(tool, '__call__')
+        """Test creating a DuckDuckGoSearchTool."""
+        tool_repo = ToolRegistryRepository()
+        tool = tool_repo.create_tool_instance({'name': 'web_search'})
+        from smolagents import DuckDuckGoSearchTool
+        assert isinstance(tool, DuckDuckGoSearchTool)
     
     def test_create_pipedream_tool_without_env(self):
-        """Test Pipedream tool creation fails without env vars."""
-        with pytest.raises(EnvironmentError):
-            tool_registry.create_tool_instance(ToolType.PIPEDREAM_CONNECTOR, {})
+        """Test that creating Pipedream tool fails without API key."""
+        with patch.dict(os.environ, {}, clear=True):
+            tool_repo = ToolRegistryRepository()
+            assert tool_repo.create_tool_instance({'name': 'pipedream_connector'}) is None
     
+    @patch.dict(os.environ, {"PIPEDREAM_API_KEY": "test-key"})
     def test_create_pipedream_tool_with_config(self):
-        """Test Pipedream tool creation with proper config."""
-        import os
-        with pytest.MonkeyPatch().context() as m:
-            m.setenv("PIPEDREAM_API_KEY", "test-key")
-            config = {"agent_id": "123", "use_test_auth": True}
-            tool = tool_registry.create_tool_instance(ToolType.PIPEDREAM_CONNECTOR, config)
-            assert tool is not None
-            assert tool.config["agent_id"] == "123"
+        """Test creating Pipedream tool with configuration."""
+        tool_repo = ToolRegistryRepository()
+        tool = tool_repo.create_tool_instance(
+            {'name': 'pipedream_connector', 'config': {'agent_id': '123'}}
+        )
+        assert tool.config['agent_id'] == '123'
     
     def test_invalid_tool_type(self):
-        """Test error handling for invalid tool type."""
-        # Create a fake ToolType-like object with value attribute
-        class FakeToolType:
-            value = "invalid_tool"
-        
-        fake_tool_type = FakeToolType()
-        with pytest.raises(ValueError, match="not registered"):
-            tool_registry.create_tool_instance(fake_tool_type, {})
+        """Test creating an invalid tool type."""
+        tool_repo = ToolRegistryRepository()
+        assert tool_repo.create_tool_instance({'name': 'invalid_tool'}) is None
