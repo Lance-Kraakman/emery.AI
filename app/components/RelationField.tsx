@@ -17,7 +17,7 @@ interface RelationItem {
 interface RelationFieldProps {
   value: RelationItem[] | null | undefined;
   onChange: (value: RelationItem[]) => void;
-  relatedTableId: number | null;
+  relatedTableId: number | null | undefined;
   workspaceId: number;
   disabled?: boolean;
 }

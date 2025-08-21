@@ -4,7 +4,8 @@
 // AIDEV-QUESTION: Should we implement virtual scrolling for large datasets?
 
 import { Plus } from 'lucide-react';
-import { Field, Row } from '@/app/actions/types';
+import type { Field } from '@/lib/domain/entities/field';
+import type { Row } from '@/app/actions/types';
 import { useRowManager } from '@/hooks/useRowManager';
 import { Button } from '@/components/ui/button';
 import RowForm from './RowForm';

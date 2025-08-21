@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db/client";
-import { fields, tables } from "@/lib/db/schema";
-import { addFieldToTable, removeFieldFromTable } from "@/lib/db/dynamic";
-import { slugify } from "@/utils/slugify";
-import { eq, and } from "drizzle-orm";
 import { authenticateRequest } from '@/lib/auth/test-auth';
+import { getFieldRepository, getDynamicTableRepository } from '@/lib/application/di/container';
+import { slugify } from "@/utils/slugify";
+import type { CreateFieldData, FieldType } from '@/lib/domain/entities/field';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,7 +15,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { tableId, name, type, required = false } = await request.json();
+    const { tableId, name, type, required = false, relatedTableId } = await request.json();
 
     if (!tableId || !name || !type) {
       return NextResponse.json(
@@ -26,7 +24,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const [table] = await db.select().from(tables).where(eq(tables.id, tableId)).limit(1);
+    // Use domain repositories for field creation
+    const fieldRepository = getFieldRepository();
+    const dynamicTableRepository = getDynamicTableRepository();
+
+    // Verify table exists and belongs to user's organization
+    const table = await dynamicTableRepository.findById(parseInt(tableId));
     if (!table) {
       return NextResponse.json(
         { error: "Table not found" },
@@ -34,7 +37,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify table belongs to user's organization
     if (!authResult.user || table.organizationId !== authResult.user.organizationId) {
       return NextResponse.json(
         { error: "Access denied: table not in your organization" },
@@ -44,31 +46,31 @@ export async function POST(request: NextRequest) {
 
     const slug = slugify(name);
 
-    const existingField = await db.select()
-      .from(fields)
-      .where(and(eq(fields.tableId, tableId), eq(fields.slug, slug)))
-      .limit(1);
-
-    if (existingField.length > 0) {
+    // Check if field slug is unique using domain repository
+    const isUnique = await fieldRepository.checkSlugUniqueness(parseInt(tableId), slug);
+    if (!isUnique) {
       return NextResponse.json(
         { error: "Field with this name already exists" },
         { status: 400 }
       );
     }
 
-    const maxOrder = await db.select().from(fields).where(eq(fields.tableId, tableId));
-    const orderIndex = maxOrder.length > 0 ? Math.max(...maxOrder.map(f => f.orderIndex || 0)) + 1 : 0;
+    // Get max order index for proper ordering
+    const existingFields = await fieldRepository.findByTableId(parseInt(tableId));
+    const orderIndex = existingFields.length > 0 ? Math.max(...existingFields.map(f => f.orderIndex || 0)) + 1 : 0;
 
-    const [newField] = await db.insert(fields).values({
-      tableId,
+    // Create field using domain repository
+    const fieldData: CreateFieldData = {
+      tableId: parseInt(tableId),
       name,
       slug,
-      type,
+      type: type as FieldType,
       required,
       orderIndex,
-    }).returning();
+      relatedTableId: relatedTableId ? parseInt(relatedTableId) : undefined,
+    };
 
-    await addFieldToTable(table.dbName, newField.id, type, required);
+    const newField = await fieldRepository.create(fieldData);
 
     return NextResponse.json(newField, { status: 201 });
   } catch (error) {
@@ -92,10 +94,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const fieldList = await db.select()
-      .from(fields)
-      .where(eq(fields.tableId, parseInt(tableId)))
-      .orderBy(fields.orderIndex);
+    // Use domain repository for field listing
+    const fieldRepository = getFieldRepository();
+    const fieldList = await fieldRepository.findByTableId(parseInt(tableId));
 
     return NextResponse.json(fieldList);
   } catch (error) {
@@ -119,11 +120,11 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const [field] = await db.select()
-      .from(fields)
-      .where(eq(fields.id, parseInt(fieldId)))
-      .limit(1);
-
+    // Use domain repository for field deletion
+    const fieldRepository = getFieldRepository();
+    
+    // Check if field exists
+    const field = await fieldRepository.findById(parseInt(fieldId));
     if (!field) {
       return NextResponse.json(
         { error: "Field not found" },
@@ -131,16 +132,17 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const [table] = await db.select().from(tables).where(eq(tables.id, field.tableId)).limit(1);
-    if (!table) {
+    // Check if field can be safely deleted
+    const canDelete = await fieldRepository.canDeleteField(parseInt(fieldId));
+    if (!canDelete) {
       return NextResponse.json(
-        { error: "Table not found" },
-        { status: 404 }
+        { error: "Field cannot be deleted: it is required and contains data" },
+        { status: 400 }
       );
     }
 
-    await removeFieldFromTable(table.dbName, field.id);
-    await db.delete(fields).where(eq(fields.id, parseInt(fieldId)));
+    // Delete field using domain repository (handles both metadata and physical column)
+    await fieldRepository.delete(parseInt(fieldId));
 
     return NextResponse.json({ message: "Field deleted successfully" });
   } catch (error) {

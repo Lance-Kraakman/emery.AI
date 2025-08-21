@@ -1,16 +1,13 @@
 'use server'
 
-// AIDEV-NOTE: Server Actions for row data management - replaces /api/rows route
-// AIDEV-QUESTION: Should we add optimistic locking for concurrent row updates?
+// AIDEV-NOTE: Server Actions for row data management using domain repositories
+// Migrated from legacy dynamic.ts operations to domain-driven architecture
 
-import { db } from '@/lib/db/client';
-import { tables, fields } from '@/lib/db/schema';
-import { insertRow, updateRow, deleteRow, getRows } from '@/lib/db/dynamic';
-import { processRowData, processPartialRowData } from '@/lib/db/field-processors';
-import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
+import { getDynamicTableRepository } from '@/lib/application/di/container';
 import type { ActionResult, CreateRowData, UpdateRowData } from "./types";
+import type { CreateRowData as DomainCreateRowData, UpdateRowData as DomainUpdateRowData } from '@/lib/domain/entities/dynamic-table';
 
 
 export async function createRow(data: CreateRowData, revalidateUrl?: string): Promise<ActionResult> {
@@ -25,8 +22,11 @@ export async function createRow(data: CreateRowData, revalidateUrl?: string): Pr
       };
     }
 
-    // Verify table exists
-    const [table] = await db.select().from(tables).where(eq(tables.id, tableId)).limit(1);
+    // Use domain repository for row creation
+    const dynamicTableRepository = getDynamicTableRepository();
+    
+    // Verify table exists using domain repository
+    const table = await dynamicTableRepository.findById(tableId);
     if (!table) {
       return {
         success: false,
@@ -34,11 +34,13 @@ export async function createRow(data: CreateRowData, revalidateUrl?: string): Pr
       };
     }
 
-    // Process row data with field mapping and validation (with debug logging)
-    const processedData = await processRowData(tableId, rowData, { validateRequired: true, debug: true });
+    // Create row using domain repository (handles field mapping and validation)
+    const domainRowData: DomainCreateRowData = {
+      tableId,
+      data: rowData || {},
+    };
 
-    // Insert row into dynamic table
-    const newRow = await insertRow(table.dbName, processedData);
+    const newRow = await dynamicTableRepository.insertRow(tableId, domainRowData);
 
     // Optional revalidation with custom URL
     if (revalidateUrl) {
@@ -88,12 +90,15 @@ export async function getRowsData(tableId: number, limit = 100, offset = 0): Pro
       throw new Error("tableId is required");
     }
 
-    const [table] = await db.select().from(tables).where(eq(tables.id, tableId)).limit(1);
+    // Use domain repository for row fetching
+    const dynamicTableRepository = getDynamicTableRepository();
+    
+    const table = await dynamicTableRepository.findById(tableId);
     if (!table) {
       throw new Error("Table not found");
     }
 
-    const rows = await getRows(table.dbName, limit, offset);
+    const rows = await dynamicTableRepository.findRows(tableId, { limit, offset });
     return rows;
   } catch (error) {
     console.error("Error fetching rows:", error);
@@ -113,8 +118,11 @@ export async function updateRowData(data: UpdateRowData, revalidateUrl?: string)
       };
     }
 
+    // Use domain repository for row updates
+    const dynamicTableRepository = getDynamicTableRepository();
+    
     // Verify table exists
-    const [table] = await db.select().from(tables).where(eq(tables.id, tableId)).limit(1);
+    const table = await dynamicTableRepository.findById(tableId);
     if (!table) {
       return {
         success: false,
@@ -122,11 +130,14 @@ export async function updateRowData(data: UpdateRowData, revalidateUrl?: string)
       };
     }
 
-    // Process row data with field mapping (with debug logging)
-    const processedData = await processPartialRowData(tableId, rowData, { debug: true });
+    // Update row using domain repository (handles field mapping and validation)
+    const domainUpdateData: DomainUpdateRowData = {
+      tableId,
+      rowId,
+      data: rowData || {},
+    };
 
-    // Update row in dynamic table
-    await updateRow(table.dbName, rowId, processedData);
+    await dynamicTableRepository.updateRow(tableId, rowId, domainUpdateData);
 
     // Optional revalidation with custom URL
     if (revalidateUrl) {
@@ -179,8 +190,11 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
       };
     }
 
+    // Use domain repository for row deletion
+    const dynamicTableRepository = getDynamicTableRepository();
+    
     // Verify table exists
-    const [table] = await db.select().from(tables).where(eq(tables.id, tableId)).limit(1);
+    const table = await dynamicTableRepository.findById(tableId);
     if (!table) {
       return {
         success: false,
@@ -188,8 +202,8 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
       };
     }
 
-    // Delete row from dynamic table
-    await deleteRow(table.dbName, rowId);
+    // Delete row using domain repository
+    await dynamicTableRepository.deleteRow(tableId, rowId);
 
     // Optional revalidation with custom URL
     if (revalidateUrl) {

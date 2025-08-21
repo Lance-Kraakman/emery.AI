@@ -1,7 +1,8 @@
 'use client'
 
 import { Edit, Trash2, Save, X } from 'lucide-react';
-import { Field, Row } from '@/app/actions/types';
+import type { Field } from '@/lib/domain/entities/field';
+import type { Row } from '@/app/actions/types';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import CellRenderer from './CellRenderer';

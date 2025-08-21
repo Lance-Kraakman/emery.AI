@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useTransition } from 'react';
-import { Field, Row } from '@/app/actions/types';
+import type { Field } from '@/lib/domain/entities/field';
+import type { Row } from '@/app/actions/types';
 import { createRowAction, updateRowAction, deleteRowAction } from '@/app/actions/rows';
 
 interface UseRowManagerProps {
