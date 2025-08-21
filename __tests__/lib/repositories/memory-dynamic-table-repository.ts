@@ -27,7 +27,7 @@ export class MemoryDynamicTableRepository implements IDynamicTableRepository {
   async findByOrganization(organizationId: number): Promise<DynamicTable[]> {
     return Array.from(this.tables.values())
       .filter(table => table.organizationId === organizationId)
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      .sort((a, b) => (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0));
   }
 
   async create(data: CreateDynamicTableData): Promise<DynamicTable> {

@@ -1,13 +1,16 @@
 // AIDEV-NOTE: Simplified Drizzle implementation of IDynamicTableRepository
-// Only implements the methods actually used in the application
+// Uses SQL templates for clear, testable SQL generation
 
 import { eq, sql } from 'drizzle-orm';
 import type postgres from 'postgres';
 
 import { tables } from '@/lib/db/schema';
-import { generateTableName } from '@/utils/slugify';
 import type { DbClient } from '@/lib/db/client';
 import type { IDynamicTableRepository } from '@/lib/domain/repositories/dynamic-table-repository';
+import { 
+  DynamicTableSqlTemplates, 
+  SqlExecutor,
+} from '@/lib/infrastructure/db/sql-templates';
 
 import type { 
   DynamicTable, 
@@ -19,10 +22,14 @@ import type {
 } from '@/lib/domain/entities/dynamic-table';
 
 export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
+  private sqlExecutor: SqlExecutor;
+
   constructor(
     private db: DbClient,
     private rawClient: postgres.Sql
-  ) {}
+  ) {
+    this.sqlExecutor = new SqlExecutor(rawClient);
+  }
 
   // Table CRUD - just the basics
   async findById(id: number): Promise<DynamicTable | null> {
@@ -103,28 +110,14 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
     const values = Object.values(data);
 
     try {
-      let result: any[];
+      const template = DynamicTableSqlTemplates.insertRow({
+        tableName: table.dbName,
+        fields,
+        values
+      });
       
-      if (fields.length === 0) {
-        // Insert with default values - raw SQL required for dynamic table
-        result = await this.rawClient`
-          INSERT INTO ${this.rawClient(table.dbName)} DEFAULT VALUES RETURNING *
-        `;
-      } else {
-        // Use proper parameterization for dynamic row insertion
-        const columnNames = fields.map(field => `"${field}"`).join(', ');
-        const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-        
-        const query = `
-          INSERT INTO "${table.dbName}" (${columnNames}) 
-          VALUES (${placeholders}) 
-          RETURNING *
-        `;
-        
-        result = await this.rawClient.unsafe(query, values);
-      }
-
-      return result[0] as any as DynamicTableRow;
+      const result = await this.sqlExecutor.executeTemplate('INSERT_ROW', template);
+      return result[0] as DynamicTableRow;
     } catch (error) {
       console.error(`Error inserting row into ${table.dbName}:`, error);
       throw error;
@@ -145,17 +138,15 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
     } = options;
 
     try {
-      let query = `SELECT * FROM "${table.dbName}"`;
-      const params: any[] = [];
+      const template = DynamicTableSqlTemplates.selectRows({
+        tableName: table.dbName,
+        orderBy,
+        orderDirection,
+        limit,
+        offset
+      });
 
-      // Add ORDER BY
-      query += ` ORDER BY "${orderBy}" ${orderDirection}`;
-
-      // Add LIMIT and OFFSET
-      query += ` LIMIT $1 OFFSET $2`;
-      params.push(limit, offset);
-
-      const result = await this.rawClient.unsafe(query, params);
+      const result = await this.sqlExecutor.executeTemplate('SELECT_ROWS', template);
       return result.map(row => row as any) as DynamicTableRow[];
     } catch (error) {
       console.error(`Error finding rows in ${table.dbName}:`, error);
@@ -177,22 +168,20 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
     }
 
     try {
-      // Use proper parameterization for dynamic row update
-      const setClause = fields.map((field, i) => `"${field}" = $${i + 1}`).join(', ');
-      const query = `
-        UPDATE "${table.dbName}" 
-        SET ${setClause}, updated_at = now() 
-        WHERE id = $${fields.length + 1} 
-        RETURNING *
-      `;
+      const template = DynamicTableSqlTemplates.updateRow({
+        tableName: table.dbName,
+        fields,
+        values,
+        rowId
+      });
 
-      const result = await this.rawClient.unsafe(query, [...values, rowId]);
+      const result = await this.sqlExecutor.executeTemplate('UPDATE_ROW', template);
       
       if (result.length === 0) {
         throw new Error(`Row with id ${rowId} not found in table ${table.dbName}`);
       }
 
-      return result[0] as any as DynamicTableRow;
+      return result[0] as DynamicTableRow;
     } catch (error) {
       console.error(`Error updating row ${rowId} in ${table.dbName}:`, error);
       throw error;
@@ -206,9 +195,12 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
     }
 
     try {
-      await this.rawClient`
-        DELETE FROM ${this.rawClient(table.dbName)} WHERE id = ${rowId}
-      `;
+      const template = DynamicTableSqlTemplates.deleteRow({
+        tableName: table.dbName,
+        rowId
+      });
+
+      await this.sqlExecutor.executeTemplate('DELETE_ROW', template);
     } catch (error) {
       console.error(`Error deleting row ${rowId} from ${table.dbName}:`, error);
       throw error;
@@ -217,17 +209,13 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
 
   // Helper methods for physical table operations
   private async createPhysicalTable(dbName: string): Promise<void> {
-    await this.rawClient`
-      CREATE TABLE ${this.rawClient(dbName)} (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        created_at TIMESTAMPTZ DEFAULT now(),
-        updated_at TIMESTAMPTZ DEFAULT now()
-      );
-    `;
+    const template = DynamicTableSqlTemplates.createTable({ tableName: dbName });
+    await this.sqlExecutor.executeTemplate('CREATE_TABLE', template);
   }
 
   private async dropPhysicalTable(dbName: string): Promise<void> {
-    await this.rawClient`DROP TABLE IF EXISTS ${this.rawClient(dbName)};`;
+    const template = DynamicTableSqlTemplates.dropTable({ tableName: dbName });
+    await this.sqlExecutor.executeTemplate('DROP_TABLE', template);
   }
 
   // Helper method to convert from database to domain entity

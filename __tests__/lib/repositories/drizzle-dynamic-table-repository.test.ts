@@ -66,9 +66,9 @@ describe('DrizzleDynamicTableRepository', () => {
       insert: vi.fn(),
       select: vi.fn(),
       delete: vi.fn(),
-    };
+    } as MockDbClient;
 
-    mockRawClient = vi.fn() as MockRawClient;
+    mockRawClient = vi.fn().mockResolvedValue(undefined) as MockRawClient;
     mockRawClient.unsafe = vi.fn();
 
     // Set up fluent API chains for Drizzle operations
@@ -151,27 +151,23 @@ describe('DrizzleDynamicTableRepository', () => {
       };
 
       it('should create table successfully', async () => {
-        // Mock successful physical table creation
-        mockRawClient.mockResolvedValue(undefined);
+        // Mock successful physical table creation using SqlExecutor pattern
+        mockRawClient.unsafe.mockResolvedValue([]);
 
         const result = await repository.create(createData);
 
         expect(result).toEqual(mockTable);
         expect(mockDb.insert).toHaveBeenCalled();
-        // Check that rawClient was called - postgres tagged template calls are complex
-        expect(mockRawClient).toHaveBeenCalled();
-        const calls = mockRawClient.mock.calls;
-        const createTableCall = calls.find(call => 
-          call[0] && call[0].some && call[0].some((part: string) => 
-            part.includes('CREATE TABLE')
-          )
+        // Check that rawClient.unsafe was called for CREATE TABLE
+        expect(mockRawClient.unsafe).toHaveBeenCalledWith(
+          expect.stringContaining('CREATE TABLE "test_table_123"'),
+          []
         );
-        expect(createTableCall).toBeDefined();
       });
 
       it('should rollback metadata creation if physical table creation fails', async () => {
-        // Mock physical table creation failure
-        mockRawClient.mockRejectedValue(new Error('Table creation failed'));
+        // Mock physical table creation failure using SqlExecutor pattern
+        mockRawClient.unsafe.mockRejectedValue(new Error('Table creation failed'));
 
         await expect(repository.create(createData)).rejects.toThrow('Failed to create physical table');
         
@@ -182,20 +178,16 @@ describe('DrizzleDynamicTableRepository', () => {
 
     describe('delete', () => {
       it('should delete table successfully', async () => {
-        // Mock successful physical table deletion
-        mockRawClient.mockResolvedValue(undefined);
+        // Mock successful physical table deletion using SqlExecutor pattern
+        mockRawClient.unsafe.mockResolvedValue([]);
 
         await repository.delete(1);
 
-        // Check that rawClient was called for table deletion
-        expect(mockRawClient).toHaveBeenCalled();
-        const calls = mockRawClient.mock.calls;
-        const dropTableCall = calls.find(call => 
-          call[0] && call[0].some && call[0].some((part: string) => 
-            part.includes('DROP TABLE IF EXISTS')
-          )
+        // Check that rawClient.unsafe was called for DROP TABLE
+        expect(mockRawClient.unsafe).toHaveBeenCalledWith(
+          expect.stringContaining('DROP TABLE IF EXISTS "test_table_123"'),
+          []
         );
-        expect(dropTableCall).toBeDefined();
         expect(mockDb.delete).toHaveBeenCalled();
       });
 
@@ -243,20 +235,16 @@ describe('DrizzleDynamicTableRepository', () => {
       });
 
       it('should insert row with default values when no data provided', async () => {
-        mockRawClient.mockResolvedValue([mockRow]);
+        mockRawClient.unsafe.mockResolvedValue([mockRow]);
 
         const result = await repository.insertRow(1, {});
 
         expect(result).toEqual(mockRow);
-        // Check that rawClient was called for default values insert
-        expect(mockRawClient).toHaveBeenCalled();
-        const calls = mockRawClient.mock.calls;
-        const insertCall = calls.find(call => 
-          call[0] && call[0].some && call[0].some((part: string) => 
-            part.includes('DEFAULT VALUES')
-          )
+        // Check that rawClient.unsafe was called for default values insert
+        expect(mockRawClient.unsafe).toHaveBeenCalledWith(
+          expect.stringContaining('INSERT INTO "test_table_123" DEFAULT VALUES RETURNING *'),
+          []
         );
-        expect(insertCall).toBeDefined();
       });
 
       it('should throw error when table not found', async () => {
@@ -335,19 +323,15 @@ describe('DrizzleDynamicTableRepository', () => {
 
     describe('deleteRow', () => {
       it('should delete row successfully', async () => {
-        mockRawClient.mockResolvedValue(undefined);
+        mockRawClient.unsafe.mockResolvedValue([]);
 
         await repository.deleteRow(1, 'row-uuid-123');
 
-        // Check that rawClient was called for row deletion
-        expect(mockRawClient).toHaveBeenCalled();
-        const calls = mockRawClient.mock.calls;
-        const deleteCall = calls.find(call => 
-          call[0] && call[0].some && call[0].some((part: string) => 
-            part.includes('DELETE FROM')
-          )
+        // Check that rawClient.unsafe was called for row deletion
+        expect(mockRawClient.unsafe).toHaveBeenCalledWith(
+          expect.stringContaining('DELETE FROM "test_table_123"'),
+          ['row-uuid-123']
         );
-        expect(deleteCall).toBeDefined();
       });
     });
   });
