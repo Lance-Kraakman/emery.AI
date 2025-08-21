@@ -8,6 +8,7 @@ from emery_agents.grpc.generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .proto_mappers import parse_task_request, create_task_progress
 from ..domain.entities.models import TaskStatus, TaskInstructions
 from ..application.services.agent_service import AgentService
+from ..infrastructure.repositories.tool_repository import ToolRegistryRepository
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -19,7 +20,8 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         self.worker_id = f"worker_{organization_id}_{int(time.time())}"
         self.start_time = time.time()
         self.active_tasks: Dict[str, Any] = {}
-        self.agent_service = AgentService()
+        tool_repository = ToolRegistryRepository()
+        self.agent_service = AgentService(tool_repository)
         
         # Check HF_TOKEN at startup
         import os

@@ -1,11 +1,9 @@
 'use server'
 
-import { db } from "@/lib/db/client";
-import { roles } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { getRoleRepository } from "@/lib/application/di/container";
 import type { ActionResult } from "./types";
-import type { CreateRoleData } from "@/lib/domain/entities/role";
+import type { CreateRoleData, UpdateRoleData } from "@/lib/domain/entities/role";
 
 export async function createRole(data: CreateRoleData): Promise<ActionResult> {
   try {
@@ -18,11 +16,15 @@ export async function createRole(data: CreateRoleData): Promise<ActionResult> {
       };
     }
 
-    const [newRole] = await db.insert(roles).values({
-      name,
-      permissions,
-      organizationId,
-    }).returning();
+    if (!organizationId) {
+      return {
+        success: false,
+        error: "Organization ID is required",
+      };
+    }
+
+    const roleRepository = getRoleRepository();
+    const newRole = await roleRepository.create(data);
 
     revalidatePath('/dashboard');
     
@@ -34,7 +36,7 @@ export async function createRole(data: CreateRoleData): Promise<ActionResult> {
     console.error("Error creating role:", error);
     return {
       success: false,
-      error: "Failed to create role",
+      error: error instanceof Error ? error.message : "Failed to create role",
     };
   }
 }
@@ -55,13 +57,17 @@ export async function createRoleAction(formData: FormData) {
   return result;
 }
 
-export async function getRoles() {
+export async function getRoles(organizationId?: number) {
   try {
-    const allRoles = await db
-      .select()
-      .from(roles);
-
-    return allRoles;
+    const roleRepository = getRoleRepository();
+    
+    if (organizationId) {
+      return await roleRepository.findByOrganization(organizationId);
+    } else {
+      // For backward compatibility, we need an organization ID
+      // In a real app, this would come from the user's session
+      throw new Error("Organization ID is required to fetch roles");
+    }
   } catch (error) {
     console.error("Error fetching roles:", error);
     throw new Error("Failed to fetch roles");
@@ -74,19 +80,21 @@ export async function getRole(roleId: number) {
       throw new Error("roleId is required");
     }
 
-    const [role] = await db
-      .select()
-      .from(roles)
-      .where(eq(roles.id, roleId));
+    const roleRepository = getRoleRepository();
+    const role = await roleRepository.findById(roleId);
+
+    if (!role) {
+      throw new Error(`Role with id ${roleId} not found`);
+    }
 
     return role;
   } catch (error) {
     console.error("Error fetching role:", error);
-    throw new Error("Failed to fetch role");
+    throw new Error(error instanceof Error ? error.message : "Failed to fetch role");
   }
 }
 
-export async function updateRole(roleId: number, data: Partial<CreateRoleData>): Promise<ActionResult> {
+export async function updateRole(roleId: number, data: UpdateRoleData): Promise<ActionResult> {
   try {
     if (!roleId) {
       return {
@@ -95,11 +103,8 @@ export async function updateRole(roleId: number, data: Partial<CreateRoleData>):
       };
     }
 
-    const [updatedRole] = await db
-      .update(roles)
-      .set(data)
-      .where(eq(roles.id, roleId))
-      .returning();
+    const roleRepository = getRoleRepository();
+    const updatedRole = await roleRepository.update(roleId, data);
 
     revalidatePath('/dashboard');
     
@@ -111,7 +116,7 @@ export async function updateRole(roleId: number, data: Partial<CreateRoleData>):
     console.error("Error updating role:", error);
     return {
       success: false,
-      error: "Failed to update role",
+      error: error instanceof Error ? error.message : "Failed to update role",
     };
   }
 }
@@ -125,7 +130,8 @@ export async function deleteRole(roleId: number): Promise<ActionResult> {
       };
     }
 
-    await db.delete(roles).where(eq(roles.id, roleId));
+    const roleRepository = getRoleRepository();
+    await roleRepository.delete(roleId);
 
     revalidatePath('/dashboard');
     
@@ -137,7 +143,131 @@ export async function deleteRole(roleId: number): Promise<ActionResult> {
     console.error("Error deleting role:", error);
     return {
       success: false,
-      error: "Failed to delete role",
+      error: error instanceof Error ? error.message : "Failed to delete role",
+    };
+  }
+}
+
+// Additional enhanced role management functions using the repository
+
+export async function createDefaultRoles(organizationId: number): Promise<ActionResult> {
+  try {
+    if (!organizationId) {
+      return {
+        success: false,
+        error: "Organization ID is required",
+      };
+    }
+
+    const roleRepository = getRoleRepository();
+    const defaultRoles = await roleRepository.createDefaultRoles(organizationId);
+
+    revalidatePath('/dashboard');
+    
+    return {
+      success: true,
+      data: defaultRoles,
+    };
+  } catch (error) {
+    console.error("Error creating default roles:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to create default roles",
+    };
+  }
+}
+
+export async function addPermissionToRole(roleId: number, permission: string): Promise<ActionResult> {
+  try {
+    if (!roleId || !permission) {
+      return {
+        success: false,
+        error: "Role ID and permission are required",
+      };
+    }
+
+    const roleRepository = getRoleRepository();
+    await roleRepository.addPermission(roleId, permission);
+
+    revalidatePath('/dashboard');
+    
+    return {
+      success: true,
+      data: { message: "Permission added successfully" },
+    };
+  } catch (error) {
+    console.error("Error adding permission to role:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to add permission",
+    };
+  }
+}
+
+export async function removePermissionFromRole(roleId: number, permission: string): Promise<ActionResult> {
+  try {
+    if (!roleId || !permission) {
+      return {
+        success: false,
+        error: "Role ID and permission are required",
+      };
+    }
+
+    const roleRepository = getRoleRepository();
+    await roleRepository.removePermission(roleId, permission);
+
+    revalidatePath('/dashboard');
+    
+    return {
+      success: true,
+      data: { message: "Permission removed successfully" },
+    };
+  } catch (error) {
+    console.error("Error removing permission from role:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to remove permission",
+    };
+  }
+}
+
+export async function getRolesByPermission(organizationId: number, permission: string) {
+  try {
+    if (!organizationId || !permission) {
+      throw new Error("Organization ID and permission are required");
+    }
+
+    const roleRepository = getRoleRepository();
+    return await roleRepository.findRolesByPermission(organizationId, permission);
+  } catch (error) {
+    console.error("Error fetching roles by permission:", error);
+    throw new Error(error instanceof Error ? error.message : "Failed to fetch roles by permission");
+  }
+}
+
+export async function cloneRole(sourceRoleId: number, newName: string, organizationId?: number): Promise<ActionResult> {
+  try {
+    if (!sourceRoleId || !newName) {
+      return {
+        success: false,
+        error: "Source role ID and new name are required",
+      };
+    }
+
+    const roleRepository = getRoleRepository();
+    const clonedRole = await roleRepository.cloneRole(sourceRoleId, newName, organizationId);
+
+    revalidatePath('/dashboard');
+    
+    return {
+      success: true,
+      data: clonedRole,
+    };
+  } catch (error) {
+    console.error("Error cloning role:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to clone role",
     };
   }
 }

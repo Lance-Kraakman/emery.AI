@@ -6,11 +6,14 @@ from emery_agents.grpc.server import AgentWorkerServiceImplementation
 from emery_agents.grpc.proto_mappers import create_task_progress
 from emery_agents.domain.entities.models import TaskStatus
 from emery_agents.grpc.generated import agent_worker_pb2
+from unittest.mock import patch
 
 class TestAgentWorkerService:
     """Test gRPC service implementation."""
     
-    def test_initialization(self):
+    @patch('emery_agents.grpc.server.ToolRegistryRepository')
+    @patch('emery_agents.grpc.server.AgentService')
+    def test_initialization(self, mock_agent_service, mock_tool_repo):
         """AgentWorkerService initializes correctly."""
         service = AgentWorkerServiceImplementation("test_org", max_concurrent_tasks=5)
         
@@ -19,6 +22,8 @@ class TestAgentWorkerService:
         assert service.worker_id.startswith("worker_test_org")
         assert isinstance(service.active_tasks, dict)
         assert len(service.active_tasks) == 0
+        mock_tool_repo.assert_called_once()
+        mock_agent_service.assert_called_once()
     
     
     @pytest.mark.asyncio
