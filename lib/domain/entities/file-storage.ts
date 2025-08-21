@@ -201,8 +201,3 @@ export interface FileBatchResult {
     duration: number;
   };
 }
-
-// Export commonly used types
-export type FileEntity = StoredFile;
-export type FileUpload = FileUploadRequest;
-export type FileDownload = FileDownloadResponse;

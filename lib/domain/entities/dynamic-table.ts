@@ -139,7 +139,3 @@ export interface TableSchema {
     required: boolean;
   }>;
 }
-
-// Export types for external use
-export type DynamicTableEntity = DynamicTable;
-export type TableRowEntity = DynamicTableRow;
