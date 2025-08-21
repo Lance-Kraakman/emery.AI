@@ -5,7 +5,7 @@ import os
 from unittest.mock import Mock, patch
 
 from emery_agents.integrations.smolagents_orcha import SmolAgentsOrchestrator
-from emery_agents.core.types import StepType, TaskInstructions
+from emery_agents.domain.entities.models import StepType, TaskInstructions
 
 
 class TestSmolAgentsOrchestrator:
@@ -85,15 +85,13 @@ class TestSmolAgentsOrchestrator:
         
         mock_tool_config = Mock()
         mock_tool_config.name = "python_repl"
+        mock_tool_config.config = {} # Add config attribute
         
-        with patch('smolagents.PythonInterpreterTool') as mock_tool_class:
-            mock_tool_instance = Mock()
-            mock_tool_class.return_value = mock_tool_instance
-            
-            tool = orchestrator._load_tool(mock_tool_config)
-            
-            assert tool == mock_tool_instance
-            mock_tool_class.assert_called_once()
+        tool = orchestrator._load_tool(mock_tool_config)
+        
+        assert tool is not None
+        from smolagents.default_tools import PythonInterpreterTool
+        assert isinstance(tool, PythonInterpreterTool)
     
     def test_load_tool_unknown(self):
         """Test loading unknown tool returns None."""

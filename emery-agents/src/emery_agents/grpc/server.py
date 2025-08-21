@@ -6,8 +6,8 @@ import grpc
 from grpc import aio
 from emery_agents.grpc.generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .proto_mappers import parse_task_request, create_task_progress
-from ..core.types import TaskStatus, TaskInstructions
-from ..integrations.smolagents_orcha import SmolAgentsOrchestrator
+from ..domain.entities.models import TaskStatus, TaskInstructions
+from ..application.services.agent_service import AgentService
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         self.worker_id = f"worker_{organization_id}_{int(time.time())}"
         self.start_time = time.time()
         self.active_tasks: Dict[str, Any] = {}
+        self.agent_service = AgentService()
         
         # Check HF_TOKEN at startup
         import os
@@ -52,35 +53,13 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         self.active_tasks[task_id] = {'agent': agent, 'start_time': time.time()}
 
         try:
-            print(f"⚡ [TASK-{task_id[:8]}] Initializing...")
-            sys.stdout.flush()
             yield create_task_progress(task_id=task_id, status=TaskStatus.IN_PROGRESS, step_id="initialization", progress_percent=0.0)
             
-            print(f"🤖 [TASK-{task_id[:8]}] Creating SmolAgents orchestrator...")
-            sys.stdout.flush()
-            orchestrator = SmolAgentsOrchestrator()
-            
-            print(f"🔧 [TASK-{task_id[:8]}] Setting up agent hierarchy...")
-            sys.stdout.flush()
-            orchestrator.setup_agent_orchestrator(agent)
-            
-            print(f"✅ [TASK-{task_id[:8]}] Orchestrator ready")
-            sys.stdout.flush()
-            yield create_task_progress(task_id=task_id, status=TaskStatus.IN_PROGRESS, step_id="orchestrator_init", output_data={"message": "Orchestrator initialized"}, progress_percent=10.0)
-            
-            if not instruction_config:
-                print(f"⚠️  [TASK-{task_id[:8]}] No instruction config, using default for capability: {capability_name}")
-                instruction_config = TaskInstructions(instructions=f"Execute capability: {capability_name}")
-            else:
-                print(f"📝 [TASK-{task_id[:8]}] Using provided instructions")
-                sys.stdout.flush()
-            
-            print(f"🎯 [TASK-{task_id[:8]}] Executing with orchestrator...")
-            sys.stdout.flush()
-            task_result = await orchestrator.execute_with_orchestrator(instructions=instruction_config)
-            
-            print(f"🏁 [TASK-{task_id[:8]}] Execution completed: {task_result.get('status', 'unknown')}")
-            sys.stdout.flush()
+            task_result = await self.agent_service.execute_task(
+                agent=agent,
+                instructions=instruction_config,
+                capability_name=capability_name
+            )
             
             if task_result["status"] == "success":
                 final_result = {"status": "completed", "result": task_result.get("result", {})}

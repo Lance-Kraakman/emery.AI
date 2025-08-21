@@ -3,7 +3,7 @@
 import pytest
 from datetime import datetime
 
-from emery_agents.core.types import (
+from emery_agents.domain.entities.models import (
     StepType, TriggerType, TaskStatus,
     ToolConfig, ServerConfig, StepConfig, CapabilityConfig,
     TaskInstructions, Task, Agent
@@ -111,5 +111,3 @@ class TestTaskTypes:
         assert agent.name == "Test Agent"
         assert len(agent.capabilities) == 1
         assert agent.status == "active"
-
-
