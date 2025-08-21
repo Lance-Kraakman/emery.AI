@@ -241,7 +241,3 @@ export interface FieldGroup {
   collapsed?: boolean;
   orderIndex?: number;
 }
-
-// Export commonly used types
-export type FieldEntity = Field;
-export type FieldTypeEntity = FieldType;
