@@ -106,18 +106,22 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
       let result: any[];
       
       if (fields.length === 0) {
-        // Insert with default values
+        // Insert with default values - raw SQL required for dynamic table
         result = await this.rawClient`
           INSERT INTO ${this.rawClient(table.dbName)} DEFAULT VALUES RETURNING *
         `;
       } else {
-        const fieldNames = fields.map(field => this.rawClient(field));
-        const query = this.rawClient`
-          INSERT INTO ${this.rawClient(table.dbName)} (${this.rawClient.unsafe(fieldNames.map(f => `"${f}"`).join(', '))}) 
-          VALUES (${values}) 
+        // Use proper parameterization for dynamic row insertion
+        const columnNames = fields.map(field => `"${field}"`).join(', ');
+        const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+        
+        const query = `
+          INSERT INTO "${table.dbName}" (${columnNames}) 
+          VALUES (${placeholders}) 
           RETURNING *
         `;
-        result = await query;
+        
+        result = await this.rawClient.unsafe(query, values);
       }
 
       return result[0] as any as DynamicTableRow;
@@ -173,6 +177,7 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
     }
 
     try {
+      // Use proper parameterization for dynamic row update
       const setClause = fields.map((field, i) => `"${field}" = $${i + 1}`).join(', ');
       const query = `
         UPDATE "${table.dbName}" 
