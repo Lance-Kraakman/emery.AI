@@ -1,7 +1,6 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
 import { useEmeryData } from '@/hooks/useEmeryData'
 import TableEditorClient from './TableEditorClient'
 

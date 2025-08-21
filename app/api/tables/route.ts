@@ -2,19 +2,18 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * Table management API endpoint
- * Supports REST API access for table operations
+ * Table management API endpoint using domain repositories
+ * Migrated from legacy dynamic.ts to domain-driven architecture
  */
 
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
-import { db } from '@/lib/db/client';
-import { tables } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
-import { createDynamicTable } from '@/lib/db/dynamic';
+import { getDynamicTableRepository } from '@/lib/application/di/container';
+import type { CreateDynamicTableData } from '@/lib/domain/entities/dynamic-table';
+import { slugify } from '@/utils/slugify';
 
 /**
- * Create a new table
+ * Create a new table using domain repository
  */
 export async function POST(request: NextRequest): Promise<Response> {
   try {
@@ -25,7 +24,6 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
 
     const userId = authResult.user.id;
-
     const body = await request.json();
     const { name, description, organizationId, databaseId } = body;
 
@@ -41,28 +39,20 @@ export async function POST(request: NextRequest): Promise<Response> {
       }, { status: 400 });
     }
 
-    // Generate database table name
-    const dbName = `table_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    // Create table record in metadata
-    const [newTable] = await db.insert(tables).values({
+    // Use domain repository for table creation
+    const dynamicTableRepository = getDynamicTableRepository();
+    
+    const tableData: CreateDynamicTableData = {
       name,
-      dbName,
+      dbName: slugify(name),
       databaseId: parseInt(databaseId),
-      organizationId: organizationId ? parseInt(organizationId) : 1, // Default to org 1
+      organizationId: organizationId ? parseInt(organizationId) : 1,
       createdBy: userId,
-    }).returning();
+      metadata: description ? { description } : undefined,
+    };
 
-    // Create the actual dynamic table
-    try {
-      await createDynamicTable(newTable.dbName);
-      console.log(`[API-TABLES] Created dynamic table: ${newTable.dbName}`);
-    } catch (tableError) {
-      console.error(`[API-TABLES] Failed to create dynamic table:`, tableError);
-      // Delete the metadata record if dynamic table creation fails
-      await db.delete(tables).where(eq(tables.id, newTable.id));
-      throw new Error('Failed to create dynamic table structure');
-    }
+    const newTable = await dynamicTableRepository.create(tableData);
+    console.log(`[API-TABLES] Created table using domain repository: ${newTable.dbName}`);
 
     return Response.json({
       success: true,
@@ -81,7 +71,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 }
 
 /**
- * Get tables list
+ * Get tables list using domain repository
  */
 export async function GET(request: NextRequest): Promise<Response> {
   try {
@@ -91,8 +81,6 @@ export async function GET(request: NextRequest): Promise<Response> {
       return Response.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = authResult.user.id;
-
     // Get tables for user's current organization
     if (!authResult.user.organizationId) {
       return Response.json({ 
@@ -101,10 +89,9 @@ export async function GET(request: NextRequest): Promise<Response> {
       }, { status: 400 });
     }
 
-    const userTables = await db
-      .select()
-      .from(tables)
-      .where(eq(tables.organizationId, authResult.user.organizationId));
+    // Use domain repository for table listing
+    const dynamicTableRepository = getDynamicTableRepository();
+    const userTables = await dynamicTableRepository.findByOrganization(authResult.user.organizationId);
 
     return Response.json({
       success: true,

@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Trash2 } from "lucide-react"
 import { EditableCell } from "./EditableCell"
-import type { FieldData, RowData } from "@/types/db"
+import type { Field } from "@/lib/domain/entities/field"
+import type { RowData } from "@/types/db"
 
 interface DynamicDataTableProps {
-  fields: FieldData[];
+  fields: Field[];
   rows: RowData[];
   organizationId: number;
   onUpdateRow: (rowId: string, fieldId: number, value: any) => void;

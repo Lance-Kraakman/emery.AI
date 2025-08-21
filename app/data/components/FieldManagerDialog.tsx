@@ -9,16 +9,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2, Edit2 } from "lucide-react"
+import { Plus, Trash2 } from "lucide-react"
 import { createField, deleteField } from "@/app/actions/fields"
 import { getTables } from "@/app/actions/tables"
-import type { FieldData, Table as TableData } from "@/types/db"
+import type { Field } from "@/lib/domain/entities/field"
+import type { DynamicTable } from "@/lib/domain/entities/dynamic-table"
 
 interface FieldManagerDialogProps {
   isOpen: boolean
   onClose: () => void
   tableId: number
-  fields: FieldData[]
+  fields: Field[]
   onFieldsUpdated: () => void
 }
 
@@ -40,7 +41,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
   const [newFieldRequired, setNewFieldRequired] = useState(false)
   const [newFieldRelatedTableId, setNewFieldRelatedTableId] = useState<number | undefined>()
   const [loading, setLoading] = useState(false)
-  const [availableTables, setAvailableTables] = useState<TableData[]>([])
+  const [availableTables, setAvailableTables] = useState<DynamicTable[]>([])
 
   const handleAddField = async () => {
     if (!newFieldName || !newFieldType) return

@@ -12,7 +12,8 @@ import { FieldManagerDialog } from "./components/FieldManagerDialog"
 import { useEmeryData, EmeryTable } from "@/hooks/useEmeryData"
 import { getFields } from "@/app/actions/fields"
 import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
-import type { FieldData, RowData } from "@/types/db"
+import type { Field } from "@/lib/domain/entities/field"
+import type { RowData } from "@/types/db"
 
 export function DataViewsClientSimplified() {
   const searchParams = useSearchParams()
@@ -37,7 +38,7 @@ export function DataViewsClientSimplified() {
   const [searchTerm, setSearchTerm] = useState("")
   
   // Table data state
-  const [fields, setFields] = useState<FieldData[]>([])
+  const [fields, setFields] = useState<Field[]>([])
   const [rows, setRows] = useState<RowData[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

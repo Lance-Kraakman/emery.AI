@@ -7,12 +7,13 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
-import type { FieldData, FileMetadata } from "@/types/db"
+import type { Field } from "@/lib/domain/entities/field"
+import type { FileMetadata } from "@/types/db"
 import { uploadFileAction } from "@/app/actions/files"
 import { PlusCircle } from "lucide-react"
 
 interface EditableCellProps {
-  field: FieldData;
+  field: Field;
   value: any;
   organizationId: number;
   onSave?: (value: any) => void;

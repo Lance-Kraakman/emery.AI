@@ -1,17 +1,14 @@
 'use server'
 
-// AIDEV-NOTE: Server Actions for field management - replaces /api/fields route  
-// AIDEV-TODO: Add transaction support for field creation/deletion with dynamic schema changes
+// AIDEV-NOTE: Server Actions for field management using domain repositories
+// Migrated from legacy dynamic.ts to domain-driven architecture
 
-import { db } from "@/lib/db/client";
-import { fields, tables } from "@/lib/db/schema";
-import { addFieldToTable, removeFieldFromTable } from "@/lib/db/dynamic";
-import { slugify } from "@/utils/slugify";
-import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
+import { getFieldRepository } from "@/lib/application/di/container";
+import { slugify } from "@/utils/slugify";
 import type { ActionResult, CreateFieldData } from "./types";
-import type { FieldData } from "@/types/db";
+import type { Field, FieldType } from "@/lib/domain/entities/field";
 
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<ActionResult> {
   try {
@@ -25,47 +22,20 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
       };
     }
 
-    // Verify table exists
-    const [table] = await db.select().from(tables).where(eq(tables.id, tableId)).limit(1);
-    if (!table) {
-      return {
-        success: false,
-        error: "Table not found",
-      };
-    }
+    const fieldRepository = getFieldRepository();
 
-    const slug = slugify(name);
+    // AIDEV-TODO: Verify table exists and user has permission using DynamicTableRepository
 
-    // Check for duplicate field names
-    const existingField = await db.select()
-      .from(fields)
-      .where(and(eq(fields.tableId, tableId), eq(fields.slug, slug)))
-      .limit(1);
-
-    if (existingField.length > 0) {
-      return {
-        success: false,
-        error: "Field with this name already exists",
-      };
-    }
-
-    // Calculate next order index
-    const maxOrder = await db.select().from(fields).where(eq(fields.tableId, tableId));
-    const orderIndex = maxOrder.length > 0 ? Math.max(...maxOrder.map(f => f.orderIndex || 0)) + 1 : 0;
-
-    // Create field metadata
-    const [newField] = await db.insert(fields).values({
+    const fieldData = {
       tableId,
       name,
-      slug,
-      type: type as FieldData['type'],
+      slug: slugify(name),
+      type: type as FieldType,
       required,
-      orderIndex,
       relatedTableId,
-    }).returning();
+    };
 
-    // Add field to dynamic table
-    await addFieldToTable(table.dbName, newField.id, type, required);
+    const newField = await fieldRepository.create(fieldData);
 
     // Note: RAG reindexing is now handled automatically by database triggers
 
@@ -106,18 +76,16 @@ export async function createFieldAction(formData: FormData) {
   return result;
 }
 
-export async function getFields(tableId: number): Promise<FieldData[]> {
+export async function getFields(tableId: number): Promise<Field[]> {
   try {
     if (!tableId) {
       throw new Error("tableId is required");
     }
 
-    const fieldList = await db.select()
-      .from(fields)
-      .where(eq(fields.tableId, tableId))
-      .orderBy(fields.orderIndex);
+    const fieldRepository = getFieldRepository();
+    const fieldList = await fieldRepository.findByTableId(tableId);
 
-    return fieldList as FieldData[];
+    return fieldList;
   } catch (error) {
     console.error("Error fetching fields:", error);
     throw new Error("Failed to fetch fields");
@@ -135,33 +103,11 @@ export async function deleteField(fieldId: number, revalidateUrl?: string): Prom
       };
     }
 
-    // Get field info
-    const [field] = await db.select()
-      .from(fields)
-      .where(eq(fields.id, fieldId))
-      .limit(1);
+    const fieldRepository = getFieldRepository();
 
-    if (!field) {
-      return {
-        success: false,
-        error: "Field not found",
-      };
-    }
+    // AIDEV-TODO: Verify user has permission to delete field from this table
 
-    // Get table info
-    const [table] = await db.select().from(tables).where(eq(tables.id, field.tableId)).limit(1);
-    if (!table) {
-      return {
-        success: false,
-        error: "Table not found",
-      };
-    }
-
-    // Remove field from dynamic table first
-    await removeFieldFromTable(table.dbName, field.id);
-    
-    // Then delete metadata
-    await db.delete(fields).where(eq(fields.id, fieldId));
+    await fieldRepository.delete(fieldId);
 
     // Revalidate the appropriate path
     if (revalidateUrl) {

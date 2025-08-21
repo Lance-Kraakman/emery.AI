@@ -1,17 +1,15 @@
 'use server'
 
-// AIDEV-NOTE: Server Actions for table management - replaces /api/tables route
-// AIDEV-TODO: Add transaction support for table creation/deletion with dynamic tables
+// AIDEV-NOTE: Server Actions for table management using domain repositories
+// Migrated from legacy dynamic.ts to domain-driven architecture
 
-import { db } from "@/lib/db/client";
-import { tables, databases } from "@/lib/db/schema";
-import { createDynamicTable, dropDynamicTable } from "@/lib/db/dynamic";
-import { generateTableName } from "@/utils/slugify";
-import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { requireAuth, requirePermission } from "./permissions";
+import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
+import { getDynamicTableRepository } from "@/lib/application/di/container";
+import { slugify } from "@/utils/slugify";
 import type { ActionResult, CreateTableData } from "./types";
+import type { CreateDynamicTableData } from "@/lib/domain/entities/dynamic-table";
 
 export async function createTable(data: CreateTableData & { databaseId: number; description?: string }, revalidateUrl?: string): Promise<ActionResult> {
   try {
@@ -33,36 +31,20 @@ export async function createTable(data: CreateTableData & { databaseId: number; 
       };
     }
 
-    // Verify the specified database exists and belongs to the current organization
-    const [targetDatabase] = await db
-      .select()
-      .from(databases)
-      .where(and(eq(databases.id, databaseId), eq(databases.organizationId, currentOrg.id)))
-      .limit(1);
+    // AIDEV-TODO: Verify database exists and belongs to organization using a DatabaseRepository
     
-    if (!targetDatabase) {
-      return {
-        success: false,
-        error: "Selected database not found or access denied.",
-      };
-    }
+    const dynamicTableRepository = getDynamicTableRepository();
 
-    const dbName = generateTableName(name);
-
-    // Create dynamic table first
-    await createDynamicTable(dbName);
-
-    const metadata = description ? { description } : null;
-
-    // Then create metadata entry using current organization
-    const [newTable] = await db.insert(tables).values({
-      databaseId: databaseId,
-      organizationId: currentOrg.id,
+    const tableData: CreateDynamicTableData = {
       name,
-      dbName,
-      metadata,
+      dbName: slugify(name),
+      databaseId,
+      organizationId: currentOrg.id,
       createdBy: session.user.id,
-    }).returning();
+      metadata: description ? { description } : undefined,
+    };
+
+    const newTable = await dynamicTableRepository.create(tableData);
 
     // Note: RAG reindexing is now handled automatically by database triggers
     
@@ -107,30 +89,12 @@ export async function createTableAction(formData: FormData) {
 export async function getTables() {
   try {
     const currentOrg = await requireCurrentOrganization();
+    const dynamicTableRepository = getDynamicTableRepository();
     
-    const tableList = await db
-      .select({
-        id: tables.id,
-        databaseId: tables.databaseId,
-        organizationId: tables.organizationId,
-        name: tables.name,
-        dbName: tables.dbName,
-        metadata: tables.metadata,
-        createdBy: tables.createdBy,
-        createdAt: tables.createdAt,
-        updatedAt: tables.updatedAt,
-        database: {
-          id: databases.id,
-          name: databases.name,
-          slug: databases.slug,
-          metadata: databases.metadata,
-        }
-      })
-      .from(tables)
-      .leftJoin(databases, eq(tables.databaseId, databases.id))
-      .where(eq(tables.organizationId, currentOrg.id));
+    // AIDEV-TODO: Enhance findByOrganization to include database details
+    const tableList = await dynamicTableRepository.findByOrganization(currentOrg.id);
 
-    console.log(`[GET-TABLES] Found ${tableList.length} tables:`, tableList.map(t => ({ id: t.id, name: t.name, dbName: t.dbName, database: t.database?.name })));
+    console.log(`[GET-TABLES] Found ${tableList.length} tables for org ${currentOrg.id}`);
     return tableList;
   } catch (error) {
     console.error("Error fetching tables:", error);
@@ -138,7 +102,6 @@ export async function getTables() {
     console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
     
     // Return empty array instead of throwing error to prevent UI crashes
-    // The logs will help diagnose the issue
     console.log(`[GET-TABLES] Returning empty array due to error to prevent UI crash`);
     return [];
   }
@@ -156,35 +119,19 @@ export async function deleteTable(tableId: number, revalidateUrl?: string): Prom
       };
     }
 
-    // Get table info and verify it belongs to current organization
-    const [table] = await db
-      .select()
-      .from(tables)
-      .where(eq(tables.id, tableId))
-      .limit(1);
-    
-    if (!table) {
+    const dynamicTableRepository = getDynamicTableRepository();
+
+    // Verify table exists and belongs to the current organization
+    const table = await dynamicTableRepository.findById(tableId);
+    if (!table || table.organizationId !== currentOrg.id) {
       return {
         success: false,
-        error: "Table not found",
+        error: "Table not found or access denied",
       };
     }
 
-    // Verify table belongs to current organization
-    if (table.organizationId !== currentOrg.id) {
-      return {
-        success: false,
-        error: "Access denied: table not in current organization",
-      };
-    }
-
-    // Drop dynamic table first
-    await dropDynamicTable(table.dbName);
-    
-    // Note: RAG reindexing is now handled automatically by database triggers
-    
-    // Then delete metadata
-    await db.delete(tables).where(eq(tables.id, tableId));
+    // Delete table using domain repository (handles both metadata and physical table)
+    await dynamicTableRepository.delete(tableId);
 
     // Revalidate the appropriate path
     if (revalidateUrl) {

@@ -1,7 +1,7 @@
 'use client'
 
 import { Save, X } from 'lucide-react';
-import { Field } from '@/app/actions/types';
+import type { Field } from '@/lib/domain/entities/field';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

@@ -1,6 +1,6 @@
 'use client'
 
-import { Field } from '@/app/actions/types';
+import type { Field } from '@/lib/domain/entities/field';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import FileUpload from '../FileUpload';
