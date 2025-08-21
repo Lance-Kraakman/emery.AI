@@ -6,7 +6,6 @@ from unittest.mock import patch
 from emery_agents.domain.entities.tools import ToolType, ToolCategory
 from emery_agents.infrastructure.repositories.tool_repository import ToolRegistryRepository
 
-
 class TestToolRegistry:
     """Test tool registry functionality."""
     

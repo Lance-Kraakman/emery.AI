@@ -9,12 +9,11 @@ import os
 import requests
 from io import BytesIO
 from typing import Dict, Any, Optional, Union, List
-
-import torch
+from emery_agents.domain.entities.models import ToolConfig
+from emery_agents.domain.entities.tools import ToolType
 from transformers import pipeline, Pipeline
 from PIL import Image
-
-from .tool_registry import ToolConfig, ToolType
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +78,7 @@ class HuggingFaceTool:
                 raise ValueError(f"Unsupported tool type: {self.tool_type}")
             
             # Use GPU if available
-            device = 0 if torch.cuda.is_available() else -1
+            device = 0 if torch.cuda.is_available() else -1 
             
             self.pipeline = pipeline(
                 task=task,
@@ -150,7 +149,6 @@ class HuggingFaceTool:
         if isinstance(image, str):
             try:
                 if image.startswith(('http://', 'https://')):
-                    # URL image (typically S3 URLs in production)
                     response = requests.get(image)
                     return Image.open(BytesIO(response.content))
                 else:
