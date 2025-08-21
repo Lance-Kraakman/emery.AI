@@ -10,7 +10,7 @@ from unittest.mock import patch, MagicMock
 
 from emery_agents.tools import tool_registry, ToolType, ToolCategory
 from emery_agents.core.types import ToolConfig as CoreToolConfig
-from emery_agents.integrations.smolagents import SmolAgentsOrchestrator
+from emery_agents.integrations.smolagents_orcha import SmolAgentsOrchestrator
 
 
 class TestFrontendToolConfigIntegration:

@@ -14,7 +14,7 @@ from .core.types import (
     CapabilityConfig, TriggerConfig, ExecutionContext,
     ToolConfig, ServerConfig, StepConfig
 )
-from .integrations.smolagents import SmolAgentsOrchestrator
+from .integrations.smolagents_orcha import SmolAgentsOrchestrator
 
 __version__ = "0.1.0"
 __author__ = "Lance Kraakman"

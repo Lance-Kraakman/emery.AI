@@ -1,6 +1,6 @@
 """Integration components for external systems."""
 
-from .smolagents import SmolAgentsOrchestrator
+from .smolagents_orcha import SmolAgentsOrchestrator
 from .mcp_servers import MCPServerIntegration
 from .emery_client import EmeryClientIntegration
 

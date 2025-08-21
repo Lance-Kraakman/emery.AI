@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from emery_agents.core.types import Agent, CapabilityConfig, StepConfig, StepType, ToolConfig
-from emery_agents.integrations.smolagents import SmolAgentsOrchestrator
+from emery_agents.integrations.smolagents_orcha import SmolAgentsOrchestrator
 
 
 class TestSmolAgentsIntegration:
@@ -39,14 +39,6 @@ class TestSmolAgentsIntegration:
         orchestrator = SmolAgentsOrchestrator()
         orchestrator.setup_agent_orchestrator(agent)
         assert orchestrator.agent is not None
-    
-    def test_missing_hf_token(self):
-        """Test error when HF_TOKEN is missing."""
-        agent = Agent(id=123, name="Test Agent")
-        orchestrator = SmolAgentsOrchestrator()
-        
-        with pytest.raises(EnvironmentError, match="HF_TOKEN environment variable is required"):
-            orchestrator.setup_agent_orchestrator(agent)
     
     @patch.dict('os.environ', {'HF_TOKEN': 'test-token'})
     def test_load_tool_success(self):

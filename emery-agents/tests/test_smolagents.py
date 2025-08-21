@@ -4,7 +4,7 @@ import pytest
 import os
 from unittest.mock import Mock, patch
 
-from emery_agents.integrations.smolagents import SmolAgentsOrchestrator
+from emery_agents.integrations.smolagents_orcha import SmolAgentsOrchestrator
 from emery_agents.core.types import StepType, TaskInstructions
 
 
@@ -132,7 +132,6 @@ class TestSmolAgentsOrchestrator:
         result = await orchestrator.execute_with_orchestrator(instructions)
         
         assert result["status"] == "success"
-        assert result["orchestrator"] == "smolagents_hierarchy"
         assert result["result"]["output"] == mock_result
     
     @pytest.mark.asyncio

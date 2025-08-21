@@ -4,10 +4,10 @@ import time
 from typing import AsyncIterator, Dict, Any
 import grpc
 from grpc import aio
-from .generated import agent_worker_pb2, agent_worker_pb2_grpc
+from emery_agents.grpc.generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .proto_mappers import parse_task_request, create_task_progress
 from ..core.types import TaskStatus, TaskInstructions
-from ..integrations.smolagents import SmolAgentsOrchestrator
+from ..integrations.smolagents_orcha import SmolAgentsOrchestrator
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

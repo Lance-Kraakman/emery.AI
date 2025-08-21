@@ -9,7 +9,6 @@ from emery_agents.core.types import (
     TaskInstructions, Task, Agent
 )
 
-
 class TestEnums:
     """Test enum definitions."""
     

@@ -30,7 +30,6 @@ class ToolConfigConverter:
             if (tool_type_config.name.lower() == tool_name.lower() or 
                 tool_type_config.tool_type.value == tool_name):
                 return tool_type_config.tool_type
-        
         return None
     
     @staticmethod
