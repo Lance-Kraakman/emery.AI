@@ -11,14 +11,19 @@ import { IDynamicTableRepository } from '../../domain/repositories/dynamic-table
 import { DrizzleDynamicTableRepository } from '../../infrastructure/db/repositories/drizzle-dynamic-table-repository';
 import { IFieldRepository } from '../../domain/repositories/field-repository';
 import { DrizzleFieldRepository } from '../../infrastructure/db/repositories/drizzle-field-repository';
+import { IFileStorageRepository } from '../../domain/repositories/file-storage-repository';
+import { S3FileStorageRepository } from '../../infrastructure/storage/repositories/s3-file-storage-repository';
+import { FileFieldService } from '../../domain/services/file-field-service';
 
-// Registry of all available repository interfaces
+// Registry of all available repository interfaces and services
 interface RepositoryRegistry {
   IOrganizationRepository: IOrganizationRepository;
   IUserRepository: IUserRepository;
   IRoleRepository: IRoleRepository;
   IDynamicTableRepository: IDynamicTableRepository;
   IFieldRepository: IFieldRepository;
+  IFileStorageRepository: IFileStorageRepository;
+  FileFieldService: FileFieldService;
 }
 
 export class DIContainer {
@@ -45,7 +50,20 @@ export class DIContainer {
       return;
     }
 
-    // Register repository implementations
+    // Register storage repository
+    const fileStorageRepository = new S3FileStorageRepository();
+    this.repositories.set('IFileStorageRepository', fileStorageRepository);
+
+    // Register service layer (depends on repositories)
+    const fieldRepository = new DrizzleFieldRepository(db, rawClient);
+    const fileFieldService = new FileFieldService(fieldRepository, fileStorageRepository);
+    this.repositories.set('FileFieldService', fileFieldService);
+
+    // Update field repository with file field service
+    const fieldRepositoryWithService = new DrizzleFieldRepository(db, rawClient, fileFieldService);
+    this.repositories.set('IFieldRepository', fieldRepositoryWithService);
+
+    // Register other repository implementations
     this.repositories.set('IOrganizationRepository', 
       new DrizzleOrganizationRepository(db, rawClient));
     this.repositories.set('IUserRepository', 
@@ -54,11 +72,9 @@ export class DIContainer {
       new DrizzleRoleRepository(db, rawClient));
     this.repositories.set('IDynamicTableRepository', 
       new DrizzleDynamicTableRepository(db, rawClient));
-    this.repositories.set('IFieldRepository', 
-      new DrizzleFieldRepository(db, rawClient));
 
     this.isInitialized = true;
-    console.log('✅ DIContainer initialized with repositories');
+    console.log('✅ DIContainer initialized with repositories and file storage services');
   }
 
   /**
@@ -135,6 +151,20 @@ export function getDynamicTableRepository(): IDynamicTableRepository {
  */
 export function getFieldRepository(): IFieldRepository {
   return DIContainer.getInstance().get('IFieldRepository');
+}
+
+/**
+ * Get the file storage repository
+ */
+export function getFileStorageRepository(): IFileStorageRepository {
+  return DIContainer.getInstance().get('IFileStorageRepository');
+}
+
+/**
+ * Get the file field service
+ */
+export function getFileFieldService(): FileFieldService {
+  return DIContainer.getInstance().get('FileFieldService');
 }
 
 // Helper to initialize container from existing clients
