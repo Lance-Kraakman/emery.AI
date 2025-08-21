@@ -6,6 +6,7 @@ import { eq, and } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "./types";
+import { getUserRepository } from "@/lib/application/di/container";
 
 export async function switchCurrentOrganization(organizationId: number): Promise<ActionResult> {
   try {
@@ -17,30 +18,8 @@ export async function switchCurrentOrganization(organizationId: number): Promise
       };
     }
 
-    // Verify user is a member of the organization they want to switch to
-    const membership = await db
-      .select()
-      .from(userOrganizations)
-      .where(
-        and(
-          eq(userOrganizations.userId, session.user.id),
-          eq(userOrganizations.organizationId, organizationId)
-        )
-      )
-      .limit(1);
-
-    if (!membership.length) {
-      return {
-        success: false,
-        error: "You are not a member of this organization",
-      };
-    }
-
-    // Update user's current organization
-    await db
-      .update(users)
-      .set({ currentOrganizationId: organizationId })
-      .where(eq(users.id, session.user.id));
+    const userRepo = getUserRepository();
+    await userRepo.switchOrganization(session.user.id, organizationId);
 
     // Revalidate to refresh session data
     revalidatePath('/');
@@ -68,19 +47,11 @@ export async function joinOrganization(organizationId: number, role: string = 'm
       };
     }
 
+    const userRepo = getUserRepository();
+    
     // Check if user is already a member
-    const existingMembership = await db
-      .select()
-      .from(userOrganizations)
-      .where(
-        and(
-          eq(userOrganizations.userId, session.user.id),
-          eq(userOrganizations.organizationId, organizationId)
-        )
-      )
-      .limit(1);
-
-    if (existingMembership.length > 0) {
+    const existingRole = await userRepo.getUserOrganizationRole(session.user.id, organizationId);
+    if (existingRole) {
       return {
         success: false,
         error: "You are already a member of this organization",
@@ -102,21 +73,15 @@ export async function joinOrganization(organizationId: number, role: string = 'm
     }
 
     // Add user to organization
-    const [newMembership] = await db
-      .insert(userOrganizations)
-      .values({
-        userId: session.user.id,
-        organizationId,
-        role,
-      })
-      .returning();
+    const newMembership = await userRepo.addUserToOrganization({
+      userId: session.user.id,
+      organizationId,
+      role,
+    });
 
     // If user doesn't have a current organization, set this as current
     if (!session.user.currentOrganizationId) {
-      await db
-        .update(users)
-        .set({ currentOrganizationId: organizationId })
-        .where(eq(users.id, session.user.id));
+      await userRepo.update(session.user.id, { currentOrganizationId: organizationId });
     }
 
     revalidatePath('/');
@@ -144,19 +109,11 @@ export async function leaveOrganization(organizationId: number): Promise<ActionR
       };
     }
 
+    const userRepo = getUserRepository();
+    
     // Check if user is a member
-    const membership = await db
-      .select()
-      .from(userOrganizations)
-      .where(
-        and(
-          eq(userOrganizations.userId, session.user.id),
-          eq(userOrganizations.organizationId, organizationId)
-        )
-      )
-      .limit(1);
-
-    if (!membership.length) {
+    const userRole = await userRepo.getUserOrganizationRole(session.user.id, organizationId);
+    if (!userRole) {
       return {
         success: false,
         error: "You are not a member of this organization",
@@ -164,7 +121,7 @@ export async function leaveOrganization(organizationId: number): Promise<ActionR
     }
 
     // Don't allow leaving if user is the only owner
-    if (membership[0].role === 'owner') {
+    if (userRole === 'owner') {
       const ownerCount = await db
         .select()
         .from(userOrganizations)
@@ -184,29 +141,14 @@ export async function leaveOrganization(organizationId: number): Promise<ActionR
     }
 
     // Remove membership
-    await db
-      .delete(userOrganizations)
-      .where(
-        and(
-          eq(userOrganizations.userId, session.user.id),
-          eq(userOrganizations.organizationId, organizationId)
-        )
-      );
+    await userRepo.removeUserFromOrganization(session.user.id, organizationId);
 
     // If this was the user's current organization, switch to another one
     if (session.user.currentOrganizationId === organizationId) {
-      const remainingMemberships = await db
-        .select()
-        .from(userOrganizations)
-        .where(eq(userOrganizations.userId, session.user.id))
-        .limit(1);
-
-      const newCurrentOrgId = remainingMemberships.length > 0 ? remainingMemberships[0].organizationId : null;
+      const userOrganizations = await userRepo.getUserOrganizations(session.user.id);
+      const newCurrentOrgId = userOrganizations.length > 0 ? userOrganizations[0].id : undefined;
       
-      await db
-        .update(users)
-        .set({ currentOrganizationId: newCurrentOrgId })
-        .where(eq(users.id, session.user.id));
+      await userRepo.update(session.user.id, { currentOrganizationId: newCurrentOrgId });
     }
 
     revalidatePath('/');
@@ -231,20 +173,23 @@ export async function getUserOrganizations() {
       throw new Error("Not authenticated");
     }
 
-    const userOrgs = await db
-      .select({
-        organization: organizations,
-        userOrg: userOrganizations
-      })
-      .from(userOrganizations)
-      .innerJoin(organizations, eq(userOrganizations.organizationId, organizations.id))
-      .where(eq(userOrganizations.userId, session.user.id));
+    const userRepo = getUserRepository();
+    const organizations = await userRepo.getUserOrganizations(session.user.id);
 
-    return userOrgs.map(uo => ({
-      ...uo.organization,
-      userRole: uo.userOrg.role,
-      joinedAt: uo.userOrg.createdAt
-    }));
+    // We need to get user roles for each organization - this requires additional calls
+    // In a future improvement, we could add this to the repository method
+    const organizationsWithRoles = await Promise.all(
+      organizations.map(async (org) => {
+        const userRole = await userRepo.getUserOrganizationRole(session.user.id, org.id);
+        return {
+          ...org,
+          userRole,
+          joinedAt: org.createdAt, // For now, using org createdAt as placeholder
+        };
+      })
+    );
+
+    return organizationsWithRoles;
   } catch (error) {
     console.error("Error fetching user organizations:", error);
     throw new Error("Failed to fetch organizations");

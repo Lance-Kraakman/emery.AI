@@ -20,7 +20,7 @@
     "test:agent-api": "node scripts/test-agent-execution-api.js",
     "grpc:generate": "npm run grpc:generate:js && npm run grpc:generate:python",
     "grpc:generate:js": "grpc_tools_node_protoc --js_out=import_style=commonjs,binary:lib/grpc/generated --grpc_out=grpc_js:lib/grpc/generated --plugin=protoc-gen-grpc=./node_modules/.bin/grpc_tools_node_protoc_plugin -I proto proto/agent_worker.proto",
-    "grpc:generate:python": "cd emery-agents && uv run python -m grpc_tools.protoc --python_out=src/emery_agents/grpc/generated --grpc_python_out=src/emery_agents/grpc/generated -I ../proto ../proto/agent_worker.proto",
+    "grpc:generate:python": "cd emery-agents && uv run python -m grpc_tools.protoc --pyi_out=src/emery_agents/grpc/generated --python_out=src/emery_agents/grpc/generated --grpc_python_out=src/emery_agents/grpc/generated -I ../proto ../proto/agent_worker.proto",
     "worker:start": "cd emery-agents && uv run --env-file ../.env.local emery-worker",
     "scheduler:start": "npx tsx --tsconfig tsconfig.json scripts/run-scheduler.ts",
     "scheduler:build": "esbuild scripts/run-scheduler.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist/scheduler.js --external:pg-native --external:canvas --external:unpdf --external:@z-skip/protoc --external:llamaindex --external:@llamaindex/readers --external:@llamaindex/core --external:sharp --external:tiktoken --external:fsevents --define:global=globalThis --sourcemap",

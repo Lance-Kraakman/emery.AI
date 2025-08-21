@@ -148,7 +148,7 @@ export async function createTestDb() {
   };
 }
 
-export type TestDbClient = ReturnType<typeof createTestDb>['db'];
+export type TestDbClient = Awaited<ReturnType<typeof createTestDb>>['db'];
 
 // Mock functions for testing environment
 export function setupTestEnvironment() {
