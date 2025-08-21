@@ -13,7 +13,7 @@ import json
 from typing import Dict, Any, List
 from datetime import datetime
 
-from .generated import agent_worker_pb2
+from emery_agents.grpc.generated import agent_worker_pb2
 from ..core.types import (
     Agent, ToolConfig, ServerConfig, StepConfig, CapabilityConfig,
     StepType, Task, TaskStatus, TaskInstructions
@@ -149,7 +149,7 @@ def create_task_progress(
     )
 
 
-def parse_task_request(request: agent_worker_pb2.TaskRequest) -> Dict[str, Any]:
+def parse_task_request(request: agent_worker_pb2.TaskRequest) -> Task:
     """Parse a complete TaskRequest into Python objects for execution"""
     
     # Convert agent config
@@ -172,17 +172,18 @@ def parse_task_request(request: agent_worker_pb2.TaskRequest) -> Dict[str, Any]:
     else:
         raise ValueError("Either capability_name or instruction_config must be provided")
     
-    return {
-        'task_id': request.task_id,
-        'agent_id': request.agent_id,
-        'capability_name': capability_name,           # Optional - for direct execution
-        'instruction_config': instruction_config,     # Optional - for auto-routing
-        'agent': agent,
-        'trigger_data': trigger_data,
-        'organization_id': request.organization_id,
-        'owner_id': request.owner_id,
-        'timeout_seconds': request.timeout_seconds
-    }
+    return Task(
+        id=request.task_id,
+        agent_id=request.agent_id,
+        name=request.name,
+        agent=agent,
+        trigger_data=trigger_data,
+        organization_id=request.organization_id,
+        owner_id=request.owner_id,
+        timeout_seconds=request.timeout_seconds,
+        capabilityName=capability_name,
+        instructions=instruction_config
+    )
 
 
 # AIDEV-NOTE: These mappers provide clean conversion between proto transport layer 
