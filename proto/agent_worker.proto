@@ -27,6 +27,7 @@ message TaskRequest {
   string organization_id = 6;      // Organization for multi-tenant routing
   string owner_id = 7;             // Agent owner ID for OAuth credentials
   int32 timeout_seconds = 8;       // Task execution timeout (default: 300)
+  string name = 10;
 }
 
 // Streaming progress updates during task execution

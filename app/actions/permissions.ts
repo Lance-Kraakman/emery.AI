@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "./types";
 import type { UpdateUserData } from "@/lib/domain/entities/user";
+import { getUserRepository } from "@/lib/application/di/container";
 
 export async function assignUserRole(userId: string, roleId: number): Promise<ActionResult> {
   try {
@@ -26,11 +27,8 @@ export async function assignUserRole(userId: string, roleId: number): Promise<Ac
       };
     }
 
-    const [updatedUser] = await db
-      .update(users)
-      .set({ roleId })
-      .where(eq(users.id, userId))
-      .returning();
+    const userRepo = getUserRepository();
+    const updatedUser = await userRepo.update(userId, { roleId });
 
     revalidatePath('/dashboard');
     
@@ -67,11 +65,8 @@ export async function updateUserProfile(userId: string, data: UpdateUserData): P
       }
     }
 
-    const [updatedUser] = await db
-      .update(users)
-      .set(data)
-      .where(eq(users.id, userId))
-      .returning();
+    const userRepo = getUserRepository();
+    const updatedUser = await userRepo.update(userId, data);
 
     revalidatePath('/dashboard');
     

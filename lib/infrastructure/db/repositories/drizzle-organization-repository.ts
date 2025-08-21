@@ -18,7 +18,12 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
       where: eq(organizations.id, id)
     });
 
-    return result || null;
+    if (!result) return null;
+
+    return {
+      ...result,
+      viewConfig: result.viewConfig as Record<string, any> | null
+    };
   }
 
   async findByUserId(userId: string): Promise<Organization[]> {
@@ -41,7 +46,10 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
       .innerJoin(userOrganizations, eq(organizations.id, userOrganizations.organizationId))
       .where(eq(userOrganizations.userId, userId));
 
-    return result;
+    return result.map(org => ({
+      ...org,
+      viewConfig: org.viewConfig as Record<string, any> | null
+    }));
   }
 
   async findByIdWithMembers(id: number): Promise<OrganizationWithMembers | null> {
@@ -79,7 +87,10 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
       .values(data)
       .returning();
 
-    return result;
+    return {
+      ...result,
+      viewConfig: result.viewConfig as Record<string, any> | null
+    };
   }
 
   async createWithOwner(data: CreateOrganizationData, ownerId: string): Promise<Organization> {
@@ -127,7 +138,10 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
         })
         .where(eq(users.id, ownerId));
 
-      return org;
+      return {
+        ...org,
+        viewConfig: org.viewConfig as Record<string, any> | null
+      };
     });
   }
 
@@ -142,7 +156,10 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
       throw new Error(`Organization with id ${id} not found`);
     }
 
-    return result;
+    return {
+      ...result,
+      viewConfig: result.viewConfig as Record<string, any> | null
+    };
   }
 
   async delete(id: number): Promise<void> {
@@ -239,6 +256,9 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
       limit
     });
 
-    return result;
+    return result.map(org => ({
+      ...org,
+      viewConfig: org.viewConfig as Record<string, any> | null
+    }));
   }
 }

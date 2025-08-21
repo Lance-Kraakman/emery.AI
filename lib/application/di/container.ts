@@ -3,12 +3,14 @@ import type postgres from 'postgres';
 
 import { IOrganizationRepository } from '../../domain/repositories/organization-repository';
 import { DrizzleOrganizationRepository } from '../../infrastructure/db/repositories/drizzle-organization-repository';
+import { IUserRepository } from '../../domain/repositories/user-repository';
+import { DrizzleUserRepository } from '../../infrastructure/db/repositories/drizzle-user-repository';
 
 // Registry of all available repository interfaces
 interface RepositoryRegistry {
   IOrganizationRepository: IOrganizationRepository;
+  IUserRepository: IUserRepository;
   // Future repositories will be added here
-  // IUserRepository: IUserRepository;
   // IDynamicTableRepository: IDynamicTableRepository;
 }
 
@@ -39,6 +41,8 @@ export class DIContainer {
     // Register repository implementations
     this.repositories.set('IOrganizationRepository', 
       new DrizzleOrganizationRepository(db, rawClient));
+    this.repositories.set('IUserRepository', 
+      new DrizzleUserRepository(db, rawClient));
 
     this.isInitialized = true;
     console.log('✅ DIContainer initialized with repositories');
@@ -90,6 +94,13 @@ export class DIContainer {
  */
 export function getOrganizationRepository(): IOrganizationRepository {
   return DIContainer.getInstance().get('IOrganizationRepository');
+}
+
+/**
+ * Get the user repository
+ */
+export function getUserRepository(): IUserRepository {
+  return DIContainer.getInstance().get('IUserRepository');
 }
 
 // Helper to initialize container from existing clients

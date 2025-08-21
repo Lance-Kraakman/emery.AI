@@ -58,7 +58,7 @@ vi.mock('@/lib/db/client', () => ({
 beforeAll(() => {
   process.env.NEXTAUTH_URL = 'http://localhost:3000'
   process.env.NEXTAUTH_SECRET = 'test-secret'
-  process.env.NODE_ENV = 'test'
+  // NODE_ENV is automatically set by test runners, don't override
   // Mock DATABASE_URL to prevent connection attempts
   process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test'
 })

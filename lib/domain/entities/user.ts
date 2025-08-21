@@ -14,7 +14,20 @@ export interface User {
 }
 
 export interface CreateUserData {
-  id?: string; // Optional, will generate UUID if not provided
+  id?: string;                         // Optional, will generate UUID if not provided
+  name?: string;
+  email: string;                       // Required for creation
+  emailVerified?: Date;
+  image?: string;
+  currentOrganizationId?: number;
+  roleId?: number;
+  jobTitle?: string;
+  role?: string;
+  teams?: string[];
+  apiKey?: string;                     // Usually generated, not provided
+}
+
+export interface UpdateUserData {
   name?: string;
   email?: string;
   emailVerified?: Date;
@@ -24,21 +37,33 @@ export interface CreateUserData {
   jobTitle?: string;
   role?: string;
   teams?: string[];
+  // Note: apiKey updates handled through separate methods for security
 }
-
-export interface UpdateUserData extends Partial<CreateUserData> {}
 
 export interface UserOrganization {
   id: number;
   userId: string;
   organizationId: number;
-  role: string; // owner, admin, member
+  role: string;                        // owner, admin, member
   createdAt?: Date | null;
-  updatedAt?: Date | null;
+  // Note: No updatedAt field - not present in user_organizations table schema
 }
 
 export interface CreateUserOrganizationData {
   userId: string;
   organizationId: number;
-  role?: string; // defaults to 'member'
+  role?: string;                       // defaults to 'member'
+}
+
+// Session data for NextAuth integration
+export interface SessionData {
+  sessionToken: string;
+  userId: string;
+  expires: Date;
+}
+
+export interface CreateSessionData {
+  sessionToken: string;
+  userId: string;
+  expires: Date;
 }
