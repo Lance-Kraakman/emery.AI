@@ -24,15 +24,31 @@ import type {
 } from '../entities/file-storage';
 
 export interface IFileStorageRepository {
-  // Core file operations
+  // Essential CRUD operations - what's actually used in the application
   uploadFile(request: FileUploadRequest): Promise<StoredFile>;
-  downloadFile(key: FileKey): Promise<FileDownloadResponse>;
   deleteFile(key: FileKey): Promise<void>;
+  generateDownloadUrl(key: FileKey, options?: FileUrlOptions): Promise<string>;
+  validateFile(request: FileUploadRequest, rules: FileValidationRule): Promise<FileValidationResult>;
+  getStorageUsage(organizationId?: number): Promise<{
+    totalFiles: number;
+    totalSize: number;
+    quotaUsed: number;
+    quotaLimit?: number;
+  }>;
+}
+
+// FUTURE-WORK: Additional methods to implement as needed
+// The following methods were part of the original comprehensive interface
+// but are not currently used in the application. They are preserved here
+// for future implementation when these features are required:
+/*
+export interface IFileStorageRepositoryFuture extends IFileStorageRepository {
+  // Core file operations
+  downloadFile(key: FileKey): Promise<FileDownloadResponse>;
   fileExists(key: FileKey): Promise<boolean>;
   getFileMetadata(key: FileKey): Promise<StoredFile>;
   
   // URL generation for external access
-  generateDownloadUrl(key: FileKey, options?: FileUrlOptions): Promise<string>;
   generateUploadUrl(key: FileKey, options?: FileUrlOptions): Promise<string>;
   
   // File listing and discovery
@@ -46,7 +62,6 @@ export interface IFileStorageRepository {
   batchOperation(operation: FileBatchOperation): Promise<FileBatchResult>;
   
   // File validation and integrity
-  validateFile(request: FileUploadRequest, rules: FileValidationRule): Promise<FileValidationResult>;
   verifyFileIntegrity(key: FileKey): Promise<{ valid: boolean; checksums?: Record<string, string> }>;
   
   // File transformations (for image processing, etc.)
@@ -92,14 +107,8 @@ export interface IFileStorageRepository {
     latency?: number;
     errors?: string[];
   }>;
-  
-  getStorageUsage(organizationId?: number): Promise<{
-    totalFiles: number;
-    totalSize: number;
-    quotaUsed: number;
-    quotaLimit?: number;
-  }>;
 }
+*/
 
 // Extended interface for cloud providers with advanced features
 export interface ICloudFileStorageRepository extends IFileStorageRepository {
