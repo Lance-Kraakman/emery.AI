@@ -11,7 +11,7 @@ This document outlines the backend architecture for the Emery Agents system, whi
 
 ## The Layers
 
-The application is divided into three logical layers, with a focus on simplicity for a stateless execution service.
+The application is divided into four distinct layers, following the principles of Clean Architecture.
 
 ```
 src/emery_agents/
@@ -19,48 +19,55 @@ src/emery_agents/
 ├── application/          # (Application Layer) Use cases and services
 │   └── services/
 ├── domain/               # (Domain Layer) Core business logic and models
-│   └── entities/
-└── integrations/         # (Infrastructure Layer) Concrete implementations
+│   ├── entities/
+│   └── repositories/
+└── infrastructure/       # (Infrastructure Layer) Concrete implementations
+    └── repositories/
 ```
 
 ### 1. Domain Layer
 
-This is the core of the application. It contains the data structures that define the business objects.
+This is the core of the application. It contains the enterprise-wide business logic and data structures.
 
--   **`domain/entities/`**: Contains the core data structures of the application (e.g., `Agent`, `Task`). These are simple, stateless data classes.
+-   **`domain/entities/`**: Contains the core data structures of the application (e.g., `Agent`, `Task`).
+-   **`domain/repositories/`**: Defines the abstract interfaces for any external dependencies, such as the `IToolRepository`.
 
-**Key Rule**: The Domain layer has zero dependencies on any other layer in the application.
+**Key Rule**: The Domain layer has zero dependencies on any other layer.
 
 ### 2. Application Layer
 
-This layer contains the application-specific business logic. It orchestrates the domain entities to perform use cases.
+This layer contains the application-specific business logic.
 
--   **`application/services/`**: Contains the services that implement the application's use cases (e.g., `AgentService`). This is the primary orchestrator of business logic.
+-   **`application/services/`**: Contains the `AgentService`, which is the primary orchestrator of the agent execution logic.
 
-**Key Rule**: The Application layer depends on the Domain layer and the Infrastructure layer.
+**Key Rule**: The Application layer depends only on the Domain layer.
 
-### 3. Infrastructure & API Layers
+### 3. Infrastructure Layer
 
-For this stateless service, the Infrastructure and API layers are closely related.
+This layer contains the concrete implementations of the interfaces defined in the Domain layer.
 
--   **`integrations/`**: Contains the code that integrates with external systems (e.g., `SmolAgentsOrchestrator`). These are treated as implementation details of the Application layer.
--   **`grpc/`**: This is the entry point of the application. It handles incoming requests, calls the appropriate service in the Application layer, and returns a response.
+-   **`infrastructure/repositories/`**: Contains concrete repository implementations, such as the `ToolRegistryRepository`.
+-   **`integrations/`**: Contains other external-facing code.
+
+**Key Rule**: The Infrastructure layer depends on the Domain layer.
 
 ## Request Flow
 
 A typical request flows through the system as follows:
 
 1.  An incoming gRPC request is received by the **API Layer** (`grpc/server.py`).
-2.  The API layer calls the appropriate method on a service in the **Application Layer** (e.g., `AgentService.execute_task`), passing in the necessary data from the request.
-3.  The service in the Application layer instantiates and uses clients from the **Infrastructure Layer** (e.g., `SmolAgentsOrchestrator`) to perform its work.
-4.  The service executes the business logic and returns a result to the API layer.
-5.  The API layer formats the result and sends it back to the client.
+2.  The API layer, acting as the **Composition Root**, instantiates the concrete `ToolRegistryRepository` from the **Infrastructure Layer**.
+3.  It then instantiates the `AgentService` from the **Application Layer**, injecting the repository into its constructor.
+4.  The API layer calls the `execute_task` method on the `AgentService`.
+5.  The `AgentService` uses the `IToolRepository` interface from the **Domain Layer** to load the necessary tools, without knowing the concrete implementation.
+6.  The service executes the business logic and returns a result to the API layer.
+7.  The API layer formats the result and sends it back to the client.
 
 ## Developer Guide
 
 When adding a new feature:
 
-1.  **Start with the Domain**: Define any new entities that are needed.
-2.  **Update the Application Service**: Add a new method to the service to implement the use case.
-3.  **Add Infrastructure**: If the new use case requires a new external integration, add it in the `integrations` directory.
-4.  **Expose via the API**: Add a new endpoint in the API layer to call the new service method.
+1.  **Start with the Domain**: Define any new entities or repository interfaces.
+2.  **Update the Application Service**: Add or modify services to implement the new use case, depending only on domain interfaces.
+3.  **Add Infrastructure**: Create concrete implementations for any new repository interfaces.
+4.  **Expose via the API**: Update the gRPC server to compose and call the new services.

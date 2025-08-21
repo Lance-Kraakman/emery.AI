@@ -5,11 +5,14 @@ import { IOrganizationRepository } from '../../domain/repositories/organization-
 import { DrizzleOrganizationRepository } from '../../infrastructure/db/repositories/drizzle-organization-repository';
 import { IUserRepository } from '../../domain/repositories/user-repository';
 import { DrizzleUserRepository } from '../../infrastructure/db/repositories/drizzle-user-repository';
+import { IRoleRepository } from '../../domain/repositories/role-repository';
+import { DrizzleRoleRepository } from '../../infrastructure/db/repositories/drizzle-role-repository';
 
 // Registry of all available repository interfaces
 interface RepositoryRegistry {
   IOrganizationRepository: IOrganizationRepository;
   IUserRepository: IUserRepository;
+  IRoleRepository: IRoleRepository;
   // Future repositories will be added here
   // IDynamicTableRepository: IDynamicTableRepository;
 }
@@ -43,6 +46,8 @@ export class DIContainer {
       new DrizzleOrganizationRepository(db, rawClient));
     this.repositories.set('IUserRepository', 
       new DrizzleUserRepository(db, rawClient));
+    this.repositories.set('IRoleRepository', 
+      new DrizzleRoleRepository(db, rawClient));
 
     this.isInitialized = true;
     console.log('✅ DIContainer initialized with repositories');
@@ -101,6 +106,13 @@ export function getOrganizationRepository(): IOrganizationRepository {
  */
 export function getUserRepository(): IUserRepository {
   return DIContainer.getInstance().get('IUserRepository');
+}
+
+/**
+ * Get the role repository
+ */
+export function getRoleRepository(): IRoleRepository {
+  return DIContainer.getInstance().get('IRoleRepository');
 }
 
 // Helper to initialize container from existing clients
