@@ -5,7 +5,7 @@ Handles conversion between different tool configuration formats.
 """
 
 from typing import Dict, Any, Optional, Union
-from ..domain.entities.models import ToolConfig
+from ...domain.entities.models import ToolConfig
 
 class ToolConfigConverter:
     """Converts between different tool configuration formats."""

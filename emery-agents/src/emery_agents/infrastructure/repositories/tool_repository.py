@@ -8,8 +8,10 @@ from smolagents import PythonInterpreterTool, DuckDuckGoSearchTool, SpeechToText
 
 from ...domain.entities.tools import ToolConfig, ToolType, ToolCategory, BUILT_IN_TOOLS, HF_NLP_TOOLS, HF_CV_TOOLS, HF_AUDIO_TOOLS, HF_MULTIMODAL_TOOLS, CUSTOM_INTEGRATION_TOOLS
 from ...domain.repositories.tool_repository import IToolRepository
-from ...tools.converters import ToolConfigConverter
+from .converters import ToolConfigConverter
 from typing import Protocol
+from .custom_tools import PipedreamConnectorTool
+from .hf_model_tools import create_hf_pipeline_tool
 
 class ToolFactory(Protocol):
     """Protocol for tool factory functions."""
@@ -73,7 +75,6 @@ class ToolRegistryRepository(IToolRepository):
         """Get factory function for custom tools."""
         def create_custom_tool(config: ToolConfig) -> Any:
             if tool_type == ToolType.PIPEDREAM_CONNECTOR:
-                from ...tools.custom_tools import PipedreamConnectorTool
                 return PipedreamConnectorTool(config.config or {})
             return None
         
@@ -82,7 +83,6 @@ class ToolRegistryRepository(IToolRepository):
     def _create_hf_model_tool(self, config: ToolConfig) -> Any:
         """Create HuggingFace model-based tool."""
         try:
-            from ...tools.hf_model_tools import create_hf_pipeline_tool
             return create_hf_pipeline_tool(config)
         except ImportError:
             logger.warning(f"HF model tools not available for {config.name}")

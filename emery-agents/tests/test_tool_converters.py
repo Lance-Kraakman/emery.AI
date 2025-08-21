@@ -1,7 +1,7 @@
 """Unit tests for tool converters."""
 
 import pytest
-from emery_agents.tools.converters import ToolConfigConverter
+from emery_agents.infrastructure.repositories.converters import ToolConfigConverter
 from emery_agents.domain.entities.tools import ToolType
 from emery_agents.domain.entities.models import ToolConfig
 

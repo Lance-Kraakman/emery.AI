@@ -39,28 +39,24 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         context: grpc.aio.ServicerContext
     ) -> AsyncIterator[agent_worker_pb2.TaskProgress]:
         
-        task_data = parse_task_request(request)
-        task_id = task_data['task_id']
-        agent = task_data['agent']
-        capability_name = task_data.get('capability_name')
-        instruction_config = task_data.get('instruction_config')
+        task = parse_task_request(request)
+    
 
-        print(f"🚀 [TASK-{task_id[:8]}] Starting execution for agent: {agent.name if agent else 'Unknown'}")
-        print(f"📋 [TASK-{task_id[:8]}] Instructions: {instruction_config}..." if instruction_config else "No instruction config")
+        print(f"🚀 [TASK-{task.id[:8]}] Starting execution for agent: {task.agent}")
+        print(f"📋 [TASK-{task.id[:8]}] Instructions: {task.instructions}..." if task.instructions else "No instruction config")
         sys.stdout.flush()
         
-        logger.info(f"Starting task execution: {task_id[:8]} for agent {agent.name if agent else 'Unknown'}")
-        logger.info(f"Instruction config: {instruction_config}")
+        logger.info(f"Instructions: {task.instructions}")
         
-        self.active_tasks[task_id] = {'agent': agent, 'start_time': time.time()}
+        self.active_tasks[task.id] = {'agent': task.agent, 'start_time': time.time()}
 
         try:
-            yield create_task_progress(task_id=task_id, status=TaskStatus.IN_PROGRESS, step_id="initialization", progress_percent=0.0)
+            yield create_task_progress(task_id=task.id, status=TaskStatus.IN_PROGRESS, step_id="initialization", progress_percent=0.0)
             
             task_result = await self.agent_service.execute_task(
-                agent=agent,
-                instructions=instruction_config,
-                capability_name=capability_name
+                agent=task.agent,
+                instructions=task.instructions,
+                capability_name=task.capabilityName
             )
             
             if task_result["status"] == "success":
@@ -70,18 +66,18 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                 final_result = {"status": "failed", "error": task_result.get("error", "Unknown error")}
                 final_status = TaskStatus.FAILED
             
-            yield create_task_progress(task_id=task_id, status=final_status, step_id="completion", output_data=final_result, progress_percent=100.0)
+            yield create_task_progress(task_id=task.id, status=final_status, step_id="completion", output_data=final_result, progress_percent=100.0)
         except Exception as e:
-            print(f"❌ [TASK-{task_id[:8]}] Failed: {str(e)}")
+            print(f"❌ [TASK-{task.id[:8]}] Failed: {str(e)}")
             import traceback
-            print(f"📍 [TASK-{task_id[:8]}] Traceback: {traceback.format_exc()}")
+            print(f"📍 [TASK-{task.id[:8]}] Traceback: {traceback.format_exc()}")
             sys.stdout.flush()
             
-            logger.exception(f"Task {task_id[:8]} failed")
-            yield create_task_progress(task_id=task_id, status=TaskStatus.FAILED, error_message=str(e))
+            logger.exception(f"Task {task.id[:8]} failed")
+            yield create_task_progress(task_id=task.id, status=TaskStatus.FAILED, error_message=str(e))
         finally:
-            if task_id in self.active_tasks:
-                del self.active_tasks[task_id]
+            if task.id in self.active_tasks:
+                del self.active_tasks[task.id]
 
     async def GetWorkerInfo(self, request: agent_worker_pb2.Empty, context: grpc.aio.ServicerContext) -> agent_worker_pb2.WorkerInfo:
         return agent_worker_pb2.WorkerInfo(

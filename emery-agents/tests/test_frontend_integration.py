@@ -7,7 +7,6 @@ from emery_agents.domain.entities.models import ToolConfig
 from emery_agents.domain.entities.tools import ToolType
 from emery_agents.infrastructure.repositories.tool_repository import ToolRegistryRepository
 
-
 class TestFrontendIntegration:
     """Test frontend compatibility."""
     
