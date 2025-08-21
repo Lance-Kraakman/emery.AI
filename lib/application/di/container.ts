@@ -7,14 +7,18 @@ import { IUserRepository } from '../../domain/repositories/user-repository';
 import { DrizzleUserRepository } from '../../infrastructure/db/repositories/drizzle-user-repository';
 import { IRoleRepository } from '../../domain/repositories/role-repository';
 import { DrizzleRoleRepository } from '../../infrastructure/db/repositories/drizzle-role-repository';
+import { IDynamicTableRepository } from '../../domain/repositories/dynamic-table-repository';
+import { DrizzleDynamicTableRepository } from '../../infrastructure/db/repositories/drizzle-dynamic-table-repository';
+import { IFieldRepository } from '../../domain/repositories/field-repository';
+import { DrizzleFieldRepository } from '../../infrastructure/db/repositories/drizzle-field-repository';
 
 // Registry of all available repository interfaces
 interface RepositoryRegistry {
   IOrganizationRepository: IOrganizationRepository;
   IUserRepository: IUserRepository;
   IRoleRepository: IRoleRepository;
-  // Future repositories will be added here
-  // IDynamicTableRepository: IDynamicTableRepository;
+  IDynamicTableRepository: IDynamicTableRepository;
+  IFieldRepository: IFieldRepository;
 }
 
 export class DIContainer {
@@ -48,6 +52,10 @@ export class DIContainer {
       new DrizzleUserRepository(db, rawClient));
     this.repositories.set('IRoleRepository', 
       new DrizzleRoleRepository(db, rawClient));
+    this.repositories.set('IDynamicTableRepository', 
+      new DrizzleDynamicTableRepository(db, rawClient));
+    this.repositories.set('IFieldRepository', 
+      new DrizzleFieldRepository(db, rawClient));
 
     this.isInitialized = true;
     console.log('✅ DIContainer initialized with repositories');
@@ -113,6 +121,20 @@ export function getUserRepository(): IUserRepository {
  */
 export function getRoleRepository(): IRoleRepository {
   return DIContainer.getInstance().get('IRoleRepository');
+}
+
+/**
+ * Get the dynamic table repository
+ */
+export function getDynamicTableRepository(): IDynamicTableRepository {
+  return DIContainer.getInstance().get('IDynamicTableRepository');
+}
+
+/**
+ * Get the field repository
+ */
+export function getFieldRepository(): IFieldRepository {
+  return DIContainer.getInstance().get('IFieldRepository');
 }
 
 // Helper to initialize container from existing clients

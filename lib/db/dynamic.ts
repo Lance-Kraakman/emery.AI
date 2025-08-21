@@ -2,7 +2,6 @@ import { db, rawClient } from "./client";
 import { sql } from "drizzle-orm";
 
 // AIDEV-NOTE: Use shared raw client from client.ts to prevent connection leaks
-
 export async function createDynamicTable(tableName: string) {
   await db.execute(sql.raw(`
     CREATE TABLE ${tableName} (
@@ -54,7 +53,6 @@ export async function insertRow(tableName: string, data: Record<string, any>): P
   const values = Object.values(data);
   
   // Use shared client pool
-  
   try {
     let query: string;
     let result: any;
