@@ -6,7 +6,7 @@ from emery_agents.grpc.server import AgentWorkerServiceImplementation
 from emery_agents.grpc.proto_mappers import create_task_progress
 from emery_agents.domain.entities.models import TaskStatus
 from emery_agents.grpc.generated import agent_worker_pb2
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 class TestAgentWorkerService:
     """Test gRPC service implementation."""

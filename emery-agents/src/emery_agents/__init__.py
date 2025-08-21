@@ -14,7 +14,7 @@ from .domain.entities.models import (
     CapabilityConfig, TriggerConfig, ExecutionContext,
     ToolConfig, ServerConfig, StepConfig
 )
-from .integrations.smolagents_orcha import SmolAgentsOrchestrator
+from .application.services.agent_service import AgentService
 
 __version__ = "0.1.0"
 __author__ = "Lance Kraakman"
@@ -35,6 +35,6 @@ __all__ = [
     "ServerConfig",
     "StepConfig",
     
-    # Integrations
-    "SmolAgentsOrchestrator",
+    # Services
+    "AgentService",
 ]

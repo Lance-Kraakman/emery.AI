@@ -20,6 +20,14 @@ class TestAgentService:
     def test_setup_agent_orchestrator(self, sample_agent):
         """Setup agent hierarchy that mirrors our system structure."""
         tool_repo = Mock()
+        # The mock must be an instance of smolagents.tools.Tool
+        from smolagents.tools import Tool
+        mock_tool = Mock(spec=Tool)
+        mock_tool.name = "mock_tool"
+        mock_tool.inputs = {}
+        mock_tool.description = "A mock tool"
+        mock_tool.output_type = "string"
+        tool_repo.create_tool_instance.return_value = mock_tool
         service = AgentService(tool_repo)
         
         with patch.dict(os.environ, {"HF_TOKEN": "test-token"}, clear=True):
@@ -63,6 +71,13 @@ class TestAgentService:
     def test_create_step_agent_code_step(self, sample_capability):
         """Create step agent for CODE_STEP."""
         tool_repo = Mock()
+        from smolagents.tools import Tool
+        mock_tool = Mock(spec=Tool)
+        mock_tool.name = "mock_tool"
+        mock_tool.inputs = {}
+        mock_tool.description = "A mock tool"
+        mock_tool.output_type = "string"
+        tool_repo.create_tool_instance.return_value = mock_tool
         service = AgentService(tool_repo)
         
         # Modify step to be CODE_STEP
@@ -75,6 +90,13 @@ class TestAgentService:
     def test_create_step_agent_tool_step(self, sample_capability):
         """Create step agent for TOOL_STEP."""
         tool_repo = Mock()
+        from smolagents.tools import Tool
+        mock_tool = Mock(spec=Tool)
+        mock_tool.name = "mock_tool"
+        mock_tool.inputs = {}
+        mock_tool.description = "A mock tool"
+        mock_tool.output_type = "string"
+        tool_repo.create_tool_instance.return_value = mock_tool
         service = AgentService(tool_repo)
         
         # Modify step to be TOOL_STEP  
@@ -117,20 +139,21 @@ class TestAgentService:
         tool_repo = Mock()
         service = AgentService(tool_repo)
         
-        # Mock the agent's run method
-        mock_result = "Execution result"
-        async def mock_run(instructions):
-            return mock_result
-        
-        # Since we can't easily patch the agent instance created inside the service,
-        # we'll patch the CodeAgent class to control its behavior.
-        with patch('emery_agents.application.services.agent_service.CodeAgent') as mock_code_agent:
-            mock_agent_instance = Mock()
-            mock_agent_instance.run = mock_run
-            mock_code_agent.return_value = mock_agent_instance
+        with patch.dict(os.environ, {"HF_TOKEN": "test-token"}, clear=True):
+            # Mock the agent's run method
+            mock_result = "Execution result"
+            async def mock_run(instructions):
+                return mock_result
             
-            instructions = TaskInstructions(instructions="Test execution")
-            result = await service.execute_task(sample_agent, instructions, "test_capability")
-            
-            assert result["status"] == "success"
-            assert result["result"]["output"] == mock_result
+            # Since we can't easily patch the agent instance created inside the service,
+            # we'll patch the CodeAgent class to control its behavior.
+            with patch('emery_agents.application.services.agent_service.CodeAgent') as mock_code_agent:
+                mock_agent_instance = Mock()
+                mock_agent_instance.run = mock_run
+                mock_code_agent.return_value = mock_agent_instance
+                
+                instructions = TaskInstructions(instructions="Test execution")
+                result = await service.execute_task(sample_agent, instructions, "test_capability")
+                
+                assert result["status"] == "success"
+                assert result["result"]["output"] == mock_result

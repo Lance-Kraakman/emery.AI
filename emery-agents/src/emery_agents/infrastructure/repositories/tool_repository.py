@@ -6,10 +6,16 @@ from enum import Enum
 
 from smolagents import PythonInterpreterTool, DuckDuckGoSearchTool, SpeechToTextTool
 
-from ...domain.entities.models import ToolConfig
+from ...domain.entities.tools import ToolConfig, ToolType, ToolCategory, BUILT_IN_TOOLS, HF_NLP_TOOLS, HF_CV_TOOLS, HF_AUDIO_TOOLS, HF_MULTIMODAL_TOOLS, CUSTOM_INTEGRATION_TOOLS
 from ...domain.repositories.tool_repository import IToolRepository
 from ...tools.converters import ToolConfigConverter
-from ...tools.tool_registry import ToolType, ToolCategory, BUILT_IN_TOOLS, HF_NLP_TOOLS, HF_CV_TOOLS, HF_AUDIO_TOOLS, HF_MULTIMODAL_TOOLS, CUSTOM_INTEGRATION_TOOLS, ToolFactory
+from typing import Protocol
+
+class ToolFactory(Protocol):
+    """Protocol for tool factory functions."""
+    def __call__(self, config: ToolConfig) -> Any:
+        """Create a tool instance from configuration."""
+        ...
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +88,13 @@ class ToolRegistryRepository(IToolRepository):
             logger.warning(f"HF model tools not available for {config.name}")
             return None
     
+    def find_tool_type_by_name(self, tool_name: str) -> Optional[Any]:
+        """Find tool type by name from registry."""
+        for tool_type, tool_config in self._tool_configs.items():
+            if tool_config.name.lower() == tool_name.lower() or tool_type.value == tool_name:
+                return tool_type
+        return None
+
     def create_tool_instance(self, tool_config: Union[ToolConfig, Dict[str, Any]]) -> Optional[Any]:
         """Creates an instance of a tool from a given configuration."""
         tool_name = ToolConfigConverter.get_tool_name(tool_config)
@@ -89,7 +102,7 @@ class ToolRegistryRepository(IToolRepository):
         try:
             config_dict = ToolConfigConverter.from_agent_config(tool_config)
             
-            tool_type = ToolConfigConverter.find_tool_type_by_name(tool_name)
+            tool_type = self.find_tool_type_by_name(tool_name)
             if not tool_type:
                 logger.warning(f"Tool {tool_name} not found in registry")
                 return None

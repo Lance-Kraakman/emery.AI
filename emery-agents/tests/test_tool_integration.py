@@ -8,9 +8,10 @@ import os
 import pytest
 from unittest.mock import patch, MagicMock
 
-from emery_agents.tools import tool_registry, ToolType, ToolCategory
+from emery_agents.domain.entities.tools import ToolType, ToolCategory
 from emery_agents.domain.entities.models import ToolConfig as CoreToolConfig
-from emery_agents.integrations.smolagents_orcha import SmolAgentsOrchestrator
+from emery_agents.application.services.agent_service import AgentService
+from emery_agents.infrastructure.repositories.tool_repository import ToolRegistryRepository
 
 
 class TestFrontendToolConfigIntegration:
@@ -56,9 +57,9 @@ class TestFrontendToolConfigIntegration:
         }
         
         # Verify the tool can be created from registry
-        pipedream_tool = tool_registry.create_tool_instance(
-            ToolType.PIPEDREAM_CONNECTOR,
-            frontend_config["config"]
+        tool_repo = ToolRegistryRepository()
+        pipedream_tool = tool_repo.create_tool_instance(
+            frontend_config
         )
         
         assert pipedream_tool is not None
@@ -86,9 +87,9 @@ class TestFrontendToolConfigIntegration:
             "test_user_id": "550e8400-e29b-41d4-a716-446655440000"
         }
         
-        pipedream_tool = tool_registry.create_tool_instance(
-            ToolType.PIPEDREAM_CONNECTOR,
-            config
+        tool_repo = ToolRegistryRepository()
+        pipedream_tool = tool_repo.create_tool_instance(
+            {'name': 'pipedream_connector', 'config': config}
         )
         
         # Test OAuth proxy call
@@ -166,16 +167,18 @@ class TestFrontendToolConfigIntegration:
         
         # Set up environment for testing
         with patch.dict(os.environ, {'HF_TOKEN': 'test-token'}):
-            orchestrator = SmolAgentsOrchestrator()
-            orchestrator.setup_agent_orchestrator(agent)
+            tool_repo = ToolRegistryRepository()
+            service = AgentService(tool_repo)
+            service.setup_agent_orchestrator(agent)
             
             # Verify orchestrator was set up
-            assert orchestrator.agent is not None
+            assert service.agent is not None
     
     def test_tool_registry_matches_frontend_expectations(self):
         """Test that tool registry provides tools expected by frontend."""
         # Get available tools
-        available_tools = tool_registry.get_available_tools()
+        tool_repo = ToolRegistryRepository()
+        available_tools = tool_repo._tool_configs.values()
         
         # Check that key tools are available
         tool_names = [config.name for config in available_tools]
@@ -199,7 +202,8 @@ class TestFrontendToolConfigIntegration:
     def test_tool_config_validation(self):
         """Test that tool configurations are properly validated."""
         # Test valid configuration
-        valid_tools = tool_registry.get_validated_tools()
+        tool_repo = ToolRegistryRepository()
+        valid_tools = [t for t in tool_repo._tool_configs.values() if t.validate_environment()]
         
         # Should have at least built-in tools that don't require env vars
         python_tools = [t for t in valid_tools if t.name == "Python Interpreter"]
@@ -207,7 +211,8 @@ class TestFrontendToolConfigIntegration:
         
         # Test that tools requiring missing env vars are filtered out
         with patch.dict(os.environ, {}, clear=True):
-            validated_tools = tool_registry.get_validated_tools()
+            tool_repo = ToolRegistryRepository()
+            validated_tools = [t for t in tool_repo._tool_configs.values() if t.validate_environment()]
             hf_tools = [t for t in validated_tools if t.required_env_vars and "HF_TOKEN" in t.required_env_vars]
             assert len(hf_tools) == 0  # Should be filtered out due to missing HF_TOKEN
 
