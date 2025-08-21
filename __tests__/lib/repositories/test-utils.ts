@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Test utilities for repository testing
 // Provides helper functions and mock factories for repository unit tests
 
-import { vi, type MockedFunction } from 'vitest';
+import { vi, type MockedFunction, expect, describe } from 'vitest';
 
 // Common mock types
 export type MockDbClient = {
@@ -9,26 +9,38 @@ export type MockDbClient = {
   select: MockedFunction<any>;
   update: MockedFunction<any>;
   delete: MockedFunction<any>;
-};
+} & Record<string, any>;
 
-export type MockRawClient = MockedFunction<any> & {
+export type MockRawClient = MockedFunction<(...args: any[]) => Promise<any>> & {
   unsafe: MockedFunction<any>;
+  mock: {
+    calls: Array<[TemplateStringsArray | string[], ...any[]]>;
+    results: any[];
+  };
 };
 
 // Mock factory for Drizzle database client
 export function createMockDbClient(): MockDbClient {
-  return {
+  return new Proxy({
     insert: vi.fn(),
     select: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
-  };
+  }, {
+    get(target, prop) {
+      if (prop in target) {
+        return target[prop as keyof typeof target];
+      }
+      // Return a mock function for any unknown property
+      return vi.fn();
+    }
+  }) as MockDbClient;
 }
 
 // Mock factory for postgres raw client
 export function createMockRawClient(): MockRawClient {
-  const mock = vi.fn() as MockRawClient;
-  mock.unsafe = vi.fn();
+  const mock = vi.fn().mockResolvedValue(undefined) as MockRawClient;
+  mock.unsafe = vi.fn().mockReturnValue('');
   return mock;
 }
 
@@ -187,11 +199,14 @@ export const assertions = {
     const calls = mockRawClient.mock.calls;
     
     for (const pattern of expectedPatterns) {
-      const matchingCall = calls.find(call => 
-        call[0] && call[0].some && call[0].some((part: string) => 
-          part.includes(pattern)
-        )
-      );
+      const matchingCall = calls.find(call => {
+        const firstArg = call[0];
+        // Check if first argument is a TemplateStringsArray or string array
+        if (Array.isArray(firstArg) && 'some' in firstArg) {
+          return (firstArg as string[]).some((part: string) => part.includes(pattern));
+        }
+        return false;
+      });
       expect(matchingCall).toBeDefined();
     }
   },
@@ -204,15 +219,36 @@ export const assertions = {
     );
   },
 
+  // Check if raw SQL (postgres tagged template) was called with expected patterns
+  expectRawSql: (mockRawClient: MockRawClient, expectedPatterns: string[]) => {
+    expect(mockRawClient).toHaveBeenCalled();
+    const calls = mockRawClient.mock.calls;
+    
+    for (const pattern of expectedPatterns) {
+      const matchingCall = calls.find(call => {
+        const firstArg = call[0];
+        // Check if first argument is a TemplateStringsArray or string array
+        if (Array.isArray(firstArg) && 'some' in firstArg) {
+          return (firstArg as string[]).some((part: string) => part.includes(pattern));
+        }
+        return false;
+      });
+      expect(matchingCall).toBeDefined();
+    }
+  },
+
   // Check if a specific SQL operation was called (CREATE TABLE, ALTER TABLE, etc.)
   expectSqlOperation: (mockRawClient: MockRawClient, operation: string) => {
     expect(mockRawClient).toHaveBeenCalled();
     const calls = mockRawClient.mock.calls;
-    const operationCall = calls.find(call => 
-      call[0] && call[0].some && call[0].some((part: string) => 
-        part.includes(operation)
-      )
-    );
+    const operationCall = calls.find(call => {
+      const firstArg = call[0];
+      // Check if first argument is a TemplateStringsArray or string array
+      if (Array.isArray(firstArg) && 'some' in firstArg) {
+        return (firstArg as string[]).some((part: string) => part.includes(operation));
+      }
+      return false;
+    });
     expect(operationCall).toBeDefined();
   },
 };
