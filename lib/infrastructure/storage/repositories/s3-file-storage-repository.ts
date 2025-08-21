@@ -34,10 +34,9 @@ import type {
   FileBatchOperation,
   FileBatchResult,
   FileKey,
-  FileOperationResult,
-  FileStorageError,
-  FileValidationError
+  FileOperationResult
 } from '../../../domain/entities/file-storage';
+import { FileStorageError } from '../../../domain/entities/file-storage';
 
 export class S3FileStorageRepository implements IFileStorageRepository {
   private readonly bucketName: string;
@@ -64,11 +63,11 @@ export class S3FileStorageRepository implements IFileStorageRepository {
         Body: request.buffer,
         ContentType: request.mimeType,
         Metadata: {
-          ...request.metadata,
+          ...(request.metadata || {}),
           originalName: request.filename.replace(/[^\w.-]/g, '_'),
-          organizationId: request.organizationId?.toString(),
-          tableId: request.tableId?.toString(),
-          fieldId: request.fieldId?.toString(),
+          organizationId: request.organizationId?.toString() || '',
+          tableId: request.tableId?.toString() || '',
+          fieldId: request.fieldId?.toString() || '',
           uploadedAt: new Date().toISOString(),
           md5: md5Hash,
           sha256: sha256Hash,
@@ -326,13 +325,11 @@ export class S3FileStorageRepository implements IFileStorageRepository {
     const results = await Promise.allSettled(
       keys.map(async (key) => {
         await this.deleteFile(key);
-        return { success: true, data: key };
       })
     );
 
     return results.map((result, index) => ({
       success: result.status === 'fulfilled',
-      data: result.status === 'fulfilled' ? result.value.data : undefined,
       error: result.status === 'rejected' ? result.reason.message : undefined,
     }));
   }

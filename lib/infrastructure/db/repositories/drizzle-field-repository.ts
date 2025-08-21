@@ -908,29 +908,20 @@ export class DrizzleFieldRepository implements IFieldRepository {
   }
 
   // File field methods using FileFieldService
-  async createFileField(
-    tableId: number,
-    name: string,
-    slug: string,
-    config?: FileFieldConfig,
-    required?: boolean
-  ): Promise<Field> {
+  async createFileField(data: CreateFieldData & { config: FileFieldConfig }): Promise<Field> {
     if (!this.fileFieldService) {
       throw new Error('FileFieldService not available - cannot create file field');
     }
 
     const fieldData: CreateFieldData & { type: 'file' } = {
-      tableId,
-      name,
-      slug,
+      ...data,
       type: 'file',
-      required: required || false,
     };
 
-    return await this.fileFieldService.createFileField(fieldData, config);
+    return await this.fileFieldService.createFileField(fieldData, data.config);
   }
 
-  async updateFileConfig(fieldId: number, config: Partial<FileFieldConfig>): Promise<Field> {
+  async updateFileConfig(fieldId: number, config: FileFieldConfig): Promise<Field> {
     if (!this.fileFieldService) {
       throw new Error('FileFieldService not available - cannot update file field config');
     }
@@ -938,10 +929,10 @@ export class DrizzleFieldRepository implements IFieldRepository {
     return await this.fileFieldService.updateFileFieldConfig(fieldId, config);
   }
 
-  async getFileConfig(fieldId: number): Promise<FileFieldConfig> {
+  async getFileConfig(fieldId: number): Promise<FileFieldConfig | null> {
     const field = await this.findById(fieldId);
     if (!field || field.type !== 'file') {
-      throw new Error(`Field ${fieldId} is not a file field`);
+      return null;
     }
 
     // Return default file configuration - in production this would be stored in field metadata
@@ -949,7 +940,6 @@ export class DrizzleFieldRepository implements IFieldRepository {
       allowedTypes: process.env.ALLOWED_FILE_TYPES?.split(',') || ['image/*', 'application/pdf', 'text/*'],
       maxSize: parseInt(process.env.MAX_FILE_SIZE || '5242880'), // 5MB default
       maxFiles: 10, // Default max files per field
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx', 'txt'],
       generateThumbnails: true,
       thumbnailSizes: ['small', 'medium', 'large'],
     };

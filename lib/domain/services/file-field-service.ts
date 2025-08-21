@@ -15,9 +15,9 @@ import type {
   StoredFile,
   FileValidationRule,
   FileValidationResult,
-  FileStorageError,
-  FileValidationError
+  FileStorageError
 } from '../entities/file-storage';
+import { FileValidationError } from '../entities/file-storage';
 
 export interface FileFieldServiceConfig {
   maxFileSize?: number;
@@ -73,13 +73,10 @@ export class FileFieldService {
     }
 
     // Create field in database
-    const field = await this.fieldRepository.createFileField(
-      fieldData.tableId,
-      fieldData.name,
-      fieldData.slug,
-      config || this.getDefaultFileConfig(),
-      fieldData.required
-    );
+    const field = await this.fieldRepository.createFileField({
+      ...fieldData,
+      config: config || this.getDefaultFileConfig()
+    });
 
     return field;
   }
@@ -100,7 +97,15 @@ export class FileFieldService {
       throw new Error(`Field ${fieldId} is not a file field`);
     }
 
-    return await this.fieldRepository.updateFileConfig(fieldId, config);
+    // Get current config and merge with updates
+    const currentConfig = await this.fieldRepository.getFileConfig(fieldId);
+    const mergedConfig: FileFieldConfig = {
+      ...this.getDefaultFileConfig(),
+      ...currentConfig,
+      ...config,
+    };
+
+    return await this.fieldRepository.updateFileConfig(fieldId, mergedConfig);
   }
 
   /**
@@ -116,6 +121,13 @@ export class FileFieldService {
     }
 
     const fileConfig = await this.fieldRepository.getFileConfig(request.fieldId);
+    if (!fileConfig) {
+      return {
+        success: false,
+        errors: [`File field configuration not found for field ${request.fieldId}`]
+      };
+    }
+
     const errors: string[] = [];
     const warnings: string[] = [];
     const uploadedFiles: FileFieldValue[] = [];
@@ -140,7 +152,10 @@ export class FileFieldService {
         const validationRule: FileValidationRule = {
           maxSize: fileConfig.maxSize || this.config.maxFileSize,
           allowedTypes: fileConfig.allowedTypes || this.config.allowedTypes,
-          requiredExtensions: fileConfig.allowedExtensions,
+          // Note: FileFieldConfig doesn't have allowedExtensions, using global config
+          requiredExtensions: this.config.allowedTypes?.map(type => 
+            type.includes('/') ? type.split('/')[1] : type
+          ).filter(ext => !ext.includes('*')),
         };
 
         const uploadRequest: FileUploadRequest = {
@@ -284,6 +299,13 @@ export class FileFieldService {
     }
 
     const fileConfig = await this.fieldRepository.getFileConfig(fieldId);
+    if (!fileConfig) {
+      return {
+        valid: false,
+        errors: ['File field configuration not found'],
+      };
+    }
+    
     const errors: string[] = [];
 
     // Check file count limits
@@ -382,7 +404,8 @@ export class FileFieldService {
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       ],
       maxFiles: this.config.maxFilesPerField || 10,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx', 'txt'],
+      generateThumbnails: true,
+      thumbnailSizes: ['small', 'medium', 'large'],
     };
   }
 
