@@ -7,7 +7,7 @@ import { ragDocuments } from '@/lib/db/schema';
 import { 
   RagSqlTemplates, 
   SqlExecutor, 
-  type VectorSearchParams,
+  type RagVectorSearchParams,
   type IndexStatisticsParams,
   type DomainTypeCountsParams
 } from '@/ddd/infrastructure/db/sql-templates';
@@ -15,7 +15,7 @@ import {
 import { 
   type RagDocumentRepository,
   type DocumentFilters,
-  type VectorSearchParams,
+  type VectorSearchParams as DomainVectorSearchParams,
   type VectorSearchResult,
   type DocumentSyncResult
 } from '@/ddd/domain/rag/repositories';
@@ -100,13 +100,13 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
     return records.map(record => this.mapToDomainEntity(record));
   }
 
-  async vectorSearch(params: VectorSearchParams): Promise<VectorSearchResult> {
+  async vectorSearch(params: DomainVectorSearchParams): Promise<VectorSearchResult> {
     try {
       // AIDEV-NOTE: Using SQL templates for consistent, testable queries
       const limit = params.limit * 2;
       
-      const searchParams: VectorSearchParams = {
-        embeddingVector: params.queryEmbedding,
+      const searchParams: RagVectorSearchParams = {
+        queryEmbedding: params.queryEmbedding,
         indexId: params.indexId.value,
         limit: limit,
         similarityMetric: params.similarityMetric || 'cosine'
@@ -275,7 +275,6 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
     domainType: DomainType, 
     newDocuments: RagDocument[]
   ): Promise<DocumentSyncResult> {
-    // Get existing content hashes for this source type
     const existingHashes = await this.getContentHashes(indexId, domainType);
     const newHashes = new Set(newDocuments.map(d => d.contentHash));
 
