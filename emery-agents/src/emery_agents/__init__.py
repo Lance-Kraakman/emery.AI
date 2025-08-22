@@ -2,39 +2,48 @@
 Emery Agents - Agent execution system for Emery.
 
 This package provides:
-- Multi-step agent workflow execution
-- Integration with smolagents for AI capabilities  
-- MCP server integration via Pipedream Connect
-- Execution tracking and reporting
+- Simple Domain-Driven Design (DDD) architecture
+- Domain entities with business logic
+- Repository pattern for data access
+- Application services for orchestration
+- Clean separation of concerns following TypeScript patterns
 """
 
-from .domain.entities.models import (
-    Agent, StepExecution,
-    StepType, TriggerType, TaskStatus, Task,
-    CapabilityConfig, TriggerConfig, ExecutionContext,
-    ToolConfig, ServerConfig, StepConfig
+# Domain entities
+from .domain.agents.entities.agent import Agent, AgentConfig
+from .domain.agents.entities.task import Task, TaskInstructions, TaskConfig
+
+# Repository interfaces
+from .domain.agents.repositories.agent_repository import IAgentRepository
+from .domain.agents.repositories.task_repository import ITaskRepository
+
+# Application services
+from .application.services.agent_task_service import (
+    AgentTaskApplicationService,
+    CreateTaskRequest,
+    ExecuteTaskRequest,
+    TaskExecutionResult
 )
-from .application.services.agent_service import AgentService
 
 __version__ = "0.1.0"
 __author__ = "Lance Kraakman"
 __email__ = "lance@aifactory.nz"
 
 __all__ = [
-    # Core types
+    # Domain entities
     "Agent",
-    "StepExecution",
-    "StepType",
-    "TriggerType",
-    "TaskStatus",
+    "AgentConfig",
     "Task",
-    "CapabilityConfig",
-    "TriggerConfig",
-    "ExecutionContext",
-    "ToolConfig",
-    "ServerConfig",
-    "StepConfig",
+    "TaskInstructions",
+    "TaskConfig",
     
-    # Services
-    "AgentService",
+    # Repository interfaces
+    "IAgentRepository",
+    "ITaskRepository",
+    
+    # Application services
+    "AgentTaskApplicationService",
+    "CreateTaskRequest",
+    "ExecuteTaskRequest",
+    "TaskExecutionResult",
 ]

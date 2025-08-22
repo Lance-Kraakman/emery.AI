@@ -10,7 +10,7 @@ import type {
   SessionData,
   CreateSessionData
 } from '../entities/user';
-import type { Organization } from '../entities/organization';
+import type { Organization } from '@/ddd/domain/organizations/entities/organization';
 
 export interface IUserRepository {
   // Basic CRUD operations

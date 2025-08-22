@@ -130,7 +130,7 @@ export class DrizzleRoleRepository implements IRoleRepository {
       return false;
     }
 
-    return role.permissions.includes(permission) || role.permissions.includes(PERMISSIONS.ALL);
+    return role.permissions.includes(permission);
   }
 
   async addPermission(roleId: number, permission: string): Promise<void> {

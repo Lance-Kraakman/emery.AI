@@ -3,7 +3,7 @@ import type postgres from 'postgres';
 
 import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
-import { ROLE_TYPES, PERMISSIONS } from '@/ddd/domain/roles/entities/role';
+import { ROLE_TYPES, PERMISSIONS, DEFAULT_ROLE_PERMISSIONS } from '@/ddd/domain/roles/entities/role';
 import type { DbClient } from '@/lib/db/client';
 import { organizations, users, userOrganizations, roles } from '@/lib/db/schema';
 
@@ -107,7 +107,7 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
         .values({
           name: ROLE_TYPES.ADMIN,
           organizationId: org.id,
-          permissions: [PERMISSIONS.ALL]
+          permissions: [...DEFAULT_ROLE_PERMISSIONS[ROLE_TYPES.ADMIN]]
         })
         .returning();
 

@@ -1,0 +1,1 @@
+"""Simplified DDD tests following TypeScript patterns."""

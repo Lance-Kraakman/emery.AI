@@ -1,8 +1,11 @@
 import { NextRequest } from 'next/server'
 import { streamText } from 'ai'
 import { auth } from '@/lib/auth'
-import { ragService } from '@/lib/rag/service'
+import { searchApplicationService, indexingApplicationService, indexRepository } from '@/ddd/application/di/rag-container'
 import { getAIModel, getAIProviderInfo } from '@/lib/ai/models'
+import type { SearchRagQuery } from '@/ddd/application/rag/queries/search-query'
+import type { CreateIndexCommand } from '@/ddd/application/rag/commands/create-index-command'
+import { RagIndexId, OrganizationId } from '@/ddd/domain/rag/value-objects'
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,31 +41,38 @@ export async function POST(req: NextRequest) {
         if (!organizationId) {
           console.log('No current organization found for user')
         } else {
-          const indexes = await ragService.listIndexes({ organizationId })
-          let ragIndex = indexes.find(idx => idx.domainTypes.includes('organizations'))
+          // AIDEV-NOTE: Using DDD repository directly instead of legacy ragService
+          const indexes = await indexRepository.findByOrganization(OrganizationId.fromNumber(organizationId))
+          let ragIndex = indexes.find(idx => idx.domainTypes.includes('organization'))
         
           // Create default RAG index if none exists
           if (!ragIndex) {
-            const indexId = await ragService.createIndex({
+            // AIDEV-NOTE: Using DDD indexing application service instead of legacy ragService
+            const createIndexCommand: CreateIndexCommand = {
               name: `Organization ${organizationId} Knowledge Base`,
               description: 'Automatic RAG index for organizational data',
               organizationId,
-              domainTypes: ['organizations', 'tables', 'agents', 'files', 'teams'],
+              domainTypes: ['organization', 'table', 'agent', 'file', 'team'], // DDD uses singular forms
               createdBy: session.user.id,
-            })
-            ragIndex = await ragService.getIndex(indexId) || undefined
+            };
+            
+            const indexId = await indexingApplicationService.createIndex(createIndexCommand)
+            ragIndex = await indexRepository.findById(RagIndexId.fromString(indexId)) || undefined
           }
 
           // Search for relevant context
           if (ragIndex) {
             console.log(`[RAG-SEARCH] Searching in index ${ragIndex.id} for query: "${latestMessage}"`)
-            const searchResult = await ragService.search({
-              indexId: ragIndex.id,
+            // AIDEV-NOTE: Using DDD search application service instead of legacy ragService
+            const searchQuery: SearchRagQuery = {
+              indexId: ragIndex.id.toString(),
               query: latestMessage,
               limit: 5,
               threshold: 0.3, // Lowered threshold for better matches
-              userId: session.user.id,
-            })
+              userId: session.user.id
+            };
+            
+            const searchResult = await searchApplicationService.search(searchQuery)
 
             console.log(`[RAG-SEARCH] Found ${searchResult.documents.length} documents`)
             if (searchResult.documents.length > 0) {

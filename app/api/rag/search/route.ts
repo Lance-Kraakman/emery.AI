@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { ragService } from '@/lib/rag/service'
+import { searchApplicationService } from '@/ddd/application/di/rag-container'
+import type { SearchRagQuery } from '@/ddd/application/rag/queries/search-query'
 
 // POST /api/rag/search - Search RAG index
 export async function POST(request: NextRequest) {
@@ -17,13 +18,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'indexId and query are required' }, { status: 400 })
     }
 
-    const result = await ragService.search({
+    // AIDEV-NOTE: Using DDD search application service instead of legacy ragService
+    const searchQuery: SearchRagQuery = {
       indexId,
       query,
       limit,
       threshold,
-      userId: session.user.id,
-    })
+      userId: session.user.id
+    };
+
+    const result = await searchApplicationService.search(searchQuery)
 
     return NextResponse.json({ success: true, result })
   } catch (error) {

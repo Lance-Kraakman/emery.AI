@@ -6,6 +6,3 @@ export * from './commands';
 
 // Queries  
 export * from './queries';
-
-// Application Services
-export * from './services';

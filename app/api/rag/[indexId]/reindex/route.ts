@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { ragService } from '@/lib/rag/service'
+import { indexingApplicationService } from '@/ddd/application/di/rag-container'
+import type { ReindexCommand } from '@/ddd/application/rag/commands/reindex-command'
 
 // POST /api/rag/[indexId]/reindex - Trigger reindexing
 export async function POST(
@@ -15,8 +16,14 @@ export async function POST(
 
     const { indexId } = await context.params
 
+    // AIDEV-NOTE: Using DDD indexing application service instead of legacy ragService
+    const reindexCommand: ReindexCommand = {
+      indexId,
+      force: false // Default to incremental reindex
+    };
+
     // Start reindexing in background (async)
-    ragService.reindexData(indexId).catch(console.error)
+    indexingApplicationService.reindexData(reindexCommand).catch(console.error)
 
     return NextResponse.json({ 
       success: true, 

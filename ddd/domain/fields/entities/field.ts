@@ -7,10 +7,10 @@ export interface Field {
   name: string;
   slug: string;                        // URL-safe field identifier
   type: FieldType;
-  orderIndex?: number | null;
-  relatedTableId?: number | null;      // For relation field types
-  required?: boolean | null;
-  createdAt?: Date | null;
+  orderIndex: number | null | undefined;  // Align with actions interface
+  relatedTableId: number | null;      // For relation field types
+  required: boolean | null;           // Align with actions interface (not optional)
+  createdAt: Date | null;
 }
 
 export interface CreateFieldData {
@@ -101,10 +101,6 @@ export interface FileFieldValue {
   }>;
 }
 
-// Legacy relation field value for backwards compatibility
-export interface RelationFieldValue extends LinkToTableValue {
-  /** @deprecated Use LinkToTableValue instead */
-}
 
 // Helper type for JSON field values
 export type FieldValue = 
@@ -174,11 +170,6 @@ export interface LinkToTableConfig {
   createReverseField?: boolean;         // Automatically create bidirectional link
 }
 
-// Legacy relation field config for backwards compatibility
-export interface RelationFieldConfig extends LinkToTableConfig {
-  /** @deprecated Use LinkToTableConfig instead */
-  relationshipType?: 'one_to_one' | 'one_to_many' | 'many_to_many';
-}
 
 export interface RelationValue {
   id: string;                           // Related record ID
@@ -195,13 +186,6 @@ export interface FileFieldConfig {
   thumbnailSizes?: string[];            // Thumbnail sizes: ['small', 'medium', 'large']
   s3BucketName?: string;               // Override default S3 bucket
   compressionEnabled?: boolean;         // Enable file compression
-}
-
-// Legacy file value for backwards compatibility  
-export interface FileValue extends FileFieldValue {
-  /** @deprecated Use FileFieldValue instead */
-  type?: string;                        // MIME type (use mimeType)
-  url: string;                          // Access URL (use s3Key + generateDownloadUrl)
 }
 
 // Complex field queries

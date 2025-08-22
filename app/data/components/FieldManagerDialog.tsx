@@ -7,13 +7,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Table as UITable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Trash2 } from "lucide-react"
 import { createField, deleteField } from "@/app/actions/fields"
 import { getTables } from "@/app/actions/tables"
-import type { Field } from "@/app/actions/types"
-import type { Table } from "@/types/db"
+import type { Field, FieldType } from "@/app/actions/types"
+import type { DynamicTable } from "@/ddd/domain/tables/entities/dynamic-table"
 
 interface FieldManagerDialogProps {
   isOpen: boolean
@@ -37,11 +37,11 @@ const FIELD_TYPES = [
 export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsUpdated }: FieldManagerDialogProps) {
   const [isAddingField, setIsAddingField] = useState(false)
   const [newFieldName, setNewFieldName] = useState("")
-  const [newFieldType, setNewFieldType] = useState("")
+  const [newFieldType, setNewFieldType] = useState<FieldType | "">("")
   const [newFieldRequired, setNewFieldRequired] = useState(false)
   const [newFieldRelatedTableId, setNewFieldRelatedTableId] = useState<number | undefined>()
   const [loading, setLoading] = useState(false)
-  const [availableTables, setAvailableTables] = useState<Table[]>([])
+  const [availableTables, setAvailableTables] = useState<DynamicTable[]>([])
 
   const handleAddField = async () => {
     if (!newFieldName || !newFieldType) return
@@ -51,7 +51,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
       const result = await createField({
         tableId,
         name: newFieldName,
-        type: newFieldType,
+        type: newFieldType as FieldType,
         required: newFieldRequired,
         relatedTableId: newFieldType === 'relation' ? newFieldRelatedTableId : undefined
       })
@@ -134,7 +134,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
           <div>
             <h3 className="text-sm font-medium mb-2">Current Fields</h3>
             <div className="border rounded-md">
-              <Table>
+              <UITable>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
@@ -180,7 +180,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+              </UITable>
             </div>
           </div>
 
@@ -206,7 +206,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
                 <div className="space-y-2">
                   <Label htmlFor="fieldType">Field Type</Label>
                   <Select value={newFieldType} onValueChange={(value) => {
-                    setNewFieldType(value)
+                    setNewFieldType(value as FieldType)
                     if (value !== 'relation') {
                       setNewFieldRelatedTableId(undefined)
                     } else {

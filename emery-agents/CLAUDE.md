@@ -1,277 +1,441 @@
-# CLAUDE.md
+# CLAUDE.md for Emery Agents
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with the emery-agents Python microservice.
 
 ## Project Overview
 
-Emery Agents is a distributed agent execution system with gRPC communication and multi-step workflow orchestration. It integrates with SmolAgents for AI model execution and MCP servers for external service connections through the parent Emery system.
+Emery Agents is a Python microservice that provides agent execution capabilities for the Emery platform. It implements a **simple Domain-Driven Design (DDD) architecture** that mirrors the TypeScript patterns used in the main frontend application.
 
-## Core Architecture
+## Simple DDD Architecture
 
-### Clean Architecture Layers
-- **Domain Layer** (`domain/`): Core business logic and models - NO external dependencies
-- **Application Layer** (`application/`): Use cases and orchestration services
-- **Infrastructure Layer** (`infrastructure/`): Concrete implementations of domain interfaces
-- **gRPC Layer** (`grpc/`): Protocol buffers communication for distributed workers
+### Core Principles
 
-### Key Components
-- **SmolAgentsOrchestrator**: Manages AI agent hierarchy with TaskExecutorAgent → CapabilityAgents → DefaultTaskExecutorAgent routing
-- **ExecutionContextManager**: Persistent context between agent steps using temporary working directories
-- **Tool Registry**: Dynamic tool loading and conversion system for SmolAgents integration
-- **MCP Server Integration**: Leverages Emery's OAuth proxy for external service connections
+This project follows **authentic DDD patterns** - NOT Clean Architecture or complex abstraction layers:
 
-## Development Commands
+- **Simple entities** with business logic
+- **Repository pattern** with interfaces in domain, implementations in infrastructure  
+- **Application services** for orchestration
+- **No value objects** for simple IDs - just use `int` and `str`
+- **No adapters or ports** - direct repository implementations
+- **Mutable entities** following TypeScript patterns
 
-### Testing Commands
-```bash
-# Quick smoke tests (no external dependencies)
-uv run pytest tests/test_types.py -v
+### Directory Structure
 
-# All unit tests
-uv run pytest tests/ -v
-
-# Tests with coverage report
-uv run pytest tests/ --cov=src/emery_agents --cov-report=html
-
-# Specific test categories (if run_tests.py exists)
-uv run pytest tests/ -m "not integration"  # Unit tests only
-uv run pytest tests/ -m "integration"      # Integration tests
-uv run pytest tests/ -m "smolagents"       # SmolAgents tests (requires HF_TOKEN)
-uv run pytest tests/ -m "grpc"             # gRPC tests
+```
+src/emery_agents/
+├── domain/                    # Pure domain logic
+│   └── agents/
+│       ├── entities/          # Domain entities with business rules
+│       │   ├── agent.py       # Agent entity with business logic
+│       │   └── task.py        # Task entity with lifecycle management
+│       └── repositories/      # Repository INTERFACES only
+│           ├── agent_repository.py
+│           └── task_repository.py
+├── application/               # Application services - orchestration
+│   └── services/
+│       └── agent_task_service.py
+└── infrastructure/            # Concrete implementations
+    └── db/
+        └── repositories/
+            └── agents/
+                ├── grpc_agent_repository.py
+                └── grpc_task_repository.py
 ```
 
-### Code Quality Commands
-```bash
-# Format code
-uv run black src/ tests/
-uv run isort src/ tests/
+### Layer Rules
 
-# Type checking
-uv run mypy src/
+#### Domain Layer (`src/emery_agents/domain/`)
+- **Contains**: Entities with business logic, repository interfaces
+- **Business Rules**: All domain logic lives in entities
+- **No Dependencies**: Pure domain logic, no external imports
+- **Mutable Entities**: Entities can change state (following TypeScript patterns)
 
-# Linting
-uv run flake8 src/
-```
+#### Application Layer (`src/emery_agents/application/`)
+- **Contains**: Application services that orchestrate domain operations
+- **Orchestration**: Coordinates between repositories and domain entities
+- **Transaction Management**: Handles save operations and error handling
+- **Simple DTOs**: Basic request/response objects
 
-### Development Setup
-```bash
-# Install for development
-uv sync --dev
+#### Infrastructure Layer (`src/emery_agents/infrastructure/`)
+- **Contains**: Repository implementations, external service integrations
+- **Database Access**: Concrete repository implementations (gRPC, HTTP, etc.)
+- **External Services**: Integration with external systems
 
-# Install with smolagents support
-uv add "./[smolagents]"
-```
+## Key Patterns
 
-## Environment Configuration
+### Domain Entities
 
-### Required Environment Variables
-```bash
-# Core integration
-EMERY_API_URL=http://localhost:3000
-EMERY_AGENT_ID=123
-EMERY_API_KEY=your_agent_api_key
+Entities are simple classes with business logic, following TypeScript patterns:
 
-# For SmolAgents integration
-HF_TOKEN=your_huggingface_token
-SMOLAGENTS_MODEL=claude-3-sonnet-20240229
-
-# Optional
-EMERY_AGENTS_LOG_LEVEL=INFO
-```
-
-### Test Environment
-```bash
-# For SmolAgents tests
-export HF_TOKEN="your_huggingface_token"
-
-# For integration tests
-export EMERY_API_URL="http://localhost:3000" 
-export TEST_ORGANIZATION_ID="test_org"
-```
-
-## Agent Configuration System
-
-### Agent Types
-- `TOOL_CALLING_AGENT`: Uses smolagents ToolCallingAgent for function calling
-- `CODE_AGENT`: Uses smolagents CodeAgent for code generation and execution
-- `HUMAN`: Human-in-the-loop step (pauses execution)
-- `AI_EMPLOYEE`: Specialized AI employee agent
-- `AI_LEAD`: AI lead/manager agent
-
-### Step Configuration Pattern
 ```python
-AgentStep(
-    id="unique_step_id",
-    instructions="What the agent should do",
-    agent_type=AgentType.TOOL_CALLING_AGENT,  # Step-specific agent type
-    tools=["tool1", "tool2"],                 # Tools to load dynamically
-    servers=["gmail", "slack"],               # MCP servers via Emery OAuth proxy
-    # Data flows automatically through execution context
-)
+# src/emery_agents/domain/agents/entities/agent.py
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Dict, Optional
+
+@dataclass
+class AgentConfig:
+    """Configuration for creating a new agent."""
+    name: str
+    organization_id: int
+    owner_id: str
+    role: Optional[str] = None
+    status: Optional[str] = None
+    api_key: Optional[str] = None
+    # ... other fields
+
+class Agent:
+    def __init__(self, id: int, name: str, status: str, api_key: str, 
+                 organization_id: int, owner_id: str, ...):
+        self.id = id
+        self.name = name
+        self.status = status
+        self.api_key = api_key
+        self.organization_id = organization_id
+        self.owner_id = owner_id
+    
+    @classmethod
+    def create(cls, config: AgentConfig) -> "Agent":
+        return cls(
+            id=0,  # Will be set by repository
+            name=config.name,
+            status=config.status or "active",
+            organization_id=config.organization_id,
+            owner_id=config.owner_id,
+            api_key=config.api_key,
+            # ...
+        )
+    
+    @classmethod 
+    def from_persistence(cls, data: Dict[str, Any]) -> "Agent":
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            status=data.get("status"),
+            api_key=data.get("api_key"),
+            organization_id=data["organization_id"],
+            owner_id=data["owner_id"],
+            # ...
+        )
+    
+    # Business logic methods
+    @property
+    def is_active(self) -> bool:
+        return self.status not in ["inactive", "disabled"]
+    
+    def validate_for_execution(self) -> None:
+        if not self.is_active:
+            raise ValueError(f"Agent {self.name} is not active")
+        if not self.api_key:
+            raise ValueError(f"Agent {self.name} has no API key configured")
 ```
 
-### Trigger Types
-- `MANUAL`: Manual execution via API
-- `CRON`: Scheduled execution via parent Emery scheduler
-- `WEBHOOK`: Triggered by webhook
-- `DATABASE_EVENT`: Triggered by database changes
+### Repository Pattern
 
-## Integration Patterns
+Simple repository interfaces with concrete implementations:
 
-### Emery Integration
-- **OAuth Proxy**: Uses parent Emery's Pipedream Connect system for external service authentication
-- **API Communication**: gRPC for distributed execution, HTTP for configuration
-- **Database Integration**: Agents configured in parent Emery database, executed in this system
-- **Multi-tenant**: Inherits organization context from parent Emery system
+```python
+# src/emery_agents/domain/agents/repositories/agent_repository.py (INTERFACE)
+from abc import ABC, abstractmethod
+from typing import Optional
+from ..entities.agent import Agent
 
-### SmolAgents Integration
-- **Model Support**: HuggingFace models (Qwen series recommended in parent project)
-- **Tool Registry**: Dynamic loading and conversion of tools to SmolAgents format
-- **Context Management**: Persistent state between agent execution steps
-- **Error Propagation**: Comprehensive error handling and reporting
+class IAgentRepository(ABC):
+    @abstractmethod
+    async def find_by_id(self, id: int) -> Optional[Agent]:
+        pass
+    
+    @abstractmethod
+    async def save(self, agent: Agent) -> None:
+        pass
 
-### MCP Server Integration
-- **OAuth Delegation**: Uses owner's connected accounts from parent Emery system
-- **Service Discovery**: Runtime discovery of available services based on user connections
-- **No Local Credentials**: All OAuth handled through parent Emery's proxy system
+# src/emery_agents/infrastructure/db/repositories/agents/grpc_agent_repository.py (IMPLEMENTATION)
+from typing import Optional
+from ....domain.agents.entities.agent import Agent
+from ....domain.agents.repositories.agent_repository import IAgentRepository
 
-## Development Workflow
-
-### Pre-commit Testing Protocol
-**MANDATORY**: Always run tests before committing to ensure changes don't break existing functionality.
-
-```bash
-# Quick validation tests
-uv run pytest tests/test_types.py -v
-
-# If quick tests pass, run full unit test suite
-uv run pytest tests/ -v --tb=short
-
-# Run with coverage for comprehensive validation
-uv run pytest tests/ --cov=src/emery_agents --cov-report=term-missing
+class GrpcAgentRepository(IAgentRepository):
+    def __init__(self, grpc_client):
+        self.grpc_client = grpc_client
+        
+    async def find_by_id(self, id: int) -> Optional[Agent]:
+        # gRPC implementation
+        pass
 ```
 
-**Test-Driven Commit Process:**
-1. Make your code changes
-2. Run relevant unit tests: `uv run pytest tests/test_[module].py -v`
-3. If successful, run full test suite: `uv run pytest tests/ -v`
-4. Fix any failing tests before proceeding
-5. Commit only when all tests pass
+### Application Services
 
-### Python Code Quality Standards
+Simple orchestration services that coordinate domain operations:
 
-**Type Definitions:**
-- **Use @dataclass for structured data** - Prefer dataclasses over Dict[str, Any] for configuration objects
-- **Use TypedDict for result dictionaries** - For return values and loose data structures
-- **Explicit type annotations** - All function parameters, return values, and class attributes
-- **Domain-specific Enums** - For status values, types, and categories (AgentType, TriggerType)
+```python
+# src/emery_agents/application/services/agent_task_service.py
+from typing import Optional
+from ...domain.agents.entities.agent import Agent
+from ...domain.agents.entities.task import Task, TaskConfig
+from ...domain.agents.repositories.agent_repository import IAgentRepository
+from ...domain.agents.repositories.task_repository import ITaskRepository
 
-**Clean Architecture Compliance:**
-- **Domain Layer**: NO external dependencies - only pure business logic and interfaces
-- **Application Layer**: Depends only on Domain layer - orchestrates business operations
-- **Infrastructure Layer**: Concrete implementations of domain interfaces
-- **Dependency Injection**: Use constructor injection, configure at composition root (gRPC layer)
+@dataclass
+class CreateTaskRequest:
+    agent_id: int
+    name: str
+    instructions: TaskInstructions
+    # ... other fields
 
-**Error Handling:**
-- **Fail fast on dependencies** - Import required libraries directly, let ImportError fail module load
-- **Chain exceptions** - Use `raise ... from e` to preserve stack traces
-- **Specific exception types** - Avoid generic `Exception` usage
-- **Proper context logging** - Include relevant context in error messages
+@dataclass 
+class TaskExecutionResult:
+    task: Task
+    execution_result: Dict[str, Any]
 
-**Function Design:**
-- **Single responsibility** - One function, one purpose
-- **Type annotations everywhere** - Never use untyped functions
-- **@dataclass parameters** - For complex parameter sets instead of multiple loose parameters
-- **Pure functions preferred** - Avoid excessive state mutation
+class AgentTaskApplicationService:
+    def __init__(self, agent_repository: IAgentRepository, task_repository: ITaskRepository):
+        self.agent_repository = agent_repository
+        self.task_repository = task_repository
+    
+    async def create_and_execute_task(self, request: CreateTaskRequest) -> TaskExecutionResult:
+        # 1. Validate agent
+        agent = await self.agent_repository.find_by_id(request.agent_id)
+        if not agent:
+            raise ValueError(f"Agent {request.agent_id} not found")
+        
+        # 2. Create task (domain logic)
+        task = Task.create(TaskConfig(
+            agent_id=request.agent_id,
+            organization_id=agent.organization_id,
+            name=request.name,
+            instructions=request.instructions
+        ))
+        
+        # 3. Save task
+        await self.task_repository.save(task)
+        
+        # 4. Execute task (domain logic)
+        task.start()
+        await self.task_repository.save(task)
+        
+        # ... execution logic
+        
+        task.complete(result)
+        await self.task_repository.save(task)
+        
+        return TaskExecutionResult(task=task, execution_result=result)
+```
+
+## Import Patterns
+
+### Recommended Import Style
+
+Always use **full module paths** starting with `src.emery_agents` for clarity and consistency:
+
+```python
+# ✅ GOOD - Full module imports (recommended)
+from src.emery_agents.domain.agents.entities.agent import Agent, AgentConfig
+from src.emery_agents.domain.agents.entities.task import Task, TaskInstructions, TaskConfig
+from src.emery_agents.domain.agents.repositories.agent_repository import IAgentRepository
+from src.emery_agents.application.services.agent_task_service import AgentTaskApplicationService
+
+# ✅ GOOD - Relative imports within same package
+from ..entities.agent import Agent
+from ...domain.agents.entities.task import Task
+
+# ❌ AVOID - Bare package imports (less clear)
+from emery_agents import Agent, Task
+```
+
+### Import Organization
+
+Organize imports in this order:
+```python
+# 1. Standard library
+import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+# 2. Third-party packages
+import pytest
+from unittest.mock import AsyncMock
+
+# 3. Local imports - full paths
+from src.emery_agents.domain.agents.entities.agent import Agent, AgentConfig
+from src.emery_agents.domain.agents.entities.task import Task, TaskInstructions
+```
+
+## Development Guidelines
+
+### Entity Design
+- **Simple Classes**: No complex immutability patterns
+- **Business Logic**: Methods like `is_active()`, `validate_for_execution()`
+- **Factory Methods**: `create()` for new entities, `from_persistence()` for existing
+- **Mutable State**: Entities can change state (task lifecycle, etc.)
+
+### Repository Design  
+- **Interface in Domain**: Abstract base class defining contracts
+- **Implementation in Infrastructure**: Concrete classes with external dependencies
+- **Simple Methods**: Basic CRUD operations, no complex abstractions
+
+### Application Service Design
+- **Orchestration**: Coordinate between repositories and domain entities  
+- **Transaction Boundaries**: Handle save operations and rollback
+- **Error Handling**: Convert domain exceptions to appropriate responses
+- **Simple DTOs**: Basic request/response objects, no complex mapping
 
 ### Testing Patterns
+- **Domain Tests**: Test business logic in entities
+- **Application Tests**: Mock repositories, test orchestration
+- **Infrastructure Tests**: Test actual implementations (integration tests)
 
-**Unit Test Guidelines:**
-- **Focus on behavior** - Test actual behavior, not implementation details
-- **Minimal mocking** - Avoid stubbing everything just for coverage
-- **Fixtures for common data** - Use pytest fixtures in `conftest.py`
-- **Test categories** - Use pytest markers (integration, smolagents, grpc)
-- **Fast unit tests** - Keep unit tests independent of external services
+## Usage Examples
 
-**Integration Test Patterns:**
-- **External service mocking** - Mock Emery API and MCP servers appropriately
-- **Environment variable testing** - Test with missing/invalid environment variables
-- **Error scenarios** - Test network failures, authentication errors, etc.
+### Creating and Executing Tasks
 
-### Architecture Rules
+```python
+# Full module imports (recommended for clarity)
+from src.emery_agents.domain.agents.entities.agent import Agent, AgentConfig
+from src.emery_agents.domain.agents.entities.task import Task, TaskInstructions, TaskConfig
+from src.emery_agents.application.services.agent_task_service import (
+    AgentTaskApplicationService,
+    CreateTaskRequest,
+    ExecuteTaskRequest,
+    TaskExecutionResult
+)
 
-**Layer Dependencies (ENFORCED):**
-- **Domain → Domain**: ✅ Allowed
-- **Application → Domain**: ✅ Allowed  
-- **Infrastructure → Domain**: ✅ Allowed
-- **gRPC → Application + Infrastructure**: ✅ Allowed (composition root)
-- **Domain → Application**: ❌ FORBIDDEN
-- **Domain → Infrastructure**: ❌ FORBIDDEN
-- **Application → Infrastructure**: ❌ FORBIDDEN (use dependency injection)
+# Set up service with dependencies (normally via DI)
+service = AgentTaskApplicationService(agent_repo, task_repo)
 
-**Import Rules:**
-- All imports at top of file - NO inline imports
-- Group imports: stdlib, third-party, local imports
-- Fail fast on missing dependencies
+# Create request
+instructions = TaskInstructions(
+    instructions="Send email to team about project update",
+    tools=[{"name": "gmail"}]
+)
 
-**Anti-patterns to Avoid:**
-- ❌ **Domain layer with external dependencies** - Keep domain pure business logic
-- ❌ **Application layer importing infrastructure** - Use dependency injection instead
-- ❌ **Generic Dict[str, Any]** - Create explicit @dataclass types
-- ❌ **Untyped function parameters** - All functions must have explicit type annotations
-- ❌ **Defensive .get() on typed structures** - Use dataclass attributes directly
-- ❌ **Magic numbers** - Extract constants with meaningful names
+request = CreateTaskRequest(
+    agent_id=123,
+    name="Send Project Update Email", 
+    instructions=instructions,
+    created_by="user_123"
+)
+
+# Execute
+result = await service.create_and_execute_task(request)
+print(f"Task {result.task.short_id} completed: {result.task.status}")
+```
+
+### Working with Domain Entities
+
+```python
+from src.emery_agents.domain.agents.entities.agent import Agent, AgentConfig
+from src.emery_agents.domain.agents.entities.task import Task, TaskInstructions, TaskConfig
+
+# Create new agent
+config = AgentConfig(
+    name="Email Agent",
+    organization_id=1,
+    owner_id="user_123",
+    api_key="api_key_123"
+)
+agent = Agent.create(config)
+
+# Business logic
+if agent.is_active:
+    agent.validate_for_execution()  # May raise ValueError
+
+# Create task with lifecycle
+task_config = TaskConfig(
+    agent_id=agent.id,
+    organization_id=1,
+    name="Send Email",
+    instructions=TaskInstructions(instructions="Send email")
+)
+task = Task.create(task_config)
+
+# Task lifecycle
+task.start()        # Changes status to "in_progress" 
+task.complete(result)  # Changes status to "completed"
+```
+
+## Common Patterns
+
+### Error Handling
+- Domain entities raise `ValueError` for business rule violations
+- Application services catch and handle domain exceptions
+- Repository implementations handle infrastructure errors
+
+### State Management
+- Entities manage their own state transitions
+- Application services coordinate state changes
+- Repositories persist state changes
+
+### Dependency Injection
+- Application services receive repositories via constructor
+- Infrastructure implementations are injected at runtime
+- Tests use mock repositories
+
+## Anti-Patterns to Avoid
+
+❌ **Don't use complex value objects for simple IDs**
+```python
+# DON'T DO THIS
+class AgentId:
+    def __init__(self, value: int): ...
+
+# DO THIS  
+def find_agent(agent_id: int) -> Agent:
+    pass
+```
+
+❌ **Don't create adapter layers**
+```python
+# DON'T DO THIS
+class AgentRepositoryAdapter(IAgentRepository):
+    def __init__(self, grpc_adapter: GrpcAdapter): ...
+
+# DO THIS
+class GrpcAgentRepository(IAgentRepository):
+    def __init__(self, grpc_client): ...
+```
+
+❌ **Don't over-abstract simple operations**
+```python  
+# DON'T DO THIS
+class AgentDomainService:
+    def validate_agent_execution_eligibility(self, agent: Agent): ...
+
+# DO THIS - put logic in entity
+class Agent:
+    def validate_for_execution(self): ...
+```
 
 ## AIDEV Anchor Comments
 
-The codebase uses searchable AIDEV comments for inline documentation:
+Use searchable AIDEV comments for inline documentation:
 - `AIDEV-NOTE:` - Important architectural decisions and explanations
 - `AIDEV-TODO:` - Known improvement opportunities  
 - `AIDEV-QUESTION:` - Areas needing architectural decisions
 
-Search for these patterns when working on complex areas:
 ```bash
 grep -r "AIDEV-" --include="*.py" src/
 ```
 
-## Integration with Parent Emery System
+## Testing
 
-### gRPC Communication
-- **Protocol Buffers**: Complete agent configuration passed via gRPC (no environment variable dependencies)
-- **Streaming Updates**: Real-time progress reporting back to parent system
-- **Error Propagation**: Comprehensive error context maintained through gRPC boundary
+### Unit Tests
+- Test domain entities independently
+- Mock repositories in application service tests
+- Focus on business logic, not implementation details
 
-### OAuth Proxy Usage
-- **No Local OAuth**: All external service authentication delegated to parent Emery
-- **Service Discovery**: Available services determined by user's connected accounts in parent system
-- **Secure Execution**: Agents run with owner's permissions, not elevated privileges
+### Integration Tests  
+- Test complete flows through all layers
+- Use real repository implementations
+- Test error handling and edge cases
 
-### Database Independence
-- **Stateless Execution**: Agent execution is stateless - all context from parent system or execution context manager
-- **Temporary State**: Uses temporary directories for execution context persistence
-- **No Direct DB Access**: All data operations through parent Emery API
+### Running Tests
+```bash
+# Run all tests
+uv run pytest
 
-## Key Implementation Details
+# Run specific test files
+uv run pytest tests/ddd/test_agent_task_service.py -v
 
-### Tool Registry System
-- **Dynamic Loading**: Tools discovered and loaded at runtime based on agent configuration
-- **SmolAgents Compatibility**: Automatic conversion of various tool formats to SmolAgents format
-- **Custom Tools**: Support for domain-specific tools beyond standard SmolAgents tools
-- **Version Management**: Tool versioning and compatibility checking
-
-### Execution Context Management
-- **Persistent Context**: State maintained between agent steps using JSON files in temporary directories
-- **Cleanup**: Automatic cleanup of execution contexts after completion or failure
-- **Data Flow**: Seamless data passing between steps without complex I/O mapping
-
-### Error Handling Patterns
-- **Comprehensive Logging**: Detailed logging for debugging distributed execution
-- **Error Context**: Maintains full error context across gRPC boundaries
-- **Graceful Degradation**: Handles network failures and service unavailability gracefully
-- **Retry Logic**: Intelligent retry mechanisms for transient failures
-
-### Performance Considerations
-- **Lazy Loading**: Tools and models loaded only when needed
-- **Connection Pooling**: Efficient gRPC connection management
-- **Memory Management**: Proper cleanup of resources after execution
-- **Concurrent Execution**: Support for concurrent agent step execution where possible
+# Run with coverage
+uv run pytest --cov=src/emery_agents --cov-report=term-missing
+```

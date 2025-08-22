@@ -1,18 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateDownloadUrl } from "@/lib/s3/operations";
+import { auth, hasPermission } from "@/lib/auth";
+import { S3FileStorageRepository } from "@/ddd/infrastructure/storage/repositories/s3-file-storage-repository";
 import { db } from "@/lib/db/client";
 import { fields, tables } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+
+// Initialize file storage repository
+const fileStorageRepository = new S3FileStorageRepository();
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ fileId: string }> }
 ) {
   try {
+    // Check authentication
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    // Check permissions
+    const hasDataPermission = await hasPermission(session.user.id, "view_data");
+    if (!hasDataPermission) {
+      return NextResponse.json(
+        { error: "Permission denied: view_data required" },
+        { status: 403 }
+      );
+    }
+
     const { fileId } = await params;
     const { searchParams } = new URL(request.url);
     const tableId = searchParams.get("tableId");
     const fieldId = searchParams.get("fieldId");
+    const filename = searchParams.get("filename"); // Optional filename for download
 
     if (!tableId || !fieldId) {
       return NextResponse.json(
@@ -49,14 +72,23 @@ export async function GET(
       );
     }
 
-    // TODO: Find the actual file metadata from the row data
-    // For now, we'll construct the S3 key pattern
-    // In a real implementation, you'd query the row data to get the exact s3Key
-    
-    // Generate signed URL (15 minutes expiry)
-    const signedUrl = await generateDownloadUrl(`files/organization-${table.organizationId}/table-${tableId}/field-${fieldId}/${fileId}/`, 900);
+    // Construct S3 key using the same pattern as uploads
+    // Note: This is a simplified approach. In production, you'd query the row data
+    // to get the exact s3Key from the FileFieldValue stored in the database
+    const s3Key = `org-${table.organizationId}/table-${tableId}/field-${fieldId}/${new Date().getFullYear()}/${(new Date().getMonth() + 1).toString().padStart(2, '0')}/${fileId}_${filename || 'file'}`;
 
-    return NextResponse.json({ downloadUrl: signedUrl });
+    // Generate signed URL (15 minutes expiry)
+    const downloadUrl = await fileStorageRepository.generateDownloadUrl(s3Key, {
+      expiresIn: 900, // 15 minutes
+      downloadFilename: filename || undefined
+    });
+
+    return NextResponse.json({ 
+      downloadUrl,
+      expiresIn: 900,
+      fileId,
+      filename: filename || undefined
+    });
   } catch (error) {
     console.error("Error generating download URL:", error);
     return NextResponse.json(

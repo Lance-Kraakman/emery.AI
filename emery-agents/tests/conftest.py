@@ -5,60 +5,47 @@ import os
 from typing import Dict, Any
 from unittest.mock import AsyncMock, Mock, patch
 
-from emery_agents.domain.entities.models import (
-    Agent, CapabilityConfig, StepConfig, StepType,
-    TaskInstructions, TriggerConfig, TriggerType,
-    ToolConfig, ServerConfig
-)
+# DDD imports - only domain layer for testing
+from emery_agents.domain.agents.entities.agent import Agent, AgentConfig
+from emery_agents.domain.agents.entities.task import Task, TaskInstructions
+from emery_agents.domain.agents.value_objects.agent_id import AgentId
+from emery_agents.domain.agents.value_objects.task_id import TaskId
+from emery_agents.domain.shared.value_objects.organization_id import OrganizationId
+from emery_agents.domain.tools.value_objects.tool_config import ToolConfig
+from emery_agents.domain.agents.value_objects.server_config import ServerConfig
 
 
 @pytest.fixture
 def sample_tool_config() -> ToolConfig:
     """Basic tool configuration."""
-    return ToolConfig(name="test_tool", version="1.0.0")
+    return ToolConfig.from_dict({"name": "test_tool", "version": "1.0.0"})
 
 
 @pytest.fixture  
 def sample_server_config() -> ServerConfig:
     """Basic server configuration."""
-    return ServerConfig(name="test_server", endpoint="http://localhost:8000")
+    return ServerConfig.from_dict({"name": "test_server", "endpoint": "http://localhost:8000"})
 
 
 @pytest.fixture
-def sample_step_config(sample_tool_config, sample_server_config) -> StepConfig:
-    """Basic step configuration."""
-    return StepConfig(
-        id="test_step_1",
-        type=StepType.CODE_STEP,
-        instructions="Test step instructions",
-        tools=[sample_tool_config],
-        servers=[sample_server_config]
-    )
-
-
-@pytest.fixture
-def sample_capability(sample_step_config) -> CapabilityConfig:
-    """Basic capability configuration."""
-    return CapabilityConfig(
-        name="test_capability",
-        description="Test capability for unit testing",
-        steps=[sample_step_config]
-    )
-
-
-@pytest.fixture
-def sample_agent(sample_capability, sample_tool_config, sample_server_config) -> Agent:
-    """Basic agent configuration."""
-    return Agent(
-        id=123,
+def sample_agent_config() -> AgentConfig:
+    """Basic agent configuration for DDD entities."""
+    return AgentConfig(
         name="Test Agent",
         role="assistant",
         description="Agent for testing",
         persona="Helpful test assistant",
-        tools=[sample_tool_config],
-        servers=[sample_server_config],
-        capabilities=[sample_capability]
+        organization_id=1,
+        owner_id="user_123",
+        status="active",
+        api_key="test_api_key"
     )
+
+
+@pytest.fixture
+def sample_agent(sample_agent_config) -> Agent:
+    """Basic agent entity."""
+    return Agent.create(sample_agent_config)
 
 
 @pytest.fixture
@@ -66,8 +53,8 @@ def sample_task_instructions() -> TaskInstructions:
     """Basic task instructions."""
     return TaskInstructions(
         instructions="Execute test task",
-        tools=[ToolConfig(name="test_tool")],
-        servers=[ServerConfig(name="test_server")]
+        tools=[{"name": "test_tool"}],
+        servers=[{"name": "test_server"}]
     )
 
 

@@ -35,8 +35,7 @@ export class Agent {
     public readonly ownerId: string,
     public readonly roleId: number | null,
     public readonly apiKey: string | null,
-    public readonly createdAt?: Date | null,
-    public readonly updatedAt?: Date | null
+    public readonly createdAt?: Date | null
   ) {}
 
   static create(config: AgentConfig): Agent {
@@ -94,8 +93,7 @@ export class Agent {
       data.ownerId,
       data.roleId || null,
       data.apiKey || null,
-      data.createdAt || null,
-      data.updatedAt || null
+      data.createdAt || null
     );
   }
 

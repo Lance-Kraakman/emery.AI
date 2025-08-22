@@ -1,7 +1,8 @@
 import { streamText } from 'ai'
 import { auth } from '@/lib/auth'
-import { ragService } from '@/lib/rag/service'
+import { searchApplicationService } from '@/ddd/application/di/rag-container'
 import { getAIModel } from '@/lib/ai/models'
+import type { SearchRagQuery } from '@/ddd/application/rag/queries/search-query'
 
 export async function POST(req: Request) {
   try {
@@ -19,13 +20,16 @@ export async function POST(req: Request) {
     // If RAG index is specified, search for relevant context
     if (ragIndexId && latestMessage) {
       try {
-        const searchResult = await ragService.search({
+        // AIDEV-NOTE: Using DDD search application service instead of legacy ragService
+        const searchQuery: SearchRagQuery = {
           indexId: ragIndexId,
           query: latestMessage,
           limit: 5,
           threshold: 0.7,
-          userId: session.user.id,
-        })
+          userId: session.user.id
+        };
+
+        const searchResult = await searchApplicationService.search(searchQuery)
 
         ragResults = searchResult
         

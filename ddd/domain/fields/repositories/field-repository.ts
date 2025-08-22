@@ -4,7 +4,9 @@
 import type { 
   Field, 
   CreateFieldData, 
-  UpdateFieldData
+  UpdateFieldData,
+  LinkToTableConfig,
+  FileFieldConfig
 } from '../entities/field';
 
 export interface IFieldRepository {
@@ -70,9 +72,9 @@ export interface IFieldRepositoryFuture extends IFieldRepository {
   swapFieldPositions(fieldId1: number, fieldId2: number): Promise<Field[]>;
   
   // Relation Field Management
-  createRelationField(data: CreateFieldData & { config: RelationFieldConfig }): Promise<Field>;
-  updateRelationConfig(fieldId: number, config: RelationFieldConfig): Promise<Field>;
-  getRelationConfig(fieldId: number): Promise<RelationFieldConfig | null>;
+  createRelationField(data: CreateFieldData & { config: LinkToTableConfig }): Promise<Field>;
+  updateRelationConfig(fieldId: number, config: LinkToTableConfig): Promise<Field>;
+  getRelationConfig(fieldId: number): Promise<LinkToTableConfig | null>;
   getRelatedTableFields(fieldId: number): Promise<Field[]>;
   validateRelationIntegrity(fieldId: number): Promise<{
     valid: boolean;

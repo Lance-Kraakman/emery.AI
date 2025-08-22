@@ -7,7 +7,8 @@ import { NextRequest } from 'next/server';
 import { db } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
 import { sql, eq, and } from 'drizzle-orm';
-import { executeAgentViaGRPC } from '@/lib/agents/grpc-executor';
+import { getAgentTaskApplicationService } from '@/ddd/application/di/agent-container';
+import type { TaskInstructions } from '@/ddd/domain/agents/entities/task';
 import { v4 as uuidv4 } from 'uuid';
 import { createHmac, timingSafeEqual } from 'crypto';
 
@@ -109,19 +110,35 @@ export async function POST(request: NextRequest): Promise<Response> {
         }, { status: 400 });
       }
 
-      // Execute agent using simplified executor
+      // Execute agent using DDD application service
       const executionId = uuidv4();
       const instructions = `Execute webhook trigger with payload`;
 
       console.log(`[SCHEDULER-WEBHOOK] Executing agent ${agent.id} (${agent.name}) via webhook trigger`);
 
-      const result = await executeAgentViaGRPC({
-        agentId: agent.id,
+      const agentTaskService = getAgentTaskApplicationService();
+      
+      const taskInstructions: TaskInstructions = {
         instructions,
         tools: [], // Webhook can specify tools if needed
         servers: [], // Webhook can specify servers if needed
-        executionId
+        metadata: { 
+          triggerType: 'WEBHOOK',
+          webhookPayload
+        }
+      };
+
+      const taskResult = await agentTaskService.createAndExecuteTask({
+        agentId: agent.id,
+        name: `Webhook: ${instructions}`,
+        instructions: taskInstructions,
+        timeoutSeconds: 300
       });
+
+      const result = {
+        success: taskResult.executionResult.success,
+        error: taskResult.executionResult.error
+      };
 
       return Response.json({
         success: true,
@@ -139,19 +156,35 @@ export async function POST(request: NextRequest): Promise<Response> {
       // No signature verification required - parse body directly
       const webhookPayload = await request.json();
 
-      // Execute agent using simplified executor
+      // Execute agent using DDD application service
       const executionId = uuidv4();
       const instructions = `Execute webhook trigger with payload`;
 
       console.log(`[SCHEDULER-WEBHOOK] Executing agent ${agent.id} (${agent.name}) via webhook trigger (unsigned)`);
 
-      const result = await executeAgentViaGRPC({
-        agentId: agent.id,
+      const agentTaskService = getAgentTaskApplicationService();
+      
+      const taskInstructions: TaskInstructions = {
         instructions,
         tools: [], // Webhook can specify tools if needed
         servers: [], // Webhook can specify servers if needed
-        executionId
+        metadata: { 
+          triggerType: 'WEBHOOK',
+          webhookPayload
+        }
+      };
+
+      const taskResult = await agentTaskService.createAndExecuteTask({
+        agentId: agent.id,
+        name: `Webhook: ${instructions}`,
+        instructions: taskInstructions,
+        timeoutSeconds: 300
       });
+
+      const result = {
+        success: taskResult.executionResult.success,
+        error: taskResult.executionResult.error
+      };
 
       return Response.json({
         success: true,

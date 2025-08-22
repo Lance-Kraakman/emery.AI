@@ -15,6 +15,15 @@ import { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-sto
 import { S3FileStorageRepository } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
 import { FileFieldService } from '@/ddd/domain/files/services/file-field-service';
 
+// Agent domain imports
+import { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import { DrizzleAgentRepository } from '@/ddd/infrastructure/db/repositories/agents/drizzle-agent-repository';
+import { ITaskRepository } from '@/ddd/domain/agents/repositories/task-repository';
+import { DrizzleTaskRepository } from '@/ddd/infrastructure/db/repositories/agents/drizzle-task-repository';
+import { IAgentExecutionRepository } from '@/ddd/domain/agents/repositories/agent-execution-repository';
+import { GrpcAgentExecutionRepository } from '@/ddd/infrastructure/execution/grpc-agent-execution-repository';
+import { AgentTaskApplicationService } from '@/ddd/application/use-cases/agents/agent-task-application-service';
+
 // Registry of all available repository interfaces and services
 interface RepositoryRegistry {
   IOrganizationRepository: IOrganizationRepository;
@@ -24,6 +33,12 @@ interface RepositoryRegistry {
   IFieldRepository: IFieldRepository;
   IFileStorageRepository: IFileStorageRepository;
   FileFieldService: FileFieldService;
+  
+  // Agent domain services
+  IAgentRepository: IAgentRepository;
+  ITaskRepository: ITaskRepository;
+  IAgentExecutionRepository: IAgentExecutionRepository;
+  AgentTaskApplicationService: AgentTaskApplicationService;
 }
 
 export class DIContainer {
@@ -73,8 +88,23 @@ export class DIContainer {
     this.repositories.set('IDynamicTableRepository', 
       new DrizzleDynamicTableRepository(db, rawClient));
 
+    // Register agent domain repositories and services
+    const agentRepository = new DrizzleAgentRepository(db);
+    const taskRepository = new DrizzleTaskRepository();
+    const agentExecutionRepository = new GrpcAgentExecutionRepository(agentRepository);
+    const agentTaskApplicationService = new AgentTaskApplicationService(
+      agentRepository,
+      taskRepository,
+      agentExecutionRepository
+    );
+
+    this.repositories.set('IAgentRepository', agentRepository);
+    this.repositories.set('ITaskRepository', taskRepository);
+    this.repositories.set('IAgentExecutionRepository', agentExecutionRepository);
+    this.repositories.set('AgentTaskApplicationService', agentTaskApplicationService);
+
     this.isInitialized = true;
-    console.log('✅ DIContainer initialized with repositories and file storage services');
+    console.log('✅ DIContainer initialized with repositories, file storage, and agent services');
   }
 
   /**
@@ -165,6 +195,34 @@ export function getFileStorageRepository(): IFileStorageRepository {
  */
 export function getFileFieldService(): FileFieldService {
   return DIContainer.getInstance().get('FileFieldService');
+}
+
+/**
+ * Get the agent repository
+ */
+export function getAgentRepository(): IAgentRepository {
+  return DIContainer.getInstance().get('IAgentRepository');
+}
+
+/**
+ * Get the task repository
+ */
+export function getTaskRepository(): ITaskRepository {
+  return DIContainer.getInstance().get('ITaskRepository');
+}
+
+/**
+ * Get the agent execution repository
+ */
+export function getAgentExecutionRepository(): IAgentExecutionRepository {
+  return DIContainer.getInstance().get('IAgentExecutionRepository');
+}
+
+/**
+ * Get the agent task application service
+ */
+export function getAgentTaskApplicationService(): AgentTaskApplicationService {
+  return DIContainer.getInstance().get('AgentTaskApplicationService');
 }
 
 // Helper to initialize container from existing clients
