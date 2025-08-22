@@ -16,3 +16,8 @@ export {
   type EmbeddingGenerator,
   type SearchLogger
 } from './search-domain-service';
+
+export {
+  OrganizationDataService,
+  type IOrganizationDataService
+} from './organization-data-service';

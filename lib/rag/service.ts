@@ -30,7 +30,7 @@ export interface RagIndex {
 
 export interface RagDocument {
   id: string
-  sourceType: string
+  domainType: string
   sourceId: string
   sourceName: string
   title: string
@@ -936,7 +936,7 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${processedChunks.length} from ${
         
         return {
           id: doc.id,
-          sourceType: doc.source_type,
+          domainType: doc.source_type,
           sourceId: doc.source_id,
           sourceName: doc.source_name,
           title: doc.title,
@@ -977,7 +977,7 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${processedChunks.length} from ${
       // Fallback to basic text search if vector search fails
       const documents = await db.select({
         id: ragDocuments.id,
-        sourceType: ragDocuments.sourceType,
+        domainType: ragDocuments.domainType,
         sourceId: ragDocuments.sourceId,
         sourceName: ragDocuments.sourceName,
         title: ragDocuments.title,
@@ -990,7 +990,7 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${processedChunks.length} from ${
       const queryLower = query.toLowerCase()
       const scoredDocuments = documents.map(doc => ({
         id: doc.id,
-        sourceType: doc.sourceType,
+        domainType: doc.domainType,
         sourceId: doc.sourceId,
         sourceName: doc.sourceName,
         title: doc.title,
@@ -1046,14 +1046,14 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${processedChunks.length} from ${
 
   private async synchronizeDocuments(
     indexId: string,
-    sourceType: string,
-    newDocuments: Omit<typeof ragDocuments.$inferInsert, 'ragIndexId' | 'sourceType'>[]
+    domainType: string,
+    newDocuments: Omit<typeof ragDocuments.$inferInsert, 'ragIndexId' | 'domainType'>[]
   ): Promise<number> {
     // Get existing hashes for this source type
     const existingHashes = await db
       .select({ contentHash: ragDocuments.contentHash })
       .from(ragDocuments)
-      .where(and(eq(ragDocuments.ragIndexId, indexId), eq(ragDocuments.sourceType, sourceType)))
+      .where(and(eq(ragDocuments.ragIndexId, indexId), eq(ragDocuments.domainType, domainType)))
       .then((rows) => new Set(rows.map((r) => r.contentHash)));
 
     const newHashes = new Set(newDocuments.map((d) => d.contentHash));
@@ -1074,7 +1074,7 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${processedChunks.length} from ${
       const documentsToInsert = documentsToAdd.map(doc => ({
         ...doc,
         ragIndexId: indexId,
-        sourceType,
+        domainType: domainType,
       }));
       await db.insert(ragDocuments).values(documentsToInsert);
     }
@@ -1086,7 +1086,7 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${processedChunks.length} from ${
         .where(
           and(
             eq(ragDocuments.ragIndexId, indexId),
-            eq(ragDocuments.sourceType, sourceType),
+            eq(ragDocuments.domainType, domainType),
             inArray(ragDocuments.contentHash, hashesToDelete)
           )
         );
