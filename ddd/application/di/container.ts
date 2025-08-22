@@ -1,19 +1,19 @@
 import type { DbClient } from '@/lib/db/client';
 import type postgres from 'postgres';
 
-import { IOrganizationRepository } from '../domain/organizations/repositories/organization-repository';
-import { DrizzleOrganizationRepository } from '../infrastructure/db/repositories/organizations/drizzle-organization-repository';
-import { IUserRepository } from '../domain/users/repositories/user-repository';
-import { DrizzleUserRepository } from '../infrastructure/db/repositories/users/drizzle-user-repository';
-import { IRoleRepository } from '../domain/roles/repositories/role-repository';
-import { DrizzleRoleRepository } from '../infrastructure/db/repositories/roles/drizzle-role-repository';
-import { IDynamicTableRepository } from '../domain/tables/repositories/dynamic-table-repository';
-import { DrizzleDynamicTableRepository } from '../infrastructure/db/repositories/tables/drizzle-dynamic-table-repository';
-import { IFieldRepository } from '../domain/fields/repositories/field-repository';
-import { DrizzleFieldRepository } from '../infrastructure/db/repositories/fields/drizzle-field-repository';
-import { IFileStorageRepository } from '../domain/files/repositories/file-storage-repository';
-import { S3FileStorageRepository } from '../infrastructure/storage/repositories/s3-file-storage-repository';
-import { FileFieldService } from '../domain/files/services/file-field-service';
+import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import { DrizzleOrganizationRepository } from '@/ddd/infrastructure/db/repositories/organizations/drizzle-organization-repository';
+import { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
+import { DrizzleUserRepository } from '@/ddd/infrastructure/db/repositories/users/drizzle-user-repository';
+import { IRoleRepository } from '@/ddd/domain/roles/repositories/role-repository';
+import { DrizzleRoleRepository } from '@/ddd/infrastructure/db/repositories/roles/drizzle-role-repository';
+import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import { DrizzleDynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/drizzle-dynamic-table-repository';
+import { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
+import { DrizzleFieldRepository } from '@/ddd/infrastructure/db/repositories/fields/drizzle-field-repository';
+import { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
+import { S3FileStorageRepository } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
+import { FileFieldService } from '@/ddd/domain/files/services/file-field-service';
 
 // Registry of all available repository interfaces and services
 interface RepositoryRegistry {
