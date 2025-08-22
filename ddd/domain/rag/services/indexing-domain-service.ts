@@ -72,13 +72,14 @@ export class IndexingDomainService {
     indexId: RagIndexId,
     organizationId: OrganizationId,
     tables: DynamicTable[],
-    fieldsMap?: Map<number, Field[]>
+    fieldsMap?: Map<number, Field[]>,
+    databasesMap?: Map<number, Database>
   ): Promise<RagDocument[]> {
     const documents: RagDocument[] = [];
 
     for (const table of tables) {
       const fields = fieldsMap?.get(table.id) || [];
-      const content = this.generateTableSchemaContent(table, fields);
+      const content = this.generateTableSchemaContent(table, fields, databasesMap);
       const embedding = await this.contentProcessor.generateEmbedding(content);
       const contentHash = this.contentProcessor.calculateContentHash(content);
 
@@ -130,13 +131,13 @@ export class IndexingDomainService {
             organizationId,
             sourceId: `${file.key}-chunk-${chunkIndex}`,
             domainType: 'file',
-            sourceName: file.originalName,
-            title: `File: ${file.originalName} (Chunk ${chunkIndex + 1}/${processedChunks.length})`,
+            sourceName: file.name,
+            title: `File: ${file.name} (Chunk ${chunkIndex + 1}/${processedChunks.length})`,
             content: chunk.content,
             metadata: {
               ...chunk.metadata,
               fileKey: file.key,
-              fileName: file.originalName,
+              fileName: file.name,
               fileSize: file.size,
               mimeType: file.mimeType,
               chunkIndex: chunkIndex,
@@ -152,7 +153,7 @@ export class IndexingDomainService {
           documents.push(document);
         }
       } catch (error) {
-        console.error(`[INDEXING-DOMAIN] Error processing file ${fileData.name}:`, error);
+        console.error(`[INDEXING-DOMAIN] Error processing file ${file.name}:`, error);
         // Continue with other files
       }
     }
@@ -301,7 +302,7 @@ About: ${organization.name} is an active organization on the Emery platform, whi
 Capabilities: The organization has access to Emery's full feature set including dynamic table creation, field management, data operations, agent-powered workflows, team collaboration, role-based access control, and integration with external services through shared tools and servers.`;
   }
 
-  private generateTableSchemaContent(table: DynamicTable, fields: Field[]): string {
+  private generateTableSchemaContent(table: DynamicTable, fields: Field[], databasesMap?: Map<number, Database>): string {
     const fieldsDescription = fields.map(field => {
       let desc = `- ${field.name} (${field.type})`;
       if (field.required) desc += ' *required*';
@@ -327,7 +328,8 @@ Capabilities: The organization has access to Emery's full feature set including 
       ? `\nDescription: ${table.metadata.description}` 
       : '';
 
-    const databaseName = table.databaseName || 'Unknown Database';
+    const database = databasesMap?.get(table.databaseId);
+    const databaseName = database?.name || `Database ID ${table.databaseId}`;
 
     const relationshipFields = fields.filter(f => f.relatedTableId);
     const fileFields = fields.filter(f => f.type === 'file');

@@ -17,6 +17,7 @@ import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/
 import { DrizzleTeamRepository } from '@/ddd/infrastructure/db/repositories/teams/drizzle-team-repository';
 import { DrizzleFileStorageRepository } from '@/ddd/infrastructure/db/repositories/files/drizzle-file-storage-repository';
 import { LlamaIndexContentProcessor } from '@/ddd/application/services/content-processing/llamaindex-content-processor';
+import { AutoReindexService } from '../rag/services/auto-reindex-service';
 
 // Application Services
 import { EmbeddingService } from '@/ddd/application/services/embedding-service';
@@ -78,3 +79,6 @@ export const searchApplicationService = new RagSearchApplicationService(
   embeddingService,
   searchAnalyticsService
 );
+
+// Auto-reindex service
+export const autoReindexService = new AutoReindexService();

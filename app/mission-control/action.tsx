@@ -4,9 +4,12 @@ import { defaultAnnotationRenderers } from '@llamaindex/chat-ui'
 import { Markdown } from '@llamaindex/chat-ui/widgets'
 import { ReactNode } from 'react'
 import { auth } from '@/lib/auth'
-import { ragService } from '@/lib/rag/service'
+import { searchApplicationService, indexingApplicationService, indexRepository } from '@/ddd/application/di/rag-container'
 import { generateText } from 'ai'
 import { getAIModel, getAIProviderInfo } from '@/lib/ai/models'
+import type { SearchRagQuery } from '@/ddd/application/rag/queries/search-query'
+import type { CreateIndexCommand } from '@/ddd/application/rag/commands/create-index-command'
+import { RagIndexId, OrganizationId } from '@/ddd/domain/rag/value-objects'
 
 export async function chatAction(question: string): Promise<ReactNode> {
   const session = await auth()
@@ -48,30 +51,37 @@ Your question: "${question}"`}
       // Get or create default organization RAG index
       const organizationId = 1 // AIDEV-TODO: Get from session
       
-      const indexes = await ragService.listIndexes({ organizationId })
-      let ragIndex = indexes.find(idx => idx.domainTypes.includes('tables'))
+      // AIDEV-NOTE: Using DDD repository directly instead of legacy ragService
+      const indexes = await indexRepository.findByOrganization(OrganizationId.fromNumber(organizationId))
+      let ragIndex = indexes.find(idx => idx.domainTypes.includes('table'))
       
       // Create default RAG index if none exists
       if (!ragIndex) {
-        const indexId = await ragService.createIndex({
+        // AIDEV-NOTE: Using DDD indexing application service instead of legacy ragService
+        const createIndexCommand: CreateIndexCommand = {
           name: 'Organization Knowledge Base',
           description: 'Automatic RAG index for organizational data',
           organizationId,
-          domainTypes: ['tables', 'agents', 'teams', 'file'],
+          domainTypes: ['table', 'agent', 'team', 'file'], // DDD uses singular forms
           createdBy: session.user.id,
-        })
-        ragIndex = await ragService.getIndex(indexId) || undefined
+        };
+        
+        const indexId = await indexingApplicationService.createIndex(createIndexCommand)
+        ragIndex = await indexRepository.findById(RagIndexId.fromString(indexId)) || undefined
       }
 
       // Search for relevant context
       if (ragIndex) {
-        const searchResult = await ragService.search({
-          indexId: ragIndex.id,
+        // AIDEV-NOTE: Using DDD search application service instead of legacy ragService
+        const searchQuery: SearchRagQuery = {
+          indexId: ragIndex.id.toString(),
           query: question,
           limit: 5,
           threshold: 0.6,
-          userId: session.user.id,
-        })
+          userId: session.user.id
+        };
+        
+        const searchResult = await searchApplicationService.search(searchQuery)
 
         if (searchResult.documents.length > 0) {
           ragContext = `
@@ -79,7 +89,7 @@ RELEVANT ORGANIZATION DATA:
 ${searchResult.documents.map((doc, idx) => 
   `[${idx + 1}] ${doc.title}
 ${doc.content.substring(0, 500)}...
-Source: ${doc.sourceType} - ${doc.sourceName} (${(doc.similarity! * 100).toFixed(1)}% match)
+Source: ${doc.domainType} - ${doc.sourceName} (${(doc.similarity! * 100).toFixed(1)}% match)
 ---`
 ).join('\n')}
 

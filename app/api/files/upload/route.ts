@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { uploadFile, validateFileType, validateFileSize } from "@/lib/s3/operations";
 import { auth, hasPermission } from "@/lib/auth";
+import { S3FileStorageRepository } from "@/ddd/infrastructure/storage/repositories/s3-file-storage-repository";
+import { FileFieldService } from "@/ddd/domain/files/services/file-field-service";
+import { fieldRepository } from "@/ddd/application/di/rag-container";
+
+// Initialize services
+const fileStorageRepository = new S3FileStorageRepository();
+const fileFieldService = new FileFieldService(fieldRepository, fileStorageRepository, {
+  maxFileSize: 5 * 1024 * 1024, // 5MB
+  allowedTypes: ['image/*', 'application/pdf', 'text/*', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  maxFilesPerField: 10
+});
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,36 +52,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file type
-    if (!validateFileType(file.type)) {
-      return NextResponse.json(
-        { error: `File type ${file.type} is not allowed` },
-        { status: 400 }
-      );
-    }
-
-    // Validate file size
-    if (!validateFileSize(file.size)) {
-      return NextResponse.json(
-        { error: "File size exceeds maximum allowed size" },
-        { status: 400 }
-      );
-    }
-
     // Convert file to buffer
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // Upload to S3
-    const fileMetadata = await uploadFile(
-      buffer,
-      file.name,
-      file.type,
+    // Use FileFieldService to handle file upload with validation
+    const result = await fileFieldService.attachFiles({
+      fieldId,
       organizationId,
       tableId,
-      fieldId
-    );
+      files: [{
+        buffer,
+        filename: file.name,
+        mimeType: file.type,
+        metadata: {
+          uploadedBy: session.user.id,
+          uploadedAt: new Date().toISOString()
+        }
+      }]
+    });
 
-    return NextResponse.json(fileMetadata, { status: 201 });
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.errors?.join(', ') || 'Failed to upload file' },
+        { status: 400 }
+      );
+    }
+
+    const fileMetadata = result.files?.[0];
+    if (!fileMetadata) {
+      return NextResponse.json(
+        { error: "No file metadata returned" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      ...fileMetadata,
+      warnings: result.warnings
+    }, { status: 201 });
   } catch (error) {
     console.error("Error uploading file:", error);
     return NextResponse.json(

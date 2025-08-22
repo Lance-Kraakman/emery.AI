@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { db } from '@/lib/db/client';
 import { tasks, agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { cancelTaskViaGRPC } from '@/lib/agents/grpc-executor';
+import { getAgentTaskApplicationService } from '@/ddd/application/di/agent-container';
 
 export interface TaskCancelRequest {
   reason?: string;
@@ -67,24 +67,21 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // Cancel task via gRPC
-    const organizationId = agent.organizationId?.toString() || 'default';
-    const cancelResult = await cancelTaskViaGRPC(
-      taskId, 
-      organizationId, 
-      body.reason
-    );
-
-    if (cancelResult.success) {
+    // Cancel task via DDD application service
+    const agentTaskService = getAgentTaskApplicationService();
+    
+    try {
+      await agentTaskService.cancelTask(taskId, body.reason);
+      
       return Response.json({
         success: true,
         message: `Task ${taskId} cancelled successfully`,
         task_id: taskId,
       });
-    } else {
+    } catch (error) {
       return Response.json({
         success: false,
-        error: cancelResult.message,
+        error: error instanceof Error ? error.message : 'Failed to cancel task',
       }, { status: 500 });
     }
 

@@ -97,7 +97,7 @@ export class SearchDomainService {
     // Apply source type filters
     if (filters?.sourceTypes && filters.sourceTypes.length > 0) {
       filteredDocuments = filteredDocuments.filter(doc => 
-        filters.sourceTypes!.includes(doc.sourceType)
+        filters.sourceTypes!.includes(doc.domainType)
       );
     }
 

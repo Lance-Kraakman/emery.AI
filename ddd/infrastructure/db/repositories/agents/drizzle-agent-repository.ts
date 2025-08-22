@@ -32,8 +32,7 @@ export class DrizzleAgentRepository implements IAgentRepository {
       ownerId: result.ownerId,
       roleId: result.roleId,
       apiKey: result.apiKey,
-      createdAt: result.createdAt,
-      updatedAt: result.updatedAt
+      createdAt: result.createdAt
     }));
   }
 
@@ -65,8 +64,7 @@ export class DrizzleAgentRepository implements IAgentRepository {
       ownerId: result.ownerId,
       roleId: result.roleId,
       apiKey: result.apiKey,
-      createdAt: result.createdAt,
-      updatedAt: result.updatedAt
+      createdAt: result.createdAt
     });
   }
 
@@ -92,8 +90,7 @@ export class DrizzleAgentRepository implements IAgentRepository {
       ownerId: result.ownerId,
       roleId: result.roleId,
       apiKey: result.apiKey,
-      createdAt: result.createdAt,
-      updatedAt: result.updatedAt
+      createdAt: result.createdAt
     }));
   }
 
@@ -124,8 +121,7 @@ export class DrizzleAgentRepository implements IAgentRepository {
       ownerId: result.ownerId,
       roleId: result.roleId,
       apiKey: result.apiKey,
-      createdAt: result.createdAt,
-      updatedAt: result.updatedAt
+      createdAt: result.createdAt
     }));
   }
 
@@ -166,8 +162,7 @@ export class DrizzleAgentRepository implements IAgentRepository {
           organizationId: agent.organizationId,
           ownerId: agent.ownerId,
           roleId: agent.roleId,
-          apiKey: agent.apiKey,
-          updatedAt: new Date()
+          apiKey: agent.apiKey
         })
         .where(eq(agents.id, agent.id));
     }

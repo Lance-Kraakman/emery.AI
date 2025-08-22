@@ -17,7 +17,7 @@ export async function GET(
     const { db } = await import('@/lib/db/client');
     const { agents } = await import('@/lib/db/schema');
     const { eq } = await import('drizzle-orm');
-    const { getWorkerHealthForOrganization } = await import('@/lib/agents/grpc-executor');
+    const { getAgentTaskApplicationService } = await import('@/ddd/application/di/agent-container');
     
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
@@ -47,11 +47,17 @@ export async function GET(
       }, { status: 403 });
     }
 
-    // Get worker health for agent's organization
-    const organizationId = agent.organizationId?.toString() || 'default';
-    const healthResult = await getWorkerHealthForOrganization(organizationId);
+    // Get worker health for agent's organization using DDD service
+    const agentTaskService = getAgentTaskApplicationService();
+    const healthResult = await agentTaskService.getWorkerHealth(agent.organizationId);
+    
+    // Format response to match legacy format
+    const formattedResult = {
+      success: healthResult.healthy,
+      worker_info: healthResult
+    };
 
-    return Response.json(healthResult);
+    return Response.json(formattedResult);
 
   } catch (error) {
     console.error('Error getting worker status:', error);

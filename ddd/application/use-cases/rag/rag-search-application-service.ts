@@ -24,7 +24,7 @@ export interface SearchResult {
     id: string;
     indexId: string;
     sourceId: string;
-    sourceType: string;
+    domainType: string;
     sourceName: string;
     title: string;
     content: string;
@@ -252,7 +252,7 @@ export class RagSearchApplicationService {
     // Apply source type filter if specified
     let filteredDocuments = allDocuments;
     if (sourceTypes && sourceTypes.length > 0) {
-      filteredDocuments = allDocuments.filter(doc => sourceTypes.includes(doc.sourceType));
+      filteredDocuments = allDocuments.filter(doc => sourceTypes.includes(doc.domainType));
     }
 
     // Perform text-based search

@@ -6,9 +6,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { getDynamicTableRepository } from "@/ddd/application/di/container";
-// import { getDynamicTableRepository } from '@/lib/application/di/container';
 import type { ActionResult, CreateRowData, UpdateRowData } from "./types";
-// Domain types already available in ./types
 
 
 export async function createRow(data: CreateRowData, revalidateUrl?: string): Promise<ActionResult> {

@@ -1,0 +1,1 @@
+"""Shared domain elements used across multiple bounded contexts."""

@@ -1,0 +1,287 @@
+/**
+ * gRPC Agent Execution Repository Implementation
+ * 
+ * Concrete implementation of IAgentExecutionRepository that uses gRPC workers
+ * for agent execution. Moved from lib/agents/grpc-executor.ts to follow DDD patterns.
+ * 
+ * AIDEV-NOTE: Infrastructure implementation of execution repository - handles
+ * all gRPC communication, proto mapping, and worker registry management
+ */
+
+import type { 
+  IAgentExecutionRepository, 
+  AgentExecutionRequest, 
+  AgentExecutionResult, 
+  ExecutionStatus, 
+  WorkerHealth 
+} from '@/ddd/domain/agents/repositories/agent-execution-repository';
+import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import { workerRegistry } from '@/lib/grpc/client';
+import type { TaskProgress } from '@/lib/grpc/client';
+import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/lib/grpc/proto-mappers';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
+
+export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
+  // Track active executions for status queries
+  private activeExecutions = new Map<string, ExecutionStatus>();
+
+  constructor(
+    private readonly agentRepository: IAgentRepository
+  ) {}
+
+  /**
+   * Execute agent via gRPC worker
+   */
+  async executeAgent(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
+    const { agentId, instructions, tools, servers, executionId, organizationId, timeoutSeconds } = request;
+    
+    console.log(`[GRPC-EXECUTION-REPO] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
+    
+    try {
+      // 1. Load agent configuration (delegated to agent repository)
+      const agent = await this.agentRepository.findById(agentId);
+      if (!agent) {
+        throw new Error(`Agent ${agentId} not found`);
+      }
+      
+      // 2. Determine organization context
+      const targetOrganizationId = organizationId || agent.organizationId;
+      const organizationIdStr = targetOrganizationId.toString();
+      
+      console.log(`[GRPC-EXECUTION-REPO] Using agent: ${agent.displayName} with ${agent.capabilitiesCount} capabilities`);
+      
+      // 3. Get worker client for organization
+      const workerClient = workerRegistry.getWorkerForOrganization(organizationIdStr);
+      
+      // 4. Create proto task request
+      const taskRequest = createTaskRequest({
+        taskId: executionId,
+        agentId: agent.id,
+        instructionConfig: { 
+          instructions, 
+          tools: tools || [], 
+          servers: servers || [] 
+        },
+        agent: this.mapAgentToAgentData(agent),
+        triggerData: {}, // Empty for proto compatibility
+        organizationId: organizationIdStr,
+        ownerId: agent.ownerId,
+        timeoutSeconds: timeoutSeconds || 300
+      });
+      
+      // 5. Initialize execution tracking
+      let finalStatus: 'completed' | 'failed' | 'in_progress' = 'in_progress';
+      let finalOutputData: any = null;
+      let finalError: string | null = null;
+      const startedAt = new Date();
+      let completedAt: Date | undefined;
+      
+      // Update active executions map
+      this.activeExecutions.set(executionId, {
+        executionId,
+        status: 'in_progress',
+        progress: 0,
+        startedAt
+      });
+      
+      // 6. Execute task via gRPC with streaming progress updates
+      await workerClient.executeTask(taskRequest as any, async (progress: TaskProgress) => {
+        console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Step ${progress.step_id} - Status: ${progress.status} (${progress.progress_percent}%)`);
+        
+        // Map proto progress to TypeScript types
+        const taskUpdate = mapTaskProgressFromProto(progress);
+        
+        // Update execution tracking
+        this.activeExecutions.set(executionId, {
+          executionId,
+          status: taskUpdate.status as ExecutionStatus['status'] || 'in_progress',
+          progress: progress.progress_percent,
+          currentStep: progress.step_id,
+          result: taskUpdate.result,
+          error: taskUpdate.error,
+          startedAt,
+          completedAt: taskUpdate.completedAt
+        });
+        
+        // Update final status based on progress
+        if (taskUpdate.status === 'completed') {
+          console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Task COMPLETED!`);
+          finalStatus = 'completed';
+          finalOutputData = taskUpdate.result;
+          completedAt = new Date();
+        } else if (taskUpdate.status === 'failed') {
+          console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Task FAILED!`);
+          finalStatus = 'failed';
+          finalError = taskUpdate.error || 'Task failed';
+          completedAt = new Date();
+        }
+      });
+      
+      // 7. Ensure finalStatus was properly set, default to failed if still in_progress
+      if (finalStatus === 'in_progress') {
+        console.warn(`[GRPC-EXECUTION-REPO] ${executionId}: Execution finished but status still in_progress, setting to failed`);
+        finalStatus = 'failed';
+        finalError = 'Task execution did not complete properly';
+        completedAt = new Date();
+      }
+      
+      // 8. Clean up execution tracking and return result
+      this.activeExecutions.delete(executionId);
+      
+      console.log(`[GRPC-EXECUTION-REPO] Execution ${executionId} completed with status: ${finalStatus}`);
+      
+      return {
+        success: (finalStatus as string) === 'completed',
+        executionId,
+        status: finalStatus as AgentExecutionResult['status'],
+        outputData: finalOutputData,
+        error: finalError || undefined,
+        startedAt,
+        completedAt
+      };
+      
+    } catch (error) {
+      console.error(`[GRPC-EXECUTION-REPO-ERROR] ${executionId}:`, error);
+      
+      // Clean up tracking and return error result
+      this.activeExecutions.delete(executionId);
+      
+      return {
+        success: false,
+        executionId,
+        status: 'failed',
+        error: error instanceof Error ? error.message : String(error),
+        startedAt: new Date(),
+        completedAt: new Date()
+      };
+    }
+  }
+
+  /**
+   * Cancel execution via gRPC
+   */
+  async cancelExecution(executionId: string, reason?: string): Promise<void> {
+    console.log(`[GRPC-EXECUTION-REPO] Cancelling execution ${executionId}: ${reason || 'No reason provided'}`);
+    
+    try {
+      // Get execution info to determine organization
+      const executionStatus = this.activeExecutions.get(executionId);
+      if (!executionStatus) {
+        console.warn(`[GRPC-EXECUTION-REPO] No active execution found for ${executionId}`);
+        return;
+      }
+
+      // For now, we can't determine which organization to cancel on
+      // Store execution tracking with organization context in the future
+      // TODO: Improve by storing organization context in execution tracking
+      console.log(`[GRPC-EXECUTION-REPO] Cancel requested for ${executionId}, but cannot determine organization - need to improve tracking`);
+      
+      // For now, just remove from tracking (execution may continue on worker)
+      this.activeExecutions.delete(executionId);
+
+      // Update execution status
+      this.activeExecutions.set(executionId, {
+        ...executionStatus,
+        status: 'cancelled',
+        error: `Cancelled: ${reason || 'User requested cancellation'}`,
+        completedAt: new Date()
+      });
+      
+    } catch (error) {
+      console.error(`[GRPC-EXECUTION-REPO] Error cancelling execution ${executionId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get execution status from tracking map
+   */
+  async getExecutionStatus(executionId: string): Promise<ExecutionStatus | null> {
+    return this.activeExecutions.get(executionId) || null;
+  }
+
+  /**
+   * Get worker health for organization
+   */
+  async getWorkerHealth(organizationId: string): Promise<WorkerHealth> {
+    try {
+      const workerClient = workerRegistry.getWorkerForOrganization(organizationId);
+      const workerInfo = await workerClient.getWorkerInfo();
+      
+      return {
+        healthy: true,
+        organizationId,
+        workerId: workerInfo.worker_id || 'unknown',
+        activeTasks: workerInfo.active_tasks || 0,
+        maxConcurrentTasks: workerInfo.max_concurrent_tasks || 10,
+        uptime: parseInt(workerInfo.uptime_seconds || '0', 10)
+      };
+    } catch (error) {
+      console.error(`[GRPC-EXECUTION-REPO] Error getting worker health for org ${organizationId}:`, error);
+      return {
+        healthy: false,
+        organizationId,
+        workerId: 'unknown',
+        activeTasks: 0,
+        maxConcurrentTasks: 0,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  /**
+   * Check if execution is available for organization
+   */
+  async isExecutionAvailable(organizationId: string): Promise<boolean> {
+    try {
+      const health = await this.getWorkerHealth(organizationId);
+      return health.healthy;
+    } catch (error) {
+      console.error(`[GRPC-EXECUTION-REPO] Error checking execution availability for org ${organizationId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Map domain Agent entity to gRPC AgentData interface
+   * AIDEV-NOTE: Adapter pattern for external service integration
+   */
+  private mapAgentToAgentData(agent: Agent): AgentData {
+    // Convert Record<string, any> to arrays for proto compatibility
+    const tools = agent.tools ? Object.entries(agent.tools).map(([name, config]) => ({
+      name,
+      config: typeof config === 'object' ? config : {}
+    })) : undefined;
+    
+    const servers = agent.servers ? Object.entries(agent.servers).map(([name, config]) => ({
+      name,
+      config: typeof config === 'object' ? config : {}
+    })) : undefined;
+    
+    const capabilities = agent.capabilities ? Object.entries(agent.capabilities).map(([name, config]) => ({
+      name,
+      description: config.description || '',
+      steps: config.steps || []
+    })) : undefined;
+
+    return {
+      id: agent.id,
+      name: agent.name,
+      role: agent.role || undefined,
+      description: agent.description || undefined,
+      persona: agent.persona || undefined,
+      ownerId: agent.ownerId,
+      tools,
+      servers,
+      trigger: agent.trigger ? {
+        type: agent.trigger.type || 'MANUAL',
+        ...agent.trigger
+      } as any : undefined,
+      capabilities,
+      status: agent.status || undefined,
+      organizationId: agent.organizationId,
+      roleId: agent.roleId || undefined,
+      apiKey: agent.apiKey || undefined,
+    };
+  }
+}

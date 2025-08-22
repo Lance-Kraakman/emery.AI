@@ -1,0 +1,1 @@
+"""Tool domain module - contains tool entities and repository interfaces."""

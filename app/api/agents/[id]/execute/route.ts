@@ -6,7 +6,8 @@ import { authenticateRequest } from '@/lib/auth/test-auth';
 import { db } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { executeAgentViaGRPC } from '@/lib/agents/grpc-executor';
+import { getAgentTaskApplicationService } from '@/ddd/application/di/agent-container';
+import type { TaskInstructions } from '@/ddd/domain/agents/entities/task';
 import crypto from 'crypto';
 
 export interface AgentExecuteRequest {
@@ -78,16 +79,33 @@ export async function POST(
     // Generate execution ID for tracking (UUID format for database compatibility)
     const executionId = crypto.randomUUID();
 
-    // Execute agent via simplified gRPC worker
-    console.log(`[GRPC-AGENT-EXEC] ${executionId}: Agent ${agentId} executing task for user ${userId}`);
+    // Execute agent via DDD application service
+    console.log(`[AGENT-EXEC] ${executionId}: Agent ${agentId} executing task for user ${userId}`);
     
-    const result = await executeAgentViaGRPC({
-      agentId: agentId,
+    const agentTaskService = getAgentTaskApplicationService();
+    
+    // Create task instructions
+    const taskInstructions: TaskInstructions = {
       instructions,
       tools,
       servers,
-      executionId
+      metadata
+    };
+    
+    // Create and execute task
+    const taskResult = await agentTaskService.createAndExecuteTask({
+      agentId: agentId,
+      name: `Agent execution: ${instructions.substring(0, 50)}...`,
+      instructions: taskInstructions,
+      timeoutSeconds: Math.floor(timeout / 1000)
     });
+    
+    const result = {
+      success: taskResult.executionResult.success,
+      output_data: taskResult.executionResult.outputData,
+      error: taskResult.executionResult.error,
+      execution_id: taskResult.executionResult.executionId
+    };
 
     // If webhook URL provided, send result asynchronously
     if (webhook_url && result.success) {

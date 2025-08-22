@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { ragService } from '@/lib/rag/service'
+import { indexingApplicationService, searchApplicationService, indexRepository } from '@/ddd/application/di/rag-container'
+import type { CreateIndexCommand } from '@/ddd/application/rag/commands/create-index-command'
+import { OrganizationId } from '@/ddd/domain/rag/value-objects'
 
 // GET /api/rag - List RAG indexes for organization
 export async function GET(request: NextRequest) {
@@ -13,8 +15,23 @@ export async function GET(request: NextRequest) {
     // AIDEV-TODO: Get organization from session
     const organizationId = 1
 
-    const indexes = await ragService.listIndexes({ organizationId })
-    return NextResponse.json({ success: true, indexes })
+    // AIDEV-NOTE: Using DDD repository directly instead of legacy ragService
+    const indexes = await indexRepository.findByOrganization(OrganizationId.fromNumber(organizationId))
+    
+    // Convert domain entities to API response format
+    const indexesData = indexes.map(index => ({
+      id: index.id.toString(),
+      name: index.name,
+      description: index.description,
+      domainTypes: index.domainTypes,
+      domainFilters: index.domainFilters,
+      status: index.status,
+      documentCount: index.documentCount,
+      createdAt: index.createdAt,
+      // updatedAt: index.updatedAt // Property doesn't exist on RagIndex entity
+    }))
+    
+    return NextResponse.json({ success: true, indexes: indexesData })
   } catch (error) {
     console.error('Failed to list RAG indexes:', error)
     return NextResponse.json({ error: 'Failed to list RAG indexes' }, { status: 500 })
@@ -34,14 +51,17 @@ export async function POST(request: NextRequest) {
 
     const organizationId = 1 // AIDEV-TODO: Get from session
 
-    const indexId = await ragService.createIndex({
+    // AIDEV-NOTE: Using DDD indexing application service instead of legacy ragService
+    const createIndexCommand: CreateIndexCommand = {
       name,
       description,
       organizationId,
-      domainTypes: domainTypes || ['tables'],
+      domainTypes: domainTypes || ['table'], // DDD uses singular 'table' not 'tables'
       domainFilters,
       createdBy: session.user.id,
-    })
+    };
+
+    const indexId = await indexingApplicationService.createIndex(createIndexCommand)
 
     return NextResponse.json({ success: true, indexId })
   } catch (error) {

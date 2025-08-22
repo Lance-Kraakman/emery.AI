@@ -50,9 +50,6 @@ export const PERMISSIONS = {
   VIEW_AGENTS: 'view_agents',
   EXECUTE_AGENTS: 'execute_agents',
   
-  // Legacy permissions (for backward compatibility)
-  ALL: 'all',
-  EDIT_TABLES: 'edit_tables'
 } as const;
 
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS];
