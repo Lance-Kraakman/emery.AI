@@ -3,10 +3,9 @@
 
 import { 
   type RagIndexRepository, 
-  type RagDocumentRepository,
-  type OrganizationDataRepository
+  type RagDocumentRepository
 } from '@/ddd/domain/rag/repositories';
-import { IndexingDomainService, type ContentProcessor } from '@/ddd/domain/rag/services';
+import { IndexingDomainService, type ContentProcessor, type IOrganizationDataService } from '@/ddd/domain/rag/services';
 import { RagIndex } from '@/ddd/domain/rag/entities';
 import { RagIndexId, OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
 import { 
@@ -42,7 +41,7 @@ export class RagIndexingApplicationService {
     private readonly indexRepository: RagIndexRepository,
     private readonly documentRepository: RagDocumentRepository,
     private readonly indexingDomainService: IndexingDomainService,
-    private readonly organizationDataRepository: OrganizationDataRepository,
+    private readonly organizationDataService: IOrganizationDataService,
     private readonly eventPublisher?: EventPublisher
   ) {}
 
@@ -227,7 +226,7 @@ export class RagIndexingApplicationService {
         : index.domainTypes;
 
       // Get all data for the domain types
-      const data = await this.organizationDataRepository.getDataForDomainTypes(
+      const data = await this.organizationDataService.getDataForDomainTypes(
         index.organizationId, 
         domainTypesToProcess
       );

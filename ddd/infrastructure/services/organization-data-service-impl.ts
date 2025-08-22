@@ -10,16 +10,17 @@ import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/
 import { DrizzleTeamRepository } from '@/ddd/infrastructure/db/repositories/teams/drizzle-team-repository';
 import { DrizzleFileStorageRepository } from '@/ddd/infrastructure/db/repositories/files/drizzle-file-storage-repository';
 import type { DbClient } from '@/lib/db/client';
+import postgres from 'postgres';
 
 /**
  * Factory for creating OrganizationDataService with proper dependencies
  */
 export class OrganizationDataServiceFactory {
-  static create(db: DbClient): OrganizationDataService {
+  static create(db: DbClient, raw: postgres.Sql): OrganizationDataService {
     // Create concrete repository implementations
-    const organizationRepository = new DrizzleOrganizationRepository(db);
-    const tableRepository = new DrizzleDynamicTableRepository(db);
-    const fieldRepository = new DrizzleFieldRepository(db);
+    const organizationRepository = new DrizzleOrganizationRepository(db, raw);
+    const tableRepository = new DrizzleDynamicTableRepository(db, raw);
+    const fieldRepository = new DrizzleFieldRepository(db, raw);
     const agentRepository = new DrizzleAgentRepository(db);
     const databaseRepository = new DrizzleDatabaseRepository(db);
     const teamRepository = new DrizzleTeamRepository(db);

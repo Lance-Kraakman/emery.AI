@@ -1,15 +1,15 @@
 // AIDEV-NOTE: Dependency injection container for RAG system
 // Provides configured instances with proper dependency wiring
 
-import { db } from '@/lib/db/client';
+import { db, rawClient } from '@/lib/db/client';
 
 // Infrastructure - Repositories and external integrations
 import { 
   DrizzleRagIndexRepository,
   DrizzleRagDocumentRepository,
-  DrizzleRagQueryLogRepository,
-  DrizzleOrganizationDataRepository
+  DrizzleRagQueryLogRepository
 } from '@/ddd/infrastructure/db/repositories/rag';
+import { OrganizationDataServiceFactory } from '@/ddd/infrastructure/services/organization-data-service-impl';
 import { LlamaIndexContentProcessor } from '@/ddd/infrastructure/external/llamaindex-file-processor';
 
 // Application Services
@@ -19,7 +19,7 @@ import {
 } from '@/ddd/application/rag/services';
 
 // Domain Services  
-import { IndexingDomainService, SearchDomainService } from '@/ddd/domain/rag/services';
+import { IndexingDomainService, SearchDomainService, type IOrganizationDataService } from '@/ddd/domain/rag/services';
 
 // Application Services
 import { 
@@ -36,7 +36,7 @@ export class RagDIContainer {
   private static _indexRepository: DrizzleRagIndexRepository;
   private static _documentRepository: DrizzleRagDocumentRepository;
   private static _queryLogRepository: DrizzleRagQueryLogRepository;
-  private static _organizationDataRepository: DrizzleOrganizationDataRepository;
+  private static _organizationDataService: IOrganizationDataService;
   
   // Application services
   private static _embeddingService: EmbeddingService;
@@ -104,13 +104,13 @@ export class RagDIContainer {
   }
 
   /**
-   * Get configured organization data repository
+   * Get configured organization data service
    */
-  static getOrganizationDataRepository(): DrizzleOrganizationDataRepository {
-    if (!this._organizationDataRepository) {
-      this._organizationDataRepository = new DrizzleOrganizationDataRepository(db);
+  static getOrganizationDataService(): IOrganizationDataService {
+    if (!this._organizationDataService) {
+      this._organizationDataService = OrganizationDataServiceFactory.create(db, rawClient);
     }
-    return this._organizationDataRepository;
+    return this._organizationDataService;
   }
 
   /**
@@ -159,7 +159,7 @@ export class RagDIContainer {
         this.getIndexRepository(),
         this.getDocumentRepository(),
         this.getIndexingDomainService(),
-        this.getOrganizationDataRepository()
+        this.getOrganizationDataService()
         // Note: EventPublisher not implemented yet
       );
     }
@@ -180,5 +180,22 @@ export class RagDIContainer {
       );
     }
     return this._searchApplicationService;
+  }
+
+  /**
+   * Reset all cached instances (useful for testing)
+   */
+  static reset(): void {
+    this._indexRepository = undefined as any;
+    this._documentRepository = undefined as any;
+    this._queryLogRepository = undefined as any;
+    this._organizationDataService = undefined as any;
+    this._embeddingService = undefined as any;
+    this._contentProcessor = undefined as any;
+    this._searchAnalyticsService = undefined as any;
+    this._indexingDomainService = undefined as any;
+    this._searchDomainService = undefined as any;
+    this._indexingApplicationService = undefined as any;
+    this._searchApplicationService = undefined as any;
   }
 }
