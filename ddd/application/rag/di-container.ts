@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Dependency injection container for RAG system
 // Provides configured instances with proper dependency wiring
 
-import { db, rawClient } from '@/lib/db/client';
+import { db } from '@/lib/db/client';
 
 // Infrastructure - Repositories and external integrations
 import { 
@@ -66,7 +66,7 @@ export class RagDIContainer {
    */
   static getDocumentRepository(): DrizzleRagDocumentRepository {
     if (!this._documentRepository) {
-      this._documentRepository = new DrizzleRagDocumentRepository(db, rawClient);
+      this._documentRepository = new DrizzleRagDocumentRepository(db);
     }
     return this._documentRepository;
   }

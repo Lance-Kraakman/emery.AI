@@ -4,6 +4,13 @@
 import { eq, sql } from 'drizzle-orm';
 import type { DbClient } from '@/lib/db/client';
 import { tables, fields, agents, organizations, databases, teams } from '@/lib/db/schema';
+import { 
+  RagSqlTemplates, 
+  SqlExecutor, 
+  type FileFieldQueryParams,
+  type DynamicTableFileQueryParams,
+  type FileCountQueryParams
+} from '@/ddd/infrastructure/db/sql-templates';
 
 import { 
   type OrganizationDataRepository,
@@ -17,7 +24,11 @@ import {
 import { OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
 
 export class DrizzleOrganizationDataRepository implements OrganizationDataRepository {
-  constructor(private readonly db: DbClient) {}
+  private readonly sqlExecutor: SqlExecutor;
+
+  constructor(private readonly db: DbClient) {
+    this.sqlExecutor = new SqlExecutor(db);
+  }
 
   async getOrganizationData(organizationId: OrganizationId): Promise<OrganizationData | null> {
     const [organization] = await this.db
@@ -125,22 +136,10 @@ export class DrizzleOrganizationDataRepository implements OrganizationDataReposi
   }
 
   async getFileData(organizationId: OrganizationId): Promise<FileData[]> {
-    // Get all file fields from tables in this organization
-    const fileFieldsQuery = await this.db.execute(sql`
-      SELECT DISTINCT 
-        f.id as field_id,
-        f.name as field_name, 
-        f.slug as field_slug,
-        t.id as table_id,
-        t.name as table_name,
-        t.db_name as table_db_name,
-        d.name as database_name
-      FROM fields f
-      JOIN tables t ON f.table_id = t.id  
-      JOIN databases d ON t.database_id = d.id
-      WHERE f.type = 'file' 
-      AND t.organization_id = ${organizationId.value}
-    `);
+    // Get all file fields from tables in this organization using SQL template
+    const fileFieldParams: FileFieldQueryParams = { organizationId: organizationId.value };
+    const fileFieldTemplate = RagSqlTemplates.getFileFields(fileFieldParams);
+    const fileFieldsQuery = await this.sqlExecutor.executeTemplate('FILE_FIELDS', fileFieldTemplate);
 
     const allFileData: FileData[] = [];
 
@@ -155,13 +154,14 @@ export class DrizzleOrganizationDataRepository implements OrganizationDataReposi
         const tableDbName = String(fieldData.table_db_name);
         const databaseName = String(fieldData.database_name);
 
-        // Get all rows with files in this field
-        const rows = await this.db.execute(sql`
-          SELECT id, ${sql.raw(`field_${fieldId}`)} as file_data, created_at, updated_at
-          FROM ${sql.raw(tableDbName)} 
-          WHERE ${sql.raw(`field_${fieldId}`)} IS NOT NULL
-          AND ${sql.raw(`field_${fieldId}`)} != '[]'
-        `);
+        // Get all rows with files in this field using dynamic SQL template
+        const dynamicParams: DynamicTableFileQueryParams = { fieldId, tableDbName };
+        const dynamicTemplate = RagSqlTemplates.getDynamicTableFiles(dynamicParams);
+        const rows = await this.sqlExecutor.executeDynamicTemplate(
+          'DYNAMIC_TABLE_FILES', 
+          dynamicTemplate, 
+          { fieldId, tableDbName }
+        );
 
         for (const row of rows) {
           try {
@@ -267,14 +267,10 @@ export class DrizzleOrganizationDataRepository implements OrganizationDataReposi
       .from(teams)
       .where(eq(teams.organizationId, organizationId.value));
 
-    // File count requires more complex query
-    const fileCountQuery = await this.db.execute(sql`
-      SELECT COUNT(*) as count
-      FROM fields f
-      JOIN tables t ON f.table_id = t.id
-      WHERE f.type = 'file' 
-      AND t.organization_id = ${organizationId.value}
-    `);
+    // File count using SQL template
+    const fileCountParams: FileCountQueryParams = { organizationId: organizationId.value };
+    const fileCountTemplate = RagSqlTemplates.getFileFieldCount(fileCountParams);
+    const fileCountQuery = await this.sqlExecutor.executeTemplate('FILE_COUNT', fileCountTemplate);
     const fileCount = fileCountQuery[0]?.count || 0;
 
     return {

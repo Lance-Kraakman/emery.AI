@@ -2,9 +2,15 @@
 // Provides vector search capabilities using pgvector and raw SQL
 
 import { eq, and, inArray, sql, desc } from 'drizzle-orm';
-import type postgres from 'postgres';
 import type { DbClient } from '@/lib/db/client';
 import { ragDocuments } from '@/lib/db/schema';
+import { 
+  RagSqlTemplates, 
+  SqlExecutor, 
+  type VectorSearchParams,
+  type IndexStatisticsParams,
+  type DomainTypeCountsParams
+} from '@/ddd/infrastructure/db/sql-templates';
 
 import { 
   type RagDocumentRepository,
@@ -17,10 +23,13 @@ import { RagDocument, type DocumentMetadata } from '@/ddd/domain/rag/entities';
 import { DocumentId, RagIndexId, type DomainType } from '@/ddd/domain/rag/value-objects';
 
 export class DrizzleRagDocumentRepository implements RagDocumentRepository {
+  private readonly sqlExecutor: SqlExecutor;
+
   constructor(
-    private readonly db: DbClient,
-    private readonly rawClient: postgres.Sql
-  ) {}
+    private readonly db: DbClient
+  ) {
+    this.sqlExecutor = new SqlExecutor(db);
+  }
 
   async findById(id: DocumentId): Promise<RagDocument | null> {
     const [record] = await this.db
@@ -93,109 +102,18 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
 
   async vectorSearch(params: VectorSearchParams): Promise<VectorSearchResult> {
     try {
-      // Build query based on similarity metric
-      // AIDEV-NOTE: Using proper parameterized queries to prevent SQL injection
-      let rawResults;
-      const embeddingVector = `[${params.queryEmbedding.join(',')}]`;
-      const indexId = params.indexId.value;
+      // AIDEV-NOTE: Using SQL templates for consistent, testable queries
       const limit = params.limit * 2;
       
-      switch (params.similarityMetric) {
-        case 'cosine':
-          // Cosine distance (lower is better)
-          rawResults = await this.rawClient`
-            SELECT 
-              id, 
-              rag_index_id,
-              organization_id,
-              source_type as domain_type, 
-              source_id, 
-              source_name, 
-              title, 
-              content, 
-              metadata,
-              content_hash,
-              indexed_at,
-              source_updated_at,
-              embedding <=> ${embeddingVector}::vector as similarity
-            FROM rag_documents
-            WHERE rag_index_id = ${indexId}
-            ORDER BY embedding <=> ${embeddingVector}::vector ASC
-            LIMIT ${limit}
-          `;
-          break;
-          
-        case 'euclidean':
-          // Euclidean distance (lower is better)
-          rawResults = await this.rawClient`
-            SELECT 
-              id, 
-              rag_index_id,
-              organization_id,
-              source_type as domain_type, 
-              source_id, 
-              source_name, 
-              title, 
-              content, 
-              metadata,
-              content_hash,
-              indexed_at,
-              source_updated_at,
-              embedding <-> ${embeddingVector}::vector as similarity
-            FROM rag_documents
-            WHERE rag_index_id = ${indexId}
-            ORDER BY embedding <-> ${embeddingVector}::vector ASC
-            LIMIT ${limit}
-          `;
-          break;
-          
-        case 'inner_product':
-          // Inner product (higher is better)
-          rawResults = await this.rawClient`
-            SELECT 
-              id, 
-              rag_index_id,
-              organization_id,
-              source_type as domain_type, 
-              source_id, 
-              source_name, 
-              title, 
-              content, 
-              metadata,
-              content_hash,
-              indexed_at,
-              source_updated_at,
-              embedding <#> ${embeddingVector}::vector as similarity
-            FROM rag_documents
-            WHERE rag_index_id = ${indexId}
-            ORDER BY embedding <#> ${embeddingVector}::vector DESC
-            LIMIT ${limit}
-          `;
-          break;
-          
-        default:
-          // Default to cosine distance
-          rawResults = await this.rawClient`
-            SELECT 
-              id, 
-              rag_index_id,
-              organization_id,
-              source_type as domain_type, 
-              source_id, 
-              source_name, 
-              title, 
-              content, 
-              metadata,
-              content_hash,
-              indexed_at,
-              source_updated_at,
-              embedding <=> ${embeddingVector}::vector as similarity
-            FROM rag_documents
-            WHERE rag_index_id = ${indexId}
-            ORDER BY embedding <=> ${embeddingVector}::vector ASC
-            LIMIT ${limit}
-          `;
-      }
+      const searchParams: VectorSearchParams = {
+        embeddingVector: params.queryEmbedding,
+        indexId: params.indexId.value,
+        limit: limit,
+        similarityMetric: params.similarityMetric || 'cosine'
+      };
+
+      const template = RagSqlTemplates.vectorSimilaritySearch(searchParams);
+      const rawResults = await this.sqlExecutor.executeTemplate('VECTOR_SEARCH', template);
 
       // Convert distance to similarity score and apply threshold
       const scoredDocuments = rawResults.map((doc: any) => {
@@ -408,24 +326,15 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
     averageEmbeddingSize: number;
     domainTypeCounts: Record<DomainType, number>;
   }> {
-    // Get total documents and sizes
-    const [stats] = await this.rawClient`
-      SELECT 
-        COUNT(*) as total_documents,
-        COALESCE(AVG(pg_column_size(content)), 0) as avg_content_size,
-        COALESCE(AVG(pg_column_size(embedding)), 0) as avg_embedding_size,
-        COALESCE(SUM(pg_column_size(content)), 0) as total_size
-      FROM rag_documents
-      WHERE rag_index_id = ${indexId.value}
-    `;
+    // Get total documents and sizes using SQL template
+    const statsParams: IndexStatisticsParams = { indexId: indexId.value };
+    const statsTemplate = RagSqlTemplates.getIndexStatistics(statsParams);
+    const [stats] = await this.sqlExecutor.executeTemplate('INDEX_STATISTICS', statsTemplate);
 
-    // Get source type counts
-    const domainTypeResults = await this.rawClient`
-      SELECT source_type, COUNT(*) as count
-      FROM rag_documents
-      WHERE rag_index_id = ${indexId.value}
-      GROUP BY source_type
-    `;
+    // Get domain type counts using SQL template
+    const countsParams: DomainTypeCountsParams = { indexId: indexId.value };
+    const countsTemplate = RagSqlTemplates.getDomainTypeCounts(countsParams);
+    const domainTypeResults = await this.sqlExecutor.executeTemplate('DOMAIN_TYPE_COUNTS', countsTemplate);
 
     const domainTypeCounts: Record<DomainType, number> = {} as any;
     for (const result of domainTypeResults) {
