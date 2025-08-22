@@ -6,7 +6,7 @@ export interface ActionResult<T = any> {
   error?: string;
 }
 
-export type FieldType = 'text' | 'number' | 'boolean' | 'email' | 'url' | 'date' | 'relation';
+export type FieldType = 'text' | 'number' | 'boolean' | 'email' | 'url' | 'date' | 'relation' | 'file';
 
 export interface Field {
   id: number;
@@ -14,7 +14,7 @@ export interface Field {
   name: string;
   slug: string;
   type: FieldType;
-  orderIndex: number | null;
+  orderIndex: number | null | undefined;
   relatedTableId: number | null;
   required: boolean | null;
   createdAt: Date | null;
@@ -34,8 +34,10 @@ export interface CreateTableData {
 export interface CreateFieldData {
   tableId: number;
   name: string;
+  slug?: string;
   type: FieldType;
   required?: boolean;
+  orderIndex?: number;
   relatedTableId?: number;
 }
 
@@ -75,7 +77,11 @@ export interface UpdateUserData {
 
 export interface CreateDynamicTableData {
   name: string;
+  dbName: string;
+  databaseId: number;
   organizationId: number;
+  createdBy: string;
+  metadata?: any;
 }
 
 export interface CreateTeamData {
