@@ -21,29 +21,11 @@ import type { Team } from '@/ddd/domain/teams/entities/team';
 import type { Field } from '@/ddd/domain/fields/entities/field';
 import type { StoredFile } from '@/ddd/domain/files/entities/file-storage';
 
-export interface ProcessedContent {
-  content: string;
-  metadata: DocumentMetadata;
-  embedding: number[];
-  contentHash: string;
-}
-
-export interface ContentProcessor {
-  /**
-   * Generate embeddings for text content
-   */
-  generateEmbedding(content: string): Promise<number[]>;
-
-  /**
-   * Calculate content hash for deduplication
-   */
-  calculateContentHash(content: string): string;
-
-  /**
-   * Process file content with LlamaIndex
-   */
-  processFileContent(fileData: StoredFile): Promise<ProcessedContent[]>;
-}
+// Import content processing interfaces
+import { 
+  type ContentProcessor, 
+  type ProcessedContent 
+} from './content-processor';
 
 export class IndexingDomainService {
   constructor(

@@ -16,7 +16,7 @@ import { DrizzleAgentRepository } from '@/ddd/infrastructure/db/repositories/age
 import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/databases/drizzle-database-repository';
 import { DrizzleTeamRepository } from '@/ddd/infrastructure/db/repositories/teams/drizzle-team-repository';
 import { DrizzleFileStorageRepository } from '@/ddd/infrastructure/db/repositories/files/drizzle-file-storage-repository';
-import { LlamaIndexContentProcessor } from '@/ddd/infrastructure/external/llamaindex-file-processor';
+import { LlamaIndexContentProcessor } from '@/ddd/infrastructure/content-processing/llamaindex-content-processor';
 
 // Application Services
 import { 
@@ -82,75 +82,3 @@ export const searchApplicationService = new RagSearchApplicationService(
   embeddingService,
   searchAnalyticsService
 );
-
-// Legacy class-based interface for backwards compatibility
-export class RagDIContainer {
-
-  static getIndexRepository(): DrizzleRagIndexRepository {
-    return indexRepository;
-  }
-
-  static getDocumentRepository(): DrizzleRagDocumentRepository {
-    return documentRepository;
-  }
-
-  static getEmbeddingService(): EmbeddingService {
-    return embeddingService;
-  }
-
-  static getContentProcessor(): LlamaIndexContentProcessor {
-    return contentProcessor;
-  }
-
-  static getQueryLogRepository(): DrizzleRagQueryLogRepository {
-    return queryLogRepository;
-  }
-
-  static getOrganizationRepository(): DrizzleOrganizationRepository {
-    return organizationRepository;
-  }
-
-  static getTableRepository(): DrizzleDynamicTableRepository {
-    return tableRepository;
-  }
-
-  static getFieldRepository(): DrizzleFieldRepository {
-    return fieldRepository;
-  }
-
-  static getAgentRepository(): DrizzleAgentRepository {
-    return agentRepository;
-  }
-
-  static getDatabaseRepository(): DrizzleDatabaseRepository {
-    return databaseRepository;
-  }
-
-  static getTeamRepository(): DrizzleTeamRepository {
-    return teamRepository;
-  }
-
-  static getFileRepository(): DrizzleFileStorageRepository {
-    return fileRepository;
-  }
-
-  static getSearchAnalyticsService(): SearchAnalyticsService {
-    return searchAnalyticsService;
-  }
-
-  static getIndexingDomainService(): IndexingDomainService {
-    return indexingDomainService;
-  }
-
-  static getSearchDomainService(): SearchDomainService {
-    return searchDomainService;
-  }
-
-  static getIndexingApplicationService(): RagIndexingApplicationService {
-    return indexingApplicationService;
-  }
-
-  static getSearchApplicationService(): RagSearchApplicationService {
-    return searchApplicationService;
-  }
-}
