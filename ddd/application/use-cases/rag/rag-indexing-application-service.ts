@@ -27,7 +27,7 @@ import {
   CreateIndexCommandValidator,
   type ReindexCommand,
   ReindexCommandValidator
-} from '../commands';
+} from '@/ddd/application/rag/commands';
 
 export interface IndexingResult {
   indexId: string;

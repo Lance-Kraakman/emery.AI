@@ -17,7 +17,7 @@ import { RagIndexId } from '@/ddd/domain/rag/value-objects';
 import { 
   type SearchRagQuery, 
   SearchRagQueryValidator 
-} from '../queries';
+} from '@/ddd/application/rag/queries';
 
 export interface SearchResult {
   documents: Array<{
