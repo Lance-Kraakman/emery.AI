@@ -6,12 +6,14 @@ export interface ActionResult<T = any> {
   error?: string;
 }
 
+export type FieldType = 'text' | 'number' | 'boolean' | 'email' | 'url' | 'date' | 'relation';
+
 export interface Field {
   id: number;
   tableId: number;
   name: string;
   slug: string;
-  type: string; // Using string instead of union for flexibility
+  type: FieldType;
   orderIndex: number | null;
   relatedTableId: number | null;
   required: boolean | null;
@@ -32,7 +34,7 @@ export interface CreateTableData {
 export interface CreateFieldData {
   tableId: number;
   name: string;
-  type: string;
+  type: FieldType;
   required?: boolean;
   relatedTableId?: number;
 }
@@ -48,7 +50,33 @@ export interface UpdateRowData {
   data: Record<string, any>;
 }
 
-// CreateOrganizationData moved to domain entities: @/lib/domain/entities/organization
+export interface CreateOrganizationData {
+  name: string;
+  mission?: string;
+}
+
+export interface CreateRoleData {
+  name: string;
+  permissions: string[];
+  organizationId: number;
+}
+
+export interface UpdateRoleData {
+  id: number;
+  name?: string;
+  permissions?: string[];
+}
+
+export interface UpdateUserData {
+  name?: string;
+  email?: string;
+  roleId?: number;
+}
+
+export interface CreateDynamicTableData {
+  name: string;
+  organizationId: number;
+}
 
 export interface CreateTeamData {
   organizationId: number;

@@ -6,10 +6,11 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { getDynamicTableRepository } from "@/lib/application/di/container";
+import { getDynamicTableRepository } from "@/ddd/application/di/container";
+// import { getDynamicTableRepository } from "@/lib/application/di/container";
 import { slugify } from "@/utils/slugify";
 import type { ActionResult, CreateTableData } from "./types";
-import type { CreateDynamicTableData } from "@/lib/domain/entities/dynamic-table";
+import type { CreateDynamicTableData } from "./types";
 
 export async function createTable(data: CreateTableData & { databaseId: number; description?: string }, revalidateUrl?: string): Promise<ActionResult> {
   try {

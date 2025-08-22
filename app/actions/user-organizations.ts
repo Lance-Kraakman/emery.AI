@@ -6,7 +6,8 @@ import { eq, and } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "./types";
-import { getUserRepository } from "@/lib/application/di/container";
+import { getUserRepository } from "@/ddd/application/di/container";
+// import { getUserRepository } from "@/lib/application/di/container";
 
 export async function switchCurrentOrganization(organizationId: number): Promise<ActionResult> {
   try {

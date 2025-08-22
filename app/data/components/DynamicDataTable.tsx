@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Trash2 } from "lucide-react"
 import { EditableCell } from "./EditableCell"
-import type { Field } from "@/lib/domain/entities/field"
+import type { Field } from "@/app/actions/types"
 import type { RowData } from "@/types/db"
 
 interface DynamicDataTableProps {

@@ -11,7 +11,7 @@ export interface RagDocumentCreationParams {
   indexId: RagIndexId;
   organizationId: OrganizationId;
   sourceId: string;
-  sourceType: DomainType;
+  domainType: DomainType;
   sourceName: string;
   title: string;
   content: string;
@@ -34,7 +34,7 @@ export class RagDocument {
     private readonly _indexId: RagIndexId,
     private readonly _organizationId: OrganizationId,
     private readonly _sourceId: string,
-    private readonly _sourceType: DomainType,
+    private readonly _domainType: DomainType,
     private readonly _sourceName: string,
     private _title: string,
     private _content: string,
@@ -63,8 +63,8 @@ export class RagDocument {
     return this._sourceId;
   }
 
-  get sourceType(): DomainType {
-    return this._sourceType;
+  get domainType(): DomainType {
+    return this._domainType;
   }
 
   get sourceName(): string {
@@ -159,8 +159,8 @@ export class RagDocument {
     return this._organizationId.equals(organizationId);
   }
 
-  isFromSource(sourceId: string, sourceType: DomainType): boolean {
-    return this._sourceId === sourceId && this._sourceType === sourceType;
+  isFromSource(sourceId: string, domainType: DomainType): boolean {
+    return this._sourceId === sourceId && this._domainType === domainType;
   }
 
   hasContentChanged(contentHash: string): boolean {
@@ -191,7 +191,7 @@ export class RagDocument {
       params.indexId,
       params.organizationId,
       params.sourceId,
-      params.sourceType,
+      params.domainType,
       params.sourceName,
       params.title,
       params.content,
@@ -209,7 +209,7 @@ export class RagDocument {
     indexId: string;
     organizationId: number;
     sourceId: string;
-    sourceType: DomainType;
+    domainType: DomainType;
     sourceName: string;
     title: string;
     content: string;
@@ -225,7 +225,7 @@ export class RagDocument {
       RagIndexId.fromString(data.indexId),
       OrganizationId.fromNumber(data.organizationId),
       data.sourceId,
-      data.sourceType,
+      data.domainType,
       data.sourceName,
       data.title,
       data.content,
@@ -295,7 +295,7 @@ export class RagDocument {
     indexId: string;
     organizationId: number;
     sourceId: string;
-    sourceType: DomainType;
+    domainType: DomainType;
     sourceName: string;
     title: string;
     content: string;
@@ -310,7 +310,7 @@ export class RagDocument {
       indexId: this._indexId.value,
       organizationId: this._organizationId.value,
       sourceId: this._sourceId,
-      sourceType: this._sourceType,
+      domainType: this._domainType,
       sourceName: this._sourceName,
       title: this._title,
       content: this._content,
@@ -327,7 +327,7 @@ export class RagDocument {
     id: string;
     indexId: string;
     sourceId: string;
-    sourceType: DomainType;
+    domainType: DomainType;
     sourceName: string;
     title: string;
     content: string;
@@ -338,7 +338,7 @@ export class RagDocument {
       id: this._id.value,
       indexId: this._indexId.value,
       sourceId: this._sourceId,
-      sourceType: this._sourceType,
+      domainType: this._domainType,
       sourceName: this._sourceName,
       title: this._title,
       content: this._content,

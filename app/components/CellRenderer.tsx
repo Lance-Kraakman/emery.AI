@@ -1,6 +1,6 @@
 'use client'
 
-import type { Field } from '@/lib/domain/entities/field';
+import type { Field } from '@/app/actions/types';
 
 interface CellRendererProps {
   field: Field;

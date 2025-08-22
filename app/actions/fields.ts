@@ -5,10 +5,10 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
-import { getFieldRepository } from "@/lib/application/di/container";
+import { getFieldRepository } from "@/ddd/application/di/container";
 import { slugify } from "@/utils/slugify";
 import type { ActionResult, CreateFieldData } from "./types";
-import type { Field, FieldType } from "@/lib/domain/entities/field";
+import type { Field, FieldType } from "./types";
 
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<ActionResult> {
   try {

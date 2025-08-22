@@ -6,11 +6,11 @@ import type postgres from 'postgres';
 
 import { tables } from '@/lib/db/schema';
 import type { DbClient } from '@/lib/db/client';
-import type { IDynamicTableRepository } from '@/lib/domain/repositories/dynamic-table-repository';
+import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import { 
   DynamicTableSqlTemplates, 
   SqlExecutor,
-} from '@/lib/infrastructure/db/sql-templates';
+} from '@/ddd/infrastructure/db/sql-templates';
 
 import type { 
   DynamicTable, 
@@ -19,7 +19,7 @@ import type {
   CreateRowData,
   UpdateRowData,
   RowQueryOptions
-} from '@/lib/domain/entities/dynamic-table';
+} from '@/ddd/domain/tables/entities/dynamic-table';
 
 export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
   private sqlExecutor: SqlExecutor;

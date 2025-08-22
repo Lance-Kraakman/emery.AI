@@ -108,7 +108,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
               id, 
               rag_index_id,
               organization_id,
-              source_type, 
+              source_type as domain_type, 
               source_id, 
               source_name, 
               title, 
@@ -132,7 +132,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
               id, 
               rag_index_id,
               organization_id,
-              source_type, 
+              source_type as domain_type, 
               source_id, 
               source_name, 
               title, 
@@ -156,7 +156,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
               id, 
               rag_index_id,
               organization_id,
-              source_type, 
+              source_type as domain_type, 
               source_id, 
               source_name, 
               title, 
@@ -180,7 +180,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
               id, 
               rag_index_id,
               organization_id,
-              source_type, 
+              source_type as domain_type, 
               source_id, 
               source_name, 
               title, 
@@ -258,7 +258,6 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
     const persistence = document.toPersistence();
     
     await this.db.insert(ragDocuments).values({
-      id: persistence.id,
       ragIndexId: persistence.indexId,
       organizationId: persistence.organizationId,
       domainType: persistence.domainType,
@@ -267,9 +266,8 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
       title: persistence.title,
       content: persistence.content,
       metadata: persistence.metadata,
-      embedding: JSON.stringify(persistence.embedding), // Convert for pgvector
+      embedding: persistence.embedding, // Should be number[] not string
       contentHash: persistence.contentHash,
-      indexedAt: new Date(),
       sourceUpdatedAt: persistence.updatedAt
     });
   }
@@ -280,7 +278,6 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
     const values = documents.map(document => {
       const persistence = document.toPersistence();
       return {
-        id: persistence.id,
         ragIndexId: persistence.indexId,
         organizationId: persistence.organizationId,
         domainType: persistence.domainType,
@@ -289,9 +286,8 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
         title: persistence.title,
         content: persistence.content,
         metadata: persistence.metadata,
-        embedding: JSON.stringify(persistence.embedding), // Convert for pgvector
+        embedding: persistence.embedding, // Should be number[] not string
         contentHash: persistence.contentHash,
-        indexedAt: new Date(),
         sourceUpdatedAt: persistence.updatedAt
       };
     });
@@ -308,7 +304,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
         title: persistence.title,
         content: persistence.content,
         metadata: persistence.metadata,
-        embedding: JSON.stringify(persistence.embedding), // Convert for pgvector
+        embedding: persistence.embedding, // Should be number[] not string
         contentHash: persistence.contentHash,
         sourceUpdatedAt: persistence.updatedAt
       })
@@ -451,7 +447,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
       indexId: record.rag_index_id || record.ragIndexId,
       organizationId: record.organization_id || record.organizationId,
       sourceId: record.source_id || record.sourceId,
-      domainType: (record.source_type || record.domainType) as DomainType,
+      domainType: (record.domain_type || record.domainType) as DomainType,
       sourceName: record.source_name || record.sourceName,
       title: record.title,
       content: record.content,

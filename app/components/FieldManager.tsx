@@ -5,7 +5,7 @@
 import { useState, useTransition } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { createFieldAction, deleteFieldAction } from '@/app/actions/fields';
-import type { Field } from '@/lib/domain/entities/field';
+import type { Field } from '@/app/actions/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';

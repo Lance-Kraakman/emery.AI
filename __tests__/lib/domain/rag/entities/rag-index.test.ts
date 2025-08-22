@@ -10,7 +10,7 @@ describe('RagIndex Domain Entity', () => {
     name: 'Test Index',
     description: 'Test description',
     organizationId: OrganizationId.fromNumber(1),
-    domainTypes: ['tables', 'files'] as const,
+    domainTypes: ['table', 'file'],
     createdBy: 'user-123'
   };
 
@@ -21,7 +21,7 @@ describe('RagIndex Domain Entity', () => {
       expect(index.name).toBe('Test Index');
       expect(index.description).toBe('Test description');
       expect(index.organizationId.value).toBe(1);
-      expect(index.domainTypes).toEqual(['tables', 'files']);
+      expect(index.domainTypes).toEqual(['table', 'file']);
       expect(index.status).toBe('created');
       expect(index.documentCount).toBe(0);
       expect(index.createdBy).toBe('user-123');
@@ -108,9 +108,9 @@ describe('RagIndex Domain Entity', () => {
     });
 
     it('should check domain type inclusion', () => {
-      expect(index.includesDomainType('tables')).toBe(true);
-      expect(index.includesDomainType('files')).toBe(true);
-      expect(index.includesDomainType('agents')).toBe(false);
+      expect(index.includesDomainType('table')).toBe(true);
+      expect(index.includesDomainType('file')).toBe(true);
+      expect(index.includesDomainType('agent')).toBe(false);
     });
 
     it('should check ownership', () => {
@@ -151,10 +151,9 @@ describe('RagIndex Domain Entity', () => {
 
     it('should update domain types', () => {
       index.updateDetails({
-        domainTypes: ['agents', 'teams']
-      });
+        domainTypes: ['agent', 'team']      });
 
-      expect(index.domainTypes).toEqual(['agents', 'teams']);
+      expect(index.domainTypes).toEqual(['agent', 'team']);
     });
 
     it('should validate name during update', () => {
@@ -172,7 +171,7 @@ describe('RagIndex Domain Entity', () => {
       expect(persistence.id).toBeDefined();
       expect(persistence.organizationId).toBe(1);
       expect(persistence.name).toBe('Test Index');
-      expect(persistence.domainTypes).toEqual(['tables', 'files']);
+      expect(persistence.domainTypes).toEqual(['table', 'file']);
       expect(persistence.status).toBe('created');
     });
 

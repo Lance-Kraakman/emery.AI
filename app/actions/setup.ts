@@ -1,13 +1,13 @@
 'use server'
 
-import { getOrganizationRepository } from "@/lib/application/di/container";
-import { CreateOrganizationData } from "@/lib/domain/entities/organization";
+import { getOrganizationRepository } from "@/ddd/application/di/container";
+import type { CreateOrganizationData } from "./types";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "./types";
 
 // Import the DI setup to ensure container is initialized
-import "@/lib/application/di/setup";
+import "@/ddd/application/di/setup";
 
 interface SetupData {
   organizationName: string;

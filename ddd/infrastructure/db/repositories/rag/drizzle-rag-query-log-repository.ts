@@ -28,7 +28,7 @@ export class DrizzleRagQueryLogRepository implements RagQueryLogRepository {
       await this.db.insert(ragQueryLogs).values({
         ragIndexId: params.indexId.value,
         query: params.query.text,
-        queryEmbedding: JSON.stringify(params.queryEmbedding), // Convert for pgvector
+        queryEmbedding: params.queryEmbedding, // pgvector expects number[] directly
         resultsCount: params.resultCount,
         topResults: null, // Could store top results if needed for analytics
         userId: params.userId,

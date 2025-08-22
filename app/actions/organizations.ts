@@ -1,10 +1,11 @@
 "use server";
 
-import { getOrganizationRepository } from "@/lib/application/di/container";
+import { getOrganizationRepository } from "@/ddd/application/di/container";
+// import { getOrganizationRepository } from "@/lib/application/di/container";
 import { revalidatePath } from "next/cache";
 
 // Import the DI setup to ensure container is initialized
-import "@/lib/application/di/setup";
+import "@/ddd/application/di/setup";
 
 export async function updateOrganizationViewConfig(organizationId: number, viewConfig: any) {
   try {
