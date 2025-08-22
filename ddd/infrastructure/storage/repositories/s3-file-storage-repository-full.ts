@@ -10,33 +10,12 @@ import {
   CopyObjectCommand
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { s3Client, BUCKET_NAME } from '../../../s3/client';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 
-import type { IFileStorageRepository } from '../../../domain/repositories/file-storage-repository';
-import type {
-  StoredFile,
-  FileUploadRequest,
-  FileDownloadResponse,
-  FileUrlOptions,
-  FileListOptions,
-  FileListResponse,
-  FileStorageStats,
-  FileCleanupOptions,
-  FileCleanupResult,
-  FileValidationRule,
-  FileValidationResult,
-  FileTransformRequest,
-  FileTransformResult,
-  FileAccessPolicy,
-  FileAccessContext,
-  FileBatchOperation,
-  FileBatchResult,
-  FileKey,
-  FileOperationResult
-} from '../../../domain/entities/file-storage';
-import { FileStorageError } from '../../../domain/entities/file-storage';
+import { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
+import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
+import { StoredFile, FileUploadRequest, FileStorageError, FileKey, FileDownloadResponse, FileUrlOptions, FileListOptions, FileListResponse, FileStorageStats, FileOperationResult, FileValidationRule, FileValidationResult, FileBatchOperation, FileBatchResult, FileTransformRequest, FileTransformResult, FileCleanupOptions, FileCleanupResult, FileAccessContext, FileAccessPolicy } from '@/ddd/domain/files/entities/file-storage';
 
 export class S3FileStorageRepository implements IFileStorageRepository {
   private readonly bucketName: string;
@@ -45,6 +24,12 @@ export class S3FileStorageRepository implements IFileStorageRepository {
   constructor(bucketName?: string) {
     this.bucketName = bucketName || BUCKET_NAME;
     this.s3 = s3Client;
+  }
+  findByOrganization(organizationId: number): Promise<StoredFile[]> {
+    throw new Error('Method not implemented.');
+  }
+  countByOrganization(organizationId: number): Promise<number> {
+    throw new Error('Method not implemented.');
   }
 
   // Core file operations

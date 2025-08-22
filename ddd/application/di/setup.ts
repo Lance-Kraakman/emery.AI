@@ -1,4 +1,4 @@
-import { db, rawClient } from '../../db/client';
+import { db, rawClient } from '@/lib/db/client';
 import { initializeDI } from './container';
 
 /**
