@@ -62,7 +62,17 @@ export class DrizzleOrganizationDataRepository implements OrganizationDataReposi
 
         return {
           ...table,
-          fields: tableFields
+          fields: tableFields.map(field => ({
+            id: field.id,
+            tableId: field.tableId,
+            name: field.name,
+            slug: field.slug,
+            type: field.type,
+            orderIndex: field.orderIndex ?? 0, // Default to 0 if null
+            relatedTableId: field.relatedTableId,
+            required: field.required ?? false, // Default to false if null
+            createdAt: field.createdAt ?? new Date() // Default to current date if null
+          }))
         };
       })
     );
