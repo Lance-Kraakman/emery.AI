@@ -1,7 +1,7 @@
 // AIDEV-NOTE: RAG Document domain entity
 // Represents an indexed document with content and embeddings
 
-import { DocumentId, RagIndexId, OrganizationId, type SourceType } from '../value-objects';
+import { DocumentId, RagIndexId, OrganizationId, type DomainType } from '../value-objects';
 
 export interface DocumentMetadata {
   [key: string]: any;
@@ -11,7 +11,7 @@ export interface RagDocumentCreationParams {
   indexId: RagIndexId;
   organizationId: OrganizationId;
   sourceId: string;
-  sourceType: SourceType;
+  sourceType: DomainType;
   sourceName: string;
   title: string;
   content: string;
@@ -34,7 +34,7 @@ export class RagDocument {
     private readonly _indexId: RagIndexId,
     private readonly _organizationId: OrganizationId,
     private readonly _sourceId: string,
-    private readonly _sourceType: SourceType,
+    private readonly _sourceType: DomainType,
     private readonly _sourceName: string,
     private _title: string,
     private _content: string,
@@ -63,7 +63,7 @@ export class RagDocument {
     return this._sourceId;
   }
 
-  get sourceType(): SourceType {
+  get sourceType(): DomainType {
     return this._sourceType;
   }
 
@@ -159,7 +159,7 @@ export class RagDocument {
     return this._organizationId.equals(organizationId);
   }
 
-  isFromSource(sourceId: string, sourceType: SourceType): boolean {
+  isFromSource(sourceId: string, sourceType: DomainType): boolean {
     return this._sourceId === sourceId && this._sourceType === sourceType;
   }
 
@@ -209,7 +209,7 @@ export class RagDocument {
     indexId: string;
     organizationId: number;
     sourceId: string;
-    sourceType: SourceType;
+    sourceType: DomainType;
     sourceName: string;
     title: string;
     content: string;
@@ -295,7 +295,7 @@ export class RagDocument {
     indexId: string;
     organizationId: number;
     sourceId: string;
-    sourceType: SourceType;
+    sourceType: DomainType;
     sourceName: string;
     title: string;
     content: string;
@@ -327,7 +327,7 @@ export class RagDocument {
     id: string;
     indexId: string;
     sourceId: string;
-    sourceType: SourceType;
+    sourceType: DomainType;
     sourceName: string;
     title: string;
     content: string;

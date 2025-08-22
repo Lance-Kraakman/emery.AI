@@ -2,12 +2,12 @@
 // Defines document storage and retrieval patterns for vector search
 
 import { RagDocument } from '../entities';
-import { DocumentId, RagIndexId, OrganizationId, SearchQuery, type SourceType } from '../value-objects';
+import { DocumentId, RagIndexId, OrganizationId, DomainType } from '../value-objects';
 
 export interface DocumentFilters {
   indexId?: RagIndexId;
   organizationId?: OrganizationId;
-  sourceType?: SourceType;
+  domainType?: DomainType;
   sourceId?: string;
   contentHashes?: string[];
 }
@@ -45,7 +45,7 @@ export interface RagDocumentRepository {
   /**
    * Find documents by source
    */
-  findBySource(sourceId: string, sourceType: SourceType): Promise<RagDocument[]>;
+  findByDomain(sourceId: string, domainType: DomainType): Promise<RagDocument[]>;
 
   /**
    * Find documents with complex filters
@@ -60,7 +60,7 @@ export interface RagDocumentRepository {
   /**
    * Get existing content hashes for an index and source type
    */
-  getContentHashes(indexId: RagIndexId, sourceType: SourceType): Promise<Set<string>>;
+  getContentHashes(indexId: RagIndexId, domainType: DomainType): Promise<Set<string>>;
 
   /**
    * Check if a document exists by content hash
@@ -95,19 +95,19 @@ export interface RagDocumentRepository {
   /**
    * Delete documents by source type within an index
    */
-  deleteBySourceType(indexId: RagIndexId, sourceType: SourceType): Promise<void>;
+  deleteByDomainType(indexId: RagIndexId, domainType: DomainType): Promise<void>;
 
   /**
    * Delete documents by content hashes
    */
-  deleteByContentHashes(indexId: RagIndexId, sourceType: SourceType, contentHashes: string[]): Promise<void>;
+  deleteByContentHashes(indexId: RagIndexId, domainType: DomainType, contentHashes: string[]): Promise<void>;
 
   /**
    * Synchronize documents for a source type (add new, remove stale)
    */
   synchronizeDocuments(
     indexId: RagIndexId, 
-    sourceType: SourceType, 
+    domainType: DomainType, 
     newDocuments: RagDocument[]
   ): Promise<DocumentSyncResult>;
 
@@ -123,6 +123,6 @@ export interface RagDocumentRepository {
     totalDocuments: number;
     totalSize: number;
     averageEmbeddingSize: number;
-    sourceTypeCounts: Record<SourceType, number>;
+    domainTypeCounts: Record<DomainType, number>;
   }>;
 }

@@ -14,7 +14,7 @@ import {
   type DocumentSyncResult
 } from '@/lib/domain/rag/repositories';
 import { RagDocument, type DocumentMetadata } from '@/lib/domain/rag/entities';
-import { DocumentId, RagIndexId, OrganizationId, type SourceType } from '@/lib/domain/rag/value-objects';
+import { DocumentId, RagIndexId, type DomainType } from '@/lib/domain/rag/value-objects';
 
 export class DrizzleRagDocumentRepository implements RagDocumentRepository {
   constructor(
@@ -44,14 +44,14 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
     return records.map(record => this.mapToDomainEntity(record));
   }
 
-  async findBySource(sourceId: string, sourceType: SourceType): Promise<RagDocument[]> {
+  async findByDomain(sourceId: string, domainType: DomainType): Promise<RagDocument[]> {
     const records = await this.db
       .select()
       .from(ragDocuments)
       .where(
         and(
           eq(ragDocuments.sourceId, sourceId),
-          eq(ragDocuments.sourceType, sourceType)
+          eq(ragDocuments.domainType, domainType)
         )
       )
       .orderBy(desc(ragDocuments.indexedAt));
@@ -70,8 +70,8 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
       conditions.push(eq(ragDocuments.organizationId, filters.organizationId.value));
     }
 
-    if (filters.sourceType) {
-      conditions.push(eq(ragDocuments.sourceType, filters.sourceType));
+    if (filters.domainType) {
+      conditions.push(eq(ragDocuments.domainType, filters.domainType));
     }
 
     if (filters.sourceId) {
@@ -162,14 +162,14 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
     }
   }
 
-  async getContentHashes(indexId: RagIndexId, sourceType: SourceType): Promise<Set<string>> {
+  async getContentHashes(indexId: RagIndexId, domainType: DomainType): Promise<Set<string>> {
     const records = await this.db
       .select({ contentHash: ragDocuments.contentHash })
       .from(ragDocuments)
       .where(
         and(
           eq(ragDocuments.ragIndexId, indexId.value),
-          eq(ragDocuments.sourceType, sourceType)
+          eq(ragDocuments.domainType, domainType)
         )
       );
 
@@ -198,7 +198,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
       id: persistence.id,
       ragIndexId: persistence.indexId,
       organizationId: persistence.organizationId,
-      sourceType: persistence.sourceType,
+      domainType: persistence.domainType,
       sourceId: persistence.sourceId,
       sourceName: persistence.sourceName,
       title: persistence.title,
@@ -220,7 +220,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
         id: persistence.id,
         ragIndexId: persistence.indexId,
         organizationId: persistence.organizationId,
-        sourceType: persistence.sourceType,
+        domainType: persistence.domainType,
         sourceId: persistence.sourceId,
         sourceName: persistence.sourceName,
         title: persistence.title,
@@ -264,20 +264,20 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
       .where(eq(ragDocuments.ragIndexId, indexId.value));
   }
 
-  async deleteBySourceType(indexId: RagIndexId, sourceType: SourceType): Promise<void> {
+  async deleteByDomainType(indexId: RagIndexId, domainType: DomainType): Promise<void> {
     await this.db
       .delete(ragDocuments)
       .where(
         and(
           eq(ragDocuments.ragIndexId, indexId.value),
-          eq(ragDocuments.sourceType, sourceType)
+          eq(ragDocuments.domainType, domainType)
         )
       );
   }
 
   async deleteByContentHashes(
     indexId: RagIndexId, 
-    sourceType: SourceType, 
+    domainType: DomainType, 
     contentHashes: string[]
   ): Promise<void> {
     if (contentHashes.length === 0) return;
@@ -287,7 +287,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
       .where(
         and(
           eq(ragDocuments.ragIndexId, indexId.value),
-          eq(ragDocuments.sourceType, sourceType),
+          eq(ragDocuments.domainType, domainType),
           inArray(ragDocuments.contentHash, contentHashes)
         )
       );
@@ -295,11 +295,11 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
 
   async synchronizeDocuments(
     indexId: RagIndexId, 
-    sourceType: SourceType, 
+    domainType: DomainType, 
     newDocuments: RagDocument[]
   ): Promise<DocumentSyncResult> {
     // Get existing content hashes for this source type
-    const existingHashes = await this.getContentHashes(indexId, sourceType);
+    const existingHashes = await this.getContentHashes(indexId, domainType);
     const newHashes = new Set(newDocuments.map(d => d.contentHash));
 
     // Documents to add (new hashes not in existing)
@@ -323,7 +323,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
     }
 
     if (hashesToDelete.length > 0) {
-      await this.deleteByContentHashes(indexId, sourceType, hashesToDelete);
+      await this.deleteByContentHashes(indexId, domainType, hashesToDelete);
       deleted = hashesToDelete.length;
     }
 
@@ -347,7 +347,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
     totalDocuments: number;
     totalSize: number;
     averageEmbeddingSize: number;
-    sourceTypeCounts: Record<SourceType, number>;
+    domainTypeCounts: Record<DomainType, number>;
   }> {
     // Get total documents and sizes
     const [stats] = await this.rawClient`
@@ -361,23 +361,23 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
     `;
 
     // Get source type counts
-    const sourceTypeResults = await this.rawClient`
+    const domainTypeResults = await this.rawClient`
       SELECT source_type, COUNT(*) as count
       FROM rag_documents
       WHERE rag_index_id = ${indexId.value}
       GROUP BY source_type
     `;
 
-    const sourceTypeCounts: Record<SourceType, number> = {} as any;
-    for (const result of sourceTypeResults) {
-      sourceTypeCounts[result.source_type as SourceType] = Number(result.count);
+    const domainTypeCounts: Record<DomainType, number> = {} as any;
+    for (const result of domainTypeResults) {
+      domainTypeCounts[result.source_type as DomainType] = Number(result.count);
     }
 
     return {
       totalDocuments: Number(stats.total_documents),
       totalSize: Number(stats.total_size),
       averageEmbeddingSize: Number(stats.avg_embedding_size),
-      sourceTypeCounts
+      domainTypeCounts
     };
   }
 
@@ -388,7 +388,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
       indexId: record.rag_index_id || record.ragIndexId,
       organizationId: record.organization_id || record.organizationId,
       sourceId: record.source_id || record.sourceId,
-      sourceType: (record.source_type || record.sourceType) as SourceType,
+      domainType: (record.source_type || record.domainType) as DomainType,
       sourceName: record.source_name || record.sourceName,
       title: record.title,
       content: record.content,
