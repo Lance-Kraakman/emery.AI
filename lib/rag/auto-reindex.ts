@@ -1,9 +1,9 @@
-import { ragService } from './service'
-import { db } from '@/lib/db/client'
-import { ragIndexes } from '@/lib/db/schema'
-import { eq } from 'drizzle-orm'
+import { RagDIContainer } from '@/lib/application/rag/di-container'
+import { OrganizationId } from '@/lib/domain/rag/value-objects'
+import type { DomainType } from '@/lib/domain/rag/value-objects'
 
 // AIDEV-NOTE: Auto-reindexing service for maintaining RAG indexes when data changes
+// AIDEV-NOTE: Migrated to use Domain-Driven Design application services
 export class AutoReindexService {
   
   /**
@@ -14,8 +14,12 @@ export class AutoReindexService {
     try {
       console.log(`[AUTO-REINDEX] Starting reindexing for organization ${organizationId}`)
       
+      const orgId = new OrganizationId(organizationId);
+      const indexingService = RagDIContainer.getIndexingApplicationService();
+      const indexRepository = RagDIContainer.getIndexRepository();
+      
       // Get all active RAG indexes for this organization
-      const indexes = await ragService.listIndexes({ organizationId })
+      const indexes = await indexRepository.findByOrganization(orgId);
       
       if (indexes.length === 0) {
         console.log(`[AUTO-REINDEX] No RAG indexes found for organization ${organizationId}`)
@@ -27,15 +31,14 @@ export class AutoReindexService {
         .filter(index => index.status === 'active')
         .map(async (index) => {
           try {
-            console.log(`[AUTO-REINDEX] Reindexing ${index.name} (${index.id})`)
-            await ragService.reindexData(index.id)
+            console.log(`[AUTO-REINDEX] Reindexing ${index.name} (${index.id.value.substring(0, 8)})`)
+            await indexingService.rebuildIndex({ indexId: index.id.value });
             console.log(`[AUTO-REINDEX] Completed reindexing ${index.name}`)
           } catch (error) {
             console.error(`[AUTO-REINDEX] Failed to reindex ${index.name}:`, error)
-            // Mark index as error status
-            await db.update(ragIndexes)
-              .set({ status: 'error' })
-              .where(eq(ragIndexes.id, index.id))
+            // Mark index as error status using domain entity
+            index.markAsFailed();
+            await indexRepository.save(index);
           }
         })
       
@@ -51,11 +54,15 @@ export class AutoReindexService {
    * Reindex specific domain types for an organization
    * More targeted than full organization reindexing
    */
-  async reindexDomainType(organizationId: number, domainType: 'tables' | 'files' | 'agents' | 'teams' | 'workflows'): Promise<void> {
+  async reindexDomainType(organizationId: number, domainType: DomainType): Promise<void> {
     try {
       console.log(`[AUTO-REINDEX] Reindexing ${domainType} for organization ${organizationId}`)
       
-      const indexes = await ragService.listIndexes({ organizationId })
+      const orgId = new OrganizationId(organizationId);
+      const indexingService = RagDIContainer.getIndexingApplicationService();
+      const indexRepository = RagDIContainer.getIndexRepository();
+      
+      const indexes = await indexRepository.findByOrganization(orgId);
       const relevantIndexes = indexes.filter(index => 
         index.domainTypes.includes(domainType) && index.status === 'active'
       )
@@ -68,10 +75,13 @@ export class AutoReindexService {
       // Reindex only the relevant indexes
       for (const index of relevantIndexes) {
         try {
-          await ragService.reindexData(index.id)
+          await indexingService.rebuildIndex({ indexId: index.id.value });
           console.log(`[AUTO-REINDEX] Reindexed ${index.name} for ${domainType}`)
         } catch (error) {
           console.error(`[AUTO-REINDEX] Failed to reindex ${index.name} for ${domainType}:`, error)
+          // Mark index as error status using domain entity
+          index.markAsFailed();
+          await indexRepository.save(index);
         }
       }
       
@@ -86,7 +96,7 @@ export class AutoReindexService {
    */
   private debounceTimers = new Map<string, NodeJS.Timeout>()
   
-  async debouncedReindex(organizationId: number, domainType?: string, delayMs: number = 5000): Promise<void> {
+  async debouncedReindex(organizationId: number, domainType?: DomainType, delayMs: number = 5000): Promise<void> {
     const key = domainType ? `${organizationId}-${domainType}` : `${organizationId}`
     
     // Clear existing timeout
@@ -99,9 +109,9 @@ export class AutoReindexService {
       this.debounceTimers.delete(key)
       
       if (domainType) {
-        const validDomainTypes = ['tables', 'files', 'agents', 'teams', 'workflows']
+        const validDomainTypes: DomainType[] = ['table', 'file', 'agent', 'team', 'organization', 'database'];
         if (validDomainTypes.includes(domainType)) {
-          await this.reindexDomainType(organizationId, domainType as any)
+          await this.reindexDomainType(organizationId, domainType)
         } else {
           console.error(`[AUTO-REINDEX] Invalid domain type: ${domainType}`)
         }

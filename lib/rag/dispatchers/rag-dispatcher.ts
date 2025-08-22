@@ -9,11 +9,12 @@
 
 import { createNotificationClient, rawClient } from '@/lib/db/client';
 import { autoReindexService } from '@/lib/rag/auto-reindex';
+import type { DomainType } from '@/lib/domain/rag/value-objects';
 import type postgres from 'postgres';
 
 export interface RagReindexRequest {
   organizationId: number;
-  domainType?: 'tables' | 'files' | 'agents' | 'teams' | 'workflows' | 'organizations';
+  domainType?: DomainType;
   changeType?: 'INSERT' | 'UPDATE' | 'DELETE';
   sourceId?: string;
   tableName?: string;
@@ -24,6 +25,26 @@ export interface RagReindexRequest {
 export class RagDispatcher {
   private isListening = false;
   private notificationListener: postgres.Sql | null = null;
+
+  /**
+   * Map legacy domain types to new DDD domain types
+   * AIDEV-NOTE: Handles backward compatibility during transition
+   */
+  private mapLegacyDomainType(legacyType?: string): DomainType | undefined {
+    if (!legacyType) return undefined;
+    
+    const mapping: Record<string, DomainType> = {
+      'tables': 'table',
+      'files': 'file', 
+      'agents': 'agent',
+      'teams': 'team',
+      'workflows': 'agent', // Workflows are part of agent domain
+      'organizations': 'organization',
+      'databases': 'database'
+    };
+    
+    return mapping[legacyType] || legacyType as DomainType;
+  }
 
   /**
    * Start listening for RAG reindex notifications
@@ -87,10 +108,13 @@ export class RagDispatcher {
     console.log(`[RAG-DISPATCHER] 🚀 Handling re-index for org ${request.organizationId}, domain: ${request.domainType || 'all'}, change: ${request.changeType || 'unknown'}`);
     
     try {
+      // Map legacy domain types for backward compatibility
+      const mappedDomainType = this.mapLegacyDomainType(request.domainType);
+      
       // Use the existing debounced reindex service with 5-second delay
       await autoReindexService.debouncedReindex(
         request.organizationId,
-        request.domainType
+        mappedDomainType
       );
       
       console.log(`[RAG-DISPATCHER] ✅ Scheduled debounced re-index for org ${request.organizationId}`);
