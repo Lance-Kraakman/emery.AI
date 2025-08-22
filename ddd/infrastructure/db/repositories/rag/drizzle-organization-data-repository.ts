@@ -146,12 +146,21 @@ export class DrizzleOrganizationDataRepository implements OrganizationDataReposi
 
     for (const field of fileFieldsQuery) {
       try {
+        // Cast the raw SQL field results to expected types
+        const fieldData = field as any;
+        const fieldId = Number(fieldData.field_id);
+        const fieldName = String(fieldData.field_name);
+        const tableId = Number(fieldData.table_id);
+        const tableName = String(fieldData.table_name);
+        const tableDbName = String(fieldData.table_db_name);
+        const databaseName = String(fieldData.database_name);
+
         // Get all rows with files in this field
         const rows = await this.db.execute(sql`
-          SELECT id, ${sql.raw(`field_${field.field_id}`)} as file_data, created_at, updated_at
-          FROM ${sql.raw(field.table_db_name)} 
-          WHERE ${sql.raw(`field_${field.field_id}`)} IS NOT NULL
-          AND ${sql.raw(`field_${field.field_id}`)} != '[]'
+          SELECT id, ${sql.raw(`field_${fieldId}`)} as file_data, created_at, updated_at
+          FROM ${sql.raw(tableDbName)} 
+          WHERE ${sql.raw(`field_${fieldId}`)} IS NOT NULL
+          AND ${sql.raw(`field_${fieldId}`)} != '[]'
         `);
 
         for (const row of rows) {
@@ -169,11 +178,11 @@ export class DrizzleOrganizationDataRepository implements OrganizationDataReposi
                   mimeType: file.mimeType,
                   s3Key: file.s3Key,
                   uploadedAt: new Date(file.uploadedAt),
-                  tableId: field.table_id,
-                  tableName: field.table_name,
-                  databaseName: field.database_name,
-                  fieldId: field.field_id,
-                  fieldName: field.field_name
+                  tableId: tableId,
+                  tableName: tableName,
+                  databaseName: databaseName,
+                  fieldId: fieldId,
+                  fieldName: fieldName
                 });
               }
             }
@@ -182,7 +191,7 @@ export class DrizzleOrganizationDataRepository implements OrganizationDataReposi
           }
         }
       } catch (error) {
-        console.error(`[ORG-DATA-REPO] Error processing field ${field.field_name}:`, error);
+        console.error(`[ORG-DATA-REPO] Error processing field:`, error);
       }
     }
 
