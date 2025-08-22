@@ -1,0 +1,273 @@
+{
+  "test_suite": {
+    "name": "data_analysis_evaluation",
+    "description": "Comprehensive evaluation of agent data analysis and processing capabilities",
+    "version": "1.0",
+    "tags": ["data", "analysis", "processing", "python"]
+  },
+  "capabilities": [
+    {
+      "capability_name": "csv_data_analysis",
+      "description": "Test agent's ability to analyze CSV data and generate insights",
+      "timeout_seconds": 90,
+      "tags": ["csv", "data", "analysis"],
+      "scenarios": [
+        {
+          "name": "basic_csv_analysis",
+          "description": "Load and perform basic analysis on CSV data",
+          "input_data": {
+            "csv_data": [
+              {"name": "Alice", "age": 25, "salary": 50000, "department": "Engineering"},
+              {"name": "Bob", "age": 30, "salary": 60000, "department": "Engineering"},
+              {"name": "Carol", "age": 28, "salary": 55000, "department": "Marketing"},
+              {"name": "Dave", "age": 35, "salary": 45000, "department": "Marketing"},
+              {"name": "Eve", "age": 27, "salary": 52000, "department": "Sales"}
+            ],
+            "analysis_type": "descriptive_statistics"
+          },
+          "expected_outputs": [
+            {
+              "output_type": "final_result",
+              "content_pattern": ".*statistics.*analysis.*|.*summary.*insights.*",
+              "success_criteria": ["statistics_calculated", "insights_generated", "data_processed"],
+              "validation_rules": [
+                {
+                  "rule_type": "contains",
+                  "pattern": "mean|average|median",
+                  "description": "Analysis should include statistical measures",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "step_tests": [
+            {
+              "step_id": "load_csv_data",
+              "step_type": "CODE_STEP",
+              "description": "Load and validate CSV data structure",
+              "input_context": {
+                "step_order": 1,
+                "available_data": ["csv_data"]
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["df", "data", "columns"],
+                "execution_order": 1,
+                "max_execution_time_ms": 5000
+              },
+              "validation_rules": [
+                {
+                  "rule_type": "contains",
+                  "pattern": "pandas|DataFrame|csv",
+                  "description": "Should use pandas or similar data processing library",
+                  "required": false
+                }
+              ]
+            },
+            {
+              "step_id": "calculate_statistics",
+              "step_type": "CODE_STEP",
+              "description": "Calculate descriptive statistics",
+              "input_context": {
+                "step_order": 2,
+                "available_data": ["analysis_type"],
+                "previous_results": {"data": "loaded"}
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["stats", "summary"],
+                "execution_order": 2,
+                "max_execution_time_ms": 10000
+              }
+            },
+            {
+              "step_id": "generate_insights",
+              "step_type": "CODE_STEP",
+              "description": "Generate insights from statistical analysis",
+              "input_context": {
+                "step_order": 3,
+                "previous_results": {"stats": "calculated"}
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["insights", "report"],
+                "execution_order": 3,
+                "max_execution_time_ms": 10000
+              }
+            }
+          ]
+        },
+        {
+          "name": "advanced_csv_analysis",
+          "description": "Perform advanced analysis with grouping and correlations",
+          "input_data": {
+            "csv_file_path": "/tmp/sales_data.csv",
+            "group_by": "department",
+            "correlation_columns": ["age", "salary"],
+            "generate_plots": true
+          },
+          "expected_outputs": [
+            {
+              "output_type": "final_result",
+              "content_pattern": ".*correlation.*grouping.*analysis.*",
+              "success_criteria": ["grouping_applied", "correlations_calculated", "plots_generated"]
+            }
+          ],
+          "step_tests": [
+            {
+              "step_id": "read_csv_file",
+              "step_type": "TOOL_STEP",
+              "description": "Read CSV file from filesystem",
+              "input_context": {
+                "step_order": 1,
+                "available_data": ["csv_file_path"]
+              },
+              "expected_behavior": {
+                "should_execute_tools": ["file_reader", "python_interpreter"],
+                "should_produce_code": false,
+                "execution_order": 1
+              }
+            },
+            {
+              "step_id": "group_by_analysis",
+              "step_type": "CODE_STEP",
+              "description": "Perform group-by analysis on specified column",
+              "input_context": {
+                "step_order": 2,
+                "available_data": ["group_by"],
+                "previous_results": {"csv_data": "loaded"}
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["grouped_data", "group_stats"],
+                "execution_order": 2
+              }
+            },
+            {
+              "step_id": "correlation_analysis",
+              "step_type": "CODE_STEP",
+              "description": "Calculate correlations between specified columns",
+              "input_context": {
+                "step_order": 3,
+                "available_data": ["correlation_columns"],
+                "previous_results": {"csv_data": "loaded"}
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["correlation_matrix", "correlations"],
+                "execution_order": 3
+              }
+            },
+            {
+              "step_id": "generate_visualizations",
+              "step_type": "CODE_STEP",
+              "description": "Generate plots and visualizations",
+              "input_context": {
+                "step_order": 4,
+                "available_data": ["generate_plots"],
+                "previous_results": {"grouped_data": "analyzed", "correlations": "calculated"}
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["plots", "charts"],
+                "execution_order": 4
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "capability_name": "json_data_processing",
+      "description": "Test agent's ability to process and analyze JSON data structures",
+      "timeout_seconds": 60,
+      "tags": ["json", "data", "processing"],
+      "scenarios": [
+        {
+          "name": "nested_json_analysis",
+          "description": "Process complex nested JSON data and extract insights",
+          "input_data": {
+            "json_data": {
+              "company": "Tech Corp",
+              "employees": [
+                {
+                  "id": 1,
+                  "name": "Alice",
+                  "department": "Engineering",
+                  "projects": [
+                    {"name": "Project A", "status": "completed", "hours": 120},
+                    {"name": "Project B", "status": "in_progress", "hours": 80}
+                  ]
+                },
+                {
+                  "id": 2,
+                  "name": "Bob",
+                  "department": "Engineering",
+                  "projects": [
+                    {"name": "Project C", "status": "completed", "hours": 150}
+                  ]
+                }
+              ],
+              "departments": {
+                "Engineering": {"budget": 500000, "headcount": 2},
+                "Marketing": {"budget": 200000, "headcount": 1}
+              }
+            },
+            "analysis_tasks": ["total_project_hours", "department_utilization", "project_completion_rate"]
+          },
+          "expected_outputs": [
+            {
+              "output_type": "final_result",
+              "content_pattern": ".*project.*hours.*completion.*rate.*",
+              "success_criteria": ["hours_calculated", "utilization_analyzed", "completion_rate_computed"]
+            }
+          ],
+          "step_tests": [
+            {
+              "step_id": "parse_json_structure",
+              "step_type": "CODE_STEP",
+              "description": "Parse and validate JSON data structure",
+              "input_context": {
+                "step_order": 1,
+                "available_data": ["json_data"]
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["parsed_data", "employees", "departments"],
+                "execution_order": 1
+              }
+            },
+            {
+              "step_id": "calculate_project_hours",
+              "step_type": "CODE_STEP",
+              "description": "Calculate total project hours across all employees",
+              "input_context": {
+                "step_order": 2,
+                "previous_results": {"parsed_data": "validated"}
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["total_hours", "hours_by_employee"],
+                "execution_order": 2
+              }
+            },
+            {
+              "step_id": "analyze_completion_rates",
+              "step_type": "CODE_STEP",
+              "description": "Calculate project completion rates",
+              "input_context": {
+                "step_order": 3,
+                "previous_results": {"parsed_data": "validated"}
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["completion_rate", "completed_projects", "total_projects"],
+                "execution_order": 3
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

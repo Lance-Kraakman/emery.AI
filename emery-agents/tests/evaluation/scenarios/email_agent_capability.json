@@ -1,0 +1,210 @@
+{
+  "test_suite": {
+    "name": "email_agent_evaluation",
+    "description": "Comprehensive evaluation of agent email capabilities",
+    "version": "1.0",
+    "tags": ["email", "oauth", "integration"]
+  },
+  "capabilities": [
+    {
+      "capability_name": "send_email",
+      "description": "Test agent's ability to send emails using Gmail integration",
+      "timeout_seconds": 90,
+      "tags": ["email", "gmail", "oauth"],
+      "prerequisites": {
+        "oauth_connection": "gmail",
+        "environment": ["PIPEDREAM_API_KEY"]
+      },
+      "scenarios": [
+        {
+          "name": "simple_email_send",
+          "description": "Send a simple email with basic content",
+          "input_data": {
+            "recipient": "test@example.com",
+            "subject": "Test Email from Agent",
+            "body": "This is a test email sent by the agent during capability evaluation."
+          },
+          "expected_outputs": [
+            {
+              "output_type": "final_result",
+              "content_pattern": ".*email sent successfully.*|.*message sent.*",
+              "success_criteria": ["email_id_present", "no_errors", "recipient_confirmed"],
+              "validation_rules": [
+                {
+                  "rule_type": "regex_match",
+                  "pattern": ".*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}.*",
+                  "description": "Email ID should be present in response",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "step_tests": [
+            {
+              "step_id": "compose_email",
+              "step_type": "CODE_STEP",
+              "description": "Compose email data structure",
+              "input_context": {
+                "step_order": 1,
+                "available_data": ["recipient", "subject", "body"]
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["email_data", "recipient", "subject", "body"],
+                "execution_order": 1,
+                "max_execution_time_ms": 5000
+              },
+              "validation_rules": [
+                {
+                  "rule_type": "contains",
+                  "pattern": "recipient",
+                  "description": "Generated code should reference recipient variable",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "step_id": "send_via_gmail",
+              "step_type": "TOOL_STEP",
+              "description": "Send email using Gmail API",
+              "input_context": {
+                "step_order": 2,
+                "previous_results": {"email_data": "composed"}
+              },
+              "expected_behavior": {
+                "should_execute_tools": ["gmail_send", "gmail"],
+                "should_produce_code": false,
+                "execution_order": 2,
+                "max_execution_time_ms": 30000
+              },
+              "validation_rules": [
+                {
+                  "rule_type": "json_schema",
+                  "pattern": "{\"type\": \"object\", \"properties\": {\"message_id\": {\"type\": \"string\"}}, \"required\": [\"message_id\"]}",
+                  "description": "Gmail response should contain message_id",
+                  "required": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "email_with_attachment",
+          "description": "Send email with file attachment",
+          "input_data": {
+            "recipient": "test@example.com",
+            "subject": "Test Email with Attachment",
+            "body": "This email contains an attachment for testing.",
+            "attachment_path": "/tmp/test_document.pdf",
+            "attachment_name": "test_document.pdf"
+          },
+          "expected_outputs": [
+            {
+              "output_type": "final_result",
+              "content_pattern": ".*email sent.*attachment.*",
+              "success_criteria": ["email_id_present", "attachment_uploaded", "no_errors"]
+            }
+          ],
+          "step_tests": [
+            {
+              "step_id": "prepare_attachment",
+              "step_type": "CODE_STEP",
+              "description": "Prepare attachment for email",
+              "input_context": {
+                "step_order": 1,
+                "available_data": ["attachment_path", "attachment_name"]
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["attachment_data", "file_content"],
+                "execution_order": 1
+              }
+            },
+            {
+              "step_id": "compose_email_with_attachment",
+              "step_type": "CODE_STEP",
+              "description": "Compose email data with attachment",
+              "input_context": {
+                "step_order": 2,
+                "previous_results": {"attachment_data": "prepared"}
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["email_data", "attachments"],
+                "execution_order": 2
+              }
+            },
+            {
+              "step_id": "send_email_with_attachment",
+              "step_type": "TOOL_STEP",
+              "description": "Send email with attachment via Gmail",
+              "input_context": {
+                "step_order": 3,
+                "previous_results": {"email_data": "composed", "attachment": "prepared"}
+              },
+              "expected_behavior": {
+                "should_execute_tools": ["gmail_send"],
+                "should_produce_code": false,
+                "execution_order": 3
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "capability_name": "read_email",
+      "description": "Test agent's ability to read and process emails",
+      "timeout_seconds": 60,
+      "tags": ["email", "gmail", "read"],
+      "scenarios": [
+        {
+          "name": "fetch_recent_emails",
+          "description": "Fetch and process recent emails from inbox",
+          "input_data": {
+            "mailbox": "inbox",
+            "limit": 5,
+            "unread_only": true
+          },
+          "expected_outputs": [
+            {
+              "output_type": "final_result",
+              "content_pattern": ".*emails fetched.*|.*messages retrieved.*",
+              "success_criteria": ["emails_list_present", "valid_email_format", "no_errors"]
+            }
+          ],
+          "step_tests": [
+            {
+              "step_id": "fetch_emails",
+              "step_type": "TOOL_STEP",
+              "description": "Fetch emails using Gmail API",
+              "input_context": {
+                "step_order": 1,
+                "available_data": ["mailbox", "limit", "unread_only"]
+              },
+              "expected_behavior": {
+                "should_execute_tools": ["gmail_list", "gmail"],
+                "should_produce_code": false,
+                "execution_order": 1
+              }
+            },
+            {
+              "step_id": "process_email_list",
+              "step_type": "CODE_STEP",
+              "description": "Process and format email list",
+              "input_context": {
+                "step_order": 2,
+                "previous_results": {"emails": "fetched"}
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["processed_emails", "email_count"],
+                "execution_order": 2
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

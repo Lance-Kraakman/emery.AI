@@ -15,7 +15,7 @@ from ...domain.tools.repositories.tool_repository import IToolRepository
 from ...infrastructure.repositories.agents.grpc_agent_execution_repository import GrpcAgentExecutionRepository
 from ...infrastructure.repositories.agents.grpc_agent_repository import GrpcAgentRepository
 from ...infrastructure.repositories.agents.grpc_task_repository import GrpcTaskRepository
-from ...infrastructure.repositories.tools.smolagents_tool_repository import SmolagentsToolRepository
+# from ...infrastructure.repositories.tools.smolagents_tool_repository import SmolagentsToolRepository
 from ..use_cases.agents.agent_task_application_service import AgentTaskApplicationService
 from ..use_cases.agents.execute_agent_task_use_case import ExecuteAgentTaskUseCase
 from ..use_cases.tools.load_tools_use_case import LoadToolsUseCase
@@ -130,7 +130,7 @@ class DIContainer:
     def _get_grpc_execution_service(self):
         """Get configured gRPC execution service."""
         if "grpc_execution_service" not in self._instances:
-            # AIDEV-TODO: Implement proper gRPC execution service
+            # Real smolagents execution service implementation
             from ...infrastructure.grpc.server import AgentExecutionService
             
             self._instances["grpc_execution_service"] = AgentExecutionService(
