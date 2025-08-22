@@ -35,6 +35,10 @@ export interface IFileStorageRepository {
     quotaUsed: number;
     quotaLimit?: number;
   }>;
+
+  // RAG indexing operations
+  findByOrganization(organizationId: number): Promise<StoredFile[]>;
+  countByOrganization(organizationId: number): Promise<number>;
 }
 
 // FUTURE-WORK: Additional methods to implement as needed
