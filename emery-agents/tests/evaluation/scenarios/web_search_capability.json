@@ -1,0 +1,218 @@
+{
+  "test_suite": {
+    "name": "web_search_evaluation",
+    "description": "Evaluation of agent web search and information retrieval capabilities",
+    "version": "1.0",
+    "tags": ["search", "web", "information_retrieval"]
+  },
+  "capabilities": [
+    {
+      "capability_name": "web_search",
+      "description": "Test agent's ability to perform web searches and process results",
+      "timeout_seconds": 45,
+      "tags": ["search", "web"],
+      "scenarios": [
+        {
+          "name": "simple_web_search",
+          "description": "Perform a basic web search and return relevant results",
+          "input_data": {
+            "query": "Python programming best practices",
+            "max_results": 5
+          },
+          "expected_outputs": [
+            {
+              "output_type": "final_result",
+              "content_pattern": ".*search.*results.*|.*found.*information.*",
+              "success_criteria": ["results_present", "relevant_content", "no_errors"],
+              "validation_rules": [
+                {
+                  "rule_type": "contains",
+                  "pattern": "Python",
+                  "description": "Results should contain query terms",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "step_tests": [
+            {
+              "step_id": "execute_search",
+              "step_type": "TOOL_STEP",
+              "description": "Execute web search using search tool",
+              "input_context": {
+                "step_order": 1,
+                "available_data": ["query", "max_results"]
+              },
+              "expected_behavior": {
+                "should_execute_tools": ["web_search", "duckduckgo_search"],
+                "should_produce_code": false,
+                "execution_order": 1,
+                "max_execution_time_ms": 15000
+              },
+              "validation_rules": [
+                {
+                  "rule_type": "json_schema",
+                  "pattern": "{\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"title\": {\"type\": \"string\"}, \"url\": {\"type\": \"string\"}}, \"required\": [\"title\", \"url\"]}}",
+                  "description": "Search results should be array of objects with title and url",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "step_id": "process_search_results",
+              "step_type": "CODE_STEP",
+              "description": "Process and filter search results",
+              "input_context": {
+                "step_order": 2,
+                "previous_results": {"search_results": "fetched"}
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["filtered_results", "relevant_links"],
+                "execution_order": 2,
+                "max_execution_time_ms": 5000
+              }
+            }
+          ]
+        },
+        {
+          "name": "targeted_search_with_filtering",
+          "description": "Perform targeted search with result filtering and ranking",
+          "input_data": {
+            "query": "machine learning algorithms comparison",
+            "max_results": 10,
+            "filter_domains": ["arxiv.org", "github.com", "medium.com"],
+            "exclude_keywords": ["advertisement", "sponsored"]
+          },
+          "expected_outputs": [
+            {
+              "output_type": "final_result",
+              "content_pattern": ".*filtered.*results.*|.*relevant.*sources.*",
+              "success_criteria": ["filtered_results", "domain_filtering_applied", "keyword_exclusion"]
+            }
+          ],
+          "step_tests": [
+            {
+              "step_id": "execute_targeted_search",
+              "step_type": "TOOL_STEP",
+              "description": "Execute web search with larger result set",
+              "input_context": {
+                "step_order": 1,
+                "available_data": ["query", "max_results"]
+              },
+              "expected_behavior": {
+                "should_execute_tools": ["web_search"],
+                "should_produce_code": false,
+                "execution_order": 1
+              }
+            },
+            {
+              "step_id": "apply_domain_filter",
+              "step_type": "CODE_STEP",
+              "description": "Filter results by preferred domains",
+              "input_context": {
+                "step_order": 2,
+                "available_data": ["filter_domains"],
+                "previous_results": {"search_results": "fetched"}
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["domain_filtered_results"],
+                "execution_order": 2
+              }
+            },
+            {
+              "step_id": "exclude_unwanted_content",
+              "step_type": "CODE_STEP",
+              "description": "Exclude results containing unwanted keywords",
+              "input_context": {
+                "step_order": 3,
+                "available_data": ["exclude_keywords"],
+                "previous_results": {"domain_filtered_results": "filtered"}
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["final_results", "excluded_count"],
+                "execution_order": 3
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "capability_name": "research_synthesis",
+      "description": "Test agent's ability to synthesize information from multiple sources",
+      "timeout_seconds": 120,
+      "tags": ["research", "synthesis", "analysis"],
+      "scenarios": [
+        {
+          "name": "multi_source_research",
+          "description": "Research a topic using multiple searches and synthesize findings",
+          "input_data": {
+            "research_topic": "Benefits and drawbacks of microservices architecture",
+            "search_queries": [
+              "microservices benefits advantages",
+              "microservices drawbacks disadvantages challenges",
+              "microservices vs monolith comparison"
+            ],
+            "max_results_per_query": 3
+          },
+          "expected_outputs": [
+            {
+              "output_type": "final_result",
+              "content_pattern": ".*research.*summary.*|.*findings.*analysis.*",
+              "success_criteria": ["multiple_sources_used", "synthesis_present", "balanced_analysis"]
+            }
+          ],
+          "step_tests": [
+            {
+              "step_id": "execute_multiple_searches",
+              "step_type": "CODE_STEP",
+              "description": "Execute multiple search queries systematically",
+              "input_context": {
+                "step_order": 1,
+                "available_data": ["search_queries", "max_results_per_query"]
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["search_plan", "all_results"],
+                "execution_order": 1
+              }
+            },
+            {
+              "step_id": "collect_search_results",
+              "step_type": "TOOL_STEP",
+              "description": "Collect results from all search queries",
+              "input_context": {
+                "step_order": 2,
+                "previous_results": {"search_plan": "created"}
+              },
+              "expected_behavior": {
+                "should_execute_tools": ["web_search"],
+                "should_produce_code": false,
+                "execution_order": 2
+              }
+            },
+            {
+              "step_id": "synthesize_findings",
+              "step_type": "CODE_STEP",
+              "description": "Analyze and synthesize information from all sources",
+              "input_context": {
+                "step_order": 3,
+                "available_data": ["research_topic"],
+                "previous_results": {"all_results": "collected"}
+              },
+              "expected_behavior": {
+                "should_produce_code": true,
+                "expected_variables": ["synthesis", "key_points", "sources_cited"],
+                "execution_order": 3,
+                "max_execution_time_ms": 20000
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
