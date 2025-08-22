@@ -4,12 +4,7 @@
 export { 
   IndexingDomainService,
   type IndexingResult,
-  type TableData,
-  type FileData,
-  type AgentData,
-  type OrganizationData,
-  type DatabaseData,
-  type TeamData,
+  
   type ProcessedContent,
   type ContentProcessor
 } from './indexing-domain-service';
