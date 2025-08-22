@@ -1,4 +1,4 @@
-import { indexingApplicationService, indexRepository } from '@/ddd/application/rag/di-container'
+import { indexingApplicationService, indexRepository } from '@/ddd/application/di/rag-container'
 import { OrganizationId } from '@/ddd/domain/rag/value-objects'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
 
