@@ -1,11 +1,11 @@
-// AIDEV-NOTE: Search service implementation
+// AIDEV-NOTE: Search analytics service implementation
 // Provides search logging and analytics using repository pattern
 
 import { type SearchLogger } from '@/lib/domain/rag/services';
 import { type RagQueryLogRepository } from '@/lib/domain/rag/repositories';
 import { RagIndexId, SearchQuery } from '@/lib/domain/rag/value-objects';
 
-export class SearchService implements SearchLogger {
+export class SearchAnalyticsService implements SearchLogger {
   constructor(private readonly queryLogRepository: RagQueryLogRepository) {}
 
   async logQuery(params: {

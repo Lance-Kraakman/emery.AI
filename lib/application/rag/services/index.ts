@@ -13,4 +13,4 @@ export {
 } from './rag-search-application-service';
 
 export { EmbeddingService } from './embedding-service';
-export { SearchService } from './search-service';
+export { SearchAnalyticsService } from './search-analytics-service';
