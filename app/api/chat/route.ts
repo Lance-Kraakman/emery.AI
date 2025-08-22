@@ -36,7 +36,7 @@ CONTEXT FROM ORGANIZATION DATA:
 ${searchResult.documents.map((doc, idx) => 
   `[${idx + 1}] ${doc.title}
 ${doc.content}
-Source: ${doc.sourceType} (${doc.sourceName})
+Source: ${doc.domainType} (${doc.sourceName})
 Relevance: ${(doc.similarity! * 100).toFixed(1)}%
 ---`
 ).join('\n')}
@@ -73,7 +73,7 @@ Always be helpful, accurate, and reference the specific data sources when applic
         'X-Rag-Results': ragResults ? JSON.stringify({
           documentsFound: ragResults.documents.length,
           query: ragResults.query,
-          sources: ragResults.documents.map(d => ({ type: d.sourceType, name: d.sourceName }))
+          sources: ragResults.documents.map(d => ({ type: d.domainType, name: d.sourceName }))
         }) : 'null'
       }
     })

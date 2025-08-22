@@ -8,7 +8,7 @@ import { requirePermission } from "./permissions";
 import { getFieldRepository } from "@/ddd/application/di/container";
 import { slugify } from "@/utils/slugify";
 import type { ActionResult, CreateFieldData } from "./types";
-import type { Field, FieldType } from "./types";
+import type { Field, FieldType } from "@/ddd/domain/fields/entities/field";
 
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<ActionResult> {
   try {
@@ -62,7 +62,7 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
 export async function createFieldAction(formData: FormData) {
   const tableId = parseInt(formData.get('tableId') as string);
   const name = formData.get('name') as string;
-  const type = formData.get('type') as string;
+  const type = formData.get('type') as FieldType;
   const required = formData.get('required') === 'true';
   const relatedTableId = formData.get('relatedTableId') ? parseInt(formData.get('relatedTableId') as string) : undefined;
 

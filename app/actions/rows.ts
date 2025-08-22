@@ -36,7 +36,7 @@ export async function createRow(data: CreateRowData, revalidateUrl?: string): Pr
     }
 
     // Create row using domain repository (handles field mapping and validation)
-    const domainRowData: DomainCreateRowData = {
+    const domainRowData: CreateRowData = {
       tableId,
       data: rowData || {},
     };
@@ -132,7 +132,7 @@ export async function updateRowData(data: UpdateRowData, revalidateUrl?: string)
     }
 
     // Update row using domain repository (handles field mapping and validation)
-    const domainUpdateData: DomainUpdateRowData = {
+    const domainUpdateData: UpdateRowData = {
       tableId,
       rowId,
       data: rowData || {},

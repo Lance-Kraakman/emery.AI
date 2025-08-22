@@ -1,11 +1,11 @@
 import { eq, ilike, and, count } from 'drizzle-orm';
 import type postgres from 'postgres';
 
-import { IOrganizationRepository } from '../../../domain/repositories/organization-repository';
-import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '../../../domain/entities/organization';
-import { ROLE_TYPES, PERMISSIONS } from '../../../domain/entities/role';
-import type { DbClient } from '../../../db/client';
-import { organizations, users, userOrganizations, roles } from '../../../db/schema';
+import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
+import { ROLE_TYPES, PERMISSIONS } from '@/ddd/domain/roles/entities/role';
+import type { DbClient } from '@/lib/db/client';
+import { organizations, users, userOrganizations, roles } from '@/lib/db/schema';
 
 export class DrizzleOrganizationRepository implements IOrganizationRepository {
   constructor(

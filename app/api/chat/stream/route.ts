@@ -72,7 +72,7 @@ RELEVANT ORGANIZATION DATA:
 ${searchResult.documents.map((doc, idx) => 
   `[${idx + 1}] ${doc.title}
 ${doc.content.substring(0, 500)}...
-Source: ${doc.sourceType} - ${doc.sourceName} (${(doc.similarity! * 100).toFixed(1)}% match)
+Source: ${doc.domainType} - ${doc.sourceName} (${(doc.similarity! * 100).toFixed(1)}% match)
 ---`
 ).join('\n')}
 

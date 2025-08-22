@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getFieldRepository, getDynamicTableRepository } from "@/ddd/application/di/container";
 import { slugify } from "@/utils/slugify";
-import type { CreateFieldData, FieldType } from '@/app/actions/types';
+import type { CreateFieldData, FieldType } from '@/ddd/domain/fields/entities/field';
 
 export async function POST(request: NextRequest) {
   try {

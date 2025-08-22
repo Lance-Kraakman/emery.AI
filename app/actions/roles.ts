@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getRoleRepository } from "@/ddd/application/di/container";
-// import { getRoleRepository } from "@/lib/application/di/container";
+import { requireCurrentOrganization } from "./user-organizations";
 import type { ActionResult } from "./types";
 import type { CreateRoleData, UpdateRoleData } from "./types";
 
@@ -43,12 +43,13 @@ export async function createRole(data: CreateRoleData): Promise<ActionResult> {
 }
 
 export async function createRoleAction(formData: FormData) {
+  const currentOrg = await requireCurrentOrganization();
   const name = formData.get('name') as string;
   const permissionsStr = formData.get('permissions') as string;
   
   const permissions = permissionsStr ? permissionsStr.split(',').map(p => p.trim()) : [];
 
-  const result = await createRole({ name, permissions });
+  const result = await createRole({ name, permissions, organizationId: currentOrg.id });
   
   if (!result.success) {
     throw new Error(result.error);
