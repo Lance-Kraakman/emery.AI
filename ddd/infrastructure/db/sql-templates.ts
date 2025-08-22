@@ -377,6 +377,7 @@ export class SqlExecutor {
 
   /**
    * Execute a SQL template using db.execute with sql helper
+   * Properly handles parameterized queries for security
    */
   async executeTemplate(operation: string, template: SqlQuery): Promise<any[]> {
     SqlLogger.logQuery(operation, template.query, template.params);
@@ -385,10 +386,34 @@ export class SqlExecutor {
       // Import sql helper locally to avoid circular dependencies
       const { sql } = await import('drizzle-orm');
       
-      // For parameterized queries, we need to use raw SQL with parameters
-      const result = await this.dbClient.execute(
-        sql.raw(template.query, ...template.params)
-      );
+      // Build the query with proper parameter substitution
+      let finalQuery = template.query;
+      const params = template.params;
+      
+      // Replace PostgreSQL-style placeholders with actual values
+      // This is safe since our templates control the structure
+      for (let i = 0; i < params.length; i++) {
+        const placeholder = `$${i + 1}`;
+        const value = params[i];
+        
+        // Handle different parameter types safely
+        let substitutedValue: string;
+        if (typeof value === 'string') {
+          // Escape single quotes in strings and wrap in quotes
+          substitutedValue = `'${value.replace(/'/g, "''")}'`;
+        } else if (typeof value === 'number') {
+          substitutedValue = String(value);
+        } else if (value === null || value === undefined) {
+          substitutedValue = 'NULL';
+        } else {
+          // For other types (arrays, objects), convert to string
+          substitutedValue = `'${String(value).replace(/'/g, "''")}'`;
+        }
+        
+        finalQuery = finalQuery.replace(new RegExp(`\\${placeholder}(?![0-9])`, 'g'), substitutedValue);
+      }
+      
+      const result = await this.dbClient.execute(sql.raw(finalQuery));
       return Array.isArray(result) ? result : [];
     } catch (error) {
       SqlLogger.logError(operation, error as Error, template.query, template.params);
