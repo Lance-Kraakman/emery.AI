@@ -13,8 +13,8 @@ import {
   type AgentData,
   type TeamData,
   type FileData
-} from '@/lib/domain/rag/repositories';
-import { OrganizationId, type DomainType } from '@/lib/domain/rag/value-objects';
+} from '@/ddd/domain/rag/repositories';
+import { OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
 
 export class DrizzleOrganizationDataRepository implements OrganizationDataRepository {
   constructor(private readonly db: DbClient) {}

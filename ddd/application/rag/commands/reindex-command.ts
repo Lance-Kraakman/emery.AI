@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Command for reindexing RAG data
 // Supports both full and partial reindexing
 
-import { RagIndexId, OrganizationId, type DomainType } from '@/lib/domain/rag/value-objects';
+import { RagIndexId, OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
 
 export interface ReindexCommand {
   indexId?: string;

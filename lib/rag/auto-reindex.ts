@@ -1,6 +1,6 @@
-import { RagDIContainer } from '@/lib/application/rag/di-container'
-import { OrganizationId } from '@/lib/domain/rag/value-objects'
-import type { DomainType } from '@/lib/domain/rag/value-objects'
+import { RagDIContainer } from '@/ddd/application/rag/di-container'
+import { OrganizationId } from '@/ddd/domain/rag/value-objects'
+import type { DomainType } from '@/ddd/domain/rag/value-objects'
 
 // AIDEV-NOTE: Auto-reindexing service for maintaining RAG indexes when data changes
 // AIDEV-NOTE: Migrated to use Domain-Driven Design application services

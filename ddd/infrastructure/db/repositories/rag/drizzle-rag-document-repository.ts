@@ -12,9 +12,9 @@ import {
   type VectorSearchParams,
   type VectorSearchResult,
   type DocumentSyncResult
-} from '@/lib/domain/rag/repositories';
-import { RagDocument, type DocumentMetadata } from '@/lib/domain/rag/entities';
-import { DocumentId, RagIndexId, type DomainType } from '@/lib/domain/rag/value-objects';
+} from '@/ddd/domain/rag/repositories';
+import { RagDocument, type DocumentMetadata } from '@/ddd/domain/rag/entities';
+import { DocumentId, RagIndexId, type DomainType } from '@/ddd/domain/rag/value-objects';
 
 export class DrizzleRagDocumentRepository implements RagDocumentRepository {
   constructor(

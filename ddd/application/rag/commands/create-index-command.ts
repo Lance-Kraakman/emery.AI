@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Command for creating RAG indexes
 // Encapsulates input validation and command data
 
-import { OrganizationId, type DomainType } from '@/lib/domain/rag/value-objects';
+import { OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
 
 export interface CreateIndexCommand {
   name: string;

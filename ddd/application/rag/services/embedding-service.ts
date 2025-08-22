@@ -3,7 +3,7 @@
 
 import { embed } from 'ai';
 import { getEmbeddingModel } from '@/lib/ai/models';
-import { type EmbeddingGenerator } from '@/lib/domain/rag/services';
+import { type EmbeddingGenerator } from '@/ddd/domain/rag/services';
 
 export class EmbeddingService implements EmbeddingGenerator {
   private readonly embeddingModel = getEmbeddingModel();

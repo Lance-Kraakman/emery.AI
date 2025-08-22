@@ -8,24 +8,24 @@ import {
   DrizzleRagIndexRepository,
   DrizzleRagDocumentRepository,
   DrizzleRagQueryLogRepository,
-  DrizzleOrganizationDataRepository,
-  LlamaIndexContentProcessor
-} from '@/lib/infrastructure/rag';
+  DrizzleOrganizationDataRepository
+} from '@/ddd/infrastructure/db/repositories/rag';
+import { LlamaIndexContentProcessor } from '@/ddd/infrastructure/external/llamaindex-file-processor';
 
 // Application Services
 import { 
   EmbeddingService,
   SearchAnalyticsService
-} from '@/lib/application/rag/services';
+} from '@/ddd/application/rag/services';
 
 // Domain Services  
-import { IndexingDomainService, SearchDomainService } from '@/lib/domain/rag/services';
+import { IndexingDomainService, SearchDomainService } from '@/ddd/domain/rag/services';
 
 // Application Services
 import { 
   RagIndexingApplicationService, 
   RagSearchApplicationService 
-} from '@/lib/application/rag/services';
+} from '@/ddd/application/rag/services';
 
 /**
  * RAG Dependency Injection Container

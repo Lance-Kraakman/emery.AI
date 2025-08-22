@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Query for RAG search operations
 // Encapsulates search input validation and query data
 
-import { RagIndexId, SearchQuery, type SimilarityMetric } from '@/lib/domain/rag/value-objects';
+import { RagIndexId, SearchQuery, type SimilarityMetric } from '@/ddd/domain/rag/value-objects';
 
 export interface SearchRagQuery {
   indexId: string;
