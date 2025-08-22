@@ -35,7 +35,7 @@ export class CreateIndexCommandValidator {
     }
 
     const validDomainTypes: DomainType[] = [
-      'table', 'file', 'agent', 'team', 'workflow', 'organization', 'database'
+      'table', 'file', 'agent', 'team', 'organization', 'database'
     ];
 
     for (const domainType of command.domainTypes) {

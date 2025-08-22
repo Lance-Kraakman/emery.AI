@@ -169,20 +169,226 @@ export class SqlLogger {
   }
 }
 
+// RAG System SQL Template Parameters
+export interface VectorSearchParams {
+  embeddingVector: number[];
+  indexId: string;
+  limit: number;
+  similarityMetric: 'cosine' | 'euclidean' | 'inner_product';
+}
+
+export interface FileFieldQueryParams {
+  organizationId: number;
+}
+
+export interface DynamicTableFileQueryParams {
+  fieldId: number;
+  tableDbName: string;
+}
+
+export interface FileCountQueryParams {
+  organizationId: number;
+}
+
+export interface IndexStatisticsParams {
+  indexId: string;
+}
+
+export interface DomainTypeCountsParams {
+  indexId: string;
+}
+
 /**
- * Helper class for executing SQL templates with logging
+ * SQL templates for RAG (Retrieval-Augmented Generation) operations
+ * Centralizes vector search and document indexing queries
  */
-export class SqlExecutor {
-  constructor(private rawClient: postgres.Sql) {}
+export class RagSqlTemplates {
+  /**
+   * Vector similarity search using pgvector
+   */
+  static vectorSimilaritySearch(params: VectorSearchParams): SqlQuery {
+    const { embeddingVector, indexId, limit, similarityMetric } = params;
+    const embeddingVectorStr = `[${embeddingVector.join(',')}]`;
+    
+    let operator: string;
+    let orderDirection: string;
+    
+    switch (similarityMetric) {
+      case 'cosine':
+        operator = '<=>';
+        orderDirection = 'ASC';
+        break;
+      case 'euclidean':
+        operator = '<->';
+        orderDirection = 'ASC';
+        break;
+      case 'inner_product':
+        operator = '<#>';
+        orderDirection = 'DESC';
+        break;
+      default:
+        operator = '<=>';
+        orderDirection = 'ASC';
+    }
+
+    return {
+      query: `
+        SELECT 
+          id, 
+          rag_index_id,
+          organization_id,
+          source_type as domain_type, 
+          source_id, 
+          source_name, 
+          title, 
+          content, 
+          metadata,
+          content_hash,
+          indexed_at,
+          source_updated_at,
+          embedding ${operator} $1::vector as similarity
+        FROM rag_documents
+        WHERE rag_index_id = $2
+        ORDER BY embedding ${operator} $1::vector ${orderDirection}
+        LIMIT $3
+      `.trim(),
+      params: [embeddingVectorStr, indexId, limit]
+    };
+  }
 
   /**
-   * Execute a SQL template using postgres unsafe method for parameterized queries
+   * Get all file fields from tables in an organization
+   */
+  static getFileFields(params: FileFieldQueryParams): SqlQuery {
+    return {
+      query: `
+        SELECT DISTINCT 
+          f.id as field_id,
+          f.name as field_name, 
+          f.slug as field_slug,
+          t.id as table_id,
+          t.name as table_name,
+          t.db_name as table_db_name,
+          d.name as database_name
+        FROM fields f
+        JOIN tables t ON f.table_id = t.id  
+        JOIN databases d ON t.database_id = d.id
+        WHERE f.type = 'file' 
+        AND t.organization_id = $1
+      `.trim(),
+      params: [params.organizationId]
+    };
+  }
+
+  /**
+   * Get file data from a specific dynamic table field
+   */
+  static getDynamicTableFiles(params: DynamicTableFileQueryParams): SqlQuery {
+    // Note: This template requires manual substitution for table and field names
+    // due to dynamic nature - handled by SqlExecutor
+    return {
+      query: `
+        SELECT id, field_{{fieldId}} as file_data, created_at, updated_at
+        FROM {{tableDbName}} 
+        WHERE field_{{fieldId}} IS NOT NULL
+        AND field_{{fieldId}} != '[]'
+      `.trim(),
+      params: []
+    };
+  }
+
+  /**
+   * Count file fields in an organization
+   */
+  static getFileFieldCount(params: FileCountQueryParams): SqlQuery {
+    return {
+      query: `
+        SELECT COUNT(*) as count
+        FROM fields f
+        JOIN tables t ON f.table_id = t.id
+        WHERE f.type = 'file' 
+        AND t.organization_id = $1
+      `.trim(),
+      params: [params.organizationId]
+    };
+  }
+
+  /**
+   * Get index statistics including document counts and sizes
+   */
+  static getIndexStatistics(params: IndexStatisticsParams): SqlQuery {
+    return {
+      query: `
+        SELECT 
+          COUNT(*) as total_documents,
+          COALESCE(AVG(pg_column_size(content)), 0) as avg_content_size,
+          COALESCE(AVG(pg_column_size(embedding)), 0) as avg_embedding_size,
+          COALESCE(SUM(pg_column_size(content)), 0) as total_size
+        FROM rag_documents
+        WHERE rag_index_id = $1
+      `.trim(),
+      params: [params.indexId]
+    };
+  }
+
+  /**
+   * Get domain type document counts for an index
+   */
+  static getDomainTypeCounts(params: DomainTypeCountsParams): SqlQuery {
+    return {
+      query: `
+        SELECT source_type, COUNT(*) as count
+        FROM rag_documents
+        WHERE rag_index_id = $1
+        GROUP BY source_type
+      `.trim(),
+      params: [params.indexId]
+    };
+  }
+
+  /**
+   * Get analytics data for query patterns
+   */
+  static getQueryAnalytics(params: { indexId: string; days: number }): SqlQuery {
+    return {
+      query: `
+        SELECT 
+          DATE_TRUNC('day', created_at) as date,
+          COUNT(*) as query_count,
+          AVG(results_count) as avg_results,
+          COUNT(DISTINCT user_id) as unique_users
+        FROM rag_query_logs
+        WHERE rag_index_id = $1
+        AND created_at >= NOW() - INTERVAL '$2 days'
+        GROUP BY DATE_TRUNC('day', created_at)
+        ORDER BY date DESC
+      `.trim(),
+      params: [params.indexId, params.days]
+    };
+  }
+}
+
+/**
+ * Helper class for executing SQL templates with logging
+ * Updated to use DbClient instead of raw postgres client
+ */
+export class SqlExecutor {
+  constructor(private dbClient: any) {} // DbClient type
+
+  /**
+   * Execute a SQL template using db.execute with sql helper
    */
   async executeTemplate(operation: string, template: SqlQuery): Promise<any[]> {
     SqlLogger.logQuery(operation, template.query, template.params);
     
     try {
-      const result = await this.rawClient.unsafe(template.query, template.params);
+      // Import sql helper locally to avoid circular dependencies
+      const { sql } = await import('drizzle-orm');
+      
+      // For parameterized queries, we need to use raw SQL with parameters
+      const result = await this.dbClient.execute(
+        sql.raw(template.query, ...template.params)
+      );
       return Array.isArray(result) ? result : [];
     } catch (error) {
       SqlLogger.logError(operation, error as Error, template.query, template.params);
@@ -191,11 +397,40 @@ export class SqlExecutor {
   }
 
   /**
-   * Execute a SQL template using postgres tagged template (for DDL operations)
+   * Execute dynamic SQL queries with manual parameter substitution
+   * Used for dynamic table/field queries where table names can't be parameterized
    */
-  async executeTaggedTemplate(operation: string, callback: (sql: postgres.Sql) => Promise<any>): Promise<any> {
+  async executeDynamicTemplate(
+    operation: string, 
+    template: SqlQuery, 
+    substitutions: Record<string, string | number>
+  ): Promise<any[]> {
+    let query = template.query;
+    
+    // Perform manual substitutions for dynamic elements
+    for (const [key, value] of Object.entries(substitutions)) {
+      query = query.replace(new RegExp(`{{${key}}}`, 'g'), String(value));
+    }
+    
+    SqlLogger.logQuery(operation, query, template.params);
+    
     try {
-      const result = await callback(this.rawClient);
+      const { sql } = await import('drizzle-orm');
+      const result = await this.dbClient.execute(sql.raw(query));
+      return Array.isArray(result) ? result : [];
+    } catch (error) {
+      SqlLogger.logError(operation, error as Error, query, template.params);
+      throw error;
+    }
+  }
+
+  /**
+   * Execute a SQL template using tagged template (for DDL operations)
+   */
+  async executeTaggedTemplate(operation: string, callback: (sql: any) => Promise<any>): Promise<any> {
+    try {
+      const { sql } = await import('drizzle-orm');
+      const result = await callback(sql);
       SqlLogger.logQuery(operation, 'Tagged template query', []);
       return result;
     } catch (error) {

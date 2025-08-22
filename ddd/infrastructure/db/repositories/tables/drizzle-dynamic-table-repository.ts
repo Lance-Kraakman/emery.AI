@@ -31,6 +31,8 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
     this.sqlExecutor = new SqlExecutor(rawClient);
   }
 
+
+
   // Table CRUD - just the basics
   async findById(id: number): Promise<DynamicTable | null> {
     const result = await this.db

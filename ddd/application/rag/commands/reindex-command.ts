@@ -33,7 +33,7 @@ export class ReindexCommandValidator {
 
     if (command.domainType !== undefined) {
       const validDomainTypes: DomainType[] = [
-        'table', 'file', 'agent', 'team', 'workflow', 'organization', 'database'
+        'table', 'file', 'agent', 'team', 'organization', 'database'
       ];
 
       if (!validDomainTypes.includes(command.domainType)) {
