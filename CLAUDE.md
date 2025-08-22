@@ -284,6 +284,148 @@ For development without full OAuth setup:
 - Add `x-test-user-id` header to bypass authentication
 - Webhook verification can be disabled for local testing
 
+## Domain-Driven Design (DDD) Architecture
+
+### Folder Structure
+**CRITICAL**: All DDD code must be organized under the `/ddd` folder with this exact structure:
+
+```
+/ddd/
+├── domain/              # Pure domain logic - NO infrastructure dependencies
+│   ├── rag/
+│   │   ├── entities/    # Domain entities with business rules
+│   │   ├── value-objects/ # Immutable value objects with validation
+│   │   ├── repositories/ # Repository INTERFACES only
+│   │   ├── services/    # Domain service INTERFACES only
+│   │   └── events/      # Domain events
+│   └── [other-domains]/
+│
+├── application/         # Application services - orchestration layer
+│   ├── rag/
+│   │   ├── services/    # Application services that orchestrate domain operations
+│   │   ├── commands/    # Command objects with validation
+│   │   ├── queries/     # Query objects with validation
+│   │   └── di-container/ # Dependency injection configuration
+│   └── [other-domains]/
+│
+└── infrastructure/      # External integrations and concrete implementations
+    ├── db/
+    │   └── repositories/  # Database repository implementations
+    │       └── rag/      # RAG-specific repository implementations
+    ├── external/         # External service integrations (APIs, file processors)
+    │   ├── llamaindex/   # LlamaIndex file processing
+    │   ├── huggingface/  # AI model integrations
+    │   └── s3/           # S3 storage operations
+    └── [other-infrastructure]/
+```
+
+### DDD Layer Rules
+
+#### Domain Layer (`/ddd/domain/`)
+- **MUST contain ONLY**:
+  - Interfaces (repository and service interfaces)
+  - Domain entities with business rules
+  - Value objects with validation
+  - Domain events
+  - Pure domain logic
+- **MUST NOT contain**:
+  - Any infrastructure dependencies (no database, no external APIs)
+  - Concrete implementations
+  - Framework-specific code
+  - I/O operations
+
+#### Application Layer (`/ddd/application/`)
+- **MUST contain**:
+  - Application services that orchestrate domain operations
+  - Command and Query handlers
+  - DTOs for external communication
+  - Dependency injection configuration
+- **Responsibilities**:
+  - Transaction management
+  - Security/authorization checks
+  - Orchestrating multiple domain operations
+  - Mapping between domain and external representations
+
+#### Infrastructure Layer (`/ddd/infrastructure/`)
+- **MUST contain**:
+  - Concrete implementations of domain interfaces
+  - Database repositories (`/infrastructure/db/repositories/`)
+  - External service integrations (`/infrastructure/external/`)
+  - Framework-specific adapters
+- **Organization**:
+  - Database repositories go under `/infrastructure/db/repositories/[domain]/`
+  - External integrations go under `/infrastructure/external/[service]/`
+  - Each external integration should implement a domain interface
+
+### Import Rules
+- **Domain → Domain**: ✅ Allowed
+- **Application → Domain**: ✅ Allowed
+- **Application → Application**: ✅ Allowed (same domain only)
+- **Infrastructure → Domain**: ✅ Allowed
+- **Infrastructure → Application**: ✅ Allowed
+- **Domain → Application**: ❌ FORBIDDEN
+- **Domain → Infrastructure**: ❌ FORBIDDEN
+- **Application → Infrastructure**: ❌ FORBIDDEN (use DI container)
+
+### Naming Conventions
+- **Repositories**: 
+  - Interface: `RagIndexRepository` (in domain)
+  - Implementation: `DrizzleRagIndexRepository` (in infrastructure)
+- **Services**:
+  - Domain Interface: `ContentProcessor` (in domain)
+  - Application Service: `RagIndexingApplicationService` (in application)
+  - Infrastructure Implementation: `LlamaIndexFileProcessor` (in infrastructure)
+- **Value Objects**: `RagIndexId`, `OrganizationId` (always with validation)
+- **Entities**: `RagIndex`, `RagDocument` (with business rules)
+
+### Example Patterns
+
+#### Repository Pattern
+```typescript
+// Domain layer - Interface only
+// /ddd/domain/rag/repositories/rag-index-repository.ts
+export interface RagIndexRepository {
+  findById(id: RagIndexId): Promise<RagIndex | null>;
+  save(index: RagIndex): Promise<void>;
+}
+
+// Infrastructure layer - Concrete implementation
+// /ddd/infrastructure/db/repositories/rag/drizzle-rag-index-repository.ts
+export class DrizzleRagIndexRepository implements RagIndexRepository {
+  constructor(private db: DbClient) {}
+  async findById(id: RagIndexId): Promise<RagIndex | null> {
+    // Actual database operations
+  }
+}
+```
+
+#### Service Pattern
+```typescript
+// Domain layer - Interface for external operations
+// /ddd/domain/rag/services/file-processor.ts
+export interface FileProcessor {
+  processFile(fileData: FileData): Promise<ProcessedContent[]>;
+}
+
+// Infrastructure layer - Concrete implementation
+// /ddd/infrastructure/external/llamaindex/llamaindex-file-processor.ts
+export class LlamaIndexFileProcessor implements FileProcessor {
+  async processFile(fileData: FileData): Promise<ProcessedContent[]> {
+    // Actual file processing with LlamaIndex
+  }
+}
+
+// Application layer - Orchestration
+// /ddd/application/rag/services/rag-indexing-application-service.ts
+export class RagIndexingApplicationService {
+  constructor(
+    private indexRepository: RagIndexRepository,
+    private fileProcessor: FileProcessor
+  ) {}
+  // Orchestrates domain operations
+}
+```
+
 ## Development Workflow
 
 ### NextJS Component Architecture Rules
