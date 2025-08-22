@@ -13,9 +13,9 @@ import { SimpleDirectoryReader } from "@llamaindex/readers/directory";
 import { 
   type ContentProcessor, 
   type ProcessedContent,
-  type FileData 
 } from '@/ddd/domain/rag/services';
 import { type EmbeddingGenerator } from '@/ddd/domain/rag/services';
+import { FileData } from '@/ddd/domain/rag';
 
 export class LlamaIndexContentProcessor implements ContentProcessor {
   constructor(private readonly embeddingGenerator: EmbeddingGenerator) {}
