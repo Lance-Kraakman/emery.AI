@@ -7,10 +7,11 @@ import { db, rawClient } from '@/lib/db/client';
 import { 
   DrizzleRagIndexRepository,
   DrizzleRagDocumentRepository,
-  HuggingFaceEmbeddingService,
+  DrizzleRagQueryLogRepository,
+  DrizzleOrganizationDataRepository,
+  EmbeddingService,
   LlamaIndexContentProcessor,
-  DrizzleSearchLoggerService,
-  DataSourceAdapter
+  SearchService
 } from '@/lib/infrastructure/rag';
 
 // Domain Services  
@@ -30,12 +31,13 @@ export class RagDIContainer {
   // Infrastructure repositories
   private static _indexRepository: DrizzleRagIndexRepository;
   private static _documentRepository: DrizzleRagDocumentRepository;
+  private static _queryLogRepository: DrizzleRagQueryLogRepository;
+  private static _organizationDataRepository: DrizzleOrganizationDataRepository;
   
   // Infrastructure services
-  private static _embeddingService: HuggingFaceEmbeddingService;
+  private static _embeddingService: EmbeddingService;
   private static _contentProcessor: LlamaIndexContentProcessor;
-  private static _searchLogger: DrizzleSearchLoggerService;
-  private static _dataSourceAdapter: DataSourceAdapter;
+  private static _searchService: SearchService;
   
   // Domain services
   private static _indexingDomainService: IndexingDomainService;
@@ -68,9 +70,9 @@ export class RagDIContainer {
   /**
    * Get configured embedding service
    */
-  static getEmbeddingService(): HuggingFaceEmbeddingService {
+  static getEmbeddingService(): EmbeddingService {
     if (!this._embeddingService) {
-      this._embeddingService = new HuggingFaceEmbeddingService();
+      this._embeddingService = new EmbeddingService();
     }
     return this._embeddingService;
   }
@@ -88,23 +90,35 @@ export class RagDIContainer {
   }
 
   /**
-   * Get configured search logger
+   * Get configured query log repository
    */
-  static getSearchLogger(): DrizzleSearchLoggerService {
-    if (!this._searchLogger) {
-      this._searchLogger = new DrizzleSearchLoggerService();
+  static getQueryLogRepository(): DrizzleRagQueryLogRepository {
+    if (!this._queryLogRepository) {
+      this._queryLogRepository = new DrizzleRagQueryLogRepository(db);
     }
-    return this._searchLogger;
+    return this._queryLogRepository;
   }
 
   /**
-   * Get configured data source adapter
+   * Get configured organization data repository
    */
-  static getDataSourceAdapter(): DataSourceAdapter {
-    if (!this._dataSourceAdapter) {
-      this._dataSourceAdapter = new DataSourceAdapter();
+  static getOrganizationDataRepository(): DrizzleOrganizationDataRepository {
+    if (!this._organizationDataRepository) {
+      this._organizationDataRepository = new DrizzleOrganizationDataRepository(db, rawClient);
     }
-    return this._dataSourceAdapter;
+    return this._organizationDataRepository;
+  }
+
+  /**
+   * Get configured search service
+   */
+  static getSearchService(): SearchService {
+    if (!this._searchService) {
+      this._searchService = new SearchService(
+        this.getQueryLogRepository()
+      );
+    }
+    return this._searchService;
   }
 
   /**
@@ -126,7 +140,7 @@ export class RagDIContainer {
     if (!this._searchDomainService) {
       this._searchDomainService = new SearchDomainService(
         this.getEmbeddingService(),
-        this.getSearchLogger()
+        this.getSearchService()
       );
     }
     return this._searchDomainService;
@@ -141,7 +155,7 @@ export class RagDIContainer {
         this.getIndexRepository(),
         this.getDocumentRepository(),
         this.getIndexingDomainService(),
-        this.getDataSourceAdapter()
+        this.getOrganizationDataRepository()
         // Note: EventPublisher not implemented yet
       );
     }
@@ -158,7 +172,7 @@ export class RagDIContainer {
         this.getDocumentRepository(),
         this.getSearchDomainService(),
         this.getEmbeddingService(),
-        this.getSearchLogger()
+        this.getSearchService()
       );
     }
     return this._searchApplicationService;
@@ -170,10 +184,11 @@ export class RagDIContainer {
   static reset(): void {
     this._indexRepository = undefined as any;
     this._documentRepository = undefined as any;
+    this._queryLogRepository = undefined as any;
+    this._organizationDataRepository = undefined as any;
     this._embeddingService = undefined as any;
     this._contentProcessor = undefined as any;
-    this._searchLogger = undefined as any;
-    this._dataSourceAdapter = undefined as any;
+    this._searchService = undefined as any;
     this._indexingDomainService = undefined as any;
     this._searchDomainService = undefined as any;
     this._indexingApplicationService = undefined as any;
@@ -187,7 +202,7 @@ export class RagDIContainer {
     database: boolean;
     embedding: boolean;
     contentProcessor: boolean;
-    searchLogger: boolean;
+    searchService: boolean;
   }> {
     try {
       // Test database connection
@@ -202,7 +217,7 @@ export class RagDIContainer {
         database: true,
         embedding: true,
         contentProcessor: true,
-        searchLogger: true
+        searchService: true
       };
     } catch (error) {
       console.error('[RAG-DI-CONTAINER] Health check failed:', error);
@@ -210,7 +225,7 @@ export class RagDIContainer {
         database: false,
         embedding: false,
         contentProcessor: false,
-        searchLogger: false
+        searchService: false
       };
     }
   }
