@@ -5,16 +5,16 @@ import {
   type RagIndexRepository, 
   type RagDocumentRepository,
   type OrganizationDataRepository
-} from '@/lib/domain/rag/repositories';
-import { IndexingDomainService, type ContentProcessor } from '@/lib/domain/rag/services';
-import { RagIndex } from '@/lib/domain/rag/entities';
-import { RagIndexId, OrganizationId, type DomainType } from '@/lib/domain/rag/value-objects';
+} from '@/ddd/domain/rag/repositories';
+import { IndexingDomainService, type ContentProcessor } from '@/ddd/domain/rag/services';
+import { RagIndex } from '@/ddd/domain/rag/entities';
+import { RagIndexId, OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
 import { 
   createRagIndexCreatedEvent, 
   createDataChangeEvent,
   type ChangeType,
   type DomainEvent 
-} from '@/lib/domain/rag/events';
+} from '@/ddd/domain/rag/events';
 
 import { 
   type CreateIndexCommand, 

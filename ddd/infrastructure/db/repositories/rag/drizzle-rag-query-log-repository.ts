@@ -9,8 +9,8 @@ import {
   type RagQueryLogRepository,
   type QueryLogEntry,
   type QueryAnalytics
-} from '@/lib/domain/rag/repositories';
-import { RagIndexId, SearchQuery } from '@/lib/domain/rag/value-objects';
+} from '@/ddd/domain/rag/repositories';
+import { RagIndexId, SearchQuery } from '@/ddd/domain/rag/value-objects';
 
 export class DrizzleRagQueryLogRepository implements RagQueryLogRepository {
   constructor(private readonly db: DbClient) {}

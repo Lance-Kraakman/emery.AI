@@ -8,9 +8,9 @@ import { ragIndexes } from '@/lib/db/schema';
 import { 
   type RagIndexRepository, 
   type RagIndexFilters 
-} from '@/lib/domain/rag/repositories';
-import { RagIndex } from '@/lib/domain/rag/entities';
-import { RagIndexId, OrganizationId, type DomainType, type IndexStatus } from '@/lib/domain/rag/value-objects';
+} from '@/ddd/domain/rag/repositories';
+import { RagIndex } from '@/ddd/domain/rag/entities';
+import { RagIndexId, OrganizationId, type DomainType, type IndexStatus } from '@/ddd/domain/rag/value-objects';
 
 export class DrizzleRagIndexRepository implements RagIndexRepository {
   constructor(private readonly db: DbClient) {}

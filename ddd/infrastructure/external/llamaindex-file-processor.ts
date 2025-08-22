@@ -14,8 +14,8 @@ import {
   type ContentProcessor, 
   type ProcessedContent,
   type FileData 
-} from '@/lib/domain/rag/services';
-import { type EmbeddingGenerator } from '@/lib/domain/rag/services';
+} from '@/ddd/domain/rag/services';
+import { type EmbeddingGenerator } from '@/ddd/domain/rag/services';
 
 export class LlamaIndexContentProcessor implements ContentProcessor {
   constructor(private readonly embeddingGenerator: EmbeddingGenerator) {}

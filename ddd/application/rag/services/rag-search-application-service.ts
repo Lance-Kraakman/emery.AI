@@ -5,14 +5,14 @@ import {
   type RagIndexRepository, 
   type RagDocumentRepository,
   type VectorSearchParams
-} from '@/lib/domain/rag/repositories';
+} from '@/ddd/domain/rag/repositories';
 import { 
   SearchDomainService, 
   type SearchFilters,
   type EmbeddingGenerator,
   type SearchLogger 
-} from '@/lib/domain/rag/services';
-import { RagIndexId } from '@/lib/domain/rag/value-objects';
+} from '@/ddd/domain/rag/services';
+import { RagIndexId } from '@/ddd/domain/rag/value-objects';
 
 import { 
   type SearchRagQuery, 

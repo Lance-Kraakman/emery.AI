@@ -9,7 +9,7 @@
 
 import { createNotificationClient, rawClient } from '@/lib/db/client';
 import { autoReindexService } from '@/lib/rag/auto-reindex';
-import type { DomainType } from '@/lib/domain/rag/value-objects';
+import type { DomainType } from '@/ddd/domain/rag/value-objects';
 import type postgres from 'postgres';
 
 export interface RagReindexRequest {

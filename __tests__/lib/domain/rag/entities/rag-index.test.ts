@@ -2,8 +2,8 @@
 // Tests business rules and domain logic without infrastructure dependencies
 
 import { describe, it, expect } from 'vitest';
-import { RagIndex } from '@/lib/domain/rag/entities/rag-index';
-import { OrganizationId } from '@/lib/domain/rag/value-objects/organization-id';
+import { RagIndex } from '@/ddd/domain/rag/entities/rag-index';
+import { OrganizationId } from '@/ddd/domain/rag/value-objects/organization-id';
 
 describe('RagIndex Domain Entity', () => {
   const validCreationParams = {
