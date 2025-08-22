@@ -12,15 +12,14 @@ export interface IndexingResult {
   errors: string[];
 }
 
-// Import data types from repository interfaces
-import {
-  type TableData,
-  type FileData,
-  type AgentData,
-  type OrganizationData,
-  type DatabaseData,
-  type TeamData
-} from '../repositories';
+// Import domain entities directly 
+import type { Organization } from '@/ddd/domain/organizations/entities/organization';
+import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import type { Database } from '@/ddd/domain/databases/entities/database';
+import type { Team } from '@/ddd/domain/teams/entities/team';
+import type { Field } from '@/ddd/domain/fields/entities/field';
+import type { StoredFile } from '@/ddd/domain/files/entities/file-storage';
 
 export interface ProcessedContent {
   content: string;
@@ -43,7 +42,7 @@ export interface ContentProcessor {
   /**
    * Process file content with LlamaIndex
    */
-  processFileContent(fileData: FileData): Promise<ProcessedContent[]>;
+  processFileContent(fileData: StoredFile): Promise<ProcessedContent[]>;
 }
 
 export class IndexingDomainService {
@@ -57,25 +56,25 @@ export class IndexingDomainService {
   async indexOrganizationData(
     indexId: RagIndexId,
     organizationId: OrganizationId,
-    organizationData: OrganizationData
+    organization: Organization
   ): Promise<RagDocument[]> {
-    const content = this.generateOrganizationContent(organizationData);
+    const content = this.generateOrganizationContent(organization);
     const embedding = await this.contentProcessor.generateEmbedding(content);
     const contentHash = this.contentProcessor.calculateContentHash(content);
 
     const document = RagDocument.create({
       indexId,
       organizationId,
-      sourceId: organizationData.id.toString(),
+      sourceId: organization.id.toString(),
       domainType: 'organization',
-      sourceName: organizationData.name,
-      title: `Organization: ${organizationData.name}`,
+      sourceName: organization.name,
+      title: `Organization: ${organization.name}`,
       content,
       metadata: {
-        organizationId: organizationData.id,
-        sharedToolsCount: organizationData.sharedTools?.length || 0,
-        sharedServersCount: organizationData.sharedServers?.length || 0,
-        createdAt: organizationData.createdAt,
+        organizationId: organization.id,
+        sharedToolsCount: organization.sharedTools?.length || 0,
+        sharedServersCount: organization.sharedServers?.length || 0,
+        createdAt: organization.createdAt,
       },
       embedding,
       contentHash,
@@ -90,32 +89,32 @@ export class IndexingDomainService {
   async indexTableData(
     indexId: RagIndexId,
     organizationId: OrganizationId,
-    tablesData: TableData[]
+    tables: DynamicTable[],
+    fieldsMap?: Map<number, Field[]>
   ): Promise<RagDocument[]> {
     const documents: RagDocument[] = [];
 
-    for (const tableData of tablesData) {
-      const content = this.generateTableSchemaContent(tableData, tableData.fields || []);
+    for (const table of tables) {
+      const fields = fieldsMap?.get(table.id) || [];
+      const content = this.generateTableSchemaContent(table, fields);
       const embedding = await this.contentProcessor.generateEmbedding(content);
       const contentHash = this.contentProcessor.calculateContentHash(content);
 
       const document = RagDocument.create({
         indexId,
         organizationId,
-        sourceId: tableData.id.toString(),
+        sourceId: table.id.toString(),
         domainType: 'table',
-        sourceName: tableData.name,
-        title: `Table: ${tableData.name} (Database: ${tableData.databaseName || 'Unknown'})`,
+        sourceName: table.name,
+        title: `Table: ${table.name}`,
         content,
         metadata: {
-          tableId: tableData.id,
-          tableName: tableData.name,
-          databaseId: tableData.databaseId,
-          databaseName: tableData.databaseName,
-          databaseSlug: tableData.databaseSlug,
-          tableMetadata: tableData.metadata,
-          organizationId: tableData.organizationId,
-          fieldCount: tableData.fields?.length || 0,
+          tableId: table.id,
+          tableName: table.name,
+          databaseId: table.databaseId,
+          tableMetadata: table.metadata,
+          organizationId: table.organizationId,
+          fieldCount: fields.length,
         },
         embedding,
         contentHash,
@@ -133,13 +132,13 @@ export class IndexingDomainService {
   async indexFileData(
     indexId: RagIndexId,
     organizationId: OrganizationId,
-    filesData: FileData[]
+    files: StoredFile[]
   ): Promise<RagDocument[]> {
     const documents: RagDocument[] = [];
 
-    for (const fileData of filesData) {
+    for (const file of files) {
       try {
-        const processedChunks = await this.contentProcessor.processFileContent(fileData);
+        const processedChunks = await this.contentProcessor.processFileContent(file);
 
         for (let chunkIndex = 0; chunkIndex < processedChunks.length; chunkIndex++) {
           const chunk = processedChunks[chunkIndex];
@@ -147,27 +146,21 @@ export class IndexingDomainService {
           const document = RagDocument.create({
             indexId,
             organizationId,
-            sourceId: `${fileData.id}-chunk-${chunkIndex}`,
+            sourceId: `${file.key}-chunk-${chunkIndex}`,
             domainType: 'file',
-            sourceName: fileData.name,
-            title: `File: ${fileData.name} (Chunk ${chunkIndex + 1}/${processedChunks.length}) - ${fileData.databaseName} → ${fileData.tableName} → ${fileData.fieldName}`,
+            sourceName: file.originalName,
+            title: `File: ${file.originalName} (Chunk ${chunkIndex + 1}/${processedChunks.length})`,
             content: chunk.content,
             metadata: {
               ...chunk.metadata,
-              fileId: fileData.id,
-              fileName: fileData.name,
-              fileSize: fileData.size,
-              mimeType: fileData.mimeType,
+              fileKey: file.key,
+              fileName: file.originalName,
+              fileSize: file.size,
+              mimeType: file.mimeType,
               chunkIndex: chunkIndex,
               totalChunks: processedChunks.length,
-              tableId: fileData.tableId,
-              tableName: fileData.tableName,
-              databaseName: fileData.databaseName,
-              fieldId: fileData.fieldId,
-              fieldName: fileData.fieldName,
-              uploadedAt: fileData.uploadedAt,
+              uploadedAt: file.uploadedAt,
               organizationId: organizationId.value,
-              contextPath: `${fileData.databaseName} → ${fileData.tableName} → ${fileData.fieldName}`,
               processingMethod: 'llamaindex'
             },
             embedding: chunk.embedding,
@@ -191,31 +184,31 @@ export class IndexingDomainService {
   async indexAgentData(
     indexId: RagIndexId,
     organizationId: OrganizationId,
-    agentsData: AgentData[]
+    agents: Agent[]
   ): Promise<RagDocument[]> {
     const documents: RagDocument[] = [];
 
-    for (const agentData of agentsData) {
-      const content = this.generateAgentContent(agentData);
+    for (const agent of agents) {
+      const content = this.generateAgentContent(agent);
       const embedding = await this.contentProcessor.generateEmbedding(content);
       const contentHash = this.contentProcessor.calculateContentHash(content);
 
       const document = RagDocument.create({
         indexId,
         organizationId,
-        sourceId: agentData.id.toString(),
+        sourceId: agent.id.toString(),
         domainType: 'agent',
-        sourceName: agentData.name,
-        title: `Agent: ${agentData.name}`,
+        sourceName: agent.name,
+        title: `Agent: ${agent.name}`,
         content,
         metadata: {
-          agentId: agentData.id,
-          role: agentData.role,
-          status: agentData.status,
+          agentId: agent.id,
+          role: agent.role,
+          status: agent.status,
           organizationId: organizationId.value,
-          toolCount: Array.isArray(agentData.tools) ? agentData.tools.length : 0,
-          serverCount: Array.isArray(agentData.servers) ? agentData.servers.length : 0,
-          capabilityCount: Array.isArray(agentData.capabilities) ? agentData.capabilities.length : 0,
+          toolCount: agent.tools ? Object.keys(agent.tools).length : 0,
+          serverCount: agent.servers ? Object.keys(agent.servers).length : 0,
+          capabilityCount: agent.capabilitiesCount,
         },
         embedding,
         contentHash,
@@ -233,28 +226,28 @@ export class IndexingDomainService {
   async indexDatabaseData(
     indexId: RagIndexId,
     organizationId: OrganizationId,
-    databasesData: DatabaseData[]
+    databases: Database[]
   ): Promise<RagDocument[]> {
     const documents: RagDocument[] = [];
 
-    for (const databaseData of databasesData) {
-      const content = this.generateDatabaseContent(databaseData);
+    for (const database of databases) {
+      const content = this.generateDatabaseContent(database);
       const embedding = await this.contentProcessor.generateEmbedding(content);
       const contentHash = this.contentProcessor.calculateContentHash(content);
 
       const document = RagDocument.create({
         indexId,
         organizationId,
-        sourceId: databaseData.id.toString(),
+        sourceId: database.id.toString(),
         domainType: 'database',
-        sourceName: databaseData.name,
-        title: `Database: ${databaseData.name}`,
+        sourceName: database.name,
+        title: `Database: ${database.name}`,
         content,
         metadata: {
-          databaseId: databaseData.id,
-          slug: databaseData.slug,
-          databaseMetadata: databaseData.metadata,
-          organizationId: databaseData.organizationId,
+          databaseId: database.id,
+          slug: database.slug,
+          databaseMetadata: database.metadata,
+          organizationId: database.organizationId,
         },
         embedding,
         contentHash,
@@ -272,27 +265,27 @@ export class IndexingDomainService {
   async indexTeamData(
     indexId: RagIndexId,
     organizationId: OrganizationId,
-    teamsData: TeamData[]
+    teams: Team[]
   ): Promise<RagDocument[]> {
     const documents: RagDocument[] = [];
 
-    for (const teamData of teamsData) {
-      const content = this.generateTeamContent(teamData);
+    for (const team of teams) {
+      const content = this.generateTeamContent(team);
       const embedding = await this.contentProcessor.generateEmbedding(content);
       const contentHash = this.contentProcessor.calculateContentHash(content);
 
       const document = RagDocument.create({
         indexId,
         organizationId,
-        sourceId: teamData.id.toString(),
+        sourceId: team.id.toString(),
         domainType: 'team',
-        sourceName: teamData.name,
-        title: `Team: ${teamData.name}`,
+        sourceName: team.name,
+        title: `Team: ${team.name}`,
         content,
         metadata: {
-          teamId: teamData.id,
+          teamId: team.id,
           organizationId: organizationId.value,
-          agentCount: Array.isArray(teamData.agentIds) ? teamData.agentIds.length : 0,
+          agentCount: team.agentCount,
         },
         embedding,
         contentHash,
@@ -305,7 +298,7 @@ export class IndexingDomainService {
   }
 
   // Content generation methods (moved from existing service)
-  private generateOrganizationContent(organization: OrganizationData): string {
+  private generateOrganizationContent(organization: Organization): string {
     const toolsList = organization.sharedTools && organization.sharedTools.length > 0
       ? `\nShared Tools:\n${organization.sharedTools.map(tool => `- ${tool}`).join('\n')}`
       : '\nShared Tools: None configured';
@@ -326,7 +319,7 @@ About: ${organization.name} is an active organization on the Emery platform, whi
 Capabilities: The organization has access to Emery's full feature set including dynamic table creation, field management, data operations, agent-powered workflows, team collaboration, role-based access control, and integration with external services through shared tools and servers.`;
   }
 
-  private generateTableSchemaContent(table: TableData, fields: any[]): string {
+  private generateTableSchemaContent(table: DynamicTable, fields: Field[]): string {
     const fieldsDescription = fields.map(field => {
       let desc = `- ${field.name} (${field.type})`;
       if (field.required) desc += ' *required*';
@@ -379,17 +372,17 @@ Data Context: This table is part of the "${databaseName}" database and contains 
 Usage: This table supports data analysis, reporting, workflow automation, and integration with other Emery systems. The dynamic schema allows for flexible data operations while maintaining type safety and relationships.`;
   }
 
-  private generateAgentContent(agent: AgentData): string {
-    const toolsList = agent.tools && Array.isArray(agent.tools) && agent.tools.length > 0
-      ? `\nTools: ${agent.tools.map((tool: any) => typeof tool === 'string' ? tool : tool.name || 'Unknown').join(', ')}`
+  private generateAgentContent(agent: Agent): string {
+    const toolsList = agent.tools && typeof agent.tools === 'object'
+      ? `\nTools: ${Object.keys(agent.tools).join(', ')}`
       : '\nTools: None configured';
 
-    const serversList = agent.servers && Array.isArray(agent.servers) && agent.servers.length > 0
-      ? `\nServers: ${agent.servers.map((server: any) => typeof server === 'string' ? server : server.name || 'Unknown').join(', ')}`
+    const serversList = agent.servers && typeof agent.servers === 'object'
+      ? `\nServers: ${Object.keys(agent.servers).join(', ')}`
       : '\nServers: None configured';
 
-    const capabilitiesDesc = agent.capabilities && Array.isArray(agent.capabilities) && agent.capabilities.length > 0
-      ? `\nCapabilities: ${agent.capabilities.length} configured capabilities including ${agent.capabilities.map((cap: any) => cap.name || 'unnamed capability').join(', ')}`
+    const capabilitiesDesc = agent.capabilitiesCount > 0
+      ? `\nCapabilities: ${agent.capabilitiesCount} configured capabilities`
       : '\nCapabilities: None configured';
 
     const createdDate = agent.createdAt 
@@ -407,9 +400,9 @@ About: ${agent.name} is an AI agent configured within the Emery platform for wor
 Functionality: The agent operates within the Emery ecosystem to handle automated workflows, data processing, integration tasks, and other organizational processes as configured through its capabilities and available tools.`;
   }
 
-  private generateDatabaseContent(database: DatabaseData): string {
-    const description = database.metadata?.description
-      ? `\nDescription: ${database.metadata.description}`
+  private generateDatabaseContent(database: Database): string {
+    const description = database.description
+      ? `\nDescription: ${database.description}`
       : '';
 
     return `Database: ${database.name}
@@ -423,7 +416,7 @@ Capabilities: The database supports dynamic table creation, field management, da
 Context: This is a database within the Emery platform, which provides dynamic database management, workflow automation, and team collaboration capabilities.`;
   }
 
-  private generateTeamContent(team: TeamData): string {
+  private generateTeamContent(team: Team): string {
     const responsibilitiesList = team.responsibilities && team.responsibilities.length > 0
       ? `\nResponsibilities:\n${team.responsibilities.map(r => `- ${r}`).join('\n')}`
       : '\nResponsibilities: Not specified';

@@ -5,7 +5,14 @@ import {
   type RagIndexRepository, 
   type RagDocumentRepository
 } from '@/ddd/domain/rag/repositories';
-import { IndexingDomainService, type ContentProcessor, type IOrganizationDataService } from '@/ddd/domain/rag/services';
+import { IndexingDomainService, type ContentProcessor } from '@/ddd/domain/rag/services';
+import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
+import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
+import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
+import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
 import { RagIndex } from '@/ddd/domain/rag/entities';
 import { RagIndexId, OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
 import { 
@@ -41,7 +48,13 @@ export class RagIndexingApplicationService {
     private readonly indexRepository: RagIndexRepository,
     private readonly documentRepository: RagDocumentRepository,
     private readonly indexingDomainService: IndexingDomainService,
-    private readonly organizationDataService: IOrganizationDataService,
+    private readonly organizationRepository: IOrganizationRepository,
+    private readonly tableRepository: IDynamicTableRepository,
+    private readonly fieldRepository: IFieldRepository,
+    private readonly agentRepository: IAgentRepository,
+    private readonly databaseRepository: IDatabaseRepository,
+    private readonly teamRepository: ITeamRepository,
+    private readonly fileRepository: IFileStorageRepository,
     private readonly eventPublisher?: EventPublisher
   ) {}
 
@@ -225,16 +238,10 @@ export class RagIndexingApplicationService {
         ? index.domainTypes.filter(dt => dt === domainType)
         : index.domainTypes;
 
-      // Get all data for the domain types
-      const data = await this.organizationDataService.getDataForDomainTypes(
-        index.organizationId, 
-        domainTypesToProcess
-      );
-
-      // Process each domain type
+      // Process each domain type directly with repositories
       for (const dt of domainTypesToProcess) {
         try {
-          const result = await this.indexDomainType(index, dt, data);
+          const result = await this.indexDomainType(index, dt);
           totalProcessed += result.documentsProcessed;
           totalAdded += result.documentsAdded;
           totalDeleted += result.documentsDeleted;
@@ -329,7 +336,7 @@ export class RagIndexingApplicationService {
     };
   }
 
-  private async indexDomainType(index: RagIndex, domainType: DomainType, data: any): Promise<{
+  private async indexDomainType(index: RagIndex, domainType: DomainType): Promise<{
     documentsProcessed: number;
     documentsAdded: number;
     documentsDeleted: number;
@@ -338,49 +345,61 @@ export class RagIndexingApplicationService {
 
     switch (domainType) {
       case 'organization':
-        if (data.organizations) {
+        const organization = await this.organizationRepository.findById(index.organizationId.value);
+        if (organization) {
           documents = await this.indexingDomainService.indexOrganizationData(
-            index.id, index.organizationId, data.organizations[0]
+            index.id, index.organizationId, organization
           );
         }
         break;
 
       case 'table':
-        if (data.tables) {
+        const tables = await this.tableRepository.findByOrganization(index.organizationId.value);
+        if (tables.length > 0) {
+          // Get fields for all tables
+          const fieldsMap = new Map();
+          for (const table of tables) {
+            const fields = await this.fieldRepository.findByTableId(table.id);
+            fieldsMap.set(table.id, fields);
+          }
           documents = await this.indexingDomainService.indexTableData(
-            index.id, index.organizationId, data.tables
+            index.id, index.organizationId, tables, fieldsMap
           );
         }
         break;
 
       case 'database':
-        if (data.databases) {
+        const databases = await this.databaseRepository.findByOrganization(index.organizationId.value);
+        if (databases.length > 0) {
           documents = await this.indexingDomainService.indexDatabaseData(
-            index.id, index.organizationId, data.databases
+            index.id, index.organizationId, databases
           );
         }
         break;
 
       case 'agent':
-        if (data.agents) {
+        const agents = await this.agentRepository.findByOrganization(index.organizationId.value);
+        if (agents.length > 0) {
           documents = await this.indexingDomainService.indexAgentData(
-            index.id, index.organizationId, data.agents
+            index.id, index.organizationId, agents
           );
         }
         break;
 
       case 'team':
-        if (data.teams) {
+        const teams = await this.teamRepository.findByOrganization(index.organizationId.value);
+        if (teams.length > 0) {
           documents = await this.indexingDomainService.indexTeamData(
-            index.id, index.organizationId, data.teams
+            index.id, index.organizationId, teams
           );
         }
         break;
 
       case 'file':
-        if (data.files) {
+        const files = await this.fileRepository.findByOrganization(index.organizationId.value);
+        if (files.length > 0) {
           documents = await this.indexingDomainService.indexFileData(
-            index.id, index.organizationId, data.files
+            index.id, index.organizationId, files
           );
         }
         break;
