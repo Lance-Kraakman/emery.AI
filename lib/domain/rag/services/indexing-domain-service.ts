@@ -12,72 +12,15 @@ export interface IndexingResult {
   errors: string[];
 }
 
-export interface TableData {
-  id: number;
-  name: string;
-  dbName: string;
-  databaseId: number;
-  metadata?: any;
-  organizationId: number;
-  databaseName?: string | null;
-  databaseSlug?: string | null;
-  fields?: any[];
-}
-
-export interface FileData {
-  id: string;
-  name: string;
-  size: number;
-  mimeType: string;
-  s3Key: string;
-  uploadedAt: Date;
-  tableId: number;
-  tableName: string;
-  databaseName: string;
-  fieldId: number;
-  fieldName: string;
-}
-
-export interface AgentData {
-  id: number;
-  name: string;
-  role?: string | null;
-  description?: string | null;
-  persona?: string | null;
-  tools?: any;
-  servers?: any;
-  capabilities?: any;
-  status?: string | null;
-  createdAt?: Date | null;
-}
-
-export interface OrganizationData {
-  id: number;
-  name: string;
-  mission?: string | null;
-  sharedTools?: string[] | null;
-  sharedServers?: string[] | null;
-  createdAt?: Date | null;
-}
-
-export interface DatabaseData {
-  id: number;
-  name: string;
-  slug: string;
-  metadata?: any;
-  organizationId: number;
-}
-
-export interface TeamData {
-  id: number;
-  name: string;
-  purpose?: string | null;
-  description?: string | null;
-  responsibilities?: string[] | null;
-  goals?: string[] | null;
-  agentIds?: string[] | null;
-  createdAt?: Date | null;
-}
+// Import data types from repository interfaces
+import {
+  type TableData,
+  type FileData,
+  type AgentData,
+  type OrganizationData,
+  type DatabaseData,
+  type TeamData
+} from '../repositories';
 
 export interface ProcessedContent {
   content: string;

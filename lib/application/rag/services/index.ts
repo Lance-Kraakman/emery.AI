@@ -11,3 +11,6 @@ export {
   RagSearchApplicationService,
   type SearchResult
 } from './rag-search-application-service';
+
+export { EmbeddingService } from './embedding-service';
+export { SearchService } from './search-service';

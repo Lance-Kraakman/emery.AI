@@ -13,3 +13,20 @@ export {
   type VectorSearchResult,
   type DocumentSyncResult
 } from './rag-document-repository';
+
+export {
+  type RagQueryLogRepository,
+  type QueryLogEntry,
+  type QueryAnalytics
+} from './rag-query-log-repository';
+
+export {
+  type OrganizationDataRepository,
+  type OrganizationData,
+  type TableData,
+  type FieldData,
+  type DatabaseData,
+  type AgentData,
+  type TeamData,
+  type FileData
+} from './organization-data-repository';

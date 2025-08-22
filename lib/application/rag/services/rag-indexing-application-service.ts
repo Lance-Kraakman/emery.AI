@@ -3,11 +3,12 @@
 
 import { 
   type RagIndexRepository, 
-  type RagDocumentRepository 
+  type RagDocumentRepository,
+  type OrganizationDataRepository
 } from '@/lib/domain/rag/repositories';
 import { IndexingDomainService, type ContentProcessor } from '@/lib/domain/rag/services';
 import { RagIndex } from '@/lib/domain/rag/entities';
-import { RagIndexId, OrganizationId } from '@/lib/domain/rag/value-objects';
+import { RagIndexId, OrganizationId, type DomainType } from '@/lib/domain/rag/value-objects';
 import { 
   createRagIndexCreatedEvent, 
   createDataChangeEvent,
@@ -21,8 +22,6 @@ import {
   type ReindexCommand,
   ReindexCommandValidator
 } from '../commands';
-
-import { DataSourceAdapter } from '@/lib/infrastructure/rag/adapters';
 
 export interface IndexingResult {
   indexId: string;
@@ -43,7 +42,7 @@ export class RagIndexingApplicationService {
     private readonly indexRepository: RagIndexRepository,
     private readonly documentRepository: RagDocumentRepository,
     private readonly indexingDomainService: IndexingDomainService,
-    private readonly dataSourceAdapter: DataSourceAdapter,
+    private readonly organizationDataRepository: OrganizationDataRepository,
     private readonly eventPublisher?: EventPublisher
   ) {}
 
@@ -112,40 +111,48 @@ export class RagIndexingApplicationService {
   }
 
   /**
+   * Convenience method for rebuilding a specific index (used by auto-reindex service)
+   */
+  async rebuildIndex(command: { indexId: string }): Promise<IndexingResult> {
+    const indexId = new RagIndexId(command.indexId);
+    return this.reindexSingleIndex(indexId);
+  }
+
+  /**
    * Handle data change events for incremental reindexing
    */
   async handleDataChange(
     organizationId: number,
-    domainType: string,
+    domainType: DomainType,
     changeType: ChangeType,
     sourceId: string,
     metadata?: Record<string, any>
   ): Promise<void> {
-    const orgId = OrganizationId.fromNumber(organizationId);
+    const orgId = new OrganizationId(organizationId);
 
     // Find indexes that include this domain type
-    const indexes = await this.indexRepository.findByFilters({
-      organizationId: orgId,
-      domainTypes: [domainType]
-    });
+    const indexes = await this.indexRepository.findByOrganization(orgId);
+    const relevantIndexes = indexes.filter(index => 
+      index.domainTypes.includes(domainType)
+    );
 
-    if (indexes.length === 0) {
+    if (relevantIndexes.length === 0) {
       console.log(`[RAG-INDEXING-APP] No indexes found for domain type ${domainType} in org ${organizationId}`);
       return;
     }
 
-    console.log(`[RAG-INDEXING-APP] Processing ${changeType} for ${domainType}:${sourceId} across ${indexes.length} indexes`);
+    console.log(`[RAG-INDEXING-APP] Processing ${changeType} for ${domainType}:${sourceId} across ${relevantIndexes.length} indexes`);
 
     // Process each affected index
-    const reindexPromises = indexes.map(async (index) => {
+    const reindexPromises = relevantIndexes.map(async (index) => {
       try {
-        await this.reindexSingleIndex(index.id, domainType as any);
+        await this.reindexSingleIndex(index.id, domainType);
         console.log(`[RAG-INDEXING-APP] Reindexed ${index.name} for ${domainType} change`);
       } catch (error) {
         console.error(`[RAG-INDEXING-APP] Failed to reindex ${index.name}:`, error);
         // Mark index as error status
-        index.failIndexing();
-        await this.indexRepository.update(index);
+        index.markAsFailed();
+        await this.indexRepository.save(index);
       }
     });
 
@@ -155,7 +162,7 @@ export class RagIndexingApplicationService {
     if (this.eventPublisher) {
       const event = createDataChangeEvent(
         orgId,
-        domainType as any,
+        domainType,
         changeType,
         sourceId,
         { metadata }
@@ -174,7 +181,7 @@ export class RagIndexingApplicationService {
     errorIndexes: number;
     totalDocuments: number;
   }> {
-    const orgId = OrganizationId.fromNumber(organizationId);
+    const orgId = new OrganizationId(organizationId);
     const indexes = await this.indexRepository.findByOrganization(orgId);
 
     let totalDocuments = 0;
@@ -194,7 +201,7 @@ export class RagIndexingApplicationService {
   // Private implementation methods
   private async reindexSingleIndex(
     indexId: RagIndexId, 
-    domainType?: string,
+    domainType?: DomainType,
     startTime: number = Date.now()
   ): Promise<IndexingResult> {
     const index = await this.indexRepository.findById(indexId);
@@ -206,7 +213,7 @@ export class RagIndexingApplicationService {
 
     // Mark as building
     index.startIndexing();
-    await this.indexRepository.update(index);
+    await this.indexRepository.save(index);
 
     let totalProcessed = 0;
     let totalAdded = 0;
@@ -220,7 +227,7 @@ export class RagIndexingApplicationService {
         : index.domainTypes;
 
       // Get all data for the domain types
-      const data = await this.dataSourceAdapter.getDataForDomainTypes(
+      const data = await this.organizationDataRepository.getDataForDomainTypes(
         index.organizationId, 
         domainTypesToProcess
       );
@@ -242,7 +249,7 @@ export class RagIndexingApplicationService {
       // Update document count and mark as complete
       const finalDocumentCount = await this.documentRepository.countByIndexId(indexId);
       index.completeIndexing(finalDocumentCount);
-      await this.indexRepository.update(index);
+      await this.indexRepository.save(index);
 
       const executionTime = Date.now() - startTime;
       console.log(`[RAG-INDEXING-APP] Completed reindex for ${index.name} in ${executionTime}ms`);
@@ -258,8 +265,8 @@ export class RagIndexingApplicationService {
       };
 
     } catch (error) {
-      index.failIndexing();
-      await this.indexRepository.update(index);
+      index.markAsFailed();
+      await this.indexRepository.save(index);
       throw error;
     }
   }
@@ -323,7 +330,7 @@ export class RagIndexingApplicationService {
     };
   }
 
-  private async indexDomainType(index: RagIndex, domainType: string, data: any): Promise<{
+  private async indexDomainType(index: RagIndex, domainType: DomainType, data: any): Promise<{
     documentsProcessed: number;
     documentsAdded: number;
     documentsDeleted: number;
@@ -331,7 +338,7 @@ export class RagIndexingApplicationService {
     let documents: any[] = [];
 
     switch (domainType) {
-      case 'organizations':
+      case 'organization':
         if (data.organizations) {
           documents = await this.indexingDomainService.indexOrganizationData(
             index.id, index.organizationId, data.organizations[0]
@@ -339,7 +346,7 @@ export class RagIndexingApplicationService {
         }
         break;
 
-      case 'tables':
+      case 'table':
         if (data.tables) {
           documents = await this.indexingDomainService.indexTableData(
             index.id, index.organizationId, data.tables
@@ -347,7 +354,7 @@ export class RagIndexingApplicationService {
         }
         break;
 
-      case 'databases':
+      case 'database':
         if (data.databases) {
           documents = await this.indexingDomainService.indexDatabaseData(
             index.id, index.organizationId, data.databases
@@ -355,7 +362,7 @@ export class RagIndexingApplicationService {
         }
         break;
 
-      case 'agents':
+      case 'agent':
         if (data.agents) {
           documents = await this.indexingDomainService.indexAgentData(
             index.id, index.organizationId, data.agents
@@ -363,7 +370,7 @@ export class RagIndexingApplicationService {
         }
         break;
 
-      case 'teams':
+      case 'team':
         if (data.teams) {
           documents = await this.indexingDomainService.indexTeamData(
             index.id, index.organizationId, data.teams
@@ -371,7 +378,7 @@ export class RagIndexingApplicationService {
         }
         break;
 
-      case 'files':
+      case 'file':
         if (data.files) {
           documents = await this.indexingDomainService.indexFileData(
             index.id, index.organizationId, data.files
@@ -386,7 +393,7 @@ export class RagIndexingApplicationService {
     if (documents.length > 0) {
       const syncResult = await this.documentRepository.synchronizeDocuments(
         index.id, 
-        domainType as any, 
+        domainType, 
         documents
       );
 

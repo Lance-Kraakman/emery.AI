@@ -1,11 +1,8 @@
 // AIDEV-NOTE: Main barrel export for RAG infrastructure layer
-// Provides concrete implementations of domain interfaces
+// Provides concrete implementations of infrastructure concerns (repositories and external integrations)
 
-// Repositories
+// Repositories - Data access implementations
 export * from './repositories';
 
-// Services
+// Infrastructure Services - External integrations and infrastructure concerns
 export * from './services';
-
-// Adapters
-export * from './adapters';
