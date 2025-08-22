@@ -15,7 +15,7 @@ import {
 // Application Services
 import { 
   EmbeddingService,
-  SearchService
+  SearchAnalyticsService
 } from '@/lib/application/rag/services';
 
 // Domain Services  
@@ -38,10 +38,10 @@ export class RagDIContainer {
   private static _queryLogRepository: DrizzleRagQueryLogRepository;
   private static _organizationDataRepository: DrizzleOrganizationDataRepository;
   
-  // Infrastructure services
+  // Application services
   private static _embeddingService: EmbeddingService;
   private static _contentProcessor: LlamaIndexContentProcessor;
-  private static _searchService: SearchService;
+  private static _searchAnalyticsService: SearchAnalyticsService;
   
   // Domain services
   private static _indexingDomainService: IndexingDomainService;
@@ -114,15 +114,15 @@ export class RagDIContainer {
   }
 
   /**
-   * Get configured search service
+   * Get configured search analytics service
    */
-  static getSearchService(): SearchService {
-    if (!this._searchService) {
-      this._searchService = new SearchService(
+  static getSearchAnalyticsService(): SearchAnalyticsService {
+    if (!this._searchAnalyticsService) {
+      this._searchAnalyticsService = new SearchAnalyticsService(
         this.getQueryLogRepository()
       );
     }
-    return this._searchService;
+    return this._searchAnalyticsService;
   }
 
   /**
@@ -144,7 +144,7 @@ export class RagDIContainer {
     if (!this._searchDomainService) {
       this._searchDomainService = new SearchDomainService(
         this.getEmbeddingService(),
-        this.getSearchService()
+        this.getSearchAnalyticsService()
       );
     }
     return this._searchDomainService;
@@ -176,7 +176,7 @@ export class RagDIContainer {
         this.getDocumentRepository(),
         this.getSearchDomainService(),
         this.getEmbeddingService(),
-        this.getSearchService()
+        this.getSearchAnalyticsService()
       );
     }
     return this._searchApplicationService;
@@ -192,7 +192,7 @@ export class RagDIContainer {
     this._organizationDataRepository = undefined as any;
     this._embeddingService = undefined as any;
     this._contentProcessor = undefined as any;
-    this._searchService = undefined as any;
+    this._searchAnalyticsService = undefined as any;
     this._indexingDomainService = undefined as any;
     this._searchDomainService = undefined as any;
     this._indexingApplicationService = undefined as any;
@@ -206,7 +206,7 @@ export class RagDIContainer {
     database: boolean;
     embedding: boolean;
     contentProcessor: boolean;
-    searchService: boolean;
+    searchAnalytics: boolean;
   }> {
     try {
       // Test database connection
@@ -221,7 +221,7 @@ export class RagDIContainer {
         database: true,
         embedding: true,
         contentProcessor: true,
-        searchService: true
+        searchAnalytics: true
       };
     } catch (error) {
       console.error('[RAG-DI-CONTAINER] Health check failed:', error);
@@ -229,7 +229,7 @@ export class RagDIContainer {
         database: false,
         embedding: false,
         contentProcessor: false,
-        searchService: false
+        searchAnalytics: false
       };
     }
   }
