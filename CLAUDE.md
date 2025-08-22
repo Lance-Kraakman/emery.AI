@@ -319,6 +319,54 @@ For development without full OAuth setup:
     └── [other-infrastructure]/
 ```
 
+### DDD Anti-Patterns to Avoid
+
+❌ **NEVER create legacy wrapper classes for "backwards compatibility"**:
+```typescript
+// DON'T DO THIS BULLSHIT:
+export const myService = new MyService();
+
+// Legacy class-based interface for backwards compatibility
+export class MyContainer {
+  static getMyService(): MyService {
+    return myService;  // Pointless wrapper
+  }
+}
+```
+- If you're migrating patterns, just migrate them - don't maintain both
+- Wrapper classes add zero value and create maintenance burden
+- Use direct exports: `export const myService = new MyService()`
+- Update call sites to use the new pattern directly
+
+❌ **NEVER use lazy singleton patterns with private statics**:
+```typescript
+// DON'T DO THIS BLOAT:
+class Container {
+  private static _service: Service;
+  
+  static getService(): Service {
+    if (!this._service) {
+      this._service = new Service();
+    }
+    return this._service;
+  }
+}
+```
+- Just export configured instances directly
+- Avoids unnecessary if-checks and private field management
+- Much cleaner and simpler dependency injection
+
+❌ **NEVER create Value Object conversions for internal operations**:
+```typescript
+// DON'T DO THIS OVERHEAD:
+const entities = await repository.getEntities();
+const valueObjects = entities.map(e => ValueObject.fromEntity(e));  // Pointless conversion
+const result = await service.process(valueObjects);
+```
+- Use domain entities directly in internal service calls
+- Value Objects are for external API boundaries only
+- Eliminates unnecessary conversion overhead
+
 ### DDD Layer Rules
 
 #### Domain Layer (`/ddd/domain/`)

@@ -3,11 +3,15 @@
 
 export { 
   IndexingDomainService,
-  type IndexingResult,
-  
-  type ProcessedContent,
-  type ContentProcessor
+  type IndexingResult
 } from './indexing-domain-service';
+
+export { 
+  type ContentProcessor,
+  type ProcessedContent,
+  type ContentProcessingConfig,
+  type FileProcessingContext
+} from './content-processor';
 
 export { 
   SearchDomainService,
@@ -17,7 +21,5 @@ export {
   type SearchLogger
 } from './search-domain-service';
 
-export {
-  OrganizationDataService,
-  type IOrganizationDataService
-} from './organization-data-service';
+// OrganizationDataService removed - eliminated redundant aggregation layer
+// Application services now call repositories directly

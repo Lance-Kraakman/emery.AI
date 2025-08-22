@@ -1,16 +1,16 @@
 // AIDEV-NOTE: Unit tests for RagIndex domain entity
 // Tests business rules and domain logic without infrastructure dependencies
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { RagIndex } from '@/ddd/domain/rag/entities/rag-index';
-import { OrganizationId } from '@/ddd/domain/rag/value-objects/organization-id';
+import { OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
 
 describe('RagIndex Domain Entity', () => {
   const validCreationParams = {
     name: 'Test Index',
     description: 'Test description',
     organizationId: OrganizationId.fromNumber(1),
-    domainTypes: ['table', 'file'],
+    domainTypes: ['table', 'file'] as DomainType[],
     createdBy: 'user-123'
   };
 
@@ -151,7 +151,8 @@ describe('RagIndex Domain Entity', () => {
 
     it('should update domain types', () => {
       index.updateDetails({
-        domainTypes: ['agent', 'team']      });
+        domainTypes: ['agent', 'team'] as DomainType[]
+      });
 
       expect(index.domainTypes).toEqual(['agent', 'team']);
     });

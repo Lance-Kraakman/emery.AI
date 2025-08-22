@@ -341,92 +341,98 @@ export class RagIndexingApplicationService {
     documentsAdded: number;
     documentsDeleted: number;
   }> {
-    let documents: any[] = [];
+    const indexers = {
+      'organization': () => this.indexOrganization(index),
+      'table': () => this.indexTables(index),
+      'database': () => this.indexDatabases(index),
+      'agent': () => this.indexAgents(index),
+      'team': () => this.indexTeams(index),
+      'file': () => this.indexFiles(index)
+    };
 
-    switch (domainType) {
-      case 'organization':
-        const organization = await this.organizationRepository.findById(index.organizationId.value);
-        if (organization) {
-          documents = await this.indexingDomainService.indexOrganizationData(
-            index.id, index.organizationId, organization
-          );
-        }
-        break;
-
-      case 'table':
-        const tables = await this.tableRepository.findByOrganization(index.organizationId.value);
-        if (tables.length > 0) {
-          // Get fields for all tables
-          const fieldsMap = new Map();
-          for (const table of tables) {
-            const fields = await this.fieldRepository.findByTableId(table.id);
-            fieldsMap.set(table.id, fields);
-          }
-          documents = await this.indexingDomainService.indexTableData(
-            index.id, index.organizationId, tables, fieldsMap
-          );
-        }
-        break;
-
-      case 'database':
-        const databases = await this.databaseRepository.findByOrganization(index.organizationId.value);
-        if (databases.length > 0) {
-          documents = await this.indexingDomainService.indexDatabaseData(
-            index.id, index.organizationId, databases
-          );
-        }
-        break;
-
-      case 'agent':
-        const agents = await this.agentRepository.findByOrganization(index.organizationId.value);
-        if (agents.length > 0) {
-          documents = await this.indexingDomainService.indexAgentData(
-            index.id, index.organizationId, agents
-          );
-        }
-        break;
-
-      case 'team':
-        const teams = await this.teamRepository.findByOrganization(index.organizationId.value);
-        if (teams.length > 0) {
-          documents = await this.indexingDomainService.indexTeamData(
-            index.id, index.organizationId, teams
-          );
-        }
-        break;
-
-      case 'file':
-        const files = await this.fileRepository.findByOrganization(index.organizationId.value);
-        if (files.length > 0) {
-          documents = await this.indexingDomainService.indexFileData(
-            index.id, index.organizationId, files
-          );
-        }
-        break;
-
-      default:
-        console.warn(`[RAG-INDEXING-APP] Unsupported domain type: ${domainType}`);
+    const indexer = indexers[domainType];
+    if (!indexer) {
+      console.warn(`[RAG-INDEXING-APP] Unsupported domain type: ${domainType}`);
+      return { documentsProcessed: 0, documentsAdded: 0, documentsDeleted: 0 };
     }
 
-    if (documents.length > 0) {
-      const syncResult = await this.documentRepository.synchronizeDocuments(
-        index.id, 
-        domainType, 
-        documents
-      );
-
-      return {
-        documentsProcessed: documents.length,
-        documentsAdded: syncResult.added,
-        documentsDeleted: syncResult.deleted
-      };
+    const documents = await indexer();
+    if (documents.length === 0) {
+      return { documentsProcessed: 0, documentsAdded: 0, documentsDeleted: 0 };
     }
+
+    const syncResult = await this.documentRepository.synchronizeDocuments(
+      index.id, 
+      domainType, 
+      documents
+    );
 
     return {
-      documentsProcessed: 0,
-      documentsAdded: 0,
-      documentsDeleted: 0
+      documentsProcessed: documents.length,
+      documentsAdded: syncResult.added,
+      documentsDeleted: syncResult.deleted
     };
+  }
+
+  private async indexOrganization(index: RagIndex): Promise<any[]> {
+    const organization = await this.organizationRepository.findById(index.organizationId.value);
+    if (!organization) return [];
+
+    return await this.indexingDomainService.indexOrganizationData(
+      index.id, index.organizationId, organization
+    );
+  }
+
+  private async indexTables(index: RagIndex): Promise<any[]> {
+    const tables = await this.tableRepository.findByOrganization(index.organizationId.value);
+    if (tables.length === 0) return [];
+
+    // Get fields for all tables efficiently
+    const fieldsMap = new Map();
+    for (const table of tables) {
+      const fields = await this.fieldRepository.findByTableId(table.id);
+      fieldsMap.set(table.id, fields);
+    }
+
+    return await this.indexingDomainService.indexTableData(
+      index.id, index.organizationId, tables, fieldsMap
+    );
+  }
+
+  private async indexDatabases(index: RagIndex): Promise<any[]> {
+    const databases = await this.databaseRepository.findByOrganization(index.organizationId.value);
+    if (databases.length === 0) return [];
+
+    return await this.indexingDomainService.indexDatabaseData(
+      index.id, index.organizationId, databases
+    );
+  }
+
+  private async indexAgents(index: RagIndex): Promise<any[]> {
+    const agents = await this.agentRepository.findByOrganization(index.organizationId.value);
+    if (agents.length === 0) return [];
+
+    return await this.indexingDomainService.indexAgentData(
+      index.id, index.organizationId, agents
+    );
+  }
+
+  private async indexTeams(index: RagIndex): Promise<any[]> {
+    const teams = await this.teamRepository.findByOrganization(index.organizationId.value);
+    if (teams.length === 0) return [];
+
+    return await this.indexingDomainService.indexTeamData(
+      index.id, index.organizationId, teams
+    );
+  }
+
+  private async indexFiles(index: RagIndex): Promise<any[]> {
+    const files = await this.fileRepository.findByOrganization(index.organizationId.value);
+    if (files.length === 0) return [];
+
+    return await this.indexingDomainService.indexFileData(
+      index.id, index.organizationId, files
+    );
   }
 
   private async performInitialIndexing(index: RagIndex): Promise<void> {

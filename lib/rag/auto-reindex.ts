@@ -1,4 +1,4 @@
-import { RagDIContainer } from '@/ddd/application/rag/di-container'
+import { indexingApplicationService, indexRepository } from '@/ddd/application/rag/di-container'
 import { OrganizationId } from '@/ddd/domain/rag/value-objects'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
 
@@ -15,8 +15,6 @@ export class AutoReindexService {
       console.log(`[AUTO-REINDEX] Starting reindexing for organization ${organizationId}`)
       
       const orgId = new OrganizationId(organizationId);
-      const indexingService = RagDIContainer.getIndexingApplicationService();
-      const indexRepository = RagDIContainer.getIndexRepository();
       
       // Get all active RAG indexes for this organization
       const indexes = await indexRepository.findByOrganization(orgId);
@@ -32,7 +30,7 @@ export class AutoReindexService {
         .map(async (index) => {
           try {
             console.log(`[AUTO-REINDEX] Reindexing ${index.name} (${index.id.value.substring(0, 8)})`)
-            await indexingService.rebuildIndex({ indexId: index.id.value });
+            await indexingApplicationService.rebuildIndex({ indexId: index.id.value });
             console.log(`[AUTO-REINDEX] Completed reindexing ${index.name}`)
           } catch (error) {
             console.error(`[AUTO-REINDEX] Failed to reindex ${index.name}:`, error)
@@ -59,8 +57,6 @@ export class AutoReindexService {
       console.log(`[AUTO-REINDEX] Reindexing ${domainType} for organization ${organizationId}`)
       
       const orgId = new OrganizationId(organizationId);
-      const indexingService = RagDIContainer.getIndexingApplicationService();
-      const indexRepository = RagDIContainer.getIndexRepository();
       
       const indexes = await indexRepository.findByOrganization(orgId);
       const relevantIndexes = indexes.filter(index => 

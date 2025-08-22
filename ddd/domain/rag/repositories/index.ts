@@ -20,13 +20,5 @@ export {
   type QueryAnalytics
 } from './rag-query-log-repository';
 
-export {
-  type OrganizationDataRepository,
-  type OrganizationData,
-  type TableData,
-  type FieldData,
-  type DatabaseData,
-  type AgentData,
-  type TeamData,
-  type FileData
-} from './organization-data-repository';
+// OrganizationDataRepository and data interfaces removed
+// Use domain entities directly instead of intermediate data interfaces

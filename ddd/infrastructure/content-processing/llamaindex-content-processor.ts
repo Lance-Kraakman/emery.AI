@@ -1,5 +1,5 @@
-// AIDEV-NOTE: LlamaIndex content processor implementation
-// Provides file processing and content generation capabilities
+// AIDEV-NOTE: LlamaIndex infrastructure implementation of ContentProcessor
+// Provides file processing using LlamaIndex library
 
 import crypto from 'crypto';
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
@@ -13,9 +13,10 @@ import { SimpleDirectoryReader } from "@llamaindex/readers/directory";
 import { 
   type ContentProcessor, 
   type ProcessedContent,
-} from '@/ddd/domain/rag/services';
+  type ContentProcessingConfig,
+  type FileProcessingContext
+} from '@/ddd/domain/rag/services/content-processor';
 import { type EmbeddingGenerator } from '@/ddd/domain/rag/services';
-import { FileData } from '@/ddd/domain/rag';
 
 export class LlamaIndexContentProcessor implements ContentProcessor {
   constructor(private readonly embeddingGenerator: EmbeddingGenerator) {}
@@ -28,14 +29,14 @@ export class LlamaIndexContentProcessor implements ContentProcessor {
     return crypto.createHash('md5').update(content).digest('hex');
   }
 
-  async processFileContent(fileData: FileData): Promise<ProcessedContent[]> {
+  async processFileContent(fileData: FileProcessingContext): Promise<ProcessedContent[]> {
     try {
       console.log(`[LLAMAINDEX-PROCESSOR] Processing file: ${fileData.name}`);
       
       // Download file from S3 to temporary location
       const response = await s3Client.send(new GetObjectCommand({
         Bucket: BUCKET_NAME,
-        Key: fileData.s3Key
+        Key: fileData.key
       }));
 
       if (!response.Body) {
@@ -63,9 +64,10 @@ export class LlamaIndexContentProcessor implements ContentProcessor {
       try {
         // Use LlamaIndex to process the document
         const llamaReader = new SimpleDirectoryReader();
+        const config = this.getProcessingConfig();
         const splitter = new SentenceSplitter({
-          chunkSize: 1024,
-          chunkOverlap: 50
+          chunkSize: config.chunkSize,
+          chunkOverlap: config.chunkOverlap
         });
         
         // Load and process document
@@ -92,11 +94,11 @@ export class LlamaIndexContentProcessor implements ContentProcessor {
             const baseContext = `
 
 CONTEXT AND RELATIONSHIPS:
-- This file belongs to the "${fileData.tableName}" table in the "${fileData.databaseName}" database
-- Stored in field: "${fileData.fieldName}" (field type: file)
-- This file contains data that is related to and belongs with other records in the "${fileData.tableName}" table
-- Use this file's content in context with the "${fileData.tableName}" table structure and data when answering questions
-- File location: Table "${fileData.tableName}" → Field "${fileData.fieldName}" → File "${fileData.name}"
+- This file belongs to the "${fileData.tableName || 'Unknown'}" table in the "${fileData.databaseName || 'Unknown'}" database
+- Stored in field: "${fileData.fieldName || 'Unknown'}" (field type: file)
+- This file contains data that is related to and belongs with other records in the "${fileData.tableName || 'Unknown'}" table
+- Use this file's content in context with the "${fileData.tableName || 'Unknown'}" table structure and data when answering questions
+- File location: Table "${fileData.tableName || 'Unknown'}" → Field "${fileData.fieldName || 'Unknown'}" → File "${fileData.name}"
 
 CONTENT QUESTIONS: This content can answer questions like:
 - What information is contained in ${fileData.name}?
@@ -122,7 +124,7 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${textChunks.length} from ${fileD
                 mimeType: fileData.mimeType,
                 fileSize: fileData.size,
                 uploadedAt: fileData.uploadedAt,
-                contextPath: `${fileData.databaseName} → ${fileData.tableName} → ${fileData.fieldName}`,
+                contextPath: `${fileData.databaseName || 'Unknown'} → ${fileData.tableName || 'Unknown'} → ${fileData.fieldName || 'Unknown'}`,
                 processingMethod: 'llamaindex'
               },
               embedding,
@@ -171,11 +173,7 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${textChunks.length} from ${fileD
   /**
    * Get processing configuration
    */
-  getProcessingConfig(): {
-    chunkSize: number;
-    chunkOverlap: number;
-    maxFileSize: number;
-  } {
+  getProcessingConfig(): ContentProcessingConfig {
     return {
       chunkSize: 1024,
       chunkOverlap: 50,
