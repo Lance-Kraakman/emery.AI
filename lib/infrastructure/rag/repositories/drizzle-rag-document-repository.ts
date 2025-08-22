@@ -93,46 +93,109 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
 
   async vectorSearch(params: VectorSearchParams): Promise<VectorSearchResult> {
     try {
-      // Choose similarity operator based on metric
-      let similarityOperator: string;
-      let orderDirection: 'ASC' | 'DESC' = 'ASC'; // Lower is better for distance metrics
+      // Build query based on similarity metric
+      // AIDEV-NOTE: Using proper parameterized queries to prevent SQL injection
+      let rawResults;
+      const embeddingVector = `[${params.queryEmbedding.join(',')}]`;
+      const indexId = params.indexId.value;
+      const limit = params.limit * 2;
       
       switch (params.similarityMetric) {
         case 'cosine':
-          similarityOperator = '<=>'; // Cosine distance
+          // Cosine distance (lower is better)
+          rawResults = await this.rawClient`
+            SELECT 
+              id, 
+              rag_index_id,
+              organization_id,
+              source_type, 
+              source_id, 
+              source_name, 
+              title, 
+              content, 
+              metadata,
+              content_hash,
+              indexed_at,
+              source_updated_at,
+              embedding <=> ${embeddingVector}::vector as similarity
+            FROM rag_documents
+            WHERE rag_index_id = ${indexId}
+            ORDER BY embedding <=> ${embeddingVector}::vector ASC
+            LIMIT ${limit}
+          `;
           break;
-        case 'euclidean': 
-          similarityOperator = '<->'; // Euclidean distance
+          
+        case 'euclidean':
+          // Euclidean distance (lower is better)
+          rawResults = await this.rawClient`
+            SELECT 
+              id, 
+              rag_index_id,
+              organization_id,
+              source_type, 
+              source_id, 
+              source_name, 
+              title, 
+              content, 
+              metadata,
+              content_hash,
+              indexed_at,
+              source_updated_at,
+              embedding <-> ${embeddingVector}::vector as similarity
+            FROM rag_documents
+            WHERE rag_index_id = ${indexId}
+            ORDER BY embedding <-> ${embeddingVector}::vector ASC
+            LIMIT ${limit}
+          `;
           break;
+          
         case 'inner_product':
-          similarityOperator = '<#>'; // Inner product
-          orderDirection = 'DESC'; // Higher is better for inner product
+          // Inner product (higher is better)
+          rawResults = await this.rawClient`
+            SELECT 
+              id, 
+              rag_index_id,
+              organization_id,
+              source_type, 
+              source_id, 
+              source_name, 
+              title, 
+              content, 
+              metadata,
+              content_hash,
+              indexed_at,
+              source_updated_at,
+              embedding <#> ${embeddingVector}::vector as similarity
+            FROM rag_documents
+            WHERE rag_index_id = ${indexId}
+            ORDER BY embedding <#> ${embeddingVector}::vector DESC
+            LIMIT ${limit}
+          `;
           break;
+          
         default:
-          similarityOperator = '<=>'; // Default to cosine distance
+          // Default to cosine distance
+          rawResults = await this.rawClient`
+            SELECT 
+              id, 
+              rag_index_id,
+              organization_id,
+              source_type, 
+              source_id, 
+              source_name, 
+              title, 
+              content, 
+              metadata,
+              content_hash,
+              indexed_at,
+              source_updated_at,
+              embedding <=> ${embeddingVector}::vector as similarity
+            FROM rag_documents
+            WHERE rag_index_id = ${indexId}
+            ORDER BY embedding <=> ${embeddingVector}::vector ASC
+            LIMIT ${limit}
+          `;
       }
-
-      // Perform vector similarity search using raw SQL with pgvector
-      const rawResults = await this.rawClient`
-        SELECT 
-          id, 
-          rag_index_id,
-          organization_id,
-          source_type, 
-          source_id, 
-          source_name, 
-          title, 
-          content, 
-          metadata,
-          content_hash,
-          indexed_at,
-          source_updated_at,
-          embedding ${sql.raw(similarityOperator)} ${JSON.stringify(params.queryEmbedding)}::vector as similarity
-        FROM rag_documents
-        WHERE rag_index_id = ${params.indexId.value}
-        ORDER BY embedding ${sql.raw(similarityOperator)} ${JSON.stringify(params.queryEmbedding)}::vector ${sql.raw(orderDirection)}
-        LIMIT ${params.limit * 2}
-      `;
 
       // Convert distance to similarity score and apply threshold
       const scoredDocuments = rawResults.map((doc: any) => {
