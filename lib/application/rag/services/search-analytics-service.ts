@@ -18,8 +18,9 @@ export class SearchAnalyticsService implements SearchLogger {
     sessionId?: string;
   }): Promise<void> {
     try {
-      // Generate embedding for the query for analytics (if needed)
-      const queryEmbedding = await this.generateQueryEmbedding(params.query.text);
+      // AIDEV-NOTE: Query embeddings for analytics not currently needed
+      // Could be added later for similarity-based query analytics
+      const queryEmbedding: number[] = [];
 
       await this.queryLogRepository.logQuery({
         indexId: params.indexId,

@@ -33,6 +33,7 @@ export class RagDispatcher {
   private mapLegacyDomainType(legacyType?: string): DomainType | undefined {
     if (!legacyType) return undefined;
     
+    // Map plural forms to singular for backward compatibility
     const mapping: Record<string, DomainType> = {
       'tables': 'table',
       'files': 'file', 
@@ -40,10 +41,17 @@ export class RagDispatcher {
       'teams': 'team',
       'workflows': 'agent', // Workflows are part of agent domain
       'organizations': 'organization',
-      'databases': 'database'
+      'databases': 'database',
+      // Already singular forms pass through
+      'table': 'table',
+      'file': 'file',
+      'agent': 'agent',
+      'team': 'team',
+      'organization': 'organization',
+      'database': 'database'
     };
     
-    return mapping[legacyType] || legacyType as DomainType;
+    return mapping[legacyType] || undefined;
   }
 
   /**

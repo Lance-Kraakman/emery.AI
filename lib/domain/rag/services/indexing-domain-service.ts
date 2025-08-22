@@ -2,7 +2,7 @@
 // Contains core business logic for indexing different data types
 
 import { RagDocument, type DocumentMetadata } from '../entities';
-import { RagIndexId, OrganizationId, type DomainType, type SourceType } from '../value-objects';
+import { RagIndexId, OrganizationId, type DomainType } from '../value-objects';
 
 export interface IndexingResult {
   documentsProcessed: number;

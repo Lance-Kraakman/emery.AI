@@ -37,7 +37,7 @@ export class AutoReindexService {
           } catch (error) {
             console.error(`[AUTO-REINDEX] Failed to reindex ${index.name}:`, error)
             // Mark index as error status using domain entity
-            index.markAsFailed();
+            index.failIndexing();
             await indexRepository.save(index);
           }
         })
@@ -80,7 +80,7 @@ export class AutoReindexService {
         } catch (error) {
           console.error(`[AUTO-REINDEX] Failed to reindex ${index.name} for ${domainType}:`, error)
           // Mark index as error status using domain entity
-          index.markAsFailed();
+          index.failIndexing();
           await indexRepository.save(index);
         }
       }

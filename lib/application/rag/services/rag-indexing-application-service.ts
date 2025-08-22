@@ -151,7 +151,7 @@ export class RagIndexingApplicationService {
       } catch (error) {
         console.error(`[RAG-INDEXING-APP] Failed to reindex ${index.name}:`, error);
         // Mark index as error status
-        index.markAsFailed();
+        index.failIndexing();
         await this.indexRepository.save(index);
       }
     });
@@ -265,7 +265,7 @@ export class RagIndexingApplicationService {
       };
 
     } catch (error) {
-      index.markAsFailed();
+      index.failIndexing();
       await this.indexRepository.save(index);
       throw error;
     }
