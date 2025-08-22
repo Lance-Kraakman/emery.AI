@@ -271,7 +271,7 @@ export class RagIndex {
     }
 
     const validDomainTypes: DomainType[] = [
-      'tables', 'files', 'agents', 'teams', 'workflows', 'organizations', 'databases'
+      'table', 'file', 'agent', 'team', 'organization', 'database'
     ];
 
     for (const domainType of domainTypes) {
