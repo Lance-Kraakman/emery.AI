@@ -1,11 +1,11 @@
-// AIDEV-NOTE: HuggingFace embedding service implementation
-// Provides embedding generation using the AI SDK
+// AIDEV-NOTE: Embedding service implementation
+// Provides embedding generation using the AI SDK with HuggingFace models
 
 import { embed } from 'ai';
 import { getEmbeddingModel } from '@/lib/ai/models';
 import { type EmbeddingGenerator } from '@/lib/domain/rag/services';
 
-export class HuggingFaceEmbeddingService implements EmbeddingGenerator {
+export class EmbeddingService implements EmbeddingGenerator {
   private readonly embeddingModel = getEmbeddingModel();
 
   async generateEmbedding(text: string): Promise<number[]> {
@@ -25,7 +25,7 @@ export class HuggingFaceEmbeddingService implements EmbeddingGenerator {
 
       return embedding;
     } catch (error) {
-      console.error('[HUGGINGFACE-EMBEDDING] Failed to generate embedding:', error);
+      console.error('[EMBEDDING-SERVICE] Failed to generate embedding:', error);
       throw new Error(`Embedding generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

@@ -3,16 +3,20 @@
 
 import { db, rawClient } from '@/lib/db/client';
 
-// Infrastructure
+// Infrastructure - Repositories and external integrations
 import { 
   DrizzleRagIndexRepository,
   DrizzleRagDocumentRepository,
   DrizzleRagQueryLogRepository,
   DrizzleOrganizationDataRepository,
-  EmbeddingService,
-  LlamaIndexContentProcessor,
-  SearchService
+  LlamaIndexContentProcessor
 } from '@/lib/infrastructure/rag';
+
+// Application Services
+import { 
+  EmbeddingService,
+  SearchService
+} from '@/lib/application/rag/services';
 
 // Domain Services  
 import { IndexingDomainService, SearchDomainService } from '@/lib/domain/rag/services';
