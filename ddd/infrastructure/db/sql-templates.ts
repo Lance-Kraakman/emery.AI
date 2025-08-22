@@ -170,8 +170,8 @@ export class SqlLogger {
 }
 
 // RAG System SQL Template Parameters
-export interface VectorSearchParams {
-  embeddingVector: number[];
+export interface RagVectorSearchParams {
+  queryEmbedding: number[];
   indexId: string;
   limit: number;
   similarityMetric: 'cosine' | 'euclidean' | 'inner_product';
@@ -206,9 +206,9 @@ export class RagSqlTemplates {
   /**
    * Vector similarity search using pgvector
    */
-  static vectorSimilaritySearch(params: VectorSearchParams): SqlQuery {
-    const { embeddingVector, indexId, limit, similarityMetric } = params;
-    const embeddingVectorStr = `[${embeddingVector.join(',')}]`;
+  static vectorSimilaritySearch(params: RagVectorSearchParams): SqlQuery {
+    const { queryEmbedding, indexId, limit, similarityMetric } = params;
+    const embeddingVectorStr = `[${queryEmbedding.join(',')}]`;
     
     let operator: string;
     let orderDirection: string;
