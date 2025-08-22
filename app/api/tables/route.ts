@@ -8,8 +8,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
-import { getDynamicTableRepository } from '@/lib/application/di/container';
-import type { CreateDynamicTableData } from '@/lib/domain/entities/dynamic-table';
+import { getDynamicTableRepository } from "@/ddd/application/di/container";
+import type { CreateDynamicTableData } from '@/app/actions/types';
 import { slugify } from '@/utils/slugify';
 
 /**

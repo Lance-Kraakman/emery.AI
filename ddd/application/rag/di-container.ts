@@ -108,7 +108,7 @@ export class RagDIContainer {
    */
   static getOrganizationDataRepository(): DrizzleOrganizationDataRepository {
     if (!this._organizationDataRepository) {
-      this._organizationDataRepository = new DrizzleOrganizationDataRepository(db, rawClient);
+      this._organizationDataRepository = new DrizzleOrganizationDataRepository(db);
     }
     return this._organizationDataRepository;
   }
@@ -180,57 +180,5 @@ export class RagDIContainer {
       );
     }
     return this._searchApplicationService;
-  }
-
-  /**
-   * Reset all cached instances (useful for testing)
-   */
-  static reset(): void {
-    this._indexRepository = undefined as any;
-    this._documentRepository = undefined as any;
-    this._queryLogRepository = undefined as any;
-    this._organizationDataRepository = undefined as any;
-    this._embeddingService = undefined as any;
-    this._contentProcessor = undefined as any;
-    this._searchAnalyticsService = undefined as any;
-    this._indexingDomainService = undefined as any;
-    this._searchDomainService = undefined as any;
-    this._indexingApplicationService = undefined as any;
-    this._searchApplicationService = undefined as any;
-  }
-
-  /**
-   * Get health status of all services
-   */
-  static async getHealthStatus(): Promise<{
-    database: boolean;
-    embedding: boolean;
-    contentProcessor: boolean;
-    searchAnalytics: boolean;
-  }> {
-    try {
-      // Test database connection
-      const indexRepo = this.getIndexRepository();
-      await indexRepo.countByOrganization({ value: 1 } as any);
-      
-      // Test embedding service
-      const embeddingService = this.getEmbeddingService();
-      await embeddingService.generateEmbedding('test');
-      
-      return {
-        database: true,
-        embedding: true,
-        contentProcessor: true,
-        searchAnalytics: true
-      };
-    } catch (error) {
-      console.error('[RAG-DI-CONTAINER] Health check failed:', error);
-      return {
-        database: false,
-        embedding: false,
-        contentProcessor: false,
-        searchAnalytics: false
-      };
-    }
   }
 }

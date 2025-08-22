@@ -5,9 +5,10 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
-import { getDynamicTableRepository } from '@/lib/application/di/container';
+import { getDynamicTableRepository } from "@/ddd/application/di/container";
+// import { getDynamicTableRepository } from '@/lib/application/di/container';
 import type { ActionResult, CreateRowData, UpdateRowData } from "./types";
-import type { CreateRowData as DomainCreateRowData, UpdateRowData as DomainUpdateRowData } from '@/lib/domain/entities/dynamic-table';
+// Domain types already available in ./types
 
 
 export async function createRow(data: CreateRowData, revalidateUrl?: string): Promise<ActionResult> {

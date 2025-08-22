@@ -194,28 +194,28 @@ export class DrizzleOrganizationDataRepository implements OrganizationDataReposi
 
     for (const domainType of domainTypes) {
       switch (domainType) {
-        case 'organizations':
+        case 'organization':
           const orgData = await this.getOrganizationData(organizationId);
           result.organizations = orgData ? [orgData] : [];
           break;
 
-        case 'tables':
+        case 'table':
           result.tables = await this.getTableData(organizationId);
           break;
 
-        case 'databases':
+        case 'database':
           result.databases = await this.getDatabaseData(organizationId);
           break;
 
-        case 'agents':
+        case 'agent':
           result.agents = await this.getAgentData(organizationId);
           break;
 
-        case 'teams':
+        case 'team':
           result.teams = await this.getTeamData(organizationId);
           break;
 
-        case 'files':
+        case 'file':
           result.files = await this.getFileData(organizationId);
           break;
 
@@ -259,13 +259,12 @@ export class DrizzleOrganizationDataRepository implements OrganizationDataReposi
     const fileCount = fileCountQuery[0]?.count || 0;
 
     return {
-      organizations: 1, // Always 1 for the organization itself
-      tables: tableCount.count,
-      databases: databaseCount.count,
-      agents: agentCount.count,
-      teams: teamCount.count,
-      files: Number(fileCount),
-      workflows: 0 // Not implemented yet
+      organization: 1, // Always 1 for the organization itself
+      table: tableCount.count,
+      database: databaseCount.count,
+      agent: agentCount.count,
+      team: teamCount.count,
+      file: Number(fileCount)
     };
   }
 }

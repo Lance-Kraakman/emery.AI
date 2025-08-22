@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react';
-import type { Field } from '@/lib/domain/entities/field';
+import type { Field } from '@/app/actions/types';
 import type { Row } from '@/app/actions/types';
 import { createRowAction, updateRowAction, deleteRowAction } from '@/app/actions/rows';
 

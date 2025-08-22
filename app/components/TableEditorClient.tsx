@@ -8,7 +8,7 @@ import { ArrowLeft } from 'lucide-react';
 import { getFields } from '@/app/actions/fields';
 import { getRowsData } from '@/app/actions/rows';
 import { getTables } from '@/app/actions/tables';
-import type { Field } from '@/lib/domain/entities/field';
+import type { Field } from '@/app/actions/types';
 import type { Row } from '@/app/actions/types';
 import FieldManager from './FieldManager';
 import RowManager from './RowManager';

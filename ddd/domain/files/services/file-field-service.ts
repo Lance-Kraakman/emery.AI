@@ -2,14 +2,14 @@
 // Handles the complex orchestration of field data storage and file storage operations
 
 import type { IFileStorageRepository } from '../repositories/file-storage-repository';
-import type { IFieldRepository } from '../repositories/field-repository';
+import type { IFieldRepository } from '../../fields/repositories/field-repository';
 import type {
   FileFieldValue,
   FileFieldConfig,
   Field,
   CreateFieldData,
   UpdateFieldData
-} from '../entities/field';
+} from '../../fields/entities/field';
 import type {
   FileUploadRequest,
   StoredFile,
@@ -307,7 +307,7 @@ export class FileFieldService {
 
       // Check file type
       if (fileConfig.allowedTypes && fileConfig.allowedTypes.length > 0) {
-        const isAllowed = fileConfig.allowedTypes.some(type => {
+        const isAllowed = fileConfig.allowedTypes.some((type: any) => {
           if (type.endsWith('*')) {
             return file.mimeType.startsWith(type.slice(0, -1));
           }

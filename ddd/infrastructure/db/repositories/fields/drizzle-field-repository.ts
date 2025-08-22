@@ -6,15 +6,15 @@ import type postgres from 'postgres';
 
 import { fields, tables } from '@/lib/db/schema';
 import type { DbClient } from '@/lib/db/client';
-import type { IFieldRepository } from '@/lib/domain/repositories/field-repository';
+import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
 import type { 
   Field, 
   CreateFieldData, 
   UpdateFieldData,
   FieldType
-} from '@/lib/domain/entities/field';
-import type { FileFieldService } from '@/lib/domain/services/file-field-service';
-import { FIELD_TYPE_MAPPING, needsGinIndex } from '@/lib/domain/entities/field';
+} from '@/ddd/domain/fields/entities/field';
+import type { FileFieldService } from '@/ddd/domain/files/services/file-field-service';
+import { FIELD_TYPE_MAPPING, needsGinIndex } from '@/ddd/domain/fields/entities/field';
 
 export class DrizzleFieldRepository implements IFieldRepository {
   constructor(

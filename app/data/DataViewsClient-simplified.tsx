@@ -12,7 +12,7 @@ import { FieldManagerDialog } from "./components/FieldManagerDialog"
 import { useEmeryData, EmeryTable } from "@/hooks/useEmeryData"
 import { getFields } from "@/app/actions/fields"
 import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
-import type { Field } from "@/lib/domain/entities/field"
+import type { Field } from "@/app/actions/types"
 import type { RowData } from "@/types/db"
 
 export function DataViewsClientSimplified() {

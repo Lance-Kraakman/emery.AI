@@ -7,7 +7,7 @@ import type postgres from 'postgres';
 
 import { users, userOrganizations, organizations, sessions } from '@/lib/db/schema';
 import type { DbClient } from '@/lib/db/client';
-import type { IUserRepository } from '@/lib/domain/repositories/user-repository';
+import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import type { 
   User, 
   CreateUserData, 
@@ -16,8 +16,8 @@ import type {
   CreateUserOrganizationData,
   SessionData,
   CreateSessionData
-} from '@/lib/domain/entities/user';
-import type { Organization } from '@/lib/domain/entities/organization';
+} from '@/ddd/domain/users/entities/user';
+import type { Organization } from '@/ddd/domain/organizations/entities/organization';
 
 export class DrizzleUserRepository implements IUserRepository {
   constructor(

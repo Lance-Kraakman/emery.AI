@@ -12,8 +12,8 @@ import { Badge } from "@/components/ui/badge"
 import { Plus, Trash2 } from "lucide-react"
 import { createField, deleteField } from "@/app/actions/fields"
 import { getTables } from "@/app/actions/tables"
-import type { Field } from "@/lib/domain/entities/field"
-import type { DynamicTable } from "@/lib/domain/entities/dynamic-table"
+import type { Field } from "@/app/actions/types"
+import type { Table } from "@/types/db"
 
 interface FieldManagerDialogProps {
   isOpen: boolean
@@ -41,7 +41,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
   const [newFieldRequired, setNewFieldRequired] = useState(false)
   const [newFieldRelatedTableId, setNewFieldRelatedTableId] = useState<number | undefined>()
   const [loading, setLoading] = useState(false)
-  const [availableTables, setAvailableTables] = useState<DynamicTable[]>([])
+  const [availableTables, setAvailableTables] = useState<Table[]>([])
 
   const handleAddField = async () => {
     if (!newFieldName || !newFieldType) return

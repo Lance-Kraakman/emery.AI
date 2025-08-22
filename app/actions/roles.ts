@@ -1,9 +1,10 @@
 'use server'
 
 import { revalidatePath } from "next/cache";
-import { getRoleRepository } from "@/lib/application/di/container";
+import { getRoleRepository } from "@/ddd/application/di/container";
+// import { getRoleRepository } from "@/lib/application/di/container";
 import type { ActionResult } from "./types";
-import type { CreateRoleData, UpdateRoleData } from "@/lib/domain/entities/role";
+import type { CreateRoleData, UpdateRoleData } from "./types";
 
 export async function createRole(data: CreateRoleData): Promise<ActionResult> {
   try {

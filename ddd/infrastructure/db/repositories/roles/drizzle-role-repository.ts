@@ -6,14 +6,14 @@ import type postgres from 'postgres';
 
 import { roles, users } from '@/lib/db/schema';
 import type { DbClient } from '@/lib/db/client';
-import type { IRoleRepository } from '@/lib/domain/repositories/role-repository';
+import type { IRoleRepository } from '@/ddd/domain/roles/repositories/role-repository';
 import type { 
   Role, 
   CreateRoleData, 
   UpdateRoleData,
   RoleType
-} from '@/lib/domain/entities/role';
-import { ROLE_TYPES, PERMISSIONS, DEFAULT_ROLE_PERMISSIONS } from '@/lib/domain/entities/role';
+} from '@/ddd/domain/roles/entities/role';
+import { ROLE_TYPES, PERMISSIONS, DEFAULT_ROLE_PERMISSIONS } from '@/ddd/domain/roles/entities/role';
 
 export class DrizzleRoleRepository implements IRoleRepository {
   constructor(
