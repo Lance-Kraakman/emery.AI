@@ -273,7 +273,7 @@ export class RagIndexingApplicationService {
 
   private async reindexOrganizationIndexes(
     organizationId: OrganizationId,
-    domainType?: string,
+    domainType?: DomainType,
     startTime: number = Date.now()
   ): Promise<IndexingResult> {
     const indexes = await this.indexRepository.findByOrganization(organizationId);
