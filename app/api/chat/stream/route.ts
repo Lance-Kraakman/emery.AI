@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server'
 import { streamText } from 'ai'
 import { auth } from '@/lib/auth'
+
+// Import the DI setup to ensure container is initialized
+import "@/ddd/application/di/setup"
 import { searchApplicationService, indexingApplicationService, indexRepository } from '@/ddd/application/di/rag-container'
 import { getAIModel, getAIProviderInfo } from '@/lib/ai/models'
 import { getChatApplicationService, getDynamicTableRepository, getAgentRepository } from '@/ddd/application/di/container'
