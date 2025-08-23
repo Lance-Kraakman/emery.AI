@@ -235,11 +235,16 @@ export class DualContextRagService {
 
       // 2. Get organizational (secondary) context from existing RAG system
       try {
+        // Generate a valid UUID for the default organizational index
+        // In a real system, this would be a configured organizational default index
+        const defaultOrgIndexId = 'ffffffff-ffff-ffff-ffff-ffffffffffff'; // Placeholder UUID
+        
         const searchQuery: SearchRagQuery = {
-          indexId: 'auto', // Use default org RAG index
+          indexId: defaultOrgIndexId, // Use valid UUID format
           query,
           limit: maxSecondaryDocs,
           threshold: similarityThreshold,
+          organizationId: organizationId,
           userId: 'system' // System query for context building
         };
 
@@ -264,8 +269,14 @@ export class DualContextRagService {
           });
         }
       } catch (ragError) {
-        console.error('[DUAL-CONTEXT-RAG] Secondary context search failed:', ragError);
-        // Continue without secondary context
+        // Check if error is due to missing index vs other issues
+        const errorMessage = ragError instanceof Error ? ragError.message : 'Unknown error';
+        if (errorMessage.includes('not found') || errorMessage.includes('Invalid index ID format')) {
+          console.log('[DUAL-CONTEXT-RAG] No secondary RAG index available for this organization');
+        } else {
+          console.error('[DUAL-CONTEXT-RAG] Secondary context search failed:', ragError);
+        }
+        // Continue without secondary context in all cases
       }
 
       const totalDocuments = primaryContext.length + secondaryContext.length;
