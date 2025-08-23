@@ -19,7 +19,14 @@ export async function POST(req: NextRequest) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
-      return new Response('Unauthorized', { status: 401 })
+      console.error('[CHAT-STREAM] Authentication failed - no valid session or user ID')
+      return new Response(
+        JSON.stringify({ error: 'Authentication required. Please log in and try again.' }),
+        { 
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
     }
 
     const { messages, chatId, tableId, domainType, domainId } = await req.json()
@@ -28,13 +35,14 @@ export async function POST(req: NextRequest) {
     // Check if HuggingFace is configured
     const providerInfo = getAIProviderInfo()
     if (!providerInfo.configured) {
+      console.error('[CHAT-STREAM] HuggingFace not configured - missing HF_TOKEN')
       return new Response(
         JSON.stringify({
-          error: 'HuggingFace not configured. Please add your HF_TOKEN to the environment variables.',
+          error: 'AI service not configured. Please add your HF_TOKEN to the environment variables.',
           details: 'Get your token from https://huggingface.co/settings/tokens'
         }),
         { 
-          status: 500,
+          status: 503, // Service Unavailable instead of 500
           headers: { 'Content-Type': 'application/json' }
         }
       )
@@ -42,7 +50,16 @@ export async function POST(req: NextRequest) {
 
     const organizationId = session.user.currentOrganizationId
     if (!organizationId) {
-      return new Response('No current organization found', { status: 400 })
+      console.error('[CHAT-STREAM] No current organization found for user:', session.user.id)
+      return new Response(
+        JSON.stringify({ 
+          error: 'No current organization found. Please select an organization and try again.' 
+        }),
+        { 
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
     }
 
     const chatApplicationService = getChatApplicationService()
@@ -212,8 +229,20 @@ Use this context to provide accurate, specific answers. When referencing informa
     let fullResponse = ''
     const responseStream = new TransformStream({
       transform(chunk, controller) {
+        // chunk is already a Uint8Array from the AI SDK textStream
         const decoder = new TextDecoder()
-        const text = decoder.decode(chunk)
+        let text = ''
+        
+        // Handle different chunk types safely
+        if (chunk instanceof Uint8Array) {
+          text = decoder.decode(chunk, { stream: true })
+        } else if (typeof chunk === 'string') {
+          text = chunk
+        } else {
+          // Convert to string if it's another type
+          text = String(chunk)
+        }
+        
         fullResponse += text
         controller.enqueue(chunk)
       },
