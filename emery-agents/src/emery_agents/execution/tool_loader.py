@@ -28,6 +28,9 @@ class ToolLoader:
             "emery_database": self._load_mock_emery_database,
             "table_schema": self._load_mock_table_schema,
             "table_data": self._load_mock_table_data,
+            # Domain API tools for organizational analysis
+            "measurement_api": self._load_measurement_api_tool,
+            "process_api": self._load_process_api_tool,
         }
     
     def load_tool(self, tool_config: ToolConfig) -> Any:
@@ -808,5 +811,798 @@ class ToolLoader:
                     return filtered_rows
             
             return MockTableDataTool()
+        except ImportError:
+            raise ValueError("smolagents not available - check smolagents installation")
+    
+    def _load_measurement_api_tool(self, config: ToolConfig) -> Any:
+        """Load Measurement API tool for organizational analysis."""
+        try:
+            from smolagents import Tool
+            import uuid
+            from datetime import datetime, timedelta
+            import json
+            
+            class MeasurementAPITool(Tool):
+                """Measurement API tool for managing organizational measurements and KPIs."""
+                name = "measurement_api"
+                description = "API for creating, updating, and analyzing organizational measurements and KPIs"
+                inputs = {
+                    "action": {"type": "string", "description": "Action to perform: create_measurement, update_measurement, get_measurements, calculate_kpi, create_kpi_definition, analyze_trends", "required": True},
+                    "organization_id": {"type": "integer", "description": "Organization ID", "required": True},
+                    "measurement_data": {"type": "object", "description": "Measurement data object", "nullable": True},
+                    "kpi_data": {"type": "object", "description": "KPI definition data", "nullable": True},
+                    "filters": {"type": "object", "description": "Query filters", "nullable": True}
+                }
+                output_type = "object"
+                
+                def __init__(self):
+                    super().__init__()
+                    # AIDEV-NOTE: Mock measurement storage for organizational analysis
+                    self.measurements = {}
+                    self.kpi_definitions = {}
+                    self._init_sample_data()
+                
+                def _init_sample_data(self):
+                    """Initialize with sample measurement data."""
+                    # Sample measurement categories and definitions
+                    sample_measurements = [
+                        {
+                            "id": "measure_001", "organization_id": 1, "category": "efficiency",
+                            "name": "Task Completion Rate", "value": 85.5, "unit": "percentage",
+                            "timestamp": (datetime.now() - timedelta(hours=2)).isoformat(),
+                            "metadata": {"department": "Operations", "source": "project_management_tool"}
+                        },
+                        {
+                            "id": "measure_002", "organization_id": 1, "category": "quality", 
+                            "name": "Customer Satisfaction Score", "value": 4.2, "unit": "rating_5",
+                            "timestamp": (datetime.now() - timedelta(hours=4)).isoformat(),
+                            "metadata": {"survey_responses": 127, "source": "customer_survey"}
+                        },
+                        {
+                            "id": "measure_003", "organization_id": 1, "category": "financial",
+                            "name": "Monthly Revenue", "value": 125000.00, "unit": "currency",
+                            "timestamp": (datetime.now() - timedelta(days=1)).isoformat(),
+                            "metadata": {"currency": "USD", "period": "2024-01", "source": "accounting_system"}
+                        },
+                        {
+                            "id": "measure_004", "organization_id": 1, "category": "performance",
+                            "name": "Response Time", "value": 2.3, "unit": "seconds",
+                            "timestamp": (datetime.now() - timedelta(minutes=30)).isoformat(),
+                            "metadata": {"endpoint": "api/data", "source": "monitoring_system"}
+                        }
+                    ]
+                    
+                    for measurement in sample_measurements:
+                        org_id = measurement["organization_id"]
+                        if org_id not in self.measurements:
+                            self.measurements[org_id] = {}
+                        self.measurements[org_id][measurement["id"]] = measurement
+                    
+                    # Sample KPI definitions
+                    sample_kpis = [
+                        {
+                            "id": "kpi_001", "organization_id": 1, "name": "Overall Efficiency Score",
+                            "description": "Weighted efficiency metric across all departments",
+                            "calculation": {
+                                "type": "weighted_average",
+                                "measurements": ["Task Completion Rate", "Response Time"],
+                                "weights": {"Task Completion Rate": 0.7, "Response Time": 0.3}
+                            },
+                            "target_value": 90.0, "unit": "percentage"
+                        },
+                        {
+                            "id": "kpi_002", "organization_id": 1, "name": "Customer Success Index",
+                            "description": "Combined metric of customer satisfaction and retention",
+                            "calculation": {
+                                "type": "composite",
+                                "formula": "(satisfaction_score * 0.6) + (retention_rate * 0.4)",
+                                "measurements": ["Customer Satisfaction Score", "Retention Rate"]
+                            },
+                            "target_value": 4.5, "unit": "index"
+                        }
+                    ]
+                    
+                    for kpi in sample_kpis:
+                        org_id = kpi["organization_id"]
+                        if org_id not in self.kpi_definitions:
+                            self.kpi_definitions[org_id] = {}
+                        self.kpi_definitions[org_id][kpi["id"]] = kpi
+                
+                def forward(self, action: str, organization_id: int, measurement_data: dict = None, 
+                           kpi_data: dict = None, filters: dict = None) -> dict:
+                    """Main tool interface for measurement operations."""
+                    
+                    if action == "create_measurement":
+                        return self.create_measurement(organization_id, measurement_data)
+                    elif action == "update_measurement":
+                        return self.update_measurement(organization_id, measurement_data)
+                    elif action == "get_measurements":
+                        return self.get_measurements(organization_id, filters)
+                    elif action == "calculate_kpi":
+                        return self.calculate_kpi(organization_id, kpi_data)
+                    elif action == "create_kpi_definition":
+                        return self.create_kpi_definition(organization_id, kpi_data)
+                    elif action == "analyze_trends":
+                        return self.analyze_trends(organization_id, filters)
+                    else:
+                        return {"success": False, "error": f"Unknown action: {action}"}
+                
+                def create_measurement(self, organization_id: int, measurement_data: dict) -> dict:
+                    """Create a new measurement record."""
+                    if not measurement_data:
+                        return {"success": False, "error": "measurement_data is required"}
+                    
+                    measurement_id = f"measure_{uuid.uuid4().hex[:8]}"
+                    timestamp = datetime.now().isoformat()
+                    
+                    measurement = {
+                        "id": measurement_id,
+                        "organization_id": organization_id,
+                        "name": measurement_data.get("name", ""),
+                        "category": measurement_data.get("category", "general"),
+                        "value": measurement_data.get("value", 0),
+                        "unit": measurement_data.get("unit", "count"),
+                        "timestamp": timestamp,
+                        "metadata": measurement_data.get("metadata", {})
+                    }
+                    
+                    if organization_id not in self.measurements:
+                        self.measurements[organization_id] = {}
+                    self.measurements[organization_id][measurement_id] = measurement
+                    
+                    return {
+                        "success": True,
+                        "message": "Measurement created successfully",
+                        "measurement": measurement,
+                        "measurement_id": measurement_id
+                    }
+                
+                def update_measurement(self, organization_id: int, measurement_data: dict) -> dict:
+                    """Update an existing measurement."""
+                    if not measurement_data or "id" not in measurement_data:
+                        return {"success": False, "error": "measurement_data with id is required"}
+                    
+                    measurement_id = measurement_data["id"]
+                    
+                    if (organization_id not in self.measurements or 
+                        measurement_id not in self.measurements[organization_id]):
+                        return {"success": False, "error": f"Measurement {measurement_id} not found"}
+                    
+                    measurement = self.measurements[organization_id][measurement_id]
+                    measurement.update({
+                        "value": measurement_data.get("value", measurement["value"]),
+                        "timestamp": datetime.now().isoformat(),
+                        "metadata": {**measurement["metadata"], **(measurement_data.get("metadata", {}))}
+                    })
+                    
+                    return {
+                        "success": True,
+                        "message": "Measurement updated successfully",
+                        "measurement": measurement
+                    }
+                
+                def get_measurements(self, organization_id: int, filters: dict = None) -> dict:
+                    """Retrieve measurements with optional filtering."""
+                    if organization_id not in self.measurements:
+                        return {"success": True, "measurements": [], "count": 0}
+                    
+                    measurements = list(self.measurements[organization_id].values())
+                    
+                    # Apply filters
+                    if filters:
+                        if "category" in filters:
+                            measurements = [m for m in measurements if m["category"] == filters["category"]]
+                        if "name" in filters:
+                            measurements = [m for m in measurements if filters["name"].lower() in m["name"].lower()]
+                        if "date_from" in filters:
+                            measurements = [m for m in measurements if m["timestamp"] >= filters["date_from"]]
+                        if "date_to" in filters:
+                            measurements = [m for m in measurements if m["timestamp"] <= filters["date_to"]]
+                    
+                    # Sort by timestamp (most recent first)
+                    measurements.sort(key=lambda m: m["timestamp"], reverse=True)
+                    
+                    return {
+                        "success": True,
+                        "measurements": measurements,
+                        "count": len(measurements),
+                        "organization_id": organization_id,
+                        "filters_applied": filters or {}
+                    }
+                
+                def calculate_kpi(self, organization_id: int, kpi_data: dict) -> dict:
+                    """Calculate KPI value based on measurements."""
+                    if not kpi_data or "kpi_id" not in kpi_data:
+                        return {"success": False, "error": "kpi_data with kpi_id is required"}
+                    
+                    kpi_id = kpi_data["kpi_id"]
+                    
+                    if (organization_id not in self.kpi_definitions or 
+                        kpi_id not in self.kpi_definitions[organization_id]):
+                        return {"success": False, "error": f"KPI definition {kpi_id} not found"}
+                    
+                    kpi_def = self.kpi_definitions[organization_id][kpi_id]
+                    calculation = kpi_def["calculation"]
+                    
+                    # Get relevant measurements
+                    measurements = self.measurements.get(organization_id, {})
+                    
+                    if calculation["type"] == "weighted_average":
+                        weighted_sum = 0
+                        total_weight = 0
+                        
+                        for measurement_name, weight in calculation["weights"].items():
+                            # Find most recent measurement with this name
+                            matching_measurements = [
+                                m for m in measurements.values() 
+                                if m["name"] == measurement_name
+                            ]
+                            if matching_measurements:
+                                latest_measurement = max(matching_measurements, key=lambda m: m["timestamp"])
+                                weighted_sum += latest_measurement["value"] * weight
+                                total_weight += weight
+                        
+                        kpi_value = weighted_sum / total_weight if total_weight > 0 else 0
+                    
+                    elif calculation["type"] == "composite":
+                        # Simple evaluation for demonstration
+                        # In real implementation, would use proper formula parser
+                        kpi_value = 4.1  # Mock calculated value
+                    
+                    else:
+                        kpi_value = 0
+                    
+                    result = {
+                        "success": True,
+                        "kpi_id": kpi_id,
+                        "kpi_name": kpi_def["name"],
+                        "calculated_value": kpi_value,
+                        "target_value": kpi_def.get("target_value"),
+                        "unit": kpi_def.get("unit"),
+                        "calculation_timestamp": datetime.now().isoformat(),
+                        "status": "above_target" if kpi_value >= kpi_def.get("target_value", 0) else "below_target"
+                    }
+                    
+                    return result
+                
+                def create_kpi_definition(self, organization_id: int, kpi_data: dict) -> dict:
+                    """Create a new KPI definition."""
+                    if not kpi_data:
+                        return {"success": False, "error": "kpi_data is required"}
+                    
+                    kpi_id = f"kpi_{uuid.uuid4().hex[:8]}"
+                    
+                    kpi_definition = {
+                        "id": kpi_id,
+                        "organization_id": organization_id,
+                        "name": kpi_data.get("name", ""),
+                        "description": kpi_data.get("description", ""),
+                        "calculation": kpi_data.get("calculation", {}),
+                        "target_value": kpi_data.get("target_value"),
+                        "unit": kpi_data.get("unit", ""),
+                        "created_at": datetime.now().isoformat()
+                    }
+                    
+                    if organization_id not in self.kpi_definitions:
+                        self.kpi_definitions[organization_id] = {}
+                    self.kpi_definitions[organization_id][kpi_id] = kpi_definition
+                    
+                    return {
+                        "success": True,
+                        "message": "KPI definition created successfully",
+                        "kpi_definition": kpi_definition,
+                        "kpi_id": kpi_id
+                    }
+                
+                def analyze_trends(self, organization_id: int, filters: dict = None) -> dict:
+                    """Analyze measurement trends and provide insights."""
+                    if organization_id not in self.measurements:
+                        return {"success": True, "analysis": {"trends": [], "insights": []}}
+                    
+                    measurements = list(self.measurements[organization_id].values())
+                    
+                    # Group by category for analysis
+                    categories = {}
+                    for measurement in measurements:
+                        category = measurement["category"]
+                        if category not in categories:
+                            categories[category] = []
+                        categories[category].append(measurement)
+                    
+                    trends = []
+                    insights = []
+                    
+                    for category, category_measurements in categories.items():
+                        if len(category_measurements) >= 2:
+                            # Simple trend analysis (mock)
+                            latest = max(category_measurements, key=lambda m: m["timestamp"])
+                            oldest = min(category_measurements, key=lambda m: m["timestamp"])
+                            
+                            change = latest["value"] - oldest["value"]
+                            change_percent = (change / oldest["value"]) * 100 if oldest["value"] != 0 else 0
+                            
+                            trend = {
+                                "category": category,
+                                "direction": "increasing" if change > 0 else "decreasing" if change < 0 else "stable",
+                                "change_value": change,
+                                "change_percentage": round(change_percent, 2),
+                                "latest_value": latest["value"],
+                                "measurement_count": len(category_measurements)
+                            }
+                            trends.append(trend)
+                            
+                            # Generate insights
+                            if abs(change_percent) > 10:
+                                insight = f"{category.title()} metrics show significant {'improvement' if change > 0 else 'decline'} of {abs(change_percent):.1f}%"
+                                insights.append(insight)
+                    
+                    return {
+                        "success": True,
+                        "analysis": {
+                            "trends": trends,
+                            "insights": insights,
+                            "total_measurements": len(measurements),
+                            "categories_analyzed": list(categories.keys()),
+                            "analysis_timestamp": datetime.now().isoformat()
+                        }
+                    }
+            
+            return MeasurementAPITool()
+        except ImportError:
+            raise ValueError("smolagents not available - check smolagents installation")
+    
+    def _load_process_api_tool(self, config: ToolConfig) -> Any:
+        """Load Process API tool for organizational process management."""
+        try:
+            from smolagents import Tool
+            import uuid
+            from datetime import datetime, timedelta
+            import json
+            
+            class ProcessAPITool(Tool):
+                """Process API tool for managing organizational processes and workflows."""
+                name = "process_api"
+                description = "API for creating, updating, and analyzing organizational processes and workflows"
+                inputs = {
+                    "action": {"type": "string", "description": "Action to perform: create_process, update_process, get_processes, analyze_bottlenecks, track_performance, create_improvement", "required": True},
+                    "organization_id": {"type": "integer", "description": "Organization ID", "required": True},
+                    "process_data": {"type": "object", "description": "Process data object", "nullable": True},
+                    "improvement_data": {"type": "object", "description": "Process improvement data", "nullable": True},
+                    "filters": {"type": "object", "description": "Query filters", "nullable": True}
+                }
+                output_type = "object"
+                
+                def __init__(self):
+                    super().__init__()
+                    # AIDEV-NOTE: Mock process storage for organizational analysis
+                    self.processes = {}
+                    self.process_executions = {}
+                    self.improvements = {}
+                    self._init_sample_data()
+                
+                def _init_sample_data(self):
+                    """Initialize with sample process data."""
+                    # Sample process definitions
+                    sample_processes = [
+                        {
+                            "id": "proc_001", "organization_id": 1, "name": "Customer Onboarding",
+                            "description": "Complete process for onboarding new customers",
+                            "category": "customer_management", "owner": "Sales Team",
+                            "steps": [
+                                {
+                                    "id": "step_001", "name": "Initial Contact", "duration_minutes": 30,
+                                    "description": "First contact and needs assessment", "order": 1,
+                                    "required_resources": ["Account Manager"], "automation_level": "manual"
+                                },
+                                {
+                                    "id": "step_002", "name": "Documentation Review", "duration_minutes": 60,
+                                    "description": "Review and process customer documentation", "order": 2,
+                                    "required_resources": ["Document Processor"], "automation_level": "semi_automated"
+                                },
+                                {
+                                    "id": "step_003", "name": "System Setup", "duration_minutes": 45,
+                                    "description": "Configure customer account in systems", "order": 3,
+                                    "required_resources": ["Technical Team"], "automation_level": "automated"
+                                },
+                                {
+                                    "id": "step_004", "name": "Welcome Call", "duration_minutes": 30,
+                                    "description": "Welcome call and orientation session", "order": 4,
+                                    "required_resources": ["Customer Success"], "automation_level": "manual"
+                                }
+                            ],
+                            "created_at": "2024-01-10T08:00:00Z",
+                            "status": "active", "version": "1.2"
+                        },
+                        {
+                            "id": "proc_002", "organization_id": 1, "name": "Order Fulfillment",
+                            "description": "Process for handling and fulfilling customer orders",
+                            "category": "operations", "owner": "Operations Team",
+                            "steps": [
+                                {
+                                    "id": "step_005", "name": "Order Validation", "duration_minutes": 15,
+                                    "description": "Validate order details and inventory", "order": 1,
+                                    "required_resources": ["System"], "automation_level": "automated"
+                                },
+                                {
+                                    "id": "step_006", "name": "Payment Processing", "duration_minutes": 10,
+                                    "description": "Process customer payment", "order": 2,
+                                    "required_resources": ["Payment System"], "automation_level": "automated"
+                                },
+                                {
+                                    "id": "step_007", "name": "Inventory Allocation", "duration_minutes": 20,
+                                    "description": "Allocate inventory and prepare for shipping", "order": 3,
+                                    "required_resources": ["Warehouse Staff"], "automation_level": "semi_automated"
+                                },
+                                {
+                                    "id": "step_008", "name": "Shipping", "duration_minutes": 60,
+                                    "description": "Package and ship the order", "order": 4,
+                                    "required_resources": ["Fulfillment Team"], "automation_level": "manual"
+                                }
+                            ],
+                            "created_at": "2024-01-10T08:30:00Z",
+                            "status": "active", "version": "2.0"
+                        }
+                    ]
+                    
+                    for process in sample_processes:
+                        org_id = process["organization_id"]
+                        if org_id not in self.processes:
+                            self.processes[org_id] = {}
+                        self.processes[org_id][process["id"]] = process
+                    
+                    # Sample process execution data
+                    sample_executions = [
+                        {
+                            "id": "exec_001", "process_id": "proc_001", "organization_id": 1,
+                            "status": "completed", "started_at": "2024-01-15T09:00:00Z",
+                            "completed_at": "2024-01-15T11:45:00Z", "total_duration_minutes": 165,
+                            "step_performance": {
+                                "step_001": {"duration_minutes": 35, "status": "completed"},
+                                "step_002": {"duration_minutes": 75, "status": "completed"},
+                                "step_003": {"duration_minutes": 40, "status": "completed"},
+                                "step_004": {"duration_minutes": 25, "status": "completed"}
+                            },
+                            "metadata": {"customer_id": "cust_001", "assignee": "John Smith"}
+                        },
+                        {
+                            "id": "exec_002", "process_id": "proc_002", "organization_id": 1,
+                            "status": "completed", "started_at": "2024-01-15T10:30:00Z",
+                            "completed_at": "2024-01-15T12:15:00Z", "total_duration_minutes": 105,
+                            "step_performance": {
+                                "step_005": {"duration_minutes": 12, "status": "completed"},
+                                "step_006": {"duration_minutes": 8, "status": "completed"},
+                                "step_007": {"duration_minutes": 25, "status": "completed"},
+                                "step_008": {"duration_minutes": 60, "status": "completed"}
+                            },
+                            "metadata": {"order_id": "ord_001", "total_amount": 2500.00}
+                        }
+                    ]
+                    
+                    for execution in sample_executions:
+                        org_id = execution["organization_id"]
+                        if org_id not in self.process_executions:
+                            self.process_executions[org_id] = {}
+                        self.process_executions[org_id][execution["id"]] = execution
+                    
+                    # Sample improvement tracking
+                    sample_improvements = [
+                        {
+                            "id": "imp_001", "organization_id": 1, "process_id": "proc_001",
+                            "title": "Automate Documentation Review", "description": "Implement OCR and automated validation for customer documents",
+                            "category": "automation", "priority": "high", "status": "in_progress",
+                            "estimated_savings": {"time_minutes_per_execution": 30, "cost_per_execution": 25.00},
+                            "created_at": "2024-01-12T14:00:00Z", "target_completion": "2024-02-15T00:00:00Z"
+                        }
+                    ]
+                    
+                    for improvement in sample_improvements:
+                        org_id = improvement["organization_id"]
+                        if org_id not in self.improvements:
+                            self.improvements[org_id] = {}
+                        self.improvements[org_id][improvement["id"]] = improvement
+                
+                def forward(self, action: str, organization_id: int, process_data: dict = None,
+                           improvement_data: dict = None, filters: dict = None) -> dict:
+                    """Main tool interface for process operations."""
+                    
+                    if action == "create_process":
+                        return self.create_process(organization_id, process_data)
+                    elif action == "update_process":
+                        return self.update_process(organization_id, process_data)
+                    elif action == "get_processes":
+                        return self.get_processes(organization_id, filters)
+                    elif action == "analyze_bottlenecks":
+                        return self.analyze_bottlenecks(organization_id, filters)
+                    elif action == "track_performance":
+                        return self.track_performance(organization_id, filters)
+                    elif action == "create_improvement":
+                        return self.create_improvement(organization_id, improvement_data)
+                    else:
+                        return {"success": False, "error": f"Unknown action: {action}"}
+                
+                def create_process(self, organization_id: int, process_data: dict) -> dict:
+                    """Create a new process definition."""
+                    if not process_data:
+                        return {"success": False, "error": "process_data is required"}
+                    
+                    process_id = f"proc_{uuid.uuid4().hex[:8]}"
+                    timestamp = datetime.now().isoformat()
+                    
+                    process = {
+                        "id": process_id,
+                        "organization_id": organization_id,
+                        "name": process_data.get("name", ""),
+                        "description": process_data.get("description", ""),
+                        "category": process_data.get("category", "general"),
+                        "owner": process_data.get("owner", ""),
+                        "steps": process_data.get("steps", []),
+                        "status": "active",
+                        "version": "1.0",
+                        "created_at": timestamp
+                    }
+                    
+                    if organization_id not in self.processes:
+                        self.processes[organization_id] = {}
+                    self.processes[organization_id][process_id] = process
+                    
+                    return {
+                        "success": True,
+                        "message": "Process created successfully",
+                        "process": process,
+                        "process_id": process_id
+                    }
+                
+                def update_process(self, organization_id: int, process_data: dict) -> dict:
+                    """Update an existing process."""
+                    if not process_data or "id" not in process_data:
+                        return {"success": False, "error": "process_data with id is required"}
+                    
+                    process_id = process_data["id"]
+                    
+                    if (organization_id not in self.processes or
+                        process_id not in self.processes[organization_id]):
+                        return {"success": False, "error": f"Process {process_id} not found"}
+                    
+                    process = self.processes[organization_id][process_id]
+                    
+                    # Update process fields
+                    updates = {}
+                    for field in ["name", "description", "category", "owner", "steps", "status"]:
+                        if field in process_data:
+                            updates[field] = process_data[field]
+                    
+                    # Increment version for significant changes
+                    if any(field in updates for field in ["steps", "description"]):
+                        current_version = float(process["version"])
+                        updates["version"] = f"{current_version + 0.1:.1f}"
+                    
+                    process.update(updates)
+                    
+                    return {
+                        "success": True,
+                        "message": "Process updated successfully",
+                        "process": process
+                    }
+                
+                def get_processes(self, organization_id: int, filters: dict = None) -> dict:
+                    """Retrieve processes with optional filtering."""
+                    if organization_id not in self.processes:
+                        return {"success": True, "processes": [], "count": 0}
+                    
+                    processes = list(self.processes[organization_id].values())
+                    
+                    # Apply filters
+                    if filters:
+                        if "category" in filters:
+                            processes = [p for p in processes if p["category"] == filters["category"]]
+                        if "owner" in filters:
+                            processes = [p for p in processes if filters["owner"].lower() in p["owner"].lower()]
+                        if "status" in filters:
+                            processes = [p for p in processes if p["status"] == filters["status"]]
+                        if "name" in filters:
+                            processes = [p for p in processes if filters["name"].lower() in p["name"].lower()]
+                    
+                    # Add performance metrics to each process
+                    for process in processes:
+                        process_executions = [
+                            e for e in self.process_executions.get(organization_id, {}).values()
+                            if e["process_id"] == process["id"]
+                        ]
+                        
+                        if process_executions:
+                            completed_executions = [e for e in process_executions if e["status"] == "completed"]
+                            avg_duration = sum(e["total_duration_minutes"] for e in completed_executions) / len(completed_executions) if completed_executions else 0
+                            
+                            process["performance_metrics"] = {
+                                "total_executions": len(process_executions),
+                                "completed_executions": len(completed_executions),
+                                "average_duration_minutes": round(avg_duration, 2),
+                                "success_rate": round((len(completed_executions) / len(process_executions)) * 100, 1)
+                            }
+                        else:
+                            process["performance_metrics"] = {
+                                "total_executions": 0,
+                                "completed_executions": 0,
+                                "average_duration_minutes": 0,
+                                "success_rate": 0
+                            }
+                    
+                    return {
+                        "success": True,
+                        "processes": processes,
+                        "count": len(processes),
+                        "organization_id": organization_id,
+                        "filters_applied": filters or {}
+                    }
+                
+                def analyze_bottlenecks(self, organization_id: int, filters: dict = None) -> dict:
+                    """Analyze process bottlenecks and inefficiencies."""
+                    if organization_id not in self.process_executions:
+                        return {"success": True, "analysis": {"bottlenecks": [], "recommendations": []}}
+                    
+                    executions = list(self.process_executions[organization_id].values())
+                    processes = self.processes.get(organization_id, {})
+                    
+                    # Apply filters
+                    if filters:
+                        if "process_id" in filters:
+                            executions = [e for e in executions if e["process_id"] == filters["process_id"]]
+                        if "date_from" in filters:
+                            executions = [e for e in executions if e["started_at"] >= filters["date_from"]]
+                    
+                    bottlenecks = []
+                    recommendations = []
+                    
+                    # Analyze step performance across executions
+                    step_performance = {}
+                    
+                    for execution in executions:
+                        if execution["status"] == "completed":
+                            process_id = execution["process_id"]
+                            process_def = processes.get(process_id, {})
+                            
+                            for step_id, step_data in execution.get("step_performance", {}).items():
+                                if step_id not in step_performance:
+                                    step_performance[step_id] = {
+                                        "durations": [],
+                                        "process_id": process_id,
+                                        "process_name": process_def.get("name", "Unknown")
+                                    }
+                                step_performance[step_id]["durations"].append(step_data["duration_minutes"])
+                    
+                    # Identify bottleneck steps
+                    for step_id, data in step_performance.items():
+                        durations = data["durations"]
+                        if len(durations) >= 2:
+                            avg_duration = sum(durations) / len(durations)
+                            max_duration = max(durations)
+                            variance = sum((d - avg_duration) ** 2 for d in durations) / len(durations)
+                            
+                            # Identify bottlenecks based on duration and variance
+                            if avg_duration > 45 or variance > 100:  # Threshold for bottleneck identification
+                                bottleneck = {
+                                    "step_id": step_id,
+                                    "process_id": data["process_id"],
+                                    "process_name": data["process_name"],
+                                    "average_duration_minutes": round(avg_duration, 2),
+                                    "max_duration_minutes": max_duration,
+                                    "variance": round(variance, 2),
+                                    "execution_count": len(durations),
+                                    "severity": "high" if avg_duration > 60 else "medium"
+                                }
+                                bottlenecks.append(bottleneck)
+                                
+                                # Generate recommendations
+                                if avg_duration > 60:
+                                    recommendations.append(f"Consider automating or optimizing step '{step_id}' in {data['process_name']} - average duration is {avg_duration:.1f} minutes")
+                                if variance > 150:
+                                    recommendations.append(f"Standardize step '{step_id}' in {data['process_name']} - high variance indicates inconsistent execution")
+                    
+                    # Sort bottlenecks by severity and duration
+                    bottlenecks.sort(key=lambda b: b["average_duration_minutes"], reverse=True)
+                    
+                    return {
+                        "success": True,
+                        "analysis": {
+                            "bottlenecks": bottlenecks,
+                            "recommendations": recommendations,
+                            "total_executions_analyzed": len(executions),
+                            "analysis_timestamp": datetime.now().isoformat()
+                        }
+                    }
+                
+                def track_performance(self, organization_id: int, filters: dict = None) -> dict:
+                    """Track process performance metrics over time."""
+                    if organization_id not in self.process_executions:
+                        return {"success": True, "performance": {"metrics": {}, "trends": []}}
+                    
+                    executions = list(self.process_executions[organization_id].values())
+                    processes = self.processes.get(organization_id, {})
+                    
+                    # Apply filters
+                    if filters:
+                        if "process_id" in filters:
+                            executions = [e for e in executions if e["process_id"] == filters["process_id"]]
+                    
+                    # Calculate overall performance metrics
+                    completed_executions = [e for e in executions if e["status"] == "completed"]
+                    
+                    if not completed_executions:
+                        return {"success": True, "performance": {"metrics": {}, "trends": []}}
+                    
+                    # Overall metrics
+                    total_duration = sum(e["total_duration_minutes"] for e in completed_executions)
+                    avg_duration = total_duration / len(completed_executions)
+                    
+                    # Process-specific metrics
+                    process_metrics = {}
+                    for process_id, process_data in processes.items():
+                        process_executions = [e for e in completed_executions if e["process_id"] == process_id]
+                        if process_executions:
+                            process_avg = sum(e["total_duration_minutes"] for e in process_executions) / len(process_executions)
+                            process_metrics[process_id] = {
+                                "name": process_data["name"],
+                                "executions": len(process_executions),
+                                "average_duration_minutes": round(process_avg, 2),
+                                "total_time_spent_minutes": sum(e["total_duration_minutes"] for e in process_executions)
+                            }
+                    
+                    # Simple trend analysis (mock)
+                    trends = [
+                        "Process execution efficiency improved by 12% over last month",
+                        "Customer Onboarding process showing consistent performance",
+                        "Order Fulfillment process duration reduced by 8 minutes on average"
+                    ]
+                    
+                    return {
+                        "success": True,
+                        "performance": {
+                            "overall_metrics": {
+                                "total_executions": len(executions),
+                                "completed_executions": len(completed_executions),
+                                "success_rate": round((len(completed_executions) / len(executions)) * 100, 1),
+                                "average_duration_minutes": round(avg_duration, 2),
+                                "total_time_spent_minutes": total_duration
+                            },
+                            "process_metrics": process_metrics,
+                            "trends": trends,
+                            "analysis_timestamp": datetime.now().isoformat()
+                        }
+                    }
+                
+                def create_improvement(self, organization_id: int, improvement_data: dict) -> dict:
+                    """Create a new process improvement initiative."""
+                    if not improvement_data:
+                        return {"success": False, "error": "improvement_data is required"}
+                    
+                    improvement_id = f"imp_{uuid.uuid4().hex[:8]}"
+                    timestamp = datetime.now().isoformat()
+                    
+                    improvement = {
+                        "id": improvement_id,
+                        "organization_id": organization_id,
+                        "process_id": improvement_data.get("process_id", ""),
+                        "title": improvement_data.get("title", ""),
+                        "description": improvement_data.get("description", ""),
+                        "category": improvement_data.get("category", "optimization"),
+                        "priority": improvement_data.get("priority", "medium"),
+                        "status": "planned",
+                        "estimated_savings": improvement_data.get("estimated_savings", {}),
+                        "created_at": timestamp,
+                        "target_completion": improvement_data.get("target_completion", "")
+                    }
+                    
+                    if organization_id not in self.improvements:
+                        self.improvements[organization_id] = {}
+                    self.improvements[organization_id][improvement_id] = improvement
+                    
+                    return {
+                        "success": True,
+                        "message": "Process improvement created successfully",
+                        "improvement": improvement,
+                        "improvement_id": improvement_id
+                    }
+            
+            return ProcessAPITool()
         except ImportError:
             raise ValueError("smolagents not available - check smolagents installation")

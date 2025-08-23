@@ -873,7 +873,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "schedule" },
-    { name = "smolagents", extra = ["dev"] },
+    { name = "smolagents" },
     { name = "torch" },
     { name = "transformers" },
     { name = "typing-extensions" },
@@ -888,7 +888,6 @@ all = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "smolagents" },
 ]
 dev = [
     { name = "black" },
@@ -898,8 +897,13 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
-smolagents = [
-    { name = "smolagents" },
+full = [
+    { name = "mlx", marker = "sys_platform == 'darwin'" },
+    { name = "mlx-lm", marker = "sys_platform == 'darwin'" },
+    { name = "smolagents", extra = ["dev"] },
+]
+macos = [
+    { name = "smolagents", extra = ["dev"] },
 ]
 
 [package.dev-dependencies]
@@ -917,13 +921,15 @@ dev = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.8.0" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.11.0" },
-    { name = "emery-agents", extras = ["dev", "smolagents"], marker = "extra == 'all'" },
+    { name = "emery-agents", extras = ["dev"], marker = "extra == 'all'" },
     { name = "flake8", marker = "extra == 'dev'", specifier = ">=6.1.0" },
     { name = "grpcio", specifier = ">=1.60.0" },
     { name = "grpcio-tools", specifier = ">=1.60.0" },
     { name = "httpx", specifier = ">=0.25.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.12.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
+    { name = "mlx", marker = "sys_platform == 'darwin' and extra == 'full'", specifier = ">=0.28.0" },
+    { name = "mlx-lm", marker = "sys_platform == 'darwin' and extra == 'full'", specifier = ">=0.26.1" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.7.0" },
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "protobuf", specifier = ">=4.25.0" },
@@ -934,8 +940,9 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.1.1" },
     { name = "requests", specifier = ">=2.30.0" },
     { name = "schedule", specifier = ">=1.2.0" },
-    { name = "smolagents", marker = "extra == 'smolagents'", specifier = ">=0.1.0" },
-    { name = "smolagents", extras = ["dev"], specifier = ">=1.20.0" },
+    { name = "smolagents", specifier = ">=1.20.0" },
+    { name = "smolagents", extras = ["dev"], marker = "extra == 'full'", specifier = ">=1.20.0" },
+    { name = "smolagents", extras = ["dev"], marker = "extra == 'macos'", specifier = ">=1.20.0" },
     { name = "torch", specifier = ">=2.0.0" },
     { name = "transformers", specifier = ">=4.30.0" },
     { name = "typing-extensions", specifier = ">=4.8.0" },

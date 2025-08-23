@@ -46,6 +46,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/app ./app
+COPY --from=builder /app/ddd ./ddd
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 # AIDEV-NOTE: Copy proto files needed by scheduler at runtime
