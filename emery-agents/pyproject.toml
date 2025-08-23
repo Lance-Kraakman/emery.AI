@@ -36,11 +36,18 @@ dev = [
     "isort>=5.12.0",
     "flake8>=6.1.0",
 ]
-smolagents = [
-    "smolagents>=0.1.0",
+# MLX features only available on macOS (Apple Silicon)
+macos = [
+    "smolagents[dev]>=1.20.0",
+]
+# Full smolagents with all features for compatible platforms
+full = [
+    "smolagents[dev]>=1.20.0",
+    "mlx>=0.28.0; sys_platform == 'darwin'",
+    "mlx-lm>=0.26.1; sys_platform == 'darwin'",
 ]
 all = [
-    "emery-agents[dev,smolagents]"
+    "emery-agents[dev]"
 ]
 
 [build-system]
