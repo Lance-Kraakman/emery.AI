@@ -25,6 +25,16 @@ export class S3FileStorageRepository implements IFileStorageRepository {
     this.bucketName = bucketName || BUCKET_NAME;
     this.s3 = s3Client;
   }
+
+  /**
+   * Determine if server-side encryption should be used
+   * Only use encryption for real AWS S3, not for MinIO/local development
+   */
+  private shouldUseEncryption(): boolean {
+    // If S3_ENDPOINT_URL is set, we're using MinIO or custom endpoint (no encryption)
+    const customEndpoint = process.env.S3_ENDPOINT_URL;
+    return !customEndpoint;
+  }
   findByOrganization(organizationId: number): Promise<StoredFile[]> {
     throw new Error('Method not implemented.');
   }
@@ -42,7 +52,8 @@ export class S3FileStorageRepository implements IFileStorageRepository {
       const md5Hash = crypto.createHash('md5').update(request.buffer).digest('hex');
       const sha256Hash = crypto.createHash('sha256').update(request.buffer).digest('hex');
 
-      const command = new PutObjectCommand({
+      // Build command parameters - conditionally include encryption
+      const commandParams: any = {
         Bucket: this.bucketName,
         Key: key,
         Body: request.buffer,
@@ -57,8 +68,14 @@ export class S3FileStorageRepository implements IFileStorageRepository {
           md5: md5Hash,
           sha256: sha256Hash,
         },
-        ServerSideEncryption: 'AES256', // Enable server-side encryption
-      });
+      };
+
+      // Only add encryption for real AWS S3 (not MinIO/development)
+      if (this.shouldUseEncryption()) {
+        commandParams.ServerSideEncryption = 'AES256';
+      }
+
+      const command = new PutObjectCommand(commandParams);
 
       await this.s3.send(command);
 
