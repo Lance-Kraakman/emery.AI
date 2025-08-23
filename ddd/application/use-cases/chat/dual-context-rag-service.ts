@@ -10,9 +10,10 @@
  */
 
 import type { SearchRagQuery } from '@/ddd/application/rag/queries/search-query';
-import { searchApplicationService } from '@/ddd/application/di/rag-container';
+import { searchApplicationService, indexRepository } from '@/ddd/application/di/rag-container';
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import { OrganizationId } from '@/ddd/domain/rag/value-objects';
 
 export interface RagDocument {
   id: string;
@@ -235,38 +236,51 @@ export class DualContextRagService {
 
       // 2. Get organizational (secondary) context from existing RAG system
       try {
-        // Generate a valid UUID for the default organizational index
-        // In a real system, this would be a configured organizational default index
-        const defaultOrgIndexId = 'ffffffff-ffff-ffff-ffff-ffffffffffff'; // Placeholder UUID
+        // First check if organization has any RAG indexes
+        const orgIndexes = await indexRepository.findByOrganization(
+          OrganizationId.fromNumber(organizationId)
+        );
         
-        const searchQuery: SearchRagQuery = {
-          indexId: defaultOrgIndexId, // Use valid UUID format
-          query,
-          limit: maxSecondaryDocs,
-          threshold: similarityThreshold,
-          organizationId: organizationId,
-          userId: 'system' // System query for context building
-        };
+        if (orgIndexes.length === 0) {
+          console.log(`[DUAL-CONTEXT-RAG] No RAG indexes found for organization ${organizationId}, skipping secondary context`);
+          // Skip RAG search - no indexes available
+        } else {
+          // Use the first active index found
+          const activeIndex = orgIndexes.find(idx => idx.status === 'active');
+          if (!activeIndex) {
+            console.log(`[DUAL-CONTEXT-RAG] No active RAG indexes found for organization ${organizationId}, skipping secondary context`);
+            // Skip RAG search - no active indexes
+          } else {
+            const searchQuery: SearchRagQuery = {
+              indexId: activeIndex.id.value,
+              query,
+              limit: maxSecondaryDocs,
+              threshold: similarityThreshold,
+              organizationId: organizationId,
+              userId: 'system' // System query for context building
+            };
 
-        const searchResult = await searchApplicationService.search(searchQuery);
+            const searchResult = await searchApplicationService.search(searchQuery);
         
-        secondaryContext = searchResult.documents.map(doc => ({
-          id: doc.id,
-          title: doc.title,
-          content: doc.content.substring(0, 500) + '...',
-          domainType: doc.domainType || 'organization',
-          sourceName: doc.sourceName || 'Organization Data',
-          similarity: doc.similarity,
-          metadata: doc.metadata
-        }));
+            secondaryContext = searchResult.documents.map(doc => ({
+              id: doc.id,
+              title: doc.title,
+              content: doc.content.substring(0, 500) + '...',
+              domainType: doc.domainType || 'organization',
+              sourceName: doc.sourceName || 'Organization Data',
+              similarity: doc.similarity,
+              metadata: doc.metadata
+            }));
 
-        if (secondaryContext.length > 0) {
-          ragSources.push({
-            type: 'secondary',
-            domainType: 'organization',
-            count: secondaryContext.length,
-            avgSimilarity: secondaryContext.reduce((sum, doc) => sum + (doc.similarity || 0), 0) / secondaryContext.length
-          });
+            if (secondaryContext.length > 0) {
+              ragSources.push({
+                type: 'secondary',
+                domainType: 'organization',
+                count: secondaryContext.length,
+                avgSimilarity: secondaryContext.reduce((sum, doc) => sum + (doc.similarity || 0), 0) / secondaryContext.length
+              });
+            }
+          }
         }
       } catch (ragError) {
         // Check if error is due to missing index vs other issues
