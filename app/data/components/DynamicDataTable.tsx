@@ -110,7 +110,7 @@ export function DynamicDataTable({ fields, rows, organizationId, onUpdateRow, on
                   <TableCell key={field.id} className="p-1">
                     <EditableCell
                       field={field}
-                      value={row[`field_${field.id}`]}
+                      value={row[field.slug]}
                       organizationId={organizationId}
                       onSave={(value) => onUpdateRow(row.id, field.id, value)}
                     />
