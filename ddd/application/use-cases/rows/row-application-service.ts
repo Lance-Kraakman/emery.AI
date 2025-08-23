@@ -389,7 +389,9 @@ export class RowApplicationService {
     for (const field of fields) {
       const value = data[field.slug];
       
-      if (value === undefined || value === null) {
+      // Only skip if value is explicitly undefined - allow null, empty strings, 0, false, etc.
+      // These are all legitimate field values that should be stored in the database
+      if (value === undefined) {
         continue;
       }
 
@@ -456,8 +458,8 @@ export class RowApplicationService {
       const dbColumn = `field_${field.id}`;
       const value = row[dbColumn];
       
-      if (value !== undefined && value !== null) {
-        // Handle special field types
+      if (value !== undefined) {
+        // Handle special field types - allow null values to be displayed as empty
         if (field.type === 'relation' || field.type === 'file') {
           // JSONB fields might need parsing
           if (typeof value === 'string') {
