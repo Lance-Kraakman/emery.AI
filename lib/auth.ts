@@ -39,7 +39,7 @@ export async function getUserIdFromRequest(request: Request): Promise<string | n
   return null;
 }
 
-const authOptions = {
+export const authOptions = {
   adapter: DrizzleAdapter(db, {
     usersTable: users,
     accountsTable: accounts,

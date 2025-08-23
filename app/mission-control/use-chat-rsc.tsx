@@ -51,6 +51,7 @@ export function useChatRSC(): ExtendedChatHandler {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Ensure cookies are included in the request
         body: JSON.stringify({
           messages: [...messages, userMessage].map(m => ({
             role: m.role,

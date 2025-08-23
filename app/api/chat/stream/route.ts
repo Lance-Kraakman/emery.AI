@@ -17,7 +17,18 @@ import type { DomainContextOptions } from '@/ddd/application/use-cases/chat/dual
 
 export async function POST(req: NextRequest) {
   try {
+    console.log('[CHAT-STREAM] Starting request processing')
     const session = await auth()
+    
+    // Debug session information
+    console.log('[CHAT-STREAM] Session status:', {
+      hasSession: !!session,
+      hasUser: !!session?.user,
+      userId: session?.user?.id,
+      userEmail: session?.user?.email,
+      currentOrganizationId: session?.user?.currentOrganizationId
+    })
+    
     if (!session?.user?.id) {
       console.error('[CHAT-STREAM] Authentication failed - no valid session or user ID')
       return new Response(
