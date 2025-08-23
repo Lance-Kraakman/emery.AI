@@ -63,6 +63,7 @@ export const organizations = pgTable("organizations", {
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   stripeSubscriptionStatus: text("stripe_subscription_status"),
+  analysisCapabilities: jsonb("analysis_capabilities"), // Organizational analysis configuration
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -149,6 +150,7 @@ export const agents = pgTable("agents", {
   roleId: integer("role_id").references(() => roles.id),
   apiKey: text("api_key").unique(), // For API authentication
   lastUsedAt: timestamp("last_used_at"), // Track API key usage
+  agentType: text("agent_type").default("general"), // Agent specialization type
   createdAt: timestamp("created_at").defaultNow(),
 });
 
