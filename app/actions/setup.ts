@@ -4,7 +4,7 @@ import { getOrganizationRepository } from "@/ddd/application/di/container";
 import type { CreateOrganizationData } from "./types";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import type { ActionResult } from "./types";
+import type { Result } from "./types";
 
 // Import the DI setup to ensure container is initialized
 import "@/ddd/application/di/setup";
@@ -14,7 +14,7 @@ interface SetupData {
   organizationMission?: string;
 }
 
-export async function createOrganization(formData: FormData): Promise<ActionResult> {
+export async function createOrganization(formData: FormData): Promise<Result> {
   const session = await auth();
   const user = session?.user;
 

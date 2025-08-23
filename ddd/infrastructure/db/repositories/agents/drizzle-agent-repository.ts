@@ -2,7 +2,8 @@
 // Handles data persistence for Agent domain entities
 
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
-import { Agent } from '@/ddd/domain/agents/entities/agent';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import { createAgentDefaults } from '@/ddd/domain/agents/entities/agent';
 import type { DbClient } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -16,24 +17,7 @@ export class DrizzleAgentRepository implements IAgentRepository {
       .from(agents)
       .where(eq(agents.organizationId, organizationId));
 
-    return results.map(result => Agent.fromPersistence({
-      id: result.id,
-      name: result.name,
-      role: result.role,
-      description: result.description,
-      persona: result.persona,
-      tools: result.tools as Record<string, any> | null,
-      servers: result.servers as Record<string, any> | null,
-      trigger: result.trigger as Record<string, any> | null,
-      capabilities: result.capabilities as Record<string, any> | null,
-      databaseId: result.databaseId,
-      status: result.status,
-      organizationId: result.organizationId,
-      ownerId: result.ownerId,
-      roleId: result.roleId,
-      apiKey: result.apiKey,
-      createdAt: result.createdAt
-    }));
+    return results.map(result => this.mapToEntity(result));
   }
 
   async findById(id: number): Promise<Agent | null> {
@@ -48,24 +32,7 @@ export class DrizzleAgentRepository implements IAgentRepository {
     }
 
     const result = results[0];
-    return Agent.fromPersistence({
-      id: result.id,
-      name: result.name,
-      role: result.role,
-      description: result.description,
-      persona: result.persona,
-      tools: result.tools as Record<string, any> | null,
-      servers: result.servers as Record<string, any> | null,
-      trigger: result.trigger as Record<string, any> | null,
-      capabilities: result.capabilities as Record<string, any> | null,
-      databaseId: result.databaseId,
-      status: result.status,
-      organizationId: result.organizationId,
-      ownerId: result.ownerId,
-      roleId: result.roleId,
-      apiKey: result.apiKey,
-      createdAt: result.createdAt
-    });
+    return this.mapToEntity(result);
   }
 
   async findByOwner(ownerId: string): Promise<Agent[]> {
@@ -74,24 +41,7 @@ export class DrizzleAgentRepository implements IAgentRepository {
       .from(agents)
       .where(eq(agents.ownerId, ownerId));
 
-    return results.map(result => Agent.fromPersistence({
-      id: result.id,
-      name: result.name,
-      role: result.role,
-      description: result.description,
-      persona: result.persona,
-      tools: result.tools as Record<string, any> | null,
-      servers: result.servers as Record<string, any> | null,
-      trigger: result.trigger as Record<string, any> | null,
-      capabilities: result.capabilities as Record<string, any> | null,
-      databaseId: result.databaseId,
-      status: result.status,
-      organizationId: result.organizationId,
-      ownerId: result.ownerId,
-      roleId: result.roleId,
-      apiKey: result.apiKey,
-      createdAt: result.createdAt
-    }));
+    return results.map(result => this.mapToEntity(result));
   }
 
   async findActiveByOrganization(organizationId: number): Promise<Agent[]> {
@@ -105,30 +55,13 @@ export class DrizzleAgentRepository implements IAgentRepository {
         )
       );
 
-    return results.map(result => Agent.fromPersistence({
-      id: result.id,
-      name: result.name,
-      role: result.role,
-      description: result.description,
-      persona: result.persona,
-      tools: result.tools as Record<string, any> | null,
-      servers: result.servers as Record<string, any> | null,
-      trigger: result.trigger as Record<string, any> | null,
-      capabilities: result.capabilities as Record<string, any> | null,
-      databaseId: result.databaseId,
-      status: result.status,
-      organizationId: result.organizationId,
-      ownerId: result.ownerId,
-      roleId: result.roleId,
-      apiKey: result.apiKey,
-      createdAt: result.createdAt
-    }));
+    return results.map(result => this.mapToEntity(result));
   }
 
-  async save(agent: Agent): Promise<void> {
+  async save(agent: Agent): Promise<Agent> {
     if (agent.id === 0) {
       // Insert new agent
-      await this.db.insert(agents).values({
+      const results = await this.db.insert(agents).values({
         name: agent.name,
         role: agent.role,
         description: agent.description,
@@ -143,10 +76,12 @@ export class DrizzleAgentRepository implements IAgentRepository {
         ownerId: agent.ownerId,
         roleId: agent.roleId,
         apiKey: agent.apiKey
-      });
+      }).returning();
+      
+      return this.mapToEntity(results[0]);
     } else {
       // Update existing agent
-      await this.db
+      const results = await this.db
         .update(agents)
         .set({
           name: agent.name,
@@ -164,7 +99,10 @@ export class DrizzleAgentRepository implements IAgentRepository {
           roleId: agent.roleId,
           apiKey: agent.apiKey
         })
-        .where(eq(agents.id, agent.id));
+        .where(eq(agents.id, agent.id))
+        .returning();
+        
+      return this.mapToEntity(results[0]);
     }
   }
 
@@ -179,5 +117,28 @@ export class DrizzleAgentRepository implements IAgentRepository {
       .where(eq(agents.organizationId, organizationId));
 
     return result.length;
+  }
+
+  // Helper method to map database result to domain entity with defaults
+  private mapToEntity(data: any): Agent {
+    return {
+      id: data.id,
+      name: data.name,
+      role: data.role || 'assistant',
+      description: data.description || '',
+      persona: data.persona || '',
+      tools: data.tools || {},
+      servers: data.servers || {},
+      trigger: data.trigger || {},
+      capabilities: data.capabilities || {},
+      databaseId: data.databaseId,
+      status: data.status || 'active',
+      organizationId: data.organizationId,
+      ownerId: data.ownerId,
+      roleId: data.roleId,
+      apiKey: data.apiKey,
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt
+    };
   }
 }

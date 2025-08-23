@@ -25,9 +25,9 @@ export interface IAgentRepository {
   findActiveByOrganization(organizationId: number): Promise<Agent[]>;
 
   /**
-   * Save agent
+   * Save agent (returns the saved agent with updated ID for new entities)
    */
-  save(agent: Agent): Promise<void>;
+  save(agent: Agent): Promise<Agent>;
 
   /**
    * Delete agent

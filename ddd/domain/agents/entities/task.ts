@@ -8,12 +8,14 @@
  * for task lifecycle and status transitions
  */
 
+import type { ToolConfig, ServerConfig } from './agent';
+
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout';
 
 export interface TaskInstructions {
   instructions: string;
-  tools?: Array<{name: string, version?: string, config?: Record<string, any>}>;
-  servers?: Array<{name: string, endpoint?: string, config?: Record<string, any>}>;
+  tools?: ToolConfig[];
+  servers?: ServerConfig[];
   metadata?: Record<string, any>;
 }
 
@@ -31,6 +33,14 @@ export interface TaskConfig {
   completedAt?: Date;
   createdBy?: string;
   createdAt?: Date;
+}
+
+export interface CreateTaskData {
+  agentId: number;
+  name: string;
+  capabilityName?: string; // Optional - system can auto-route
+  instructions: TaskInstructions; // Task configuration
+  createdBy?: string;
 }
 
 export class Task {
@@ -52,6 +62,23 @@ export class Task {
 
   static create(config: TaskConfig): Task {
     const now = new Date();
+    
+    // AIDEV-DEBUG: Log task creation to debug organization_id issue
+    console.log('[TASK-ENTITY] Creating task with config:', {
+      agentId: config.agentId,
+      organizationId: config.organizationId,
+      organizationIdType: typeof config.organizationId,
+      name: config.name
+    });
+    
+    // Validate required fields to prevent NULL constraint violations
+    if (!config.organizationId || typeof config.organizationId !== 'number') {
+      throw new Error(`Task creation failed: organizationId is required and must be a number, got: ${config.organizationId} (${typeof config.organizationId})`);
+    }
+    
+    if (!config.agentId || typeof config.agentId !== 'number') {
+      throw new Error(`Task creation failed: agentId is required and must be a number, got: ${config.agentId} (${typeof config.agentId})`);
+    }
     
     return new Task(
       config.id || crypto.randomUUID(),

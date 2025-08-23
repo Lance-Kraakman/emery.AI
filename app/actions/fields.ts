@@ -1,16 +1,16 @@
 'use server'
 
-// AIDEV-NOTE: Server Actions for field management using domain repositories
-// Migrated from legacy dynamic.ts to domain-driven architecture
+// AIDEV-NOTE: Server Actions for field management using FieldApplicationService
+// Uses application service for business logic and validation
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
-import { getFieldRepository } from "@/ddd/application/di/container";
-import { slugify } from "@/utils/slugify";
-import type { ActionResult, CreateFieldData } from "./types";
+import { getFieldApplicationService } from "@/ddd/application/di/container";
+import type { Result, CreateFieldData } from "./types";
 import type { Field, FieldType } from "@/ddd/domain/fields/entities/field";
+import type { CreateFieldCommand } from "@/ddd/application/use-cases/fields/field-application-service";
 
-export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<ActionResult> {
+export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("create_fields");
     const { tableId, name, type, required = false, relatedTableId } = data;
@@ -22,20 +22,25 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
       };
     }
 
-    const fieldRepository = getFieldRepository();
+    const fieldApplicationService = getFieldApplicationService();
 
-    // AIDEV-TODO: Verify table exists and user has permission using DynamicTableRepository
-
-    const fieldData = {
+    const command: CreateFieldCommand = {
       tableId,
       name,
-      slug: slugify(name),
       type: type as FieldType,
       required,
       relatedTableId,
+      metadata: {}
     };
 
-    const newField = await fieldRepository.create(fieldData);
+    const result = await fieldApplicationService.createField(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to create field"
+      };
+    }
 
     // Note: RAG reindexing is now handled automatically by database triggers
 
@@ -48,7 +53,7 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
     
     return {
       success: true,
-      data: newField,
+      data: result.data,
     };
   } catch (error) {
     console.error("Error creating field:", error);
@@ -82,8 +87,8 @@ export async function getFields(tableId: number): Promise<Field[]> {
       throw new Error("tableId is required");
     }
 
-    const fieldRepository = getFieldRepository();
-    const fieldList = await fieldRepository.findByTableId(tableId);
+    const fieldApplicationService = getFieldApplicationService();
+    const fieldList = await fieldApplicationService.getFieldsForTable(tableId);
 
     return fieldList;
   } catch (error) {
@@ -92,7 +97,7 @@ export async function getFields(tableId: number): Promise<Field[]> {
   }
 }
 
-export async function deleteField(fieldId: number, revalidateUrl?: string): Promise<ActionResult> {
+export async function deleteField(fieldId: number, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("manage_fields");
     
@@ -103,11 +108,16 @@ export async function deleteField(fieldId: number, revalidateUrl?: string): Prom
       };
     }
 
-    const fieldRepository = getFieldRepository();
+    const fieldApplicationService = getFieldApplicationService();
 
-    // AIDEV-TODO: Verify user has permission to delete field from this table
+    const result = await fieldApplicationService.deleteField(fieldId);
 
-    await fieldRepository.delete(fieldId);
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to delete field"
+      };
+    }
 
     // Revalidate the appropriate path
     if (revalidateUrl) {
@@ -124,7 +134,7 @@ export async function deleteField(fieldId: number, revalidateUrl?: string): Prom
     console.error("Error deleting field:", error);
     return {
       success: false,
-      error: "Failed to delete field",
+      error: error instanceof Error ? error.message : "Failed to delete field",
     };
   }
 }

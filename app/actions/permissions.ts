@@ -5,12 +5,12 @@ import { db } from "@/lib/db/client";
 import { users, roles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import type { ActionResult } from "./types";
+import type { Result } from "./types";
 import type { UpdateUserData } from "./types";
 import { getUserRepository } from "@/ddd/application/di/container";
 // import { getUserRepository } from "@/lib/application/di/container";
 
-export async function assignUserRole(userId: string, roleId: number): Promise<ActionResult> {
+export async function assignUserRole(userId: string, roleId: number): Promise<Result> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -46,7 +46,7 @@ export async function assignUserRole(userId: string, roleId: number): Promise<Ac
   }
 }
 
-export async function updateUserProfile(userId: string, data: UpdateUserData): Promise<ActionResult> {
+export async function updateUserProfile(userId: string, data: UpdateUserData): Promise<Result> {
   try {
     const session = await auth();
     if (!session?.user?.id) {

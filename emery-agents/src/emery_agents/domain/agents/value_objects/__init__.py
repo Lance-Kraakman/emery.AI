@@ -1,1 +1,0 @@
-"""Agent value objects for strong typing and validation."""

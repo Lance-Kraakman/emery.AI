@@ -16,6 +16,7 @@ export interface IndexingResult {
 import type { Organization } from '@/ddd/domain/organizations/entities/organization';
 import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import { getCapabilitiesCount } from '@/ddd/domain/agents/entities/agent';
 import type { Database } from '@/ddd/domain/databases/entities/database';
 import type { Team } from '@/ddd/domain/teams/entities/team';
 import type { Field } from '@/ddd/domain/fields/entities/field';
@@ -191,7 +192,7 @@ export class IndexingDomainService {
           organizationId: organizationId.value,
           toolCount: agent.tools ? Object.keys(agent.tools).length : 0,
           serverCount: agent.servers ? Object.keys(agent.servers).length : 0,
-          capabilityCount: agent.capabilitiesCount,
+          capabilityCount: getCapabilitiesCount(agent),
         },
         embedding,
         contentHash,
@@ -365,8 +366,9 @@ Usage: This table supports data analysis, reporting, workflow automation, and in
       ? `\nServers: ${Object.keys(agent.servers).join(', ')}`
       : '\nServers: None configured';
 
-    const capabilitiesDesc = agent.capabilitiesCount > 0
-      ? `\nCapabilities: ${agent.capabilitiesCount} configured capabilities`
+    const capabilityCount = getCapabilitiesCount(agent);
+    const capabilitiesDesc = capabilityCount > 0
+      ? `\nCapabilities: ${capabilityCount} configured capabilities`
       : '\nCapabilities: None configured';
 
     const createdDate = agent.createdAt 

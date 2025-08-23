@@ -1,49 +1,52 @@
 """
-Emery Agents - Agent execution system for Emery.
+Emery Agents - Pure agent execution service for protobuf requests.
 
 This package provides:
-- Simple Domain-Driven Design (DDD) architecture
-- Domain entities with business logic
-- Repository pattern for data access
-- Application services for orchestration
-- Clean separation of concerns following TypeScript patterns
+- Simple protobuf-compatible execution service
+- Core domain entities matching protobuf schema exactly
+- Smolagents integration with streaming progress
+- Dual execution modes: capability-based and instruction-based
 """
 
-# Domain entities
-from .domain.agents.entities.agent import Agent, AgentConfig
-from .domain.agents.entities.task import Task, TaskInstructions, TaskConfig
-
-# Repository interfaces
-from .domain.agents.repositories.agent_repository import IAgentRepository
-from .domain.agents.repositories.task_repository import ITaskRepository
-
-# Application services
-from .application.services.agent_task_service import (
-    AgentTaskApplicationService,
-    CreateTaskRequest,
-    ExecuteTaskRequest,
-    TaskExecutionResult
+# Core entities matching protobuf
+from .core.entities import (
+    TaskRequest, TaskProgress, AgentConfig, CapabilityConfig, 
+    StepConfig, ToolConfig, ServerConfig, InstructionConfig,
+    WorkerInfo, CancelTaskRequest, CancelTaskResponse
 )
+from .core.types import StepType, TaskStatus, WorkerStatus
 
-__version__ = "0.1.0"
+# Execution services
+from .execution.capability_router import CapabilityRouter
+from .execution.tool_loader import ToolLoader
+# Import SmolAgentsExecutionService only when needed to avoid smolagents dependency
+# from .infrastructure.execution.smolagents_execution_service import SmolAgentsExecutionService
+
+__version__ = "2.0.0-protobuf"
 __author__ = "Lance Kraakman"
 __email__ = "lance@aifactory.nz"
 
 __all__ = [
-    # Domain entities
-    "Agent",
+    # Core entities
+    "TaskRequest",
+    "TaskProgress", 
     "AgentConfig",
-    "Task",
-    "TaskInstructions",
-    "TaskConfig",
+    "CapabilityConfig",
+    "StepConfig",
+    "ToolConfig",
+    "ServerConfig",
+    "InstructionConfig",
+    "WorkerInfo",
+    "CancelTaskRequest",
+    "CancelTaskResponse",
     
-    # Repository interfaces
-    "IAgentRepository",
-    "ITaskRepository",
+    # Core types
+    "StepType",
+    "TaskStatus", 
+    "WorkerStatus",
     
-    # Application services
-    "AgentTaskApplicationService",
-    "CreateTaskRequest",
-    "ExecuteTaskRequest",
-    "TaskExecutionResult",
+    # Execution services
+    "CapabilityRouter",
+    "ToolLoader",
+    # "SmolAgentsExecutionService",  # Import manually when needed
 ]

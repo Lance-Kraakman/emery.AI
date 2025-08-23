@@ -1,10 +1,9 @@
 // AIDEV-NOTE: Shared types for Server Actions - ensures type safety across actions
-// frontend types ysed by the applications
-export interface ActionResult<T = any> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
+// Uses unified Result<T> interface from DDD domain layer for consistent error handling
+import type { Result } from '@/ddd/domain/shared/result';
+
+// Export the unified Result interface for use in Server Actions
+export type { Result } from '@/ddd/domain/shared/result';
 
 export type FieldType = 'text' | 'number' | 'boolean' | 'email' | 'url' | 'date' | 'relation' | 'file';
 
@@ -94,86 +93,24 @@ export interface CreateTeamData {
   agentIds?: string[];
 }
 
-export interface CreateAgentData {
-  name: string;
-  role?: string;
-  description?: string;
-  persona?: string;
-  tools?: ToolConfig[];
-  servers?: ServerConfig[];
-  trigger?: TriggerConfig;
-  capabilities?: CapabilityConfig[];
-  status?: string;
-  roleId?: number;
-}
+// Import agent types from domain layer
+export type {
+  ToolConfig,
+  ServerConfig,
+  StepConfig,
+  CapabilityConfig,
+  CreateAgentData
+} from '@/ddd/domain/agents/entities/agent';
 
-export interface ToolConfig {
-  name: string;
-  version?: string;
-  config?: Record<string, any>;
-}
+export type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
-export interface ServerConfig {
-  name: string;
-  endpoint?: string;
-  config?: Record<string, any>;
-}
-
-export interface TriggerConfig {
-  type: 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT' | 'CALENDAR';
-  cron?: string;
-  webhook_url?: string;
-  webhook_secret?: string;
-  table_id?: number;
-}
-
-export interface CapabilityConfig {
-  name: string;
-  description: string;
-  steps: StepConfig[];
-}
-
-export interface StepConfig {
-  id: string;
-  type: 'CODE_STEP' | 'TOOL_STEP';
-  instructions: string;
-  model?: string; // Per-step model specification
-  tools?: ToolConfig[];
-  servers?: ServerConfig[];
-}
-
-// New Task types aligned with frontend model
-export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout';
-
-// Task instruction configuration (step-like structure)
-export interface TaskInstructions {
-  instructions: string; // Natural language instructions
-  tools?: ToolConfig[]; // Optional tools the task can use
-  servers?: ServerConfig[]; // Optional servers the task can use
-}
-
-export interface Task {
-  id: string;
-  agentId: number;
-  name: string;
-  capabilityName?: string; // Optional - system can auto-route if not specified
-  instructions: TaskInstructions; // Step-like configuration stored as JSONB
-  status: TaskStatus;
-  result?: any;
-  error?: string;
-  startedAt?: Date;
-  completedAt?: Date;
-  createdBy?: string;
-  createdAt: Date;
-}
-
-export interface CreateTaskData {
-  agentId: number;
-  name: string;
-  capabilityName?: string; // Optional - system can auto-route
-  instructions: TaskInstructions; // Step-like configuration
-  createdBy?: string;
-}
+// Import task types from domain layer
+export type {
+  TaskStatus,
+  TaskInstructions,
+  TaskConfig as Task,
+  CreateTaskData
+} from '@/ddd/domain/agents/entities/task';
 
 // CreateRoleData moved to domain entities: @/lib/domain/entities/role
 
@@ -182,4 +119,3 @@ export interface TeamMembershipData {
   userId: string;
 }
 
-// UpdateUserData moved to domain entities: @/lib/domain/entities/user

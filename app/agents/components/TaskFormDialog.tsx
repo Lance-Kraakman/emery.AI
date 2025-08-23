@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Agent } from '@/types/db';
+import type { Agent, ToolConfig, ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import { createTask } from '@/app/actions/tasks';
-import { ToolConfig, ServerConfig } from '@/app/actions/types';
 
 interface TaskFormDialogProps {
   isOpen: boolean;

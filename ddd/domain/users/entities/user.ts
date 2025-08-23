@@ -32,7 +32,7 @@ export interface UpdateUserData {
   email?: string;
   emailVerified?: Date;
   image?: string;
-  currentOrganizationId?: number;
+  currentOrganizationId?: number | null;
   roleId?: number;
   jobTitle?: string;
   role?: string;

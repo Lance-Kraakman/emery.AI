@@ -1,0 +1,416 @@
+/**
+ * Team Application Service
+ * 
+ * Handles team business operations including CRUD, member management,
+ * agent assignment, and organization scoping.
+ */
+
+import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
+import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import type { Result } from '@/ddd/domain/shared/result';
+import { Team, type TeamConfig } from '@/ddd/domain/teams/entities/team';
+
+export interface CreateTeamCommand {
+  name: string;
+  purpose?: string;
+  description?: string;
+  responsibilities?: string[];
+  goals?: string[];
+  agentIds?: string[];
+  organizationId: number;
+}
+
+export interface UpdateTeamCommand {
+  teamId: number;
+  name?: string;
+  purpose?: string;
+  description?: string;
+  responsibilities?: string[];
+  goals?: string[];
+  agentIds?: string[];
+}
+
+export interface TeamFilters {
+  organizationId: number;
+  searchQuery?: string;
+  hasAgents?: boolean;
+}
+
+// Use unified Result interface from domain shared types
+export type TeamApplicationResult<T = any> = Result<T>;
+
+export class TeamApplicationService {
+  constructor(
+    private readonly teamRepository: ITeamRepository,
+    private readonly agentRepository: IAgentRepository
+  ) {}
+
+  /**
+   * Create a new team with business validation
+   */
+  async createTeam(command: CreateTeamCommand): Promise<TeamApplicationResult<Team>> {
+    try {
+      // Business validation
+      if (!command.name?.trim()) {
+        return {
+          success: false,
+          error: "Team name is required"
+        };
+      }
+
+      // Validate agent IDs if provided
+      const warnings: string[] = [];
+      if (command.agentIds && command.agentIds.length > 0) {
+        const agents = await this.agentRepository.findByOrganization(command.organizationId);
+        const validAgentIds = agents.map(a => a.id.toString());
+        const invalidAgentIds = command.agentIds.filter(id => !validAgentIds.includes(id));
+        
+        if (invalidAgentIds.length > 0) {
+          warnings.push(`Invalid agent IDs: ${invalidAgentIds.join(', ')}`);
+          // Remove invalid agent IDs
+          command.agentIds = command.agentIds.filter(id => !invalidAgentIds.includes(id));
+        }
+      }
+
+      // Create team using domain entity
+      const team = Team.create({
+        name: command.name.trim(),
+        purpose: command.purpose,
+        description: command.description,
+        responsibilities: command.responsibilities,
+        goals: command.goals,
+        agentIds: command.agentIds,
+        organizationId: command.organizationId
+      });
+
+      // Save to repository
+      await this.teamRepository.save(team);
+
+      return {
+        success: true,
+        data: team,
+        warnings: warnings.length > 0 ? warnings : undefined
+      };
+    } catch (error) {
+      console.error("Error creating team:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to create team"
+      };
+    }
+  }
+
+  /**
+   * Update an existing team
+   */
+  async updateTeam(command: UpdateTeamCommand): Promise<TeamApplicationResult<Team>> {
+    try {
+      // Load existing team
+      const existingTeam = await this.teamRepository.findById(command.teamId);
+      if (!existingTeam) {
+        return {
+          success: false,
+          error: `Team with ID ${command.teamId} not found`
+        };
+      }
+
+      // Validate agent IDs if provided
+      const warnings: string[] = [];
+      let validatedAgentIds = command.agentIds;
+      if (command.agentIds && command.agentIds.length > 0) {
+        const agents = await this.agentRepository.findByOrganization(existingTeam.organizationId);
+        const validAgentIds = agents.map(a => a.id.toString());
+        const invalidAgentIds = command.agentIds.filter(id => !validAgentIds.includes(id));
+        
+        if (invalidAgentIds.length > 0) {
+          warnings.push(`Invalid agent IDs: ${invalidAgentIds.join(', ')}`);
+          // Remove invalid agent IDs
+          validatedAgentIds = command.agentIds.filter(id => !invalidAgentIds.includes(id));
+        }
+      }
+
+      // Create updated team with existing values as defaults
+      const updatedTeam = Team.fromPersistence({
+        id: existingTeam.id,
+        name: command.name !== undefined ? command.name : existingTeam.name,
+        purpose: command.purpose !== undefined ? command.purpose : existingTeam.purpose,
+        description: command.description !== undefined ? command.description : existingTeam.description,
+        responsibilities: command.responsibilities !== undefined ? command.responsibilities : existingTeam.responsibilities,
+        goals: command.goals !== undefined ? command.goals : existingTeam.goals,
+        agentIds: validatedAgentIds !== undefined ? validatedAgentIds : existingTeam.agentIds,
+        organizationId: existingTeam.organizationId,
+        createdAt: existingTeam.createdAt
+      });
+
+      // Save updated team
+      await this.teamRepository.save(updatedTeam);
+
+      return {
+        success: true,
+        data: updatedTeam,
+        warnings: warnings.length > 0 ? warnings : undefined
+      };
+    } catch (error) {
+      console.error("Error updating team:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to update team"
+      };
+    }
+  }
+
+  /**
+   * Delete a team
+   */
+  async deleteTeam(teamId: number): Promise<TeamApplicationResult<void>> {
+    try {
+      const team = await this.teamRepository.findById(teamId);
+      if (!team) {
+        return {
+          success: false,
+          error: `Team with ID ${teamId} not found`
+        };
+      }
+
+      await this.teamRepository.delete(teamId);
+
+      return {
+        success: true,
+        data: undefined
+      };
+    } catch (error) {
+      console.error("Error deleting team:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to delete team"
+      };
+    }
+  }
+
+  /**
+   * Get team by ID
+   */
+  async getTeam(teamId: number): Promise<Team | null> {
+    return await this.teamRepository.findById(teamId);
+  }
+
+  /**
+   * Get teams with filtering and organization scoping
+   */
+  async getTeams(filters: TeamFilters): Promise<Team[]> {
+    try {
+      let teams = await this.teamRepository.findByOrganization(filters.organizationId);
+
+      // Apply search filter
+      if (filters.searchQuery) {
+        const searchLower = filters.searchQuery.toLowerCase();
+        teams = teams.filter(team => 
+          team.name.toLowerCase().includes(searchLower) ||
+          team.description?.toLowerCase().includes(searchLower) ||
+          team.purpose?.toLowerCase().includes(searchLower)
+        );
+      }
+
+      // Apply agent filter
+      if (filters.hasAgents !== undefined) {
+        if (filters.hasAgents) {
+          teams = teams.filter(team => team.agentCount > 0);
+        } else {
+          teams = teams.filter(team => team.agentCount === 0);
+        }
+      }
+
+      // Sort by creation date (newest first)
+      teams.sort((a, b) => {
+        const aTime = a.createdAt?.getTime() || 0;
+        const bTime = b.createdAt?.getTime() || 0;
+        return bTime - aTime;
+      });
+
+      return teams;
+    } catch (error) {
+      console.error("Error fetching teams:", error);
+      throw new Error("Failed to fetch teams");
+    }
+  }
+
+  /**
+   * Add agent to team
+   */
+  async addAgentToTeam(teamId: number, agentId: string): Promise<TeamApplicationResult<Team>> {
+    try {
+      const existingTeam = await this.teamRepository.findById(teamId);
+      if (!existingTeam) {
+        return {
+          success: false,
+          error: `Team with ID ${teamId} not found`
+        };
+      }
+
+      // Validate agent exists in organization
+      const agents = await this.agentRepository.findByOrganization(existingTeam.organizationId);
+      const agentExists = agents.some(a => a.id.toString() === agentId);
+      
+      if (!agentExists) {
+        return {
+          success: false,
+          error: `Agent with ID ${agentId} not found in organization`
+        };
+      }
+
+      // Check if agent is already in team
+      const currentAgentIds = existingTeam.agentIds || [];
+      if (currentAgentIds.includes(agentId)) {
+        return {
+          success: false,
+          error: `Agent ${agentId} is already in the team`
+        };
+      }
+
+      // Add agent to team
+      const updatedAgentIds = [...currentAgentIds, agentId];
+      const updatedTeam = Team.fromPersistence({
+        id: existingTeam.id,
+        name: existingTeam.name,
+        purpose: existingTeam.purpose,
+        description: existingTeam.description,
+        responsibilities: existingTeam.responsibilities,
+        goals: existingTeam.goals,
+        agentIds: updatedAgentIds,
+        organizationId: existingTeam.organizationId,
+        createdAt: existingTeam.createdAt
+      });
+
+      await this.teamRepository.save(updatedTeam);
+
+      return {
+        success: true,
+        data: updatedTeam
+      };
+    } catch (error) {
+      console.error("Error adding agent to team:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to add agent to team"
+      };
+    }
+  }
+
+  /**
+   * Remove agent from team
+   */
+  async removeAgentFromTeam(teamId: number, agentId: string): Promise<TeamApplicationResult<Team>> {
+    try {
+      const existingTeam = await this.teamRepository.findById(teamId);
+      if (!existingTeam) {
+        return {
+          success: false,
+          error: `Team with ID ${teamId} not found`
+        };
+      }
+
+      // Check if agent is in team
+      const currentAgentIds = existingTeam.agentIds || [];
+      if (!currentAgentIds.includes(agentId)) {
+        return {
+          success: false,
+          error: `Agent ${agentId} is not in the team`
+        };
+      }
+
+      // Remove agent from team
+      const updatedAgentIds = currentAgentIds.filter(id => id !== agentId);
+      const updatedTeam = Team.fromPersistence({
+        id: existingTeam.id,
+        name: existingTeam.name,
+        purpose: existingTeam.purpose,
+        description: existingTeam.description,
+        responsibilities: existingTeam.responsibilities,
+        goals: existingTeam.goals,
+        agentIds: updatedAgentIds,
+        organizationId: existingTeam.organizationId,
+        createdAt: existingTeam.createdAt
+      });
+
+      await this.teamRepository.save(updatedTeam);
+
+      return {
+        success: true,
+        data: updatedTeam
+      };
+    } catch (error) {
+      console.error("Error removing agent from team:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to remove agent from team"
+      };
+    }
+  }
+
+  /**
+   * Get teams that contain a specific agent
+   */
+  async getTeamsForAgent(agentId: string): Promise<Team[]> {
+    return await this.teamRepository.findByAgentId(agentId);
+  }
+
+  /**
+   * Get team count for organization
+   */
+  async getTeamCount(organizationId: number): Promise<number> {
+    return await this.teamRepository.countByOrganization(organizationId);
+  }
+
+  /**
+   * Bulk assign agents to team
+   */
+  async bulkAssignAgents(teamId: number, agentIds: string[]): Promise<TeamApplicationResult<Team>> {
+    try {
+      const existingTeam = await this.teamRepository.findById(teamId);
+      if (!existingTeam) {
+        return {
+          success: false,
+          error: `Team with ID ${teamId} not found`
+        };
+      }
+
+      // Validate all agent IDs
+      const agents = await this.agentRepository.findByOrganization(existingTeam.organizationId);
+      const validAgentIds = agents.map(a => a.id.toString());
+      const invalidAgentIds = agentIds.filter(id => !validAgentIds.includes(id));
+      
+      if (invalidAgentIds.length > 0) {
+        return {
+          success: false,
+          error: `Invalid agent IDs: ${invalidAgentIds.join(', ')}`
+        };
+      }
+
+      // Replace agent assignments
+      const updatedTeam = Team.fromPersistence({
+        id: existingTeam.id,
+        name: existingTeam.name,
+        purpose: existingTeam.purpose,
+        description: existingTeam.description,
+        responsibilities: existingTeam.responsibilities,
+        goals: existingTeam.goals,
+        agentIds: agentIds,
+        organizationId: existingTeam.organizationId,
+        createdAt: existingTeam.createdAt
+      });
+
+      await this.teamRepository.save(updatedTeam);
+
+      return {
+        success: true,
+        data: updatedTeam
+      };
+    } catch (error) {
+      console.error("Error bulk assigning agents:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to assign agents to team"
+      };
+    }
+  }
+}

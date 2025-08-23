@@ -2,18 +2,17 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * Table management API endpoint using domain repositories
+ * Table management API endpoint using TableApplicationService
  * Migrated from legacy dynamic.ts to domain-driven architecture
  */
 
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
-import { getDynamicTableRepository } from "@/ddd/application/di/container";
-import type { CreateDynamicTableData } from '@/app/actions/types';
-import { slugify } from '@/utils/slugify';
+import { getTableApplicationService } from "@/ddd/application/di/container";
+import type { CreateTableCommand } from '@/ddd/application/use-cases/tables/table-application-service';
 
 /**
- * Create a new table using domain repository
+ * Create a new table using TableApplicationService
  */
 export async function POST(request: NextRequest): Promise<Response> {
   try {
@@ -39,26 +38,34 @@ export async function POST(request: NextRequest): Promise<Response> {
       }, { status: 400 });
     }
 
-    // Use domain repository for table creation
-    const dynamicTableRepository = getDynamicTableRepository();
+    // Use TableApplicationService for table creation
+    const tableApplicationService = getTableApplicationService();
     
-    const tableData: CreateDynamicTableData = {
+    const command: CreateTableCommand = {
       name,
-      dbName: slugify(name),
       databaseId: parseInt(databaseId),
       organizationId: organizationId ? parseInt(organizationId) : 1,
       createdBy: userId,
-      metadata: description ? { description } : undefined,
+      description,
+      metadata: {}
     };
 
-    const newTable = await dynamicTableRepository.create(tableData);
-    console.log(`[API-TABLES] Created table using domain repository: ${newTable.dbName}`);
+    const result = await tableApplicationService.createTable(command);
+
+    if (!result.success) {
+      return Response.json({ 
+        success: false,
+        error: result.error || 'Failed to create table'
+      }, { status: 400 });
+    }
+
+    console.log(`[API-TABLES] Created table using TableApplicationService: ${result.data?.dbName}`);
 
     return Response.json({
       success: true,
       message: 'Table created successfully',
-      table: newTable,
-      id: newTable.id, // For compatibility with tests
+      table: result.data,
+      id: result.data?.id, // For compatibility with tests
     });
 
   } catch (error) {
@@ -71,7 +78,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 }
 
 /**
- * Get tables list using domain repository
+ * Get tables list using TableApplicationService
  */
 export async function GET(request: NextRequest): Promise<Response> {
   try {
@@ -89,9 +96,9 @@ export async function GET(request: NextRequest): Promise<Response> {
       }, { status: 400 });
     }
 
-    // Use domain repository for table listing
-    const dynamicTableRepository = getDynamicTableRepository();
-    const userTables = await dynamicTableRepository.findByOrganization(authResult.user.organizationId);
+    // Use TableApplicationService for table listing
+    const tableApplicationService = getTableApplicationService();
+    const userTables = await tableApplicationService.getTablesForOrganization(authResult.user.organizationId);
 
     return Response.json({
       success: true,

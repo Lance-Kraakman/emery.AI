@@ -2,13 +2,13 @@
 // Tests business logic without requiring actual database connections
 
 import { describe, it, expect, vi, beforeEach, type MockedFunction } from 'vitest';
-import { DrizzleFieldRepository } from '@/lib/infrastructure/db/repositories/drizzle-field-repository';
+import { DrizzleFieldRepository } from '@/ddd/infrastructure/db/repositories/fields/drizzle-field-repository';
 import type { 
   Field, 
   CreateFieldData, 
   UpdateFieldData,
   FieldType
-} from '@/lib/domain/entities/field';
+} from '@/ddd/domain/fields/entities/field';
 
 // Mock types for better TypeScript support
 type MockDbClient = {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Agent } from '@/types/db';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { createAgent, updateAgent } from '@/app/actions/agents';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

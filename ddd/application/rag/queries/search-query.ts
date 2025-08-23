@@ -10,6 +10,7 @@ export interface SearchRagQuery {
   threshold?: number;
   similarityMetric?: SimilarityMetric;
   sourceTypes?: string[];
+  organizationId?: number;  // Organization scoping for RAG queries
   userId?: string;
   agentId?: number;
   sessionId?: string;

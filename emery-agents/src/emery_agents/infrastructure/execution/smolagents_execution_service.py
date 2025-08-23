@@ -1,129 +1,223 @@
 """
 SmolAgents Execution Service
 
-AIDEV-NOTE: Ports the working SmolAgentsOrchestrator to DDD execution service.
-This replaces MockAgentService with real smolagents execution using the hierarchical
-Agent → CapabilityAgents → StepAgents structure.
+AIDEV-NOTE: Pure smolagents execution service for protobuf TaskRequest.
+Uses the proven hierarchical Agent → CapabilityAgents → StepAgents structure.
 """
 
 import logging
 import os
-from typing import Dict, Any, List, Optional, Union
+import time
+import json
+from typing import Dict, Any, List, Optional, Union, AsyncIterator
 
 from smolagents import CodeAgent, ToolCallingAgent
 from smolagents.models import InferenceClientModel
 
-from ...domain.agents.entities.agent import Agent
-from ...domain.agents.value_objects.execution_context import ExecutionContext
-from ...domain.agents.repositories.agent_execution_repository import (
-    AgentExecutionRequest, AgentExecutionResult
-)
+from ...core.entities import TaskRequest, TaskProgress, CapabilityConfig
+from ...core.types import StepType, TaskStatus
+from ...execution.capability_router import CapabilityRouter
+from ...execution.tool_loader import ToolLoader
 
 logger = logging.getLogger(__name__)
 
-# Legacy types for conversion compatibility
-class StepType:
-    CODE_STEP = "CODE_STEP"
-    TOOL_STEP = "TOOL_STEP"
-
 class SmolAgentsExecutionService:
     """
-    Real smolagents execution service for DDD architecture.
+    Pure smolagents execution service for protobuf TaskRequest.
     
-    AIDEV-NOTE: Converts DDD domain entities to smolagents hierarchical structure
-    and executes real agent tasks using the proven orchestrator pattern.
+    AIDEV-NOTE: Converts protobuf entities to smolagents hierarchical structure
+    and executes real agent tasks with streaming progress updates.
     """
     
     def __init__(self):
-        self.agent_cache: Dict[int, CodeAgent] = {}
+        self.agent_cache: Dict[str, CodeAgent] = {}  # Cache by task_id for isolation
+        self.capability_router = CapabilityRouter()
+        self.tool_loader = ToolLoader()
         logger.info("SmolAgentsExecutionService initialized")
     
-    async def execute_task(self, request: AgentExecutionRequest) -> AgentExecutionResult:
+    async def execute_task(self, request: TaskRequest) -> AsyncIterator[TaskProgress]:
         """
-        Execute agent task using real smolagents.
+        Execute agent task using real smolagents with streaming progress.
         
-        AIDEV-NOTE: Main entry point that converts DDD request to smolagents execution.
+        AIDEV-NOTE: Main entry point that converts protobuf request to smolagents execution.
         """
-        logger.info(f"Executing task for agent {request.agent_id.value}: {request.instructions[:50]}...")
+        logger.info(f"Executing task {request.task_id} for agent {request.agent_id}: {request.name}")
+        
+        start_time = time.time()
         
         try:
-            # Get or create smolagents agent
-            smolagents_agent = await self._get_or_create_smolagents_agent(request)
+            # Yield initial progress
+            yield TaskProgress(
+                task_id=request.task_id,
+                status=TaskStatus.TASK_IN_PROGRESS.name,
+                step_id="routing",
+                step_type="ROUTING",
+                output_json=json.dumps({"message": "Routing execution mode"}),
+                error_message="",
+                timestamp_ms=int(time.time() * 1000),
+                progress_percent=10.0
+            )
             
-            # Execute using smolagents
-            result = await smolagents_agent.run(request.instructions)
+            # Route to capability
+            capability = self.capability_router.route_execution(request)
             
-            # Convert result to DDD format
-            return AgentExecutionResult(
-                success=True,
-                execution_id=request.execution_id,
-                status="completed",
-                output_data={"output": result},
-                duration_ms=0  # TODO: Add timing
+            yield TaskProgress(
+                task_id=request.task_id,
+                status=TaskStatus.TASK_IN_PROGRESS.name,
+                step_id="setup",
+                step_type="SETUP",
+                output_json=json.dumps({"capability": capability.name, "steps": len(capability.steps)}),
+                error_message="",
+                timestamp_ms=int(time.time() * 1000),
+                progress_percent=20.0
+            )
+            
+            # Create smolagents agent for this capability
+            smolagents_agent = await self._create_smolagents_agent(capability, request)
+            
+            # Execute each step with progress updates
+            total_steps = len(capability.steps)
+            for i, step in enumerate(capability.steps):
+                step_progress = 30.0 + (60.0 * i / total_steps)
+                
+                yield TaskProgress(
+                    task_id=request.task_id,
+                    status=TaskStatus.TASK_IN_PROGRESS.name,
+                    step_id=step.id,
+                    step_type=step.type.name,
+                    output_json=json.dumps({"message": f"Executing step: {step.instructions[:100]}"}),
+                    error_message="",
+                    timestamp_ms=int(time.time() * 1000),
+                    progress_percent=step_progress
+                )
+                
+                # Execute step (smolagents.run is not async)
+                result = smolagents_agent.run(step.instructions)
+                
+                yield TaskProgress(
+                    task_id=request.task_id,
+                    status=TaskStatus.TASK_IN_PROGRESS.name,
+                    step_id=step.id,
+                    step_type=step.type.name,
+                    output_json=json.dumps({"result": str(result)}),
+                    error_message="",
+                    timestamp_ms=int(time.time() * 1000),
+                    progress_percent=30.0 + (60.0 * (i + 1) / total_steps)
+                )
+            
+            # Final completion
+            duration_ms = int((time.time() - start_time) * 1000)
+            yield TaskProgress(
+                task_id=request.task_id,
+                status=TaskStatus.TASK_COMPLETED.name,
+                step_id="completed",
+                step_type="COMPLETION",
+                output_json=json.dumps({
+                    "message": "Task completed successfully",
+                    "duration_ms": duration_ms,
+                    "capability": capability.name
+                }),
+                error_message="",
+                timestamp_ms=int(time.time() * 1000),
+                progress_percent=100.0
             )
             
         except Exception as e:
             logger.exception(f"SmolAgents execution failed: {e}")
-            return AgentExecutionResult(
-                success=False,
-                execution_id=request.execution_id,
-                status="failed",
-                error=str(e)
+            yield TaskProgress(
+                task_id=request.task_id,
+                status=TaskStatus.TASK_FAILED.name,
+                step_id="error",
+                step_type="ERROR",
+                output_json=json.dumps({"error": str(e)}),
+                error_message=str(e),
+                timestamp_ms=int(time.time() * 1000),
+                progress_percent=0.0
             )
+        
+        finally:
+            # Clean up cached agent
+            if request.task_id in self.agent_cache:
+                del self.agent_cache[request.task_id]
     
-    async def _get_or_create_smolagents_agent(self, request: AgentExecutionRequest) -> CodeAgent:
+    async def _create_smolagents_agent(self, capability: CapabilityConfig, request: TaskRequest) -> CodeAgent:
         """
-        Get cached smolagents agent or create new one from DDD agent entity.
+        Create smolagents agent from capability configuration.
         
-        AIDEV-NOTE: Converts DDD Agent entity to smolagents hierarchical structure.
+        AIDEV-NOTE: Converts protobuf entities to smolagents hierarchical structure.
         """
-        agent_id = request.agent_id.value
+        if request.task_id in self.agent_cache:
+            return self.agent_cache[request.task_id]
         
-        if agent_id in self.agent_cache:
-            return self.agent_cache[agent_id]
-        
-        # TODO: Get agent from repository - for now create a basic agent
-        smolagents_agent = await self._create_smolagents_agent_from_request(request)
-        self.agent_cache[agent_id] = smolagents_agent
+        smolagents_agent = await self._create_capability_agent(capability, request)
+        self.agent_cache[request.task_id] = smolagents_agent
         
         return smolagents_agent
     
-    async def _create_smolagents_agent_from_request(self, request: AgentExecutionRequest) -> CodeAgent:
+    async def _create_capability_agent(self, capability: CapabilityConfig, request: TaskRequest) -> CodeAgent:
         """
-        Create smolagents agent from execution request.
+        Create capability agent from CapabilityConfig.
         
-        AIDEV-NOTE: This is a simplified version. In full implementation,
-        this would load the full Agent entity and convert capabilities to 
-        the hierarchical Agent → CapabilityAgents → StepAgents structure.
+        AIDEV-NOTE: Implements the proven hierarchical structure:
+        CapabilityAgent → StepAgents where each step is a specialized agent.
         """
         hf_token = os.getenv("HF_TOKEN")
         if not hf_token:
             raise EnvironmentError("HF_TOKEN environment variable is required")
         
+        # Create step agents for this capability
+        step_agents = []
+        for step in capability.steps:
+            step_agent = await self._create_step_agent(step, hf_token)
+            step_agent.name = step.id
+            step_agent.description = step.instructions
+            step_agents.append(step_agent)
+        
+        # Create capability-level agent that manages step agents
         model = InferenceClientModel("Qwen/Qwen2.5-72B-Instruct", token=hf_token)
         
-        # For now, create a simple agent with tools from request
-        tools = []
-        if request.tools:
-            for tool_config in request.tools:
-                tool_instance = self._load_tool_from_config(tool_config)
-                if tool_instance:
-                    tools.append(tool_instance)
-        
-        return CodeAgent(
-            tools=tools,
+        capability_agent = CodeAgent(
+            tools=[],  # Capability agent delegates to step agents
             model=model,
-            managed_agents=[],  # TODO: Add capability agents
+            managed_agents=step_agents,
             additional_authorized_imports=["time", "json", "os", "sys"]
         )
-    
-    def _load_tool_from_config(self, tool_config) -> Optional[Any]:
-        """
-        Load tool from configuration.
         
-        AIDEV-NOTE: Simplified tool loading. Full implementation would use
-        the ported ToolRegistry and ToolConfigConverter.
-        """
+        capability_agent.name = capability.name
+        capability_agent.description = capability.description
+        
+        return capability_agent
+    
+    async def _create_step_agent(self, step, hf_token: str) -> Union[CodeAgent, ToolCallingAgent]:
+        """Create step-level agent based on step type."""
+        model_name = step.model or (
+            "Qwen/Qwen2.5-Coder-32B-Instruct" if step.type == StepType.CODE_STEP 
+            else "Qwen/Qwen2.5-72B-Instruct"
+        )
+        model = InferenceClientModel(model_name, token=hf_token)
+        
+        # Load tools for this step
+        step_tools = []
+        if step.tools:
+            try:
+                step_tools = self.tool_loader.load_tools(step.tools)
+            except Exception as e:
+                logger.warning(f"Failed to load some tools for step {step.id}: {e}")
+        
+        if step.type == StepType.CODE_STEP:
+            return CodeAgent(
+                tools=step_tools,
+                model=model,
+                additional_authorized_imports=["time", "json", "os", "sys"]
+            )
+        else:
+            return ToolCallingAgent(
+                tools=step_tools,
+                model=model
+            )
+    
+    def _load_tool_from_config_legacy(self, tool_config) -> Optional[Any]:
+        """Legacy tool loading method - use ToolLoader instead."""
         try:
             tool_name = getattr(tool_config, 'name', str(tool_config))
             

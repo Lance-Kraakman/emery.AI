@@ -1,30 +1,30 @@
 'use server'
 
+// AIDEV-NOTE: Server Actions for file management using FileApplicationService
+// Uses application service for business logic and validation
+
 import { auth, hasPermission } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { fileRepository } from "@/ddd/application/di/rag-container";
-import { S3FileStorageRepository } from "@/ddd/infrastructure/storage/repositories/s3-file-storage-repository";
-import { FileFieldService } from "@/ddd/domain/files/services/file-field-service";
-import { fieldRepository } from "@/ddd/application/di/rag-container";
+import { getFileApplicationService } from "@/ddd/application/di/container";
+import type { UploadFileCommand, DeleteFileCommand } from "@/ddd/application/use-cases/files/file-application-service";
+import type { Result } from "./types";
 
-// Initialize services
-const fileStorageRepository = new S3FileStorageRepository();
-const fileFieldService = new FileFieldService(fieldRepository, fileStorageRepository, {
-  maxFileSize: 5 * 1024 * 1024, // 5MB
-  allowedTypes: ['image/*', 'application/pdf', 'text/*', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-  maxFilesPerField: 10
-});
-
-export async function uploadFileAction(formData: FormData) {
+export async function uploadFileAction(formData: FormData): Promise<Result> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      throw new Error("Authentication required");
+      return {
+        success: false,
+        error: "Authentication required"
+      };
     }
 
     const hasDataPermission = await hasPermission(session.user.id, "manage_data");
     if (!hasDataPermission) {
-      throw new Error("Permission denied: manage_data required");
+      return {
+        success: false,
+        error: "Permission denied: manage_data required"
+      };
     }
 
     const file = formData.get('file') as File;
@@ -33,76 +33,104 @@ export async function uploadFileAction(formData: FormData) {
     const fieldId = parseInt(formData.get('fieldId') as string);
 
     if (!file) {
-      throw new Error("No file provided");
+      return {
+        success: false,
+        error: "No file provided"
+      };
     }
 
     if (!organizationId || !tableId || !fieldId) {
-      throw new Error("organizationId, tableId, and fieldId are required");
+      return {
+        success: false,
+        error: "organizationId, tableId, and fieldId are required"
+      };
     }
 
+    // Use FileApplicationService for file upload
+    const fileApplicationService = getFileApplicationService();
+    
     const buffer = Buffer.from(await file.arrayBuffer());
-
-    // Use FileFieldService to handle file attachment
-    const result = await fileFieldService.attachFiles({
-      fieldId,
+    const command: UploadFileCommand = {
       organizationId,
       tableId,
-      files: [{
+      fieldId,
+      file: {
         buffer,
         filename: file.name,
-        mimeType: file.type,
-        metadata: {
-          uploadedBy: session.user.id,
-          uploadedAt: new Date().toISOString()
-        }
-      }]
-    });
+        mimeType: file.type
+      },
+      uploadedBy: session.user.id
+    };
+
+    const result = await fileApplicationService.uploadFile(command);
 
     if (!result.success) {
-      throw new Error(result.errors?.join(', ') || 'Failed to upload file');
+      return {
+        success: false,
+        error: result.error || "Failed to upload file"
+      };
     }
 
     revalidatePath('/mission-control');
     return { 
       success: true, 
-      data: result.files?.[0] || null,
-      warnings: result.warnings
+      data: result.data
     };
   } catch (error) {
     console.error("Error uploading file:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Failed to upload file" };
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : "Failed to upload file" 
+    };
   }
 }
 
-export async function deleteFileAction(fileId: string, fieldId: number) {
+export async function deleteFileAction(fileId: string, fieldId: number, organizationId: number): Promise<Result> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      throw new Error("Authentication required");
+      return {
+        success: false,
+        error: "Authentication required"
+      };
     }
 
     const hasDataPermission = await hasPermission(session.user.id, "manage_data");
     if (!hasDataPermission) {
-      throw new Error("Permission denied: manage_data required");
+      return {
+        success: false,
+        error: "Permission denied: manage_data required"
+      };
     }
 
-    // Use FileFieldService to handle file detachment
-    const result = await fileFieldService.detachFiles({
+    // Use FileApplicationService for file deletion
+    const fileApplicationService = getFileApplicationService();
+    
+    const command: DeleteFileCommand = {
+      fileId,
       fieldId,
-      fileIds: [fileId]
-    });
+      organizationId,
+      deletedBy: session.user.id
+    };
+
+    const result = await fileApplicationService.deleteFile(command);
 
     if (!result.success) {
-      throw new Error(result.errors?.join(', ') || 'Failed to delete file');
+      return {
+        success: false,
+        error: result.error || "Failed to delete file"
+      };
     }
 
     revalidatePath('/mission-control');
     return { 
-      success: true,
-      warnings: result.warnings
+      success: true
     };
   } catch (error) {
     console.error("Error deleting file:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Failed to delete file" };
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : "Failed to delete file" 
+    };
   }
 }

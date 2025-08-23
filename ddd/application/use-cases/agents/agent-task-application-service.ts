@@ -12,6 +12,7 @@ import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-re
 import type { ITaskRepository } from '@/ddd/domain/agents/repositories/task-repository';
 import type { IAgentExecutionRepository, AgentExecutionRequest } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 import { Task, type TaskInstructions } from '@/ddd/domain/agents/entities/task';
+import { isActiveAgent, getAgentDisplayName } from '@/ddd/domain/agents/entities/agent';
 import { autoReindexService } from '@/ddd/application/di/rag-container';
 
 export interface CreateTaskRequest {
@@ -58,12 +59,22 @@ export class AgentTaskApplicationService {
       throw new Error(`Agent ${request.agentId} not found`);
     }
 
-    if (!agent.isActive) {
+    if (!isActiveAgent(agent)) {
       throw new Error(`Agent ${request.agentId} is not active (status: ${agent.status})`);
     }
 
     // 2. Use agent's organization or override
     const organizationId = request.organizationId || agent.organizationId;
+    
+    // AIDEV-DEBUG: Log organization ID resolution to debug constraint violation
+    console.log('[AGENT-TASK-SERVICE] Organization ID resolution:', {
+      requestOrganizationId: request.organizationId,
+      agentOrganizationId: agent.organizationId,
+      resolvedOrganizationId: organizationId,
+      organizationIdType: typeof organizationId,
+      agentName: agent.name,
+      requestName: request.name
+    });
 
     // 3. Create task using domain entity
     const task = Task.create({
@@ -79,7 +90,7 @@ export class AgentTaskApplicationService {
     // 4. Save task
     await this.taskRepository.save(task);
 
-    console.log(`[AGENT-TASK-SERVICE] Created task ${task.id.substring(0, 8)} for agent ${agent.displayName}`);
+    console.log(`[AGENT-TASK-SERVICE] Created task ${task.id.substring(0, 8)} for agent ${getAgentDisplayName(agent)}`);
     return task;
   }
 
@@ -107,7 +118,7 @@ export class AgentTaskApplicationService {
       throw new Error(`Agent ${task.agentId} not found`);
     }
 
-    if (!agent.isActive) {
+    if (!isActiveAgent(agent)) {
       throw new Error(`Agent ${task.agentId} is not active`);
     }
 

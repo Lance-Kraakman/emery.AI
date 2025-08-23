@@ -1,18 +1,16 @@
 'use server'
 
-// AIDEV-NOTE: Server Actions for table management using domain repositories
-// Migrated from legacy dynamic.ts to domain-driven architecture
+// AIDEV-NOTE: Server Actions for table management using TableApplicationService
+// Uses application service for business logic and validation
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { getDynamicTableRepository } from "@/ddd/application/di/container";
-// import { getDynamicTableRepository } from "@/lib/application/di/container";
-import { slugify } from "@/utils/slugify";
-import type { ActionResult, CreateTableData } from "./types";
-import type { CreateDynamicTableData } from "./types";
+import { getTableApplicationService } from "@/ddd/application/di/container";
+import type { Result, CreateTableData } from "./types";
+import type { CreateTableCommand } from "@/ddd/application/use-cases/tables/table-application-service";
 
-export async function createTable(data: CreateTableData & { databaseId: number; description?: string }, revalidateUrl?: string): Promise<ActionResult> {
+export async function createTable(data: CreateTableData & { databaseId: number; description?: string }, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("create_table");
     const currentOrg = await requireCurrentOrganization();
@@ -32,20 +30,26 @@ export async function createTable(data: CreateTableData & { databaseId: number; 
       };
     }
 
-    // AIDEV-TODO: Verify database exists and belongs to organization using a DatabaseRepository
+    // Use TableApplicationService for table creation
+    const tableApplicationService = getTableApplicationService();
     
-    const dynamicTableRepository = getDynamicTableRepository();
-
-    const tableData: CreateDynamicTableData = {
+    const command: CreateTableCommand = {
       name,
-      dbName: slugify(name),
       databaseId,
       organizationId: currentOrg.id,
       createdBy: session.user.id,
-      metadata: description ? { description } : undefined,
+      description,
+      metadata: {}
     };
 
-    const newTable = await dynamicTableRepository.create(tableData);
+    const result = await tableApplicationService.createTable(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to create table"
+      };
+    }
 
     // Note: RAG reindexing is now handled automatically by database triggers
     
@@ -58,7 +62,7 @@ export async function createTable(data: CreateTableData & { databaseId: number; 
     
     return {
       success: true,
-      data: newTable,
+      data: result.data,
     };
   } catch (error) {
     console.error("Error creating table:", error);
@@ -90,10 +94,9 @@ export async function createTableAction(formData: FormData) {
 export async function getTables() {
   try {
     const currentOrg = await requireCurrentOrganization();
-    const dynamicTableRepository = getDynamicTableRepository();
+    const tableApplicationService = getTableApplicationService();
     
-    // AIDEV-TODO: Enhance findByOrganization to include database details
-    const tableList = await dynamicTableRepository.findByOrganization(currentOrg.id);
+    const tableList = await tableApplicationService.getTablesForOrganization(currentOrg.id);
 
     console.log(`[GET-TABLES] Found ${tableList.length} tables for org ${currentOrg.id}`);
     return tableList;
@@ -108,7 +111,7 @@ export async function getTables() {
   }
 }
 
-export async function deleteTable(tableId: number, revalidateUrl?: string): Promise<ActionResult> {
+export async function deleteTable(tableId: number, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("manage_tables");
     const currentOrg = await requireCurrentOrganization();
@@ -120,19 +123,16 @@ export async function deleteTable(tableId: number, revalidateUrl?: string): Prom
       };
     }
 
-    const dynamicTableRepository = getDynamicTableRepository();
+    const tableApplicationService = getTableApplicationService();
 
-    // Verify table exists and belongs to the current organization
-    const table = await dynamicTableRepository.findById(tableId);
-    if (!table || table.organizationId !== currentOrg.id) {
+    const result = await tableApplicationService.deleteTable(tableId);
+
+    if (!result.success) {
       return {
         success: false,
-        error: "Table not found or access denied",
+        error: result.error || "Failed to delete table"
       };
     }
-
-    // Delete table using domain repository (handles both metadata and physical table)
-    await dynamicTableRepository.delete(tableId);
 
     // Revalidate the appropriate path
     if (revalidateUrl) {
@@ -149,7 +149,7 @@ export async function deleteTable(tableId: number, revalidateUrl?: string): Prom
     console.error("Error deleting table:", error);
     return {
       success: false,
-      error: "Failed to delete table",
+      error: error instanceof Error ? error.message : "Failed to delete table",
     };
   }
 }

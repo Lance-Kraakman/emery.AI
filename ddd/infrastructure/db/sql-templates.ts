@@ -37,6 +37,11 @@ export interface RowDeleteParams {
   rowId: string;
 }
 
+export interface RowSelectByIdParams {
+  tableName: string;
+  rowId: string;
+}
+
 /**
  * SQL templates for dynamic table operations
  * All templates use proper parameterization to prevent SQL injection
@@ -129,6 +134,16 @@ export class DynamicTableSqlTemplates {
         RETURNING *
       `.trim(),
       params: [...params.values, params.rowId]
+    };
+  }
+
+  /**
+   * Select a specific row by ID from a dynamic table
+   */
+  static selectRowById(params: RowSelectByIdParams): SqlQuery {
+    return {
+      query: `SELECT * FROM "${params.tableName}" WHERE id = $1`,
+      params: [params.rowId]
     };
   }
 
@@ -405,8 +420,12 @@ export class SqlExecutor {
           substitutedValue = String(value);
         } else if (value === null || value === undefined) {
           substitutedValue = 'NULL';
+        } else if (Array.isArray(value) || typeof value === 'object') {
+          // For arrays and objects (JSONB), serialize to JSON string
+          const jsonString = JSON.stringify(value);
+          substitutedValue = `'${jsonString.replace(/'/g, "''")}'::jsonb`;
         } else {
-          // For other types (arrays, objects), convert to string
+          // For other types, convert to string
           substitutedValue = `'${String(value).replace(/'/g, "''")}'`;
         }
         

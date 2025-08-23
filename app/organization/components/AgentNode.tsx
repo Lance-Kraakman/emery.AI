@@ -7,7 +7,7 @@ import { Handle, Position } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Bot, User, Activity, CheckCircle, Clock, XCircle } from 'lucide-react';
-import { Agent } from '@/types/db';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { Task } from '@/app/actions/types';
 
 interface AgentNodeData extends Agent {

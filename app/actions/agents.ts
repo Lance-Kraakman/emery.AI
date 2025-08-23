@@ -1,57 +1,42 @@
 'use server'
 
-import { db } from "@/lib/db/client";
-import { agents, roles } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
-import type { ActionResult, CreateAgentData } from "./types";
+import type { Result, CreateAgentData } from "./types";
+import { getAgentApplicationService } from "@/ddd/application/di/container";
+import type { CreateAgentCommand, UpdateAgentCommand, AgentFilters } from "@/ddd/application/use-cases/agents/agent-application-service";
+import type { CapabilityConfig } from "@/ddd/domain/agents/entities/agent";
 
-// AIDEV-NOTE: Simple API key generator for agent authentication - use more secure method in production
-function generateApiKey(): string {
-  return 'ag_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-}
-
-export async function createAgent(data: CreateAgentData, revalidateUrl?: string): Promise<ActionResult> {
+export async function createAgent(data: CreateAgentData, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("manage_agents");
-    const { 
-      name, 
-      role, 
-      description, 
-      persona, 
-      tools, 
-      servers, 
-      trigger, 
-      capabilities, 
-      status, 
-      roleId 
-    } = data;
+    const agentApplicationService = getAgentApplicationService();
+    
+    const command: CreateAgentCommand = {
+      name: data.name,
+      role: data.role,
+      description: data.description,
+      persona: data.persona,
+      ownerId: session.user.id,
+      organizationId: session.user.currentOrganizationId,
+      roleId: data.roleId,
+      tools: data.tools,
+      servers: data.servers,
+      trigger: data.trigger,
+      capabilities: data.capabilities,
+      status: (data.status === 'active' || data.status === 'inactive' || data.status === 'archived') ? data.status : 'active'
+    };
 
-    if (!name) {
+    const result = await agentApplicationService.createAgent(command);
+
+    if (!result.success) {
       return {
         success: false,
-        error: "Agent name is required",
+        error: result.error || "Failed to create agent"
       };
     }
-
-    const [newAgent] = await db.insert(agents).values({
-      name,
-      role: role || 'assistant',
-      description,
-      persona,
-      ownerId: session.user.id, // Agent is owned by the creating user
-      tools: tools ? tools as any : null, // JSONB field - rich tool configuration
-      servers: servers ? servers as any : null, // JSONB field - rich server configuration
-      trigger: trigger ? trigger as any : null, // JSONB field
-      capabilities: capabilities ? capabilities as any : null, // JSONB field
-      status: status || "active",
-      organizationId: session.user.currentOrganizationId,
-      roleId: roleId || null,
-      apiKey: generateApiKey(),
-    }).returning();
 
     // Note: RAG reindexing is now handled automatically by database triggers
 
@@ -62,9 +47,11 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
       revalidatePath('/manage'); // Default path for agent operations
     }
     
+    // Return domain entity directly - it already has proper defaults and types
+
     return {
       success: true,
-      data: newAgent,
+      data: result.data,
     };
   } catch (error) {
     console.error("Error creating agent:", error);
@@ -75,18 +62,24 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
   }
 }
 
-export async function addCapabilityToAgent(agentId: number, capability: { name: string; description: string; tools: string[]; servers: any[] }) {
+export async function addCapabilityToAgent(agentId: number, capability: CapabilityConfig) {
   'use server';
-  const agent = await db.select().from(agents).where(eq(agents.id, agentId));
-  if (agent.length === 0) {
-    throw new Error("Agent not found");
+  try {
+    const agentApplicationService = getAgentApplicationService();
+    const result = await agentApplicationService.addCapabilityToAgent(agentId, capability);
+    
+    if (!result.success) {
+      throw new Error(result.error || "Failed to add capability");
+    }
+    
+    return result.data;
+  } catch (error) {
+    console.error("Error adding capability to agent:", error);
+    throw error;
   }
-  const existingCapabilities = (agent[0].capabilities as any[]) || [];
-  const newCapabilities = [...existingCapabilities, capability];
-  await db.update(agents).set({ capabilities: newCapabilities }).where(eq(agents.id, agentId));
 }
 
-export async function createAgentAction(formData: FormData): Promise<ActionResult> {
+export async function createAgentAction(formData: FormData): Promise<Result> {
   try {
     const currentOrg = await requireCurrentOrganization();
     
@@ -132,49 +125,22 @@ export async function createAgentAction(formData: FormData): Promise<ActionResul
   }
 }
 
-import { and, like, sql, desc } from "drizzle-orm";
-import { teams } from "@/lib/db/schema";
-
-export async function getAgents(filters: { teamId?: number | string, searchQuery?: string } = {}) {
+export async function getAgents(filters: { teamId?: number | string, searchQuery?: string, status?: 'active' | 'inactive' | 'archived' } = {}) {
   try {
     const currentOrg = await requireCurrentOrganization();
-    const { teamId, searchQuery } = filters;
+    const agentApplicationService = getAgentApplicationService();
+    
+    const agentFilters: AgentFilters = {
+      organizationId: currentOrg.id,
+      teamId: filters.teamId,
+      searchQuery: filters.searchQuery,
+      status: filters.status
+    };
 
-    const conditions = [eq(agents.organizationId, currentOrg.id)];
-
-    if (searchQuery) {
-      conditions.push(like(agents.name, `%${searchQuery}%`));
-    }
-
-    if (teamId && teamId !== 'all') {
-      const teamIdNumber = Number(teamId);
-      if (isNaN(teamIdNumber)) {
-        console.warn(`Invalid teamId provided: ${teamId}`);
-        return [];
-      }
-      
-      const team = await db.select({ agentIds: teams.agentIds }).from(teams).where(eq(teams.id, teamIdNumber));
-      if (team.length > 0 && team[0].agentIds) {
-        const agentIdsAsNumbers = team[0].agentIds.map((id: any) => Number(id));
-        if(agentIdsAsNumbers.length > 0) {
-          conditions.push(sql`${agents.id} IN ${agentIdsAsNumbers}`);
-        } else {
-          // No agents in this team, return empty
-          return [];
-        }
-      } else {
-        // Team not found or has no agents, return empty
-        return [];
-      }
-    }
-
-    const organizationAgents = await db
-      .select()
-      .from(agents)
-      .where(and(...conditions))
-      .orderBy(desc(agents.createdAt));
-
-    return organizationAgents;
+    const domainAgents = await agentApplicationService.getAgents(agentFilters);
+    
+    // Return domain entities directly - they already have proper defaults and types
+    return domainAgents;
   } catch (error) {
     console.error("Error fetching agents:", error);
     throw new Error("Failed to fetch agents");
@@ -187,19 +153,22 @@ export async function getAgent(agentId: number) {
       throw new Error("agentId is required");
     }
 
-    const [agent] = await db
-      .select()
-      .from(agents)
-      .where(eq(agents.id, agentId));
-
-    return agent;
+    const agentApplicationService = getAgentApplicationService();
+    const domainAgent = await agentApplicationService.getAgent(agentId);
+    
+    if (!domainAgent) {
+      return null;
+    }
+    
+    // Return domain entity directly - it already has proper defaults and types
+    return domainAgent;
   } catch (error) {
     console.error("Error fetching agent:", error);
     throw new Error("Failed to fetch agent");
   }
 }
 
-export async function updateAgent(agentId: number, data: Partial<CreateAgentData>, revalidateUrl?: string): Promise<ActionResult> {
+export async function updateAgent(agentId: number, data: Partial<CreateAgentData>, revalidateUrl?: string): Promise<Result> {
   try {
     if (!agentId) {
       return {
@@ -208,11 +177,29 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       };
     }
 
-    const [updatedAgent] = await db
-      .update(agents)
-      .set(data)
-      .where(eq(agents.id, agentId))
-      .returning();
+    const agentApplicationService = getAgentApplicationService();
+    const command: UpdateAgentCommand = {
+      agentId,
+      name: data.name,
+      role: data.role,
+      description: data.description,
+      persona: data.persona,
+      roleId: data.roleId,
+      tools: data.tools,
+      servers: data.servers,
+      trigger: data.trigger,
+      capabilities: data.capabilities,
+      status: (data.status === 'active' || data.status === 'inactive' || data.status === 'archived') ? data.status : undefined
+    };
+
+    const result = await agentApplicationService.updateAgent(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to update agent"
+      };
+    }
 
     // Revalidate the appropriate path
     if (revalidateUrl) {
@@ -221,9 +208,11 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       revalidatePath('/manage'); // Default path for agent operations
     }
     
+    // Return domain entity directly - it already has proper defaults and types
+
     return {
       success: true,
-      data: updatedAgent,
+      data: result.data,
     };
   } catch (error) {
     console.error("Error updating agent:", error);
@@ -234,7 +223,7 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
   }
 }
 
-export async function deleteAgent(agentId: number, revalidateUrl?: string): Promise<ActionResult> {
+export async function deleteAgent(agentId: number, revalidateUrl?: string): Promise<Result> {
   try {
     if (!agentId) {
       return {
@@ -243,7 +232,15 @@ export async function deleteAgent(agentId: number, revalidateUrl?: string): Prom
       };
     }
 
-    await db.delete(agents).where(eq(agents.id, agentId));
+    const agentApplicationService = getAgentApplicationService();
+    const result = await agentApplicationService.deleteAgent(agentId);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to delete agent"
+      };
+    }
 
     // Revalidate the appropriate path
     if (revalidateUrl) {

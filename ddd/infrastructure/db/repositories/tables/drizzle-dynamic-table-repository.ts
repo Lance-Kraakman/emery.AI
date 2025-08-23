@@ -28,7 +28,7 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
     private db: DbClient,
     private rawClient: postgres.Sql
   ) {
-    this.sqlExecutor = new SqlExecutor(rawClient);
+    this.sqlExecutor = new SqlExecutor(db);
   }
 
   // Table CRUD - just the basics
@@ -124,6 +124,30 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
+  async getRow(tableId: number, rowId: string): Promise<DynamicTableRow | null> {
+    const table = await this.findById(tableId);
+    if (!table) {
+      throw new Error(`Table with id ${tableId} not found`);
+    }
+
+    try {
+      const template = DynamicTableSqlTemplates.selectRowById({
+        tableName: table.dbName,
+        rowId
+      });
+
+      const result = await this.sqlExecutor.executeTemplate('SELECT_ROW_BY_ID', template);
+      return result.length > 0 ? result[0] as DynamicTableRow : null;
+    } catch (error) {
+      console.error(`Error finding row ${rowId} in ${table.dbName}:`, error);
+      throw error;
+    }
+  }
+
+  async getRows(tableId: number, options: RowQueryOptions = {}): Promise<DynamicTableRow[]> {
+    return this.findRows(tableId, options);
+  }
+
   async findRows(tableId: number, options: RowQueryOptions = {}): Promise<DynamicTableRow[]> {
     const table = await this.findById(tableId);
     if (!table) {
@@ -205,6 +229,75 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
       console.error(`Error deleting row ${rowId} from ${table.dbName}:`, error);
       throw error;
     }
+  }
+
+  // Additional repository methods required by application services
+  async findByDatabase(databaseId: number): Promise<DynamicTable[]> {
+    const result = await this.db
+      .select()
+      .from(tables)
+      .where(eq(tables.databaseId, databaseId))
+      .orderBy(tables.createdAt);
+
+    return result.map(table => this.mapToDomainEntity(table));
+  }
+
+  async update(id: number, data: Partial<DynamicTable>): Promise<DynamicTable> {
+    const [updatedTable] = await this.db
+      .update(tables)
+      .set({
+        name: data.name,
+        metadata: data.metadata,
+        updatedAt: sql`now()`
+      })
+      .where(eq(tables.id, id))
+      .returning();
+
+    if (!updatedTable) {
+      throw new Error(`Table with id ${id} not found for update`);
+    }
+
+    return this.mapToDomainEntity(updatedTable);
+  }
+
+  async existsByDbName(organizationId: number, dbName: string): Promise<boolean> {
+    const result = await this.db
+      .select({ id: tables.id })
+      .from(tables)
+      .where(eq(tables.dbName, dbName))
+      .limit(1);
+
+    return result.length > 0;
+  }
+
+  async hasRows(tableId: number): Promise<boolean> {
+    const table = await this.findById(tableId);
+    if (!table) {
+      return false;
+    }
+
+    try {
+      const result = await this.rawClient.unsafe(`
+        SELECT EXISTS (
+          SELECT 1 FROM ${table.dbName} LIMIT 1
+        ) as has_rows
+      `);
+      
+      return result[0]?.has_rows || false;
+    } catch (error) {
+      console.error(`Error checking rows for table ${table.dbName}:`, error);
+      // If table doesn't exist physically, it has no rows
+      return false;
+    }
+  }
+
+  async findAll(): Promise<DynamicTable[]> {
+    const result = await this.db
+      .select()
+      .from(tables)
+      .orderBy(tables.createdAt);
+
+    return result.map(table => this.mapToDomainEntity(table));
   }
 
   // Helper methods for physical table operations

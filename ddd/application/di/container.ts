@@ -23,6 +23,37 @@ import { DrizzleTaskRepository } from '@/ddd/infrastructure/db/repositories/agen
 import { IAgentExecutionRepository } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 import { GrpcAgentExecutionRepository } from '@/ddd/infrastructure/execution/grpc-agent-execution-repository';
 import { AgentTaskApplicationService } from '@/ddd/application/use-cases/agents/agent-task-application-service';
+import { AgentApplicationService } from '@/ddd/application/use-cases/agents/agent-application-service';
+import { TeamApplicationService } from '@/ddd/application/use-cases/teams/team-application-service';
+import { DatabaseApplicationService } from '@/ddd/application/use-cases/database/database-application-service';
+import { PermissionApplicationService } from '@/ddd/application/use-cases/permissions/permission-application-service';
+import { UserOrganizationApplicationService } from '@/ddd/application/use-cases/user-organizations/user-organization-application-service';
+import { InvitationApplicationService } from '@/ddd/application/use-cases/invitations/invitation-application-service';
+
+// Team domain imports
+import { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
+import { DrizzleTeamRepository } from '@/ddd/infrastructure/db/repositories/teams/drizzle-team-repository';
+
+// Invitation domain imports
+import { IInvitationRepository } from '@/ddd/domain/invitations/repositories/invitation-repository';
+import { DrizzleInvitationRepository } from '@/ddd/infrastructure/db/repositories/invitations/drizzle-invitation-repository';
+
+// Database domain imports
+import { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
+import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/databases/drizzle-database-repository';
+
+// New application services for tables, fields, rows, files, and chat
+import { TableApplicationService } from '@/ddd/application/use-cases/tables/table-application-service';
+import { FieldApplicationService } from '@/ddd/application/use-cases/fields/field-application-service';
+import { RowApplicationService } from '@/ddd/application/use-cases/rows/row-application-service';
+import { FileApplicationService } from '@/ddd/application/use-cases/files/file-application-service';
+import { ChatApplicationService } from '@/ddd/application/use-cases/chat/chat-application-service';
+
+// Chat domain imports
+import { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
+import { DrizzleChatRepository } from '@/ddd/infrastructure/db/repositories/chat/drizzle-chat-repository';
+import { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
+import { DrizzleChatMessageRepository } from '@/ddd/infrastructure/db/repositories/chat/drizzle-chat-message-repository';
 
 // Registry of all available repository interfaces and services
 interface RepositoryRegistry {
@@ -34,11 +65,37 @@ interface RepositoryRegistry {
   IFileStorageRepository: IFileStorageRepository;
   FileFieldService: FileFieldService;
   
+  // Team domain
+  ITeamRepository: ITeamRepository;
+  
+  // Invitation domain
+  IInvitationRepository: IInvitationRepository;
+  
+  // Database domain
+  IDatabaseRepository: IDatabaseRepository;
+  
   // Agent domain services
   IAgentRepository: IAgentRepository;
   ITaskRepository: ITaskRepository;
   IAgentExecutionRepository: IAgentExecutionRepository;
   AgentTaskApplicationService: AgentTaskApplicationService;
+  AgentApplicationService: AgentApplicationService;
+  TeamApplicationService: TeamApplicationService;
+  DatabaseApplicationService: DatabaseApplicationService;
+  PermissionApplicationService: PermissionApplicationService;
+  UserOrganizationApplicationService: UserOrganizationApplicationService;
+  InvitationApplicationService: InvitationApplicationService;
+  
+  // New application services for data management
+  TableApplicationService: TableApplicationService;
+  FieldApplicationService: FieldApplicationService;
+  RowApplicationService: RowApplicationService;
+  FileApplicationService: FileApplicationService;
+  
+  // Chat domain services
+  IChatRepository: IChatRepository;
+  IChatMessageRepository: IChatMessageRepository;
+  ChatApplicationService: ChatApplicationService;
 }
 
 export class DIContainer {
@@ -88,8 +145,19 @@ export class DIContainer {
     this.repositories.set('IDynamicTableRepository', 
       new DrizzleDynamicTableRepository(db, rawClient));
 
+    // Register team and invitation repositories
+    const teamRepository = new DrizzleTeamRepository(db);
+    const invitationRepository = new DrizzleInvitationRepository(db);
+    this.repositories.set('ITeamRepository', teamRepository);
+    this.repositories.set('IInvitationRepository', invitationRepository);
+    
+    // Register database repository
+    const databaseRepository = new DrizzleDatabaseRepository(db);
+    this.repositories.set('IDatabaseRepository', databaseRepository);
+
     // Register agent domain repositories and services
     const agentRepository = new DrizzleAgentRepository(db);
+    const roleRepository = new DrizzleRoleRepository(db, rawClient);
     const taskRepository = new DrizzleTaskRepository();
     const agentExecutionRepository = new GrpcAgentExecutionRepository(agentRepository);
     const agentTaskApplicationService = new AgentTaskApplicationService(
@@ -97,11 +165,87 @@ export class DIContainer {
       taskRepository,
       agentExecutionRepository
     );
+    const agentApplicationService = new AgentApplicationService(
+      agentRepository,
+      roleRepository,
+      teamRepository
+    );
+    const teamApplicationService = new TeamApplicationService(
+      teamRepository,
+      agentRepository
+    );
+    const databaseApplicationService = new DatabaseApplicationService(
+      this.repositories.get('IDynamicTableRepository'),
+      this.repositories.get('IFieldRepository')
+    );
+    const permissionApplicationService = new PermissionApplicationService(
+      this.repositories.get('IRoleRepository'),
+      this.repositories.get('IUserRepository')
+    );
+    const userOrganizationApplicationService = new UserOrganizationApplicationService(
+      this.repositories.get('IUserRepository'),
+      this.repositories.get('IOrganizationRepository'),
+      this.repositories.get('IRoleRepository')
+    );
+    const invitationApplicationService = new InvitationApplicationService(
+      this.repositories.get('IInvitationRepository'),
+      this.repositories.get('IUserRepository'),
+      this.repositories.get('IOrganizationRepository')
+    );
 
     this.repositories.set('IAgentRepository', agentRepository);
     this.repositories.set('ITaskRepository', taskRepository);
     this.repositories.set('IAgentExecutionRepository', agentExecutionRepository);
     this.repositories.set('AgentTaskApplicationService', agentTaskApplicationService);
+    this.repositories.set('AgentApplicationService', agentApplicationService);
+    this.repositories.set('TeamApplicationService', teamApplicationService);
+    this.repositories.set('DatabaseApplicationService', databaseApplicationService);
+    this.repositories.set('PermissionApplicationService', permissionApplicationService);
+    this.repositories.set('UserOrganizationApplicationService', userOrganizationApplicationService);
+    this.repositories.set('InvitationApplicationService', invitationApplicationService);
+    
+    // Register new application services for data management
+    const tableApplicationService = new TableApplicationService(
+      this.repositories.get('IDynamicTableRepository'),
+      this.repositories.get('IFieldRepository'),
+      this.repositories.get('IDatabaseRepository'),
+      this.repositories.get('IOrganizationRepository')
+    );
+    const fieldApplicationService = new FieldApplicationService(
+      this.repositories.get('IFieldRepository'),
+      this.repositories.get('IDynamicTableRepository')
+    );
+    const rowApplicationService = new RowApplicationService(
+      this.repositories.get('IDynamicTableRepository'),
+      this.repositories.get('IFieldRepository'),
+      this.repositories.get('IFileStorageRepository'),
+      this.repositories.get('FileFieldService')
+    );
+    const fileApplicationService = new FileApplicationService(
+      this.repositories.get('FileFieldService'),
+      this.repositories.get('IFileStorageRepository'),
+      this.repositories.get('IFieldRepository'),
+      this.repositories.get('IDynamicTableRepository')
+    );
+    
+    // Register chat repositories
+    const chatRepository = new DrizzleChatRepository(db);
+    const chatMessageRepository = new DrizzleChatMessageRepository(db);
+    this.repositories.set('IChatRepository', chatRepository);
+    this.repositories.set('IChatMessageRepository', chatMessageRepository);
+    
+    const chatApplicationService = new ChatApplicationService(
+      chatRepository,
+      chatMessageRepository,
+      this.repositories.get('IDynamicTableRepository'),
+      this.repositories.get('IAgentRepository') // Add agent repository for domain support
+    );
+    
+    this.repositories.set('TableApplicationService', tableApplicationService);
+    this.repositories.set('FieldApplicationService', fieldApplicationService);
+    this.repositories.set('RowApplicationService', rowApplicationService);
+    this.repositories.set('FileApplicationService', fileApplicationService);
+    this.repositories.set('ChatApplicationService', chatApplicationService);
 
     this.isInitialized = true;
     console.log('✅ DIContainer initialized with repositories, file storage, and agent services');
@@ -223,6 +367,104 @@ export function getAgentExecutionRepository(): IAgentExecutionRepository {
  */
 export function getAgentTaskApplicationService(): AgentTaskApplicationService {
   return DIContainer.getInstance().get('AgentTaskApplicationService');
+}
+
+/**
+ * Get the agent application service
+ */
+export function getAgentApplicationService(): AgentApplicationService {
+  return DIContainer.getInstance().get('AgentApplicationService');
+}
+
+/**
+ * Get the team application service
+ */
+export function getTeamApplicationService(): TeamApplicationService {
+  return DIContainer.getInstance().get('TeamApplicationService');
+}
+
+/**
+ * Get the database application service
+ */
+export function getDatabaseApplicationService(): DatabaseApplicationService {
+  return DIContainer.getInstance().get('DatabaseApplicationService');
+}
+
+/**
+ * Get the permission application service
+ */
+export function getPermissionApplicationService(): PermissionApplicationService {
+  return DIContainer.getInstance().get('PermissionApplicationService');
+}
+
+/**
+ * Get the user organization application service
+ */
+export function getUserOrganizationApplicationService(): UserOrganizationApplicationService {
+  return DIContainer.getInstance().get('UserOrganizationApplicationService');
+}
+
+/**
+ * Get the invitation application service
+ */
+export function getInvitationApplicationService(): InvitationApplicationService {
+  return DIContainer.getInstance().get('InvitationApplicationService');
+}
+
+/**
+ * Get the table application service
+ */
+export function getTableApplicationService(): TableApplicationService {
+  return DIContainer.getInstance().get('TableApplicationService');
+}
+
+/**
+ * Get the field application service
+ */
+export function getFieldApplicationService(): FieldApplicationService {
+  return DIContainer.getInstance().get('FieldApplicationService');
+}
+
+/**
+ * Get the row application service
+ */
+export function getRowApplicationService(): RowApplicationService {
+  return DIContainer.getInstance().get('RowApplicationService');
+}
+
+/**
+ * Get the file application service
+ */
+export function getFileApplicationService(): FileApplicationService {
+  return DIContainer.getInstance().get('FileApplicationService');
+}
+
+/**
+ * Get the chat repository
+ */
+export function getChatRepository(): IChatRepository {
+  return DIContainer.getInstance().get('IChatRepository');
+}
+
+/**
+ * Get the chat message repository
+ */
+export function getChatMessageRepository(): IChatMessageRepository {
+  return DIContainer.getInstance().get('IChatMessageRepository');
+}
+
+/**
+ * Get the chat application service
+ */
+export function getChatApplicationService(): ChatApplicationService {
+  return DIContainer.getInstance().get('ChatApplicationService');
+}
+
+/**
+ * Get the database repository
+ */
+export function getDatabaseRepository(): IDatabaseRepository {
+  return DIContainer.getInstance().get('IDatabaseRepository');
 }
 
 // Helper to initialize container from existing clients
