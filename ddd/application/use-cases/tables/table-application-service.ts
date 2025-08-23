@@ -14,7 +14,7 @@ import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/da
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { DynamicTable, CreateDynamicTableData } from '@/ddd/domain/tables/entities/dynamic-table';
 import type { Result } from '@/ddd/domain/shared/result';
-import { slugify } from '@/utils/slugify';
+import { generateTableName } from '@/utils/slugify';
 
 export interface CreateTableCommand {
   name: string;
@@ -79,16 +79,8 @@ export class TableApplicationService {
         };
       }
 
-      // 3. Generate unique slug for table
-      const baseSlug = slugify(command.name);
-      let dbName = baseSlug;
-      let counter = 1;
-      
-      // Ensure unique dbName within the organization
-      while (await this.tableRepository.existsByDbName(command.organizationId, dbName)) {
-        dbName = `${baseSlug}_${counter}`;
-        counter++;
-      }
+      // 3. Generate unique table name with user_table_ prefix
+      const dbName = generateTableName(command.name);
 
       // 4. Create table data
       const tableData: CreateDynamicTableData = {
