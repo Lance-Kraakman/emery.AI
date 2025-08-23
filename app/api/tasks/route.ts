@@ -2,15 +2,12 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createTask } from '@/app/actions/tasks';
-import type { CreateTaskData } from '@/app/actions/types';
 import { authenticateRequest } from '@/lib/auth/test-auth';
-import { db } from '@/lib/db/client';
-import { tasks } from '@/lib/db/schema';
-import { desc } from 'drizzle-orm';
+import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
+import type { CreateTaskRequest } from '@/ddd/application/use-cases/agents/agent-task-application-service';
 
 /**
- * Get tasks list
+ * Get tasks list using AgentTaskApplicationService
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
@@ -20,11 +17,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
     }
 
-    // Get all tasks, ordered by creation date (most recent first)
-    const allTasks = await db
-      .select()
-      .from(tasks)
-      .orderBy(desc(tasks.createdAt));
+    // Use AgentTaskApplicationService for task listing
+    const agentTaskApplicationService = getAgentTaskApplicationService();
+    const organizationId = 1; // TODO: Get from session
+    const allTasks = await agentTaskApplicationService.getTasksForOrganization(organizationId);
 
     return NextResponse.json({
       success: true,
@@ -42,8 +38,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await authenticateRequest(request);
+    
+    if (!authResult.success || !authResult.user) {
+      return NextResponse.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
-    const { agentId, name, capabilityName, instructions, createdBy } = body;
+    const { agentId, name, capabilityName, instructions } = body;
 
     // Validate required fields
     if (!agentId || !name || !capabilityName) {
@@ -53,21 +55,23 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const taskData: CreateTaskData = {
+    // Use AgentTaskApplicationService for task creation
+    const agentTaskApplicationService = getAgentTaskApplicationService();
+
+    const command: CreateTaskRequest = {
       agentId: parseInt(agentId),
       name,
       capabilityName,
       instructions: instructions || {},
-      createdBy: createdBy || undefined
+      createdBy: authResult.user.id
     };
 
-    const result = await createTask(taskData);
+    const task = await agentTaskApplicationService.createTask(command);
     
-    if (result.success) {
-      return NextResponse.json(result, { status: 201 });
-    } else {
-      return NextResponse.json(result, { status: 400 });
-    }
+    return NextResponse.json({
+      success: true,
+      task
+    }, { status: 201 });
 
   } catch (error) {
     console.error('API Error creating task:', error);

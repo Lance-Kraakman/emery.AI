@@ -279,3 +279,70 @@ export const ragQueryLogs = pgTable("rag_query_logs", {
   
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Chat System Tables - Connected to All Domain Types
+export const chats = pgTable("chats", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+  
+  // Domain connections - flexible connections to any domain type
+  domainType: text("domain_type"), // 'table', 'agent', 'file', 'team', 'workflow', null for org-wide
+  domainId: integer("domain_id"), // ID of connected domain entity
+  tableId: integer("table_id").references(() => tables.id), // Legacy table connection (for compatibility)
+  
+  // Chat metadata
+  title: text("title").notNull(),
+  description: text("description"),
+  
+  // RAG and AI context
+  contextMetadata: jsonb("context_metadata").$type<{
+    ragIndexId?: string;
+    contextType?: 'table' | 'agent' | 'file' | 'team' | 'workflow' | 'organization' | 'mixed';
+    domainSchema?: any;
+    primaryRagWeight?: number; // Weight for primary domain context (0.0-1.0)
+    lastRagUpdate?: string;
+  }>(),
+  
+  // Status and lifecycle
+  status: text("status").notNull().default("active"), // active, archived, deleted
+  messageCount: integer("message_count").default(0),
+  lastMessageAt: timestamp("last_message_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const chatMessages: any = pgTable("chat_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  chatId: uuid("chat_id").notNull().references(() => chats.id, { onDelete: "cascade" }),
+  
+  // Message content
+  role: text("role").notNull(), // 'user' | 'assistant' | 'system'
+  content: text("content").notNull(),
+  
+  // AI and processing metadata
+  metadata: jsonb("metadata").$type<{
+    ragSources?: Array<{
+      documentId: string;
+      title: string;
+      similarity: number;
+      domainType: string;
+    }>;
+    modelUsed?: string;
+    processingTime?: number;
+    tokenCount?: number;
+    error?: string;
+  }>(),
+  
+  // Message ordering and organization
+  messageIndex: integer("message_index").notNull(), // Sequential order within chat
+  parentMessageId: uuid("parent_message_id").references(() => chatMessages.id), // For threading/editing
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Index for efficient chat message retrieval
+// Note: This would be created in a migration file
+// CREATE INDEX idx_chat_messages_chat_id_order ON chat_messages(chat_id, message_index);
+// CREATE INDEX idx_chats_table_id ON chats(table_id) WHERE table_id IS NOT NULL;

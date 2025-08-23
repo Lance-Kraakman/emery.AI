@@ -1,5 +1,5 @@
 /**
- * Agent management API endpoint
+ * Agent management API endpoint using AgentApplicationService
  * Supports REST API access for agent operations
  */
 
@@ -8,17 +8,11 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
-import { db } from '@/lib/db/client';
-import { agents } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
-
-// Agent API key generator
-function generateAgentApiKey(): string {
-  return 'ag_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-}
+import { getAgentApplicationService } from '@/ddd/application/di/container';
+import type { CreateAgentCommand } from '@/ddd/application/use-cases/agents/agent-application-service';
 
 /**
- * Create a new agent
+ * Create a new agent using AgentApplicationService
  */
 export async function POST(request: NextRequest): Promise<Response> {
   try {
@@ -49,9 +43,10 @@ export async function POST(request: NextRequest): Promise<Response> {
       }, { status: 400 });
     }
 
+    // Use AgentApplicationService for agent creation
+    const agentApplicationService = getAgentApplicationService();
 
-    // Create agent
-    const [newAgent] = await db.insert(agents).values({
+    const command: CreateAgentCommand = {
       name,
       role,
       description,
@@ -61,16 +56,23 @@ export async function POST(request: NextRequest): Promise<Response> {
       trigger: trigger || { type: 'MANUAL' },
       capabilities: capabilities || [],
       tools: tools || [],
-      servers: servers || [],
-      status: 'active',
-      apiKey: generateAgentApiKey(),
-    }).returning();
+      servers: servers || []
+    };
+
+    const result = await agentApplicationService.createAgent(command);
+
+    if (!result.success) {
+      return Response.json({ 
+        success: false,
+        error: result.error || 'Failed to create agent'
+      }, { status: 400 });
+    }
 
     return Response.json({
       success: true,
       message: 'Agent created successfully',
-      agent: newAgent,
-      id: newAgent.id, // For compatibility with tests
+      agent: result.data,
+      id: result.data?.id, // For compatibility with tests
     });
 
   } catch (error) {
@@ -83,7 +85,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 }
 
 /**
- * Get agents list
+ * Get agents list using AgentApplicationService
  */
 export async function GET(request: NextRequest): Promise<Response> {
   try {
@@ -95,11 +97,9 @@ export async function GET(request: NextRequest): Promise<Response> {
 
     const userId = authResult.user.id;
 
-    // Get agents for user - this will return empty if userId doesn't match any ownerId
-    const userAgents = await db
-      .select()
-      .from(agents)
-      .where(eq(agents.ownerId, userId));
+    // Use AgentApplicationService for agent listing
+    const agentApplicationService = getAgentApplicationService();
+    const userAgents = await agentApplicationService.getAgentsByOwner(userId);
 
     return Response.json({
       success: true,

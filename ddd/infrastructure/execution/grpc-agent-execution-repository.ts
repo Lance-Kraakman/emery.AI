@@ -20,6 +20,7 @@ import { workerRegistry } from '@/lib/grpc/client';
 import type { TaskProgress } from '@/lib/grpc/client';
 import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/lib/grpc/proto-mappers';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import { getAgentDisplayName, getCapabilitiesCount } from '@/ddd/domain/agents/entities/agent';
 
 export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
   // Track active executions for status queries
@@ -48,7 +49,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       const targetOrganizationId = organizationId || agent.organizationId;
       const organizationIdStr = targetOrganizationId.toString();
       
-      console.log(`[GRPC-EXECUTION-REPO] Using agent: ${agent.displayName} with ${agent.capabilitiesCount} capabilities`);
+      console.log(`[GRPC-EXECUTION-REPO] Using agent: ${getAgentDisplayName(agent)} with ${getCapabilitiesCount(agent)} capabilities`);
       
       // 3. Get worker client for organization
       const workerClient = workerRegistry.getWorkerForOrganization(organizationIdStr);
@@ -274,8 +275,8 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       tools,
       servers,
       trigger: agent.trigger ? {
-        type: agent.trigger.type || 'MANUAL',
-        ...agent.trigger
+        ...agent.trigger,
+        type: agent.trigger.type || 'MANUAL'
       } as any : undefined,
       capabilities,
       status: agent.status || undefined,

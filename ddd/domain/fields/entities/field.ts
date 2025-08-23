@@ -10,6 +10,7 @@ export interface Field {
   orderIndex: number | null | undefined;  // Align with actions interface
   relatedTableId: number | null;      // For relation field types
   required: boolean | null;           // Align with actions interface (not optional)
+  metadata?: Record<string, any>;     // Additional field metadata
   createdAt: Date | null;
 }
 
@@ -21,6 +22,7 @@ export interface CreateFieldData {
   orderIndex?: number;
   relatedTableId?: number;             // Required for relation fields
   required?: boolean;
+  metadata?: Record<string, any>;      // Additional field metadata
 }
 
 export interface UpdateFieldData {
@@ -30,6 +32,7 @@ export interface UpdateFieldData {
   orderIndex?: number;
   relatedTableId?: number;
   required?: boolean;
+  metadata?: Record<string, any>;      // Additional field metadata
   // Note: tableId typically not changed after creation
 }
 

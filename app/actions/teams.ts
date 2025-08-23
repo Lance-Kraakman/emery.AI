@@ -5,9 +5,9 @@ import { teams, teamMemberships } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createTeamSchema, updateTeamSchema, parseFormDataToTeam } from "@/lib/schemas";
-import type { ActionResult, CreateTeamData, TeamMembershipData } from "./types";
+import type { Result, CreateTeamData, TeamMembershipData } from "./types";
 
-export async function createTeam(data: CreateTeamData): Promise<ActionResult> {
+export async function createTeam(data: CreateTeamData): Promise<Result> {
   try {
     const { organizationId, name, purpose, description, responsibilities, goals, agentIds } = data;
 
@@ -46,7 +46,7 @@ export async function createTeam(data: CreateTeamData): Promise<ActionResult> {
   }
 }
 
-export async function createTeamAction(formData: FormData): Promise<ActionResult> {
+export async function createTeamAction(formData: FormData): Promise<Result> {
   try {
     // Parse and validate form data
     const rawData = parseFormDataToTeam(formData);
@@ -103,7 +103,7 @@ export async function getTeam(teamId: number) {
   }
 }
 
-export async function updateTeam(teamId: number, data: Partial<CreateTeamData>): Promise<ActionResult> {
+export async function updateTeam(teamId: number, data: Partial<CreateTeamData>): Promise<Result> {
   try {
     if (!teamId) {
       return {
@@ -138,7 +138,7 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
   }
 }
 
-export async function deleteTeam(teamId: number): Promise<ActionResult> {
+export async function deleteTeam(teamId: number): Promise<Result> {
   try {
     if (!teamId) {
       return {
@@ -169,7 +169,7 @@ export async function deleteTeam(teamId: number): Promise<ActionResult> {
   }
 }
 
-export async function addTeamMember(data: TeamMembershipData): Promise<ActionResult> {
+export async function addTeamMember(data: TeamMembershipData): Promise<Result> {
   try {
     const { teamId, userId } = data;
 
@@ -201,7 +201,7 @@ export async function addTeamMember(data: TeamMembershipData): Promise<ActionRes
   }
 }
 
-export async function removeTeamMember(membershipId: number): Promise<ActionResult> {
+export async function removeTeamMember(membershipId: number): Promise<Result> {
   try {
     if (!membershipId) {
       return {

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Agent, Team } from '@/types/db';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import type { Team } from '@/types/db';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';

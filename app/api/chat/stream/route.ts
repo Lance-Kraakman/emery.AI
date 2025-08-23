@@ -3,9 +3,14 @@ import { streamText } from 'ai'
 import { auth } from '@/lib/auth'
 import { searchApplicationService, indexingApplicationService, indexRepository } from '@/ddd/application/di/rag-container'
 import { getAIModel, getAIProviderInfo } from '@/lib/ai/models'
+import { getChatApplicationService, getDynamicTableRepository, getAgentRepository } from '@/ddd/application/di/container'
 import type { SearchRagQuery } from '@/ddd/application/rag/queries/search-query'
 import type { CreateIndexCommand } from '@/ddd/application/rag/commands/create-index-command'
 import { RagIndexId, OrganizationId } from '@/ddd/domain/rag/value-objects'
+import type { CreateChatCommand, SendMessageCommand } from '@/ddd/application/use-cases/chat/chat-application-service'
+import { ChatMessageEntity } from '@/ddd/domain/chat/entities/chat-message'
+import { DualContextRagService } from '@/ddd/application/use-cases/chat/dual-context-rag-service'
+import type { DomainContextOptions } from '@/ddd/application/use-cases/chat/dual-context-rag-service'
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,7 +19,7 @@ export async function POST(req: NextRequest) {
       return new Response('Unauthorized', { status: 401 })
     }
 
-    const { messages } = await req.json()
+    const { messages, chatId, tableId, domainType, domainId } = await req.json()
     const latestMessage = messages[messages.length - 1]?.content
 
     // Check if HuggingFace is configured
@@ -32,84 +37,160 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    let ragContext = ''
+    const organizationId = session.user.currentOrganizationId
+    if (!organizationId) {
+      return new Response('No current organization found', { status: 400 })
+    }
 
-    // Get organization RAG context if available
+    const chatApplicationService = getChatApplicationService()
+    let currentChatId = chatId
+    let currentChat: any = null
+
+    // Create or retrieve chat session
+    if (!currentChatId && latestMessage) {
+      // Create new chat session (optionally connected to domain)
+      const createChatCommand: CreateChatCommand = {
+        organizationId,
+        createdBy: session.user.id,
+        domainType: domainType as any,
+        domainId: domainId ? parseInt(domainId) : undefined,
+        tableId: tableId ? parseInt(tableId) : undefined // Legacy support
+      }
+
+      const chatResult = await chatApplicationService.createChat(createChatCommand)
+      if (!chatResult.success) {
+        return new Response(
+          JSON.stringify({ error: chatResult.error || 'Failed to create chat' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      currentChatId = chatResult.data!.id
+      currentChat = chatResult.data
+      
+      const chatTypeDesc = domainType ? `${domainType}-connected` : (tableId ? 'table-connected' : 'organization')
+      console.log(`[CHAT-STREAM] Created new ${chatTypeDesc} chat: ${currentChatId}`)
+    } else if (currentChatId) {
+      // Retrieve existing chat for context
+      const chatHistory = await chatApplicationService.getChatHistory({
+        chatId: currentChatId,
+        userId: session.user.id,
+        organizationId,
+        limit: 1
+      })
+      
+      if (chatHistory.success) {
+        currentChat = chatHistory.data?.chat
+      }
+    }
+
+    // Save user message if we have a chat session
+    if (currentChatId && latestMessage) {
+      const userMessageCommand: SendMessageCommand = {
+        chatId: currentChatId,
+        userId: session.user.id,
+        organizationId,
+        content: latestMessage,
+        role: 'user'
+      }
+
+      const messageResult = await chatApplicationService.sendMessage(userMessageCommand)
+      if (!messageResult.success) {
+        console.warn('[CHAT-STREAM] Failed to save user message:', messageResult.error)
+      }
+    }
+
+    let ragContext = ''
+    let ragSourceSummary: string[] = []
+
+    // Get dual-context RAG results using the new service
     try {
       if (session?.user?.id && latestMessage) {
-        const organizationId = session.user.currentOrganizationId
-        if (!organizationId) {
-          console.log('No current organization found for user')
-        } else {
-          // AIDEV-NOTE: Using DDD repository directly instead of legacy ragService
-          const indexes = await indexRepository.findByOrganization(OrganizationId.fromNumber(organizationId))
-          let ragIndex = indexes.find(idx => idx.domainTypes.includes('organization'))
+        // Initialize dual-context RAG service
+        const tableRepository = getDynamicTableRepository()
+        const agentRepository = getAgentRepository()
+        const dualContextRagService = new DualContextRagService(tableRepository, agentRepository)
+
+        // Determine domain context from chat
+        let resolvedDomainType = currentChat?.domainType || domainType
+        let resolvedDomainId = currentChat?.domainId || domainId
         
-          // Create default RAG index if none exists
-          if (!ragIndex) {
-            // AIDEV-NOTE: Using DDD indexing application service instead of legacy ragService
-            const createIndexCommand: CreateIndexCommand = {
-              name: `Organization ${organizationId} Knowledge Base`,
-              description: 'Automatic RAG index for organizational data',
-              organizationId,
-              domainTypes: ['organization', 'table', 'agent', 'file', 'team'], // DDD uses singular forms
-              createdBy: session.user.id,
-            };
-            
-            const indexId = await indexingApplicationService.createIndex(createIndexCommand)
-            ragIndex = await indexRepository.findById(RagIndexId.fromString(indexId)) || undefined
-          }
+        // Handle legacy table ID
+        if (!resolvedDomainType && (currentChat?.tableId || tableId)) {
+          resolvedDomainType = 'table'
+          resolvedDomainId = currentChat?.tableId || parseInt(tableId)
+        }
 
-          // Search for relevant context
-          if (ragIndex) {
-            console.log(`[RAG-SEARCH] Searching in index ${ragIndex.id} for query: "${latestMessage}"`)
-            // AIDEV-NOTE: Using DDD search application service instead of legacy ragService
-            const searchQuery: SearchRagQuery = {
-              indexId: ragIndex.id.toString(),
-              query: latestMessage,
-              limit: 5,
-              threshold: 0.3, // Lowered threshold for better matches
-              userId: session.user.id
-            };
-            
-            const searchResult = await searchApplicationService.search(searchQuery)
+        const contextOptions: DomainContextOptions = {
+          domainType: resolvedDomainType,
+          domainId: resolvedDomainId,
+          organizationId,
+          query: latestMessage,
+          primaryWeight: 0.7,
+          maxPrimaryDocs: 3,
+          maxSecondaryDocs: 2,
+          similarityThreshold: 0.3
+        }
 
-            console.log(`[RAG-SEARCH] Found ${searchResult.documents.length} documents`)
-            if (searchResult.documents.length > 0) {
-              console.log(`[RAG-SEARCH] Top match: ${searchResult.documents[0].title} (${(searchResult.documents[0].similarity! * 100).toFixed(1)}% similarity)`)
-              ragContext = `
-RELEVANT ORGANIZATION DATA:
-${searchResult.documents.map((doc, idx) => 
-  `[${idx + 1}] ${doc.title}
-${doc.content.substring(0, 500)}...
-Source: ${doc.domainType} - ${doc.sourceName} (${(doc.similarity! * 100).toFixed(1)}% match)
----`
-).join('\n')}
-
-`
-            } else {
-              console.log('[RAG-SEARCH] No documents found above similarity threshold')
-            }
-          }
+        const dualContextResult = await dualContextRagService.getDualContext(contextOptions)
+        
+        if (dualContextResult.totalDocuments > 0) {
+          ragContext = dualContextRagService.formatContextForSystemMessage(dualContextResult)
+          ragSourceSummary = dualContextRagService.getRagSourceSummary(dualContextResult)
+          
+          console.log(`[DUAL-CONTEXT-RAG] Generated context with ${dualContextResult.primaryContext.length} primary + ${dualContextResult.secondaryContext.length} secondary docs`)
+          console.log(`[DUAL-CONTEXT-RAG] Context type: ${resolvedDomainType || 'organization'} chat`)
+        } else {
+          console.log('[DUAL-CONTEXT-RAG] No relevant context found')
         }
       }
     } catch (ragError) {
-      console.error('RAG search failed:', ragError)
+      console.error('Dual-context RAG search failed:', ragError)
       // Continue without RAG context
     }
 
-    // Create system message with RAG context
-    const systemMessage = {
-      role: 'system' as const,
-      content: `You are an AI assistant for Emery, a dynamic database and workflow platform. You help users understand their organizational data, create workflows, and manage their systems.
+    // Create domain-aware system message with RAG context
+    let systemPrompt = 'You are an AI assistant for Emery, a dynamic database and workflow platform. You help users understand their organizational data, create workflows, and manage their systems.'
+    
+    // Add domain-specific context if available
+    if (currentChat?.domainType || domainType) {
+      const contextType = currentChat?.domainType || domainType
+      switch (contextType) {
+        case 'table':
+          systemPrompt += ' You are currently assisting with a specific table and its data. Focus on table structure, data analysis, and table-specific operations.'
+          break
+        case 'agent':
+          systemPrompt += ' You are currently assisting with a specific agent. Focus on agent capabilities, execution history, and configuration.'
+          break
+        case 'file':
+          systemPrompt += ' You are currently assisting with a specific file. Focus on file content, analysis, and document-related tasks.'
+          break
+        case 'team':
+          systemPrompt += ' You are currently assisting with a specific team. Focus on team dynamics, member coordination, and collaborative activities.'
+          break
+        case 'workflow':
+          systemPrompt += ' You are currently assisting with a specific workflow. Focus on process optimization, execution analysis, and workflow management.'
+          break
+      }
+    }
 
-${ragContext ? `You have access to relevant context from the user's organization:
+    if (ragContext) {
+      systemPrompt += `
+
+You have access to relevant context information:
 
 ${ragContext}
 
-Use this context to provide accurate, specific answers about their tables, data, and workflows. Reference the specific sources when applicable.` : 'No specific organizational context is available. Provide general guidance about database management and workflows.'}
+Use this context to provide accurate, specific answers. When referencing information from the context, cite the specific sources (marked as P1, P2 for primary domain context, or S1, S2 for secondary organizational context).`
+    } else {
+      systemPrompt += ' No specific context is available. Provide general guidance about database management and workflows.'
+    }
 
-Always be helpful, accurate, and professional.`
+    systemPrompt += '\n\nAlways be helpful, accurate, and professional.'
+
+    const systemMessage = {
+      role: 'system' as const,
+      content: systemPrompt
     }
 
     console.log(`[RAG-CONTEXT] Using RAG context: ${ragContext ? 'YES' : 'NO'}`)
@@ -124,8 +205,47 @@ Always be helpful, accurate, and professional.`
       temperature: 0.7,
     })
 
-    // AI SDK v5 - create streaming response from textStream
-    return new Response(result.textStream, {
+    // Create a transform stream to capture the response for saving
+    let fullResponse = ''
+    const responseStream = new TransformStream({
+      transform(chunk, controller) {
+        const decoder = new TextDecoder()
+        const text = decoder.decode(chunk)
+        fullResponse += text
+        controller.enqueue(chunk)
+      },
+      flush() {
+        // Save the complete assistant response after streaming
+        if (currentChatId && fullResponse.trim()) {
+          const saveAssistantMessage = async () => {
+            try {
+              const assistantMessageCommand: SendMessageCommand = {
+                chatId: currentChatId,
+                userId: session.user.id,
+                organizationId,
+                content: fullResponse.trim(),
+                role: 'assistant',
+                metadata: {
+                  ragSources: [], // TODO: Convert ragSourceSummary to proper format
+                  processingTime: Date.now() - performance.now()
+                }
+              }
+              
+              await chatApplicationService.sendMessage(assistantMessageCommand)
+              console.log(`[CHAT-STREAM] Saved assistant response to chat ${currentChatId}`)
+            } catch (error) {
+              console.error('[CHAT-STREAM] Failed to save assistant response:', error)
+            }
+          }
+          
+          // Save response asynchronously without blocking
+          saveAssistantMessage()
+        }
+      }
+    })
+
+    // AI SDK v5 - create streaming response from textStream with transform
+    return new Response(result.textStream.pipeThrough(responseStream), {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache',

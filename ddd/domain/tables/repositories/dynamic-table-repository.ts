@@ -14,14 +14,23 @@ export interface IDynamicTableRepository {
   // Table CRUD - just the basics
   findById(id: number): Promise<DynamicTable | null>;
   findByOrganization(organizationId: number): Promise<DynamicTable[]>;
+  findByDatabase(databaseId: number): Promise<DynamicTable[]>;
   create(data: CreateDynamicTableData): Promise<DynamicTable>;
+  update(id: number, data: Partial<DynamicTable>): Promise<DynamicTable>;
   delete(id: number): Promise<void>;
+  existsByDbName(organizationId: number, dbName: string): Promise<boolean>;
   
   // Row CRUD - what's actually used
   insertRow(tableId: number, data: CreateRowData): Promise<DynamicTableRow>;
   findRows(tableId: number, options?: RowQueryOptions): Promise<DynamicTableRow[]>;
+  getRow(tableId: number, rowId: string): Promise<DynamicTableRow | null>;
+  getRows(tableId: number, options?: RowQueryOptions): Promise<DynamicTableRow[]>; 
   updateRow(tableId: number, rowId: string, data: UpdateRowData): Promise<DynamicTableRow>;
   deleteRow(tableId: number, rowId: string): Promise<void>;
+  
+  // Table analysis methods needed by application services
+  hasRows(tableId: number): Promise<boolean>;
+  findAll(): Promise<DynamicTable[]>;
 }
 
 // FUTURE-WORK: Additional methods to implement as needed

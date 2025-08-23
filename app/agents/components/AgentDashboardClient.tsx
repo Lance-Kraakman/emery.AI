@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Agent, Team } from '@/types/db';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import type { Team } from '@/types/db';
 import { Search, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

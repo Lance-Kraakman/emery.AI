@@ -1,15 +1,16 @@
 'use server'
 
-import { db } from "@/lib/db/client";
-import { tasks, agents } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
-import type { ActionResult, CreateTaskData } from "./types";
+import { requireCurrentOrganization } from "./user-organizations";
+import type { Result, CreateTaskData } from "./types";
+import { getAgentTaskApplicationService, getAgentApplicationService } from "@/ddd/application/di/container";
+import type { CreateTaskRequest } from "@/ddd/application/use-cases/agents/agent-task-application-service";
 
-export async function createTask(data: CreateTaskData): Promise<ActionResult> {
+export async function createTask(data: CreateTaskData): Promise<Result> {
   try {
     const session = await requirePermission("manage_agents");
+    const currentOrg = await requireCurrentOrganization();
     const { agentId, name, capabilityName, instructions, createdBy } = data;
 
     if (!name || !instructions?.instructions) {
@@ -19,12 +20,9 @@ export async function createTask(data: CreateTaskData): Promise<ActionResult> {
       };
     }
 
-    // Verify the agent exists and user has access
-    const [agent] = await db
-      .select()
-      .from(agents)
-      .where(eq(agents.id, agentId))
-      .limit(1);
+    // Verify agent ownership
+    const agentApplicationService = getAgentApplicationService();
+    const agent = await agentApplicationService.getAgent(agentId);
 
     if (!agent) {
       return {
@@ -40,48 +38,85 @@ export async function createTask(data: CreateTaskData): Promise<ActionResult> {
       };
     }
 
-    const [newTask] = await db.insert(tasks).values({
+    // Create task using application service
+    const taskApplicationService = getAgentTaskApplicationService();
+    const createRequest: CreateTaskRequest = {
       agentId,
-      organizationId: agent.organizationId!, // Required for RLS
       name,
-      capabilityName: capabilityName || null, // Allow null for auto-routing
       instructions,
-      status: "pending",
+      capabilityName,
       createdBy: createdBy || session.user.id,
-    }).returning();
+      organizationId: currentOrg.id
+    };
+
+    const task = await taskApplicationService.createTask(createRequest);
+
+    // Convert domain entity to database schema type for frontend compatibility
+    const convertedTask = {
+      id: task.id,
+      agentId: task.agentId,
+      organizationId: task.organizationId,
+      name: task.name,
+      capabilityName: task.capabilityName,
+      instructions: task.instructions,
+      status: task.status,
+      result: task.result,
+      error: task.error,
+      startedAt: task.startedAt,
+      completedAt: task.completedAt,
+      createdBy: task.createdBy,
+      createdAt: task.createdAt
+    };
 
     revalidatePath('/dashboard');
     
     return {
       success: true,
-      data: newTask,
+      data: convertedTask,
     };
   } catch (error) {
     console.error("Error creating task:", error);
     return {
       success: false,
-      error: "Failed to create task",
+      error: error instanceof Error ? error.message : "Failed to create task",
     };
   }
 }
 
-export async function getTasks(agentId?: number, limit = 50): Promise<ActionResult> {
+export async function getTasks(agentId?: number, limit = 50): Promise<Result> {
   try {
     await requirePermission("manage_agents");
+    const currentOrg = await requireCurrentOrganization();
 
-    const query = db.select().from(tasks);
-    
+    const taskApplicationService = getAgentTaskApplicationService();
+    let domainTasks;
+
     if (agentId) {
-      query.where(eq(tasks.agentId, agentId));
+      domainTasks = await taskApplicationService.getTasksForAgent(agentId);
+    } else {
+      domainTasks = await taskApplicationService.getRecentTasksForOrganization(currentOrg.id, limit);
     }
-    
-    const allTasks = await query
-      .orderBy(desc(tasks.createdAt))
-      .limit(limit);
+
+    // Convert domain entities to database schema types for frontend compatibility
+    const convertedTasks = domainTasks.map(task => ({
+      id: task.id,
+      agentId: task.agentId,
+      organizationId: task.organizationId,
+      name: task.name,
+      capabilityName: task.capabilityName,
+      instructions: task.instructions,
+      status: task.status,
+      result: task.result,
+      error: task.error,
+      startedAt: task.startedAt,
+      completedAt: task.completedAt,
+      createdBy: task.createdBy,
+      createdAt: task.createdAt
+    }));
 
     return {
       success: true,
-      data: allTasks,
+      data: convertedTasks,
     };
   } catch (error) {
     console.error("Error fetching tasks:", error);
@@ -92,26 +127,40 @@ export async function getTasks(agentId?: number, limit = 50): Promise<ActionResu
   }
 }
 
-export async function getTask(taskId: string): Promise<ActionResult> {
+export async function getTask(taskId: string): Promise<Result> {
   try {
     await requirePermission("manage_agents");
 
-    const [task] = await db
-      .select()
-      .from(tasks)
-      .where(eq(tasks.id, taskId))
-      .limit(1);
+    const taskApplicationService = getAgentTaskApplicationService();
+    const domainTask = await taskApplicationService.getTask(taskId);
 
-    if (!task) {
+    if (!domainTask) {
       return {
         success: false,
         error: "Task not found",
       };
     }
 
+    // Convert domain entity to database schema type for frontend compatibility
+    const convertedTask = {
+      id: domainTask.id,
+      agentId: domainTask.agentId,
+      organizationId: domainTask.organizationId,
+      name: domainTask.name,
+      capabilityName: domainTask.capabilityName,
+      instructions: domainTask.instructions,
+      status: domainTask.status,
+      result: domainTask.result,
+      error: domainTask.error,
+      startedAt: domainTask.startedAt,
+      completedAt: domainTask.completedAt,
+      createdBy: domainTask.createdBy,
+      createdAt: domainTask.createdAt
+    };
+
     return {
       success: true,
-      data: task,
+      data: convertedTask,
     };
   } catch (error) {
     console.error("Error fetching task:", error);
@@ -127,50 +176,105 @@ export async function updateTaskStatus(
   status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout',
   result?: any,
   error?: string
-): Promise<ActionResult> {
+): Promise<Result> {
   try {
     await requirePermission("manage_agents");
 
-    const updateData: any = { status };
+    const taskApplicationService = getAgentTaskApplicationService();
     
-    if (status === 'in_progress') {
-      updateData.startedAt = new Date();
-    }
-    
-    if (['completed', 'failed', 'cancelled', 'timeout'].includes(status)) {
-      updateData.completedAt = new Date();
-    }
-    
-    if (result) {
-      updateData.result = result;
-    }
-    
-    if (error) {
-      updateData.error = error;
+    // For cancelled status, use the cancel method
+    if (status === 'cancelled') {
+      await taskApplicationService.cancelTask(taskId, error || 'Cancelled by user');
+    } else {
+      // For other status changes, we need to get the task and use domain methods
+      // Note: This is a simplified approach - in a real scenario, you might want 
+      // to add status update methods to the application service
+      const domainTask = await taskApplicationService.getTask(taskId);
+      
+      if (!domainTask) {
+        return {
+          success: false,
+          error: "Task not found",
+        };
+      }
+
+      // Apply domain transitions based on status
+      try {
+        switch (status) {
+          case 'in_progress':
+            domainTask.start();
+            break;
+          case 'completed':
+            domainTask.complete(result);
+            break;
+          case 'failed':
+            domainTask.fail(error || 'Task failed');
+            break;
+          case 'timeout':
+            domainTask.timeout();
+            break;
+          default:
+            return {
+              success: false,
+              error: `Cannot update task to status: ${status}`,
+            };
+        }
+
+        // Save the updated task through the repository
+        // Note: Accessing repository directly from application service would be cleaner
+        // but this approach works for now
+        await (taskApplicationService as any).taskRepository.save(domainTask);
+      } catch (domainError) {
+        return {
+          success: false,
+          error: domainError instanceof Error ? domainError.message : 'Invalid status transition',
+        };
+      }
     }
 
-    const [updatedTask] = await db
-      .update(tasks)
-      .set(updateData)
-      .where(eq(tasks.id, taskId))
-      .returning();
+    // Get the updated task
+    const updatedDomainTask = await taskApplicationService.getTask(taskId);
+    
+    if (!updatedDomainTask) {
+      return {
+        success: false,
+        error: "Failed to retrieve updated task",
+      };
+    }
+
+    // Convert domain entity to database schema type for frontend compatibility
+    const convertedTask = {
+      id: updatedDomainTask.id,
+      agentId: updatedDomainTask.agentId,
+      organizationId: updatedDomainTask.organizationId,
+      name: updatedDomainTask.name,
+      capabilityName: updatedDomainTask.capabilityName,
+      instructions: updatedDomainTask.instructions,
+      status: updatedDomainTask.status,
+      result: updatedDomainTask.result,
+      error: updatedDomainTask.error,
+      startedAt: updatedDomainTask.startedAt,
+      completedAt: updatedDomainTask.completedAt,
+      createdBy: updatedDomainTask.createdBy,
+      createdAt: updatedDomainTask.createdAt
+    };
 
     revalidatePath('/dashboard');
     
     return {
       success: true,
-      data: updatedTask,
+      data: convertedTask,
     };
   } catch (error) {
     console.error("Error updating task status:", error);
     return {
       success: false,
-      error: "Failed to update task status",
+      error: error instanceof Error ? error.message : "Failed to update task status",
     };
   }
 }
 
-export async function deleteTask(taskId: string): Promise<ActionResult> {
+export async function deleteTask(taskId: string): Promise<Result> {
   try {
     await requirePermission("manage_agents");
 
@@ -181,9 +285,20 @@ export async function deleteTask(taskId: string): Promise<ActionResult> {
       };
     }
 
+    const taskApplicationService = getAgentTaskApplicationService();
     
-    // Delete the task
-    await db.delete(tasks).where(eq(tasks.id, taskId));
+    // Verify task exists
+    const task = await taskApplicationService.getTask(taskId);
+    if (!task) {
+      return {
+        success: false,
+        error: "Task not found",
+      };
+    }
+
+    // Delete through the repository
+    // Note: Ideally this would be a method on the application service
+    await (taskApplicationService as any).taskRepository.delete(taskId);
 
     revalidatePath('/dashboard');
     
@@ -195,31 +310,33 @@ export async function deleteTask(taskId: string): Promise<ActionResult> {
     console.error("Error deleting task:", error);
     return {
       success: false,
-      error: "Failed to delete task",
+      error: error instanceof Error ? error.message : "Failed to delete task",
     };
   }
 }
 
-export async function getTaskStats(agentId?: number): Promise<ActionResult> {
+export async function getTaskStats(agentId?: number): Promise<Result> {
   try {
     await requirePermission("manage_agents");
+    const currentOrg = await requireCurrentOrganization();
 
-    const query = db.select().from(tasks);
-    
+    const taskApplicationService = getAgentTaskApplicationService();
+    let domainTasks;
+
     if (agentId) {
-      query.where(eq(tasks.agentId, agentId));
+      domainTasks = await taskApplicationService.getTasksForAgent(agentId);
+    } else {
+      domainTasks = await taskApplicationService.getTasksForOrganization(currentOrg.id);
     }
     
-    const allTasks = await query;
-    
     const stats = {
-      total: allTasks.length,
-      pending: allTasks.filter(t => t.status === 'pending').length,
-      in_progress: allTasks.filter(t => t.status === 'in_progress').length,
-      completed: allTasks.filter(t => t.status === 'completed').length,
-      failed: allTasks.filter(t => t.status === 'failed').length,
-      cancelled: allTasks.filter(t => t.status === 'cancelled').length,
-      timeout: allTasks.filter(t => t.status === 'timeout').length,
+      total: domainTasks.length,
+      pending: domainTasks.filter(t => t.status === 'pending').length,
+      in_progress: domainTasks.filter(t => t.status === 'in_progress').length,
+      completed: domainTasks.filter(t => t.status === 'completed').length,
+      failed: domainTasks.filter(t => t.status === 'failed').length,
+      cancelled: domainTasks.filter(t => t.status === 'cancelled').length,
+      timeout: domainTasks.filter(t => t.status === 'timeout').length,
     };
 
     return {

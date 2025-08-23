@@ -1,6 +1,6 @@
 'use client';
 
-import { Agent } from '@/types/db';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { useEffect, useState } from 'react';
 import { getTasks } from '@/app/actions/tasks';
 import TaskFormDialog from './TaskFormDialog';

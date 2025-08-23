@@ -82,7 +82,7 @@ export function mapStepToProto(step: StepConfig): StepConfigProto {
   };
 
   return {
-    id: step.id,
+    id: `step_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, // Generate ID for proto
     type: stepTypeMap[step.type] || StepType.TOOL_STEP,
     instructions: step.instructions,
     model: step.model || '',

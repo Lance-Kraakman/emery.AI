@@ -106,6 +106,16 @@ export class DrizzleTaskRepository implements ITaskRepository {
   async save(task: Task): Promise<void> {
     const taskData = this.mapToDatabase(task);
     
+    // AIDEV-DEBUG: Log the task data being saved to debug organization_id issue
+    console.log('[TASK-REPOSITORY] Saving task data:', {
+      id: taskData.id,
+      agentId: taskData.agentId, 
+      organizationId: taskData.organizationId,
+      name: taskData.name,
+      organizationIdType: typeof taskData.organizationId,
+      organizationIdValue: taskData.organizationId
+    });
+    
     // Try to update first, then insert if not found
     const [existingTask] = await db
       .select({ id: tasks.id })
@@ -197,7 +207,7 @@ export class DrizzleTaskRepository implements ITaskRepository {
    * Map domain entity to database record
    */
   private mapToDatabase(task: Task) {
-    return {
+    const mapped = {
       id: task.id,
       agentId: task.agentId,
       organizationId: task.organizationId,
@@ -212,5 +222,18 @@ export class DrizzleTaskRepository implements ITaskRepository {
       createdBy: task.createdBy,
       createdAt: task.createdAt,
     };
+    
+    // AIDEV-DEBUG: Log the mapped data to debug organization_id issue
+    console.log('[TASK-REPOSITORY] mapToDatabase result:', {
+      id: mapped.id,
+      agentId: mapped.agentId,
+      organizationId: mapped.organizationId,
+      organizationIdType: typeof mapped.organizationId,
+      organizationIdIsNull: mapped.organizationId === null,
+      organizationIdIsUndefined: mapped.organizationId === undefined,
+      allKeys: Object.keys(mapped)
+    });
+    
+    return mapped;
   }
 }

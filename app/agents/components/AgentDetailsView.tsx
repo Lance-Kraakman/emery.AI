@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Edit } from 'lucide-react';
-import { Agent } from '@/types/db';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';

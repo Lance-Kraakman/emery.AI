@@ -2,14 +2,14 @@
 // Tests business logic without requiring actual database connections
 
 import { describe, it, expect, vi, beforeEach, type MockedFunction } from 'vitest';
-import { DrizzleDynamicTableRepository } from '@/lib/infrastructure/db/repositories/drizzle-dynamic-table-repository';
+import { DrizzleDynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/drizzle-dynamic-table-repository';
 import type { 
   DynamicTable, 
   CreateDynamicTableData, 
   DynamicTableRow,
   CreateRowData,
   UpdateRowData 
-} from '@/lib/domain/entities/dynamic-table';
+} from '@/ddd/domain/tables/entities/dynamic-table';
 
 // Mock types for better TypeScript support
 type MockDbClient = {

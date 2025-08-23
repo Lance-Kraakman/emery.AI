@@ -7,7 +7,7 @@ import { runActionForAgent } from "@/lib/pipedream/agents";
 import { db } from "@/lib/db/client";
 import { agents } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import type { ActionResult } from "./types";
+import type { Result } from "./types";
 
 export interface ConnectAppData {
   appName: string;
@@ -27,7 +27,7 @@ export interface DisconnectAccountData {
 /**
  * Initialize Pipedream user for the current user
  */
-export async function initializePipedreamUser(): Promise<ActionResult> {
+export async function initializePipedreamUser(): Promise<Result> {
   try {
     const session = await requireAuth();
     
@@ -62,7 +62,7 @@ export async function initializePipedreamUser(): Promise<ActionResult> {
 /**
  * Get user's OAuth connections
  */
-export async function getUserOAuthConnections(): Promise<ActionResult> {
+export async function getUserOAuthConnections(): Promise<Result> {
   try {
     const session = await requireAuth();
     
@@ -92,7 +92,7 @@ export async function getUserOAuthConnections(): Promise<ActionResult> {
 /**
  * Generate connection URL for connecting an app
  */
-export async function getAppConnectionUrl(data: ConnectAppData): Promise<ActionResult> {
+export async function getAppConnectionUrl(data: ConnectAppData): Promise<Result> {
   try {
     const session = await requireAuth();
     
@@ -125,7 +125,7 @@ export async function getAppConnectionUrl(data: ConnectAppData): Promise<ActionR
 /**
  * Run an action on behalf of an agent (using owner's credentials)
  */
-export async function runAgentAction(data: RunAgentActionData): Promise<ActionResult> {
+export async function runAgentAction(data: RunAgentActionData): Promise<Result> {
   try {
     const session = await requireAuth();
     
@@ -177,7 +177,7 @@ export async function runAgentAction(data: RunAgentActionData): Promise<ActionRe
 /**
  * Disconnect an OAuth account for the current user
  */
-export async function disconnectOAuthAccount(data: DisconnectAccountData): Promise<ActionResult> {
+export async function disconnectOAuthAccount(data: DisconnectAccountData): Promise<Result> {
   try {
     const session = await requireAuth();
     

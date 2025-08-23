@@ -1,1 +1,0 @@
-"""Domain layer tests - focus on business logic without external dependencies."""

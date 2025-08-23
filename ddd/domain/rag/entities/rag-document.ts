@@ -182,6 +182,15 @@ export class RagDocument {
     this.validateContent(params.content);
     this.validateEmbedding(params.embedding);
     this.validateContentHash(params.contentHash);
+    
+    // AIDEV-DEBUG: Validate organization ID to prevent NULL constraint violations
+    if (!params.organizationId) {
+      throw new Error(`RagDocument creation failed: organizationId is required, got: ${params.organizationId}`);
+    }
+    
+    if (!params.indexId) {
+      throw new Error(`RagDocument creation failed: indexId is required, got: ${params.indexId}`);
+    }
 
     const id = DocumentId.create();
     const now = new Date();

@@ -1,16 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, hasPermission } from "@/lib/auth";
-import { S3FileStorageRepository } from "@/ddd/infrastructure/storage/repositories/s3-file-storage-repository";
-import { FileFieldService } from "@/ddd/domain/files/services/file-field-service";
-import { fieldRepository } from "@/ddd/application/di/rag-container";
-
-// Initialize services
-const fileStorageRepository = new S3FileStorageRepository();
-const fileFieldService = new FileFieldService(fieldRepository, fileStorageRepository, {
-  maxFileSize: 5 * 1024 * 1024, // 5MB
-  allowedTypes: ['image/*', 'application/pdf', 'text/*', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-  maxFilesPerField: 10
-});
+import { getFileApplicationService } from "@/ddd/application/di/container";
+import type { UploadFileCommand } from "@/ddd/application/use-cases/files/file-application-service";
 
 export async function POST(request: NextRequest) {
   try {
@@ -52,34 +43,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert file to buffer
+    // Use FileApplicationService for file upload
+    const fileApplicationService = getFileApplicationService();
+    
     const buffer = Buffer.from(await file.arrayBuffer());
-
-    // Use FileFieldService to handle file upload with validation
-    const result = await fileFieldService.attachFiles({
-      fieldId,
+    const command: UploadFileCommand = {
       organizationId,
       tableId,
-      files: [{
+      fieldId,
+      file: {
         buffer,
         filename: file.name,
-        mimeType: file.type,
-        metadata: {
-          uploadedBy: session.user.id,
-          uploadedAt: new Date().toISOString()
-        }
-      }]
-    });
+        mimeType: file.type
+      },
+      uploadedBy: session.user.id
+    };
+
+    const result = await fileApplicationService.uploadFile(command);
 
     if (!result.success) {
       return NextResponse.json(
-        { error: result.errors?.join(', ') || 'Failed to upload file' },
+        { error: result.error || 'Failed to upload file' },
         { status: 400 }
       );
     }
 
-    const fileMetadata = result.files?.[0];
-    if (!fileMetadata) {
+    if (!result.data) {
       return NextResponse.json(
         { error: "No file metadata returned" },
         { status: 500 }
@@ -87,7 +76,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      ...fileMetadata,
+      ...result.data,
       warnings: result.warnings
     }, { status: 201 });
   } catch (error) {

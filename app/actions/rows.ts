@@ -1,15 +1,16 @@
 'use server'
 
-// AIDEV-NOTE: Server Actions for row data management using domain repositories
-// Migrated from legacy dynamic.ts operations to domain-driven architecture
+// AIDEV-NOTE: Server Actions for row data management using RowApplicationService
+// Uses application service for business logic and validation
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
-import { getDynamicTableRepository } from "@/ddd/application/di/container";
-import type { ActionResult, CreateRowData, UpdateRowData } from "./types";
+import { getRowApplicationService } from "@/ddd/application/di/container";
+import type { Result, CreateRowData, UpdateRowData } from "./types";
+import type { CreateRowCommand, UpdateRowCommand } from "@/ddd/application/use-cases/rows/row-application-service";
 
 
-export async function createRow(data: CreateRowData, revalidateUrl?: string): Promise<ActionResult> {
+export async function createRow(data: CreateRowData, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("manage_data");
     const { tableId, data: rowData } = data;
@@ -21,25 +22,23 @@ export async function createRow(data: CreateRowData, revalidateUrl?: string): Pr
       };
     }
 
-    // Use domain repository for row creation
-    const dynamicTableRepository = getDynamicTableRepository();
+    // Use RowApplicationService for row creation
+    const rowApplicationService = getRowApplicationService();
     
-    // Verify table exists using domain repository
-    const table = await dynamicTableRepository.findById(tableId);
-    if (!table) {
-      return {
-        success: false,
-        error: "Table not found",
-      };
-    }
-
-    // Create row using domain repository (handles field mapping and validation)
-    const domainRowData: CreateRowData = {
+    const command: CreateRowCommand = {
       tableId,
       data: rowData || {},
+      createdBy: session.user.id
     };
 
-    const newRow = await dynamicTableRepository.insertRow(tableId, domainRowData);
+    const result = await rowApplicationService.createRow(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to create row"
+      };
+    }
 
     // Optional revalidation with custom URL
     if (revalidateUrl) {
@@ -48,7 +47,7 @@ export async function createRow(data: CreateRowData, revalidateUrl?: string): Pr
     
     return {
       success: true,
-      data: newRow,
+      data: result.data,
     };
   } catch (error) {
     console.error("Error creating row:", error);
@@ -89,15 +88,10 @@ export async function getRowsData(tableId: number, limit = 100, offset = 0): Pro
       throw new Error("tableId is required");
     }
 
-    // Use domain repository for row fetching
-    const dynamicTableRepository = getDynamicTableRepository();
+    // Use RowApplicationService for row fetching
+    const rowApplicationService = getRowApplicationService();
     
-    const table = await dynamicTableRepository.findById(tableId);
-    if (!table) {
-      throw new Error("Table not found");
-    }
-
-    const rows = await dynamicTableRepository.findRows(tableId, { limit, offset });
+    const rows = await rowApplicationService.getRows(tableId, { limit, offset });
     return rows;
   } catch (error) {
     console.error("Error fetching rows:", error);
@@ -105,7 +99,7 @@ export async function getRowsData(tableId: number, limit = 100, offset = 0): Pro
   }
 }
 
-export async function updateRowData(data: UpdateRowData, revalidateUrl?: string): Promise<ActionResult> {
+export async function updateRowData(data: UpdateRowData, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("manage_data");
     const { tableId, rowId, data: rowData } = data;
@@ -117,26 +111,24 @@ export async function updateRowData(data: UpdateRowData, revalidateUrl?: string)
       };
     }
 
-    // Use domain repository for row updates
-    const dynamicTableRepository = getDynamicTableRepository();
+    // Use RowApplicationService for row updates
+    const rowApplicationService = getRowApplicationService();
     
-    // Verify table exists
-    const table = await dynamicTableRepository.findById(tableId);
-    if (!table) {
-      return {
-        success: false,
-        error: "Table not found",
-      };
-    }
-
-    // Update row using domain repository (handles field mapping and validation)
-    const domainUpdateData: UpdateRowData = {
+    const command: UpdateRowCommand = {
       tableId,
       rowId,
       data: rowData || {},
+      updatedBy: session.user.id
     };
 
-    await dynamicTableRepository.updateRow(tableId, rowId, domainUpdateData);
+    const result = await rowApplicationService.updateRow(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to update row"
+      };
+    }
 
     // Optional revalidation with custom URL
     if (revalidateUrl) {
@@ -145,13 +137,13 @@ export async function updateRowData(data: UpdateRowData, revalidateUrl?: string)
     
     return {
       success: true,
-      data: { message: "Row updated successfully" },
+      data: result.data,
     };
   } catch (error) {
     console.error("Error updating row:", error);
     return {
       success: false,
-      error: "Failed to update row",
+      error: error instanceof Error ? error.message : "Failed to update row",
     };
   }
 }
@@ -178,7 +170,7 @@ export async function updateRowAction(formData: FormData) {
   return result;
 }
 
-export async function deleteRowData(tableId: number, rowId: string, revalidateUrl?: string): Promise<ActionResult> {
+export async function deleteRowData(tableId: number, rowId: string, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("manage_data");
     
@@ -189,20 +181,17 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
       };
     }
 
-    // Use domain repository for row deletion
-    const dynamicTableRepository = getDynamicTableRepository();
+    // Use RowApplicationService for row deletion
+    const rowApplicationService = getRowApplicationService();
     
-    // Verify table exists
-    const table = await dynamicTableRepository.findById(tableId);
-    if (!table) {
+    const result = await rowApplicationService.deleteRow(tableId, rowId);
+
+    if (!result.success) {
       return {
         success: false,
-        error: "Table not found",
+        error: result.error || "Failed to delete row"
       };
     }
-
-    // Delete row using domain repository
-    await dynamicTableRepository.deleteRow(tableId, rowId);
 
     // Optional revalidation with custom URL
     if (revalidateUrl) {
@@ -217,7 +206,7 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
     console.error("Error deleting row:", error);
     return {
       success: false,
-      error: "Failed to delete row",
+      error: error instanceof Error ? error.message : "Failed to delete row",
     };
   }
 }

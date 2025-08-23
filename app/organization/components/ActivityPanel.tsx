@@ -67,6 +67,11 @@ export default function ActivityPanel({
     return [...activities].sort((a, b) => {
       const aDate = a.startedAt || a.createdAt;
       const bDate = b.startedAt || b.createdAt;
+      
+      if (!aDate && !bDate) return 0;
+      if (!aDate) return 1;
+      if (!bDate) return -1;
+      
       return new Date(bDate).getTime() - new Date(aDate).getTime();
     });
   }, [activities]);
@@ -74,7 +79,7 @@ export default function ActivityPanel({
   // Group activities by status
   const groupedActivities = useMemo(() => {
     return sortedActivities.reduce((acc, activity) => {
-      const status = activity.status;
+      const status = activity.status || 'unknown';
       if (!acc[status]) {
         acc[status] = [];
       }
@@ -193,9 +198,9 @@ export default function ActivityPanel({
                         </div>
                         <Badge 
                           variant="secondary" 
-                          className={`text-xs shrink-0 ml-1 ${getStatusColor(activity.status)}`}
+                          className={`text-xs shrink-0 ml-1 ${getStatusColor(activity.status || 'unknown')}`}
                         >
-                          {activity.status.replace('_', ' ')}
+                          {(activity.status || 'unknown').replace('_', ' ')}
                         </Badge>
                       </div>
                       
@@ -207,7 +212,7 @@ export default function ActivityPanel({
                         <div className="flex items-center gap-1 min-w-0 overflow-hidden">
                           <Calendar className="w-3 h-3 shrink-0" />
                           <span className="truncate">
-                            {formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true })}
+                            {activity.createdAt ? formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true }) : 'Unknown time'}
                           </span>
                         </div>
                       </div>

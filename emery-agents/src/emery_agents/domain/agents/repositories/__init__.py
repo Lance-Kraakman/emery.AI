@@ -1,1 +1,0 @@
-"""Agent repository interfaces - define contracts for data access."""

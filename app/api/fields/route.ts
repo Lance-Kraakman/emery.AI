@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from '@/lib/auth/test-auth';
-import { getFieldRepository, getDynamicTableRepository } from "@/ddd/application/di/container";
-import { slugify } from "@/utils/slugify";
-import type { CreateFieldData, FieldType } from '@/ddd/domain/fields/entities/field';
+import { getFieldApplicationService } from "@/ddd/application/di/container";
+import type { FieldType } from '@/ddd/domain/fields/entities/field';
+import type { CreateFieldCommand } from '@/ddd/application/use-cases/fields/field-application-service';
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,55 +24,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use domain repositories for field creation
-    const fieldRepository = getFieldRepository();
-    const dynamicTableRepository = getDynamicTableRepository();
+    // Use FieldApplicationService for field creation
+    const fieldApplicationService = getFieldApplicationService();
 
-    // Verify table exists and belongs to user's organization
-    const table = await dynamicTableRepository.findById(parseInt(tableId));
-    if (!table) {
+    const command: CreateFieldCommand = {
+      tableId: parseInt(tableId),
+      name,
+      type: type as FieldType,
+      required,
+      relatedTableId: relatedTableId ? parseInt(relatedTableId) : undefined,
+      metadata: {}
+    };
+
+    const result = await fieldApplicationService.createField(command);
+
+    if (!result.success) {
       return NextResponse.json(
-        { error: "Table not found" },
-        { status: 404 }
-      );
-    }
-
-    if (!authResult.user || table.organizationId !== authResult.user.organizationId) {
-      return NextResponse.json(
-        { error: "Access denied: table not in your organization" },
-        { status: 403 }
-      );
-    }
-
-    const slug = slugify(name);
-
-    // Check if field slug is unique using domain repository
-    const isUnique = await fieldRepository.checkSlugUniqueness(parseInt(tableId), slug);
-    if (!isUnique) {
-      return NextResponse.json(
-        { error: "Field with this name already exists" },
+        { error: result.error || "Failed to create field" },
         { status: 400 }
       );
     }
 
-    // Get max order index for proper ordering
-    const existingFields = await fieldRepository.findByTableId(parseInt(tableId));
-    const orderIndex = existingFields.length > 0 ? Math.max(...existingFields.map(f => f.orderIndex || 0)) + 1 : 0;
-
-    // Create field using domain repository
-    const fieldData: CreateFieldData = {
-      tableId: parseInt(tableId),
-      name,
-      slug,
-      type: type as FieldType,
-      required,
-      orderIndex,
-      relatedTableId: relatedTableId ? parseInt(relatedTableId) : undefined,
-    };
-
-    const newField = await fieldRepository.create(fieldData);
-
-    return NextResponse.json(newField, { status: 201 });
+    return NextResponse.json(result.data, { status: 201 });
   } catch (error) {
     console.error("Error creating field:", error);
     return NextResponse.json(
@@ -94,9 +67,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Use domain repository for field listing
-    const fieldRepository = getFieldRepository();
-    const fieldList = await fieldRepository.findByTableId(parseInt(tableId));
+    // Use FieldApplicationService for field listing
+    const fieldApplicationService = getFieldApplicationService();
+    const fieldList = await fieldApplicationService.getFieldsForTable(parseInt(tableId));
 
     return NextResponse.json(fieldList);
   } catch (error) {
@@ -120,29 +93,17 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Use domain repository for field deletion
-    const fieldRepository = getFieldRepository();
+    // Use FieldApplicationService for field deletion
+    const fieldApplicationService = getFieldApplicationService();
     
-    // Check if field exists
-    const field = await fieldRepository.findById(parseInt(fieldId));
-    if (!field) {
-      return NextResponse.json(
-        { error: "Field not found" },
-        { status: 404 }
-      );
-    }
+    const result = await fieldApplicationService.deleteField(parseInt(fieldId));
 
-    // Check if field can be safely deleted
-    const canDelete = await fieldRepository.canDeleteField(parseInt(fieldId));
-    if (!canDelete) {
+    if (!result.success) {
       return NextResponse.json(
-        { error: "Field cannot be deleted: it is required and contains data" },
+        { error: result.error || "Failed to delete field" },
         { status: 400 }
       );
     }
-
-    // Delete field using domain repository (handles both metadata and physical column)
-    await fieldRepository.delete(parseInt(fieldId));
 
     return NextResponse.json({ message: "Field deleted successfully" });
   } catch (error) {

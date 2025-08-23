@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { getRoleRepository } from "@/ddd/application/di/container";
 import { requireCurrentOrganization } from "./user-organizations";
-import type { ActionResult } from "./types";
+import type { Result } from "./types";
 import type { CreateRoleData, UpdateRoleData } from "./types";
 
-export async function createRole(data: CreateRoleData): Promise<ActionResult> {
+export async function createRole(data: CreateRoleData): Promise<Result> {
   try {
     const { name, permissions, organizationId } = data;
 
@@ -96,7 +96,7 @@ export async function getRole(roleId: number) {
   }
 }
 
-export async function updateRole(roleId: number, data: UpdateRoleData): Promise<ActionResult> {
+export async function updateRole(roleId: number, data: UpdateRoleData): Promise<Result> {
   try {
     if (!roleId) {
       return {
@@ -123,7 +123,7 @@ export async function updateRole(roleId: number, data: UpdateRoleData): Promise<
   }
 }
 
-export async function deleteRole(roleId: number): Promise<ActionResult> {
+export async function deleteRole(roleId: number): Promise<Result> {
   try {
     if (!roleId) {
       return {
@@ -152,7 +152,7 @@ export async function deleteRole(roleId: number): Promise<ActionResult> {
 
 // Additional enhanced role management functions using the repository
 
-export async function createDefaultRoles(organizationId: number): Promise<ActionResult> {
+export async function createDefaultRoles(organizationId: number): Promise<Result> {
   try {
     if (!organizationId) {
       return {
@@ -179,7 +179,7 @@ export async function createDefaultRoles(organizationId: number): Promise<Action
   }
 }
 
-export async function addPermissionToRole(roleId: number, permission: string): Promise<ActionResult> {
+export async function addPermissionToRole(roleId: number, permission: string): Promise<Result> {
   try {
     if (!roleId || !permission) {
       return {
@@ -206,7 +206,7 @@ export async function addPermissionToRole(roleId: number, permission: string): P
   }
 }
 
-export async function removePermissionFromRole(roleId: number, permission: string): Promise<ActionResult> {
+export async function removePermissionFromRole(roleId: number, permission: string): Promise<Result> {
   try {
     if (!roleId || !permission) {
       return {
@@ -247,7 +247,7 @@ export async function getRolesByPermission(organizationId: number, permission: s
   }
 }
 
-export async function cloneRole(sourceRoleId: number, newName: string, organizationId?: number): Promise<ActionResult> {
+export async function cloneRole(sourceRoleId: number, newName: string, organizationId?: number): Promise<Result> {
   try {
     if (!sourceRoleId || !newName) {
       return {

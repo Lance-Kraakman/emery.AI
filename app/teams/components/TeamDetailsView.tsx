@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Edit, Users, Target, CheckCircle } from 'lucide-react';
-import { Agent, Team } from '@/types/db';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import type { Team } from '@/types/db';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';

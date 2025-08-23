@@ -5,11 +5,11 @@ import { users, organizations, userOrganizations } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import type { ActionResult } from "./types";
+import type { Result } from "./types";
 import { getUserRepository } from "@/ddd/application/di/container";
 // import { getUserRepository } from "@/lib/application/di/container";
 
-export async function switchCurrentOrganization(organizationId: number): Promise<ActionResult> {
+export async function switchCurrentOrganization(organizationId: number): Promise<Result> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -38,7 +38,7 @@ export async function switchCurrentOrganization(organizationId: number): Promise
   }
 }
 
-export async function joinOrganization(organizationId: number, role: string = 'member'): Promise<ActionResult> {
+export async function joinOrganization(organizationId: number, role: string = 'member'): Promise<Result> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -100,7 +100,7 @@ export async function joinOrganization(organizationId: number, role: string = 'm
   }
 }
 
-export async function leaveOrganization(organizationId: number): Promise<ActionResult> {
+export async function leaveOrganization(organizationId: number): Promise<Result> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
