@@ -141,15 +141,23 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
 async def serve(port: int, organization_id: str):
     server = aio.server()
     
-    service_impl = AgentWorkerServiceImplementation(organization_id)
+    # Add AgentWorker service
+    agent_service_impl = AgentWorkerServiceImplementation(organization_id)
+    agent_worker_pb2_grpc.add_AgentWorkerServicer_to_server(agent_service_impl, server)
     
-    agent_worker_pb2_grpc.add_AgentWorkerServicer_to_server(service_impl, server)
+    # Add ChatProcessing service  
+    from .chat_processing_service import ChatProcessingServiceImplementation
+    chat_service_impl = ChatProcessingServiceImplementation(organization_id)
+    agent_worker_pb2_grpc.add_ChatProcessingServiceServicer_to_server(chat_service_impl, server)
     
     listen_addr = f'[::]:{port}'
     server.add_insecure_port(listen_addr)
     
-    logger.info(f"Server starting on {listen_addr}")
+    logger.info(f"gRPC Server starting on {listen_addr}")
+    logger.info("Services available:")
+    logger.info("  - AgentWorker: Agent execution and task management")
+    logger.info("  - ChatProcessingService: AI chat processing (RAG + LLM streaming)")
     
     await server.start()
-    logger.info("server started succesfully, waiting for termination")
+    logger.info("✅ gRPC server started successfully, waiting for termination")
     await server.wait_for_termination()
