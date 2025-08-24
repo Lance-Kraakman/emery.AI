@@ -128,9 +128,79 @@ export interface InstructionConfig {
   servers: ServerConfig[];       // Optional servers for this task
 }
 
-// Service interface (for reference)
+// Chat Processing Service Types (AI-only operations, stateless)
+export interface ProcessMessageRequest {
+  message_content: string;        // User message content
+  user_id: string;                // User identifier for context
+  organization_id: number;        // Organization for multi-tenant routing
+  context?: ChatContext;          // Context for RAG and domain-specific processing
+  conversation_history?: HistoryMessage[]; // Conversation history from Next.js database
+  metadata?: Record<string, string>; // Optional metadata
+}
+
+export interface ProcessMessageResponse {
+  // Standard oneof pattern for different response types (use only one)
+  content_chunk?: ContentChunk;   // AI-generated streaming content
+  rag_context?: RagContext;       // RAG sources and context
+  complete?: ProcessingComplete;  // Processing finished marker
+  error?: ProcessingError;        // Processing error
+  timestamp: number;              // Response timestamp
+}
+
+export interface HistoryMessage {
+  role: string;                   // user, assistant, system
+  content: string;                // message content
+  timestamp: number;              // when it was created
+}
+
+export interface ContentChunk {
+  content: string;                // Text content chunk
+  sequence: number;               // Sequence number for ordering
+}
+
+export interface RagContext {
+  sources: RagSource[];           // List of RAG sources used
+  context_summary: string;        // Summary of context used
+  total_sources: number;          // Total number of sources found
+}
+
+export interface RagSource {
+  document_id: string;            // Source document identifier
+  title: string;                  // Source document title
+  similarity: number;             // Similarity score
+  domain_type: string;            // Domain type (table, agent, file, etc.)
+  excerpt: string;                // Relevant text excerpt
+}
+
+export interface ProcessingComplete {
+  model_used: string;             // AI model used for generation
+  total_tokens: number;           // Total tokens processed
+  processing_time_ms: number;     // Processing time in milliseconds
+  metadata?: Record<string, string>; // Additional processing metadata
+}
+
+export interface ProcessingError {
+  error_code: string;             // Error code (RAG_FAILED, MODEL_ERROR, etc.)
+  error_message: string;          // Human-readable error message
+  error_details?: Record<string, string>; // Additional error context
+}
+
+export interface ChatContext {
+  domain_type: string;            // Domain type (table, agent, file, team, workflow)
+  domain_id: number;              // Domain entity identifier
+  enable_rag: boolean;            // Enable RAG context retrieval
+  rag_threshold: number;          // RAG similarity threshold (default: 0.3)
+  max_rag_docs: number;           // Maximum RAG documents to retrieve (default: 5)
+  primary_rag_weight: number;     // Weight for domain-specific RAG (default: 0.7)
+}
+
+// Service interfaces (for reference)
 export interface AgentWorkerService {
   ExecuteTask(request: TaskRequest): AsyncIterable<TaskProgress>;
   GetWorkerInfo(request: Empty): Promise<WorkerInfo>;
   CancelTask(request: CancelTaskRequest): Promise<CancelTaskResponse>;
+}
+
+export interface ChatProcessingService {
+  ProcessMessage(request: ProcessMessageRequest): AsyncIterable<ProcessMessageResponse>;
 }

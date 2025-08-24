@@ -10,6 +10,17 @@ const nextConfig = {
     }
     return config
   },
+  
+  // gRPC-Web proxy configuration
+  async rewrites() {
+    return [
+      {
+        // Proxy gRPC-Web requests to Python gRPC server
+        source: '/grpc/:path*',
+        destination: 'http://localhost:50051/:path*',
+      },
+    ]
+  },
 }
 
 module.exports = nextConfig
