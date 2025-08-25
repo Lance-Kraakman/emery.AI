@@ -48,8 +48,25 @@ export async function createOrganization(formData: FormData): Promise<Result> {
 
     console.log("Created organization with owner:", newOrg.id);
 
+    // Serialize Value Objects for client components
+    const serializedOrg = {
+      id: newOrg.id.value,
+      name: newOrg.name.value,
+      mission: newOrg.mission,
+      sharedTools: newOrg.sharedTools,
+      sharedServers: newOrg.sharedServers,
+      databaseId: newOrg.databaseId,
+      viewConfig: newOrg.viewConfig,
+      analysisCapabilities: newOrg.analysisCapabilities,
+      plan: newOrg.plan,
+      stripeCustomerId: newOrg.stripeCustomerId,
+      stripeSubscriptionId: newOrg.stripeSubscriptionId,
+      stripeSubscriptionStatus: newOrg.stripeSubscriptionStatus,
+      createdAt: newOrg.createdAt
+    };
+
     revalidatePath("/");
-    return { success: true, data: newOrg };
+    return { success: true, data: serializedOrg };
   } catch (error) {
     console.error("Failed to create organization:", error);
     return { success: false, error: "Failed to create organization." };
