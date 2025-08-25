@@ -94,7 +94,7 @@ export default function AgentFormDialog({ isOpen, onClose, agent }: AgentFormDia
           {agent && (
             <FormField label="Schedule">
               <ScheduleManager 
-                agentId={agent.id} 
+                agentId={agent.id.value} 
                 initialRRule={(agent.trigger as any)?.rrule}
                 onScheduleChange={(rrule) => {
                   // AIDEV-NOTE: Update agent trigger with new schedule

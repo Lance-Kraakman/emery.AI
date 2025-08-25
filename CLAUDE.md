@@ -4,884 +4,397 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Emery is a Baserow-style dynamic database builder that allows users to create tables, fields, and manage data at runtime. It implements a hybrid architecture using both static and dynamic schemas.
+Emery is a Baserow-style dynamic database builder that allows users to create tables, fields, and manage data at runtime. It implements a hybrid architecture using both static and dynamic schemas with agent automation and OAuth integration.
 
 ## Core Architecture
 
 ### Dual Schema Approach
-- **Static Schema** (`lib/db/schema.ts`): Drizzle ORM manages metadata tables (organizations, tables, fields, users, agents)
-- **Dynamic Tables**: Created at runtime using raw SQL with `field_{id}` column naming pattern (Baserow-style)
+- **Static Schema** (`lib/db/schema.ts`): Drizzle ORM manages metadata (organizations, tables, fields, users, agents)
+- **Dynamic Tables**: Runtime creation using raw SQL with `field_{id}` column naming pattern
 
-### Key Architectural Patterns
-- **Database Layer**: Uses both Drizzle ORM (static) and raw postgres client (dynamic operations)
-- **Column Naming**: Dynamic table columns use `field_{id}` format where `id` is the field's database ID
-- **JSONB Relations**: Relation fields use JSONB datatype with GIN indexes for performance
-- **UUID Primary Keys**: All dynamic tables use `gen_random_uuid()` for primary keys
-- **RBAC System**: Role-Based Access Control with organizations, roles, and permissions
-- **Agent System**: Agents belong to users and can use owner's OAuth credentials via Pipedream Connect
-- **AI Models**: Uses HuggingFace models (Qwen series) for chat, code generation, and embeddings
+### Key Patterns
+- **Database**: Drizzle ORM (static) + raw postgres client (dynamic operations)
+- **Column Naming**: `field_{id}` format where `id` is the field's database ID
+- **JSONB Relations**: With GIN indexes for performance, UUID primary keys
+- **RBAC System**: Organizations → Roles → Permissions hierarchy
+- **Agent System**: Agents use owner's OAuth credentials via Pipedream Connect
+- **AI Models**: HuggingFace Qwen series (chat, code generation, embeddings)
 
 ### Critical Files
-- `lib/db/dynamic.ts`: Core dynamic table operations (create, alter, insert, update, delete)
-- `lib/db/client.ts`: Database connection setup with dotenv loading
-- `lib/db/schema.ts`: Static schema with organizations, users, agents, roles, permissions
-- `lib/auth.ts`: NextAuth configuration with RBAC integration
-- `app/api/rows/route.ts`: Handles JSONB parsing for relation fields in data operations
-- `app/dashboard/TableEditor.tsx`: Main UI for table schema and data management
-- `app/actions/agents.ts`: Agent management server actions
-- `lib/pipedream/`: Pipedream Connect integration for OAuth credential delegation
+- `lib/db/schema.ts`: Static schema definitions with Drizzle ORM
+- `lib/db/client.ts`: Database connection and configuration
+- `lib/auth.ts`: NextAuth v4 with RBAC integration
+- `lib/pipedream/`: OAuth credential delegation components
+- `lib/agents/`: Agent type configurations and tools registry
 
 ## Development Commands
 
-### Database Operations
 ```bash
-pnpm db:generate    # Generate Drizzle migrations from schema changes
-pnpm db:migrate     # Apply migrations to database
-pnpm db:studio      # Open Drizzle Studio for database inspection
-```
+# Database
+pnpm db:generate    # Generate Drizzle migrations
+pnpm db:migrate     # Apply migrations
+pnpm db:studio      # Database inspection
 
-### Development Server
-```bash
-pnpm dev           # Start Next.js development server
+# Development
+pnpm dev           # Start Next.js server
 pnpm build         # Production build
 pnpm lint          # Run ESLint
-```
 
-### Database Setup
-```bash
+# Docker
 docker-compose up -d              # Start PostgreSQL with pgvector
 docker-compose down               # Stop database
-docker volume rm emery_db   # Reset database (removes all data)
+docker volume rm emery_db         # Reset database
 ```
 
-## Environment Configuration
+## Environment Setup
 
-- Copy `.env.example` to `.env.local` for local development
-- Database runs on port 5433 to avoid conflicts with local PostgreSQL
-- Environment variables are loaded by dotenv in database client and Drizzle config
+Copy `.env.example` to `.env.local`. Database runs on port 5433 to avoid conflicts.
 
-### AI Model Configuration
-- **HuggingFace Models**: Uses advanced Qwen models for AI functionality
-  - **Default Chat**: `Qwen/Qwen2.5-Coder-32B-Instruct` - Best for code generation and technical tasks
-  - **General Chat**: `Qwen/Qwen2.5-72B-Instruct` - Superior reasoning and conversation
-  - **Fast Model**: `Qwen/Qwen2.5-Coder-7B-Instruct` - Faster responses with good quality
-  - **Embeddings**: `sentence-transformers/all-mpnet-base-v2` - High-quality text embeddings
-- **Required**: Set `HF_TOKEN` environment variable with your HuggingFace API token
-- **Get Token**: Visit https://huggingface.co/settings/tokens to create your token
+### Required Environment Variables
+```bash
+# HuggingFace AI Models
+HF_TOKEN=your_token  # Get from https://huggingface.co/settings/tokens
 
-## Field Type System
+# Pipedream OAuth Integration  
+PIPEDREAM_PROJECT_ID=your_project_id
+PIPEDREAM_CLIENT_ID=your_client_id
+PIPEDREAM_CLIENT_SECRET=your_client_secret
+PIPEDREAM_API_KEY=your_api_key
 
-### Supported Types
-- `text`: TEXT columns
-- `number`: INTEGER columns  
-- `boolean`: BOOLEAN columns
-- `email`: TEXT with email validation in UI
-- `url`: TEXT with URL validation in UI
-- `date`: DATE columns
-- `relation`: JSONB columns with GIN indexes for relationship data
+# NextAuth
+NEXTAUTH_SECRET=your_secret
+NEXTAUTH_URL=http://localhost:3000
+```
+
+### AI Models Used
+- **Chat**: `Qwen/Qwen2.5-Coder-32B-Instruct` (code generation)
+- **General**: `Qwen/Qwen2.5-72B-Instruct` (reasoning)
+- **Fast**: `Qwen/Qwen2.5-Coder-7B-Instruct` (quick responses)
+- **Embeddings**: `sentence-transformers/all-mpnet-base-v2`
+
+## Field Types & Data Flow
+
+### Supported Field Types
+- `text`, `number`, `boolean`, `date`: Standard SQL columns
+- `email`, `url`: TEXT with UI validation
+- `relation`: JSONB columns with GIN indexes
 
 ### Dynamic Column Management
-When adding fields via API:
-1. Field metadata is stored in static `fields` table
+1. Field metadata stored in static `fields` table
 2. `addFieldToTable()` creates `field_{id}` column in dynamic table
-3. JSONB fields automatically get GIN indexes for query performance
+3. JSONB fields get automatic GIN indexes
 
-## Data Flow Patterns
-
-### Row Operations
+### Row Operations Flow
 1. API receives data keyed by field slug/name
-2. Backend maps to `field_{id}` column names using field metadata
-3. JSONB fields are parsed from JSON strings if needed
-4. Raw postgres client handles parameterized queries for dynamic tables
+2. Backend maps to `field_{id}` column names using metadata
+3. JSONB fields parsed from JSON strings if needed
+4. Raw postgres client handles parameterized queries
 
 ### Authentication & Authorization
 - **NextAuth v4**: OAuth providers (GitHub, Google) with DrizzleAdapter
-- **RBAC System**: Organizations → Roles → Permissions hierarchy
-- **Initial Setup**: First user becomes Super Admin with full permissions
-- **Session Management**: Server-side sessions with organization context
-- **Permission Levels**: Super Admin, Admin, Editor, Viewer with granular permissions
+- **RBAC**: Organizations → Roles → Permissions hierarchy
+- **Initial Setup**: First user becomes Super Admin
+- **Permission Levels**: Super Admin, Admin, Editor, Viewer
 
 ## OAuth Proxy Service with Pipedream Connect
 
 ### Architecture Overview
-- **OAuth Credential Delegation**: Agents execute actions using their owner's connected OAuth accounts
-- **No Local Token Storage**: OAuth credentials managed entirely through Pipedream Connect
-- **Universal Proxy**: Single proxy endpoint (`/api/agents/proxy`) supporting any OAuth service
-- **Agent Ownership Model**: Strict ownership verification - agents can only use owner's credentials
-- **External User Mapping**: Users mapped to Pipedream external users with `emery_user_{userId}` format
+- **OAuth Credential Delegation**: Agents execute actions using owner's connected OAuth accounts
+- **No Local Token Storage**: OAuth credentials managed through Pipedream Connect
+- **Universal Proxy**: Single endpoint (`/api/agents/proxy`) supporting any OAuth service
+- **Agent Ownership**: Strict verification - agents only use owner's credentials
 
 ### Core Components
-
-#### Backend Integration Layer
-- `lib/pipedream/client.ts`: PipedreamClient initialization with environment validation
-- `lib/pipedream/users.ts`: User account management, OAuth connections, and disconnect functionality
-- `lib/pipedream/agents.ts`: Agent action execution using owner credentials
-- `app/actions/pipedream.ts`: Server actions for OAuth connection management
-
-#### Frontend Connection Management
-- `app/dashboard/connections/page.tsx`: OAuth connections dashboard
-- `app/dashboard/connections/ConnectionsManager.tsx`: UI for connecting/disconnecting OAuth accounts
+- `lib/pipedream/`: Client, user management, agent execution, connection mapping
+- OAuth connections managed through Pipedream Connect UI
 - **Supported Services**: Gmail, Slack, GitHub, Google Sheets, Discord, Twitter
 
-#### Agent API Routes
-- `/api/agents/[id]/execute`: Execute Pipedream actions with webhook support
-- `/api/agents/[id]/capabilities`: Get agent capabilities and connected services  
-- `/api/agents/proxy`: Universal OAuth proxy for all agent OAuth calls
+### API Routes
+- `/api/agents/[id]/execute`: Execute actions with webhook support
+- `/api/agents/[id]/capabilities`: Get capabilities and connected services
+- `/api/agents/proxy`: Universal OAuth proxy
 
 ### Python Backend Integration
-
-#### Client Library Structure
 ```
-backend/
-├── src/emery_client/
-│   ├── __init__.py
-│   ├── client.py          # Full client with webhook support
-│   ├── simple_client.py   # Minimal OAuth proxy client
-│   ├── gmail.py          # Gmail integration examples
-│   └── types.py          # Type definitions
-├── scripts/
-│   └── test_integration.py  # Integration test runner
-└── pyproject.toml        # Python project configuration with uv
+backend/src/emery_client/
+├── client.py          # Full client with webhook support
+├── simple_client.py   # Minimal OAuth proxy client
+├── gmail.py          # Integration examples
+└── types.py          # Type definitions
 ```
 
-#### Two Client Approaches
-1. **Full Client** (`client.py`): Complete client with webhook support, capabilities discovery, structured types
-2. **Simple Client** (`simple_client.py`): Minimal OAuth proxy client for agent libraries
+### Authentication
+- **Development**: Test user ID `550e8400-e29b-41d4-a716-446655440000` via `x-test-user-id` header
+- **Production Options**: API keys (recommended), OAuth App-to-App, Agent API keys
 
-#### Development Testing Commands
+### OAuth Connection Flow
+1. User clicks "Connect" → Server creates Pipedream token
+2. User redirects to Pipedream Connect → Completes OAuth
+3. Pipedream redirects back → UI refreshes connections
+4. Agents can now use owner's connected accounts
+
+### Key Features
+- **Webhook Integration**: Async execution with HMAC signature verification
+- **Service Discovery**: Runtime discovery of available services/actions
+- **Security**: OAuth delegation, parameter binding, ownership verification
+
+## Development Workflows
+
+### Adding New Field Types
+1. Update field type definitions in `lib/db/schema.ts`
+2. Add UI input component in table editor components
+3. Update API parsing in `app/api/rows/route.ts`
+
+### Database Schema Changes
+1. Modify `lib/db/schema.ts`
+2. Run `pnpm db:generate` and `pnpm db:migrate`
+3. Reset if needed: `docker-compose down && docker volume rm emery_db`
+
+### Testing Complete System
 ```bash
-# Backend integration tests using uv package manager
+# Fresh setup
+docker-compose down && docker volume rm emery_db && docker-compose up -d
+pnpm db:migrate && pnpm dev
+
+# Integration flow
+# 1. OAuth login → create organization → create table → add fields → add rows
+# 2. Create agent → connect OAuth accounts via /dashboard/connections
+# 3. Test agent execution via Python client or API
+```
+
+### Testing OAuth Proxy
+```bash
+# Python integration testing
 uv run scripts/test_integration.py <agent_id>
 pnpm test:agent-api <agent_id>
 
-# Direct Python client testing  
-python scripts/python_agent_client.py <agent_id>
+# Manual API testing
+curl -X GET "http://localhost:3000/api/agents/<agent_id>/capabilities" \
+  -H "Authorization: Bearer <agent_api_key>"
 ```
-
-### Authentication System
-
-#### Current Development Authentication
-- **Development Bypass**: Uses test user ID `550e8400-e29b-41d4-a716-446655440000` via `x-test-user-id` header
-- **Session-based Auth**: NextAuth v4 for frontend user authentication  
-- **Agent Ownership Verification**: Agents can only be used by their owners
-
-#### Planned Production Authentication (Multiple Options)
-1. **API Key Authentication (Recommended)**: JWT-based API keys for backend applications
-2. **OAuth App-to-App Flow (Enterprise)**: OAuth 2.0 Client Credentials Flow
-3. **Agent API Keys (Simple)**: Each agent gets its own API key
-
-### Environment Configuration
-```bash
-# Pipedream Connect Integration (Required)
-PIPEDREAM_PROJECT_ID=your_project_id
-PIPEDREAM_CLIENT_ID=your_client_id  
-PIPEDREAM_CLIENT_SECRET=your_client_secret
-PIPEDREAM_API_KEY=your_api_key
-
-# Webhook Security
-WEBHOOK_SECRET=default-webhook-secret
-
-# NextAuth Configuration
-NEXTAUTH_SECRET=your_nextauth_secret
-NEXTAUTH_URL=http://localhost:3000
-```
-
-### OAuth Connection Flow
-1. User clicks "Connect" in dashboard → Server creates Pipedream token
-2. User redirects to Pipedream Connect → Completes OAuth with service (Gmail, Slack, etc.)
-3. Pipedream redirects back → UI refreshes connections list
-4. Agents can now use owner's connected accounts for actions
-5. **Disconnect Support**: Users can disconnect accounts to enable reconnection with different credentials
-
-### Key Features
-
-#### Webhook Integration
-- **Async Execution**: Support for long-running actions with webhook result delivery
-- **HMAC Signature Verification**: Webhook payloads verified with HMAC signatures
-- **Development Testing**: Webhook bypass for synchronous testing during development
-
-#### Service Discovery
-- **Dynamic Capabilities**: Runtime discovery of available services and actions based on user's connections
-- **Service Mapping**: Map service+action combinations to Pipedream action IDs
-- **Error Propagation**: Comprehensive error handling and user feedback
-
-#### Security Patterns
-- **OAuth Delegation**: Agents use owner's credentials, not elevated privileges
-- **Webhook Signatures**: HMAC signature verification for webhook payloads  
-- **Parameter Binding**: All database operations use parameterized queries
-- **Agent Ownership**: Strict ownership verification for all agent operations
-
-## Common Development Tasks
-
-### Adding New Field Types
-1. Update `typeMap` in `lib/db/dynamic.ts`
-2. Add UI input component in `TableEditor.tsx` `renderFieldInput()`
-3. Add display logic in table row rendering
-4. Update API parsing logic in `app/api/rows/route.ts` if special handling needed
-
-### Database Schema Changes
-1. Modify `lib/db/schema.ts` for static schema changes
-2. Run `pnpm db:generate` to create migration
-3. Run `pnpm db:migrate` to apply changes
-4. Reset database with `docker-compose down && docker volume rm emery_db` if needed
-
-### Testing Complete System
-1. **Fresh Database Setup**:
-   ```bash
-   docker-compose down && docker volume rm emery_db && docker-compose up -d
-   pnpm db:migrate
-   ```
-
-2. **Start Development Environment**:
-   ```bash
-   pnpm dev  # Starts Next.js on http://localhost:3000
-   ```
-
-3. **Complete Integration Flow**:
-   - OAuth login → create organization → create table → add fields → add rows
-   - Create agent → connect OAuth accounts via `/dashboard/connections`
-   - Test agent execution via Python client or API
-
-### Testing OAuth Proxy Service
-1. **Prerequisites**:
-   - Emery running: `pnpm dev`
-   - Pipedream environment variables configured
-   - Agent created with valid agent API key
-
-2. **Frontend OAuth Connection Testing**:
-   - Navigate to `/dashboard/connections`
-   - Connect Gmail, Slack, or other supported services
-   - Test disconnect/reconnect functionality
-
-3. **Python Backend Integration Testing**:
-   ```bash
-   # Using uv package manager (recommended)
-   uv run scripts/test_integration.py <agent_id>
-   
-   # Using npm script
-   pnpm test:agent-api <agent_id>
-   
-   # Direct Python execution
-   python scripts/python_agent_client.py <agent_id>
-   ```
-
-4. **Manual API Testing**:
-   ```bash
-   # Test agent capabilities
-   curl -X GET "http://localhost:3000/api/agents/<agent_id>/capabilities" \
-     -H "Authorization: Bearer <agent_api_key>"
-   
-   # Test OAuth proxy
-   curl -X POST "http://localhost:3000/api/agents/proxy" \
-     -H "Authorization: Bearer <agent_api_key>" \
-     -H "Content-Type: application/json" \
-     -d '{"service": "gmail", "action": "send_email", "params": {...}}'
-   ```
-
-### Development Authentication Testing
-For development without full OAuth setup:
-- Use test user ID: `550e8400-e29b-41d4-a716-446655440000`
-- Add `x-test-user-id` header to bypass authentication
-- Webhook verification can be disabled for local testing
 
 ## Domain-Driven Design (DDD) Architecture
 
 ### Folder Structure
-**CRITICAL**: All DDD code must be organized under the `/ddd` folder with this exact structure:
-
 ```
 /ddd/
 ├── domain/              # Pure domain logic - NO infrastructure dependencies
-│   ├── rag/
+│   ├── [domain]/
 │   │   ├── entities/    # Domain entities with business rules
 │   │   ├── value-objects/ # Immutable value objects with validation
 │   │   ├── repositories/ # Repository INTERFACES only
 │   │   ├── services/    # Domain service INTERFACES only
 │   │   └── events/      # Domain events
-│   └── [other-domains]/
 │
 ├── application/         # Application services - orchestration layer
-│   ├── rag/
+│   ├── [domain]/
 │   │   ├── services/    # Application services that orchestrate domain operations
 │   │   ├── commands/    # Command objects with validation
 │   │   ├── queries/     # Query objects with validation
-│   │   └── di-container/ # Dependency injection configuration
-│   └── [other-domains]/
+│   │   └── use-cases/   # Focused business operation Use Cases
 │
 └── infrastructure/      # External integrations and concrete implementations
-    ├── db/
-    │   └── repositories/  # Database repository implementations
-    │       └── rag/      # RAG-specific repository implementations
-    ├── external/         # External service integrations (APIs, file processors)
-    │   ├── llamaindex/   # LlamaIndex file processing
-    │   ├── huggingface/  # AI model integrations
-    │   └── s3/           # S3 storage operations
-    └── [other-infrastructure]/
+    ├── db/repositories/ # Database repository implementations
+    └── external/        # External service integrations (APIs, file processors)
 ```
 
 ### DDD Anti-Patterns to Avoid
 
-❌ **NEVER create legacy wrapper classes for "backwards compatibility"**:
-```typescript
-// DON'T DO THIS BULLSHIT:
-export const myService = new MyService();
-
-// Legacy class-based interface for backwards compatibility
-export class MyContainer {
-  static getMyService(): MyService {
-    return myService;  // Pointless wrapper
-  }
-}
-```
-- If you're migrating patterns, just migrate them - don't maintain both
-- Wrapper classes add zero value and create maintenance burden
+❌ **No legacy wrapper classes for "backwards compatibility"**:
+- If migrating patterns, just migrate them - don't maintain both
 - Use direct exports: `export const myService = new MyService()`
-- Update call sites to use the new pattern directly
 
-❌ **NEVER use lazy singleton patterns with private statics**:
-```typescript
-// DON'T DO THIS BLOAT:
-class Container {
-  private static _service: Service;
-  
-  static getService(): Service {
-    if (!this._service) {
-      this._service = new Service();
-    }
-    return this._service;
-  }
-}
-```
-- Just export configured instances directly
+❌ **No lazy singleton patterns with private statics**:
+- Export configured instances directly
 - Avoids unnecessary if-checks and private field management
-- Much cleaner and simpler dependency injection
 
-❌ **NEVER create Value Object conversions for internal operations**:
-```typescript
-// DON'T DO THIS OVERHEAD:
-const entities = await repository.getEntities();
-const valueObjects = entities.map(e => ValueObject.fromEntity(e));  // Pointless conversion
-const result = await service.process(valueObjects);
-```
+❌ **No Value Object conversions for internal operations**:
 - Use domain entities directly in internal service calls
 - Value Objects are for external API boundaries only
-- Eliminates unnecessary conversion overhead
 
 ### DDD Layer Rules
 
 #### Domain Layer (`/ddd/domain/`)
-- **MUST contain ONLY**:
-  - Interfaces (repository and service interfaces)
-  - Domain entities with business rules
-  - Value objects with validation
-  - Domain events
-  - Pure domain logic
-- **MUST NOT contain**:
-  - Any infrastructure dependencies (no database, no external APIs)
-  - Concrete implementations
-  - Framework-specific code
-  - I/O operations
+- **MUST contain ONLY**: Interfaces, domain entities, value objects, domain events, pure domain logic
+- **MUST NOT contain**: Infrastructure dependencies, concrete implementations, framework-specific code
 
 #### Application Layer (`/ddd/application/`)
-- **MUST contain**:
-  - Application services that orchestrate domain operations
-  - Command and Query handlers
-  - DTOs for external communication
-  - Dependency injection configuration
-- **Responsibilities**:
-  - Transaction management
-  - Security/authorization checks
-  - Orchestrating multiple domain operations
-  - Mapping between domain and external representations
+- **Orchestrates**: Domain operations, transaction management, security/authorization
+- **Contains**: Application services, Command/Query handlers, DTOs, Use Cases
 
 #### Infrastructure Layer (`/ddd/infrastructure/`)
-- **MUST contain**:
-  - Concrete implementations of domain interfaces
-  - Database repositories (`/infrastructure/db/repositories/`)
-  - External service integrations (`/infrastructure/external/`)
-  - Framework-specific adapters
-- **Organization**:
-  - Database repositories go under `/infrastructure/db/repositories/[domain]/`
-  - External integrations go under `/infrastructure/external/[service]/`
-  - Each external integration should implement a domain interface
+- **Implements**: Domain interfaces, database repositories, external service integrations
+- **Organization**: `/infrastructure/db/repositories/[domain]/`, `/infrastructure/external/[service]/`
 
 ### Import Rules
 - **Domain → Domain**: ✅ Allowed
-- **Application → Domain**: ✅ Allowed
-- **Application → Application**: ✅ Allowed (same domain only)
-- **Infrastructure → Domain**: ✅ Allowed
-- **Infrastructure → Application**: ✅ Allowed
-- **Domain → Application**: ❌ FORBIDDEN
-- **Domain → Infrastructure**: ❌ FORBIDDEN
+- **Application → Domain**: ✅ Allowed  
+- **Infrastructure → Domain/Application**: ✅ Allowed
+- **Domain → Application/Infrastructure**: ❌ FORBIDDEN
 - **Application → Infrastructure**: ❌ FORBIDDEN (use DI container)
 
 ### Naming Conventions
-- **Repositories**: 
-  - Interface: `RagIndexRepository` (in domain)
-  - Implementation: `DrizzleRagIndexRepository` (in infrastructure)
-- **Services**:
-  - Domain Interface: `ContentProcessor` (in domain)
-  - Application Service: `RagIndexingApplicationService` (in application)
-  - Infrastructure Implementation: `LlamaIndexFileProcessor` (in infrastructure)
+- **Repositories**: `RagIndexRepository` (domain interface), `DrizzleRagIndexRepository` (infrastructure)
+- **Services**: `ContentProcessor` (domain), `RagIndexingApplicationService` (application)
 - **Value Objects**: `RagIndexId`, `OrganizationId` (always with validation)
 - **Entities**: `RagIndex`, `RagDocument` (with business rules)
 
-### Example Patterns
+### 2025 DDD Implementation Status ✅
+- **Folder Structure**: Proper `/ddd/domain/`, `/application/`, `/infrastructure/` organization
+- **Value Objects**: Type-safe IDs (`AgentId`, `UserId`, `TeamId`, `TaskId`, `OrganizationId`)
+- **Domain Services**: `MeasurementAnalysisService`, `ProcessOptimizationService`, `AnalysisCoordinationService`
+- **Use Cases**: Focused business operations (`CreateAgentUseCase`)
+- **Schema Type Safety**: Replaced `$type<any>()` with proper TypeScript types
+- **Benefits**: Type safety, business logic encapsulation, clear boundaries, maintainability
+
+### Example DDD Patterns
+
+#### Value Objects
+```typescript
+export class AgentId {
+  constructor(private readonly _value: number) {
+    if (!Number.isInteger(_value) || _value <= 0) {
+      throw new Error('AgentId must be a positive integer');
+    }
+  }
+  get value(): number { return this._value; }
+  equals(other: AgentId): boolean { return this._value === other._value; }
+}
+```
+
+#### Use Cases
+```typescript
+export class CreateAgentUseCase {
+  async execute(request: CreateAgentRequest): Promise<Result<CreateAgentResponse>> {
+    // 1. Validate business rules
+    // 2. Delegate to Application Service for orchestration
+  }
+}
+```
 
 #### Repository Pattern
 ```typescript
-// Domain layer - Interface only
-// /ddd/domain/rag/repositories/rag-index-repository.ts
+// Domain interface
 export interface RagIndexRepository {
   findById(id: RagIndexId): Promise<RagIndex | null>;
   save(index: RagIndex): Promise<void>;
 }
 
-// Infrastructure layer - Concrete implementation
-// /ddd/infrastructure/db/repositories/rag/drizzle-rag-index-repository.ts
+// Infrastructure implementation  
 export class DrizzleRagIndexRepository implements RagIndexRepository {
-  constructor(private db: DbClient) {}
-  async findById(id: RagIndexId): Promise<RagIndex | null> {
-    // Actual database operations
-  }
+  // Actual database operations
 }
 ```
 
-#### Service Pattern
-```typescript
-// Domain layer - Interface for external operations
-// /ddd/domain/rag/services/file-processor.ts
-export interface FileProcessor {
-  processFile(fileData: FileData): Promise<ProcessedContent[]>;
-}
+## NextJS Component Architecture
 
-// Infrastructure layer - Concrete implementation
-// /ddd/infrastructure/external/llamaindex/llamaindex-file-processor.ts
-export class LlamaIndexFileProcessor implements FileProcessor {
-  async processFile(fileData: FileData): Promise<ProcessedContent[]> {
-    // Actual file processing with LlamaIndex
-  }
-}
+### When to Use Each Pattern
 
-// Application layer - Orchestration
-// /ddd/application/rag/services/rag-indexing-application-service.ts
-export class RagIndexingApplicationService {
-  constructor(
-    private indexRepository: RagIndexRepository,
-    private fileProcessor: FileProcessor
-  ) {}
-  // Orchestrates domain operations
-}
-```
+**Server Actions**: App Router internal actions, type-safe DB logic, form submissions
+**API Routes**: HTTP endpoints for external clients, custom responses, independent testing
+**Server Components**: No interactivity, server-side data fetching, better performance
+**Client Components**: Interactivity (onClick, useState), browser APIs, real-time updates
 
-## Development Workflow
+## Testing & Code Quality
 
-### NextJS Component Architecture Rules
-Follow these patterns for consistent component usage:
-
-**Use Server Actions when:**
-- Using App Router for internal-only actions
-- Want type-safe, co-located DB logic (Drizzle)
-- Don't need custom HTTP headers/status codes
-- Handling form submissions or component-triggered mutations
-
-**Use API Routes when:**
-- Need to expose HTTP endpoint (mobile clients, webhooks)
-- Require custom HTTP responses (headers, status)
-- Action called via fetch or by external services
-- Need independent testing (Postman, curl)
-
-**Use Server Components when:**
-- No interactivity needed (no event listeners)
-- Want server-side data fetching (DB queries)
-- Want better performance and smaller bundles
-- Using Server Actions, file system, or sensitive logic
-
-**Use Client Components when:**
-- Need interactivity (onClick, useState, useEffect)
-- Using browser-only APIs (localStorage, window)
-- Component relies on real-time updates, sockets, animations
-- Handling forms with client-side validation
-
-### Pre-commit Testing Protocol
-
-**MANDATORY**: Always run tests before committing to ensure changes don't break existing functionality.
-
+### Pre-commit Testing (MANDATORY)
 ```bash
-# Run focused unit tests for specific modules
+# Run focused tests
 uv run python -m pytest tests/test_module_name.py -v
 
-# Run all unit tests
+# Run all tests
 uv run python -m pytest tests/ -v
 
-# Run tests with coverage
+# With coverage
 uv run python -m pytest tests/ --cov=src/emery_agents --cov-report=term-missing
 ```
 
-**Test-Driven Commit Process:**
-1. Make your code changes
-2. Run relevant unit tests: `uv run python -m pytest tests/test_[module].py -v`
-3. If successful, run full test suite: `uv run python -m pytest tests/ -v`
-4. Fix any failing tests before proceeding
-5. Commit only when all tests pass
-6. Include test status in commit message if relevant
+**Process**: Make changes → run relevant tests → run full suite → fix failures → commit only when all pass
 
-**Unit Test Framework Guidelines:**
-- Create focused, concise unit tests instead of debug scripts
-- Use pytest fixtures for common test data
-- Mock external dependencies and environment variables
-- Test both success and error cases
-- Each test should test one specific behavior
+**Guidelines**: Focused unit tests, pytest fixtures, mock external dependencies, test success/error cases
 
 ### Python Code Quality Standards
 
-**Mandatory Code Structure:**
-- **All imports at top of file** - No inline imports except in functions when truly necessary
-- **Type hints on all functions** - Include parameter types and return types
-- **Fail fast on dependencies** - Import required libraries directly, let ImportError fail module load
-- **Clear, maintainable code** - Write self-documenting code with meaningful variable names
-- **Short comments only** - Prefer descriptive code over extensive comments
-- **Functional code patterns** - Use pure functions where possible, avoid excessive state mutation
+**Structure:**
+- All imports at top, type hints on all functions, fail fast on dependencies
+- Use @dataclass for structured data, TypedDict for result dictionaries
+- Functions under 50 lines, single responsibility principle
 
-**Type Definitions and Hints:**
-- **Use @dataclass for structured data** - Prefer dataclasses over Dict[str, Any] for configuration objects
-- **Use TypedDict only for result dictionaries** - For return values and loose data structures
-- **Declare types explicitly** - Create specific type definitions rather than using generic types
-- **Use types everywhere possible** - All function parameters, return values, and class attributes
-- **Use Union types** over generic Any when multiple types are acceptable
-- **Create domain-specific Enums** - For status values, types, and categories
-- Example:
-  ```python
-  from dataclasses import dataclass
-  from typing import TypedDict, Optional, List
-  from enum import Enum
-  
-  class TaskStatus(Enum):
-      PENDING = "pending"
-      COMPLETED = "completed"
-      FAILED = "failed"
-  
-  @dataclass
-  class TaskConfig:
-      """Task configuration object."""
-      name: str
-      instructions: str
-      timeout: int = 30
-      tools: Optional[List[str]] = None
-  
-  class ExecutionResult(TypedDict, total=False):
-      """Execution result dictionary."""
-      status: str
-      result: Optional[Any]
-      error: Optional[str]
-  
-  def process_task(config: TaskConfig) -> ExecutionResult:
-      # Clear function signature with explicit types
-  ```
+**Types:**
+```python
+@dataclass
+class TaskConfig:
+    name: str
+    instructions: str
+    timeout: int = 30
 
-**Imports and Dependencies:**
-- All imports must be at the top of the file - NO inline imports
-- Group imports: stdlib, third-party, local imports
-- Fail fast on missing dependencies - don't use graceful fallbacks unless truly optional
-- If dependency is required, import directly and let ImportError fail the module load
-- Example:
-  ```python
-  # Standard library
-  import os
-  import json
-  from typing import Dict, Any
-  
-  # Third-party (fail fast if missing)
-  from smolagents import HfApiModel
-  from transformers import pipeline
-  
-  # Local imports
-  from emery_agents.core.types import ToolConfig
-  ```
-
-**Error Handling:**
-- Avoid over-defensive patterns like excessive `.get(key, default)` usage
-- Use `obj.get(key) or default` instead of `obj.get(key, default)` for non-None defaults
-- Replace `hasattr(obj, 'attr')` with `getattr(obj, 'attr', None)` where appropriate
-- Use proper exception handling rather than defensive programming
-- Chain exceptions with `raise ... from e` to preserve stack traces
-- Use specific exception types instead of generic `Exception`
-
-**Function Design:**
-- Keep functions under 50 lines when possible
-- Extract complex logic into helper methods
-- **Explicit type annotations on all parameters and returns** - Never use untyped functions
-- Use descriptive parameter names that indicate their purpose
-- Single responsibility principle - one function, one purpose
-- **Pass @dataclass objects instead of dictionaries** - For complex parameter sets
-- **Return @dataclass or TypedDict** - For structured return values, prefer dataclass for configuration, TypedDict for results
-- Example:
-  ```python
-  @dataclass
-  class ProcessingConfig:
-      input_file: str
-      output_dir: str
-      max_retries: int = 3
-  
-  def process_data(config: ProcessingConfig) -> ExecutionResult:
-      # Function with explicit types and structured parameters
-  ```
-
-**Code Organization:**
-- Extract constants for magic numbers (MAX_LOG_PREVIEW_LENGTH = 100)
-- Split large files (>300 lines) into focused modules
-- One class per file when possible, related classes can be grouped
-- Use AIDEV-NOTE, AIDEV-TODO, AIDEV-QUESTION comments for searchable inline docs
-
-**Anti-patterns to Avoid:**
-- Generic `except Exception as e:` without re-raising or logging context
-- Magic numbers scattered throughout code
-- **Using Dict[str, Any] instead of @dataclass** - Always create explicit types for structured data
-- **Untyped function parameters or returns** - All functions must have explicit type annotations
-- Defensive `.get()` usage on typed structures (use dataclass attributes directly)
-- **Passing multiple loose parameters** - Use @dataclass for complex parameter sets
-- Files with multiple unrelated classes (>4 classes per file)
-- Hard-coded paths and URLs
-- String concatenation for paths (use pathlib)
-- Backwards compatibility fallbacks unless explicitly required
-
-## Important Implementation Details
-
-### Error Handling
-- **Dynamic Table Operations**: Use raw SQL with proper parameter binding
-- **JSONB Parsing**: Includes try/catch for malformed JSON in relation fields
-- **Field Validation**: Ensures required fields are provided
-- **OAuth Proxy Errors**: Comprehensive error propagation from Pipedream Connect to client
-- **Webhook Failures**: Graceful handling of webhook delivery failures with retry logic
-- **Authentication Errors**: Clear error messages for missing or invalid API keys
-
-### Performance Considerations
-- **Database Indexes**: GIN indexes automatically created for all JSONB (relation) fields
-- **Connection Management**: Raw postgres client connections are properly closed after operations
-- **Parameterized Queries**: Prevent SQL injection across all database operations
-- **OAuth Token Caching**: Short-lived Pipedream tokens prevent unnecessary API calls
-- **Webhook Async Processing**: Long-running agent actions don't block API responses
-
-### Data Consistency
-- **Field Management**: Field deletions remove both metadata and dynamic table columns
-- **Table Cleanup**: Table deletions cascade through metadata cleanup and dynamic table drops
-- **Field ID Consistency**: Maintained between metadata and dynamic column names
-- **Agent Ownership**: Strict ownership verification ensures secure credential delegation
-- **RBAC Enforcement**: Permissions enforced at both API and UI levels
-- **OAuth Account Mapping**: Consistent external user ID mapping for Pipedream integration
-
-### Security Considerations
-- **OAuth Credential Management**: Credentials never stored locally - fully delegated through Pipedream Connect
-- **Agent Execution Security**: Agents run with owner's permissions, not elevated privileges
-- **Token Expiration**: Pipedream tokens have short expiration for security
-- **Webhook Verification**: HMAC signature verification for all webhook payloads
-- **API Key Security**: Agent API keys provide secure backend authentication
-- **RBAC System**: Prevents unauthorized access to resources and data
-- **SQL Injection Prevention**: All database operations use parameterized queries
-- **Development Security**: Test authentication bypass only enabled in development environment
-
-### OAuth Proxy Architecture
-- **Universal Proxy Design**: Single `/api/agents/proxy` endpoint handles all OAuth services
-- **Service Agnostic**: Supports any OAuth-enabled service through Pipedream Connect
-- **Dynamic Service Discovery**: Runtime discovery of available services based on user connections
-- **Error Propagation**: Maintains full error context from external services to client applications
-- **Webhook Integration**: Supports both synchronous and asynchronous execution patterns
-- **Multi-Client Support**: Both full-featured and simple Python clients for different use cases
-
-## Frontend Architecture Refactoring (2025-01)
-
-### Component Architecture Improvements
-
-#### Refactored Component Structure
-The frontend has been significantly refactored for better maintainability and consistency:
-
-**Component Organization:**
-- **Core UI Components**: Standardized shadcn/ui components with consistent design tokens
-- **Composite Components**: Business logic components built from core UI components
-- **Custom Hooks**: Extracted state management and side effects into reusable hooks
-- **Utility Components**: Reusable patterns like `FormField`, `EmptyState`, `Loading`
-
-#### Major Component Refactoring
-
-**RowManager Component (394 → 84 lines)**
-- **Extracted Components**: 
-  - `FieldInput.tsx` - Field type-specific input handling
-  - `CellRenderer.tsx` - Cell value display formatting
-  - `RowForm.tsx` - Form creation and editing
-  - `RowTable.tsx` - Table display and inline editing
-- **Custom Hook**: `useRowManager.ts` - State management and CRUD operations
-- **Benefits**: 80% reduction in complexity, better testability, clear separation of concerns
-
-**Other Refactored Components:**
-- **TableList**: Converted to shadcn/ui Card and Button components
-- **FieldManager**: Standardized form inputs and improved UX with EmptyState
-- **TableEditorClient**: Consolidated with better error handling
-
-#### Removed Dead Code
-- **Deleted Files**: 
-  - `app/TableEditor.tsx` (394 lines) - Replaced by refactored components
-  - `app/components/DashboardClient.tsx` (88 lines) - Unused component
-  - `app/components/DashboardWithData.tsx` - Dead data loader
-  - `app/utils/validation.ts` - Unused validation utilities
-  - `app/mission-control/dashboard-content.tsx` - Unnecessary wrapper
-- **Clean Directories**: Removed empty `dashboard/` subdirectories
-- **Import Cleanup**: Removed unused imports across all components
-
-### Styling Standardization
-
-#### Design System Implementation
-**Consistent Component Usage:**
-- **Buttons**: All hardcoded button styles replaced with `Button` component variants
-- **Forms**: Standardized `Input`, `Select`, `Checkbox` components
-- **Cards**: Consistent `Card`, `CardHeader`, `CardContent` structure
-- **Tables**: Proper `Table`, `TableHeader`, `TableBody` components
-- **Loading States**: Unified loading and disabled state styling
-
-**Color Token Migration:**
-- **Before**: `bg-blue-600`, `text-gray-900`, `text-red-500` (hardcoded colors)
-- **After**: `bg-primary`, `text-foreground`, `text-destructive` (design tokens)
-- **Benefits**: Automatic dark mode support, consistent theming, maintainable styles
-
-**Added Utility Components:**
-```typescript
-// New standardized components
-<FormField label="Name" required error={error}>
-  <Input {...props} />
-</FormField>
-
-<EmptyState 
-  title="No items" 
-  description="Add your first item"
-  action={{ label: "Add Item", onClick: handler }}
-/>
-
-<Loading text="Loading..." />
-<LoadingOverlay isLoading={pending}>...</LoadingOverlay>
+class ExecutionResult(TypedDict, total=False):
+    status: str
+    result: Optional[Any]
+    error: Optional[str]
 ```
 
-#### Button Variant System
-Extended shadcn/ui Button with application-specific variants:
-- `success` - Green buttons for creation actions
-- `destructive` - Red buttons for delete actions  
-- `outline` - Secondary actions and cancellation
-- `ghost` - Icon buttons and subtle actions
+**Anti-patterns to Avoid:**
+- Dict[str, Any] instead of @dataclass
+- Untyped function parameters/returns
+- Generic exception handling without context
+- Magic numbers, hard-coded paths
+- Multiple loose parameters (use @dataclass)
 
-### Development Patterns
+## Implementation Details
 
-#### Consistent Patterns Established
-**Form Handling:**
-- Standardized `FormField` wrapper with built-in error handling
-- Consistent loading states and disabled styling
-- Proper ARIA attributes and accessibility
+### Error Handling & Performance
+- **Database**: Raw SQL with parameter binding, GIN indexes for JSONB fields
+- **OAuth Proxy**: Comprehensive error propagation, token caching, async processing
+- **Webhooks**: HMAC signature verification, graceful failure handling
 
-**Data Display:**
-- `EmptyState` for consistent empty states across all lists
-- `CellRenderer` for proper field type display formatting
-- Hover states and interaction patterns standardized
+### Security & Data Consistency
+- **Authentication**: OAuth credentials delegated through Pipedream (never stored locally)
+- **RBAC**: Permissions enforced at API/UI levels, strict agent ownership verification
+- **Data Integrity**: Field deletions cascade through metadata and dynamic columns
 
-**Component Composition:**
-- Clear separation between UI components and business logic
-- Proper prop interfaces and TypeScript types
-- Consistent naming conventions and file organization
+## Frontend Architecture (2025-01 Refactor)
 
-#### Custom Hooks Pattern
-**State Management Hooks:**
-- `useRowManager` - Row CRUD operations and form state
-- `useEmeryData` - Global data fetching and caching
-- Extracted from components for better testability and reuse
+### Component Improvements
+- **Major Refactoring**: RowManager (394→84 lines), extracted `FieldInput`, `CellRenderer`, `RowForm`, `RowTable`
+- **Custom Hooks**: `useRowManager` for state management, `useEmeryData` for caching
+- **Dead Code Removal**: Deleted unused components, cleaned directories, removed unused imports
 
-### Code Quality Improvements
+### Design System Standardization
+- **shadcn/ui Components**: Standardized `Button`, `Input`, `Card`, `Table` components
+- **Design Tokens**: Replaced hardcoded colors with semantic tokens (`bg-primary`, `text-foreground`)
+- **Utility Components**: Added `FormField`, `EmptyState`, `Loading`, `LoadingOverlay`
+- **Button Variants**: `success`, `destructive`, `outline`, `ghost`
 
-#### TypeScript Integration
-- Consistent type definitions across all components
-- Proper prop interface definitions
-- Better error handling with type safety
+### Benefits Achieved
+- **Maintainability**: Single source of truth, consistent styling, clear separation
+- **Developer Productivity**: Reusable components, type safety, easier testing
+- **User Experience**: Consistent interactions, accessibility, performance improvements
 
-#### Performance Optimizations  
-- Component splitting reduces bundle size and improves tree shaking
-- Proper React patterns for state updates and side effects
-- Reduced re-renders through better state management
-
-#### Developer Experience
-- Clear component boundaries and responsibilities
-- Consistent import patterns and file organization
-- Better error messages and development warnings
-- Standardized loading and error states
-
-### Migration Benefits
-
-#### Maintainability
-- **Single Source of Truth**: All UI patterns now use shadcn/ui components
-- **Consistent Styling**: Design tokens ensure visual consistency
-- **Better Organization**: Clear separation of concerns and component responsibilities
-
-#### Developer Productivity
-- **Reusable Components**: Standard patterns reduce duplicate code
-- **Type Safety**: Better TypeScript integration prevents runtime errors
-- **Testing**: Smaller, focused components are easier to test
-
-#### User Experience
-- **Consistent Interactions**: Standardized hover, focus, and loading states
-- **Accessibility**: Proper ARIA attributes and keyboard navigation
-- **Performance**: Smaller components and better code splitting
-
-### Future Refactoring Opportunities
-
-#### Remaining Complex Components
-- **EditableCell.tsx** (341 lines) - Candidate for field-type component extraction
-- **DataViewsClient-simplified.tsx** (307 lines) - Could benefit from hook extraction
-- **EmerySidebar.tsx** (298 lines) - Navigation state management improvements
-
-#### Additional Improvements
-- **API Route Consolidation**: Review Server Actions vs API routes usage
-- **Error Boundary Implementation**: Consistent error handling across components
-- **Testing Strategy**: Unit tests for extracted hooks and components
-- **Performance Monitoring**: Bundle size analysis and optimization
-
-## Agent Scheduler & gRPC Executor Architecture (2025-01)
+## Agent Scheduler & gRPC Executor (2025-01)
 
 ### Simplified Execution Architecture
 
-The agent execution system has been consolidated to use a unified pattern:
+#### Agent Execution System
+- **Simplified Architecture**: Unified agent execution pattern
+- **JSONB Instructions**: Database field storing `{instructions, tools[], servers[], metadata}`
+- **Real-time Progress**: Streaming provides step-by-step execution updates
 
-#### Simplified gRPC Executor (`lib/agents/grpc-executor.ts`)
-- **Single Function**: `executeAgentViaGRPC()` handles all agent execution
-- **JSONB Instructions Structure**: Database field storing `{instructions, tools[], servers[], metadata}`
-- **Real-time Progress**: gRPC streaming provides step-by-step execution updates
-- **Automatic Recording**: All executions stored in database with complete audit trail
-
-```typescript
-interface AgentExecutionRequest {
-  agentId: number;
-  instructions: string; // Main instruction text
-  tools?: Array<{name: string, version?: string, config?: Record<string, any>}>; // Optional tools
-  servers?: Array<{name: string, endpoint?: string, config?: Record<string, any>}>; // Optional servers
-  executionId: string;
-  metadata?: Record<string, any>; // Optional context metadata
-}
-```
-
-#### Enhanced Agent Scheduler (`lib/scheduler/agent-scheduler.ts`)
-- **Pending Task Processing**: `processPendingTasks()` runs automatically every minute
-- **Manual Execution**: `processPendingTasksManually()` for immediate task execution
-- **Multiple Trigger Types**: CRON, DATABASE_EVENT, WEBHOOK, and MANUAL triggers
-- **Dynamic Agent Discovery**: Automatically detects new/updated/deleted agents
-- **JSONB Task Instructions**: Supports complex task configuration with tools and servers
+#### Agent Scheduler (`lib/scheduler/agent-scheduler.ts`)
+- **Auto Processing**: `processPendingTasks()` runs every minute (up to 10 tasks/cycle)
+- **Manual Execution**: `processPendingTasksManually()` for immediate execution
+- **Trigger Types**: CRON, DATABASE_EVENT, WEBHOOK, MANUAL
+- **Dynamic Discovery**: Automatically detects new/updated/deleted agents
 
 #### Legacy Pattern Removal
-All legacy execution patterns have been removed:
-- ❌ `triggerData: trigger_data || {}` fallback patterns
-- ❌ `stepOverrides: step_overrides` legacy parameters  
-- ❌ `executeAgentCapabilityViaGRPC()` (replaced by simplified `executeAgentViaGRPC()`)
+- ❌ Removed `triggerData` fallbacks, `stepOverrides`, `executeAgentCapabilityViaGRPC()`
 - ❌ Capability-specific routing (now handled by smolagents hierarchy)
 
-#### API Endpoint Consistency
-All agent execution now uses the same simplified pattern:
-- `/api/agents/[id]/execute` - Direct agent execution with tools/servers support
-- `/api/scheduler/webhook` - Webhook triggers using simplified execution
+#### API Endpoints
+- `/api/agents/[id]/execute` - Direct execution with tools/servers
+- `/api/scheduler/webhook` - Webhook triggers
 
-#### Database Task Schema
-Tasks are stored with JSONB instructions supporting the complete execution context:
+#### Task Schema
 ```sql
 tasks.instructions JSONB: {
   instructions: string,     -- Main task description
@@ -891,30 +404,5 @@ tasks.instructions JSONB: {
 }
 ```
 
-### Scheduler Operation Modes
-
-#### Automatic Processing (Every Minute)
-- Checks for new pending tasks and executes them immediately
-- Processes up to 10 tasks per cycle to prevent overload
-- Updates task status in real-time during execution
-
-#### CRON Scheduled Jobs
-- Dynamic CRON job management with node-cron
-- Automatic job cleanup when agents are deleted/deactivated
-- Timezone support with `SCHEDULER_TIMEZONE` environment variable
-
-#### Database Event Triggers
-- PostgreSQL LISTEN/NOTIFY for real-time table change detection
-- Agents triggered when specific tables are modified
-- Supports INSERT, UPDATE, DELETE operations
-
 ### AIDEV Anchor Comments
-The codebase uses searchable AIDEV comments for inline documentation:
-- `AIDEV-NOTE:` - Important architectural decisions and explanations
-- `AIDEV-TODO:` - Known improvement opportunities
-- `AIDEV-QUESTION:` - Areas needing architectural decisions
-
-Search for these patterns when working on complex areas:
-```bash
-grep -r "AIDEV-" --include="*.ts" --include="*.py" .
-```
+Use searchable comments for inline documentation: `AIDEV-NOTE:`, `AIDEV-TODO:`, `AIDEV-QUESTION:`

@@ -9,22 +9,23 @@
  */
 
 import type { Task } from '../entities/task';
+import { TaskId, AgentId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 export interface ITaskRepository {
   /**
    * Find task by ID
    */
-  findById(id: string): Promise<Task | null>;
+  findById(id: TaskId): Promise<Task | null>;
 
   /**
    * Find tasks by agent ID
    */
-  findByAgentId(agentId: number): Promise<Task[]>;
+  findByAgentId(agentId: AgentId): Promise<Task[]>;
 
   /**
    * Find tasks by organization ID
    */
-  findByOrganizationId(organizationId: number): Promise<Task[]>;
+  findByOrganizationId(organizationId: OrganizationId): Promise<Task[]>;
 
   /**
    * Find pending tasks (for scheduler processing)
@@ -39,7 +40,7 @@ export interface ITaskRepository {
   /**
    * Find tasks by status
    */
-  findByStatus(status: string, organizationId?: number): Promise<Task[]>;
+  findByStatus(status: string, organizationId?: OrganizationId): Promise<Task[]>;
 
   /**
    * Save task (create or update)
@@ -49,15 +50,15 @@ export interface ITaskRepository {
   /**
    * Delete task
    */
-  delete(id: string): Promise<void>;
+  delete(id: TaskId): Promise<void>;
 
   /**
    * Count tasks by status for organization
    */
-  countByStatus(status: string, organizationId: number): Promise<number>;
+  countByStatus(status: string, organizationId: OrganizationId): Promise<number>;
 
   /**
    * Find recent tasks for organization (for dashboard)
    */
-  findRecentByOrganization(organizationId: number, limit?: number): Promise<Task[]>;
+  findRecentByOrganization(organizationId: OrganizationId, limit?: number): Promise<Task[]>;
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Plus, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import type { Team } from '@/types/db';
+import type { Team } from '@/ddd/domain/teams/entities/team';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -122,9 +122,9 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
           ) : (
             filteredTeams.map((team) => (
               <Card
-                key={team.id}
+                key={team.id.value}
                 className={`cursor-pointer transition-all hover:shadow-md ${
-                  selectedTeam?.id === team.id
+                  selectedTeam?.id.value === team.id.value
                     ? 'ring-2 ring-primary bg-secondary'
                     : ''
                 }`}

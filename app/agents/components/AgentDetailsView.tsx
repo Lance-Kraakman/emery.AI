@@ -28,8 +28,8 @@ export default function AgentDetailsView({ agent, onEdit }: AgentDetailsViewProp
             <p className="text-muted-foreground">{agent.role}</p>
           )}
           {agent.status && (
-            <Badge variant={agent.status === 'active' ? 'success' : 'secondary'}>
-              {agent.status}
+            <Badge variant={agent.status.value === 'active' ? 'success' : 'secondary'}>
+              {agent.status.value}
             </Badge>
           )}
         </div>

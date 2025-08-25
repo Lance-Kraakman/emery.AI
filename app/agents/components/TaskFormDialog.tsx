@@ -24,7 +24,7 @@ export default function TaskFormDialog({ isOpen, onClose, agent }: TaskFormDialo
     const instructions = formData.get('instructions') as string;
     
     await createTask({ 
-      agentId: agent.id, 
+      agentId: agent.id.value, 
       name, 
       capabilityName: capabilityName || undefined, // Auto-route if empty
       instructions: {

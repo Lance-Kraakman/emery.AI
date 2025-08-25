@@ -8,7 +8,7 @@ import { requirePermission } from "./permissions";
 import { getFieldApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateFieldData } from "./types";
 import type { Field, FieldType } from "@/ddd/domain/fields/entities/field";
-import type { CreateFieldCommand } from "@/ddd/application/use-cases/fields/field-application-service";
+import type { CreateFieldCommand } from "@/ddd/application/services/fields/field-application-service";
 
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<Result> {
   try {

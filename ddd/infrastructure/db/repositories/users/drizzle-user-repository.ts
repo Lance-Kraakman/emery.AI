@@ -18,6 +18,7 @@ import type {
   CreateSessionData
 } from '@/ddd/domain/users/entities/user';
 import type { Organization } from '@/ddd/domain/organizations/entities/organization';
+import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationRole } from '@/ddd/domain/shared/value-objects';
 
 export class DrizzleUserRepository implements IUserRepository {
   constructor(
@@ -26,31 +27,37 @@ export class DrizzleUserRepository implements IUserRepository {
   ) {}
 
   // Basic CRUD operations
-  async findById(id: string): Promise<User | null> {
+  async findById(id: UserId): Promise<User | null> {
     const result = await this.db
       .select()
       .from(users)
-      .where(eq(users.id, id))
+      .where(eq(users.id, id.value))
       .limit(1);
 
-    return result[0] || null;
+    return result[0] ? this.mapToEntity(result[0]) : null;
   }
 
-  async findByEmail(email: string): Promise<User | null> {
+  async findByEmail(email: EmailAddress): Promise<User | null> {
     const result = await this.db
       .select()
       .from(users)
-      .where(eq(users.email, email))
+      .where(eq(users.email, email.value))
       .limit(1);
 
-    return result[0] || null;
+    return result[0] ? this.mapToEntity(result[0]) : null;
   }
 
   async create(data: CreateUserData): Promise<User> {
-    // Generate UUID if not provided
+    // Convert Value Objects to primitives for database
     const userData = {
-      ...data,
-      id: data.id || crypto.randomUUID(),
+      id: data.id?.value || crypto.randomUUID(),
+      name: data.name,
+      email: data.email?.value || null,
+      emailVerified: data.emailVerified,
+      image: data.image,
+      currentOrganizationId: data.currentOrganizationId?.value || null,
+      roleId: data.roleId,
+      apiKey: data.apiKey?.value || null
     };
 
     const [newUser] = await this.db
@@ -62,111 +69,121 @@ export class DrizzleUserRepository implements IUserRepository {
       throw new Error('Failed to create user');
     }
 
-    return newUser;
+    return this.mapToEntity(newUser);
   }
 
-  async update(id: string, data: UpdateUserData): Promise<User> {
+  async update(id: UserId, data: UpdateUserData): Promise<User> {
+    // Convert Value Objects to primitives for database
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.email !== undefined) updateData.email = data.email?.value || null;
+    if (data.emailVerified !== undefined) updateData.emailVerified = data.emailVerified;
+    if (data.image !== undefined) updateData.image = data.image;
+    if (data.currentOrganizationId !== undefined) updateData.currentOrganizationId = data.currentOrganizationId?.value || null;
+    if (data.roleId !== undefined) updateData.roleId = data.roleId;
+    if (data.apiKey !== undefined) updateData.apiKey = data.apiKey?.value || null;
+
     const [updatedUser] = await this.db
       .update(users)
-      .set(data)
-      .where(eq(users.id, id))
+      .set(updateData)
+      .where(eq(users.id, id.value))
       .returning();
 
     if (!updatedUser) {
-      throw new Error(`User with id ${id} not found or could not be updated`);
+      throw new Error(`User with id ${id.value} not found or could not be updated`);
     }
 
-    return updatedUser;
+    return this.mapToEntity(updatedUser);
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: UserId): Promise<void> {
     // First check if user exists
     const existingUser = await this.findById(id);
     if (!existingUser) {
-      throw new Error(`User with id ${id} not found`);
+      throw new Error(`User with id ${id.value} not found`);
     }
 
     await this.db
       .delete(users)
-      .where(eq(users.id, id));
+      .where(eq(users.id, id.value));
   }
 
   // API Key management
-  async generateApiKey(userId: string): Promise<string> {
-    const apiKey = randomBytes(32).toString('hex');
+  async generateApiKey(userId: UserId): Promise<ApiKey> {
+    const apiKey = ApiKey.generate();
 
     const [updatedUser] = await this.db
       .update(users)
-      .set({ apiKey })
-      .where(eq(users.id, userId))
+      .set({ apiKey: apiKey.value })
+      .where(eq(users.id, userId.value))
       .returning();
 
     if (!updatedUser) {
-      throw new Error(`User with id ${userId} not found`);
+      throw new Error(`User with id ${userId.value} not found`);
     }
 
     return apiKey;
   }
 
-  async findByApiKey(apiKey: string): Promise<User | null> {
+  async findByApiKey(apiKey: ApiKey): Promise<User | null> {
     const result = await this.db
       .select()
       .from(users)
-      .where(eq(users.apiKey, apiKey))
+      .where(eq(users.apiKey, apiKey.value))
       .limit(1);
 
-    return result[0] || null;
+    return result[0] ? this.mapToEntity(result[0]) : null;
   }
 
-  async revokeApiKey(userId: string): Promise<void> {
+  async revokeApiKey(userId: UserId): Promise<void> {
     const [updatedUser] = await this.db
       .update(users)
       .set({ apiKey: null })
-      .where(eq(users.id, userId))
+      .where(eq(users.id, userId.value))
       .returning();
 
     if (!updatedUser) {
-      throw new Error(`User with id ${userId} not found`);
+      throw new Error(`User with id ${userId.value} not found`);
     }
   }
 
   // Organization management
-  async switchOrganization(userId: string, organizationId: number): Promise<void> {
+  async switchOrganization(userId: UserId, organizationId: OrganizationId): Promise<void> {
     // Verify user is a member of the organization
     const membership = await this.db
       .select()
       .from(userOrganizations)
       .where(
         and(
-          eq(userOrganizations.userId, userId),
-          eq(userOrganizations.organizationId, organizationId)
+          eq(userOrganizations.userId, userId.value),
+          eq(userOrganizations.organizationId, organizationId.value)
         )
       )
       .limit(1);
 
     if (!membership.length) {
-      throw new Error(`User ${userId} is not a member of organization ${organizationId}`);
+      throw new Error(`User ${userId.value} is not a member of organization ${organizationId.value}`);
     }
 
     const [updatedUser] = await this.db
       .update(users)
-      .set({ currentOrganizationId: organizationId })
-      .where(eq(users.id, userId))
+      .set({ currentOrganizationId: organizationId.value })
+      .where(eq(users.id, userId.value))
       .returning();
 
     if (!updatedUser) {
-      throw new Error(`User with id ${userId} not found`);
+      throw new Error(`User with id ${userId.value} not found`);
     }
   }
 
-  async getUserOrganizations(userId: string): Promise<Organization[]> {
+  async getUserOrganizations(userId: UserId): Promise<Organization[]> {
     const result = await this.db
       .select({
         organization: organizations
       })
       .from(userOrganizations)
       .innerJoin(organizations, eq(userOrganizations.organizationId, organizations.id))
-      .where(eq(userOrganizations.userId, userId));
+      .where(eq(userOrganizations.userId, userId.value));
 
     return result.map(r => ({
       ...r.organization,
@@ -193,46 +210,46 @@ export class DrizzleUserRepository implements IUserRepository {
     return newRelationship;
   }
 
-  async removeUserFromOrganization(userId: string, organizationId: number): Promise<void> {
+  async removeUserFromOrganization(userId: UserId, organizationId: OrganizationId): Promise<void> {
     // First check if user-organization relationship exists
     const existingRole = await this.getUserOrganizationRole(userId, organizationId);
     if (!existingRole) {
-      throw new Error(`User ${userId} is not a member of organization ${organizationId}`);
+      throw new Error(`User ${userId.value} is not a member of organization ${organizationId.value}`);
     }
 
     await this.db
       .delete(userOrganizations)
       .where(
         and(
-          eq(userOrganizations.userId, userId),
-          eq(userOrganizations.organizationId, organizationId)
+          eq(userOrganizations.userId, userId.value),
+          eq(userOrganizations.organizationId, organizationId.value)
         )
       );
   }
 
-  async getUserOrganizationRole(userId: string, organizationId: number): Promise<string | null> {
+  async getUserOrganizationRole(userId: UserId, organizationId: OrganizationId): Promise<OrganizationRole | null> {
     const result = await this.db
       .select({ role: userOrganizations.role })
       .from(userOrganizations)
       .where(
         and(
-          eq(userOrganizations.userId, userId),
-          eq(userOrganizations.organizationId, organizationId)
+          eq(userOrganizations.userId, userId.value),
+          eq(userOrganizations.organizationId, organizationId.value)
         )
       )
       .limit(1);
 
-    return result[0]?.role || null;
+    return result[0]?.role ? OrganizationRole.fromString(result[0].role) : null;
   }
 
-  async updateUserOrganizationRole(userId: string, organizationId: number, role: string): Promise<UserOrganization> {
+  async updateUserOrganizationRole(userId: UserId, organizationId: OrganizationId, role: OrganizationRole): Promise<UserOrganization> {
     const [updatedRelationship] = await this.db
       .update(userOrganizations)
-      .set({ role })
+      .set({ role: role.value })
       .where(
         and(
-          eq(userOrganizations.userId, userId),
-          eq(userOrganizations.organizationId, organizationId)
+          eq(userOrganizations.userId, userId.value),
+          eq(userOrganizations.organizationId, organizationId.value)
         )
       )
       .returning();
@@ -246,9 +263,16 @@ export class DrizzleUserRepository implements IUserRepository {
 
   // Session management (NextAuth integration)
   async createSession(data: CreateSessionData): Promise<void> {
+    // Convert Value Objects to primitives for database
+    const sessionData = {
+      sessionToken: data.sessionToken,
+      userId: data.userId?.value || data.userId as string, // Handle both Value Object and string
+      expires: data.expires
+    };
+    
     await this.db
       .insert(sessions)
-      .values(data);
+      .values(sessionData);
   }
 
   async findSession(sessionToken: string): Promise<SessionData | null> {
@@ -273,23 +297,23 @@ export class DrizzleUserRepository implements IUserRepository {
       .where(eq(sessions.sessionToken, sessionToken));
   }
 
-  async deleteAllUserSessions(userId: string): Promise<void> {
+  async deleteAllUserSessions(userId: UserId): Promise<void> {
     await this.db
       .delete(sessions)
-      .where(eq(sessions.userId, userId));
+      .where(eq(sessions.userId, userId.value));
   }
 
   // User queries for admin operations
-  async findByOrganizationId(organizationId: number): Promise<User[]> {
+  async findByOrganizationId(organizationId: OrganizationId): Promise<User[]> {
     const result = await this.db
       .select({
         user: users
       })
       .from(userOrganizations)
       .innerJoin(users, eq(userOrganizations.userId, users.id))
-      .where(eq(userOrganizations.organizationId, organizationId));
+      .where(eq(userOrganizations.organizationId, organizationId.value));
 
-    return result.map(r => r.user);
+    return result.map(r => this.mapToEntity(r.user));
   }
 
   async findByRoleId(roleId: number): Promise<User[]> {
@@ -302,35 +326,35 @@ export class DrizzleUserRepository implements IUserRepository {
   }
 
   // Business logic operations
-  async verifyEmail(userId: string): Promise<User> {
+  async verifyEmail(userId: UserId): Promise<User> {
     const [verifiedUser] = await this.db
       .update(users)
       .set({ emailVerified: new Date() })
-      .where(eq(users.id, userId))
+      .where(eq(users.id, userId.value))
       .returning();
 
     if (!verifiedUser) {
-      throw new Error(`User with id ${userId} not found`);
+      throw new Error(`User with id ${userId.value} not found`);
     }
 
-    return verifiedUser;
+    return this.mapToEntity(verifiedUser);
   }
 
-  async updateLastLogin(userId: string): Promise<void> {
+  async updateLastLogin(userId: UserId): Promise<void> {
     // Note: If we add a lastLoginAt field to schema in the future, implement here
     // For now, this is a placeholder for business logic consistency
     
     // Could potentially update a separate user activity table or add timestamp
-    // await this.db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, userId));
+    // await this.db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, userId.value));
   }
 
-  async getUserWithOrganizations(userId: string): Promise<(User & { organizations: Organization[] }) | null> {
+  async getUserWithOrganizations(userId: UserId): Promise<(User & { organizations: Organization[] }) | null> {
     return await this.db.transaction(async (tx) => {
       // Get the user
       const userResult = await tx
         .select()
         .from(users)
-        .where(eq(users.id, userId))
+        .where(eq(users.id, userId.value))
         .limit(1);
 
       const user = userResult[0];
@@ -345,7 +369,7 @@ export class DrizzleUserRepository implements IUserRepository {
         })
         .from(userOrganizations)
         .innerJoin(organizations, eq(userOrganizations.organizationId, organizations.id))
-        .where(eq(userOrganizations.userId, userId));
+        .where(eq(userOrganizations.userId, userId.value));
 
       const userOrgs = orgsResult.map(r => ({
         ...r.organization,
@@ -353,9 +377,23 @@ export class DrizzleUserRepository implements IUserRepository {
       }));
 
       return {
-        ...user,
+        ...this.mapToEntity(user),
         organizations: userOrgs,
       };
     });
+  }
+
+  // AIDEV-NOTE: Boundary conversion - maps database primitives to domain Value Objects
+  private mapToEntity(data: any): User {
+    return {
+      id: data.id,
+      name: data.name,
+      email: data.email ? EmailAddress.fromString(data.email) : null,
+      emailVerified: data.emailVerified,
+      image: data.image,
+      currentOrganizationId: data.currentOrganizationId ? OrganizationId.fromNumber(data.currentOrganizationId) : null,
+      roleId: data.roleId,
+      apiKey: data.apiKey ? ApiKey.fromString(data.apiKey) : null
+    };
   }
 }

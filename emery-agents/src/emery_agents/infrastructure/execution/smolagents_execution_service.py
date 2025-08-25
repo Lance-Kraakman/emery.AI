@@ -17,6 +17,7 @@ from smolagents.models import InferenceClientModel
 from ...core.entities import TaskRequest, TaskProgress, CapabilityConfig
 from ...core.types import StepType, TaskStatus
 from ...execution.capability_router import CapabilityRouter
+from ...execution.capability_router_agent import CapabilityRouterAgent
 from ...execution.tool_loader import ToolLoader
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ class SmolAgentsExecutionService:
     def __init__(self):
         self.agent_cache: Dict[str, CodeAgent] = {}  # Cache by task_id for isolation
         self.capability_router = CapabilityRouter()
+        self.capability_router_agent = CapabilityRouterAgent()
         self.tool_loader = ToolLoader()
         logger.info("SmolAgentsExecutionService initialized")
     
@@ -58,7 +60,43 @@ class SmolAgentsExecutionService:
                 progress_percent=10.0
             )
             
-            # Route to capability
+            # Check if this should use CapabilityRouterAgent (capabilityName=null)
+            if request.capability_name is None and request.instruction_config:
+                # Use CapabilityRouterAgent for direct tool execution
+                yield TaskProgress(
+                    task_id=request.task_id,
+                    status=TaskStatus.TASK_IN_PROGRESS.name,
+                    step_id="direct_tool_execution",
+                    step_type="TOOL_EXECUTION",
+                    output_json=json.dumps({"message": "Using CapabilityRouterAgent for direct tool execution"}),
+                    error_message="",
+                    timestamp_ms=int(time.time() * 1000),
+                    progress_percent=30.0
+                )
+                
+                # Extract tool names from instruction config
+                tool_names = [tool.name for tool in request.instruction_config.tools] if request.instruction_config.tools else None
+                
+                # Execute directly via CapabilityRouterAgent
+                result = await self.capability_router_agent.execute_instructions(
+                    instructions=request.instruction_config.instructions,
+                    available_tools=tool_names
+                )
+                
+                yield TaskProgress(
+                    task_id=request.task_id,
+                    status=TaskStatus.TASK_COMPLETED.name,
+                    step_id="direct_tool_execution",
+                    step_type="TOOL_EXECUTION",
+                    output_json=json.dumps({"result": str(result)}),
+                    error_message="",
+                    timestamp_ms=int(time.time() * 1000),
+                    progress_percent=100.0
+                )
+                
+                return
+            
+            # Route to capability (existing logic)
             capability = self.capability_router.route_execution(request)
             
             yield TaskProgress(

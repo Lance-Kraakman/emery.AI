@@ -5,7 +5,8 @@ import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import type { Result, CreateTaskData } from "./types";
 import { getAgentTaskApplicationService, getAgentApplicationService } from "@/ddd/application/di/container";
-import type { CreateTaskRequest } from "@/ddd/application/use-cases/agents/agent-task-application-service";
+import type { CreateTaskRequest } from "@/ddd/application/services/agents/agent-task-application-service";
+import { AgentId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 export async function createTask(data: CreateTaskData): Promise<Result> {
   try {
@@ -22,7 +23,7 @@ export async function createTask(data: CreateTaskData): Promise<Result> {
 
     // Verify agent ownership
     const agentApplicationService = getAgentApplicationService();
-    const agent = await agentApplicationService.getAgent(agentId);
+    const agent = await agentApplicationService.getAgent(AgentId.fromNumber(agentId));
 
     if (!agent) {
       return {
@@ -46,7 +47,7 @@ export async function createTask(data: CreateTaskData): Promise<Result> {
       instructions,
       capabilityName,
       createdBy: createdBy || session.user.id,
-      organizationId: currentOrg.id
+      organizationId: currentOrg.id.value
     };
 
     const task = await taskApplicationService.createTask(createRequest);
@@ -94,7 +95,7 @@ export async function getTasks(agentId?: number, limit = 50): Promise<Result> {
     if (agentId) {
       domainTasks = await taskApplicationService.getTasksForAgent(agentId);
     } else {
-      domainTasks = await taskApplicationService.getRecentTasksForOrganization(currentOrg.id, limit);
+      domainTasks = await taskApplicationService.getRecentTasksForOrganization(currentOrg.id.value, limit);
     }
 
     // Convert domain entities to database schema types for frontend compatibility
@@ -326,17 +327,17 @@ export async function getTaskStats(agentId?: number): Promise<Result> {
     if (agentId) {
       domainTasks = await taskApplicationService.getTasksForAgent(agentId);
     } else {
-      domainTasks = await taskApplicationService.getTasksForOrganization(currentOrg.id);
+      domainTasks = await taskApplicationService.getTasksForOrganization(currentOrg.id.value);
     }
     
     const stats = {
       total: domainTasks.length,
-      pending: domainTasks.filter(t => t.status === 'pending').length,
-      in_progress: domainTasks.filter(t => t.status === 'in_progress').length,
-      completed: domainTasks.filter(t => t.status === 'completed').length,
-      failed: domainTasks.filter(t => t.status === 'failed').length,
-      cancelled: domainTasks.filter(t => t.status === 'cancelled').length,
-      timeout: domainTasks.filter(t => t.status === 'timeout').length,
+      pending: domainTasks.filter(t => t.status.value === 'pending').length,
+      in_progress: domainTasks.filter(t => t.status.value === 'in_progress').length,
+      completed: domainTasks.filter(t => t.status.value === 'completed').length,
+      failed: domainTasks.filter(t => t.status.value === 'failed').length,
+      cancelled: domainTasks.filter(t => t.status.value === 'cancelled').length,
+      timeout: domainTasks.filter(t => t.status.value === 'timeout').length,
     };
 
     return {

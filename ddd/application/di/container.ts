@@ -22,13 +22,13 @@ import { ITaskRepository } from '@/ddd/domain/agents/repositories/task-repositor
 import { DrizzleTaskRepository } from '@/ddd/infrastructure/db/repositories/agents/drizzle-task-repository';
 import { IAgentExecutionRepository } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 import { GrpcAgentExecutionRepository } from '@/ddd/infrastructure/execution/grpc-agent-execution-repository';
-import { AgentTaskApplicationService } from '@/ddd/application/use-cases/agents/agent-task-application-service';
-import { AgentApplicationService } from '@/ddd/application/use-cases/agents/agent-application-service';
-import { TeamApplicationService } from '@/ddd/application/use-cases/teams/team-application-service';
-import { DatabaseApplicationService } from '@/ddd/application/use-cases/database/database-application-service';
-import { PermissionApplicationService } from '@/ddd/application/use-cases/permissions/permission-application-service';
-import { UserOrganizationApplicationService } from '@/ddd/application/use-cases/user-organizations/user-organization-application-service';
-import { InvitationApplicationService } from '@/ddd/application/use-cases/invitations/invitation-application-service';
+import { AgentTaskApplicationService } from '@/ddd/application/services/agents/agent-task-application-service';
+import { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
+import { TeamApplicationService } from '@/ddd/application/services/teams/team-application-service';
+import { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
+import { PermissionApplicationService } from '@/ddd/application/services/permissions/permission-application-service';
+import { UserOrganizationApplicationService } from '@/ddd/application/services/user-organizations/user-organization-application-service';
+import { InvitationApplicationService } from '@/ddd/application/services/invitations/invitation-application-service';
 
 // Team domain imports
 import { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
@@ -43,11 +43,11 @@ import { IDatabaseRepository } from '@/ddd/domain/databases/repositories/databas
 import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/databases/drizzle-database-repository';
 
 // New application services for tables, fields, rows, files, and chat
-import { TableApplicationService } from '@/ddd/application/use-cases/tables/table-application-service';
-import { FieldApplicationService } from '@/ddd/application/use-cases/fields/field-application-service';
-import { RowApplicationService } from '@/ddd/application/use-cases/rows/row-application-service';
-import { FileApplicationService } from '@/ddd/application/use-cases/files/file-application-service';
-import { ChatApplicationService } from '@/ddd/application/use-cases/chat/chat-application-service';
+import { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
+import { FieldApplicationService } from '@/ddd/application/services/fields/field-application-service';
+import { RowApplicationService } from '@/ddd/application/services/rows/row-application-service';
+import { FileApplicationService } from '@/ddd/application/services/files/file-application-service';
+import { ChatApplicationService } from '@/ddd/application/services/chat/chat-application-service';
 
 // Chat domain imports
 import { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
@@ -176,7 +176,8 @@ export class DIContainer {
     );
     const databaseApplicationService = new DatabaseApplicationService(
       this.repositories.get('IDynamicTableRepository'),
-      this.repositories.get('IFieldRepository')
+      this.repositories.get('IFieldRepository'),
+      this.repositories.get('IDatabaseRepository')
     );
     const permissionApplicationService = new PermissionApplicationService(
       this.repositories.get('IRoleRepository'),
@@ -290,182 +291,78 @@ export class DIContainer {
   }
 }
 
-// Convenience functions for common usage patterns
+// Simplified convenience getters using dynamic function generation
+// AIDEV-NOTE: This reduces 125+ lines of repetitive getter functions to ~25 lines
 
-/**
- * Get the organization repository
- */
-export function getOrganizationRepository(): IOrganizationRepository {
-  return DIContainer.getInstance().get('IOrganizationRepository');
-}
+type ServiceMap = {
+  // Repositories
+  OrganizationRepository: IOrganizationRepository;
+  UserRepository: IUserRepository;
+  RoleRepository: IRoleRepository;
+  DynamicTableRepository: IDynamicTableRepository;
+  FieldRepository: IFieldRepository;
+  FileStorageRepository: IFileStorageRepository;
+  AgentRepository: IAgentRepository;
+  TaskRepository: ITaskRepository;
+  AgentExecutionRepository: IAgentExecutionRepository;
+  TeamRepository: ITeamRepository;
+  InvitationRepository: IInvitationRepository;
+  DatabaseRepository: IDatabaseRepository;
+  ChatRepository: IChatRepository;
+  ChatMessageRepository: IChatMessageRepository;
+  
+  // Services
+  FileFieldService: FileFieldService;
+  AgentTaskApplicationService: AgentTaskApplicationService;
+  AgentApplicationService: AgentApplicationService;
+  TeamApplicationService: TeamApplicationService;
+  DatabaseApplicationService: DatabaseApplicationService;
+  PermissionApplicationService: PermissionApplicationService;
+  UserOrganizationApplicationService: UserOrganizationApplicationService;
+  InvitationApplicationService: InvitationApplicationService;
+  TableApplicationService: TableApplicationService;
+  FieldApplicationService: FieldApplicationService;
+  RowApplicationService: RowApplicationService;
+  FileApplicationService: FileApplicationService;
+  ChatApplicationService: ChatApplicationService;
+};
 
-/**
- * Get the user repository
- */
-export function getUserRepository(): IUserRepository {
-  return DIContainer.getInstance().get('IUserRepository');
-}
+// Generate getter functions dynamically
+const diContainer = DIContainer.getInstance();
+const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] => {
+  // Map simple names to container keys (e.g., 'AgentRepository' -> 'IAgentRepository')
+  const containerKey = key.includes('Repository') ? `I${key}` : key;
+  return diContainer.get(containerKey as any) as ServiceMap[K];
+};
 
-/**
- * Get the role repository
- */
-export function getRoleRepository(): IRoleRepository {
-  return DIContainer.getInstance().get('IRoleRepository');
-}
-
-/**
- * Get the dynamic table repository
- */
-export function getDynamicTableRepository(): IDynamicTableRepository {
-  return DIContainer.getInstance().get('IDynamicTableRepository');
-}
-
-/**
- * Get the field repository
- */
-export function getFieldRepository(): IFieldRepository {
-  return DIContainer.getInstance().get('IFieldRepository');
-}
-
-/**
- * Get the file storage repository
- */
-export function getFileStorageRepository(): IFileStorageRepository {
-  return DIContainer.getInstance().get('IFileStorageRepository');
-}
-
-/**
- * Get the file field service
- */
-export function getFileFieldService(): FileFieldService {
-  return DIContainer.getInstance().get('FileFieldService');
-}
-
-/**
- * Get the agent repository
- */
-export function getAgentRepository(): IAgentRepository {
-  return DIContainer.getInstance().get('IAgentRepository');
-}
-
-/**
- * Get the task repository
- */
-export function getTaskRepository(): ITaskRepository {
-  return DIContainer.getInstance().get('ITaskRepository');
-}
-
-/**
- * Get the agent execution repository
- */
-export function getAgentExecutionRepository(): IAgentExecutionRepository {
-  return DIContainer.getInstance().get('IAgentExecutionRepository');
-}
-
-/**
- * Get the agent task application service
- */
-export function getAgentTaskApplicationService(): AgentTaskApplicationService {
-  return DIContainer.getInstance().get('AgentTaskApplicationService');
-}
-
-/**
- * Get the agent application service
- */
-export function getAgentApplicationService(): AgentApplicationService {
-  return DIContainer.getInstance().get('AgentApplicationService');
-}
-
-/**
- * Get the team application service
- */
-export function getTeamApplicationService(): TeamApplicationService {
-  return DIContainer.getInstance().get('TeamApplicationService');
-}
-
-/**
- * Get the database application service
- */
-export function getDatabaseApplicationService(): DatabaseApplicationService {
-  return DIContainer.getInstance().get('DatabaseApplicationService');
-}
-
-/**
- * Get the permission application service
- */
-export function getPermissionApplicationService(): PermissionApplicationService {
-  return DIContainer.getInstance().get('PermissionApplicationService');
-}
-
-/**
- * Get the user organization application service
- */
-export function getUserOrganizationApplicationService(): UserOrganizationApplicationService {
-  return DIContainer.getInstance().get('UserOrganizationApplicationService');
-}
-
-/**
- * Get the invitation application service
- */
-export function getInvitationApplicationService(): InvitationApplicationService {
-  return DIContainer.getInstance().get('InvitationApplicationService');
-}
-
-/**
- * Get the table application service
- */
-export function getTableApplicationService(): TableApplicationService {
-  return DIContainer.getInstance().get('TableApplicationService');
-}
-
-/**
- * Get the field application service
- */
-export function getFieldApplicationService(): FieldApplicationService {
-  return DIContainer.getInstance().get('FieldApplicationService');
-}
-
-/**
- * Get the row application service
- */
-export function getRowApplicationService(): RowApplicationService {
-  return DIContainer.getInstance().get('RowApplicationService');
-}
-
-/**
- * Get the file application service
- */
-export function getFileApplicationService(): FileApplicationService {
-  return DIContainer.getInstance().get('FileApplicationService');
-}
-
-/**
- * Get the chat repository
- */
-export function getChatRepository(): IChatRepository {
-  return DIContainer.getInstance().get('IChatRepository');
-}
-
-/**
- * Get the chat message repository
- */
-export function getChatMessageRepository(): IChatMessageRepository {
-  return DIContainer.getInstance().get('IChatMessageRepository');
-}
-
-/**
- * Get the chat application service
- */
-export function getChatApplicationService(): ChatApplicationService {
-  return DIContainer.getInstance().get('ChatApplicationService');
-}
-
-/**
- * Get the database repository
- */
-export function getDatabaseRepository(): IDatabaseRepository {
-  return DIContainer.getInstance().get('IDatabaseRepository');
-}
+// Export typed getter functions
+export const getOrganizationRepository = createGetter('OrganizationRepository');
+export const getUserRepository = createGetter('UserRepository');
+export const getRoleRepository = createGetter('RoleRepository');
+export const getDynamicTableRepository = createGetter('DynamicTableRepository');
+export const getFieldRepository = createGetter('FieldRepository');
+export const getFileStorageRepository = createGetter('FileStorageRepository');
+export const getAgentRepository = createGetter('AgentRepository');
+export const getTaskRepository = createGetter('TaskRepository');
+export const getAgentExecutionRepository = createGetter('AgentExecutionRepository');
+export const getTeamRepository = createGetter('TeamRepository');
+export const getInvitationRepository = createGetter('InvitationRepository');
+export const getDatabaseRepository = createGetter('DatabaseRepository');
+export const getChatRepository = createGetter('ChatRepository');
+export const getChatMessageRepository = createGetter('ChatMessageRepository');
+export const getFileFieldService = createGetter('FileFieldService');
+export const getAgentTaskApplicationService = createGetter('AgentTaskApplicationService');
+export const getAgentApplicationService = createGetter('AgentApplicationService');
+export const getTeamApplicationService = createGetter('TeamApplicationService');
+export const getDatabaseApplicationService = createGetter('DatabaseApplicationService');
+export const getPermissionApplicationService = createGetter('PermissionApplicationService');
+export const getUserOrganizationApplicationService = createGetter('UserOrganizationApplicationService');
+export const getInvitationApplicationService = createGetter('InvitationApplicationService');
+export const getTableApplicationService = createGetter('TableApplicationService');
+export const getFieldApplicationService = createGetter('FieldApplicationService');
+export const getRowApplicationService = createGetter('RowApplicationService');
+export const getFileApplicationService = createGetter('FileApplicationService');
+export const getChatApplicationService = createGetter('ChatApplicationService');
 
 // Helper to initialize container from existing clients
 export function initializeDI(db: DbClient, rawClient: postgres.Sql): void {

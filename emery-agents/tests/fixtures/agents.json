@@ -95,5 +95,200 @@
         ]
       }
     ]
+  },
+  {
+    "id": 4,
+    "name": "Organizational Intelligence Analyst", 
+    "role": "business_analyst",
+    "description": "Analyzes any company website to create detailed organizational intelligence reports. Adapts analysis approach based on discovered industry and business model characteristics.",
+    "persona": "Strategic business analyst with expertise in cross-industry organizational analysis. Skilled at identifying patterns and adapting methodologies to any business type or industry.",
+    "tools": [
+      {"name": "analysis_api", "version": "1.0"},
+      {"name": "kpi_api", "version": "1.0"}
+    ],
+    "capabilities": [
+      {
+        "name": "adaptive_website_analysis",
+        "description": "Analyze any company website and automatically adapt analysis depth based on discovered business characteristics",
+        "steps": [
+          {
+            "id": "discover_and_analyze", 
+            "type": "TOOL_STEP",
+            "instructions": "Use analysis_api with action 'analyze_website' to analyze the provided website URL. The tool will automatically identify the industry and business model, then provide appropriate analysis depth. Extract all available data: business_model, industry, company_size_estimate, primary_services, target_audience, organizational_complexity, inferred_processes, suggested_measurements with confidence scoring.",
+            "tools": [{"name": "analysis_api"}]
+          },
+          {
+            "id": "create_structured_intelligence_report",
+            "type": "CODE_STEP", 
+            "instructions": "Transform the analysis into a structured organizational intelligence report. Use this adaptable format: {'website_analysis': {discovered_characteristics}, 'business_classification': {industry_specific_insights}, 'key_insights': {tailored_processes_and_measurements}, 'confidence_assessment': {analysis_reliability}, 'implementation_recommendations': {next_steps_based_on_company_type}}. Adapt the depth and focus areas based on the discovered industry and business model.",
+            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+          }
+        ]
+      },
+      {
+        "name": "dynamic_industry_benchmarking", 
+        "description": "Create industry benchmark analysis for any discovered industry type with appropriate depth and focus",
+        "steps": [
+          {
+            "id": "get_industry_specific_benchmarks",
+            "type": "TOOL_STEP",
+            "instructions": "Use analysis_api with action 'analyze_industry_benchmarks' to get comprehensive benchmarks. Pass the discovered industry information from previous analysis. The tool will adapt to provide relevant benchmarks for any industry type: industry_trends, typical_processes, key_performance_indicators, common_challenges, improvement_opportunities, benchmark_metrics, competitive_factors, regulatory_considerations, technology_trends.",
+            "tools": [{"name": "analysis_api"}]
+          },
+          {
+            "id": "create_adaptive_benchmark_report",
+            "type": "CODE_STEP",
+            "instructions": "Create an industry-adaptive benchmark report. Structure: {'industry_overview': {context_specific_trends}, 'performance_benchmarks': {relevant_metrics_for_this_industry}, 'process_standards': {industry_appropriate_workflows}, 'implementation_guidance': {tailored_priorities_and_timeline}}. Adjust the focus and depth based on the specific industry characteristics and company maturity level discovered in the analysis.",
+            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 5,
+    "name": "Adaptive Measurement Framework Architect",
+    "role": "measurement_specialist",
+    "description": "Designs measurement frameworks for any type of organization by analyzing their specific context and automatically adapting the approach. Creates frameworks that map to OrganizationAnalysisCapabilities structure regardless of industry.",
+    "persona": "Expert measurement specialist with cross-industry experience. Skilled at identifying universal measurement patterns while adapting to specific business contexts, regulatory requirements, and operational characteristics.",
+    "tools": [
+      {"name": "kpi_api", "version": "1.0"},
+      {"name": "measurement_api", "version": "1.0"}
+    ],
+    "capabilities": [
+      {
+        "name": "context_adaptive_framework_design",
+        "description": "Analyze organizational context and create tailored measurement framework that adapts to any business type",
+        "steps": [
+          {
+            "id": "design_contextual_kpi_framework",
+            "type": "TOOL_STEP",
+            "instructions": "Use kpi_api with action 'design_kpi_framework' to create a context-appropriate KPI framework. Pass the organizational context (industry, company_size, business_model) provided in the task. The tool will automatically adapt to provide relevant KPIs for any business type. Focus on getting 5-8 high-impact KPIs with complete definitions including name, category, thresholds{excellent, good, warning, critical}, calculationFrequency, dependentMeasurements[], and priority level suitable for the specific organizational context.",
+            "tools": [{"name": "kpi_api"}]
+          },
+          {
+            "id": "structure_universal_framework",
+            "type": "CODE_STEP",
+            "instructions": "Transform the context-specific KPI framework into the standard OrganizationAnalysisCapabilities.measurementFramework format. Create structured output: {'measurementFramework': {'measurements': [], 'kpiDefinitions': [], 'reportingSchedule': {}, 'defaultValidationRules': []}}. Ensure each KPI includes all required fields: id, name, description, formula, dependentMeasurements[], calculationAgent (AgentId), calculationFrequency, targetValue, thresholds{excellent, good, warning, critical}. Adapt the validation rules and reporting schedule to match the organizational context and industry requirements.",
+            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+          }
+        ]
+      },
+      {
+        "name": "universal_measurement_creation",
+        "description": "Create measurement definitions that work for any business context with appropriate data sources",
+        "steps": [
+          {
+            "id": "generate_contextual_measurements", 
+            "type": "TOOL_STEP",
+            "instructions": "Use measurement_api with action 'suggest_measurements_for_industry' to create measurement definitions appropriate for the organizational context. Pass the industry_type and processes[] from the task context. The tool will adapt to suggest relevant measurements for any business type, each containing: id, name, description, category (MeasurementCategory), measurementType ('raw_data'|'calculated_kpi'|'aggregated_metric'), dataSource{type, location, queryInstructions}, frequency (CalculationFrequency), assignedAgents[], validationRules[], alertThresholds{warning, critical}.",
+            "tools": [{"name": "measurement_api"}]
+          },
+          {
+            "id": "create_integrated_measurement_system",
+            "type": "CODE_STEP",
+            "instructions": "Create a comprehensive measurement system that integrates measurements with KPIs for any organizational context. Output format: {'measurementDefinitions': [], 'kpi_measurement_mapping': {}, 'data_collection_schedule': {}, 'validation_framework': {}}. Ensure measurements have appropriate dataSource configurations for the specific business type, establish proper KPI calculation chains, and create validation rules that match industry standards or general business practices. Adapt the system architecture to organizational size and complexity.",
+            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 6,
+    "name": "Process Architecture Specialist", 
+    "role": "process_analyst",
+    "description": "Creates detailed business process definitions with monitoring points and improvement recommendations that map to OrganizationAnalysisCapabilities.processDefinitions structure",
+    "persona": "Expert process analyst who designs comprehensive process architectures with detailed steps, monitoring points, and automation opportunities",
+    "tools": [
+      {"name": "analysis_api", "version": "1.0"}
+    ],
+    "capabilities": [
+      {
+        "name": "comprehensive_process_estimation",
+        "description": "Estimate detailed business processes matching OrganizationAnalysisCapabilities.processDefinitions structure",
+        "steps": [
+          {
+            "id": "estimate_detailed_processes",
+            "type": "TOOL_STEP", 
+            "instructions": "Use analysis_api with action 'estimate_processes' to create comprehensive process definitions. Required input: industry_data{industry, company_size, business_model}. Expected output: estimated_processes[] with each containing: id, name, description, category, priority, estimated_complexity, steps[], monitoring_requirements[], automation_opportunities[], related_measurements[]. Focus on 3-5 core business processes with detailed step breakdown including estimatedDuration, requiredInputs[], expectedOutputs[], qualityChecks[].",
+            "tools": [{"name": "analysis_api"}]
+          },
+          {
+            "id": "create_process_definitions",
+            "type": "CODE_STEP",
+            "instructions": "Transform estimated processes into OrganizationAnalysisCapabilities.processDefinitions format. Create structured output: {'processDefinitions': [], 'monitoringPoints': [], 'improvementOpportunities': []}. Each ProcessDefinition must include: id, name, description, processSteps[], monitoringPoints[], assignedTeams[], monitoringAgents[], improvementTriggers[], relatedMeasurements[]. Each ProcessStep needs: id, name, description, estimatedDuration (minutes), requiredInputs[], expectedOutputs[], qualityChecks[], order. Create MonitoringPoint entries: id, stepId, metricName, collectionInstruction, alertThreshold, frequency.",
+            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+          }
+        ]
+      },
+      {
+        "name": "process_improvement_analysis",
+        "description": "Analyze existing processes and create detailed improvement recommendations",
+        "steps": [
+          {
+            "id": "analyze_process_improvements",
+            "type": "TOOL_STEP",
+            "instructions": "Use analysis_api with action 'recommend_improvement_areas' to analyze process performance. Required input: process_data{processes[], performance_metrics{}}. Expected output: recommendations[] with each containing: process_name, improvement_type ('automation'|'optimization'|'quality'), title, description, priority ('high'|'medium'|'low'), estimated_impact, estimated_effort, success_metrics[], implementation_steps[]. Focus on actionable improvements with ROI estimates and implementation timelines.",
+            "tools": [{"name": "analysis_api"}]
+          },
+          {
+            "id": "create_improvement_roadmap",
+            "type": "CODE_STEP", 
+            "instructions": "Create detailed improvement roadmap matching OrganizationAnalysisCapabilities.improvementTracking format. Output structure: {'improvementAreas': [], 'implementation_roadmap': {}, 'success_metrics': {}}. Each ImprovementArea needs: id, name, description, priority, identifiedDate, status, assignedTeams[], estimatedImpact, resourcesRequired[], targetCompletion. Sort by priority and impact. Include implementation phases and success criteria.",
+            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 7,
+    "name": "Analysis Coordination Scheduler",
+    "role": "scheduler_coordinator",
+    "description": "Creates comprehensive analysis schedules and coordination systems that map to OrganizationAnalysisCapabilities.analysisSchedule structure",
+    "persona": "Expert coordination specialist who designs efficient analysis workflows, reporting schedules, and automation systems with detailed implementation plans",
+    "tools": [
+      {"name": "analysis_api", "version": "1.0"},
+      {"name": "kpi_api", "version": "1.0"}
+    ],
+    "capabilities": [
+      {
+        "name": "comprehensive_schedule_optimization",
+        "description": "Create detailed analysis schedules matching OrganizationAnalysisCapabilities.analysisSchedule structure",
+        "steps": [
+          {
+            "id": "optimize_reporting_schedule",
+            "type": "TOOL_STEP",
+            "instructions": "Use analysis_api with action 'optimize_reporting_schedule' to create comprehensive schedules. Required input: analysis_context{measurements[], stakeholders[], organization_size}. Expected output: optimized_schedule{daily_reports{time, recipients[], content[], format, delivery}, weekly_reports{day, time, recipients[], content[], format, delivery}, monthly_reports{day, time, recipients[], content[], format, delivery}}, optimization_notes[], estimated_time_savings. Focus on balancing stakeholder needs with operational efficiency.",
+            "tools": [{"name": "analysis_api"}]
+          },
+          {
+            "id": "create_analysis_schedule_config",
+            "type": "CODE_STEP",
+            "instructions": "Transform optimized schedule into OrganizationAnalysisCapabilities.analysisSchedule format. Create structured output: {'analysisSchedule': {'timezone': 'UTC', 'dailyCollectionTime': '09:00', 'weeklyReportDay': 'monday', 'monthlyReportDay': 1, 'quarterlyReportMonth': 1, 'reporting': {'frequency': 'daily'|'weekly'|'monthly', 'recipients': [], 'format': 'dashboard'|'email'|'pdf', 'includeRecommendations': true}}}. Include detailed scheduling rationale and efficiency metrics.",
+            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+          }
+        ]
+      },
+      {
+        "name": "trend_analysis_and_insights",
+        "description": "Analyze performance trends and setup continuous monitoring systems", 
+        "steps": [
+          {
+            "id": "analyze_kpi_trends",
+            "type": "TOOL_STEP",
+            "instructions": "Use kpi_api with action 'analyze_kpi_trends' to assess performance patterns. Required input: organization_id, filters{}. Expected output: trends[]{kpi_id, kpi_name, direction ('improving'|'declining'|'stable'), change_value, change_percentage, current_status, calculations_analyzed}, insights[], analysis_summary{total_kpis_analyzed, improving, declining, stable}. Focus on actionable insights and performance patterns.",
+            "tools": [{"name": "kpi_api"}]
+          },
+          {
+            "id": "create_monitoring_framework",
+            "type": "CODE_STEP",
+            "instructions": "Create comprehensive monitoring and alerting framework. Output structure: {'continuous_monitoring': {'trend_detection': {}, 'anomaly_alerts': {}, 'performance_insights': {}}, 'automation_recommendations': [], 'stakeholder_notifications': {}}. Include specific alert thresholds, escalation procedures, and automated insight generation. Map to improvement tracking systems for closed-loop optimization.",
+            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+          }
+        ]
+      }
+    ]
   }
 ]

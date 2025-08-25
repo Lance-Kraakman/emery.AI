@@ -13,17 +13,18 @@ import { tasks } from '@/lib/db/schema';
 import { eq, desc, asc, inArray, and } from 'drizzle-orm';
 import type { ITaskRepository } from '@/ddd/domain/agents/repositories/task-repository';
 import { Task } from '@/ddd/domain/agents/entities/task';
+import { TaskId, AgentId, OrganizationId, UserId, TaskStatus } from '@/ddd/domain/shared/value-objects';
 
 export class DrizzleTaskRepository implements ITaskRepository {
   
   /**
    * Find task by ID
    */
-  async findById(id: string): Promise<Task | null> {
+  async findById(id: TaskId): Promise<Task | null> {
     const [taskRecord] = await db
       .select()
       .from(tasks)
-      .where(eq(tasks.id, id))
+      .where(eq(tasks.id, id.value))
       .limit(1);
     
     return taskRecord ? this.mapToEntity(taskRecord) : null;
@@ -32,11 +33,11 @@ export class DrizzleTaskRepository implements ITaskRepository {
   /**
    * Find tasks by agent ID
    */
-  async findByAgentId(agentId: number): Promise<Task[]> {
+  async findByAgentId(agentId: AgentId): Promise<Task[]> {
     const taskRecords = await db
       .select()
       .from(tasks)
-      .where(eq(tasks.agentId, agentId))
+      .where(eq(tasks.agentId, agentId.value))
       .orderBy(desc(tasks.createdAt));
     
     return taskRecords.map(record => this.mapToEntity(record));
@@ -45,11 +46,11 @@ export class DrizzleTaskRepository implements ITaskRepository {
   /**
    * Find tasks by organization ID
    */
-  async findByOrganizationId(organizationId: number): Promise<Task[]> {
+  async findByOrganizationId(organizationId: OrganizationId): Promise<Task[]> {
     const taskRecords = await db
       .select()
       .from(tasks)
-      .where(eq(tasks.organizationId, organizationId))
+      .where(eq(tasks.organizationId, organizationId.value))
       .orderBy(desc(tasks.createdAt));
     
     return taskRecords.map(record => this.mapToEntity(record));
@@ -85,11 +86,11 @@ export class DrizzleTaskRepository implements ITaskRepository {
   /**
    * Find tasks by status
    */
-  async findByStatus(status: string, organizationId?: number): Promise<Task[]> {
+  async findByStatus(status: string, organizationId?: OrganizationId): Promise<Task[]> {
     const whereConditions = [eq(tasks.status, status)];
     
     if (organizationId) {
-      whereConditions.push(eq(tasks.organizationId, organizationId));
+      whereConditions.push(eq(tasks.organizationId, organizationId.value));
     }
     
     const taskRecords = await db
@@ -120,7 +121,7 @@ export class DrizzleTaskRepository implements ITaskRepository {
     const [existingTask] = await db
       .select({ id: tasks.id })
       .from(tasks)
-      .where(eq(tasks.id, task.id))
+      .where(eq(tasks.id, task.id.value))
       .limit(1);
     
     if (existingTask) {
@@ -137,7 +138,7 @@ export class DrizzleTaskRepository implements ITaskRepository {
           startedAt: taskData.startedAt,
           completedAt: taskData.completedAt,
         })
-        .where(eq(tasks.id, task.id));
+        .where(eq(tasks.id, task.id.value));
     } else {
       // Insert new task
       await db.insert(tasks).values(taskData);
@@ -147,22 +148,22 @@ export class DrizzleTaskRepository implements ITaskRepository {
   /**
    * Delete task
    */
-  async delete(id: string): Promise<void> {
+  async delete(id: TaskId): Promise<void> {
     await db
       .delete(tasks)
-      .where(eq(tasks.id, id));
+      .where(eq(tasks.id, id.value));
   }
 
   /**
    * Count tasks by status for organization
    */
-  async countByStatus(status: string, organizationId: number): Promise<number> {
+  async countByStatus(status: string, organizationId: OrganizationId): Promise<number> {
     const [result] = await db
       .select({ count: db.$count(tasks) })
       .from(tasks)
       .where(and(
         eq(tasks.status, status),
-        eq(tasks.organizationId, organizationId)
+        eq(tasks.organizationId, organizationId.value)
       ));
     
     return result?.count || 0;
@@ -171,11 +172,11 @@ export class DrizzleTaskRepository implements ITaskRepository {
   /**
    * Find recent tasks for organization (for dashboard)
    */
-  async findRecentByOrganization(organizationId: number, limit: number = 20): Promise<Task[]> {
+  async findRecentByOrganization(organizationId: OrganizationId, limit: number = 20): Promise<Task[]> {
     const taskRecords = await db
       .select()
       .from(tasks)
-      .where(eq(tasks.organizationId, organizationId))
+      .where(eq(tasks.organizationId, organizationId.value))
       .orderBy(desc(tasks.createdAt))
       .limit(limit);
     
@@ -204,22 +205,23 @@ export class DrizzleTaskRepository implements ITaskRepository {
   }
 
   /**
-   * Map domain entity to database record
+   * Map domain entity to database record (Value Objects to primitives)
+   * AIDEV-NOTE: Boundary conversion - converts Value Objects to database primitives
    */
   private mapToDatabase(task: Task) {
     const mapped = {
-      id: task.id,
-      agentId: task.agentId,
-      organizationId: task.organizationId,
+      id: task.id.value,
+      agentId: task.agentId.value,
+      organizationId: task.organizationId.value,
       name: task.name,
       capabilityName: task.capabilityName,
       instructions: task.instructions, // Will be stored as JSONB
-      status: task.status,
+      status: task.status.value,
       result: task.result,
       error: task.error,
       startedAt: task.startedAt,
       completedAt: task.completedAt,
-      createdBy: task.createdBy,
+      createdBy: task.createdBy?.value || null,
       createdAt: task.createdAt,
     };
     

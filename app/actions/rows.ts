@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { getRowApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateRowData, UpdateRowData } from "./types";
-import type { CreateRowCommand, UpdateRowCommand } from "@/ddd/application/use-cases/rows/row-application-service";
+import type { CreateRowCommand, UpdateRowCommand } from "@/ddd/application/services/rows/row-application-service";
 
 
 export async function createRow(data: CreateRowData, revalidateUrl?: string): Promise<Result> {

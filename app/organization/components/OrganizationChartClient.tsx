@@ -92,9 +92,10 @@ export default function OrganizationChartClient() {
       // Filter tasks for this team (safely handle missing agentIds)
       const teamTasks = (team.agentIds && team.agentIds.length > 0) 
         ? tasks.filter(task => 
-            team.agentIds!.some(agentId => 
-              agents.some(agent => agent.id.toString() === agentId && agent.id === task.agentId)
-            )
+            (team.agentIds as any[])!.some(agentId => {
+              const agentIdValue = agentId?.value || agentId;
+              return agents.some(agent => agent.id === agentIdValue && agent.id === task.agentId?.value);
+            })
           )
         : [];
 
@@ -119,7 +120,7 @@ export default function OrganizationChartClient() {
         const agentX = teamX + (agentIndex % 2) * 200 - 50;
         const agentY = teamY + 150 + Math.floor(agentIndex / 2) * 120;
 
-        const agentTasks = tasks.filter(task => task.agentId === agent.id);
+        const agentTasks = tasks.filter(task => task.agentId?.value === agent.id);
 
         newNodes.push({
           id: `agent-${agent.id}`,
@@ -152,7 +153,7 @@ export default function OrganizationChartClient() {
     );
 
     unassignedAgents.forEach((agent, index) => {
-      const agentTasks = tasks.filter(task => task.agentId === agent.id);
+      const agentTasks = tasks.filter(task => task.agentId?.value === agent.id);
 
       newNodes.push({
         id: `agent-${agent.id}`,
@@ -301,14 +302,14 @@ export default function OrganizationChartClient() {
     return tasks.filter(task => {
       // Check if task belongs to any selected agent
       const directAgentMatch = selectedNodeIds.some(nodeId => 
-        nodeId?.type === 'agent' && nodeId.id === task.agentId
+        nodeId?.type === 'agent' && nodeId.id === task.agentId?.value
       );
 
       // Check if task belongs to agent in selected team
       const teamAgentMatch = selectedNodeIds.some(nodeId => {
         if (nodeId?.type === 'team') {
           const team = teams.find(t => t.id === nodeId.id);
-          const taskAgent = agents.find(a => a.id === task.agentId);
+          const taskAgent = agents.find(a => a.id === task.agentId?.value);
           return team && taskAgent && team.agentIds?.includes(taskAgent.id.toString());
         }
         return false;

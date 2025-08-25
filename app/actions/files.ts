@@ -6,7 +6,7 @@
 import { auth, hasPermission } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { getFileApplicationService } from "@/ddd/application/di/container";
-import type { UploadFileCommand, DeleteFileCommand } from "@/ddd/application/use-cases/files/file-application-service";
+import type { UploadFileCommand, DeleteFileCommand } from "@/ddd/application/services/files/file-application-service";
 import type { Result } from "./types";
 
 export async function uploadFileAction(formData: FormData): Promise<Result> {

@@ -7,13 +7,13 @@ import "@/ddd/application/di/setup"
 import { searchApplicationService, indexingApplicationService, indexRepository } from '@/ddd/application/di/rag-container'
 import { getAIModel, getAIProviderInfo } from '@/lib/ai/models'
 import { getChatApplicationService, getDynamicTableRepository, getAgentRepository } from '@/ddd/application/di/container'
-import type { SearchRagQuery } from '@/ddd/application/rag/queries/search-query'
-import type { CreateIndexCommand } from '@/ddd/application/rag/commands/create-index-command'
+import type { SearchRagQuery } from '@/ddd/application/services/rag/queries/search-query'
+import type { CreateIndexCommand } from '@/ddd/application/services/rag/commands/create-index-command'
 import { RagIndexId, OrganizationId } from '@/ddd/domain/rag/value-objects'
-import type { CreateChatCommand, SendMessageCommand } from '@/ddd/application/use-cases/chat/chat-application-service'
+import type { CreateChatCommand, SendMessageCommand } from '@/ddd/application/services/chat/chat-application-service'
 import { ChatMessageEntity } from '@/ddd/domain/chat/entities/chat-message'
-import { DualContextRagService } from '@/ddd/application/use-cases/chat/dual-context-rag-service'
-import type { DomainContextOptions } from '@/ddd/application/use-cases/chat/dual-context-rag-service'
+import { DualContextRagService } from '@/ddd/application/services/chat/dual-context-rag-service'
+import type { DomainContextOptions } from '@/ddd/application/services/chat/dual-context-rag-service'
 
 export async function POST(req: NextRequest) {
   try {

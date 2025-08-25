@@ -96,4 +96,4 @@ markers = [
 ]
 
 [project.scripts]
-emery-worker = "emery_agents.grpc.main:main"
+emery-worker = "emery_agents.infrastructure.grpc.main:main"

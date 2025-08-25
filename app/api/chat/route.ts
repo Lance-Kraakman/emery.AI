@@ -2,7 +2,7 @@ import { streamText } from 'ai'
 import { auth } from '@/lib/auth'
 import { searchApplicationService } from '@/ddd/application/di/rag-container'
 import { getAIModel } from '@/lib/ai/models'
-import type { SearchRagQuery } from '@/ddd/application/rag/queries/search-query'
+import type { SearchRagQuery } from '@/ddd/application/services/rag/queries/search-query'
 
 export async function POST(req: Request) {
   try {

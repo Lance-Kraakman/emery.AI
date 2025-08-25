@@ -6,7 +6,7 @@ No complex abstractions - just direct mapping functions.
 """
 
 from typing import List, Dict, Any
-from emery_agents.infrastructure.grpc.generated import agent_worker_pb2
+from ...grpc.generated import agent_worker_pb2
 from ...core.entities import (
     TaskRequest, TaskProgress, WorkerInfo, CancelTaskRequest, CancelTaskResponse,
     AgentConfig, CapabilityConfig, StepConfig, ToolConfig, ServerConfig,

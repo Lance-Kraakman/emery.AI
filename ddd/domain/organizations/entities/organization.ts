@@ -1,6 +1,19 @@
+// AIDEV-NOTE: Updated Organization entity to use DDD Value Objects for type safety
+import { 
+  OrganizationId, 
+  UserId, 
+  AgentId, 
+  TeamId,
+  OrganizationName,
+  OrganizationRole,
+  EmailAddress,
+  MeasurementCategory,
+  CalculationFrequency
+} from '@/ddd/domain/shared/value-objects';
+
 export interface Organization {
-  id: number;
-  name: string;
+  id: OrganizationId;
+  name: OrganizationName;
   mission?: string | null;
   sharedTools?: string[] | null;
   sharedServers?: string[] | null;
@@ -16,7 +29,7 @@ export interface Organization {
 }
 
 export interface CreateOrganizationData {
-  name: string;
+  name: OrganizationName;
   mission?: string;
   sharedTools?: string[];
   sharedServers?: string[];
@@ -32,11 +45,12 @@ export interface OrganizationWithMembers extends Organization {
   members?: OrganizationMember[];
 }
 
+// im not sure if this makes sense, should just be Agent?
 export interface OrganizationMember {
-  userId: string;
+  userId: UserId;
   name?: string | null;
-  email?: string | null;
-  role: string; // owner, admin, member
+  email?: EmailAddress | null;
+  role: OrganizationRole; // owner, admin, member
   joinedAt?: Date | null;
 }
 
@@ -61,7 +75,7 @@ export interface MeasurementDefinition {
   id: string;
   name: string;
   description: string;
-  category: 'efficiency' | 'quality' | 'satisfaction' | 'financial' | 'performance';
+  category: MeasurementCategory;
   measurementType: 'raw_data' | 'calculated_kpi' | 'aggregated_metric';
   tableId?: number; // Reference to measurement storage table
   dataSource: {
@@ -69,9 +83,9 @@ export interface MeasurementDefinition {
     location: string; // source table, API endpoint, calculation formula
     queryInstructions: string;
   };
-  frequency: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'quarterly';
-  assignedAgents: number[]; // Collector agents
-  calculationAgents?: number[]; // KPI calculation agents
+  frequency: CalculationFrequency;
+  assignedAgents: AgentId[]; // Collector agents with type safety
+  calculationAgents?: AgentId[]; // KPI calculation agents with type safety
   targetValue?: number;
   validationRules: string[];
   alertThresholds?: {
@@ -86,8 +100,8 @@ export interface KPIDefinition {
   description: string;
   formula: string; // Natural language or formula
   dependentMeasurements: string[]; // measurement IDs needed
-  calculationAgent: number; // Agent responsible for calculation
-  calculationFrequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
+  calculationAgent: AgentId; // Agent responsible for calculation with type safety
+  calculationFrequency: CalculationFrequency;
   targetValue?: number;
   thresholds: {
     excellent: number;
@@ -103,8 +117,8 @@ export interface ProcessDefinition {
   description: string;
   processSteps: ProcessStep[];
   monitoringPoints: MonitoringPoint[];
-  assignedTeams: number[];
-  monitoringAgents: number[];
+  assignedTeams: TeamId[];
+  monitoringAgents: AgentId[];
   improvementTriggers: string[];
   relatedMeasurements: string[]; // measurement IDs this process affects
 }
@@ -151,13 +165,8 @@ export interface ImprovementArea {
   priority: 'critical' | 'high' | 'medium' | 'low';
   identifiedDate: string;
   status: 'identified' | 'planning' | 'in-progress' | 'completed';
-  assignedTeams: number[];
+  assignedTeams: TeamId[];
   estimatedImpact: 'high' | 'medium' | 'low';
   resourcesRequired: string[];
   targetCompletion: string;
-}
-
-// Extended organization interface with analysis capabilities
-export interface OrganizationWithAnalysis extends Organization {
-  analysisCapabilities: OrganizationAnalysisCapabilities;
 }

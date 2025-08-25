@@ -3,6 +3,7 @@
 import { getOrganizationRepository } from "@/ddd/application/di/container";
 // import { getOrganizationRepository } from "@/lib/application/di/container";
 import { revalidatePath } from "next/cache";
+import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 
 // Import the DI setup to ensure container is initialized
 import "@/ddd/application/di/setup";
@@ -11,7 +12,7 @@ export async function updateOrganizationViewConfig(organizationId: number, viewC
   try {
     const orgRepo = getOrganizationRepository();
     
-    await orgRepo.update(organizationId, { viewConfig });
+    await orgRepo.update(OrganizationId.fromNumber(organizationId), { viewConfig });
 
     revalidatePath(`/organization`);
     

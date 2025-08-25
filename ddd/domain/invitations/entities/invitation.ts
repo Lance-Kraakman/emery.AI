@@ -1,28 +1,36 @@
 // AIDEV-NOTE: Invitation domain entities - manages user invitation workflow
 // Supports token-based invitations with expiration and role assignment
 
+import { 
+  OrganizationId, 
+  UserId, 
+  EmailAddress, 
+  InvitationToken, 
+  OrganizationRole 
+} from '@/ddd/domain/shared/value-objects';
+
 export interface Invitation {
   id: number;
-  organizationId: number;
-  invitedBy: string;                       // UUID reference to users.id
-  email: string;
-  role: string;                            // owner, admin, member
-  token: string;                           // Unique invitation token
+  organizationId: OrganizationId;
+  invitedBy: UserId;                       // UUID reference to users.id
+  email: EmailAddress;
+  role: OrganizationRole;                  // owner, admin, member
+  token: InvitationToken;                  // Unique invitation token
   expiresAt: Date;
   createdAt?: Date | null;
 }
 
 export interface CreateInvitationData {
-  organizationId: number;
-  invitedBy: string;
-  email: string;
-  role?: string;                           // defaults to 'member'
+  organizationId: OrganizationId;
+  invitedBy: UserId;
+  email: EmailAddress;
+  role?: OrganizationRole;                 // defaults to 'member'
   expiresAt?: Date;                        // defaults to 7 days from now
 }
 
 export interface UpdateInvitationData {
-  email?: string;
-  role?: string;
+  email?: EmailAddress;
+  role?: OrganizationRole;
   expiresAt?: Date;
 }
 
@@ -120,32 +128,23 @@ export interface InvitationTokenData {
   expiresAt: Date;
 }
 
-// Role validation for invitations
-export const INVITATION_ROLES = ['owner', 'admin', 'member'] as const;
-export type InvitationRole = typeof INVITATION_ROLES[number];
-
+// AIDEV-NOTE: Role validation now handled by OrganizationRole Value Object
 export const DEFAULT_INVITATION_EXPIRY_DAYS = 7;
 export const MAX_INVITATION_EXPIRY_DAYS = 30;
 
 // Helper functions
-export const isValidInvitationRole = (role: string): role is InvitationRole => {
-  return INVITATION_ROLES.includes(role as InvitationRole);
+export const isValidInvitationRole = (role: string): boolean => {
+  return OrganizationRole.isValidRole(role);
 };
 
-export const generateInvitationToken = (): string => {
-  // Generate a secure random token for invitations
-  // This would typically use crypto.randomBytes in a real implementation
-  return Math.random().toString(36).substring(2, 15) + 
-         Math.random().toString(36).substring(2, 15) +
-         Date.now().toString(36);
+export const generateInvitationToken = (): InvitationToken => {
+  return InvitationToken.generate();
 };
 
 export const createInvitationExpiry = (days: number = DEFAULT_INVITATION_EXPIRY_DAYS): Date => {
-  const expiry = new Date();
-  expiry.setDate(expiry.getDate() + Math.min(days, MAX_INVITATION_EXPIRY_DAYS));
-  return expiry;
+  return InvitationToken.generateExpirationDate(Math.min(days, MAX_INVITATION_EXPIRY_DAYS));
 };
 
 export const isInvitationExpired = (invitation: Invitation): boolean => {
-  return new Date() > invitation.expiresAt;
+  return InvitationToken.isExpired(invitation.expiresAt);
 };

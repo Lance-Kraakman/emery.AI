@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getFieldApplicationService } from "@/ddd/application/di/container";
 import type { FieldType } from '@/ddd/domain/fields/entities/field';
-import type { CreateFieldCommand } from '@/ddd/application/use-cases/fields/field-application-service';
+import type { CreateFieldCommand } from '@/ddd/application/services/fields/field-application-service';
 
 export async function POST(request: NextRequest) {
   try {

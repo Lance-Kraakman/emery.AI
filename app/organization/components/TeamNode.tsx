@@ -21,9 +21,9 @@ interface TeamNodeProps {
 }
 
 export default function TeamNode({ data, selected }: TeamNodeProps) {
-  const activeTasks = data.tasks?.filter(task => task.status === 'in_progress') || [];
-  const pendingTasks = data.tasks?.filter(task => task.status === 'pending') || [];
-  const completedTasks = data.tasks?.filter(task => task.status === 'completed') || [];
+  const activeTasks = data.tasks?.filter(task => task.status?.value === 'in_progress') || [];
+  const pendingTasks = data.tasks?.filter(task => task.status?.value === 'pending') || [];
+  const completedTasks = data.tasks?.filter(task => task.status?.value === 'completed') || [];
 
   return (
     <div className="relative">

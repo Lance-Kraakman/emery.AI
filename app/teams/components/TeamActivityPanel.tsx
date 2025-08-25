@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Team } from '@/types/db';
+import { Team } from '@/ddd/domain/teams/entities/team';
 
 interface TeamActivityPanelProps {
   team: Team;
@@ -33,7 +33,7 @@ export default function TeamActivityPanel({ team }: TeamActivityPanelProps) {
         timestamp: new Date(team.createdAt || new Date()),
       }
     ]);
-  }, [team.id]);
+  }, [team.id.value]);
 
   if (loading) {
     return <div className="text-muted-foreground">Loading team activity...</div>;

@@ -1,69 +1,78 @@
+// AIDEV-NOTE: Updated User entity to use DDD Value Objects for type safety
+import { 
+  UserId, 
+  OrganizationId, 
+  EmailAddress, 
+  ApiKey, 
+  OrganizationRole 
+} from '@/ddd/domain/shared/value-objects';
+
 export interface User {
-  id: string;
+  id: UserId;
   name?: string | null;
-  email?: string | null;
+  email?: EmailAddress | null;
   emailVerified?: Date | null;
   image?: string | null;
-  currentOrganizationId?: number | null;
+  currentOrganizationId?: OrganizationId | null;
   roleId?: number | null;
   jobTitle?: string | null;
-  role?: string | null;
+  role?: OrganizationRole | null;
   teams?: string[] | null;
-  apiKey?: string | null;
+  apiKey?: ApiKey | null;
   createdAt?: Date | null;
 }
 
 export interface CreateUserData {
-  id?: string;                         // Optional, will generate UUID if not provided
+  id?: UserId;                         // Optional, will generate UUID if not provided
   name?: string;
-  email: string;                       // Required for creation
+  email: EmailAddress;                 // Required for creation
   emailVerified?: Date;
   image?: string;
-  currentOrganizationId?: number;
+  currentOrganizationId?: OrganizationId;
   roleId?: number;
   jobTitle?: string;
-  role?: string;
+  role?: OrganizationRole;
   teams?: string[];
-  apiKey?: string;                     // Usually generated, not provided
+  apiKey?: ApiKey;                     // Usually generated, not provided
 }
 
 export interface UpdateUserData {
   name?: string;
-  email?: string;
+  email?: EmailAddress;
   emailVerified?: Date;
   image?: string;
-  currentOrganizationId?: number | null;
+  currentOrganizationId?: OrganizationId | null;
   roleId?: number;
   jobTitle?: string;
-  role?: string;
+  role?: OrganizationRole;
   teams?: string[];
   // Note: apiKey updates handled through separate methods for security
 }
 
 export interface UserOrganization {
   id: number;
-  userId: string;
-  organizationId: number;
-  role: string;                        // owner, admin, member
+  userId: UserId;
+  organizationId: OrganizationId;
+  role: OrganizationRole;              // owner, admin, member
   createdAt?: Date | null;
   // Note: No updatedAt field - not present in user_organizations table schema
 }
 
 export interface CreateUserOrganizationData {
-  userId: string;
-  organizationId: number;
-  role?: string;                       // defaults to 'member'
+  userId: UserId;
+  organizationId: OrganizationId;
+  role?: OrganizationRole;             // defaults to 'member'
 }
 
 // Session data for NextAuth integration
 export interface SessionData {
   sessionToken: string;
-  userId: string;
+  userId: UserId;
   expires: Date;
 }
 
 export interface CreateSessionData {
   sessionToken: string;
-  userId: string;
+  userId: UserId;
   expires: Date;
 }

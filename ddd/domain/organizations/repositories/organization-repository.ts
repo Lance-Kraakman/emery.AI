@@ -1,25 +1,26 @@
 import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '../entities/organization';
+import { OrganizationId, UserId, OrganizationRole } from '@/ddd/domain/shared/value-objects';
 
 export interface IOrganizationRepository {
   /**
    * Find organization by ID
    */
-  findById(id: number): Promise<Organization | null>;
+  findById(id: OrganizationId): Promise<Organization | null>;
 
   /**
    * Find all organizations a user is a member of
    */
-  findByUserId(userId: string): Promise<Organization[]>;
+  findByUserId(userId: UserId): Promise<Organization[]>;
 
   /**
    * Find organization with member information
    */
-  findByIdWithMembers(id: number): Promise<OrganizationWithMembers | null>;
+  findByIdWithMembers(id: OrganizationId): Promise<OrganizationWithMembers | null>;
 
   /**
    * Get all members of an organization
    */
-  getMembers(organizationId: number): Promise<OrganizationMember[]>;
+  getMembers(organizationId: OrganizationId): Promise<OrganizationMember[]>;
 
   /**
    * Create a new organization
@@ -30,37 +31,37 @@ export interface IOrganizationRepository {
    * Create organization with owner and default roles
    * This is a common business operation that should be atomic
    */
-  createWithOwner(data: CreateOrganizationData, ownerId: string): Promise<Organization>;
+  createWithOwner(data: CreateOrganizationData, ownerId: UserId): Promise<Organization>;
 
   /**
    * Update organization
    */
-  update(id: number, data: UpdateOrganizationData): Promise<Organization>;
+  update(id: OrganizationId, data: UpdateOrganizationData): Promise<Organization>;
 
   /**
    * Delete organization (and cascade related data)
    */
-  delete(id: number): Promise<void>;
+  delete(id: OrganizationId): Promise<void>;
 
   /**
    * Add a member to organization
    */
-  addMember(organizationId: number, userId: string, role?: string): Promise<void>;
+  addMember(organizationId: OrganizationId, userId: UserId, role?: OrganizationRole): Promise<void>;
 
   /**
    * Remove a member from organization
    */
-  removeMember(organizationId: number, userId: string): Promise<void>;
+  removeMember(organizationId: OrganizationId, userId: UserId): Promise<void>;
 
   /**
    * Update member role in organization
    */
-  updateMemberRole(organizationId: number, userId: string, role: string): Promise<void>;
+  updateMemberRole(organizationId: OrganizationId, userId: UserId, role: OrganizationRole): Promise<void>;
 
   /**
    * Check if user is member of organization
    */
-  isMember(organizationId: number, userId: string): Promise<boolean>;
+  isMember(organizationId: OrganizationId, userId: UserId): Promise<boolean>;
 
   /**
    * Get user's role in organization

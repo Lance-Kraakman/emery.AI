@@ -1,5 +1,7 @@
-// AIDEV-NOTE: Team domain entity
+// AIDEV-NOTE: Team domain entity with DDD Value Objects
 // Represents a team of agents with shared purpose and goals
+
+import { TeamId, OrganizationId, AgentId } from '@/ddd/domain/shared/value-objects';
 
 export interface TeamConfig {
   name: string;
@@ -7,28 +9,28 @@ export interface TeamConfig {
   description?: string | null;
   responsibilities?: string[] | null;
   goals?: string[] | null;
-  agentIds?: string[] | null;
+  agentIds?: AgentId[] | null;
   databaseId?: string | null;
-  organizationId: number;
+  organizationId: OrganizationId;
 }
 
 export class Team {
   private constructor(
-    public readonly id: number,
+    public readonly id: TeamId,
     public readonly name: string,
     public readonly purpose: string | null,
     public readonly description: string | null,
     public readonly responsibilities: string[] | null,
     public readonly goals: string[] | null,
-    public readonly agentIds: string[] | null,
+    public readonly agentIds: AgentId[] | null,
     public readonly databaseId: string | null,
-    public readonly organizationId: number,
+    public readonly organizationId: OrganizationId,
     public readonly createdAt?: Date | null
   ) {}
 
   static create(config: TeamConfig): Team {
     return new Team(
-      0, // Will be set by repository
+      TeamId.fromNumber(0), // Will be set by repository after persistence
       config.name,
       config.purpose || null,
       config.description || null,
@@ -47,21 +49,21 @@ export class Team {
     description?: string | null;
     responsibilities?: string[] | null;
     goals?: string[] | null;
-    agentIds?: string[] | null;
+    agentIds?: string[] | null; // Will convert from string[] to AgentId[]
     databaseId?: string | null;
     organizationId: number;
     createdAt?: Date | null;
   }): Team {
     return new Team(
-      data.id,
+      TeamId.fromNumber(data.id),
       data.name,
       data.purpose || null,
       data.description || null,
       data.responsibilities || null,
       data.goals || null,
-      data.agentIds || null,
+      data.agentIds ? data.agentIds.map(id => AgentId.fromNumber(parseInt(id))) : null,
       data.databaseId || null,
-      data.organizationId,
+      OrganizationId.fromNumber(data.organizationId),
       data.createdAt || null
     );
   }

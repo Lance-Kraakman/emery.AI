@@ -11,42 +11,49 @@ import type {
   CreateSessionData
 } from '../entities/user';
 import type { Organization } from '@/ddd/domain/organizations/entities/organization';
+import { 
+  UserId, 
+  OrganizationId, 
+  EmailAddress, 
+  ApiKey, 
+  OrganizationRole 
+} from '@/ddd/domain/shared/value-objects';
 
 export interface IUserRepository {
   // Basic CRUD operations
-  findById(id: string): Promise<User | null>;
-  findByEmail(email: string): Promise<User | null>;
+  findById(id: UserId): Promise<User | null>;
+  findByEmail(email: EmailAddress): Promise<User | null>;
   create(data: CreateUserData): Promise<User>;
-  update(id: string, data: UpdateUserData): Promise<User>;
-  delete(id: string): Promise<void>;
+  update(id: UserId, data: UpdateUserData): Promise<User>;
+  delete(id: UserId): Promise<void>;
   
   // API Key management
-  generateApiKey(userId: string): Promise<string>;
-  findByApiKey(apiKey: string): Promise<User | null>;
-  revokeApiKey(userId: string): Promise<void>;
+  generateApiKey(userId: UserId): Promise<ApiKey>;
+  findByApiKey(apiKey: ApiKey): Promise<User | null>;
+  revokeApiKey(userId: UserId): Promise<void>;
   
   // Organization management
-  switchOrganization(userId: string, organizationId: number): Promise<void>;
-  getUserOrganizations(userId: string): Promise<Organization[]>;
+  switchOrganization(userId: UserId, organizationId: OrganizationId): Promise<void>;
+  getUserOrganizations(userId: UserId): Promise<Organization[]>;
   
   // User-Organization relationship management
   addUserToOrganization(data: CreateUserOrganizationData): Promise<UserOrganization>;
-  removeUserFromOrganization(userId: string, organizationId: number): Promise<void>;
-  getUserOrganizationRole(userId: string, organizationId: number): Promise<string | null>;
-  updateUserOrganizationRole(userId: string, organizationId: number, role: string): Promise<UserOrganization>;
+  removeUserFromOrganization(userId: UserId, organizationId: OrganizationId): Promise<void>;
+  getUserOrganizationRole(userId: UserId, organizationId: OrganizationId): Promise<OrganizationRole | null>;
+  updateUserOrganizationRole(userId: UserId, organizationId: OrganizationId, role: OrganizationRole): Promise<UserOrganization>;
   
   // Session management (NextAuth integration)
   createSession(data: CreateSessionData): Promise<void>;
   findSession(sessionToken: string): Promise<SessionData | null>;
   deleteSession(sessionToken: string): Promise<void>;
-  deleteAllUserSessions(userId: string): Promise<void>;
+  deleteAllUserSessions(userId: UserId): Promise<void>;
   
   // User queries for admin operations
-  findByOrganizationId(organizationId: number): Promise<User[]>;
+  findByOrganizationId(organizationId: OrganizationId): Promise<User[]>;
   findByRoleId(roleId: number): Promise<User[]>;
   
   // Business logic operations
-  verifyEmail(userId: string): Promise<User>;
-  updateLastLogin(userId: string): Promise<void>;
-  getUserWithOrganizations(userId: string): Promise<(User & { organizations: Organization[] }) | null>;
+  verifyEmail(userId: UserId): Promise<User>;
+  updateLastLogin(userId: UserId): Promise<void>;
+  getUserWithOrganizations(userId: UserId): Promise<(User & { organizations: Organization[] }) | null>;
 }
