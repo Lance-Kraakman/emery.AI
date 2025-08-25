@@ -22,7 +22,7 @@ interface ExtendedChatHandler extends ChatHandler {
  * - Calls gRPC service for AI processing (RAG + LLM streaming)
  * - Provides the same interface as the original REST-based hook
  * 
- * AIDEV-NOTE: This is a drop-in replacement for useChatRSC that leverages
+ * AIDEV-NOTE: gRPC-based chat handler that leverages
  * the new gRPC architecture while maintaining the same React interface.
  */
 export function useChatGRPC(): ExtendedChatHandler {
