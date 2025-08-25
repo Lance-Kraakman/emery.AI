@@ -448,7 +448,7 @@ export class UserOrganizationApplicationService {
           const membership: UserMembership = {
             userOrganization,
             organization: filters.includeOrganizationDetails ? organization : undefined,
-            isCurrentOrganization: user.currentOrganizationId === organization.id
+            isCurrentOrganization: user.currentOrganizationId?.equals(organization.id) ?? false
           };
 
           result.push(membership);
