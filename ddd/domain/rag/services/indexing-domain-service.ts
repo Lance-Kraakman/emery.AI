@@ -50,8 +50,8 @@ export class IndexingDomainService {
       organizationId,
       sourceId: organization.id.toString(),
       domainType: 'organization',
-      sourceName: organization.name,
-      title: `Organization: ${organization.name}`,
+      sourceName: organization.name.value,
+      title: `Organization: ${organization.name.value}`,
       content,
       metadata: {
         organizationId: organization.id,

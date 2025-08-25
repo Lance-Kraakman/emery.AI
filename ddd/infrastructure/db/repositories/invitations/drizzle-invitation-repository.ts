@@ -63,7 +63,7 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
       organizationId: data.organizationId.value,
       invitedBy: data.invitedBy.value,
       email: data.email.value.toLowerCase(),
-      role: data.role.value,
+      role: data.role?.value || 'member',
       token,
       expiresAt: data.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days default
     };

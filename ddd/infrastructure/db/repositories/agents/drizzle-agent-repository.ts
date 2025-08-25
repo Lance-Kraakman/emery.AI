@@ -94,11 +94,11 @@ export class DrizzleAgentRepository implements IAgentRepository {
           trigger: agent.trigger,
           capabilities: agent.capabilities,
           databaseId: agent.databaseId,
-          status: agent.status.value.value,
+          status: agent.status.value,
           organizationId: agent.organizationId.value,
           ownerId: agent.ownerId.value,
           roleId: agent.roleId,
-          apiKey: agent.apiKey?.value?.value
+          apiKey: agent.apiKey?.value
         })
         .where(eq(agents.id, agent.id.value))
         .returning();
