@@ -42,6 +42,8 @@ export interface ChatProcessingOptions {
   ragThreshold?: number;
   maxRagDocs?: number;
   primaryRagWeight?: number;
+  assembledRagContext?: string;  // Pre-assembled RAG context from DualContextRagService
+  ragSources?: string[];         // RAG source summary
 }
 
 export interface StreamingChatResponse {
@@ -104,14 +106,16 @@ export class ChatProcessingClient {
     };
 
     // Add context if provided
-    if (options.domainType || options.enableRag) {
+    if (options.domainType || options.enableRag || options.assembledRagContext) {
       const context: ChatContext = {
         domain_type: options.domainType || '',
         domain_id: options.domainId || 0,
         enable_rag: options.enableRag || false,
         rag_threshold: options.ragThreshold || 0.3,
         max_rag_docs: options.maxRagDocs || 5,
-        primary_rag_weight: options.primaryRagWeight || 0.7
+        primary_rag_weight: options.primaryRagWeight || 0.7,
+        assembled_rag_context: options.assembledRagContext || '',
+        rag_sources: options.ragSources || []
       };
       request.context = context;
     }

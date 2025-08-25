@@ -192,6 +192,8 @@ export interface ChatContext {
   rag_threshold: number;          // RAG similarity threshold (default: 0.3)
   max_rag_docs: number;           // Maximum RAG documents to retrieve (default: 5)
   primary_rag_weight: number;     // Weight for domain-specific RAG (default: 0.7)
+  assembled_rag_context: string;  // Pre-assembled RAG context from Next.js DualContextRagService
+  rag_sources: string[];          // RAG source summary for metadata
 }
 
 // Service interfaces (for reference)

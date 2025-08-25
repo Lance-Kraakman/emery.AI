@@ -52,21 +52,26 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         
         # Import services at runtime to avoid circular dependencies
         try:
-            # AI model integration (existing HuggingFace setup)
-            from ...core.ai.model_factory import ModelFactory
-            self.model_factory = ModelFactory()
-            
-            # RAG processing (reuse existing patterns from agent execution)
+            # RAG processing (always available - no external dependencies)
             from ...core.rag.rag_processor import RagProcessor
             self.rag_processor = RagProcessor()
+            logger.info("✅ RagProcessor initialized successfully")
+            
+            # AI model integration (may not be available yet)
+            try:
+                from ...core.ai.model_factory import ModelFactory
+                self.model_factory = ModelFactory()
+                logger.info("✅ ModelFactory initialized successfully")
+            except ImportError as model_error:
+                logger.warning(f"⚠️ ModelFactory not available: {model_error}")
+                self.model_factory = None
             
             logger.info("✅ ChatProcessingService initialized successfully")
             
         except ImportError as e:
-            logger.error(f"❌ Failed to import AI services: {e}")
-            # These services will be implemented to match existing patterns
-            self.model_factory = None
+            logger.error(f"❌ Failed to import core services: {e}")
             self.rag_processor = None
+            self.model_factory = None
 
     async def ProcessMessage(
         self,
@@ -94,29 +99,32 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         logger.info(f"📝 Message preview: {message_content[:100]}...")
         
         try:
-            # 1. RAG Context Retrieval (if enabled)
+            # 1. RAG Context Processing (pre-assembled from Next.js)
             rag_context_data = None
-            if request.context and request.context.enable_rag:
-                logger.info("🔍 Retrieving RAG context...")
+            if request.context and request.context.assembled_rag_context:
+                logger.info("🔍 Processing pre-assembled RAG context from Next.js...")
                 
-                rag_context_data = await self._get_rag_context(
-                    query=message_content,
-                    domain_type=request.context.domain_type,
-                    domain_id=request.context.domain_id,
-                    organization_id=org_id,
-                    threshold=request.context.rag_threshold or 0.3,
-                    max_docs=request.context.max_rag_docs or 5,
-                    primary_weight=request.context.primary_rag_weight or 0.7
+                # Import RagProcessor classes
+                from ...core.rag.rag_processor import RagContextData
+                
+                # Create RAG context data from the pre-assembled context
+                rag_context_data = RagContextData(
+                    assembled_context=request.context.assembled_rag_context,
+                    sources=list(request.context.rag_sources) if request.context.rag_sources else [],
+                    domain_type=request.context.domain_type if request.context.domain_type else None,
+                    domain_id=request.context.domain_id if request.context.domain_id else None
                 )
                 
-                if rag_context_data and rag_context_data['sources']:
-                    # Send RAG context to client
+                logger.info(f"✅ Processed RAG context: {len(rag_context_data.assembled_context)} chars, {len(rag_context_data.sources)} sources")
+                
+                # Send RAG acknowledgment to client (optional - could be removed)
+                if rag_context_data.sources:
                     rag_response = agent_worker_pb2.ProcessMessageResponse(
-                        rag_context=self._convert_to_rag_context_proto(rag_context_data),
+                        rag_context=self._build_rag_context_proto_from_data(rag_context_data),
                         timestamp=int(time.time() * 1000)
                     )
                     yield rag_response
-                    logger.info(f"✅ Sent RAG context with {len(rag_context_data['sources'])} sources")
+                    logger.info(f"✅ Sent RAG context acknowledgment with {len(rag_context_data.sources)} sources")
 
             # 2. Build Conversation Context
             conversation_messages = []
@@ -209,7 +217,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         Retrieve RAG context using existing dual-context patterns.
         
         This should integrate with the same RAG service used by:
-        - /api/chat/stream/route.ts (DualContextRagService)
+        - /api/chat/stream-grpc/route.ts (DualContextRagService)
         - Agent execution pipeline
         
         AIDEV-TODO: Implement using actual DualContextRagService patterns
@@ -249,55 +257,112 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
     async def _stream_ai_response(
         self, 
         conversation_messages: List[Dict[str, str]], 
-        rag_context: Optional[Dict[str, Any]],
+        rag_context_data: Optional[Any],
         domain_context: Optional[Any] = None
     ) -> AsyncIterator[str]:
         """
-        Stream AI response using existing HuggingFace integration.
+        Stream AI response using RAG processor and HuggingFace integration.
         
-        This should reuse the same AI model setup as:
-        - Agent execution (SmolAgents integration)
-        - Current chat API (/api/chat/stream/route.ts)
-        
-        AIDEV-TODO: Integrate with actual HuggingFace model setup
+        This method now uses the real RagProcessor to format context
+        and will integrate with actual AI models when available.
         """
         
-        if not self.model_factory:
-            logger.warning("⚠️ Model factory not available - using mock response")
-            # Mock streaming response for testing
-            mock_response = "I understand your question about the system. Let me help you with that information."
-            for i, word in enumerate(mock_response.split()):
-                yield word + " "
-                if i < len(mock_response.split()) - 1:
-                    # Simulate streaming delay
-                    import asyncio
-                    await asyncio.sleep(0.05)
-            return
-
+        # Import here to avoid circular dependencies
+        from ...core.rag.rag_processor import RagContextData
+        
         try:
-            # Build system prompt with RAG context
-            system_prompt = self._build_system_prompt(rag_context, domain_context)
-            
+            # Build system prompt using real RAG processor
+            if self.rag_processor and rag_context_data and isinstance(rag_context_data, RagContextData):
+                # Use the real RAG processor for context formatting
+                domain_context_dict = {
+                    'domain_type': domain_context.domain_type if domain_context else None,
+                    'domain_id': domain_context.domain_id if domain_context else None
+                } if domain_context else None
+                
+                system_prompt = self.rag_processor.format_context_for_llm(
+                    rag_context_data=rag_context_data,
+                    user_query=conversation_messages[-1]['content'] if conversation_messages else '',
+                    domain_context=domain_context_dict
+                )
+                
+                logger.info(f"✅ Generated system prompt using RAG processor: {len(system_prompt)} chars")
+                
+                # Get context metadata for logging
+                context_metadata = self.rag_processor.extract_context_metadata(rag_context_data)
+                logger.info(f"📊 RAG context metadata: {context_metadata}")
+                
+            else:
+                # Fallback to basic system prompt if no RAG context
+                system_prompt = self._build_basic_system_prompt(domain_context)
+                logger.info("Using basic system prompt (no RAG context)")
+
             # Prepare messages for model
             messages = [{'role': 'system', 'content': system_prompt}] + conversation_messages
             
-            logger.info(f"🤖 Streaming AI response using {self._get_model_name()}")
-            
-            # AIDEV-TODO: Replace with actual streaming model call
-            # This should mirror the streamText() call in app/api/chat/stream/route.ts
-            # async for chunk in self.model_factory.stream_response(messages):
-            #     yield chunk
-            
-            # Mock streaming for now
-            mock_response = "Based on the context provided, I can help you understand the system better. Let me provide detailed information about your request."
-            for word in mock_response.split():
-                yield word + " "
-                import asyncio
-                await asyncio.sleep(0.02)
+            # Use real AI model streaming
+            if self.model_factory:
+                logger.info(f"🤖 Streaming AI response using real {self._get_model_name()}")
+                
+                # Stream response from real AI model
+                async for chunk in self.model_factory.stream_response(messages, model_name='chat'):
+                    yield chunk
+                
+            else:
+                logger.warning("⚠️ Model factory not available - using enhanced mock response")
+                
+                # Fallback enhanced mock response
+                if rag_context_data and rag_context_data.assembled_context:
+                    mock_response = f"Based on the relevant context from your organization's data (found {len(rag_context_data.sources)} sources), I can help you with your request. Let me provide you with specific information from the available documentation and data."
+                else:
+                    mock_response = "I understand your question. Let me provide you with general guidance about your request."
+                
+                # Stream the fallback response word by word
+                for word in mock_response.split():
+                    yield word + " "
+                    import asyncio
+                    await asyncio.sleep(0.02)
                 
         except Exception as e:
             logger.error(f"❌ AI streaming failed: {e}")
             yield f"I apologize, but I encountered an error processing your request: {str(e)}"
+
+    def _build_basic_system_prompt(self, domain_context: Optional[Any] = None) -> str:
+        """Build basic system prompt without RAG context."""
+        
+        base_prompt = 'You are an AI assistant for Emery, a dynamic database and workflow platform. You help users understand their organizational data, create workflows, and manage their systems.'
+        
+        if domain_context and hasattr(domain_context, 'domain_type'):
+            domain_type = domain_context.domain_type
+            if domain_type == 'table':
+                base_prompt += ' You are currently assisting with a specific table and its data.'
+            elif domain_type == 'agent':
+                base_prompt += ' You are currently assisting with a specific agent.'
+            elif domain_type == 'file':
+                base_prompt += ' You are currently assisting with a specific file.'
+        
+        base_prompt += ' Always be helpful, accurate, and professional.'
+        return base_prompt
+
+    def _build_rag_context_proto_from_data(self, rag_context_data) -> agent_worker_pb2.RagContext:
+        """Build RagContext protobuf from RagContextData."""
+        
+        # Create mock sources for the protobuf response
+        sources = []
+        for i, source_summary in enumerate(rag_context_data.sources[:5]):  # Limit to 5 sources
+            proto_source = agent_worker_pb2.RagSource(
+                document_id=f'source_{i}',
+                title=f'Source {i+1}',
+                similarity=0.8,  # Mock similarity
+                domain_type=rag_context_data.domain_type or 'organization',
+                excerpt=source_summary[:100] + '...' if len(source_summary) > 100 else source_summary
+            )
+            sources.append(proto_source)
+        
+        return agent_worker_pb2.RagContext(
+            sources=sources,
+            context_summary=f'Found {len(rag_context_data.sources)} relevant sources from {rag_context_data.domain_type or "organization"} data',
+            total_sources=len(rag_context_data.sources)
+        )
 
     def _build_system_prompt(
         self, 

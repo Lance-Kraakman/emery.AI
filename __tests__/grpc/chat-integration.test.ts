@@ -56,7 +56,9 @@ describe('gRPC Chat Integration', () => {
           enable_rag: true,
           rag_threshold: 0.3,
           max_rag_docs: 5,
-          primary_rag_weight: 0.7
+          primary_rag_weight: 0.7,
+          assembled_rag_context: '',
+          rag_sources: []
         },
         conversation_history: [
           {

@@ -243,4 +243,6 @@ message ChatContext {
   float rag_threshold = 4;           // RAG similarity threshold (default: 0.3)
   int32 max_rag_docs = 5;            // Maximum RAG documents to retrieve (default: 5)
   float primary_rag_weight = 6;      // Weight for domain-specific RAG (default: 0.7)
+  string assembled_rag_context = 7;  // Pre-assembled RAG context from Next.js DualContextRagService
+  repeated string rag_sources = 8;   // RAG source summary for metadata
 }

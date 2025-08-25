@@ -11,7 +11,7 @@ import {
 } from '@llamaindex/chat-ui'
 import { X, Code, FileText, Send, Database, BarChart, Users, Lightbulb } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useChatRSC } from './use-chat-rsc'
+import { useChatGRPC } from './use-chat-grpc'
 import DashboardMainContent from '../components/DashboardMainContent'
 
 // Save/Revert Actions Component - separate from other actions
@@ -192,7 +192,7 @@ function CompactSuggestions({
 }
 
 function CustomChat() {
-  const handler = useChatRSC()
+  const handler = useChatGRPC()
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
 
