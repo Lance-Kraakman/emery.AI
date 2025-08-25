@@ -14,7 +14,8 @@ import {
   AgentId, 
   OrganizationId, 
   UserId, 
-  TaskStatus 
+  TaskStatus,
+  TASK_STATUS
 } from '@/ddd/domain/shared/value-objects';
 
 // Re-export TaskStatus for external use
@@ -194,11 +195,11 @@ export class Task {
    * Mark task as timed out
    */
   timeout(): void {
-    if (this._status === 'completed' || this._status === 'failed') {
-      throw new Error(`Cannot timeout task ${this.id}: task is already ${this._status}`);
+    if (this._status.value === TASK_STATUS.COMPLETED || this._status.value === TASK_STATUS.FAILED) {
+      throw new Error(`Cannot timeout task ${this.id}: task is already ${this._status.value}`);
     }
     
-    this._status = 'timeout';
+    this._status = TaskStatus.failed(); // Use failed status for timeout
     this._error = 'Task execution timed out';
     this._completedAt = new Date();
   }
@@ -207,7 +208,7 @@ export class Task {
    * Update task result during execution (for progress tracking)
    */
   updateResult(result: any): void {
-    if (this._status !== 'in_progress') {
+    if (this._status.value !== TASK_STATUS.IN_PROGRESS) {
       throw new Error(`Cannot update result for task ${this.id}: task is not in progress`);
     }
     
@@ -218,21 +219,21 @@ export class Task {
    * Check if task is in a terminal state
    */
   get isTerminal(): boolean {
-    return ['completed', 'failed', 'cancelled', 'timeout'].includes(this._status);
+    return [TASK_STATUS.COMPLETED, TASK_STATUS.FAILED, TASK_STATUS.CANCELLED].includes(this._status.value as any);
   }
 
   /**
    * Check if task is running
    */
   get isRunning(): boolean {
-    return this._status === 'in_progress';
+    return this._status.value === TASK_STATUS.IN_PROGRESS;
   }
 
   /**
    * Check if task is pending
    */
   get isPending(): boolean {
-    return this._status === 'pending';
+    return this._status.value === TASK_STATUS.PENDING;
   }
 
   /**
