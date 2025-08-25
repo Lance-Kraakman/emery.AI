@@ -275,14 +275,14 @@ export function EmeryChat() {
                 </ChatInput>
               </div>
             </div>
+            
+            {/* Canvas Section (inside ChatSection for proper provider context) */}
+            {canvasState === 'expanded' && (
+              <ChatCanvas />
+            )}
           </ChatSection>
         </div>
       </div>
-      
-      {/* Canvas Section (when expanded) */}
-      {canvasState === 'expanded' && (
-        <ChatCanvas />
-      )}
     </div>
   )
 }
