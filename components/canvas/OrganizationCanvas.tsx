@@ -33,9 +33,9 @@ export function OrganizationCanvas({ organizationName, children }: OrganizationC
         </Button>
       }
     >
-      <div className="flex-1 overflow-auto">
+      <div className="h-full flex flex-col overflow-hidden">
         {children || (
-          <div className="p-6">
+          <div className="flex-1 overflow-auto p-6">
             <div className="max-w-4xl mx-auto space-y-8">
               {/* Organization Overview */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

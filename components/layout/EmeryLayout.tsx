@@ -67,8 +67,9 @@ function EmeryLayoutInner({
       {/* Left Panel - Sidebar */}
       <aside 
         className={`
+          h-screen
           ${sidebarWidth}
-          ${isMobile ? 'fixed left-0 top-0 h-full z-30 transform transition-transform duration-300' : ''}
+          ${isMobile ? 'fixed left-0 top-0 h-screen z-30 transform transition-transform duration-300' : ''}
           ${isMobile && sidebarState === 'collapsed' ? '-translate-x-full' : 'translate-x-0'}
           bg-card border-r border-border
         `}
@@ -79,18 +80,18 @@ function EmeryLayoutInner({
       </aside>
 
       {/* Main Content Area - Layout changes based on canvas state */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
+      <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
         {/* Canvas Mode: Traditional 3-panel (sidebar | canvas | chat) */}
         {isCanvasMode && (
           <>
             {/* Center Panel - Canvas/Main Content */}
-            <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+            <main className="flex-1 flex flex-col overflow-hidden min-w-0 h-full">
               {children}
             </main>
 
             {/* Right Panel - Chat Interface */}
             {enableChat && chatState !== 'hidden' && (
-              <div className={`${getChatWidth(chatState)} ${isMobile ? 'hidden' : 'block'}`}>
+              <div className={`h-full ${getChatWidth(chatState)} ${isMobile ? 'hidden' : 'block'}`}>
                 <Suspense fallback={<ChatSkeleton />}>
                   <EmeryChat />
                 </Suspense>
@@ -101,7 +102,7 @@ function EmeryLayoutInner({
         
         {/* Chat Main Mode: 2-panel (sidebar | chat-as-main) */}
         {isChatMainMode && enableChat && (
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden h-screen">
             <Suspense fallback={<ChatSkeleton />}>
               <EmeryChat />
             </Suspense>
@@ -123,7 +124,7 @@ function EmeryLayoutInner({
             className="fixed inset-0 bg-black/50 z-20"
             onClick={() => setChatState('collapsed')}
           />
-          <div className="fixed right-0 top-0 h-full w-80 z-30 bg-card border-l border-border">
+          <div className="fixed right-0 top-0 h-screen w-80 z-30 bg-card border-l border-border">
             <Suspense fallback={<ChatSkeleton />}>
               <EmeryChat />
             </Suspense>
