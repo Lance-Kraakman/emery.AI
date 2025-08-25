@@ -18,6 +18,10 @@ import type {
   generateInvitationToken
 } from '@/ddd/domain/invitations/entities/invitation';
 import { generateInvitationToken as generateToken } from '@/ddd/domain/invitations/entities/invitation';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
+import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
+import { EmailAddress } from '@/ddd/domain/shared/value-objects/email-address';
+import { OrganizationRole } from '@/ddd/domain/shared/value-objects/organization-role';
 
 export class DrizzleInvitationRepository implements IInvitationRepository {
   constructor(private readonly db: DbClient) {}
