@@ -87,7 +87,7 @@ export class DrizzleTeamRepository implements ITeamRepository {
         description: team.description,
         responsibilities: team.responsibilities,
         goals: team.goals,
-        agentIds: team.agentIds?.map(id => id.value) || null,
+        agentIds: team.agentIds?.map(id => id.value.toString()) || null,
         databaseId: team.databaseId,
         organizationId: team.organizationId.value
       });
@@ -101,7 +101,7 @@ export class DrizzleTeamRepository implements ITeamRepository {
           description: team.description,
           responsibilities: team.responsibilities,
           goals: team.goals,
-          agentIds: team.agentIds?.map(id => id.value) || null,
+          agentIds: team.agentIds?.map(id => id.value.toString()) || null,
           databaseId: team.databaseId,
           organizationId: team.organizationId.value
         })
