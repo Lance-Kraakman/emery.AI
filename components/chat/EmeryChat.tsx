@@ -7,7 +7,6 @@ import {
   ChatInput
 } from '@llamaindex/chat-ui'
 import { 
-  MessageCircle, 
   ChevronLeft, 
   ChevronRight, 
   Database,
@@ -64,7 +63,6 @@ function EmeryChatHeader({ domainType, domainName }: EmeryChatHeaderProps) {
   return (
     <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
       <div className="flex items-center gap-3 min-w-0 flex-1">
-        <MessageCircle className="h-5 w-5 text-primary flex-shrink-0" />
         <div className="min-w-0 flex-1">
           <h3 className="font-bold text-lg bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
             Emery

@@ -89,8 +89,8 @@ function EmeryLayoutInner({
             </main>
 
             {/* Right Panel - Chat Interface */}
-            {enableChat && (
-              <div className={`w-96 ${isMobile ? 'hidden' : 'block'}`}>
+            {enableChat && chatState !== 'hidden' && (
+              <div className={`${getChatWidth(chatState)} ${isMobile ? 'hidden' : 'block'}`}>
                 <Suspense fallback={<ChatSkeleton />}>
                   <EmeryChat />
                 </Suspense>
@@ -159,7 +159,19 @@ function getSidebarWidth(state: string, isMobile: boolean): string {
   }
 }
 
-// Remove getChatWidth - no longer needed with new layout logic
+// Utility function for chat width based on state
+function getChatWidth(state: string): string {
+  switch (state) {
+    case 'collapsed':
+      return 'w-12' // Just show minimal collapsed width
+    case 'expanded':
+      return 'w-96' // Full chat width
+    case 'hidden':
+      return 'w-0' // Hidden
+    default:
+      return 'w-96'
+  }
+}
 
 // Loading skeletons
 function SidebarSkeleton() {
@@ -179,7 +191,7 @@ function SidebarSkeleton() {
 
 function ChatSkeleton() {
   return (
-    <div className="w-96 h-full bg-card border-l border-border animate-pulse">
+    <div className="h-full bg-card border-l border-border animate-pulse">
       <div className="p-4 space-y-4">
         <div className="h-8 bg-muted rounded" />
         <div className="flex-1 space-y-2">

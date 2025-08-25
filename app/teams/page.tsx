@@ -3,9 +3,10 @@ import { getTeams } from '@/app/actions/teams';
 import { getAgents } from '@/app/actions/agents';
 import { Loading } from '@/components/ui/loading';
 import { auth } from '@/lib/auth';
+import { TeamsCanvas } from '@/components/canvas';
 import TeamDashboardClient from './components/TeamDashboardClient';
 
-// AIDEV-NOTE: Teams page refactored to use consistent design patterns and improved error handling
+// AIDEV-NOTE: Teams page updated to use canvas architecture with collapsible layout
 // AIDEV-NOTE: Page is dynamic due to session/organization context requirements
 
 export const dynamic = 'force-dynamic';
@@ -22,10 +23,10 @@ export default async function TeamsPage() {
   ]);
 
   return (
-    <div className="h-full">
-      <Suspense fallback={<Loading text="Loading dashboard..." />}>
+    <TeamsCanvas>
+      <Suspense fallback={<Loading text="Loading teams..." />}>
         <TeamDashboardClient initialTeams={teams} agents={agents} />
       </Suspense>
-    </div>
+    </TeamsCanvas>
   );
 }

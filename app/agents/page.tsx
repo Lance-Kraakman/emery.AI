@@ -3,9 +3,10 @@ import { getAgents } from '@/app/actions/agents';
 import { getTeams } from '@/app/actions/teams';
 import { Loading } from '@/components/ui/loading';
 import { auth } from '@/lib/auth';
+import { AgentsCanvas } from '@/components/canvas';
 import AgentDashboardClient from './components/AgentDashboardClient';
 
-// AIDEV-NOTE: Agents page refactored to use consistent design patterns and improved error handling
+// AIDEV-NOTE: Agents page updated to use canvas architecture with collapsible layout
 
 export default async function AgentsPage() {
   // Get current user's organization
@@ -19,10 +20,10 @@ export default async function AgentsPage() {
   ]);
 
   return (
-    <div className="h-full">
-      <Suspense fallback={<Loading text="Loading dashboard..." />}>
+    <AgentsCanvas>
+      <Suspense fallback={<Loading text="Loading agents..." />}>
         <AgentDashboardClient initialAgents={agents} teams={teams} />
       </Suspense>
-    </div>
+    </AgentsCanvas>
   );
 }

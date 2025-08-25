@@ -10,10 +10,11 @@ interface ChatMessage extends Message {
   id: string
 }
 
-// Extended ChatHandler interface with scroll functionality
+// Extended ChatHandler interface with scroll functionality and persistence
 interface ExtendedChatHandler extends ChatHandler {
   scrollRef?: React.RefObject<HTMLDivElement>
   scrollToBottom?: () => void
+  clearMessages?: () => void
 }
 
 // Chat context options for domain-specific functionality
@@ -42,8 +43,12 @@ export function useChatGRPC(contextOptions?: ChatContextOptions): ExtendedChatHa
   const [input, setInput] = useState<string>('')
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [isClient, setIsClient] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const { chatContext } = useLayout()
+  
+  // Generate a consistent storage key for this chat session
+  const chatStorageKey = 'emery-chat-messages'
 
   // Auto-scroll to bottom function
   const scrollToBottom = () => {
@@ -52,10 +57,39 @@ export function useChatGRPC(contextOptions?: ChatContextOptions): ExtendedChatHa
     }
   }
 
+  // Initialize client-side and load persisted messages
+  useEffect(() => {
+    setIsClient(true)
+    
+    // Load persisted messages from localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const savedMessages = localStorage.getItem(chatStorageKey)
+        if (savedMessages) {
+          const parsedMessages = JSON.parse(savedMessages) as ChatMessage[]
+          setMessages(parsedMessages)
+        }
+      } catch (error) {
+        console.warn('[CHAT-GRPC-HOOK] Failed to load persisted messages:', error)
+      }
+    }
+  }, [chatStorageKey])
+
   // Auto-scroll when messages change
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Persist messages when they change (client-side only)
+  useEffect(() => {
+    if (isClient && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(chatStorageKey, JSON.stringify(messages))
+      } catch (error) {
+        console.warn('[CHAT-GRPC-HOOK] Failed to persist messages:', error)
+      }
+    }
+  }, [messages, isClient, chatStorageKey])
 
   const append = async (message: Message) => {
     const userMessage: ChatMessage = {
@@ -162,6 +196,18 @@ export function useChatGRPC(contextOptions?: ChatContextOptions): ExtendedChatHa
     return message.content as string
   }
 
+  // Clear all messages and localStorage
+  const clearMessages = () => {
+    setMessages([])
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(chatStorageKey)
+      } catch (error) {
+        console.warn('[CHAT-GRPC-HOOK] Failed to clear persisted messages:', error)
+      }
+    }
+  }
+
   return {
     input,
     setInput,
@@ -171,6 +217,7 @@ export function useChatGRPC(contextOptions?: ChatContextOptions): ExtendedChatHa
     setMessages,
     scrollRef,
     scrollToBottom,
+    clearMessages,
   }
 }
 
