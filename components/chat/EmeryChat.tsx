@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react'
 import { 
   ChatSection, 
-  ChatMessages, 
-  ChatInput
+  ChatMessages
 } from '@llamaindex/chat-ui'
 import { 
   ChevronLeft, 
@@ -13,13 +12,13 @@ import {
   BarChart,
   Users,
   Code,
-  Lightbulb,
-  Send 
+  Lightbulb
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useLayout } from '@/components/layout/LayoutProvider'
 import { useChatGRPC } from './useChatGRPC'
 import { ChatCanvas } from './ChatCanvas'
+import { CustomChatInput } from './CustomChatInput'
 import type { DomainType } from '@/ddd/domain/chat/entities/chat'
 
 /**
@@ -171,6 +170,8 @@ export function EmeryChat() {
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const [isClient, setIsClient] = useState(false)
+  const [inputValue, setInputValue] = useState('')
+  const [cursorPosition, setCursorPosition] = useState(0)
   
   // Fix hydration by ensuring client-only rendering of dynamic content
   useEffect(() => {
@@ -229,6 +230,7 @@ export function EmeryChat() {
     handler.append({ content: suggestion, role: 'user' })
   }
 
+
   // Determine layout based on canvas state
   const isFullWidth = canvasState === 'collapsed'
   
@@ -269,19 +271,13 @@ export function EmeryChat() {
               
               {/* Input area - always fixed at very bottom */}
               <div className="flex-shrink-0 p-4 border-t border-border/10 bg-card" onKeyDown={handleKeyDown}>
-                <ChatInput className="bg-transparent border-0 shadow-none p-0">
-                  <ChatInput.Form className="relative flex items-end gap-3 bg-transparent">
-                    <div className="relative flex-1">
-                      <ChatInput.Field
-                        className="w-full resize-none rounded-xl border border-input bg-background px-4 py-3 pr-14 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground min-h-[44px] max-h-32"
-                        placeholder="Ask Emery anything..."
-                      />
-                      <ChatInput.Submit className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm">
-                        <Send className="h-4 w-4" />
-                      </ChatInput.Submit>
-                    </div>
-                  </ChatInput.Form>
-                </ChatInput>
+                <CustomChatInput 
+                  onSendMessage={(message) => {
+                    handler.append({ content: message, role: 'user' })
+                    setShowSuggestions(false)
+                  }}
+                  placeholder="Ask Emery anything..."
+                />
               </div>
             </div>
             
