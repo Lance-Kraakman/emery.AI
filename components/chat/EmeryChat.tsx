@@ -251,7 +251,7 @@ export function EmeryChat() {
           >
             <div className="h-full flex flex-col">
               {/* Messages and suggestions container - scrollable */}
-              <div className="flex-1 overflow-y-auto flex flex-col">
+              <div ref={handler.scrollRef} className="flex-1 overflow-y-auto flex flex-col">
                 {/* Messages area */}
                 <div className="flex-1">
                   <ChatMessages className="bg-transparent px-4 py-2" />
