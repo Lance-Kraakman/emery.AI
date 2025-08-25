@@ -18,7 +18,7 @@ import type {
   CreateSessionData
 } from '@/ddd/domain/users/entities/user';
 import type { Organization } from '@/ddd/domain/organizations/entities/organization';
-import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationRole } from '@/ddd/domain/shared/value-objects';
+import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationName, OrganizationRole } from '@/ddd/domain/shared/value-objects';
 
 export class DrizzleUserRepository implements IUserRepository {
   constructor(
@@ -187,6 +187,8 @@ export class DrizzleUserRepository implements IUserRepository {
 
     return result.map(r => ({
       ...r.organization,
+      id: OrganizationId.fromNumber(r.organization.id),
+      name: OrganizationName.fromString(r.organization.name),
       viewConfig: r.organization.viewConfig as Record<string, any> | null
     }));
   }
@@ -228,6 +230,12 @@ export class DrizzleUserRepository implements IUserRepository {
   }
 
   async getUserOrganizationRole(userId: UserId, organizationId: OrganizationId): Promise<OrganizationRole | null> {
+    // Add defensive check
+    if (!organizationId || !organizationId.value) {
+      console.error('Invalid organizationId passed to getUserOrganizationRole:', organizationId);
+      return null;
+    }
+    
     const result = await this.db
       .select({ role: userOrganizations.role })
       .from(userOrganizations)

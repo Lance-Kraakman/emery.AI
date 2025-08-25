@@ -20,7 +20,8 @@ import { AgentTaskApplicationService } from '@/ddd/application/services/agents/a
 import {
   getAgentRepository as getMainAgentRepository,
   getTaskRepository as getMainTaskRepository,
-  getAgentExecutionRepository as getMainAgentExecutionRepository
+  getAgentExecutionRepository as getMainAgentExecutionRepository,
+  getAgentTaskApplicationService as getMainAgentTaskApplicationService
 } from '@/ddd/application/di/container';
 
 /**
@@ -48,23 +49,5 @@ export function getAgentExecutionRepository(): IAgentExecutionRepository {
  * Get agent task application service instance (delegates to main container)
  */
 export function getAgentTaskApplicationService(): AgentTaskApplicationService {
-  // Import from main container
-  const { getAgentTaskApplicationService: getMainAgentTaskApplicationService } = require('@/ddd/application/di/container');
   return getMainAgentTaskApplicationService();
-}
-
-/**
- * Initialize all agent services (delegates to main container)
- */
-export function initializeAgentContainer(): void {
-  console.log('[AGENT-CONTAINER] Agent services available via main DI container');
-  // No initialization needed - delegates to main container
-}
-
-/**
- * Reset container (delegates to main container)
- */
-export function resetAgentContainer(): void {
-  console.log('[AGENT-CONTAINER] Agent container reset (delegates to main container)');
-  // No reset needed - delegates to main container
 }
