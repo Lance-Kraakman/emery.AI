@@ -233,33 +233,42 @@ export function EmeryChat() {
   const isFullWidth = canvasState === 'collapsed'
   
   return (
-    <div className="flex h-full bg-card border-l border-border">
+    <div className={`flex bg-card border-l border-border ${isFullWidth ? 'h-screen' : 'h-full'}`}>
       {/* Chat Section */}
-      <div className={`flex flex-col h-full ${isFullWidth ? 'flex-1' : 'w-96'}`}>
+      <div className={`flex flex-col ${isFullWidth ? 'h-screen' : 'h-full'} ${isFullWidth ? 'flex-1' : 'w-96'}`}>
         <EmeryChatHeader 
           domainType={chatContext?.domainType}
           domainName={chatContext?.domainName}
         />
         
-        {/* Canvas expand button moved to chat header - no full-width bar needed */}
-        
-        <div className="flex-1 flex flex-col min-h-0" suppressHydrationWarning>
+        {/* Chat content area - takes remaining height after header */}
+        <div className="flex-1 min-h-0 overflow-hidden" suppressHydrationWarning>
           <ChatSection
             handler={handler}
-            className="flex-1 flex flex-col p-0"
+            className="h-full flex flex-col p-0"
           >
-            <div className="flex-1 flex flex-col min-h-0">
-              <ChatMessages className="flex-1 min-h-0 overflow-y-auto bg-transparent px-4 py-2" />
+            <div className="h-full flex flex-col">
+              {/* Messages and suggestions container - scrollable */}
+              <div className="flex-1 overflow-y-auto flex flex-col">
+                {/* Messages area */}
+                <div className="flex-1">
+                  <ChatMessages className="bg-transparent px-4 py-2" />
+                </div>
+                
+                {/* Suggestions at bottom of messages area when no messages */}
+                {isClient && showSuggestions && handler.messages.length === 0 && (
+                  <div className="flex-shrink-0 mt-auto">
+                    <ChatSuggestions 
+                      onSuggestionClick={handleSuggestionClick} 
+                      selectedIndex={selectedSuggestionIndex}
+                      domainType={chatContext?.domainType}
+                    />
+                  </div>
+                )}
+              </div>
               
-              {isClient && showSuggestions && handler.messages.length === 0 && (
-                <ChatSuggestions 
-                  onSuggestionClick={handleSuggestionClick} 
-                  selectedIndex={selectedSuggestionIndex}
-                  domainType={chatContext?.domainType}
-                />
-              )}
-              
-              <div className="p-4" onKeyDown={handleKeyDown}>
+              {/* Input area - always fixed at very bottom */}
+              <div className="flex-shrink-0 p-4 border-t border-border/10 bg-card" onKeyDown={handleKeyDown}>
                 <ChatInput className="bg-transparent border-0 shadow-none p-0">
                   <ChatInput.Form className="relative flex items-end gap-3 bg-transparent">
                     <div className="relative flex-1">
@@ -301,11 +310,6 @@ function getSuggestionsForDomain(domainType?: DomainType | 'organization' | 'gen
           icon: <BarChart className="h-3 w-3" />,
           title: "Analyze agent performance and task execution",
           prompt: "Analyze this agent's performance metrics and suggest optimizations for task execution."
-        },
-        {
-          icon: <Users className="h-3 w-3" />,
-          title: "Review agent team assignments and workflows",
-          prompt: "Review this agent's team assignments and suggest workflow improvements."
         }
       ]
       
@@ -362,16 +366,6 @@ function getSuggestionsForDomain(domainType?: DomainType | 'organization' | 'gen
           icon: <BarChart className="h-3 w-3" />,
           title: "Generate comprehensive analytics report with KPIs",
           prompt: "Generate a comprehensive analytics report showing key performance indicators, user engagement metrics, and business trends from our data."
-        },
-        {
-          icon: <Users className="h-3 w-3" />,
-          title: "Analyze user behavior patterns and engagement",
-          prompt: "Analyze user behavior patterns, identify high-value user segments, and suggest strategies to improve user retention and engagement."
-        },
-        {
-          icon: <Code className="h-3 w-3" />,
-          title: "Review code architecture and best practices",
-          prompt: "Perform a code architecture review, identify potential improvements, and suggest best practices for scalability and maintainability."
         }
       ]
   }

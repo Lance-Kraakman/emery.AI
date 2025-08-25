@@ -37,10 +37,10 @@ export function DataCanvas({ tableId, tableName, children }: DataCanvasProps) {
         </Button>
       }
     >
-      <div className="flex-1 overflow-auto">
+      <div className="h-full flex flex-col overflow-hidden">
         {children || (
-          <div className="p-6">
-            <div className="text-center py-12">
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="text-center">
               <Database className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">No tables found</h3>
               <p className="text-muted-foreground mb-4">

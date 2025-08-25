@@ -108,11 +108,11 @@ export function EmerySidebar() {
 
   return (
     <div
-      className={`relative min-h-screen border-r transition-all duration-300 ease-in-out shadow-lg ${
+      className={`relative h-screen border-r transition-all duration-300 ease-in-out shadow-lg ${
         isCollapsed ? "w-16" : "w-64"
       }`}
     >
-      <div className="flex h-full max-h-screen flex-col gap-2">
+      <div className="flex h-screen max-h-screen flex-col gap-2">
         <div className="flex h-16 items-center border-b px-4 justify-between">
           <div className="flex items-center gap-2">
             <EmeryOrganizationModal isCollapsed={isCollapsed} />
