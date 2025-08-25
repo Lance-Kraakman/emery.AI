@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import type { Team } from '@/types/db';
+import type { Team } from '@/ddd/domain/teams/entities/team';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -26,7 +26,9 @@ export default function TeamFormDialog({ isOpen, onClose, team, agents }: TeamFo
   const { currentOrganization, refetch } = useEmery();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>(team?.agentIds || []);
+  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>(
+    team?.agentIds?.map(id => typeof id === 'string' ? id : id.value?.toString()) || []
+  );
 
   const handleSubmit = async (formData: FormData) => {
     if (!currentOrganization) return;
@@ -50,7 +52,7 @@ export default function TeamFormDialog({ isOpen, onClose, team, agents }: TeamFo
           agentIds: selectedAgentIds,
         };
         
-        await updateTeam(team.id, data);
+        await updateTeam(team.id.value, data);
       } else {
         // Create new team
         await createTeamAction(formData);
@@ -149,15 +151,15 @@ export default function TeamFormDialog({ isOpen, onClose, team, agents }: TeamFo
               {agents.length > 0 ? (
                 <div className="space-y-3">
                   {agents.map((agent) => (
-                    <div key={agent.id} className="flex items-center space-x-2">
+                    <div key={agent.id.value} className="flex items-center space-x-2">
                       <Checkbox
-                        id={`agent-${agent.id}`}
-                        checked={selectedAgentIds.includes(agent.id.toString())}
-                        onCheckedChange={() => toggleAgentSelection(agent.id.toString())}
+                        id={`agent-${agent.id.value}`}
+                        checked={selectedAgentIds.includes(agent.id.value.toString())}
+                        onCheckedChange={() => toggleAgentSelection(agent.id.value.toString())}
                         disabled={loading}
                       />
                       <label
-                        htmlFor={`agent-${agent.id}`}
+                        htmlFor={`agent-${agent.id.value}`}
                         className="text-sm cursor-pointer flex-1"
                       >
                         <span className="font-medium">{agent.name}</span>

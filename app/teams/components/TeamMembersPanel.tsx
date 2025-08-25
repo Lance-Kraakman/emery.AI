@@ -1,33 +1,31 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Team } from '@/types/db';
+import { Team } from '@/ddd/domain/teams/entities/team';
 import { getTeamMembers, addTeamMember, removeTeamMember } from '@/app/actions/teams';
 
 interface TeamMembersPanelProps {
   team: Team;
 }
 
-interface TeamMembership {
-  id: number;
-  teamId: number;
-  userId: string;
-  createdAt: Date | null;
+interface TeamAgentsData {
+  teamId: any; // TeamId Value Object
+  agentIds: any[]; // AgentId[] Value Objects  
 }
 
 export default function TeamMembersPanel({ team }: TeamMembersPanelProps) {
-  const [members, setMembers] = useState<TeamMembership[]>([]);
+  const [teamAgents, setTeamAgents] = useState<TeamAgentsData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadMembers();
-  }, [team.id]);
+  }, [team.id.value]);
 
   const loadMembers = async () => {
     try {
       setLoading(true);
-      const teamMembers = await getTeamMembers(team.id);
-      setMembers(teamMembers);
+      const teamMembers = await getTeamMembers(team.id.value);
+      setTeamAgents(teamMembers);
     } catch (error) {
       console.error('Failed to load team members:', error);
     } finally {
@@ -48,23 +46,24 @@ export default function TeamMembersPanel({ team }: TeamMembersPanelProps) {
         </button>
       </div>
 
-      {members.length > 0 ? (
+      {teamAgents?.agentIds && teamAgents.agentIds.length > 0 ? (
         <div className="space-y-2">
-          {members.map((member) => (
-            <div key={member.id} className="flex justify-between items-center p-3 border rounded">
+          {teamAgents.agentIds.map((agentId, index) => (
+            <div key={typeof agentId === 'string' ? agentId : agentId.value || index} className="flex justify-between items-center p-3 border rounded">
               <div>
-                <p className="font-medium text-foreground">User ID: {member.userId}</p>
+                <p className="font-medium text-foreground">Agent ID: {typeof agentId === 'string' ? agentId : agentId.value}</p>
                 <p className="text-sm text-muted-foreground">
-                  Joined: {member.createdAt ? new Date(member.createdAt).toLocaleDateString() : 'Unknown'}
+                  Type: Team Agent
                 </p>
               </div>
               <button
                 onClick={async () => {
                   try {
-                    await removeTeamMember(member.id);
+                    const agentIdString = typeof agentId === 'string' ? agentId : agentId.value?.toString();
+                    await removeTeamMember(team.id.value, agentIdString);
                     loadMembers();
                   } catch (error) {
-                    console.error('Failed to remove member:', error);
+                    console.error('Failed to remove agent:', error);
                   }
                 }}
                 className="text-destructive hover:text-destructive/80 text-sm"
@@ -76,8 +75,8 @@ export default function TeamMembersPanel({ team }: TeamMembersPanelProps) {
         </div>
       ) : (
         <div className="text-center py-8 text-muted-foreground">
-          <p>No members in this team yet.</p>
-          <p className="text-sm">Add members to collaborate on team goals.</p>
+          <p>No agents in this team yet.</p>
+          <p className="text-sm">Add agents to collaborate on team goals.</p>
         </div>
       )}
     </div>

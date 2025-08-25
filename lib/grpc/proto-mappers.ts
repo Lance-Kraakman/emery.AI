@@ -239,7 +239,7 @@ export function mapTaskProgressFromProto(progress: TaskProgressProto): Partial<T
   }
 
   // Set completion timestamp for final states
-  if (['completed', 'failed', 'cancelled', 'timeout'].includes(update.status!)) {
+  if (['completed', 'failed', 'cancelled', 'timeout'].includes(update.status!.value)) {
     update.completedAt = new Date();
   }
 

@@ -1,39 +1,50 @@
 "use server"
 
-import { db } from "@/lib/db/client"
-import { databases } from "@/lib/db/schema"
-import { eq, and } from "drizzle-orm"
-import { auth } from "@/lib/auth"
+// AIDEV-NOTE: Server Actions for database management using DatabaseApplicationService
+// Migrated from direct DB access to proper DDD application service pattern
+
 import { z } from "zod"
 import { revalidatePath } from "next/cache"
+import { requirePermission } from "./permissions"
+import { requireCurrentOrganization } from "./user-organizations"
+import { getDatabaseApplicationService } from "@/ddd/application/di/container"
+import type { Result } from "./types"
 
-// AIDEV-NOTE: Database management server actions with metadata support for RAG indexing
+// Import the DI setup to ensure container is initialized
+import "@/ddd/application/di/setup"
+import type {
+  CreateDatabaseCommand,
+  UpdateDatabaseCommand,
+  DatabaseFilters
+} from "@/ddd/application/services/database/database-application-service"
 
 const createDatabaseSchema = z.object({
   name: z.string().min(1, "Database name is required"),
   description: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
 })
 
 const updateDatabaseSchema = z.object({
   id: z.number(),
-  name: z.string().min(1, "Database name is required"),
+  name: z.string().min(1, "Database name is required").optional(),
   description: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
 })
 
-export async function getDatabases() {
-  const session = await auth()
-  if (!session?.user?.currentOrganizationId) {
-    throw new Error("Not authenticated or no organization selected")
-  }
-
+export async function getDatabases(searchQuery?: string, hasTables?: boolean) {
   try {
-    const dbList = await db
-      .select()
-      .from(databases)
-      .where(eq(databases.organizationId, session.user.currentOrganizationId))
-      .orderBy(databases.createdAt)
+    const session = await requirePermission("view_data");
+    const currentOrg = await requireCurrentOrganization();
     
-    return dbList
+    const databaseApplicationService = getDatabaseApplicationService();
+    
+    const filters: DatabaseFilters = {
+      organizationId: currentOrg.id.value,
+      searchQuery,
+      hasTables
+    };
+    
+    return await databaseApplicationService.getDatabases(filters);
   } catch (error) {
     console.error('Error fetching databases:', error)
     throw new Error('Failed to fetch databases')
@@ -41,77 +52,52 @@ export async function getDatabases() {
 }
 
 export async function getDatabase(id: number) {
-  const session = await auth()
-  if (!session?.user?.currentOrganizationId) {
-    throw new Error("Not authenticated or no organization selected")
-  }
-
   try {
-    const database = await db
-      .select()
-      .from(databases)
-      .where(and(
-        eq(databases.id, id),
-        eq(databases.organizationId, session.user.currentOrganizationId)
-      ))
-      .limit(1)
+    const session = await requirePermission("view_data");
     
-    if (database.length === 0) {
-      throw new Error("Database not found")
+    if (!id) {
+      throw new Error("Database ID is required");
     }
     
-    return database[0]
+    const databaseApplicationService = getDatabaseApplicationService();
+    const database = await databaseApplicationService.getDatabase(id);
+    
+    if (!database) {
+      throw new Error("Database not found");
+    }
+    
+    return database;
   } catch (error) {
     console.error('Error fetching database:', error)
     throw new Error('Failed to fetch database')
   }
 }
 
-export async function createDatabase(data: z.infer<typeof createDatabaseSchema>, revalidateUrl?: string) {
-  const session = await auth()
-  if (!session?.user?.currentOrganizationId || !session?.user?.id) {
-    throw new Error("Not authenticated or no organization selected")
-  }
-
+export async function createDatabase(data: z.infer<typeof createDatabaseSchema>, revalidateUrl?: string): Promise<Result> {
   try {
-    const validatedData = createDatabaseSchema.parse(data)
+    const session = await requirePermission("create_data");
+    const currentOrg = await requireCurrentOrganization();
     
-    // Create URL-safe slug
-    const baseSlug = validatedData.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
+    const validatedData = createDatabaseSchema.parse(data);
     
-    // Ensure unique slug by checking existing databases
-    let slug = baseSlug
-    let counter = 1
-    while (true) {
-      const existing = await db
-        .select()
-        .from(databases)
-        .where(eq(databases.slug, slug))
-        .limit(1)
-      
-      if (existing.length === 0) break
-      
-      slug = `${baseSlug}-${counter}`
-      counter++
+    const databaseApplicationService = getDatabaseApplicationService();
+    
+    const command: CreateDatabaseCommand = {
+      name: validatedData.name,
+      description: validatedData.description,
+      metadata: validatedData.metadata,
+      organizationId: currentOrg.id.value,
+      createdBy: session.user.id
+    };
+
+    const result = await databaseApplicationService.createDatabase(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to create database"
+      };
     }
-
-    const metadata = validatedData.description 
-      ? { description: validatedData.description }
-      : null
-
-    const result = await db
-      .insert(databases)
-      .values({
-        name: validatedData.name,
-        slug,
-        metadata,
-        organizationId: session.user.currentOrganizationId,
-        createdBy: session.user.id,
-      })
-      .returning()
 
     // Note: RAG reindexing is now handled automatically by database triggers
 
@@ -122,7 +108,11 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
       revalidatePath('/data') // Default path for database operations
     }
 
-    return { success: true, data: result[0] }
+    return {
+      success: true,
+      data: result.data,
+      warnings: result.warnings
+    };
   } catch (error) {
     console.error('Error creating database:', error)
     
@@ -137,34 +127,32 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
   }
 }
 
-export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>, revalidateUrl?: string) {
-  const session = await auth()
-  if (!session?.user?.currentOrganizationId) {
-    throw new Error("Not authenticated or no organization selected")
-  }
-
+export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>, revalidateUrl?: string): Promise<Result> {
   try {
-    const validatedData = updateDatabaseSchema.parse(data)
+    const session = await requirePermission("manage_data");
     
-    const metadata = validatedData.description 
-      ? { description: validatedData.description }
-      : null
+    const validatedData = updateDatabaseSchema.parse(data);
+    
+    if (!validatedData.id) {
+      return { success: false, error: "Database ID is required" };
+    }
+    
+    const databaseApplicationService = getDatabaseApplicationService();
+    
+    const command: UpdateDatabaseCommand = {
+      databaseId: validatedData.id,
+      name: validatedData.name,
+      description: validatedData.description,
+      metadata: validatedData.metadata
+    };
 
-    const result = await db
-      .update(databases)
-      .set({
-        name: validatedData.name,
-        metadata,
-        updatedAt: new Date(),
-      })
-      .where(and(
-        eq(databases.id, validatedData.id),
-        eq(databases.organizationId, session.user.currentOrganizationId)
-      ))
-      .returning()
+    const result = await databaseApplicationService.updateDatabase(command);
 
-    if (result.length === 0) {
-      return { success: false, error: "Database not found" }
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to update database"
+      };
     }
 
     // Note: RAG reindexing is now handled automatically by database triggers
@@ -176,7 +164,11 @@ export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>,
       revalidatePath('/data') // Default path for database operations
     }
 
-    return { success: true, data: result[0] }
+    return {
+      success: true,
+      data: result.data,
+      warnings: result.warnings
+    };
   } catch (error) {
     console.error('Error updating database:', error)
     
@@ -191,35 +183,23 @@ export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>,
   }
 }
 
-export async function deleteDatabase(id: number, revalidateUrl?: string) {
-  const session = await auth()
-  if (!session?.user?.currentOrganizationId) {
-    throw new Error("Not authenticated or no organization selected")
-  }
-
+export async function deleteDatabase(id: number, revalidateUrl?: string): Promise<Result> {
   try {
-    // Check if database has tables - prevent deletion if it does
-    const tablesCount = await db.query.tables.findMany({
-      where: (tables, { eq }) => eq(tables.databaseId, id)
-    })
-
-    if (tablesCount.length > 0) {
-      return { 
-        success: false, 
-        error: `Cannot delete database: it contains ${tablesCount.length} table(s). Delete all tables first.` 
-      }
+    const session = await requirePermission("manage_data");
+    const currentOrg = await requireCurrentOrganization();
+    
+    if (!id) {
+      return { success: false, error: "Database ID is required" };
     }
+    
+    const databaseApplicationService = getDatabaseApplicationService();
+    const result = await databaseApplicationService.deleteDatabase(id, currentOrg.id.value);
 
-    const result = await db
-      .delete(databases)
-      .where(and(
-        eq(databases.id, id),
-        eq(databases.organizationId, session.user.currentOrganizationId)
-      ))
-      .returning()
-
-    if (result.length === 0) {
-      return { success: false, error: "Database not found" }
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to delete database"
+      };
     }
 
     // Note: RAG reindexing is now handled automatically by database triggers
@@ -231,9 +211,57 @@ export async function deleteDatabase(id: number, revalidateUrl?: string) {
       revalidatePath('/data') // Default path for database operations
     }
 
-    return { success: true }
+    return {
+      success: true,
+      data: { message: "Database deleted successfully" },
+      warnings: result.warnings
+    };
   } catch (error) {
     console.error('Error deleting database:', error)
     return { success: false, error: "Failed to delete database" }
+  }
+}
+
+/**
+ * Get database count for the current organization
+ */
+export async function getDatabaseCount() {
+  try {
+    const session = await requirePermission("view_data");
+    const currentOrg = await requireCurrentOrganization();
+    
+    const databaseApplicationService = getDatabaseApplicationService();
+    return await databaseApplicationService.getDatabaseCount(currentOrg.id.value);
+  } catch (error) {
+    console.error('Error fetching database count:', error);
+    throw new Error('Failed to fetch database count');
+  }
+}
+
+/**
+ * Get database by slug
+ */
+export async function getDatabaseBySlug(slug: string) {
+  try {
+    const session = await requirePermission("view_data");
+    
+    if (!slug) {
+      throw new Error("Database slug is required");
+    }
+    
+    // Note: This would require adding findBySlug method to application service
+    // For now, get all databases and filter by slug
+    const currentOrg = await requireCurrentOrganization();
+    const databases = await getDatabases();
+    const database = databases.find(db => db.slug === slug);
+    
+    if (!database) {
+      throw new Error("Database not found");
+    }
+    
+    return database;
+  } catch (error) {
+    console.error('Error fetching database by slug:', error);
+    throw new Error('Failed to fetch database by slug');
   }
 }

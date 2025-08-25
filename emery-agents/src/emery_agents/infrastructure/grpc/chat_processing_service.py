@@ -21,7 +21,7 @@ from typing import AsyncIterator, Optional, List, Dict, Any
 import grpc
 from grpc import aio
 
-from .generated import agent_worker_pb2, agent_worker_pb2_grpc
+from ...grpc.generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .mappers import ProtoMapper
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

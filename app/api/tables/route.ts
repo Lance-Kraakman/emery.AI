@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getTableApplicationService } from "@/ddd/application/di/container";
-import type { CreateTableCommand } from '@/ddd/application/use-cases/tables/table-application-service';
+import type { CreateTableCommand } from '@/ddd/application/services/tables/table-application-service';
 
 /**
  * Create a new table using TableApplicationService

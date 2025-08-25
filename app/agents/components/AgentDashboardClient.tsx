@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import type { Team } from '@/types/db';
+import type { Team } from '@/ddd/domain/teams/entities/team';
 import { Search, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,8 +53,8 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
     // Check if agent belongs to selected team (teams have agentIds array)
     let matchesTeam = selectedTeam === 'all';
     if (selectedTeam !== 'all') {
-      const team = teams.find(t => t.id.toString() === selectedTeam);
-      matchesTeam = team?.agentIds?.includes(agent.id.toString()) || false;
+      const team = teams.find(t => t.id.value.toString() === selectedTeam);
+      matchesTeam = team?.agentIds?.some(agentId => agentId.value === agent.id.value) || false;
     }
     
     return matchesSearch && matchesTeam;
@@ -106,7 +106,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
               <SelectContent>
                 <SelectItem value="all">All Teams</SelectItem>
                 {teams.map((team) => (
-                  <SelectItem key={team.id} value={team.id.toString()}>
+                  <SelectItem key={team.id.value} value={team.id.value.toString()}>
                     {team.name}
                   </SelectItem>
                 ))}
@@ -139,7 +139,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
               ) : (
                 filteredAgents.map((agent) => (
                   <Card
-                    key={agent.id}
+                    key={agent.id.value}
                     className={`cursor-pointer transition-all hover:shadow-md ${
                       selectedAgent?.id === agent.id
                         ? 'ring-2 ring-primary bg-secondary'
@@ -158,9 +158,9 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
                       <p className="text-sm text-muted-foreground">{agent.role || 'No role specified'}</p>
                       {agent.status && (
                         <span className={`inline-block px-2 py-1 text-xs rounded-full mt-2 ${
-                          agent.status === 'active' ? 'bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-muted/50 text-muted-foreground'
+                          agent.status.value === 'active' ? 'bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-muted/50 text-muted-foreground'
                         }`}>
-                          {agent.status}
+                          {agent.status.value}
                         </span>
                       )}
                     </CardContent>

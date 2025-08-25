@@ -1,5 +1,8 @@
 import { pgTable, text, uuid, serial, integer, timestamp, boolean, primaryKey, jsonb, unique, customType } from "drizzle-orm/pg-core";
 
+// AIDEV-NOTE: Import organizational analysis types for type-safe schema
+import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
+
 // Custom vector type for pgvector
 const vector = customType<{ data: number[]; notNull: false; default: false }>({
   dataType() {
@@ -63,7 +66,7 @@ export const organizations = pgTable("organizations", {
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   stripeSubscriptionStatus: text("stripe_subscription_status"),
-  analysisCapabilities: jsonb("analysis_capabilities"), // Organizational analysis configuration
+  analysisCapabilities: jsonb("analysis_capabilities").$type<OrganizationAnalysisCapabilities>(), // Type-safe organizational analysis configuration
   createdAt: timestamp("created_at").defaultNow(),
 });
 

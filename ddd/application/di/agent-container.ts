@@ -14,7 +14,7 @@ import type { ITaskRepository } from '@/ddd/domain/agents/repositories/task-repo
 import type { IAgentExecutionRepository } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 
 // Application services
-import { AgentTaskApplicationService } from '@/ddd/application/use-cases/agents/agent-task-application-service';
+import { AgentTaskApplicationService } from '@/ddd/application/services/agents/agent-task-application-service';
 
 // Import from main container
 import {

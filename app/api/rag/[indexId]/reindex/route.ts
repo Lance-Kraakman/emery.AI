@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { indexingApplicationService } from '@/ddd/application/di/rag-container'
-import type { ReindexCommand } from '@/ddd/application/rag/commands/reindex-command'
+import type { ReindexCommand } from '@/ddd/application/services/rag/commands/reindex-command'
 
 // POST /api/rag/[indexId]/reindex - Trigger reindexing
 export async function POST(

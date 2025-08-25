@@ -7,8 +7,8 @@ import { auth } from '@/lib/auth'
 import { searchApplicationService, indexingApplicationService, indexRepository } from '@/ddd/application/di/rag-container'
 import { generateText } from 'ai'
 import { getAIModel, getAIProviderInfo } from '@/lib/ai/models'
-import type { SearchRagQuery } from '@/ddd/application/rag/queries/search-query'
-import type { CreateIndexCommand } from '@/ddd/application/rag/commands/create-index-command'
+import type { SearchRagQuery } from '@/ddd/application/services/rag/queries/search-query'
+import type { CreateIndexCommand } from '@/ddd/application/services/rag/commands/create-index-command'
 import { RagIndexId, OrganizationId } from '@/ddd/domain/rag/value-objects'
 
 export async function chatAction(question: string): Promise<ReactNode> {

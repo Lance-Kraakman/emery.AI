@@ -5,12 +5,20 @@
  * Tasks are created when agents are executed and track progress/results.
  * 
  * AIDEV-NOTE: Domain entity for task management - contains business logic
- * for task lifecycle and status transitions
+ * for task lifecycle and status transitions with DDD Value Objects
  */
 
 import type { ToolConfig, ServerConfig } from './agent';
+import { 
+  TaskId, 
+  AgentId, 
+  OrganizationId, 
+  UserId, 
+  TaskStatus 
+} from '@/ddd/domain/shared/value-objects';
 
-export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout';
+// Re-export TaskStatus for external use
+export { TaskStatus };
 
 export interface TaskInstructions {
   instructions: string;
@@ -20,9 +28,9 @@ export interface TaskInstructions {
 }
 
 export interface TaskConfig {
-  id?: string; // UUID, will be generated if not provided
-  agentId: number;
-  organizationId: number;
+  id?: TaskId; // Will be generated if not provided
+  agentId: AgentId;
+  organizationId: OrganizationId;
   name: string;
   capabilityName?: string;
   instructions: TaskInstructions;
@@ -31,23 +39,23 @@ export interface TaskConfig {
   error?: string;
   startedAt?: Date;
   completedAt?: Date;
-  createdBy?: string;
+  createdBy?: UserId;
   createdAt?: Date;
 }
 
 export interface CreateTaskData {
-  agentId: number;
+  agentId: AgentId;
   name: string;
   capabilityName?: string; // Optional - system can auto-route
   instructions: TaskInstructions; // Task configuration
-  createdBy?: string;
+  createdBy?: UserId;
 }
 
 export class Task {
   private constructor(
-    public readonly id: string,
-    public readonly agentId: number,
-    public readonly organizationId: number,
+    public readonly id: TaskId,
+    public readonly agentId: AgentId,
+    public readonly organizationId: OrganizationId,
     public readonly name: string,
     public readonly capabilityName: string | null,
     public readonly instructions: TaskInstructions,
@@ -56,38 +64,31 @@ export class Task {
     private _error: string | null,
     private _startedAt: Date | null,
     private _completedAt: Date | null,
-    public readonly createdBy: string | null,
+    public readonly createdBy: UserId | null,
     public readonly createdAt: Date
   ) {}
 
   static create(config: TaskConfig): Task {
     const now = new Date();
     
-    // AIDEV-DEBUG: Log task creation to debug organization_id issue
-    console.log('[TASK-ENTITY] Creating task with config:', {
-      agentId: config.agentId,
-      organizationId: config.organizationId,
-      organizationIdType: typeof config.organizationId,
-      name: config.name
-    });
-    
-    // Validate required fields to prevent NULL constraint violations
-    if (!config.organizationId || typeof config.organizationId !== 'number') {
-      throw new Error(`Task creation failed: organizationId is required and must be a number, got: ${config.organizationId} (${typeof config.organizationId})`);
+    // AIDEV-NOTE: Value Objects provide built-in validation, no need for manual checks
+    // Validate required Value Objects
+    if (!config.organizationId) {
+      throw new Error('Task creation failed: organizationId is required');
     }
     
-    if (!config.agentId || typeof config.agentId !== 'number') {
-      throw new Error(`Task creation failed: agentId is required and must be a number, got: ${config.agentId} (${typeof config.agentId})`);
+    if (!config.agentId) {
+      throw new Error('Task creation failed: agentId is required');
     }
     
     return new Task(
-      config.id || crypto.randomUUID(),
+      config.id || TaskId.generate(),
       config.agentId,
       config.organizationId,
       config.name,
       config.capabilityName || null,
       config.instructions,
-      config.status || 'pending',
+      config.status || TaskStatus.pending(),
       config.result || null,
       config.error || null,
       config.startedAt || null,
@@ -113,18 +114,18 @@ export class Task {
     createdAt: Date;
   }): Task {
     return new Task(
-      data.id,
-      data.agentId,
-      data.organizationId,
+      TaskId.fromString(data.id),
+      AgentId.fromNumber(data.agentId),
+      OrganizationId.fromNumber(data.organizationId),
       data.name,
       data.capabilityName || null,
       data.instructions as TaskInstructions,
-      data.status as TaskStatus,
+      TaskStatus.fromString(data.status),
       data.result || null,
       data.error || null,
       data.startedAt || null,
       data.completedAt || null,
-      data.createdBy || null,
+      data.createdBy ? UserId.fromString(data.createdBy) : null,
       data.createdAt
     );
   }
@@ -140,11 +141,11 @@ export class Task {
    * Start task execution
    */
   start(): void {
-    if (this._status !== 'pending') {
-      throw new Error(`Cannot start task ${this.id}: current status is ${this._status}`);
+    if (!this._status.canStart()) {
+      throw new Error(`Cannot start task ${this.id}: current status is ${this._status.value}`);
     }
     
-    this._status = 'in_progress';
+    this._status = TaskStatus.inProgress();
     this._startedAt = new Date();
     this._error = null; // Clear any previous error
   }
@@ -153,11 +154,11 @@ export class Task {
    * Mark task as completed with result
    */
   complete(result?: any): void {
-    if (this._status !== 'in_progress') {
-      throw new Error(`Cannot complete task ${this.id}: current status is ${this._status}`);
+    if (!this._status.canTransitionTo(TaskStatus.completed())) {
+      throw new Error(`Cannot complete task ${this.id}: current status is ${this._status.value}`);
     }
     
-    this._status = 'completed';
+    this._status = TaskStatus.completed();
     this._result = result || null;
     this._completedAt = new Date();
     this._error = null; // Clear any error on success
@@ -167,11 +168,11 @@ export class Task {
    * Mark task as failed with error
    */
   fail(error: string): void {
-    if (this._status === 'completed') {
-      throw new Error(`Cannot fail task ${this.id}: task is already completed`);
+    if (!this._status.canTransitionTo(TaskStatus.failed())) {
+      throw new Error(`Cannot fail task ${this.id}: current status is ${this._status.value}`);
     }
     
-    this._status = 'failed';
+    this._status = TaskStatus.failed();
     this._error = error;
     this._completedAt = new Date();
   }
@@ -180,11 +181,11 @@ export class Task {
    * Cancel task execution
    */
   cancel(reason?: string): void {
-    if (this._status === 'completed' || this._status === 'failed') {
-      throw new Error(`Cannot cancel task ${this.id}: task is already ${this._status}`);
+    if (!this._status.canCancel()) {
+      throw new Error(`Cannot cancel task ${this.id}: current status is ${this._status.value}`);
     }
     
-    this._status = 'cancelled';
+    this._status = TaskStatus.cancelled();
     this._error = reason ? `Cancelled: ${reason}` : 'Cancelled by user';
     this._completedAt = new Date();
   }

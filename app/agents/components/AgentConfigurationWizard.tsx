@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import { AgentStatus } from '@/ddd/domain/shared/value-objects';
 import { createAgent, updateAgent } from '@/app/actions/agents';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -171,12 +172,12 @@ export default function AgentConfigurationWizard({
         tools,
         trigger,
         capabilities,
-        status: 'active' as const
+        status: AgentStatus.active()
       };
 
       let result;
       if (agent) {
-        result = await updateAgent(agent.id, agentData);
+        result = await updateAgent(agent.id.value, agentData);
       } else {
         result = await createAgent(agentData);
       }
@@ -393,7 +394,7 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                 {formData.triggerType === 'CALENDAR' && agent?.id && (
                   <FormField label="Calendar Schedule">
                     <ScheduleManager
-                      agentId={agent.id}
+                      agentId={agent.id.value}
                       initialRRule={formData.triggerConfig.rrule}
                       onScheduleChange={(rrule) => setFormData(prev => ({
                         ...prev,

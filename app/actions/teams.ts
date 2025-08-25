@@ -1,41 +1,57 @@
 'use server'
 
-import { db } from "@/lib/db/client";
-import { teams, teamMemberships } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+// AIDEV-NOTE: Server Actions for team management using TeamApplicationService
+// Migrated from direct DB access to proper DDD application service pattern
+
 import { revalidatePath } from "next/cache";
+import { requirePermission } from "./permissions";
+import { requireCurrentOrganization } from "./user-organizations";
+import { getTeamApplicationService } from "@/ddd/application/di/container";
 import { createTeamSchema, updateTeamSchema, parseFormDataToTeam } from "@/lib/schemas";
 import type { Result, CreateTeamData, TeamMembershipData } from "./types";
+import type { CreateTeamCommand, UpdateTeamCommand, TeamFilters } from "@/ddd/application/services/teams/team-application-service";
+import { TeamId, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
+
+// Import the DI setup to ensure container is initialized
+import "@/ddd/application/di/setup";
 
 export async function createTeam(data: CreateTeamData): Promise<Result> {
   try {
-    const { organizationId, name, purpose, description, responsibilities, goals, agentIds } = data;
+    const session = await requirePermission("manage_teams");
+    const currentOrg = await requireCurrentOrganization();
+    const { name, purpose, description, responsibilities, goals, agentIds } = data;
 
-    if (!organizationId || !name) {
-      return {
-        success: false,
-        error: "organizationId and name are required",
-      };
-    }
-
-    const [newTeam] = await db.insert(teams).values({
-      organizationId,
+    const teamApplicationService = getTeamApplicationService();
+    
+    const command: CreateTeamCommand = {
       name,
       purpose,
       description,
       responsibilities,
       goals,
       agentIds,
-    }).returning();
+      organizationId: currentOrg.id.value
+    };
 
-    revalidatePath('/dashboard');
-    revalidatePath('/teams');
+    const result = await teamApplicationService.createTeam(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to create team"
+      };
+    }
 
     // Note: RAG reindexing is now handled automatically by database triggers
+
+    // Revalidate paths
+    revalidatePath('/dashboard');
+    revalidatePath('/teams');
     
     return {
       success: true,
-      data: newTeam,
+      data: result.data,
+      warnings: result.warnings
     };
   } catch (error) {
     console.error("Error creating team:", error);
@@ -72,13 +88,16 @@ export async function createTeamAction(formData: FormData): Promise<Result> {
 
 export async function getTeams(organizationId?: number) {
   try {
-    const query = db.select().from(teams).orderBy(desc(teams.createdAt));
-
-    if (organizationId) {
-      return await query.where(eq(teams.organizationId, organizationId));
-    }
-
-    return await query;
+    const session = await requirePermission("view_teams");
+    const currentOrg = await requireCurrentOrganization();
+    
+    const teamApplicationService = getTeamApplicationService();
+    
+    const filters: TeamFilters = {
+      organizationId: organizationId || currentOrg.id.value
+    };
+    
+    return await teamApplicationService.getTeams(filters);
   } catch (error) {
     console.error("Error fetching teams:", error);
     throw new Error("Failed to fetch teams");
@@ -87,16 +106,14 @@ export async function getTeams(organizationId?: number) {
 
 export async function getTeam(teamId: number) {
   try {
+    const session = await requirePermission("view_teams");
+    
     if (!teamId) {
       throw new Error("teamId is required");
     }
 
-    const [team] = await db
-      .select()
-      .from(teams)
-      .where(eq(teams.id, teamId));
-
-    return team;
+    const teamApplicationService = getTeamApplicationService();
+    return await teamApplicationService.getTeam(teamId);
   } catch (error) {
     console.error("Error fetching team:", error);
     throw new Error("Failed to fetch team");
@@ -105,6 +122,8 @@ export async function getTeam(teamId: number) {
 
 export async function updateTeam(teamId: number, data: Partial<CreateTeamData>): Promise<Result> {
   try {
+    const session = await requirePermission("manage_teams");
+    
     if (!teamId) {
       return {
         success: false,
@@ -112,22 +131,35 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
       };
     }
 
-    const [updatedTeam] = await db
-      .update(teams)
-      .set(data)
-      .where(eq(teams.id, teamId))
-      .returning();
+    const teamApplicationService = getTeamApplicationService();
+    
+    const command: UpdateTeamCommand = {
+      teamId,
+      name: data.name,
+      purpose: data.purpose,
+      description: data.description,
+      responsibilities: data.responsibilities,
+      goals: data.goals,
+      agentIds: data.agentIds
+    };
 
+    const result = await teamApplicationService.updateTeam(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to update team"
+      };
+    }
+
+    // Note: RAG reindexing is now handled automatically by database triggers
     revalidatePath('/dashboard');
     revalidatePath('/teams');
-
-    if (updatedTeam.organizationId) {
-      // Note: RAG reindexing is now handled automatically by database triggers
-    }
     
     return {
       success: true,
-      data: updatedTeam,
+      data: result.data,
+      warnings: result.warnings
     };
   } catch (error) {
     console.error("Error updating team:", error);
@@ -140,6 +172,8 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
 
 export async function deleteTeam(teamId: number): Promise<Result> {
   try {
+    const session = await requirePermission("manage_teams");
+    
     if (!teamId) {
       return {
         success: false,
@@ -147,14 +181,19 @@ export async function deleteTeam(teamId: number): Promise<Result> {
       };
     }
 
-    const [deletedTeam] = await db.delete(teams).where(eq(teams.id, teamId)).returning();
+    const teamApplicationService = getTeamApplicationService();
+    const result = await teamApplicationService.deleteTeam(teamId);
 
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to delete team"
+      };
+    }
+
+    // Note: RAG reindexing is now handled automatically by database triggers
     revalidatePath('/dashboard');
     revalidatePath('/teams');
-
-    if (deletedTeam?.organizationId) {
-      // Note: RAG reindexing is now handled automatically by database triggers
-    }
     
     return {
       success: true,
@@ -169,79 +208,204 @@ export async function deleteTeam(teamId: number): Promise<Result> {
   }
 }
 
-export async function addTeamMember(data: TeamMembershipData): Promise<Result> {
+// AIDEV-NOTE: Team memberships are now managed through agent assignments
+// This function adds an agent to a team instead of a user membership
+export async function addAgentToTeam(teamId: number, agentId: string): Promise<Result> {
   try {
-    const { teamId, userId } = data;
+    const session = await requirePermission("manage_teams");
 
-    if (!teamId || !userId) {
+    if (!teamId || !agentId) {
       return {
         success: false,
-        error: "teamId and userId are required",
+        error: "teamId and agentId are required",
       };
     }
 
-    const [newMembership] = await db.insert(teamMemberships).values({
-      teamId,
-      userId,
-    }).returning();
+    const teamApplicationService = getTeamApplicationService();
+    const result = await teamApplicationService.addAgentToTeam(teamId, agentId);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to add agent to team"
+      };
+    }
 
     revalidatePath('/dashboard');
     revalidatePath('/teams');
     
     return {
       success: true,
-      data: newMembership,
+      data: result.data,
+      warnings: result.warnings
     };
   } catch (error) {
-    console.error("Error adding team member:", error);
+    console.error("Error adding agent to team:", error);
     return {
       success: false,
-      error: "Failed to add team member",
+      error: "Failed to add agent to team",
     };
   }
 }
 
-export async function removeTeamMember(membershipId: number): Promise<Result> {
+// AIDEV-NOTE: Team memberships are now managed through agent assignments
+// This function removes an agent from a team instead of a user membership
+export async function removeAgentFromTeam(teamId: number, agentId: string): Promise<Result> {
   try {
-    if (!membershipId) {
+    const session = await requirePermission("manage_teams");
+    
+    if (!teamId || !agentId) {
       return {
         success: false,
-        error: "membershipId is required",
+        error: "teamId and agentId are required",
       };
     }
 
-    await db.delete(teamMemberships).where(eq(teamMemberships.id, membershipId));
+    const teamApplicationService = getTeamApplicationService();
+    const result = await teamApplicationService.removeAgentFromTeam(teamId, agentId);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to remove agent from team"
+      };
+    }
 
     revalidatePath('/dashboard');
     revalidatePath('/teams');
     
     return {
       success: true,
-      data: { message: "Team member removed successfully" },
+      data: { message: "Agent removed from team successfully" },
     };
   } catch (error) {
-    console.error("Error removing team member:", error);
+    console.error("Error removing agent from team:", error);
     return {
       success: false,
-      error: "Failed to remove team member",
+      error: "Failed to remove agent from team",
     };
   }
 }
 
-export async function getTeamMembers(teamId: number) {
+// AIDEV-NOTE: Team members are now represented by agents assigned to the team
+// Get the team details which includes agent information
+export async function getTeamAgents(teamId: number) {
   try {
+    const session = await requirePermission("view_teams");
+    
     if (!teamId) {
       throw new Error("teamId is required");
     }
 
-    const members = await db
-      .select()
-      .from(teamMemberships)
-      .where(eq(teamMemberships.teamId, teamId));
+    const teamApplicationService = getTeamApplicationService();
+    const team = await teamApplicationService.getTeam(teamId);
+    
+    if (!team) {
+      throw new Error("Team not found");
+    }
 
-    return members;
+    // Return agent IDs - the UI can fetch full agent details if needed
+    return {
+      teamId: team.id,
+      agentIds: team.agentIds || []
+    };
   } catch (error) {
-    console.error("Error fetching team members:", error);
-    throw new Error("Failed to fetch team members");
+    console.error("Error fetching team agents:", error);
+    throw new Error("Failed to fetch team agents");
+  }
+}
+
+// Legacy compatibility function - kept for existing UI components
+export async function getTeamMembers(teamId: number) {
+  return getTeamAgents(teamId);
+}
+
+/**
+ * Alias for addAgentToTeam for legacy compatibility
+ */
+export async function addTeamMember(teamId: number, agentId: string): Promise<Result> {
+  return addAgentToTeam(teamId, agentId);
+}
+
+/**
+ * Alias for removeAgentFromTeam for legacy compatibility
+ */
+export async function removeTeamMember(teamId: number, agentId: string): Promise<Result> {
+  return removeAgentFromTeam(teamId, agentId);
+}
+
+/**
+ * Get teams that contain a specific agent
+ */
+export async function getTeamsForAgent(agentId: string) {
+  try {
+    const session = await requirePermission("view_teams");
+    
+    if (!agentId) {
+      throw new Error("agentId is required");
+    }
+
+    const teamApplicationService = getTeamApplicationService();
+    return await teamApplicationService.getTeamsForAgent(agentId);
+  } catch (error) {
+    console.error("Error fetching teams for agent:", error);
+    throw new Error("Failed to fetch teams for agent");
+  }
+}
+
+/**
+ * Get team count for an organization
+ */
+export async function getTeamCount(organizationId?: number) {
+  try {
+    const session = await requirePermission("view_teams");
+    const currentOrg = await requireCurrentOrganization();
+    
+    const teamApplicationService = getTeamApplicationService();
+    return await teamApplicationService.getTeamCount(organizationId || currentOrg.id.value);
+  } catch (error) {
+    console.error("Error fetching team count:", error);
+    throw new Error("Failed to fetch team count");
+  }
+}
+
+/**
+ * Bulk assign multiple agents to a team
+ */
+export async function bulkAssignAgents(teamId: number, agentIds: string[]): Promise<Result> {
+  try {
+    const session = await requirePermission("manage_teams");
+    
+    if (!teamId || !agentIds || agentIds.length === 0) {
+      return {
+        success: false,
+        error: "teamId and agentIds are required",
+      };
+    }
+
+    const teamApplicationService = getTeamApplicationService();
+    const result = await teamApplicationService.bulkAssignAgents(teamId, agentIds);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to assign agents to team"
+      };
+    }
+
+    revalidatePath('/dashboard');
+    revalidatePath('/teams');
+    
+    return {
+      success: true,
+      data: result.data,
+      warnings: result.warnings
+    };
+  } catch (error) {
+    console.error("Error bulk assigning agents:", error);
+    return {
+      success: false,
+      error: "Failed to assign agents to team",
+    };
   }
 }

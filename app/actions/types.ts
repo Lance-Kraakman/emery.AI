@@ -105,12 +105,22 @@ export type {
 export type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 // Import task types from domain layer
+import type { TaskInstructions } from '@/ddd/domain/agents/entities/task';
+
 export type {
   TaskStatus,
   TaskInstructions,
-  TaskConfig as Task,
-  CreateTaskData
+  TaskConfig as Task
 } from '@/ddd/domain/agents/entities/task';
+
+// Server Action interface for task creation (uses primitives, converted to Value Objects in Application layer)
+export interface CreateTaskData {
+  agentId: number;
+  name: string;
+  capabilityName?: string;
+  instructions: TaskInstructions;
+  createdBy?: string;
+}
 
 // CreateRoleData moved to domain entities: @/lib/domain/entities/role
 

@@ -1,6 +1,6 @@
 export { RagIndexId } from './rag-index-id';
 export { DocumentId } from './document-id';
-export { OrganizationId } from './organization-id';
+export { OrganizationId } from '../../shared/value-objects/organization-id';
 export { SearchQuery, type SimilarityMetric } from './search-query';
 
 // RAG data transfer value objects removed - use domain entities directly for internal operations

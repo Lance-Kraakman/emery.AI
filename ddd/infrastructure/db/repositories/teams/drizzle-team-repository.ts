@@ -3,6 +3,7 @@
 
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
 import { Team } from '@/ddd/domain/teams/entities/team';
+import { OrganizationId, TeamId, AgentId } from '@/ddd/domain/shared/value-objects';
 import type { DbClient } from '@/lib/db/client';
 import { teams } from '@/lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
@@ -10,11 +11,11 @@ import { eq, sql } from 'drizzle-orm';
 export class DrizzleTeamRepository implements ITeamRepository {
   constructor(private readonly db: DbClient) {}
 
-  async findByOrganization(organizationId: number): Promise<Team[]> {
+  async findByOrganization(organizationId: OrganizationId): Promise<Team[]> {
     const results = await this.db
       .select()
       .from(teams)
-      .where(eq(teams.organizationId, organizationId));
+      .where(eq(teams.organizationId, organizationId.value));
 
     return results.map(result => Team.fromPersistence({
       id: result.id,
@@ -30,11 +31,11 @@ export class DrizzleTeamRepository implements ITeamRepository {
     }));
   }
 
-  async findById(id: number): Promise<Team | null> {
+  async findById(id: TeamId): Promise<Team | null> {
     const results = await this.db
       .select()
       .from(teams)
-      .where(eq(teams.id, id))
+      .where(eq(teams.id, id.value))
       .limit(1);
 
     if (results.length === 0) {
@@ -56,12 +57,12 @@ export class DrizzleTeamRepository implements ITeamRepository {
     });
   }
 
-  async findByAgentId(agentId: string): Promise<Team[]> {
+  async findByAgentId(agentId: AgentId): Promise<Team[]> {
     // Use PostgreSQL array contains operator to find teams that include the agent
     const results = await this.db
       .select()
       .from(teams)
-      .where(sql`${teams.agentIds} @> ARRAY[${agentId}]::text[]`);
+      .where(sql`${teams.agentIds} @> ARRAY[${agentId.value}]::text[]`);
 
     return results.map(result => Team.fromPersistence({
       id: result.id,
@@ -78,7 +79,7 @@ export class DrizzleTeamRepository implements ITeamRepository {
   }
 
   async save(team: Team): Promise<void> {
-    if (team.id === 0) {
+    if (team.id.value === 0) {
       // Insert new team
       await this.db.insert(teams).values({
         name: team.name,
@@ -86,9 +87,9 @@ export class DrizzleTeamRepository implements ITeamRepository {
         description: team.description,
         responsibilities: team.responsibilities,
         goals: team.goals,
-        agentIds: team.agentIds,
+        agentIds: team.agentIds?.map(id => id.value) || null,
         databaseId: team.databaseId,
-        organizationId: team.organizationId
+        organizationId: team.organizationId.value
       });
     } else {
       // Update existing team
@@ -100,23 +101,23 @@ export class DrizzleTeamRepository implements ITeamRepository {
           description: team.description,
           responsibilities: team.responsibilities,
           goals: team.goals,
-          agentIds: team.agentIds,
+          agentIds: team.agentIds?.map(id => id.value) || null,
           databaseId: team.databaseId,
-          organizationId: team.organizationId
+          organizationId: team.organizationId.value
         })
-        .where(eq(teams.id, team.id));
+        .where(eq(teams.id, team.id.value));
     }
   }
 
-  async delete(id: number): Promise<void> {
-    await this.db.delete(teams).where(eq(teams.id, id));
+  async delete(id: TeamId): Promise<void> {
+    await this.db.delete(teams).where(eq(teams.id, id.value));
   }
 
-  async countByOrganization(organizationId: number): Promise<number> {
+  async countByOrganization(organizationId: OrganizationId): Promise<number> {
     const result = await this.db
       .select({ count: teams.id })
       .from(teams)
-      .where(eq(teams.organizationId, organizationId));
+      .where(eq(teams.organizationId, organizationId.value));
 
     return result.length;
   }

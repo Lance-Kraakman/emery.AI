@@ -5,7 +5,7 @@ import os
 from typing import AsyncIterator, Dict, Any, List
 import grpc
 from grpc import aio
-from emery_agents.infrastructure.grpc.generated import agent_worker_pb2, agent_worker_pb2_grpc
+from ...grpc.generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .mappers import ProtoMapper
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

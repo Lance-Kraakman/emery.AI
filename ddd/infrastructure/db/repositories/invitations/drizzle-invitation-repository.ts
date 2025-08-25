@@ -60,10 +60,10 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     const token = await this.generateUniqueToken();
     
     const insertData = {
-      organizationId: data.organizationId,
-      invitedBy: data.invitedBy,
-      email: data.email.toLowerCase(),
-      role: data.role || 'member',
+      organizationId: data.organizationId.value,
+      invitedBy: data.invitedBy.value,
+      email: data.email.value.toLowerCase(),
+      role: data.role.value,
       token,
       expiresAt: data.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days default
     };
@@ -78,7 +78,7 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
 
   async update(id: number, data: UpdateInvitationData): Promise<Invitation> {
     const updateData: any = {};
-    if (data.email !== undefined) updateData.email = data.email.toLowerCase();
+    if (data.email !== undefined) updateData.email = data.email.value.toLowerCase();
     if (data.role !== undefined) updateData.role = data.role;
     if (data.expiresAt !== undefined) updateData.expiresAt = data.expiresAt;
 
@@ -186,7 +186,7 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     const maxAttempts = 10;
 
     do {
-      token = generateToken();
+      token = generateToken().value;
       const existing = await this.findByToken(token);
       if (!existing) {
         return token;
@@ -249,10 +249,10 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
         }
 
         const invitation = await this.create({
-          organizationId: data.organizationId,
-          invitedBy: data.invitedBy,
-          email: invitationData.email,
-          role: invitationData.role || data.defaultRole || 'member',
+          organizationId: typeof data.organizationId === 'number' ? OrganizationId.fromNumber(data.organizationId) : data.organizationId,
+          invitedBy: typeof data.invitedBy === 'string' ? UserId.fromString(data.invitedBy) : data.invitedBy,
+          email: typeof invitationData.email === 'string' ? EmailAddress.fromString(invitationData.email) : invitationData.email,
+          role: typeof invitationData.role === 'string' ? OrganizationRole.fromString(invitationData.role || data.defaultRole || 'member') : invitationData.role || OrganizationRole.fromString(data.defaultRole || 'member'),
           expiresAt: data.expiresAt
         });
 

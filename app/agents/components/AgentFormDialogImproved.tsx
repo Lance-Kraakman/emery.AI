@@ -12,6 +12,7 @@ import { useEmery } from '@/contexts/EmeryContext';
 import { useFormWithUnsavedChanges } from '@/hooks/useFormWithUnsavedChanges';
 import { agentSchema } from '@/lib/schemas';
 import { AlertTriangle } from 'lucide-react';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import ScheduleManager from './ScheduleManager';
 
 // AIDEV-NOTE: Enhanced agent form dialog with Zod validation and unsaved changes detection
@@ -54,8 +55,12 @@ export default function AgentFormDialogImproved({ isOpen, onClose, agent }: Agen
 
       try {
         if (agent) {
-          // Update existing agent
-          const result = await updateAgent(agent.id, validatedData);
+          // Update existing agent - convert organizationId to Value Object
+          const updateData = {
+            ...validatedData,
+            organizationId: currentOrganization.id ? OrganizationId.fromNumber(currentOrganization.id) : undefined
+          };
+          const result = await updateAgent(agent.id.value, updateData);
           
           if (!result.success) {
             throw new Error(result.error);
@@ -177,7 +182,7 @@ export default function AgentFormDialogImproved({ isOpen, onClose, agent }: Agen
           {agent && (
             <FormField label="Schedule">
               <ScheduleManager 
-                agentId={agent.id} 
+                agentId={agent.id.value} 
                 initialRRule={(agent.trigger as any)?.rrule}
                 onScheduleChange={(rrule) => {
                   // AIDEV-NOTE: Update agent trigger with new schedule

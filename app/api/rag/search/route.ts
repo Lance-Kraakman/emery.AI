@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { searchApplicationService } from '@/ddd/application/di/rag-container'
-import type { SearchRagQuery } from '@/ddd/application/rag/queries/search-query'
+import type { SearchRagQuery } from '@/ddd/application/services/rag/queries/search-query'
 
 // POST /api/rag/search - Search RAG index
 export async function POST(request: NextRequest) {

@@ -98,8 +98,20 @@ export function useEmeryData() {
       ]);
 
       const tables = tablesResult as EmeryTable[];
-      const agents = agentsResult as EmeryAgent[];
-      const teams = teamsResult as EmeryTeam[];
+      const agents: EmeryAgent[] = agentsResult.map(agent => ({
+        id: agent.id.value,
+        name: agent.name,
+        description: agent.description,
+        status: agent.status?.value || 'active',
+        organizationId: agent.organizationId.value
+      }));
+      const teams: EmeryTeam[] = teamsResult.map(team => ({
+        id: team.id.value,
+        name: team.name,
+        purpose: team.purpose,
+        organizationId: team.organizationId.value,
+        agentIds: team.agentIds || []
+      }));
 
       // Group tables by database
       const databasesWithTables = databasesResult.map(db => ({

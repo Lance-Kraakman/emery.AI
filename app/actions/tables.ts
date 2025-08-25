@@ -8,11 +8,14 @@ import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateTableData } from "./types";
-import type { CreateTableCommand } from "@/ddd/application/use-cases/tables/table-application-service";
+import type { CreateTableCommand } from "@/ddd/application/services/tables/table-application-service";
+
+// Import the DI setup to ensure container is initialized
+import "@/ddd/application/di/setup";
 
 export async function createTable(data: CreateTableData & { databaseId: number; description?: string }, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("create_table");
+    const session = await requirePermission("create_tables");
     const currentOrg = await requireCurrentOrganization();
     const { name, databaseId, description } = data;
 
@@ -36,7 +39,7 @@ export async function createTable(data: CreateTableData & { databaseId: number; 
     const command: CreateTableCommand = {
       name,
       databaseId,
-      organizationId: currentOrg.id,
+      organizationId: currentOrg.id.value,
       createdBy: session.user.id,
       description,
       metadata: {}
@@ -96,7 +99,7 @@ export async function getTables() {
     const currentOrg = await requireCurrentOrganization();
     const tableApplicationService = getTableApplicationService();
     
-    const tableList = await tableApplicationService.getTablesForOrganization(currentOrg.id);
+    const tableList = await tableApplicationService.getTablesForOrganization(currentOrg.id.value);
 
     console.log(`[GET-TABLES] Found ${tableList.length} tables for org ${currentOrg.id}`);
     return tableList;

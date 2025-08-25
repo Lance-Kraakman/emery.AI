@@ -19,7 +19,7 @@ export default function AgentActivityPanel({ agent }: AgentActivityPanelProps) {
     setHasMounted(true);
     const fetchTasks = async () => {
       setLoading(true);
-      const result = await getTasks(agent.id);
+      const result = await getTasks(agent.id.value);
       if (result.success) {
         setTasks(result.data);
       }

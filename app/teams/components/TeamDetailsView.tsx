@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Edit, Users, Target, CheckCircle } from 'lucide-react';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import type { Team } from '@/types/db';
+import type { Team } from '@/ddd/domain/teams/entities/team';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -24,7 +24,9 @@ export default function TeamDetailsView({ team, agents, onEdit }: TeamDetailsVie
 
   // Get agents that belong to this team
   const teamAgents = agents.filter(agent => 
-    team.agentIds && team.agentIds.includes(agent.id.toString())
+    team.agentIds && team.agentIds.some(agentId => 
+      (typeof agentId === 'string' ? agentId : agentId.value?.toString()) === agent.id.value?.toString()
+    )
   );
 
   return (
@@ -123,7 +125,7 @@ export default function TeamDetailsView({ team, agents, onEdit }: TeamDetailsVie
             {teamAgents.length > 0 ? (
               <div className="grid gap-4 md:grid-cols-2">
                 {teamAgents.map((agent) => (
-                  <Card key={agent.id}>
+                  <Card key={agent.id.value}>
                     <CardContent className="p-4">
                       <h4 className="font-medium text-foreground">{agent.name}</h4>
                       <p className="text-sm text-muted-foreground">{agent.role}</p>
@@ -132,10 +134,10 @@ export default function TeamDetailsView({ team, agents, onEdit }: TeamDetailsVie
                       )}
                       {agent.status && (
                         <Badge 
-                          variant={agent.status === 'active' ? 'success' : 'secondary'}
+                          variant={agent.status?.value === 'active' ? 'success' : 'secondary'}
                           className="mt-2"
                         >
-                          {agent.status}
+                          {typeof agent.status === 'string' ? agent.status : agent.status?.value}
                         </Badge>
                       )}
                     </CardContent>

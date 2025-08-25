@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { indexingApplicationService, searchApplicationService, indexRepository } from '@/ddd/application/di/rag-container'
-import type { CreateIndexCommand } from '@/ddd/application/rag/commands/create-index-command'
+import type { CreateIndexCommand } from '@/ddd/application/services/rag/commands/create-index-command'
 import { OrganizationId } from '@/ddd/domain/rag/value-objects'
 
 // GET /api/rag - List RAG indexes for organization

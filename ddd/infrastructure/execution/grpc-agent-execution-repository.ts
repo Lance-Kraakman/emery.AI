@@ -21,6 +21,7 @@ import type { TaskProgress } from '@/lib/grpc/client';
 import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/lib/grpc/proto-mappers';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { getAgentDisplayName, getCapabilitiesCount } from '@/ddd/domain/agents/entities/agent';
+import { AgentId, UserId, OrganizationId, TaskStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
 
 export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
   // Track active executions for status queries
@@ -40,7 +41,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
     
     try {
       // 1. Load agent configuration (delegated to agent repository)
-      const agent = await this.agentRepository.findById(agentId);
+      const agent = await this.agentRepository.findById(AgentId.fromNumber(agentId));
       if (!agent) {
         throw new Error(`Agent ${agentId} not found`);
       }
@@ -57,7 +58,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       // 4. Create proto task request
       const taskRequest = createTaskRequest({
         taskId: executionId,
-        agentId: agent.id,
+        agentId: agent.id.value,
         instructionConfig: { 
           instructions, 
           tools: tools || [], 
@@ -66,7 +67,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         agent: this.mapAgentToAgentData(agent),
         triggerData: {}, // Empty for proto compatibility
         organizationId: organizationIdStr,
-        ownerId: agent.ownerId,
+        ownerId: agent.ownerId.value,
         timeoutSeconds: timeoutSeconds || 300
       });
       
@@ -95,7 +96,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         // Update execution tracking
         this.activeExecutions.set(executionId, {
           executionId,
-          status: taskUpdate.status as ExecutionStatus['status'] || 'in_progress',
+          status: (taskUpdate.status?.value as ExecutionStatus['status']) || 'in_progress',
           progress: progress.progress_percent,
           currentStep: progress.step_id,
           result: taskUpdate.result,
@@ -105,12 +106,12 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         });
         
         // Update final status based on progress
-        if (taskUpdate.status === 'completed') {
+        if (taskUpdate.status?.value === 'completed') {
           console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Task COMPLETED!`);
           finalStatus = 'completed';
           finalOutputData = taskUpdate.result;
           completedAt = new Date();
-        } else if (taskUpdate.status === 'failed') {
+        } else if (taskUpdate.status?.value === 'failed') {
           console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Task FAILED!`);
           finalStatus = 'failed';
           finalError = taskUpdate.error || 'Task failed';
@@ -266,12 +267,12 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
     })) : undefined;
 
     return {
-      id: agent.id,
+      id: agent.id.value,
       name: agent.name,
       role: agent.role || undefined,
       description: agent.description || undefined,
       persona: agent.persona || undefined,
-      ownerId: agent.ownerId,
+      ownerId: agent.ownerId.value,
       tools,
       servers,
       trigger: agent.trigger ? {
@@ -279,10 +280,10 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         type: agent.trigger.type || 'MANUAL'
       } as any : undefined,
       capabilities,
-      status: agent.status || undefined,
-      organizationId: agent.organizationId,
+      status: agent.status?.value || undefined,
+      organizationId: agent.organizationId.value,
       roleId: agent.roleId || undefined,
-      apiKey: agent.apiKey || undefined,
+      apiKey: agent.apiKey?.value || undefined,
     };
   }
 }

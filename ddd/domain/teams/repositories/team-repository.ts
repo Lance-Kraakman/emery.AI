@@ -2,22 +2,23 @@
 // Defines data access operations for Team entities
 
 import type { Team } from '../entities/team';
+import { TeamId, OrganizationId, AgentId } from '@/ddd/domain/shared/value-objects';
 
 export interface ITeamRepository {
   /**
    * Find teams by organization ID
    */
-  findByOrganization(organizationId: number): Promise<Team[]>;
+  findByOrganization(organizationId: OrganizationId): Promise<Team[]>;
 
   /**
    * Find team by ID
    */
-  findById(id: number): Promise<Team | null>;
+  findById(id: TeamId): Promise<Team | null>;
 
   /**
    * Find teams by agent ID
    */
-  findByAgentId(agentId: string): Promise<Team[]>;
+  findByAgentId(agentId: AgentId): Promise<Team[]>;
 
   /**
    * Save team
@@ -27,10 +28,10 @@ export interface ITeamRepository {
   /**
    * Delete team
    */
-  delete(id: number): Promise<void>;
+  delete(id: TeamId): Promise<void>;
 
   /**
    * Count teams by organization
    */
-  countByOrganization(organizationId: number): Promise<number>;
+  countByOrganization(organizationId: OrganizationId): Promise<number>;
 }

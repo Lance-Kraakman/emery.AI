@@ -79,8 +79,8 @@ export default async function UserManagementPage() {
           <div className="space-y-2">
             {pendingInvitations.map((invitation) => (
               <div key={invitation.id} className="flex items-center justify-between p-2 border rounded-lg">
-                <p>{invitation.email}</p>
-                <p className="text-sm text-muted-foreground">Role: {invitation.role}</p>
+                <p>{typeof invitation.email === 'string' ? invitation.email : invitation.email?.value}</p>
+                <p className="text-sm text-muted-foreground">Role: {typeof invitation.role === 'string' ? invitation.role : invitation.role?.value}</p>
               </div>
             ))}
           </div>

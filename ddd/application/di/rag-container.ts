@@ -17,7 +17,7 @@ import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/
 import { DrizzleTeamRepository } from '@/ddd/infrastructure/db/repositories/teams/drizzle-team-repository';
 import { DrizzleFileStorageRepository } from '@/ddd/infrastructure/db/repositories/files/drizzle-file-storage-repository';
 import { LlamaIndexContentProcessor } from '@/ddd/application/services/content-processing/llamaindex-content-processor';
-import { AutoReindexService } from '../rag/services/auto-reindex-service';
+import { AutoReindexService } from '@/ddd/application/services/rag/auto-reindex-service';
 
 // Application Services
 import { EmbeddingService } from '@/ddd/application/services/embedding-service';
@@ -27,8 +27,8 @@ import { SearchAnalyticsService } from '@/ddd/application/services/search-analyt
 import { IndexingDomainService, SearchDomainService } from '@/ddd/domain/rag/services';
 
 // Use Cases
-import { RagIndexingApplicationService } from '@/ddd/application/use-cases/rag/rag-indexing-application-service';
-import { RagSearchApplicationService } from '@/ddd/application/use-cases/rag/rag-search-application-service';
+import { RagIndexingApplicationService } from '@/ddd/application/services/rag/rag-indexing-application-service';
+import { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
 
 /**
  * RAG Dependency Injection Container

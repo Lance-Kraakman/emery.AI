@@ -49,7 +49,7 @@ export async function createRoleAction(formData: FormData) {
   
   const permissions = permissionsStr ? permissionsStr.split(',').map(p => p.trim()) : [];
 
-  const result = await createRole({ name, permissions, organizationId: currentOrg.id });
+  const result = await createRole({ name, permissions, organizationId: currentOrg.id.value });
   
   if (!result.success) {
     throw new Error(result.error);

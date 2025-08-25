@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAgentApplicationService } from '@/ddd/application/di/container';
-import type { CreateAgentCommand } from '@/ddd/application/use-cases/agents/agent-application-service';
+import type { CreateAgentCommand } from '@/ddd/application/services/agents/agent-application-service';
+import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 /**
  * Create a new agent using AgentApplicationService
@@ -51,8 +52,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       role,
       description,
       persona,
-      ownerId: userId,
-      organizationId: parseInt(organizationId),
+      ownerId: UserId.fromString(userId),
+      organizationId: OrganizationId.fromNumber(parseInt(organizationId)),
       trigger: trigger || { type: 'MANUAL' },
       capabilities: capabilities || [],
       tools: tools || [],

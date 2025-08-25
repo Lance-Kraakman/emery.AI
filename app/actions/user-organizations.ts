@@ -1,26 +1,49 @@
 'use server'
 
-import { db } from "@/lib/db/client";
-import { users, organizations, userOrganizations } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
-import { auth } from "@/lib/auth";
+// AIDEV-NOTE: Server Actions for user-organization management using UserOrganizationApplicationService
+// Migrated from direct DB access to proper DDD application service pattern
+
 import { revalidatePath } from "next/cache";
+import { requirePermission } from "./permissions";
+import { getUserOrganizationApplicationService } from "@/ddd/application/di/container";
 import type { Result } from "./types";
-import { getUserRepository } from "@/ddd/application/di/container";
-// import { getUserRepository } from "@/lib/application/di/container";
+
+// Import the DI setup to ensure container is initialized
+import "@/ddd/application/di/setup";
+import type { 
+  AddUserToOrganizationCommand, 
+  SwitchOrganizationCommand,
+  RemoveUserFromOrganizationCommand,
+  OrganizationMemberFilters,
+  UserMembershipsFilters 
+} from "@/ddd/application/services/user-organizations/user-organization-application-service";
 
 export async function switchCurrentOrganization(organizationId: number): Promise<Result> {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const session = await requirePermission("manage_users");
+    
+    if (!organizationId) {
       return {
         success: false,
-        error: "Not authenticated",
+        error: "Organization ID is required"
       };
     }
 
-    const userRepo = getUserRepository();
-    await userRepo.switchOrganization(session.user.id, organizationId);
+    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    
+    const command: SwitchOrganizationCommand = {
+      userId: session.user.id,
+      organizationId
+    };
+
+    const result = await userOrganizationApplicationService.switchOrganization(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to switch organization"
+      };
+    }
 
     // Revalidate to refresh session data
     revalidatePath('/');
@@ -28,6 +51,7 @@ export async function switchCurrentOrganization(organizationId: number): Promise
     return {
       success: true,
       data: { organizationId },
+      warnings: result.warnings
     };
   } catch (error) {
     console.error("Error switching organization:", error);
@@ -40,56 +64,39 @@ export async function switchCurrentOrganization(organizationId: number): Promise
 
 export async function joinOrganization(organizationId: number, role: string = 'member'): Promise<Result> {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return {
-        success: false,
-        error: "Not authenticated",
-      };
-    }
-
-    const userRepo = getUserRepository();
+    const session = await requirePermission("manage_users");
     
-    // Check if user is already a member
-    const existingRole = await userRepo.getUserOrganizationRole(session.user.id, organizationId);
-    if (existingRole) {
+    if (!organizationId) {
       return {
         success: false,
-        error: "You are already a member of this organization",
+        error: "Organization ID is required"
       };
     }
 
-    // Verify the organization exists
-    const org = await db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.id, organizationId))
-      .limit(1);
-
-    if (!org.length) {
-      return {
-        success: false,
-        error: "Organization not found",
-      };
-    }
-
-    // Add user to organization
-    const newMembership = await userRepo.addUserToOrganization({
+    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    
+    const command: AddUserToOrganizationCommand = {
       userId: session.user.id,
       organizationId,
-      role,
-    });
+      role
+    };
 
-    // If user doesn't have a current organization, set this as current
-    if (!session.user.currentOrganizationId) {
-      await userRepo.update(session.user.id, { currentOrganizationId: organizationId });
+    const result = await userOrganizationApplicationService.addUserToOrganization(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to join organization"
+      };
     }
 
     revalidatePath('/');
+    revalidatePath('/dashboard');
     
     return {
       success: true,
-      data: newMembership,
+      data: result.data,
+      warnings: result.warnings
     };
   } catch (error) {
     console.error("Error joining organization:", error);
@@ -102,61 +109,39 @@ export async function joinOrganization(organizationId: number, role: string = 'm
 
 export async function leaveOrganization(organizationId: number): Promise<Result> {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return {
-        success: false,
-        error: "Not authenticated",
-      };
-    }
-
-    const userRepo = getUserRepository();
+    const session = await requirePermission("manage_users");
     
-    // Check if user is a member
-    const userRole = await userRepo.getUserOrganizationRole(session.user.id, organizationId);
-    if (!userRole) {
+    if (!organizationId) {
       return {
         success: false,
-        error: "You are not a member of this organization",
+        error: "Organization ID is required"
       };
     }
 
-    // Don't allow leaving if user is the only owner
-    if (userRole === 'owner') {
-      const ownerCount = await db
-        .select()
-        .from(userOrganizations)
-        .where(
-          and(
-            eq(userOrganizations.organizationId, organizationId),
-            eq(userOrganizations.role, 'owner')
-          )
-        );
+    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    
+    const command: RemoveUserFromOrganizationCommand = {
+      userId: session.user.id,
+      organizationId,
+      removedBy: session.user.id // User is removing themselves
+    };
 
-      if (ownerCount.length === 1) {
-        return {
-          success: false,
-          error: "Cannot leave organization as the only owner. Transfer ownership first.",
-        };
-      }
-    }
+    const result = await userOrganizationApplicationService.removeUserFromOrganization(command);
 
-    // Remove membership
-    await userRepo.removeUserFromOrganization(session.user.id, organizationId);
-
-    // If this was the user's current organization, switch to another one
-    if (session.user.currentOrganizationId === organizationId) {
-      const userOrganizations = await userRepo.getUserOrganizations(session.user.id);
-      const newCurrentOrgId = userOrganizations.length > 0 ? userOrganizations[0].id : undefined;
-      
-      await userRepo.update(session.user.id, { currentOrganizationId: newCurrentOrgId });
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to leave organization"
+      };
     }
 
     revalidatePath('/');
+    revalidatePath('/dashboard');
     
     return {
       success: true,
       data: { message: "Left organization successfully" },
+      warnings: result.warnings
     };
   } catch (error) {
     console.error("Error leaving organization:", error);
@@ -169,28 +154,25 @@ export async function leaveOrganization(organizationId: number): Promise<Result>
 
 export async function getUserOrganizations() {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      throw new Error("Not authenticated");
-    }
+    const session = await requirePermission("view_users");
+    
+    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    
+    const filters: UserMembershipsFilters = {
+      userId: session.user.id,
+      includeOrganizationDetails: true,
+      activeOnly: true
+    };
 
-    const userRepo = getUserRepository();
-    const organizations = await userRepo.getUserOrganizations(session.user.id);
+    const memberships = await userOrganizationApplicationService.getUserMemberships(filters);
 
-    // We need to get user roles for each organization - this requires additional calls
-    // In a future improvement, we could add this to the repository method
-    const organizationsWithRoles = await Promise.all(
-      organizations.map(async (org) => {
-        const userRole = await userRepo.getUserOrganizationRole(session.user.id, org.id);
-        return {
-          ...org,
-          userRole,
-          joinedAt: org.createdAt, // For now, using org createdAt as placeholder
-        };
-      })
-    );
-
-    return organizationsWithRoles;
+    // Map to expected format for backwards compatibility
+    return memberships.map(membership => ({
+      ...membership.organization,
+      userRole: membership.userOrganization.role,
+      isCurrentOrganization: membership.isCurrentOrganization,
+      joinedAt: membership.organization?.createdAt
+    }));
   } catch (error) {
     console.error("Error fetching user organizations:", error);
     throw new Error("Failed to fetch organizations");
@@ -199,31 +181,30 @@ export async function getUserOrganizations() {
 
 export async function getCurrentOrganization() {
   try {
-    const session = await auth();
-    if (!session?.user?.id || !session.user.currentOrganizationId) {
+    const session = await requirePermission("view_users");
+    
+    if (!session.user.currentOrganizationId) {
       return null;
     }
 
-    const result = await db
-      .select({
-        organization: organizations,
-        userOrg: userOrganizations
-      })
-      .from(userOrganizations)
-      .innerJoin(organizations, eq(userOrganizations.organizationId, organizations.id))
-      .where(
-        and(
-          eq(userOrganizations.userId, session.user.id),
-          eq(userOrganizations.organizationId, session.user.currentOrganizationId)
-        )
-      )
-      .limit(1);
+    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    
+    const filters: UserMembershipsFilters = {
+      userId: session.user.id,
+      includeOrganizationDetails: true,
+      activeOnly: true
+    };
 
-    if (!result.length) return null;
+    const memberships = await userOrganizationApplicationService.getUserMemberships(filters);
+    const currentMembership = memberships.find(m => m.isCurrentOrganization);
+
+    if (!currentMembership || !currentMembership.organization) {
+      return null;
+    }
 
     return {
-      ...result[0].organization,
-      userRole: result[0].userOrg.role
+      ...currentMembership.organization,
+      userRole: currentMembership.userOrganization.role
     };
   } catch (error) {
     console.error("Error fetching current organization:", error);
@@ -238,4 +219,251 @@ export async function requireCurrentOrganization() {
     throw new Error("No current organization selected");
   }
   return org;
+}
+
+/**
+ * Add another user to an organization (admin function)
+ */
+export async function addUserToOrganization(userId: string, organizationId: number, role: string = 'member'): Promise<Result> {
+  try {
+    const session = await requirePermission("manage_users");
+    
+    if (!userId || !organizationId) {
+      return {
+        success: false,
+        error: "User ID and Organization ID are required"
+      };
+    }
+
+    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    
+    const command: AddUserToOrganizationCommand = {
+      userId,
+      organizationId,
+      role,
+      invitedBy: session.user.id
+    };
+
+    const result = await userOrganizationApplicationService.addUserToOrganization(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to add user to organization"
+      };
+    }
+
+    revalidatePath('/organization/settings/users');
+    revalidatePath('/dashboard');
+    
+    return {
+      success: true,
+      data: result.data,
+      warnings: result.warnings
+    };
+  } catch (error) {
+    console.error("Error adding user to organization:", error);
+    return {
+      success: false,
+      error: "Failed to add user to organization",
+    };
+  }
+}
+
+/**
+ * Remove another user from organization (admin function)
+ */
+export async function removeUserFromOrganization(userId: string, organizationId: number): Promise<Result> {
+  try {
+    const session = await requirePermission("manage_users");
+    
+    if (!userId || !organizationId) {
+      return {
+        success: false,
+        error: "User ID and Organization ID are required"
+      };
+    }
+
+    // Don't allow removing yourself via this function
+    if (userId === session.user.id) {
+      return {
+        success: false,
+        error: "Use leaveOrganization to remove yourself from an organization"
+      };
+    }
+
+    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    
+    const command: RemoveUserFromOrganizationCommand = {
+      userId,
+      organizationId,
+      removedBy: session.user.id
+    };
+
+    const result = await userOrganizationApplicationService.removeUserFromOrganization(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to remove user from organization"
+      };
+    }
+
+    revalidatePath('/organization/settings/users');
+    revalidatePath('/dashboard');
+    
+    return {
+      success: true,
+      data: { message: "User removed from organization successfully" },
+      warnings: result.warnings
+    };
+  } catch (error) {
+    console.error("Error removing user from organization:", error);
+    return {
+      success: false,
+      error: "Failed to remove user from organization",
+    };
+  }
+}
+
+/**
+ * Get organization members (admin function)
+ */
+export async function getOrganizationMembers(organizationId?: number, searchQuery?: string, role?: string) {
+  try {
+    const session = await requirePermission("view_users");
+    const currentOrg = await requireCurrentOrganization();
+    
+    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    
+    const filters: OrganizationMemberFilters = {
+      organizationId: organizationId || currentOrg.id.value,
+      searchQuery,
+      role,
+      includeUserDetails: true
+    };
+
+    return await userOrganizationApplicationService.getOrganizationMembers(filters);
+  } catch (error) {
+    console.error("Error fetching organization members:", error);
+    throw new Error("Failed to fetch organization members");
+  }
+}
+
+/**
+ * Update user role in organization (admin function)
+ */
+export async function updateUserRole(userId: string, organizationId: number, newRole: string): Promise<Result> {
+  try {
+    const session = await requirePermission("manage_users");
+    
+    if (!userId || !organizationId || !newRole) {
+      return {
+        success: false,
+        error: "User ID, Organization ID, and new role are required"
+      };
+    }
+
+    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    
+    const command = {
+      userId,
+      organizationId,
+      newRole,
+      updatedBy: session.user.id
+    };
+
+    const result = await userOrganizationApplicationService.updateMemberRole(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to update user role"
+      };
+    }
+
+    revalidatePath('/organization/settings/users');
+    revalidatePath('/dashboard');
+    
+    return {
+      success: true,
+      data: result.data,
+      warnings: result.warnings
+    };
+  } catch (error) {
+    console.error("Error updating user role:", error);
+    return {
+      success: false,
+      error: "Failed to update user role",
+    };
+  }
+}
+
+/**
+ * Get organization member statistics
+ */
+export async function getOrganizationMemberStats(organizationId?: number) {
+  try {
+    const session = await requirePermission("view_users");
+    const currentOrg = await requireCurrentOrganization();
+    
+    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    return await userOrganizationApplicationService.getOrganizationMemberStats(organizationId || currentOrg.id.value);
+  } catch (error) {
+    console.error("Error fetching organization member stats:", error);
+    throw new Error("Failed to fetch organization member stats");
+  }
+}
+
+/**
+ * Check if user can manage members in organization
+ */
+export async function canManageMembers(userId?: string, organizationId?: number) {
+  try {
+    const session = await requirePermission("view_users");
+    const currentOrg = await requireCurrentOrganization();
+    
+    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    return await userOrganizationApplicationService.canManageMembers(
+      userId || session.user.id,
+      organizationId || currentOrg.id.value
+    );
+  } catch (error) {
+    console.error("Error checking manage members permission:", error);
+    return false;
+  }
+}
+
+/**
+ * Check if user is organization owner
+ */
+export async function isOrganizationOwner(userId?: string, organizationId?: number) {
+  try {
+    const session = await requirePermission("view_users");
+    const currentOrg = await requireCurrentOrganization();
+    
+    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    return await userOrganizationApplicationService.isOrganizationOwner(
+      userId || session.user.id,
+      organizationId || currentOrg.id.value
+    );
+  } catch (error) {
+    console.error("Error checking organization ownership:", error);
+    return false;
+  }
+}
+
+/**
+ * Get user's role in specific organization
+ */
+export async function getUserOrganizationRole(userId: string, organizationId: number) {
+  try {
+    const session = await requirePermission("view_users");
+    
+    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    return await userOrganizationApplicationService.getUserOrganizationRole(userId, organizationId);
+  } catch (error) {
+    console.error("Error fetching user organization role:", error);
+    return null;
+  }
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, hasPermission } from "@/lib/auth";
 import { getFileApplicationService } from "@/ddd/application/di/container";
-import type { UploadFileCommand } from "@/ddd/application/use-cases/files/file-application-service";
+import type { UploadFileCommand } from "@/ddd/application/services/files/file-application-service";
 
 export async function POST(request: NextRequest) {
   try {

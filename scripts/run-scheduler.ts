@@ -1,10 +1,12 @@
 #!/usr/bin/env tsx
+
+import { getEventDrivenSchedulingService } from "@/ddd/application/di/scheduling-container";
+
 /**
  * Standalone Scheduler Runner
  * Runs the simplified event-driven scheduler as an independent process
  */
 
-import { getEventDrivenSchedulingService } from '../ddd/application/scheduling/di/scheduling-container';
 
 // Environment validation
 if (!process.env.DATABASE_URL) {

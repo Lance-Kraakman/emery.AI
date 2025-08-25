@@ -6,8 +6,12 @@ import { requireCurrentOrganization } from "./user-organizations";
 import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
 import type { Result, CreateAgentData } from "./types";
 import { getAgentApplicationService } from "@/ddd/application/di/container";
-import type { CreateAgentCommand, UpdateAgentCommand, AgentFilters } from "@/ddd/application/use-cases/agents/agent-application-service";
+import type { CreateAgentCommand, UpdateAgentCommand, AgentFilters } from "@/ddd/application/services/agents/agent-application-service";
 import type { CapabilityConfig } from "@/ddd/domain/agents/entities/agent";
+import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
+
+// Import the DI setup to ensure container is initialized
+import "@/ddd/application/di/setup";
 
 export async function createAgent(data: CreateAgentData, revalidateUrl?: string): Promise<Result> {
   try {
@@ -19,14 +23,19 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
       role: data.role,
       description: data.description,
       persona: data.persona,
-      ownerId: session.user.id,
-      organizationId: session.user.currentOrganizationId,
+      ownerId: UserId.fromString(session.user.id),
+      organizationId: OrganizationId.fromNumber(session.user.currentOrganizationId),
       roleId: data.roleId,
       tools: data.tools,
       servers: data.servers,
       trigger: data.trigger,
       capabilities: data.capabilities,
-      status: (data.status === 'active' || data.status === 'inactive' || data.status === 'archived') ? data.status : 'active'
+      status: (() => {
+        const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
+        return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived') 
+          ? statusValue as 'active' | 'inactive' | 'archived'
+          : 'active';
+      })()
     };
 
     const result = await agentApplicationService.createAgent(command);
@@ -66,7 +75,7 @@ export async function addCapabilityToAgent(agentId: number, capability: Capabili
   'use server';
   try {
     const agentApplicationService = getAgentApplicationService();
-    const result = await agentApplicationService.addCapabilityToAgent(agentId, capability);
+    const result = await agentApplicationService.addCapabilityToAgent(AgentId.fromNumber(agentId), capability);
     
     if (!result.success) {
       throw new Error(result.error || "Failed to add capability");
@@ -110,9 +119,10 @@ export async function createAgentAction(formData: FormData): Promise<Result> {
 
     const result = await createAgent({ 
       ...validatedData,
+      organizationId: currentOrg.id,
       tools, 
       servers,
-      status: 'active'
+      status: AgentStatus.active()
     });
     
     return result;
@@ -154,7 +164,7 @@ export async function getAgent(agentId: number) {
     }
 
     const agentApplicationService = getAgentApplicationService();
-    const domainAgent = await agentApplicationService.getAgent(agentId);
+    const domainAgent = await agentApplicationService.getAgent(AgentId.fromNumber(agentId));
     
     if (!domainAgent) {
       return null;
@@ -179,7 +189,7 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
 
     const agentApplicationService = getAgentApplicationService();
     const command: UpdateAgentCommand = {
-      agentId,
+      agentId: AgentId.fromNumber(agentId),
       name: data.name,
       role: data.role,
       description: data.description,
@@ -189,7 +199,12 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       servers: data.servers,
       trigger: data.trigger,
       capabilities: data.capabilities,
-      status: (data.status === 'active' || data.status === 'inactive' || data.status === 'archived') ? data.status : undefined
+      status: (() => {
+        const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
+        return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived') 
+          ? statusValue as 'active' | 'inactive' | 'archived'
+          : undefined;
+      })()
     };
 
     const result = await agentApplicationService.updateAgent(command);
@@ -233,7 +248,7 @@ export async function deleteAgent(agentId: number, revalidateUrl?: string): Prom
     }
 
     const agentApplicationService = getAgentApplicationService();
-    const result = await agentApplicationService.deleteAgent(agentId);
+    const result = await agentApplicationService.deleteAgent(AgentId.fromNumber(agentId));
 
     if (!result.success) {
       return {

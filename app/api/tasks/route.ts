@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
-import type { CreateTaskRequest } from '@/ddd/application/use-cases/agents/agent-task-application-service';
+import type { CreateTaskRequest } from '@/ddd/application/services/agents/agent-task-application-service';
 
 /**
  * Get tasks list using AgentTaskApplicationService

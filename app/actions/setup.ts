@@ -1,10 +1,11 @@
 'use server'
 
 import { getOrganizationRepository } from "@/ddd/application/di/container";
-import type { CreateOrganizationData } from "./types";
+import type { CreateOrganizationData } from "@/ddd/domain/organizations/entities/organization";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import type { Result } from "./types";
+import { OrganizationName, UserId } from "@/ddd/domain/shared/value-objects";
 
 // Import the DI setup to ensure container is initialized
 import "@/ddd/application/di/setup";
@@ -19,7 +20,7 @@ export async function createOrganization(formData: FormData): Promise<Result> {
   const user = session?.user;
 
   if (!user) {
-    return { success: false, error: "User not authenticated" };
+    return { success: false, error: "User  not authenticated" };
   }
 
   const name = formData.get("organizationName") as string;
@@ -33,7 +34,7 @@ export async function createOrganization(formData: FormData): Promise<Result> {
     const orgRepo = getOrganizationRepository();
     
     const orgData: CreateOrganizationData = {
-      name,
+      name: OrganizationName.fromString(name),
       mission: mission || undefined
     };
 
@@ -43,7 +44,7 @@ export async function createOrganization(formData: FormData): Promise<Result> {
     // - User-organization relationship
     // - Setting user's current organization
     // All in a single atomic transaction
-    const newOrg = await orgRepo.createWithOwner(orgData, user.id);
+    const newOrg = await orgRepo.createWithOwner(orgData, UserId.fromString(user.id));
 
     console.log("Created organization with owner:", newOrg.id);
 
