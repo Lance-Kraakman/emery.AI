@@ -121,12 +121,12 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
             </DialogHeader>
             <form action={handleCreateOrganization} className="space-y-4">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium mb-1">
+                <label htmlFor="organizationName" className="block text-sm font-medium mb-1">
                   Organization Name *
                 </label>
                 <input
-                  id="name"
-                  name="name"
+                  id="organizationName"
+                  name="organizationName"
                   type="text"
                   required
                   className="w-full p-2 border border-input bg-background rounded-md focus:ring-2 focus:ring-ring focus:border-ring"
@@ -134,12 +134,12 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
                 />
               </div>
               <div>
-                <label htmlFor="mission" className="block text-sm font-medium mb-1">
+                <label htmlFor="organizationMission" className="block text-sm font-medium mb-1">
                   Mission (Optional)
                 </label>
                 <textarea
-                  id="mission"
-                  name="mission"
+                  id="organizationMission"
+                  name="organizationMission"
                   rows={3}
                   className="w-full p-2 border border-input bg-background rounded-md focus:ring-2 focus:ring-ring focus:border-ring"
                   placeholder="Organization mission or description"
