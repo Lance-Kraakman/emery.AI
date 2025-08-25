@@ -29,6 +29,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { EmeryOrganizationModal } from "./EmeryOrganizationModal"
 import { useEmery } from "@/contexts/EmeryContext"
 import { useDataDialogs } from "@/contexts/DataDialogsContext"
+import { useLayout } from "@/components/layout/LayoutProvider"
 
 const navItems = [
   { href: "/mission-control", label: "Mission Control", icon: Target },
@@ -66,8 +67,11 @@ export function EmerySidebar() {
   const { data: sessionData } = useSession()
   const { data, isLoading } = useEmery()
   const { setIsCreateDatabaseOpen, setIsCreateTableOpen, setSelectedDatabaseForTable } = useDataDialogs()
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  const { sidebarState, toggleSidebar, isMobile } = useLayout()
   const [openCollapsibles, setOpenCollapsibles] = useState<string[]>([])
+  
+  // Determine if sidebar is collapsed based on layout state
+  const isCollapsed = sidebarState === 'collapsed'
 
   useEffect(() => {
     const orchestrationPaths = orchestrationNavItems.map(item => item.href)
@@ -84,12 +88,12 @@ export function EmerySidebar() {
     }
   }, [pathname, data.databases])
 
-  const toggleSidebar = () => {
-    setIsCollapsed(!isCollapsed)
-  }
+  // Remove local toggle function - use layout context instead
 
   const toggleCollapsible = (id: string) => {
-    if (isCollapsed) return
+    // Don't allow collapsible toggling when sidebar is collapsed or on mobile
+    if (isCollapsed || isMobile) return
+    
     setOpenCollapsibles(prev => {
       const isOpen = prev.includes(id)
       if (id === "Data") {

@@ -1,6 +1,5 @@
 'use client'
 
-import { EmerySidebar } from '@/components/EmerySidebar'
 import { Suspense } from 'react'
 import { DataDialogsProvider } from '@/contexts/DataDialogsContext'
 import { EmeryProvider } from '@/contexts/EmeryContext'
@@ -9,6 +8,8 @@ import { CreateTableDialog } from '@/app/data/components/CreateTableDialog'
 import { useDataDialogs } from '@/contexts/DataDialogsContext'
 import { useEmery } from '@/contexts/EmeryContext'
 import { ThemeProvider } from '@/components/ThemeProvider'
+import { LayoutProvider } from '@/components/layout/LayoutProvider'
+import { EmeryLayout } from '@/components/layout/EmeryLayout'
 
 function DataDialogs() {
   const { 
@@ -48,9 +49,22 @@ function DataDialogs() {
 
 interface EmeryProvidersProps {
   children: React.ReactNode
+  // Layout configuration props
+  enableChat?: boolean
+  chatContext?: import('@/components/layout/types').ChatContextConfig
+  // Page context for automatic chat configuration
+  pageName?: string
 }
 
-export function EmeryProviders({ children }: EmeryProvidersProps) {
+export function EmeryProviders({ 
+  children, 
+  enableChat = true,
+  chatContext,
+  pageName
+}: EmeryProvidersProps) {
+  // Auto-generate chat context based on page if not provided
+  const { createChatContextForPage } = require('@/components/layout/types')
+  const effectiveChatContext = chatContext || (pageName ? createChatContextForPage(pageName) : undefined)
   return (
     <ThemeProvider
       attribute="class"
@@ -60,15 +74,12 @@ export function EmeryProviders({ children }: EmeryProvidersProps) {
     >
       <EmeryProvider>
         <DataDialogsProvider>
-          <div className="flex h-screen overflow-hidden">
-            <Suspense fallback={<div className="w-64 bg-card border-r border-border" />}>
-              <EmerySidebar />
-            </Suspense>
-            <main className="flex-1 flex flex-col overflow-hidden min-h-0">
+          <LayoutProvider>
+            <EmeryLayout enableChat={enableChat} chatContext={effectiveChatContext}>
               {children}
-            </main>
+            </EmeryLayout>
             <DataDialogs />
-          </div>
+          </LayoutProvider>
         </DataDialogsProvider>
       </EmeryProvider>
     </ThemeProvider>

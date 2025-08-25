@@ -1,0 +1,384 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { 
+  ChatSection, 
+  ChatMessages, 
+  ChatInput
+} from '@llamaindex/chat-ui'
+import { 
+  MessageCircle, 
+  ChevronLeft, 
+  ChevronRight, 
+  Database,
+  BarChart,
+  Users,
+  Code,
+  Lightbulb,
+  Send 
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useLayout } from '@/components/layout/LayoutProvider'
+import { useChatGRPC } from './useChatGRPC'
+import { ChatCanvas } from './ChatCanvas'
+import type { DomainType } from '@/ddd/domain/chat/entities/chat'
+
+/**
+ * EmeryChat - Main chat component with LlamaIndex integration
+ * 
+ * Features:
+ * - "Emery" branding at the top
+ * - LlamaIndex ChatSection with ChatMessages and ChatInput
+ * - Canvas expand/collapse controls
+ * - Context-aware suggestions based on page/domain
+ * - Responsive behavior for mobile
+ * 
+ * AIDEV-NOTE: This replaces the placeholder chat component with full
+ * LlamaIndex integration and domain-aware functionality.
+ */
+
+interface EmeryChatHeaderProps {
+  domainType?: DomainType | 'organization' | 'general'
+  domainName?: string
+}
+
+function EmeryChatHeader({ domainType, domainName }: EmeryChatHeaderProps) {
+  const { chatState, toggleChat, canvasState, toggleCanvas } = useLayout()
+  
+  // Determine context subtitle based on domain
+  const getSubtitle = () => {
+    if (domainType && domainName) {
+      switch (domainType) {
+        case 'agent': return `Agent: ${domainName}`
+        case 'team': return `Team: ${domainName}`
+        case 'table': return `Table: ${domainName}`
+        case 'workflow': return `Workflow: ${domainName}`
+        case 'file': return `File: ${domainName}`
+        case 'organization': return 'Organization Assistant'
+        default: return 'AI Assistant'
+      }
+    }
+    return 'AI Assistant'
+  }
+
+  return (
+    <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <MessageCircle className="h-5 w-5 text-primary flex-shrink-0" />
+        <div className="min-w-0 flex-1">
+          <h3 className="font-bold text-lg bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+            Emery
+          </h3>
+          <p className="text-xs text-muted-foreground truncate">{getSubtitle()}</p>
+        </div>
+      </div>
+      
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {/* Canvas expand button (only when canvas collapsed) - points right > */}
+        {canvasState === 'collapsed' && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleCanvas}
+            className="h-7 w-7"
+            title="Expand canvas"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        )}
+        
+        {/* Chat collapse button (only show when expanded) - points right > */}
+        {chatState === 'expanded' && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleChat}
+            className="h-7 w-7"
+            title="Collapse chat"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        )}
+        
+        {/* Chat expand button (only show when collapsed) - points left < */}
+        {chatState === 'collapsed' && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleChat}
+            className="h-7 w-7"
+            title="Expand chat"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Context-aware suggestions component (extracted from mission-control)
+function ChatSuggestions({ 
+  onSuggestionClick, 
+  selectedIndex = -1,
+  domainType
+}: { 
+  onSuggestionClick: (suggestion: string) => void
+  selectedIndex?: number
+  domainType?: DomainType | 'organization' | 'general'
+}) {
+  const suggestions = getSuggestionsForDomain(domainType)
+
+  if (suggestions.length === 0) return null
+
+  return (
+    <div className="px-4">
+      <div className="mb-2">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <Lightbulb className="h-3 w-3" />
+          Suggestions
+        </div>
+      </div>
+      <div>
+        {suggestions.map((suggestion, index) => (
+          <button
+            key={index}
+            className={`w-full flex items-center gap-2 px-0 py-2.5 text-left text-sm transition-colors duration-150 focus:outline-none border-b border-border/30 last:border-b-0 ${
+              selectedIndex === index 
+                ? 'bg-muted/70 text-foreground' 
+                : 'hover:bg-muted/50'
+            }`}
+            onClick={() => onSuggestionClick(suggestion.prompt)}
+          >
+            <div className="flex-shrink-0 text-muted-foreground">
+              {suggestion.icon}
+            </div>
+            <span className="flex-1 text-foreground truncate">
+              {suggestion.title}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function EmeryChat() {
+  const { chatState, canvasState, chatContext, toggleCanvas } = useLayout()
+  const handler = useChatGRPC({
+    domainType: chatContext?.domainType,
+    domainId: chatContext?.domainId
+  })
+  
+  const [showSuggestions, setShowSuggestions] = useState(true)
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
+  const [isClient, setIsClient] = useState(false)
+  
+  // Fix hydration by ensuring client-only rendering of dynamic content
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+  
+  // Don't render if hidden
+  if (chatState === 'hidden') {
+    return null
+  }
+  
+  // Collapsed state - just show header with expand button
+  if (chatState === 'collapsed') {
+    return (
+      <div className="w-12 h-full flex flex-col bg-card border-l border-border">
+        <EmeryChatHeader 
+          domainType={chatContext?.domainType}
+          domainName={chatContext?.domainName}
+        />
+        <div className="flex-1" />
+      </div>
+    )
+  }
+
+  const suggestions = getSuggestionsPrompts(chatContext?.domainType)
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions || suggestions.length === 0) return
+    
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedSuggestionIndex(prev => {
+        if (prev === -1) return suggestions.length - 1
+        return prev > 0 ? prev - 1 : suggestions.length - 1
+      })
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedSuggestionIndex(prev => {
+        if (prev === -1) return 0
+        return prev < suggestions.length - 1 ? prev + 1 : 0
+      })
+    } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
+      e.preventDefault()
+      handleSuggestionClick(suggestions[selectedSuggestionIndex])
+    } else if (e.key === 'Escape') {
+      setSelectedSuggestionIndex(-1)
+    }
+  }
+
+  const handleSuggestionClick = (suggestion: string) => {
+    console.log('Suggestion clicked:', suggestion)
+    setSelectedSuggestionIndex(-1)
+    setShowSuggestions(false) // Hide suggestions after selection
+    
+    // Use the chat handler to send the suggestion
+    handler.append({ content: suggestion, role: 'user' })
+  }
+
+  // Determine layout based on canvas state
+  const isFullWidth = canvasState === 'collapsed'
+  
+  return (
+    <div className="flex h-full bg-card border-l border-border">
+      {/* Chat Section */}
+      <div className={`flex flex-col h-full ${isFullWidth ? 'flex-1' : 'w-96'}`}>
+        <EmeryChatHeader 
+          domainType={chatContext?.domainType}
+          domainName={chatContext?.domainName}
+        />
+        
+        {/* Canvas expand button moved to chat header - no full-width bar needed */}
+        
+        <div className="flex-1 flex flex-col min-h-0" suppressHydrationWarning>
+          <ChatSection
+            handler={handler}
+            className="flex-1 flex flex-col p-0"
+          >
+            <div className="flex-1 flex flex-col min-h-0">
+              <ChatMessages className="flex-1 min-h-0 overflow-y-auto bg-transparent px-4 py-2" />
+              
+              {isClient && showSuggestions && handler.messages.length === 0 && (
+                <ChatSuggestions 
+                  onSuggestionClick={handleSuggestionClick} 
+                  selectedIndex={selectedSuggestionIndex}
+                  domainType={chatContext?.domainType}
+                />
+              )}
+              
+              <div className="p-4" onKeyDown={handleKeyDown}>
+                <ChatInput className="bg-transparent border-0 shadow-none p-0">
+                  <ChatInput.Form className="relative flex items-end gap-3 bg-transparent">
+                    <div className="relative flex-1">
+                      <ChatInput.Field
+                        className="w-full resize-none rounded-xl border border-input bg-background px-4 py-3 pr-14 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground min-h-[44px] max-h-32"
+                        placeholder="Ask Emery anything..."
+                      />
+                      <ChatInput.Submit className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm">
+                        <Send className="h-4 w-4" />
+                      </ChatInput.Submit>
+                    </div>
+                  </ChatInput.Form>
+                </ChatInput>
+              </div>
+            </div>
+          </ChatSection>
+        </div>
+      </div>
+      
+      {/* Canvas Section (when expanded) */}
+      {canvasState === 'expanded' && (
+        <ChatCanvas />
+      )}
+    </div>
+  )
+}
+
+// Helper functions for domain-specific suggestions
+function getSuggestionsForDomain(domainType?: DomainType | 'organization' | 'general') {
+  switch (domainType) {
+    case 'agent':
+      return [
+        {
+          icon: <Code className="h-3 w-3" />,
+          title: "Help configure agent capabilities and tools",
+          prompt: "Help me configure this agent's capabilities and available tools for optimal performance."
+        },
+        {
+          icon: <BarChart className="h-3 w-3" />,
+          title: "Analyze agent performance and task execution",
+          prompt: "Analyze this agent's performance metrics and suggest optimizations for task execution."
+        },
+        {
+          icon: <Users className="h-3 w-3" />,
+          title: "Review agent team assignments and workflows",
+          prompt: "Review this agent's team assignments and suggest workflow improvements."
+        }
+      ]
+      
+    case 'team':
+      return [
+        {
+          icon: <Users className="h-3 w-3" />,
+          title: "Analyze team collaboration and productivity",
+          prompt: "Analyze our team's collaboration patterns and suggest productivity improvements."
+        },
+        {
+          icon: <BarChart className="h-3 w-3" />,
+          title: "Review team performance metrics and goals",
+          prompt: "Review our team's performance metrics and help optimize our goals and workflows."
+        }
+      ]
+      
+    case 'table':
+      return [
+        {
+          icon: <Database className="h-3 w-3" />,
+          title: "Query table data with natural language",
+          prompt: "Help me query this table's data using natural language commands."
+        },
+        {
+          icon: <BarChart className="h-3 w-3" />,
+          title: "Analyze data patterns and generate insights",
+          prompt: "Analyze patterns in this table's data and generate actionable business insights."
+        }
+      ]
+      
+    case 'organization':
+      return [
+        {
+          icon: <BarChart className="h-3 w-3" />,
+          title: "Generate organizational performance report",
+          prompt: "Generate a comprehensive report on our organizational performance and key metrics."
+        },
+        {
+          icon: <Users className="h-3 w-3" />,
+          title: "Analyze resource allocation and optimization",
+          prompt: "Analyze our current resource allocation and suggest optimization strategies."
+        }
+      ]
+      
+    default: // 'general' or mission-control
+      return [
+        {
+          icon: <Database className="h-3 w-3" />,
+          title: "Analyze database performance and optimization opportunities",
+          prompt: "Analyze the current database performance and suggest optimizations for our main tables and queries."
+        },
+        {
+          icon: <BarChart className="h-3 w-3" />,
+          title: "Generate comprehensive analytics report with KPIs",
+          prompt: "Generate a comprehensive analytics report showing key performance indicators, user engagement metrics, and business trends from our data."
+        },
+        {
+          icon: <Users className="h-3 w-3" />,
+          title: "Analyze user behavior patterns and engagement",
+          prompt: "Analyze user behavior patterns, identify high-value user segments, and suggest strategies to improve user retention and engagement."
+        },
+        {
+          icon: <Code className="h-3 w-3" />,
+          title: "Review code architecture and best practices",
+          prompt: "Perform a code architecture review, identify potential improvements, and suggest best practices for scalability and maintainability."
+        }
+      ]
+  }
+}
+
+function getSuggestionsPrompts(domainType?: DomainType | 'organization' | 'general'): string[] {
+  return getSuggestionsForDomain(domainType).map(s => s.prompt)
+}
