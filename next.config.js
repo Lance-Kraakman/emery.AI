@@ -6,7 +6,7 @@ const nextConfig = {
   // App router is now stable in Next.js 15
   webpack: (config, { isServer }) => {
     if (isServer) {
-      config.externals = [...config.externals, 'unpdf', '@z-skip/protoc', 'canvas']
+      config.externals = [...config.externals, 'unpdf', '@z-skip/protoc', 'canvas', 'duckdb']
     }
     return config
   },

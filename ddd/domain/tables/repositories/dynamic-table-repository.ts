@@ -3,12 +3,14 @@
 
 import type { 
   DynamicTable, 
-  CreateDynamicTableData, 
   DynamicTableRow,
   CreateRowData,
   UpdateRowData,
-  RowQueryOptions
+  RowQueryOptions,
+  CreateDynamicTableData
 } from '../entities/dynamic-table';
+
+export type { CreateDynamicTableData } from '../entities/dynamic-table';
 
 export interface IDynamicTableRepository {
   // Table CRUD - just the basics
@@ -18,7 +20,7 @@ export interface IDynamicTableRepository {
   create(data: CreateDynamicTableData): Promise<DynamicTable>;
   update(id: number, data: Partial<DynamicTable>): Promise<DynamicTable>;
   delete(id: number): Promise<void>;
-  existsByDbName(organizationId: number, dbName: string): Promise<boolean>;
+  existsByStorageLocation(organizationId: number, storageLocation: string): Promise<boolean>;
   
   // Row CRUD - what's actually used
   insertRow(tableId: number, data: CreateRowData): Promise<DynamicTableRow>;
@@ -27,6 +29,14 @@ export interface IDynamicTableRepository {
   getRows(tableId: number, options?: RowQueryOptions): Promise<DynamicTableRow[]>; 
   updateRow(tableId: number, rowId: string, data: UpdateRowData): Promise<DynamicTableRow>;
   deleteRow(tableId: number, rowId: string): Promise<void>;
+  
+  // Generic table operations for any storage backend
+  tableExists(tableId: number): Promise<boolean>;
+  getTableStats(tableId: number): Promise<{
+    rowCount: number;
+    sizeBytes: number;
+    lastModified: Date;
+  }>;
   
   // Table analysis methods needed by application services
   hasRows(tableId: number): Promise<boolean>;

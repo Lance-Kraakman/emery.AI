@@ -179,7 +179,7 @@ export class ChatApplicationService {
         return {
           valid: true,
           domainName: table.name,
-          domainSchema: { tableName: table.name, dbName: table.dbName }
+          domainSchema: { tableName: table.name, dbName: table.name }
         };
 
       case 'agent':

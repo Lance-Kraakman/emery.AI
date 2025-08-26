@@ -3,7 +3,6 @@
 
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import { createAgentDefaults } from '@/ddd/domain/agents/entities/agent';
 import type { DbClient } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';

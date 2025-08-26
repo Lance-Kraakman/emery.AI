@@ -83,23 +83,3 @@ class ToolRegistry:
             "available": True
         }
 
-
-# Backward compatibility - create instance that can be used like the old ToolLoader
-def create_tool_loader():
-    """Create tool loader instance for backward compatibility."""
-    class CompatibilityToolLoader:
-        """Compatibility wrapper for ToolRegistry."""
-        
-        def __init__(self):
-            self.registry = ToolRegistry()
-        
-        def load_tool(self, tool_config: ToolConfig) -> Any:
-            return self.registry.load_tool(tool_config)
-        
-        def load_tools(self, tool_configs: List[ToolConfig]) -> List[Any]:
-            return self.registry.load_tools(tool_configs)
-        
-        def list_available_tools(self) -> List[str]:
-            return self.registry.list_available_tools()
-    
-    return CompatibilityToolLoader()

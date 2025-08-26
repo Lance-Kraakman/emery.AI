@@ -81,7 +81,9 @@ export class DrizzleUserRepository implements IUserRepository {
     if (data.image !== undefined) updateData.image = data.image;
     if (data.currentOrganizationId !== undefined) updateData.currentOrganizationId = data.currentOrganizationId?.value || null;
     if (data.roleId !== undefined) updateData.roleId = data.roleId;
-    if (data.apiKey !== undefined) updateData.apiKey = data.apiKey?.value || null;
+    if (data.jobTitle !== undefined) updateData.jobTitle = data.jobTitle;
+    if (data.teams !== undefined) updateData.teams = data.teams;
+    // Note: apiKey updates handled through separate methods for security
 
     const [updatedUser] = await this.db
       .update(users)
@@ -196,7 +198,8 @@ export class DrizzleUserRepository implements IUserRepository {
   // User-Organization relationship management
   async addUserToOrganization(data: CreateUserOrganizationData): Promise<UserOrganization> {
     const relationshipData = {
-      ...data,
+      userId: data.userId.value,
+      organizationId: data.organizationId.value,
       role: data.role || 'member',
     };
 

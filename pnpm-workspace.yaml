@@ -1,4 +1,8 @@
 ignoredBuiltDependencies:
+  - canvas
+  - duckdb
   - esbuild
+  - grpc-tools
+  - lzo
   - sharp
   - unrs-resolver

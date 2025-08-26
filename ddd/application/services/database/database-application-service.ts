@@ -13,6 +13,8 @@ import type { Field, CreateFieldData, FieldType } from '@/ddd/domain/fields/enti
 import { Database, type DatabaseConfig } from '@/ddd/domain/databases/entities/database';
 import type { CreateRowData, UpdateRowData } from '@/app/actions/types';
 import type { Result } from '@/ddd/domain/shared/result';
+import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
+import { ResultHelpers } from '@/ddd/domain/shared/result';
 
 export interface CreateDatabaseCommand {
   name: string;
@@ -353,16 +355,28 @@ export class DatabaseApplicationService {
       // Generate dbName if not provided
       const dbName = command.dbName || this.slugify(command.name);
 
+      // Create table metadata using TableMetadata value object
+      let tableMetadata: TableMetadata | undefined = undefined;
+      if (command.description || command.metadata) {
+        const metadataResult = TableMetadata.fromPartial({
+          description: command.description,
+          metadata: command.metadata
+        });
+        if (!metadataResult.success) {
+          return ResultHelpers.failure(`Invalid table metadata: ${metadataResult.error}`);
+        }
+        
+        tableMetadata = metadataResult.data;
+      }
+
       // Create table using domain interface
       const tableConfig: CreateDynamicTableData = {
         name: command.name.trim(),
-        dbName,
+        storageLocation: dbName, // Use dbName as storage location identifier
         databaseId: command.databaseId,
         organizationId: command.organizationId,
         createdBy: command.createdBy,
-        metadata: command.description ? 
-          { ...command.metadata, description: command.description } : 
-          command.metadata
+        metadata: tableMetadata
       };
 
       // Save to repository (creates both metadata and physical table)
@@ -396,24 +410,30 @@ export class DatabaseApplicationService {
       }
 
       // Create updated table configuration
+      // Handle metadata conversion for updates
+      let updatedMetadata: TableMetadata | undefined = existingTable.metadata;
+      if (command.metadata !== undefined || command.description !== undefined) {
+        const metadataResult = TableMetadata.fromPartial({
+          description: command.description,
+          metadata: command.metadata
+        });
+        if (!metadataResult.success) {
+          return ResultHelpers.failure(`Invalid table metadata: ${metadataResult.error}`);
+        }
+        
+        updatedMetadata = metadataResult.data;
+      }
+
       const updatedConfig = {
         id: existingTable.id,
         name: command.name !== undefined ? command.name : existingTable.name,
-        dbName: command.dbName !== undefined ? command.dbName : existingTable.dbName,
         databaseId: existingTable.databaseId,
         organizationId: existingTable.organizationId,
         createdBy: existingTable.createdBy,
-        metadata: command.metadata !== undefined ? command.metadata : existingTable.metadata,
+        metadata: updatedMetadata,
         createdAt: existingTable.createdAt
       };
 
-      // Update metadata if description is provided
-      if (command.description !== undefined) {
-        updatedConfig.metadata = {
-          ...updatedConfig.metadata,
-          description: command.description
-        };
-      }
 
       // updatedConfig already contains the updated table data
 
@@ -487,7 +507,7 @@ export class DatabaseApplicationService {
         const searchLower = filters.searchQuery.toLowerCase();
         tables = tables.filter(table => 
           table.name.toLowerCase().includes(searchLower) ||
-          table.dbName.toLowerCase().includes(searchLower) ||
+          table.storageLocation.toLowerCase().includes(searchLower) ||
           (table.metadata?.description && 
            String(table.metadata.description).toLowerCase().includes(searchLower))
         );

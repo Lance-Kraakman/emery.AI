@@ -102,7 +102,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         status = WorkerStatus.WORKER_HEALTHY.name if hf_token else WorkerStatus.WORKER_UNHEALTHY.name
         
         # Get available capabilities (from tool loader)
-        available_tools = self.execution_service.tool_loader.list_available_tools()
+        available_tools = self.execution_service.tool_registry.list_available_tools()
         
         worker_info = WorkerInfo(
             worker_id=self.worker_id,

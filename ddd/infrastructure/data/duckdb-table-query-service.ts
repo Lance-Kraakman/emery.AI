@@ -1,0 +1,276 @@
+/**
+ * DuckDB Table Query Service Implementation
+ * 
+ * Infrastructure implementation for executing analytical queries against Apache Arrow files
+ * stored in S3 using DuckDB's powerful analytical capabilities with zero-copy performance.
+ * 
+ * AIDEV-NOTE: Infrastructure implementation of TableQueryService using DuckDB for Arrow analytical queries
+ */
+
+import Database from 'duckdb';
+import { BUCKET_NAME } from '@/lib/s3/client';
+
+import type { Result } from '@/ddd/domain/shared/result';
+import type { 
+  TableQueryService, 
+  QueryResult
+} from '@/ddd/domain/tables/services/table-query-service';
+import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
+import { DuckDB, eq, gt, gte, lt, lte, like, type QueryFilter } from './duckdb-sql-builder';
+
+export class DuckDBTableQueryService implements TableQueryService {
+  private db: Database.Database | null = null;
+
+  constructor() {
+    this.initializeDatabase();
+  }
+
+  private async initializeDatabase(): Promise<void> {
+    this.db = new Database.Database(':memory:', (err) => {
+      if (err) {
+        console.error('[DuckDB] Failed to initialize database:', err);
+      }
+    });
+
+    if (this.db) {
+      // Install required extensions
+      const connection = this.db.connect();
+      
+      // Install and load arrow extension  
+      await this.executeQuery("INSTALL arrow; LOAD arrow;");
+      
+      // Install and load httpfs for S3 access
+      await this.executeQuery("INSTALL httpfs; LOAD httpfs;");
+      
+      // Configure S3 credentials if available
+      if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+        await this.executeQuery(`SET s3_region='${process.env.AWS_REGION || 'ap-southeast-2'}';`);
+        await this.executeQuery(`SET s3_access_key_id='${process.env.AWS_ACCESS_KEY_ID}';`);
+        await this.executeQuery(`SET s3_secret_access_key='${process.env.AWS_SECRET_ACCESS_KEY}';`);
+        
+        if (process.env.S3_ENDPOINT_URL) {
+          await this.executeQuery(`SET s3_endpoint='${process.env.S3_ENDPOINT_URL}';`);
+          await this.executeQuery(`SET s3_use_ssl='${!process.env.S3_ENDPOINT_URL.startsWith('http://')}';`);
+        }
+      }
+      
+      connection.close();
+    }
+  }
+
+  private async executeQuery(sql: string): Promise<Result<QueryResult>> {
+    try {
+      if (!this.db) {
+        await this.initializeDatabase();
+        if (!this.db) {
+          return { success: false, error: 'Failed to initialize DuckDB' };
+        }
+      }
+
+      const startTime = Date.now();
+      const connection = this.db.connect();
+      
+      return new Promise((resolve) => {
+        connection.all(sql, (err: any, rows: any[]) => {
+          const executionTime = Date.now() - startTime;
+          connection.close();
+          
+          if (err) {
+            console.error('[DuckDB] Query error:', err);
+            resolve({
+              success: false,
+              error: err.message || 'Query execution failed'
+            });
+            return;
+          }
+          
+          resolve({
+            success: true,
+            data: {
+              rows,
+              rowCount: rows.length
+            }
+          });
+        });
+      });
+      
+    } catch (error) {
+      console.error('[DuckDB] Error executing query:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to execute query'
+      };
+    }
+  }
+
+  async queryTable(
+    tableId: number,
+    filters?: Record<string, any>,
+    orderBy?: string,
+    orderDirection?: 'ASC' | 'DESC',
+    limit?: number,
+    offset?: number
+  ): Promise<Result<QueryResult>> {
+    try {
+      // Get S3 path for table
+      const s3Path = await this.getTableS3Path(tableId);
+      if (!s3Path) {
+        return { success: false, error: 'Table not found' };
+      }
+
+      // Build SQL query
+      const s3Url = `s3://${BUCKET_NAME}/${s3Path.getDataPath()}`;
+      // Convert basic filters to QueryFilter format for the SQL builder
+      const queryFilters: QueryFilter[] = [];
+      if (filters && Object.keys(filters).length > 0) {
+        for (const [key, value] of Object.entries(filters)) {
+          if (value !== null && value !== undefined) {
+            queryFilters.push(eq(key, value));
+          }
+        }
+      }
+
+      // Use the type-safe SQL builder
+      const sql = DuckDB.select(s3Url, {
+        filters: queryFilters,
+        orderBy,
+        orderDirection,
+        limit,
+        offset
+      });
+      
+      console.log(`[DuckDB] Executing query: ${sql}`);
+      return await this.executeQuery(sql);
+      
+    } catch (error) {
+      console.error('[DuckDB] Error querying table:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to query table'
+      };
+    }
+  }
+
+  // Private helper methods
+
+  private async getTableS3Path(tableId: number): Promise<S3TablePath | null> {
+    // TODO: Implement proper table metadata lookup from PostgreSQL
+    // For now, this is a placeholder that creates a path based on tableId
+    // In a real implementation, we would query the tables schema to get
+    // the actual organizationId, databaseId, and s3Path
+    try {
+      return new S3TablePath(1, 1, tableId); // Placeholder
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Advanced query method that accepts type-safe QueryFilters directly
+   * This provides more flexibility than the basic queryTable method
+   */
+  async queryWithFilters(
+    tableId: number, 
+    queryFilters: QueryFilter[],
+    orderBy?: string,
+    orderDirection?: 'ASC' | 'DESC',
+    limit?: number,
+    offset?: number
+  ): Promise<Result<QueryResult>> {
+    try {
+      // Get S3 path for table
+      const s3Path = await this.getTableS3Path(tableId);
+      if (!s3Path) {
+        return { success: false, error: 'Table not found' };
+      }
+
+      // Build SQL query using the type-safe builder
+      const s3Url = `s3://${BUCKET_NAME}/${s3Path.getDataPath()}`;
+      const sql = DuckDB.select(s3Url, {
+        filters: queryFilters,
+        orderBy,
+        orderDirection,
+        limit,
+        offset
+      });
+
+      console.log(`[DuckDB] Executing advanced query: ${sql}`);
+      return await this.executeQuery(sql);
+
+    } catch (error) {
+      console.error('[DuckDB] Error querying table with filters:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to query table'
+      };
+    }
+  }
+
+  /**
+   * Count rows in a table with optional filters
+   */
+  async countRows(tableId: number, queryFilters?: QueryFilter[]): Promise<Result<number>> {
+    try {
+      const s3Path = await this.getTableS3Path(tableId);
+      if (!s3Path) {
+        return { success: false, error: 'Table not found' };
+      }
+
+      const s3Url = `s3://${BUCKET_NAME}/${s3Path.getDataPath()}`;
+      const sql = DuckDB.count(s3Url, queryFilters);
+      
+      console.log(`[DuckDB] Executing count query: ${sql}`);
+      const result = await this.executeQuery(sql);
+      
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+      
+      const count = result.data?.rows[0]?.count || 0;
+      return { success: true, data: count };
+      
+    } catch (error) {
+      console.error('[DuckDB] Error counting rows:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to count rows'
+      };
+    }
+  }
+
+  /**
+   * Get distinct values for a field
+   */
+  async getDistinctValues(
+    tableId: number, 
+    field: string, 
+    queryFilters?: QueryFilter[]
+  ): Promise<Result<any[]>> {
+    try {
+      const s3Path = await this.getTableS3Path(tableId);
+      if (!s3Path) {
+        return { success: false, error: 'Table not found' };
+      }
+
+      const s3Url = `s3://${BUCKET_NAME}/${s3Path.getDataPath()}`;
+      const sql = DuckDB.distinct(s3Url, field, queryFilters);
+      
+      console.log(`[DuckDB] Executing distinct query: ${sql}`);
+      const result = await this.executeQuery(sql);
+      
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+      
+      const values = result.data?.rows.map(row => row[field]) || [];
+      return { success: true, data: values };
+      
+    } catch (error) {
+      console.error('[DuckDB] Error getting distinct values:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get distinct values'
+      };
+    }
+  }
+}

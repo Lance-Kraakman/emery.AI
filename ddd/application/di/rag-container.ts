@@ -10,8 +10,8 @@ import {
   DrizzleRagQueryLogRepository
 } from '@/ddd/infrastructure/db/repositories/rag';
 import { DrizzleOrganizationRepository } from '@/ddd/infrastructure/db/repositories/organizations/drizzle-organization-repository';
-import { DrizzleDynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/drizzle-dynamic-table-repository';
-import { DrizzleFieldRepository } from '@/ddd/infrastructure/db/repositories/fields/drizzle-field-repository';
+import { S3TableRepository } from '@/ddd/infrastructure/storage/repositories/s3-table-repository';
+import { DuckDBTableQueryService } from '@/ddd/infrastructure/data/duckdb-table-query-service';
 import { DrizzleAgentRepository } from '@/ddd/infrastructure/db/repositories/agents/drizzle-agent-repository';
 import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/databases/drizzle-database-repository';
 import { DrizzleTeamRepository } from '@/ddd/infrastructure/db/repositories/teams/drizzle-team-repository';
@@ -29,6 +29,7 @@ import { IndexingDomainService, SearchDomainService } from '@/ddd/domain/rag/ser
 // Use Cases
 import { RagIndexingApplicationService } from '@/ddd/application/services/rag/rag-indexing-application-service';
 import { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
+import { ArrowDataStorageService } from '@/ddd/infrastructure/data/arrow-data-storage-service';
 
 /**
  * RAG Dependency Injection Container
@@ -42,9 +43,12 @@ export const queryLogRepository = new DrizzleRagQueryLogRepository(db);
 
 // Domain repositories
 export const organizationRepository = new DrizzleOrganizationRepository(db, rawClient);
-export const tableRepository = new DrizzleDynamicTableRepository(db, rawClient);
-export const fieldRepository = new DrizzleFieldRepository(db, rawClient);
 export const agentRepository = new DrizzleAgentRepository(db);
+
+// S3 + Arrow repositories
+const arrowConverterService = new ArrowDataStorageService();
+const duckdbQueryService = new DuckDBTableQueryService();
+export const tableRepository = new S3TableRepository(arrowConverterService, duckdbQueryService);
 export const databaseRepository = new DrizzleDatabaseRepository(db);
 export const teamRepository = new DrizzleTeamRepository(db);
 export const fileRepository = new DrizzleFileStorageRepository(db);
@@ -65,7 +69,6 @@ export const indexingApplicationService = new RagIndexingApplicationService(
   indexingDomainService,
   organizationRepository,
   tableRepository,
-  fieldRepository,
   agentRepository,
   databaseRepository,
   teamRepository,

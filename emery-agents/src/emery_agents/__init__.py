@@ -18,7 +18,6 @@ from .core.types import StepType, TaskStatus, WorkerStatus
 
 # Execution services
 from .execution.capability_router import CapabilityRouter
-from .execution.tool_loader import ToolLoader
 # Import SmolAgentsExecutionService only when needed to avoid smolagents dependency
 # from .infrastructure.execution.smolagents_execution_service import SmolAgentsExecutionService
 
@@ -47,6 +46,5 @@ __all__ = [
     
     # Execution services
     "CapabilityRouter",
-    "ToolLoader",
     # "SmolAgentsExecutionService",  # Import manually when needed
 ]

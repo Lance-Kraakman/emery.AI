@@ -15,7 +15,7 @@ from emery_agents.core.entities import (
 )
 from emery_agents.core.types import StepType
 from emery_agents.execution.capability_router import CapabilityRouter
-from emery_agents.execution.tool_loader import ToolLoader
+from emery_agents.execution.tools.tool_registry import ToolRegistry
 from emery_agents.infrastructure.execution.smolagents_execution_service import SmolAgentsExecutionService
 
 
@@ -137,50 +137,6 @@ class TestCapabilityRouter:
         
         with pytest.raises(ValueError, match="must specify either capability_name or instruction_config"):
             router.route_execution(request)
-
-
-class TestToolLoader:
-    """Test tool loading functionality."""
-    
-    def test_list_available_tools(self):
-        """Test listing available tools."""
-        loader = ToolLoader()
-        tools = loader.list_available_tools()
-        
-        assert isinstance(tools, list)
-        assert "python_repl" in tools
-        assert "web_search" in tools
-    
-    def test_load_python_repl_tool(self):
-        """Test loading Python REPL tool."""
-        loader = ToolLoader()
-        
-        tool_config = ToolConfig(
-            name="python_repl",
-            version="1.0",
-            config={}
-        )
-        
-        # This will fail if smolagents not installed, which is expected
-        try:
-            tool = loader.load_tool(tool_config)
-            assert tool is not None
-        except ValueError as e:
-            # Expected if smolagents not available
-            assert "not available" in str(e)
-    
-    def test_load_unknown_tool_raises_error(self):
-        """Test that unknown tool raises error."""
-        loader = ToolLoader()
-        
-        tool_config = ToolConfig(
-            name="nonexistent_tool",
-            version="1.0",
-            config={}
-        )
-        
-        with pytest.raises(ValueError, match="Unknown tool"):
-            loader.load_tool(tool_config)
 
 
 @pytest.mark.asyncio
@@ -320,12 +276,6 @@ if __name__ == "__main__":
         test_router.test_route_capability_name_execution()
         test_router.test_route_instruction_config_execution()
         print("✓ CapabilityRouter tests passed")
-        
-        print("Testing ToolLoader...")
-        test_loader = TestToolLoader()
-        test_loader.test_list_available_tools()
-        print("✓ ToolLoader tests passed")
-        
-        print("All integration tests completed!")
+            
     
     asyncio.run(run_simple_test())
