@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional
 from enum import Enum
 
-from ...core.types import StepType
+from emery_agents.core.types import StepType
 
 
 class ModelType(Enum):
