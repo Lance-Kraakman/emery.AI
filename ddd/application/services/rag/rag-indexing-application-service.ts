@@ -8,7 +8,9 @@ import {
 import { IndexingDomainService, type ContentProcessor } from '@/ddd/domain/rag/services';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
-import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
+import { db } from '@/lib/db/client';
+import { tables, fields } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
@@ -50,7 +52,6 @@ export class RagIndexingApplicationService {
     private readonly indexingDomainService: IndexingDomainService,
     private readonly organizationRepository: IOrganizationRepository,
     private readonly tableRepository: IDynamicTableRepository,
-    private readonly fieldRepository: IFieldRepository,
     private readonly agentRepository: IAgentRepository,
     private readonly databaseRepository: IDatabaseRepository,
     private readonly teamRepository: ITeamRepository,
@@ -384,18 +385,39 @@ export class RagIndexingApplicationService {
   }
 
   private async indexTables(index: RagIndex): Promise<any[]> {
-    const tables = await this.tableRepository.findByOrganization(index.organizationId.value);
-    if (tables.length === 0) return [];
-
+    // AIDEV-NOTE: Fixed implementation - properly index table/field metadata from PostgreSQL
+    // This enables RAG discovery while keeping actual data queries separate via DuckDB
+    
+    console.log(`[RAG-INDEXING-APP] Indexing table metadata (schemas only) for organization ${index.organizationId.value}`);
+    
+    // Query PostgreSQL metadata tables directly for this organization
+    const tablesForOrg = await db.query.tables.findMany({
+      where: eq(tables.organizationId, index.organizationId.value)
+    });
+    
+    if (tablesForOrg.length === 0) {
+      console.log(`[RAG-INDEXING-APP] No tables found for organization ${index.organizationId.value}`);
+      return [];
+    }
+    
     // Get fields for all tables efficiently
     const fieldsMap = new Map();
-    for (const table of tables) {
-      const fields = await this.fieldRepository.findByTableId(table.id);
-      fieldsMap.set(table.id, fields);
+    for (const table of tablesForOrg) {
+      const tableFields = await db.query.fields.findMany({
+        where: eq(fields.tableId, table.id),
+        orderBy: (fields, { asc }) => [asc(fields.orderIndex)]
+      });
+      fieldsMap.set(table.id, tableFields);
     }
-
+    
+    console.log(`[RAG-INDEXING-APP] Found ${tablesForOrg.length} tables with metadata for indexing`);
+    
+    // Use existing domain service that already only indexes metadata (not row data)
     return await this.indexingDomainService.indexTableData(
-      index.id, index.organizationId, tables, fieldsMap
+      index.id, 
+      index.organizationId, 
+      tablesForOrg as any[], // Convert to domain entities
+      fieldsMap
     );
   }
 

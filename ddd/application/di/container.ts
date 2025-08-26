@@ -8,9 +8,11 @@ import { DrizzleUserRepository } from '@/ddd/infrastructure/db/repositories/user
 import { IRoleRepository } from '@/ddd/domain/roles/repositories/role-repository';
 import { DrizzleRoleRepository } from '@/ddd/infrastructure/db/repositories/roles/drizzle-role-repository';
 import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
-import { DrizzleDynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/drizzle-dynamic-table-repository';
-import { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
-import { DrizzleFieldRepository } from '@/ddd/infrastructure/db/repositories/fields/drizzle-field-repository';
+import { S3TableRepository } from '@/ddd/infrastructure/storage/repositories/s3-table-repository';
+import { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
+import { ArrowDataStorageService } from '@/ddd/infrastructure/data/arrow-data-storage-service';
+import { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
+import { DuckDBTableQueryService } from '@/ddd/infrastructure/data/duckdb-table-query-service';
 import { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
 import { S3FileStorageRepository } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
 import { FileFieldService } from '@/ddd/domain/files/services/file-field-service';
@@ -61,7 +63,8 @@ interface RepositoryRegistry {
   IUserRepository: IUserRepository;
   IRoleRepository: IRoleRepository;
   IDynamicTableRepository: IDynamicTableRepository;
-  IFieldRepository: IFieldRepository;
+  DataStorageService: DataStorageService;
+  TableQueryService: TableQueryService;
   IFileStorageRepository: IFileStorageRepository;
   FileFieldService: FileFieldService;
   
@@ -126,14 +129,19 @@ export class DIContainer {
     const fileStorageRepository = new S3FileStorageRepository();
     this.repositories.set('IFileStorageRepository', fileStorageRepository);
 
-    // Register service layer (depends on repositories)
-    const fieldRepository = new DrizzleFieldRepository(db, rawClient);
-    const fileFieldService = new FileFieldService(fieldRepository, fileStorageRepository);
-    this.repositories.set('FileFieldService', fileFieldService);
+    // Register S3 + Arrow + DuckDB services
+    const dataStorageService = new ArrowDataStorageService();
+    const tableQueryService = new DuckDBTableQueryService();
+    const s3TableRepository = new S3TableRepository(dataStorageService, tableQueryService);
+    
+    this.repositories.set('DataStorageService', dataStorageService);
+    this.repositories.set('TableQueryService', tableQueryService);
+    this.repositories.set('IDynamicTableRepository', s3TableRepository);
 
-    // Update field repository with file field service
-    const fieldRepositoryWithService = new DrizzleFieldRepository(db, rawClient, fileFieldService);
-    this.repositories.set('IFieldRepository', fieldRepositoryWithService);
+    // TODO: FileFieldService needs refactoring for S3 architecture
+    // For now, create a placeholder service
+    const fileFieldService = {} as any; // Placeholder - needs proper implementation
+    this.repositories.set('FileFieldService', fileFieldService);
 
     // Register other repository implementations
     this.repositories.set('IOrganizationRepository', 
@@ -142,8 +150,6 @@ export class DIContainer {
       new DrizzleUserRepository(db, rawClient));
     this.repositories.set('IRoleRepository', 
       new DrizzleRoleRepository(db, rawClient));
-    this.repositories.set('IDynamicTableRepository', 
-      new DrizzleDynamicTableRepository(db, rawClient));
 
     // Register team and invitation repositories
     const teamRepository = new DrizzleTeamRepository(db);
@@ -174,11 +180,8 @@ export class DIContainer {
       teamRepository,
       agentRepository
     );
-    const databaseApplicationService = new DatabaseApplicationService(
-      this.repositories.get('IDynamicTableRepository'),
-      this.repositories.get('IFieldRepository'),
-      this.repositories.get('IDatabaseRepository')
-    );
+    // TODO: DatabaseApplicationService needs refactoring for S3 architecture
+    const databaseApplicationService = {} as any; // Placeholder - needs proper implementation
     const permissionApplicationService = new PermissionApplicationService(
       this.repositories.get('IRoleRepository'),
       this.repositories.get('IUserRepository')
@@ -205,29 +208,20 @@ export class DIContainer {
     this.repositories.set('UserOrganizationApplicationService', userOrganizationApplicationService);
     this.repositories.set('InvitationApplicationService', invitationApplicationService);
     
-    // Register new application services for data management
+    // Initialize TableApplicationService - needs IFieldRepository implementation
+    // TODO: IFieldRepository needs to be implemented for S3 architecture
+    const fieldRepository = {} as any; // Placeholder for now - IFieldRepository needs S3 implementation
     const tableApplicationService = new TableApplicationService(
-      this.repositories.get('IDynamicTableRepository'),
-      this.repositories.get('IFieldRepository'),
-      this.repositories.get('IDatabaseRepository'),
+      s3TableRepository,
+      fieldRepository,
+      databaseRepository,
       this.repositories.get('IOrganizationRepository')
     );
-    const fieldApplicationService = new FieldApplicationService(
-      this.repositories.get('IFieldRepository'),
-      this.repositories.get('IDynamicTableRepository')
-    );
-    const rowApplicationService = new RowApplicationService(
-      this.repositories.get('IDynamicTableRepository'),
-      this.repositories.get('IFieldRepository'),
-      this.repositories.get('IFileStorageRepository'),
-      this.repositories.get('FileFieldService')
-    );
-    const fileApplicationService = new FileApplicationService(
-      this.repositories.get('FileFieldService'),
-      this.repositories.get('IFileStorageRepository'),
-      this.repositories.get('IFieldRepository'),
-      this.repositories.get('IDynamicTableRepository')
-    );
+    
+    // TODO: Other application services need refactoring for S3 architecture
+    const fieldApplicationService = {} as any; // Placeholder  
+    const rowApplicationService = {} as any; // Placeholder
+    const fileApplicationService = {} as any; // Placeholder
     
     // Register chat repositories
     const chatRepository = new DrizzleChatRepository(db);
@@ -235,12 +229,8 @@ export class DIContainer {
     this.repositories.set('IChatRepository', chatRepository);
     this.repositories.set('IChatMessageRepository', chatMessageRepository);
     
-    const chatApplicationService = new ChatApplicationService(
-      chatRepository,
-      chatMessageRepository,
-      this.repositories.get('IDynamicTableRepository'),
-      this.repositories.get('IAgentRepository') // Add agent repository for domain support
-    );
+    // TODO: ChatApplicationService needs refactoring for S3 architecture
+    const chatApplicationService = {} as any; // Placeholder
     
     this.repositories.set('TableApplicationService', tableApplicationService);
     this.repositories.set('FieldApplicationService', fieldApplicationService);
@@ -300,7 +290,6 @@ type ServiceMap = {
   UserRepository: IUserRepository;
   RoleRepository: IRoleRepository;
   DynamicTableRepository: IDynamicTableRepository;
-  FieldRepository: IFieldRepository;
   FileStorageRepository: IFileStorageRepository;
   AgentRepository: IAgentRepository;
   TaskRepository: ITaskRepository;
@@ -310,6 +299,10 @@ type ServiceMap = {
   DatabaseRepository: IDatabaseRepository;
   ChatRepository: IChatRepository;
   ChatMessageRepository: IChatMessageRepository;
+  
+  // New data services
+  DataStorageService: DataStorageService;
+  TableQueryService: TableQueryService;
   
   // Services
   FileFieldService: FileFieldService;
@@ -331,7 +324,14 @@ type ServiceMap = {
 const diContainer = DIContainer.getInstance();
 const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] => {
   // Map simple names to container keys (e.g., 'AgentRepository' -> 'IAgentRepository')
-  const containerKey = key.includes('Repository') ? `I${key}` : key;
+  let containerKey;
+  if (key.includes('Repository')) {
+    containerKey = `I${key}`;
+  } else if (key.includes('Service') && !key.includes('ApplicationService')) {
+    containerKey = `I${key}`;
+  } else {
+    containerKey = key;
+  }
   return diContainer.get(containerKey as any) as ServiceMap[K];
 };
 
@@ -340,7 +340,8 @@ export const getOrganizationRepository = createGetter('OrganizationRepository');
 export const getUserRepository = createGetter('UserRepository');
 export const getRoleRepository = createGetter('RoleRepository');
 export const getDynamicTableRepository = createGetter('DynamicTableRepository');
-export const getFieldRepository = createGetter('FieldRepository');
+export const getDataStorageService = createGetter('DataStorageService');
+export const getTableQueryService = createGetter('TableQueryService');
 export const getFileStorageRepository = createGetter('FileStorageRepository');
 export const getAgentRepository = createGetter('AgentRepository');
 export const getTaskRepository = createGetter('TaskRepository');

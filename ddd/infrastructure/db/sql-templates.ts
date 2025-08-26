@@ -7,22 +7,8 @@ export interface SqlQuery {
   params: any[];
 }
 
-export interface TableSchemaParams {
-  tableName: string;
-}
-
-export interface RowInsertParams {
-  tableName: string;
-  fields: string[];
-  values: any[];
-}
-
-export interface RowUpdateParams {
-  tableName: string;
-  fields: string[];
-  values: any[];
-  rowId: string;
-}
+// AIDEV-NOTE: Obsolete interfaces removed (TableSchemaParams, RowInsertParams, RowUpdateParams, RowDeleteParams)
+// These were for PostgreSQL dynamic table operations, now replaced by S3/Parquet storage
 
 export interface RowQueryParams {
   tableName: string;
@@ -30,11 +16,6 @@ export interface RowQueryParams {
   orderDirection?: 'ASC' | 'DESC';
   limit?: number;
   offset?: number;
-}
-
-export interface RowDeleteParams {
-  tableName: string;
-  rowId: string;
 }
 
 export interface RowSelectByIdParams {
@@ -47,55 +28,8 @@ export interface RowSelectByIdParams {
  * All templates use proper parameterization to prevent SQL injection
  */
 export class DynamicTableSqlTemplates {
-  /**
-   * Create a new dynamic table with standard columns
-   */
-  static createTable(params: TableSchemaParams): SqlQuery {
-    return {
-      query: `
-        CREATE TABLE "${params.tableName}" (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          created_at TIMESTAMPTZ DEFAULT now(),
-          updated_at TIMESTAMPTZ DEFAULT now()
-        )
-      `.trim(),
-      params: []
-    };
-  }
-
-  /**
-   * Drop a dynamic table if it exists
-   */
-  static dropTable(params: TableSchemaParams): SqlQuery {
-    return {
-      query: `DROP TABLE IF EXISTS "${params.tableName}"`,
-      params: []
-    };
-  }
-
-  /**
-   * Insert a row with specific field values
-   */
-  static insertRow(params: RowInsertParams): SqlQuery {
-    if (params.fields.length === 0) {
-      return {
-        query: `INSERT INTO "${params.tableName}" DEFAULT VALUES RETURNING *`,
-        params: []
-      };
-    }
-
-    const columnNames = params.fields.map(field => `"${field}"`).join(', ');
-    const placeholders = params.values.map((_, i) => `$${i + 1}`).join(', ');
-    
-    return {
-      query: `
-        INSERT INTO "${params.tableName}" (${columnNames}) 
-        VALUES (${placeholders}) 
-        RETURNING *
-      `.trim(),
-      params: params.values
-    };
-  }
+  // AIDEV-NOTE: Dynamic table creation/modification methods removed
+  // Tables are now stored in S3 as Parquet files, not PostgreSQL tables
 
   /**
    * Select rows from a dynamic table with ordering and pagination
@@ -120,24 +54,6 @@ export class DynamicTableSqlTemplates {
   }
 
   /**
-   * Update a specific row in a dynamic table
-   */
-  static updateRow(params: RowUpdateParams): SqlQuery {
-    const setClause = params.fields.map((field, i) => `"${field}" = $${i + 1}`).join(', ');
-    const rowIdParamIndex = params.fields.length + 1;
-
-    return {
-      query: `
-        UPDATE "${params.tableName}" 
-        SET ${setClause}, updated_at = now() 
-        WHERE id = $${rowIdParamIndex} 
-        RETURNING *
-      `.trim(),
-      params: [...params.values, params.rowId]
-    };
-  }
-
-  /**
    * Select a specific row by ID from a dynamic table
    */
   static selectRowById(params: RowSelectByIdParams): SqlQuery {
@@ -147,15 +63,8 @@ export class DynamicTableSqlTemplates {
     };
   }
 
-  /**
-   * Delete a specific row from a dynamic table
-   */
-  static deleteRow(params: RowDeleteParams): SqlQuery {
-    return {
-      query: `DELETE FROM "${params.tableName}" WHERE id = $1`,
-      params: [params.rowId]
-    };
-  }
+  // AIDEV-NOTE: Row modification methods removed (updateRow, deleteRow)
+  // Row operations now handled by S3 Delta Lake pattern with tombstones
 }
 
 /**

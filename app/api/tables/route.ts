@@ -59,7 +59,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       }, { status: 400 });
     }
 
-    console.log(`[API-TABLES] Created table using TableApplicationService: ${result.data?.dbName}`);
+    console.log(`[API-TABLES] Created table using TableApplicationService: ${result.data?.name}`);
 
     return Response.json({
       success: true,

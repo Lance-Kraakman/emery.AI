@@ -35,7 +35,7 @@ export const tables = pgTable("tables", {
   databaseId: integer("database_id").notNull().references(() => databases.id),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
-  dbName: text("db_name").notNull().unique(),
+  s3Path: text("s3_path").notNull().unique(), // S3 path for table's Parquet data: org_{id}/db_{id}/table_{id}/
   metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata for RAG indexing
   createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
@@ -47,10 +47,26 @@ export const fields = pgTable("fields", {
   tableId: integer("table_id").notNull().references(() => tables.id),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
-  type: text("type").notNull(), // text, number, boolean, email, url, date, relation
+  type: text("type").notNull(), // text, number, boolean, email, url, date, file, relation
   orderIndex: integer("order_index").default(0),
-  relatedTableId: integer("related_table_id").references(() => tables.id),
   required: boolean("required").default(false),
+  
+  // Configuration for complex field types (file, relation)
+  fieldConfig: jsonb("field_config").$type<{
+    // File field config
+    allowedTypes?: string[]; // ['image/*', '.pdf', etc.]
+    maxSize?: number; // in bytes
+    multiple?: boolean;
+    
+    // Relation field config  
+    targetTableId?: number;
+    relationshipType?: 'one-to-one' | 'one-to-many' | 'many-to-many';
+    displayField?: string;
+    
+    // Generic extension metadata
+    [key: string]: any;
+  }>(),
+  
   createdAt: timestamp("created_at").defaultNow(),
 });
 

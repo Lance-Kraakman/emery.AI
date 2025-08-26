@@ -12,7 +12,7 @@ from typing import Any, Dict
 from smolagents import ToolCallingAgent
 from smolagents.models import InferenceClientModel
 
-from .tool_loader import ToolLoader
+from .tools.tool_registry import ToolRegistry
 from ..core.entities import ToolConfig
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ class CapabilityRouterAgent:
     """
     
     def __init__(self):
-        self.tool_loader = ToolLoader()
+        self.tool_registry = ToolRegistry()
         self._agent_cache = {}  # Cache by tool configuration
         logger.info("CapabilityRouterAgent initialized")
     
@@ -74,17 +74,17 @@ class CapabilityRouterAgent:
         # Load only specified tools (avoid loading all tools to prevent performance issues)
         if tool_names:
             tool_configs = [ToolConfig(name=name, version="1.0", config={}) for name in tool_names]
-            tools = self.tool_loader.load_tools(tool_configs)
+            tools = self.tool_registry.load_tools(tool_configs)
             logger.info(f"Loaded {len(tools)} specified tools: {tool_names}")
         else:
             # Default to essential tools only to avoid performance issues
             default_tools = ['emery_database', 'table_data']
             tool_configs = [ToolConfig(name=name, version="1.0", config={}) for name in default_tools]
-            tools = self.tool_loader.load_tools(tool_configs)
+            tools = self.tool_registry.load_tools(tool_configs)
             logger.info(f"Loaded {len(tools)} default tools: {default_tools}")
         
         # Create ToolCallingAgent with optimized configuration  
-        # Use 14B model - good balance of speed and instruction following
+        # Use 14B model - good balance of speed and tool calling support
         model = InferenceClientModel("Qwen/Qwen2.5-14B-Instruct", token=hf_token)
         
         agent = ToolCallingAgent(

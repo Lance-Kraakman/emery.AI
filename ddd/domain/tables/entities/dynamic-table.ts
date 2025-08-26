@@ -1,13 +1,15 @@
 // AIDEV-NOTE: Dynamic Table domain entities - manages runtime-created tables in Baserow-style system
 // Dynamic tables use field_{id} column naming and support complex types like JSONB relations
 
+import type { TableMetadata } from '../value-objects/table-metadata';
+
 export interface DynamicTable {
   id: number;
   databaseId: number;                  // References databases.id
   organizationId: number;               // References organizations.id (denormalized for RLS)
   name: string;                        // Human-readable table name
-  dbName: string;                      // Actual PostgreSQL table name (slugified, unique)
-  metadata?: TableMetadata | null;     // JSONB metadata for descriptions, etc.
+  storageLocation: string;             // Generic storage location (S3 path, table name, etc.)
+  metadata?: TableMetadata;            // JSONB metadata using value object
   createdBy: string;                   // UUID reference to users.id
   createdAt?: Date | null;
   updatedAt?: Date | null;
@@ -30,16 +32,12 @@ export interface DatabaseMetadata {
   [key: string]: any;                  // Additional metadata for RAG indexing
 }
 
-export interface TableMetadata {
-  description?: string;
-  [key: string]: any;                  // Extensible metadata for future features
-}
 
 export interface CreateDynamicTableData {
   databaseId: number;
   organizationId: number;
   name: string;
-  dbName: string;                      // Generated from name via slugify
+  storageLocation: string;             // Generated storage location (S3 path, table name, etc.)
   metadata?: TableMetadata;
   createdBy: string;
 }

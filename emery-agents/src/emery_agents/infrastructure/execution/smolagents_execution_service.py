@@ -18,7 +18,7 @@ from ...core.entities import TaskRequest, TaskProgress, CapabilityConfig
 from ...core.types import StepType, TaskStatus
 from ...execution.capability_router import CapabilityRouter
 from ...execution.capability_router_agent import CapabilityRouterAgent
-from ...execution.tool_loader import ToolLoader
+from ...execution.tools.tool_registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class SmolAgentsExecutionService:
         self.agent_cache: Dict[str, CodeAgent] = {}  # Cache by task_id for isolation
         self.capability_router = CapabilityRouter()
         self.capability_router_agent = CapabilityRouterAgent()
-        self.tool_loader = ToolLoader()
+        self.tool_registry = ToolRegistry()
         logger.info("SmolAgentsExecutionService initialized")
     
     async def execute_task(self, request: TaskRequest) -> AsyncIterator[TaskProgress]:
@@ -212,7 +212,7 @@ class SmolAgentsExecutionService:
             step_agents.append(step_agent)
         
         # Create capability-level agent that manages step agents
-        model = InferenceClientModel("Qwen/Qwen2.5-72B-Instruct", token=hf_token)
+        model = InferenceClientModel("Qwen/Qwen2.5-14B-Instruct", token=hf_token)
         
         capability_agent = CodeAgent(
             tools=[],  # Capability agent delegates to step agents
@@ -230,7 +230,7 @@ class SmolAgentsExecutionService:
         """Create step-level agent based on step type."""
         model_name = step.model or (
             "Qwen/Qwen2.5-Coder-32B-Instruct" if step.type == StepType.CODE_STEP 
-            else "Qwen/Qwen2.5-72B-Instruct"
+            else "Qwen/Qwen2.5-14B-Instruct"
         )
         model = InferenceClientModel(model_name, token=hf_token)
         
@@ -238,7 +238,7 @@ class SmolAgentsExecutionService:
         step_tools = []
         if step.tools:
             try:
-                step_tools = self.tool_loader.load_tools(step.tools)
+                step_tools = self.tool_registry.load_tools(step.tools)
             except Exception as e:
                 logger.warning(f"Failed to load some tools for step {step.id}: {e}")
         
@@ -255,7 +255,7 @@ class SmolAgentsExecutionService:
             )
     
     def _load_tool_from_config_legacy(self, tool_config) -> Optional[Any]:
-        """Legacy tool loading method - use ToolLoader instead."""
+        """Legacy tool loading method - use ToolRegistry instead."""
         try:
             tool_name = getattr(tool_config, 'name', str(tool_config))
             
@@ -315,7 +315,7 @@ class LegacySmolAgentsOrchestrator:
                 capability_agent.description = capability.description or f"Handles {capability.name} capability"
                 capability_agents.append(capability_agent)
         
-        model = InferenceClientModel("Qwen/Qwen2.5-72B-Instruct", token=hf_token)
+        model = InferenceClientModel("Qwen/Qwen2.5-14B-Instruct", token=hf_token)
         
         self.agent = CodeAgent(
             tools=[],
@@ -335,7 +335,7 @@ class LegacySmolAgentsOrchestrator:
             step_agent.description = step.instructions
             step_agents.append(step_agent)
         
-        model = InferenceClientModel("Qwen/Qwen2.5-72B-Instruct", token=hf_token)
+        model = InferenceClientModel("Qwen/Qwen2.5-14B-Instruct", token=hf_token)
         
         return CodeAgent(
             tools=[],
@@ -348,7 +348,7 @@ class LegacySmolAgentsOrchestrator:
         """Create step-level agent."""
         model_name = getattr(step, 'model', None) or (
             "Qwen/Qwen2.5-Coder-32B-Instruct" if step.type == StepType.CODE_STEP 
-            else "Qwen/Qwen2.5-72B-Instruct"
+            else "Qwen/Qwen2.5-14B-Instruct"
         )
         model = InferenceClientModel(model_name, token=hf_token)
         

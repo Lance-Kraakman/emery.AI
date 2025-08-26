@@ -185,6 +185,7 @@ export interface FileFieldConfig {
   allowedTypes?: string[];              // MIME types: ['image/*', 'application/pdf']
   maxSize?: number;                     // Max file size in bytes (defaults to env MAX_FILE_SIZE)
   maxFiles?: number;                    // Max number of files per field
+  multiple?: boolean;                   // Allow multiple file uploads (defaults to false)
   generateThumbnails?: boolean;         // Auto-generate image thumbnails
   thumbnailSizes?: string[];            // Thumbnail sizes: ['small', 'medium', 'large']
   s3BucketName?: string;               // Override default S3 bucket

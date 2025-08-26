@@ -318,7 +318,7 @@ export function ChatMentionDropdown({
                           ${!isAvailable ? 'opacity-50 cursor-not-allowed' : ''}
                         `}
                         onClick={() => isAvailable && handleItemClick(item)}
-                        onMouseEnter={() => setSelectedIndex(adjustedIndex)}
+                        onMouseEnter={() => setSelectedIndex(index)}
                         disabled={!isAvailable}
                       >
                         <div className="flex-shrink-0">

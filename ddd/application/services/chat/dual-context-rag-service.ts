@@ -92,7 +92,7 @@ export class TableContextBuilder extends DomainContextBuilder {
       context.push({
         id: `table_schema_${domainId}`,
         title: `Table Schema: ${table.name}`,
-        content: `Table "${table.name}" (Database: ${table.dbName})\nThis table contains structured data with multiple fields and relationships. Users can query and analyze data from this table.`,
+        content: `Table "${table.name}"\nThis table contains structured data with multiple fields and relationships. Users can query and analyze data from this table.`,
         domainType: 'table',
         sourceName: table.name,
         similarity: 1.0, // Perfect match for schema
