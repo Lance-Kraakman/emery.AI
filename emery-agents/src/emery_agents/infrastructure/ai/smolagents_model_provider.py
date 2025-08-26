@@ -12,8 +12,8 @@ from typing import Any, Optional
 
 from smolagents.models import InferenceClientModel
 
-from ...domain.ai.services.model_provider_service import IModelProviderService, ModelType
 from ...core.types import StepType
+from ...domain.ai.services.model_provider_service import IModelProviderService, ModelType
 
 logger = logging.getLogger(__name__)
 
