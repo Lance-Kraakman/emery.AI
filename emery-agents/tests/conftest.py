@@ -8,37 +8,51 @@ from unittest.mock import AsyncMock, Mock, patch
 # DDD imports - only domain layer for testing
 from emery_agents.domain.agents.entities.agent import Agent, AgentConfig
 from emery_agents.domain.agents.entities.task import Task, TaskInstructions
-from emery_agents.domain.agents.value_objects.agent_id import AgentId
-from emery_agents.domain.agents.value_objects.task_id import TaskId
-from emery_agents.domain.shared.value_objects.organization_id import OrganizationId
-from emery_agents.domain.tools.value_objects.tool_config import ToolConfig
-from emery_agents.domain.agents.value_objects.server_config import ServerConfig
+from emery_agents.domain.shared.value_objects.ids import AgentId, OrganizationId, TaskId
+from emery_agents.domain.agents.value_objects.agent_value_objects import AgentName, AgentStatus, ApiKey
 
 
 @pytest.fixture
-def sample_tool_config() -> ToolConfig:
+def sample_agent_id() -> AgentId:
+    """Sample agent ID value object."""
+    return AgentId(123)
+
+
+@pytest.fixture
+def sample_organization_id() -> OrganizationId:
+    """Sample organization ID value object."""
+    return OrganizationId(1)
+
+
+@pytest.fixture
+def sample_task_id() -> TaskId:
+    """Sample task ID value object."""
+    return TaskId.generate()
+
+
+@pytest.fixture
+def sample_tool_config() -> Dict[str, Any]:
     """Basic tool configuration."""
-    return ToolConfig.from_dict({"name": "test_tool", "version": "1.0.0"})
+    return {"name": "test_tool", "version": "1.0.0"}
 
 
 @pytest.fixture  
-def sample_server_config() -> ServerConfig:
+def sample_server_config() -> Dict[str, Any]:
     """Basic server configuration."""
-    return ServerConfig.from_dict({"name": "test_server", "endpoint": "http://localhost:8000"})
+    return {"name": "test_server", "endpoint": "http://localhost:8000"}
 
 
 @pytest.fixture
 def sample_agent_config() -> AgentConfig:
-    """Basic agent configuration for DDD entities."""
+    """Basic agent configuration for DDD entities with value objects."""
     return AgentConfig(
-        name="Test Agent",
-        role="assistant",
+        name=AgentName("Test Agent"),
+        organization_id=OrganizationId(1),
+        owner_id="user_123",
         description="Agent for testing",
         persona="Helpful test assistant",
-        organization_id=1,
-        owner_id="user_123",
-        status="active",
-        api_key="test_api_key"
+        status=AgentStatus.active(),
+        api_key=ApiKey("ak_conftest_secure_production_abcdef789xyz")
     )
 
 

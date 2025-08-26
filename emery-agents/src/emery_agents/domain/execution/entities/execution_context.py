@@ -8,6 +8,7 @@ Contains execution mode, tools, and environment information.
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 from enum import Enum
+from ...shared.value_objects.ids import AgentId, OrganizationId
 
 
 class ExecutionMode(Enum):
@@ -26,8 +27,8 @@ class ExecutionContext:
     available_tools: List[str]
     
     # Optional context
-    agent_id: Optional[int] = None
-    organization_id: Optional[int] = None
+    agent_id: Optional[AgentId] = None
+    organization_id: Optional[OrganizationId] = None
     capability_name: Optional[str] = None
     max_steps: Optional[int] = None
     timeout_seconds: Optional[int] = None

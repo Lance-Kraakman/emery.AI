@@ -9,7 +9,7 @@ import { getUserOrganizationApplicationService } from "@/ddd/application/di/cont
 import type { Result } from "./types";
 
 // Import the DI setup to ensure container is initialized
-import "@/ddd/application/di/setup";
+// AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
 import type { 
   AddUserToOrganizationCommand, 
   SwitchOrganizationCommand,

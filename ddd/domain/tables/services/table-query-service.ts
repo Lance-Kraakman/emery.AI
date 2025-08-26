@@ -12,6 +12,7 @@ import type { Result } from '@/ddd/domain/shared/result';
 export interface QueryResult {
   rows: Array<Record<string, any>>;
   rowCount: number;
+  executionTime?: number; // Optional execution time in milliseconds
 }
 
 export interface TableQueryService {

@@ -12,6 +12,7 @@ from ...domain.execution.repositories.execution_repository import IExecutionRepo
 from ...domain.tools.repositories.tool_registry_repository import IToolRegistryRepository
 from ...domain.execution.services.capability_routing_service import CapabilityRoutingService
 from ...domain.execution.entities.execution_context import ExecutionContext
+from ...domain.shared.value_objects.ids import AgentId
 from ...core.entities import TaskRequest
 
 
@@ -70,15 +71,17 @@ class AgentTaskApplicationService:
     
     async def _validate_agent(self, request: TaskRequest):
         """Validate that agent exists and is active for execution."""
-        if not request.agent_config or not request.agent_config.id:
-            raise ValueError("Agent configuration is required")
+        if not request.agent_id:
+            raise ValueError("Agent ID is required")
         
-        agent = await self.agent_repository.find_by_id(request.agent_config.id)
+        # Convert to value object for repository call
+        agent_id = AgentId(request.agent_id)
+        agent = await self.agent_repository.find_by_id(agent_id)
         if not agent:
-            raise ValueError(f"Agent {request.agent_config.id} not found")
+            raise ValueError(f"Agent {request.agent_id} not found")
         
         if not agent.is_active:
-            raise ValueError(f"Agent {agent.name} is not active")
+            raise ValueError(f"Agent {agent.name.value} is not active")
         
         return agent
     

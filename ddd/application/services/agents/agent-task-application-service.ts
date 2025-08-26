@@ -13,7 +13,7 @@ import type { ITaskRepository } from '@/ddd/domain/agents/repositories/task-repo
 import type { IAgentExecutionRepository, AgentExecutionRequest } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 import { Task, type TaskInstructions } from '@/ddd/domain/agents/entities/task';
 import { isActiveAgent, getAgentDisplayName } from '@/ddd/domain/agents/entities/agent';
-import { autoReindexService } from '@/ddd/application/di/rag-container';
+import { getAutoReindexService } from '@/ddd/application/di/container';
 import { AgentId, OrganizationId, TaskId, UserId, TaskStatus } from '@/ddd/domain/shared/value-objects';
 
 export interface CreateTaskRequest {
@@ -153,6 +153,7 @@ export class AgentTaskApplicationService {
         // AIDEV-NOTE: Automatically reindex organization data when agent tasks complete
         try {
           console.log(`[AGENT-TASK-SERVICE] Triggering RAG reindexing for organization ${task.organizationId} after successful task completion`);
+          const autoReindexService = getAutoReindexService();
           await autoReindexService.debouncedReindex(task.organizationId.value, 'agent', 5000);
         } catch (ragError) {
           console.error(`[AGENT-TASK-SERVICE] Error triggering RAG reindexing for task ${taskId.substring(0, 8)}:`, ragError);

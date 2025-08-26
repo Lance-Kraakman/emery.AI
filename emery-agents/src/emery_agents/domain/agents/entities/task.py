@@ -1,7 +1,7 @@
 """
 Task Domain Entity
 
-AIDEV-NOTE: Simple DDD entity following TypeScript patterns.
+AIDEV-NOTE: Proper DDD entity using value objects for type safety.
 Mutable entity with business logic for task lifecycle management.
 """
 
@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
+from ...shared.value_objects.ids import AgentId, OrganizationId, TaskId
 
 
 TaskStatus = Union[str, Any]  # 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout'
@@ -25,12 +26,12 @@ class TaskInstructions:
 
 @dataclass
 class TaskConfig:
-    """Configuration for creating a new task."""
-    agent_id: int
-    organization_id: int
+    """Configuration for creating a new task with value objects."""
+    agent_id: AgentId
+    organization_id: OrganizationId
     name: str
     instructions: TaskInstructions
-    id: Optional[str] = None
+    id: Optional[TaskId] = None
     capability_name: Optional[str] = None
     status: Optional[str] = None
     result: Optional[Any] = None
@@ -46,9 +47,9 @@ class Task:
     
     def __init__(
         self,
-        id: str,
-        agent_id: int,
-        organization_id: int,
+        id: TaskId,
+        agent_id: AgentId,
+        organization_id: OrganizationId,
         name: str,
         capability_name: Optional[str],
         instructions: TaskInstructions,
@@ -80,7 +81,7 @@ class Task:
         now = datetime.utcnow()
         
         return cls(
-            id=config.id or str(uuid.uuid4()),
+            id=config.id or TaskId.generate(),
             agent_id=config.agent_id,
             organization_id=config.organization_id,
             name=config.name,
@@ -105,9 +106,9 @@ class Task:
             instructions = TaskInstructions(instructions=str(instructions_data))
         
         return cls(
-            id=data["id"],
-            agent_id=data["agent_id"],
-            organization_id=data["organization_id"],
+            id=TaskId(data["id"]),
+            agent_id=AgentId(data["agent_id"]),
+            organization_id=OrganizationId(data["organization_id"]),
             name=data["name"],
             capability_name=data.get("capability_name"),
             instructions=instructions,
@@ -239,4 +240,4 @@ class Task:
     @property
     def short_id(self) -> str:
         """Get first 8 characters for display purposes."""
-        return self.id[:8]
+        return self.id.short_id

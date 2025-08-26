@@ -5,7 +5,7 @@
  * This script provides debugging utilities for the Emery scheduler system
  */
 
-import { getEventDrivenSchedulingService } from '../ddd/application/scheduling/di/scheduling-container';
+import { getEventDrivenSchedulingService } from '../ddd/application/di/scheduling-container';
 
 async function main() {
   const args = process.argv.slice(2);

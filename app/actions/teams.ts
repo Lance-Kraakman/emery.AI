@@ -13,7 +13,7 @@ import type { CreateTeamCommand, UpdateTeamCommand, TeamFilters } from "@/ddd/ap
 import { TeamId, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
 
 // Import the DI setup to ensure container is initialized
-import "@/ddd/application/di/setup";
+// AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
 
 export async function createTeam(data: CreateTeamData): Promise<Result> {
   try {

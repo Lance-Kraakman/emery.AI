@@ -10,6 +10,8 @@
 
 import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import type { FieldSchemaService } from '@/ddd/domain/fields/services/field-schema-service';
+import type { TableDataService } from '@/ddd/domain/tables/services/table-data-service';
 import type { Field, CreateFieldData, UpdateFieldData, FieldType } from '@/ddd/domain/fields/entities/field';
 import type { Result } from '@/ddd/domain/shared/result';
 import { slugify } from '@/utils/slugify';
@@ -42,7 +44,9 @@ export type FieldApplicationServiceResult<T = any> = Result<T>;
 export class FieldApplicationService {
   constructor(
     private readonly fieldRepository: IFieldRepository,
-    private readonly tableRepository: IDynamicTableRepository
+    private readonly tableRepository: IDynamicTableRepository,
+    private readonly fieldSchemaService: FieldSchemaService,
+    private readonly tableDataService: TableDataService
   ) {}
 
   /**
@@ -108,14 +112,31 @@ export class FieldApplicationService {
         metadata: command.metadata
       };
 
-      // 6. Create field using repository (handles both metadata and physical column)
+      // 6. Create field metadata first
       const newField = await this.fieldRepository.create(fieldData);
+
+      // 7. Add field to table schema using the schema service
+      const schemaResult = await this.fieldSchemaService.addFieldToTable(command.tableId, newField);
+      if (!schemaResult.success) {
+        // Rollback field creation if schema operation fails
+        try {
+          await this.fieldRepository.delete(newField.id);
+        } catch (rollbackError) {
+          console.error(`[FIELD-APP-SERVICE] Failed to rollback field creation: ${rollbackError}`);
+        }
+        
+        return {
+          success: false,
+          error: `Failed to add field to table schema: ${schemaResult.error}`
+        };
+      }
 
       console.log(`[FIELD-APP-SERVICE] Created field: ${newField.name} (${newField.type}) for table ${table.name}`);
 
       return {
         success: true,
-        data: newField
+        data: newField,
+        warnings: schemaResult.data ? [] : undefined
       };
 
     } catch (error) {
@@ -229,22 +250,25 @@ export class FieldApplicationService {
         };
       }
 
-      // 2. Check if field can be safely deleted
-      const canDelete = await this.fieldRepository.canDeleteField(fieldId);
-      if (!canDelete) {
+      // 2. Check if field can be safely deleted using schema service
+      const canDeleteResult = await this.fieldSchemaService.canDeleteField(fieldId);
+      if (!canDeleteResult.success || !canDeleteResult.data?.canDelete) {
         return {
           success: false,
-          error: 'Field cannot be deleted: it is required and contains data'
+          error: canDeleteResult.data?.blockers.join(', ') || canDeleteResult.error || 'Field cannot be deleted'
         };
       }
 
-      // 3. Check if any other fields reference this field (for relation fields)
-      if (field.type === 'relation') {
-        // TODO: Check if other tables have fields that reference this field's table
-        console.warn(`[FIELD-APP-SERVICE] Deleting relation field ${field.name} - related data may be affected`);
+      // 3. Remove field from table schema first
+      const schemaResult = await this.fieldSchemaService.removeFieldFromTable(field.tableId, fieldId);
+      if (!schemaResult.success) {
+        return {
+          success: false,
+          error: `Failed to remove field from table schema: ${schemaResult.error}`
+        };
       }
 
-      // 4. Delete the field (handles both metadata and physical column)
+      // 4. Delete the field metadata
       await this.fieldRepository.delete(fieldId);
 
       console.log(`[FIELD-APP-SERVICE] Deleted field: ${field.name} from table ${field.tableId}`);

@@ -11,19 +11,34 @@ from ...core.entities import ToolConfig
 
 
 def load_mock_gmail(config: ToolConfig) -> Any:
-    """Load mock Gmail tool for testing email scenarios."""
+    """Load mock Gmail tool for testing email scenarios with proper DDD validation."""
+    # Validate ToolConfig using DDD patterns
+    if not config or not config.name:
+        raise ValueError("ToolConfig must have a name")
+    
+    if config.name != "gmail_api":
+        raise ValueError(f"Expected tool name 'gmail_api', got '{config.name}'")
+    
     try:
         class MockGmailTool(Tool):
             """Mock Gmail tool that simulates email operations."""
             name = "gmail_api"
             description = "Mock Gmail API for sending and reading emails"
+            inputs = {
+                "action": {
+                    "type": "string",
+                    "description": "Email action to perform (send_email, read_emails)",
+                    "nullable": True
+                }
+            }
+            output_type = "object"
             
-            def forward(self, action: str = "send_email", **kwargs) -> Dict[str, Any]:
+            def forward(self, action: str = "send_email") -> Dict[str, Any]:
                 """Simulate Gmail operations."""
                 if action == "send_email":
                     return {
                         "success": True,
-                        "message": f"Mock email sent to {kwargs.get('to', 'unknown')} with subject '{kwargs.get('subject', 'No subject')}'"
+                        "message": f"Mock email sent to user@example.com with subject 'Mock Email'"
                     }
                 elif action == "read_emails":
                     return {

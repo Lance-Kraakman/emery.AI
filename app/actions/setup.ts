@@ -7,14 +7,6 @@ import { revalidatePath } from "next/cache";
 import type { Result } from "./types";
 import { OrganizationName, UserId } from "@/ddd/domain/shared/value-objects";
 
-// Import the DI setup to ensure container is initialized
-import "@/ddd/application/di/setup";
-
-interface SetupData {
-  organizationName: string;
-  organizationMission?: string;
-}
-
 export async function createOrganization(formData: FormData): Promise<Result> {
   const session = await auth();
   const user = session?.user;

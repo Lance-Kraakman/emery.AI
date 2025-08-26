@@ -14,9 +14,9 @@ from emery_agents.core.entities import (
     ServerConfig, TriggerData, InstructionConfig
 )
 from emery_agents.core.types import StepType
-from emery_agents.execution.capability_router import CapabilityRouter
-from emery_agents.execution.tools.tool_registry import ToolRegistry
-from emery_agents.infrastructure.execution.smolagents_execution_service import SmolAgentsExecutionService
+from emery_agents.domain.execution.services.capability_routing_service import CapabilityRoutingService
+from emery_agents.domain.execution.repositories.execution_repository import IExecutionRepository
+from emery_agents.application.di.container import container
 
 
 class TestCapabilityRouter:
@@ -24,7 +24,7 @@ class TestCapabilityRouter:
     
     def test_route_capability_name_execution(self):
         """Test routing when capability_name is provided."""
-        router = CapabilityRouter()
+        routing_service = CapabilityRoutingService()
         
         # Create test capability
         step = StepConfig(
@@ -64,7 +64,12 @@ class TestCapabilityRouter:
             capability_name="code_generation"
         )
         
-        result = router.route_execution(request)
+        execution_context = routing_service.determine_execution_context(request)
+        # Get the capability from the context  
+        result = routing_service.find_capability_by_name(
+            request.agent_config.capabilities, 
+            request.capability_name
+        )
         
         assert result.name == "code_generation"
         assert len(result.steps) == 1
@@ -72,7 +77,7 @@ class TestCapabilityRouter:
     
     def test_route_instruction_config_execution(self):
         """Test routing when instruction_config is provided."""
-        router = CapabilityRouter()
+        routing_service = CapabilityRoutingService()
         
         instruction_config = InstructionConfig(
             instructions="Send an email to the team",
@@ -102,16 +107,22 @@ class TestCapabilityRouter:
             instruction_config=instruction_config
         )
         
-        result = router.route_execution(request)
+        execution_context = routing_service.determine_execution_context(request)
+        # Create dynamic capability from instruction config
+        result = routing_service.create_dynamic_capability(
+            instruction_config.instructions,
+            instruction_config.tools,
+            instruction_config.servers
+        )
         
-        assert result.name == "auto_routed_capability"
+        assert result.name == "dynamic_capability"
         assert len(result.steps) == 1
         assert result.steps[0].type == StepType.TOOL_STEP  # Because tools are provided
         assert result.steps[0].instructions == "Send an email to the team"
     
     def test_route_no_execution_mode_raises_error(self):
         """Test that missing execution mode raises error."""
-        router = CapabilityRouter()
+        routing_service = CapabilityRoutingService()
         
         agent_config = AgentConfig(
             name="Test Agent",
@@ -136,12 +147,12 @@ class TestCapabilityRouter:
         )
         
         with pytest.raises(ValueError, match="must specify either capability_name or instruction_config"):
-            router.route_execution(request)
+            routing_service.determine_execution_context(request)
 
 
 @pytest.mark.asyncio
-class TestSmolAgentsExecutionService:
-    """Test smolagents execution service."""
+class TestSmolAgentsExecutionRepository:
+    """Test smolagents execution repository with DDD architecture."""
     
     async def test_execute_task_with_capability_routing(self):
         """Test task execution with capability routing."""
@@ -150,7 +161,11 @@ class TestSmolAgentsExecutionService:
         if not os.getenv("HF_TOKEN"):
             pytest.skip("HF_TOKEN not available")
         
-        service = SmolAgentsExecutionService()
+        # Initialize DDD container and get execution repository
+        container.initialize_defaults()
+        
+        execution_repo = container.get_repository(IExecutionRepository)
+        routing_service = CapabilityRoutingService()
         
         # Create test request with capability
         step = StepConfig(
@@ -190,18 +205,32 @@ class TestSmolAgentsExecutionService:
             capability_name="simple_calculation"
         )
         
-        # Collect all progress updates
+        # Convert TaskRequest to ExecutionContext
+        execution_context = routing_service.determine_execution_context(request)
+        
+        # Collect all progress updates using DDD architecture
         progress_updates = []
-        async for progress in service.execute_task(request):
-            progress_updates.append(progress)
+        async for progress_dict in execution_repo.execute_task(execution_context):
+            # Convert dict to TaskProgress-like object for compatibility
+            class MockTaskProgress:
+                def __init__(self, data):
+                    self.task_id = request.task_id
+                    self.step_id = data["step_id"]
+                    self.status = data["status"].upper()
+                    if not self.status.startswith("TASK_"):
+                        self.status = f"TASK_{self.status.upper()}"
+                    self.output_json = json.dumps(data["output"]) if isinstance(data["output"], dict) else str(data["output"])
+                    self.error_message = data.get("error_message", "")
+                    
+            progress_updates.append(MockTaskProgress(progress_dict))
         
         # Verify we got progress updates
         assert len(progress_updates) > 0
         
-        # Check first update is routing
+        # Check first update is setup
         first_update = progress_updates[0]
         assert first_update.task_id == "test_calc_task"
-        assert first_update.step_id == "routing"
+        assert first_update.step_id == "setup"
         
         # Check final update is completion or failure
         final_update = progress_updates[-1]
@@ -222,7 +251,11 @@ class TestSmolAgentsExecutionService:
         if not os.getenv("HF_TOKEN"):
             pytest.skip("HF_TOKEN not available")
         
-        service = SmolAgentsExecutionService()
+        # Initialize DDD container and get execution repository
+        container.initialize_defaults()
+        
+        execution_repo = container.get_repository(IExecutionRepository)
+        routing_service = CapabilityRoutingService()
         
         instruction_config = InstructionConfig(
             instructions="What is the capital of France?",
@@ -252,10 +285,24 @@ class TestSmolAgentsExecutionService:
             instruction_config=instruction_config
         )
         
-        # Collect progress updates
+        # Convert TaskRequest to ExecutionContext
+        execution_context = routing_service.determine_execution_context(request)
+        
+        # Collect progress updates using DDD architecture
         progress_updates = []
-        async for progress in service.execute_task(request):
-            progress_updates.append(progress)
+        async for progress_dict in execution_repo.execute_task(execution_context):
+            # Convert dict to TaskProgress-like object for compatibility
+            class MockTaskProgress:
+                def __init__(self, data):
+                    self.task_id = request.task_id
+                    self.step_id = data["step_id"]
+                    self.status = data["status"].upper()
+                    if not self.status.startswith("TASK_"):
+                        self.status = f"TASK_{self.status.upper()}"
+                    self.output_json = json.dumps(data["output"]) if isinstance(data["output"], dict) else str(data["output"])
+                    self.error_message = data.get("error_message", "")
+                    
+            progress_updates.append(MockTaskProgress(progress_dict))
         
         # Verify we got progress updates
         assert len(progress_updates) > 0

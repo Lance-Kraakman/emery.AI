@@ -92,7 +92,9 @@ asyncio_mode = "auto"
 markers = [
     "integration: marks tests as integration tests",
     "smolagents: marks tests that require smolagents and HF_TOKEN",
-    "grpc: marks tests that require gRPC dependencies"
+    "grpc: marks tests that require gRPC dependencies",
+    "real_execution: marks tests that execute real agents with AI models",
+    "slow: marks tests that take a long time to execute (30s+)"
 ]
 
 [project.scripts]

@@ -8,56 +8,61 @@ Replace with real database implementation when needed.
 from typing import Optional, List
 from ...domain.agents.repositories.agent_repository import IAgentRepository
 from ...domain.agents.entities.agent import Agent, AgentConfig
+from ...domain.shared.value_objects.ids import AgentId, OrganizationId
+from ...domain.agents.value_objects.agent_value_objects import AgentName, AgentStatus, ApiKey
 
 
 class MockAgentRepository(IAgentRepository):
     """Mock implementation for testing purposes."""
     
     def __init__(self):
-        # Mock agents for testing
-        self._agents = {
-            123: Agent.create(AgentConfig(
-                name="Test Agent",
-                description="Mock agent for testing",
-                organization_id=1,
-                owner_id="test_user",
-                status="active",
-                api_key="test_api_key"
-            )),
-            456: Agent.create(AgentConfig(
-                name="Inactive Agent", 
-                description="Mock inactive agent",
-                organization_id=1,
-                owner_id="test_user",
-                status="inactive",
-                api_key="test_api_key_2"
-            ))
-        }
+        # Mock agents for testing using value objects
+        agent_123 = Agent.create(AgentConfig(
+            name=AgentName("Test Agent"),
+            organization_id=OrganizationId(1),
+            owner_id="test_user",
+            description="Mock agent for testing",
+            status=AgentStatus.active(),
+            api_key=ApiKey("ak_mock_secure_production_agent_123_abcdef")
+        ))
+        agent_123.id = AgentId(123)  # Set ID after creation
         
-        # Set IDs for mock agents
-        self._agents[123].id = 123
-        self._agents[456].id = 456
+        agent_456 = Agent.create(AgentConfig(
+            name=AgentName("Inactive Agent"),
+            organization_id=OrganizationId(1),  
+            owner_id="test_user",
+            description="Mock inactive agent",
+            status=AgentStatus.inactive(),
+            api_key=ApiKey("ak_mock_secure_production_agent_456_ghijkl")
+        ))
+        agent_456.id = AgentId(456)  # Set ID after creation
+        
+        self._agents = {
+            AgentId(123): agent_123,
+            AgentId(456): agent_456
+        }
     
-    async def find_by_id(self, agent_id: int) -> Optional[Agent]:
+    async def find_by_id(self, agent_id: AgentId) -> Optional[Agent]:
         """Find agent by ID."""
         return self._agents.get(agent_id)
     
-    async def find_by_organization(self, organization_id: int) -> List[Agent]:
+    async def find_by_organization(self, organization_id: OrganizationId) -> List[Agent]:
         """Find all agents for an organization."""
         return [agent for agent in self._agents.values() 
                 if agent.organization_id == organization_id]
     
     async def save(self, agent: Agent) -> None:
         """Save or update an agent."""
-        if agent.id:
+        if agent.id and agent.id.value > 0:
             self._agents[agent.id] = agent
         else:
             # Assign new ID
-            new_id = max(self._agents.keys(), default=0) + 1
-            agent.id = new_id
-            self._agents[new_id] = agent
+            existing_ids = [aid.value for aid in self._agents.keys()]
+            new_id_value = max(existing_ids, default=0) + 1
+            agent.id = AgentId(new_id_value)
+            self._agents[agent.id] = agent
     
-    async def delete(self, agent_id: int) -> bool:
+    async def delete(self, agent_id: AgentId) -> bool:
         """Delete an agent."""
         if agent_id in self._agents:
             del self._agents[agent_id]

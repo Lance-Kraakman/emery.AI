@@ -13,7 +13,6 @@ import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-re
 import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
 import type { FileFieldService } from '@/ddd/domain/files/services/file-field-service';
 import type { Result } from '@/ddd/domain/shared/result';
-import { FieldApplicationService } from '../fields/field-application-service';
 
 export interface CreateRowCommand {
   tableId: number;
@@ -55,16 +54,12 @@ export interface RowFilters {
 export type RowApplicationServiceResult<T = any> = Result<T>;
 
 export class RowApplicationService {
-  private fieldApplicationService: FieldApplicationService;
-
   constructor(
     private readonly tableRepository: IDynamicTableRepository,
     private readonly fieldRepository: IFieldRepository,
     private readonly fileStorageRepository: IFileStorageRepository,
     private readonly fileFieldService: FileFieldService
-  ) {
-    this.fieldApplicationService = new FieldApplicationService(fieldRepository, tableRepository);
-  }
+  ) {}
 
   /**
    * Create a new row in a dynamic table
@@ -80,8 +75,9 @@ export class RowApplicationService {
         };
       }
 
-      // 2. Validate row data against field definitions
-      const validation = await this.fieldApplicationService.validateRowData(command.tableId, command.data);
+      // 2. Get field definitions and validate row data
+      const fields = await this.fieldRepository.findByTableId(command.tableId);
+      const validation = this.validateRowData(fields, command.data);
       if (!validation.valid) {
         return {
           success: false,
@@ -135,8 +131,9 @@ export class RowApplicationService {
         };
       }
 
-      // 3. Validate update data against field definitions
-      const validation = await this.fieldApplicationService.validateRowData(command.tableId, command.data);
+      // 3. Get field definitions and validate update data
+      const fields = await this.fieldRepository.findByTableId(command.tableId);
+      const validation = this.validateRowData(fields, command.data);
       if (!validation.valid) {
         return {
           success: false,
@@ -268,11 +265,12 @@ export class RowApplicationService {
         };
       }
 
-      // 2. Validate all rows
+      // 2. Get field definitions and validate all rows
+      const fields = await this.fieldRepository.findByTableId(command.tableId);
       const validationErrors: Array<{ row: number; errors: Array<{ field: string; error: string }> }> = [];
       
       for (let i = 0; i < command.rows.length; i++) {
-        const validation = await this.fieldApplicationService.validateRowData(command.tableId, command.rows[i]);
+        const validation = this.validateRowData(fields, command.rows[i]);
         if (!validation.valid) {
           validationErrors.push({ row: i, errors: validation.errors });
         }
@@ -333,11 +331,12 @@ export class RowApplicationService {
       for (const update of command.updates) {
         try {
           // Validate update data
-          const validation = await this.fieldApplicationService.validateRowData(command.tableId, update.data);
+          const fields = await this.fieldRepository.findByTableId(command.tableId);
+          const validation = this.validateRowData(fields, update.data);
           if (!validation.valid) {
             errors.push({
               rowId: update.rowId,
-              error: validation.errors.map(e => `${e.field}: ${e.error}`).join(', ')
+              error: validation.errors.map((e: { field: string; error: string }) => `${e.field}: ${e.error}`).join(', ')
             });
             continue;
           }
@@ -441,6 +440,79 @@ export class RowApplicationService {
     }
 
     return processedData;
+  }
+
+  /**
+   * Validate row data against field definitions
+   */
+  private validateRowData(fields: any[], data: Record<string, any>): { valid: boolean; errors: Array<{ field: string; error: string }> } {
+    const errors: Array<{ field: string; error: string }> = [];
+
+    for (const field of fields) {
+      const value = data[field.slug];
+      
+      // Check required fields
+      if (field.required && (value === undefined || value === null || value === '')) {
+        errors.push({
+          field: field.name,
+          error: 'Field is required'
+        });
+      }
+
+      // Type validation
+      if (value !== undefined && value !== null) {
+        switch (field.type) {
+          case 'number':
+            if (isNaN(Number(value))) {
+              errors.push({
+                field: field.name,
+                error: 'Must be a valid number'
+              });
+            }
+            break;
+          case 'boolean':
+            if (typeof value !== 'boolean' && value !== 'true' && value !== 'false') {
+              errors.push({
+                field: field.name,
+                error: 'Must be a valid boolean'
+              });
+            }
+            break;
+          case 'date':
+            if (!(value instanceof Date) && isNaN(Date.parse(value))) {
+              errors.push({
+                field: field.name,
+                error: 'Must be a valid date'
+              });
+            }
+            break;
+          case 'email':
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(String(value))) {
+              errors.push({
+                field: field.name,
+                error: 'Must be a valid email address'
+              });
+            }
+            break;
+          case 'url':
+            try {
+              new URL(String(value));
+            } catch {
+              errors.push({
+                field: field.name,
+                error: 'Must be a valid URL'
+              });
+            }
+            break;
+        }
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
   }
 
   /**

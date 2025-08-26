@@ -7,7 +7,7 @@
  * AIDEV-NOTE: Infrastructure implementation of TableQueryService using DuckDB for Arrow analytical queries
  */
 
-import Database from 'duckdb';
+import duckdb from '@duckdb/node-api';
 import { BUCKET_NAME } from '@/lib/s3/client';
 
 import type { Result } from '@/ddd/domain/shared/result';
@@ -19,80 +19,68 @@ import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import { DuckDB, eq, gt, gte, lt, lte, like, type QueryFilter } from './duckdb-sql-builder';
 
 export class DuckDBTableQueryService implements TableQueryService {
-  private db: Database.Database | null = null;
+  private instance: any = null;
+  private connection: any = null;
 
   constructor() {
+    // Initialize asynchronously - connection will be created when first needed
     this.initializeDatabase();
   }
 
   private async initializeDatabase(): Promise<void> {
-    this.db = new Database.Database(':memory:', (err) => {
-      if (err) {
-        console.error('[DuckDB] Failed to initialize database:', err);
-      }
-    });
+    try {
+      // Create DuckDB instance using new Neo API
+      this.instance = await duckdb.DuckDBInstance.create(':memory:');
+      this.connection = await this.instance.connect();
 
-    if (this.db) {
       // Install required extensions
-      const connection = this.db.connect();
-      
-      // Install and load arrow extension  
-      await this.executeQuery("INSTALL arrow; LOAD arrow;");
+      await this.connection.run("INSTALL arrow; LOAD arrow;");
       
       // Install and load httpfs for S3 access
-      await this.executeQuery("INSTALL httpfs; LOAD httpfs;");
+      await this.connection.run("INSTALL httpfs; LOAD httpfs;");
       
       // Configure S3 credentials if available
       if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-        await this.executeQuery(`SET s3_region='${process.env.AWS_REGION || 'ap-southeast-2'}';`);
-        await this.executeQuery(`SET s3_access_key_id='${process.env.AWS_ACCESS_KEY_ID}';`);
-        await this.executeQuery(`SET s3_secret_access_key='${process.env.AWS_SECRET_ACCESS_KEY}';`);
+        await this.connection.run(`SET s3_region='${process.env.AWS_REGION || 'ap-southeast-2'}';`);
+        await this.connection.run(`SET s3_access_key_id='${process.env.AWS_ACCESS_KEY_ID}';`);
+        await this.connection.run(`SET s3_secret_access_key='${process.env.AWS_SECRET_ACCESS_KEY}';`);
         
         if (process.env.S3_ENDPOINT_URL) {
-          await this.executeQuery(`SET s3_endpoint='${process.env.S3_ENDPOINT_URL}';`);
-          await this.executeQuery(`SET s3_use_ssl='${!process.env.S3_ENDPOINT_URL.startsWith('http://')}';`);
+          await this.connection.run(`SET s3_endpoint='${process.env.S3_ENDPOINT_URL}';`);
+          await this.connection.run(`SET s3_use_ssl='${!process.env.S3_ENDPOINT_URL.startsWith('http://')}';`);
         }
       }
       
-      connection.close();
+      console.log('[DuckDB-NEO] Database initialized successfully');
+    } catch (error) {
+      console.error('[DuckDB-NEO] Failed to initialize database:', error);
     }
   }
 
   private async executeQuery(sql: string): Promise<Result<QueryResult>> {
     try {
-      if (!this.db) {
+      if (!this.connection) {
         await this.initializeDatabase();
-        if (!this.db) {
-          return { success: false, error: 'Failed to initialize DuckDB' };
+        if (!this.connection) {
+          return { success: false, error: 'Failed to initialize DuckDB connection' };
         }
       }
 
       const startTime = Date.now();
-      const connection = this.db.connect();
       
-      return new Promise((resolve) => {
-        connection.all(sql, (err: any, rows: any[]) => {
-          const executionTime = Date.now() - startTime;
-          connection.close();
-          
-          if (err) {
-            console.error('[DuckDB] Query error:', err);
-            resolve({
-              success: false,
-              error: err.message || 'Query execution failed'
-            });
-            return;
-          }
-          
-          resolve({
-            success: true,
-            data: {
-              rows,
-              rowCount: rows.length
-            }
-          });
-        });
-      });
+      // Use new Neo API
+      const reader = await this.connection.runAndReadAll(sql);
+      const rows = reader.getRowObjects();
+      const executionTime = Date.now() - startTime;
+      
+      return {
+        success: true,
+        data: {
+          rows,
+          rowCount: rows.length,
+          executionTime
+        }
+      };
       
     } catch (error) {
       console.error('[DuckDB] Error executing query:', error);

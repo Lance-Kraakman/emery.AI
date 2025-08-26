@@ -120,7 +120,7 @@ export function useEmeryData() {
         name: team.name,
         purpose: team.purpose || undefined, // Convert null to undefined for compatibility
         organizationId: team.organizationId.value,
-        agentIds: team.agentIds ? team.agentIds.map(agentId => agentId.value) : []
+        agentIds: team.agentIds ? team.agentIds.map(agentId => agentId.value.toString()) : []
       }));
 
       // Group tables by database
