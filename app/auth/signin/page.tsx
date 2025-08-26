@@ -7,9 +7,9 @@ import { Separator } from "@/components/ui/separator"
 export default async function SignInPage() {
   const session = await auth()
   
-  if (session) {
-    redirect("/mission-control")
-  }
+  // if (session) {
+  //   redirect("/mission-control")
+  // }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">

@@ -95,14 +95,14 @@ export const authOptions = {
                 .innerJoin(organizations, eq(userOrganizations.organizationId, organizations.id))
                 .where(eq(userOrganizations.userId, user.id));
 
-              session.user.availableOrganizations = userOrgs.map(uo => ({
+              session.user.availableOrganizations = userOrgs.map((uo: any) => ({
                 ...uo.organization,
                 userRole: uo.userOrg.role
               }));
 
               // Get current organization details
               if (userRecord.currentOrganizationId) {
-                const currentOrg = userOrgs.find(uo => uo.organization.id === userRecord.currentOrganizationId);
+                const currentOrg = userOrgs.find((uo: any) => uo.organization.id === userRecord.currentOrganizationId);
                 session.user.currentOrganization = currentOrg ? {
                   ...currentOrg.organization,
                   userRole: currentOrg.userOrg.role

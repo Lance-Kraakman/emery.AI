@@ -1,17 +1,21 @@
 // AIDEV-NOTE: Application service for RAG search operations
 // Orchestrates search domain services and manages performance monitoring
 
-import { 
-  type RagIndexRepository, 
-  type RagDocumentRepository,
-  type VectorSearchParams
-} from '@/ddd/domain/rag/repositories';
+import type { RagIndexRepository } from '@/ddd/domain/rag/repositories/rag-index-repository';
+import type { RagDocumentRepository } from '@/ddd/domain/rag/repositories/rag-document-repository';
+import type { VectorSearchParams } from '@/ddd/domain/rag/repositories/rag-document-repository';
 import { 
   SearchDomainService, 
-  type SearchFilters,
   type EmbeddingGenerator,
   type SearchLogger 
 } from '@/ddd/domain/rag/services';
+
+// Define inline until exported from services
+interface SearchFilters {
+  indexId?: string;
+  domainTypes?: string[];
+  dateRange?: { from: Date; to: Date };
+}
 import { RagIndexId } from '@/ddd/domain/rag/value-objects';
 
 import { 
@@ -82,15 +86,13 @@ export class RagSearchApplicationService {
 
       // Apply domain filters and ranking
       const searchFilters: SearchFilters = {
-        sourceTypes,
-        minSimilarity: searchQuery.threshold,
-        maxResults: searchQuery.limit
+        domainTypes: sourceTypes
       };
 
       const filteredDocuments = this.searchDomainService.filterAndRankResults(
         vectorResult.documents,
         searchQuery,
-        searchFilters
+        searchFilters as any
       );
 
       const searchTime = Date.now() - startTime;

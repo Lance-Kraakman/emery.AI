@@ -39,7 +39,7 @@ export class ArrowFieldSchemaService implements FieldSchemaService {
 
       // 2. Validate field doesn't conflict with existing fields
       const existingFields = await this.fieldRepository.findByTableId(tableId);
-      const conflictingField = existingFields.find(f => f.slug === field.slug);
+      const conflictingField = existingFields.find((f: any) => f.slug === field.slug);
       if (conflictingField) {
         return ResultHelpers.failure(`Field with slug '${field.slug}' already exists in table`);
       }
@@ -153,7 +153,7 @@ export class ArrowFieldSchemaService implements FieldSchemaService {
 
       // 2. Check for name conflicts (handled by repository layer, but double-check)
       const existingFields = await this.fieldRepository.findByTableId(tableId);
-      const conflictingField = existingFields.find(f => f.name === newName && f.id !== fieldId);
+      const conflictingField = existingFields.find((f: any) => f.name === newName && f.id !== fieldId);
       if (conflictingField) {
         return ResultHelpers.failure(`Field with name '${newName}' already exists in table`);
       }

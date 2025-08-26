@@ -1,10 +1,8 @@
 // AIDEV-NOTE: Application service for RAG indexing operations
 // Orchestrates domain services and manages transaction boundaries
 
-import { 
-  type RagIndexRepository, 
-  type RagDocumentRepository
-} from '@/ddd/domain/rag/repositories';
+import type { RagIndexRepository } from '@/ddd/domain/rag/repositories/rag-index-repository';
+import type { RagDocumentRepository } from '@/ddd/domain/rag/repositories/rag-document-repository';
 import { IndexingDomainService, type ContentProcessor } from '@/ddd/domain/rag/services';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { db } from '@/lib/db/client';
@@ -29,6 +27,7 @@ import {
   type ReindexCommand,
   ReindexCommandValidator
 } from '@/ddd/application/services/rag/commands';
+import { any } from 'zod/v4';
 
 export interface IndexingResult {
   indexId: string;
@@ -154,7 +153,7 @@ export class RagIndexingApplicationService {
     console.log(`[RAG-INDEXING-APP] Processing ${changeType} for ${domainType}:${sourceId} across ${relevantIndexes.length} indexes`);
 
     // Process each affected index
-    const reindexPromises = relevantIndexes.map(async (index) => {
+    const reindexPromises = relevantIndexes.map(async (index: RagIndex) => {
       try {
         await this.reindexSingleIndex(index.id, domainType);
         console.log(`[RAG-INDEXING-APP] Reindexed ${index.name} for ${domainType} change`);
@@ -233,7 +232,7 @@ export class RagIndexingApplicationService {
     try {
       // Determine which domain types to reindex
       const domainTypesToProcess = domainType 
-        ? index.domainTypes.filter(dt => dt === domainType)
+        ? index.domainTypes.filter((dt: DomainType) => dt === domainType)
         : index.domainTypes;
 
       // Process each domain type directly with repositories
@@ -302,7 +301,7 @@ export class RagIndexingApplicationService {
     const errors: string[] = [];
 
     // Process indexes in parallel (but limited concurrency)
-    const reindexPromises = indexes.map(async (index) => {
+    const reindexPromises = indexes.map(async (index: RagIndex) => {
       try {
         const result = await this.reindexSingleIndex(index.id, domainType, startTime);
         return result;

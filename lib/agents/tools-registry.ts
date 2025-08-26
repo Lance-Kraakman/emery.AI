@@ -453,35 +453,35 @@ export const PREDEFINED_TRIGGERS: TriggerDefinition[] = [
  * Get tools by category
  */
 export function getToolsByCategory(category: string): ToolDefinition[] {
-  return PREDEFINED_TOOLS.filter(tool => tool.category === category);
+  return PREDEFINED_TOOLS.filter((tool: any) => tool.category === category);
 }
 
 /**
  * Get all tool categories
  */
 export function getToolCategories(): string[] {
-  return Array.from(new Set(PREDEFINED_TOOLS.map(tool => tool.category)));
+  return Array.from(new Set(PREDEFINED_TOOLS.map((tool: any) => tool.category)));
 }
 
 /**
  * Find tool by name
  */
 export function getToolByName(name: string): ToolDefinition | undefined {
-  return PREDEFINED_TOOLS.find(tool => tool.name === name);
+  return PREDEFINED_TOOLS.find((tool: any) => tool.name === name);
 }
 
 /**
  * Get servers by category
  */
 export function getServersByCategory(category: string): ServerDefinition[] {
-  return PREDEFINED_SERVERS.filter(server => server.category === category);
+  return PREDEFINED_SERVERS.filter((server: any) => server.category === category);
 }
 
 /**
  * Find server by name
  */
 export function getServerByName(name: string): ServerDefinition | undefined {
-  return PREDEFINED_SERVERS.find(server => server.name === name);
+  return PREDEFINED_SERVERS.find((server: any) => server.name === name);
 }
 
 /**
