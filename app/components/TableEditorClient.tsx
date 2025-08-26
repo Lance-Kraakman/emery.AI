@@ -8,7 +8,7 @@ import { ArrowLeft } from 'lucide-react';
 import { getFields } from '@/app/actions/fields';
 import { getRowsData } from '@/app/actions/rows';
 import { getTables } from '@/app/actions/tables';
-import type { Field } from '@/app/actions/types';
+import type { Field } from '@/ddd/domain/fields/entities/field';
 import type { Row } from '@/app/actions/types';
 import FieldManager from './FieldManager';
 import RowManager from './RowManager';
@@ -40,7 +40,7 @@ export default function TableEditorClient({ tableId, tableName, organizationId, 
       ]);
       setFields(fieldsData);
       setRows(Array.from(rowsData) as unknown as Row[]);
-      setAvailableTables(tablesData.map(t => ({ id: t.id, name: t.name })));
+      setAvailableTables(tablesData.map(t => ({ id: t.id.value, name: t.name })));
     } catch (error) {
       console.error('Error loading table data:', error);
     } finally {
@@ -58,7 +58,7 @@ export default function TableEditorClient({ tableId, tableName, organizationId, 
       ]);
       setFields(fieldsData);
       setRows(Array.from(rowsData) as unknown as Row[]);
-      setAvailableTables(tablesData.map(t => ({ id: t.id, name: t.name })));
+      setAvailableTables(tablesData.map(t => ({ id: t.id.value, name: t.name })));
     } catch (error) {
       console.error('Error refreshing fields:', error);
     }

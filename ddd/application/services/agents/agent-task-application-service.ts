@@ -9,11 +9,10 @@
  */
 
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
-import type { ITaskRepository } from '@/ddd/domain/agents/repositories/task-repository';
+import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
 import type { IAgentExecutionRepository, AgentExecutionRequest } from '@/ddd/domain/agents/repositories/agent-execution-repository';
-import { Task, type TaskInstructions } from '@/ddd/domain/agents/entities/task';
+import { Task, type TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 import { isActiveAgent, getAgentDisplayName } from '@/ddd/domain/agents/entities/agent';
-import { getAutoReindexService } from '@/ddd/application/di/container';
 import { AgentId, OrganizationId, TaskId, UserId, TaskStatus } from '@/ddd/domain/shared/value-objects';
 
 export interface CreateTaskRequest {
@@ -149,16 +148,9 @@ export class AgentTaskApplicationService {
       if (executionResult.success) {
         task.complete(executionResult.outputData);
         
-        // 6. Trigger RAG reindexing for successful task completions
-        // AIDEV-NOTE: Automatically reindex organization data when agent tasks complete
-        try {
-          console.log(`[AGENT-TASK-SERVICE] Triggering RAG reindexing for organization ${task.organizationId} after successful task completion`);
-          const autoReindexService = getAutoReindexService();
-          await autoReindexService.debouncedReindex(task.organizationId.value, 'agent', 5000);
-        } catch (ragError) {
-          console.error(`[AGENT-TASK-SERVICE] Error triggering RAG reindexing for task ${taskId.substring(0, 8)}:`, ragError);
-          // Don't fail the task if RAG reindexing fails
-        }
+        // 6. RAG reindexing (TODO: Integrate with new task scheduling system)
+        // AIDEV-NOTE: Auto reindexing will be handled by the new task scheduling system
+        console.log(`[AGENT-TASK-SERVICE] Task ${taskId.substring(0, 8)} completed successfully for organization ${task.organizationId.value}`);
       } else {
         task.fail(executionResult.error || 'Execution failed');
       }
@@ -240,7 +232,7 @@ export class AgentTaskApplicationService {
    * Get tasks for organization
    */
   async getTasksForOrganization(organizationId: number): Promise<Task[]> {
-    return await this.taskRepository.findByOrganizationId(OrganizationId.fromNumber(organizationId));
+    return await this.taskRepository.findByOrganization(OrganizationId.fromNumber(organizationId));
   }
 
   /**
@@ -254,14 +246,17 @@ export class AgentTaskApplicationService {
    * Get running tasks (for monitoring)
    */
   async getRunningTasks(): Promise<Task[]> {
-    return await this.taskRepository.findRunningTasks();
+    return await this.taskRepository.findByStatus(TaskStatus.inProgress());
   }
 
   /**
    * Get recent tasks for organization (for dashboard)
    */
   async getRecentTasksForOrganization(organizationId: number, limit?: number): Promise<Task[]> {
-    return await this.taskRepository.findRecentByOrganization(OrganizationId.fromNumber(organizationId), limit);
+    const tasks = await this.taskRepository.findByOrganization(OrganizationId.fromNumber(organizationId));
+    // Sort by creation date (most recent first) and apply limit
+    const sortedTasks = tasks.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return limit ? sortedTasks.slice(0, limit) : sortedTasks;
   }
 
   /**

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Trash2 } from "lucide-react"
 import { EditableCell } from "./EditableCell"
-import type { Field } from "@/app/actions/types"
+import type { Field } from "@/ddd/domain/fields/entities/field"
 import type { RowData } from "@/types/db"
 
 interface DynamicDataTableProps {
@@ -84,7 +84,7 @@ export function DynamicDataTable({ fields, rows, organizationId, onUpdateRow, on
                 />
               </TableHead>
               {sortedFields.map((field) => (
-                <TableHead key={field.id} className="min-w-[120px] p-2">
+                <TableHead key={field.id.value} className="min-w-[120px] p-2">
                   <div className="flex items-center gap-1.5">
                     <span className="font-semibold">{field.name}</span>
                     {field.required && <span className="text-red-500">*</span>}
@@ -107,12 +107,12 @@ export function DynamicDataTable({ fields, rows, organizationId, onUpdateRow, on
                   />
                 </TableCell>
                 {sortedFields.map((field) => (
-                  <TableCell key={field.id} className="p-1">
+                  <TableCell key={field.id.value} className="p-1">
                     <EditableCell
                       field={field}
                       value={row[field.slug]}
                       organizationId={organizationId}
-                      onSave={(value) => onUpdateRow(row.id, field.id, value)}
+                      onSave={(value) => onUpdateRow(row.id, field.id.value, value)}
                     />
                   </TableCell>
                 ))}

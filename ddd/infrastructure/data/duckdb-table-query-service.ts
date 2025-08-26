@@ -142,57 +142,42 @@ export class DuckDBTableQueryService implements TableQueryService {
   // Private helper methods
 
   private async getTableS3Path(tableId: number): Promise<S3TablePath | null> {
-    // TODO: Implement proper table metadata lookup from PostgreSQL
-    // For now, this is a placeholder that creates a path based on tableId
-    // In a real implementation, we would query the tables schema to get
-    // the actual organizationId, databaseId, and s3Path
     try {
-      return new S3TablePath(1, 1, tableId); // Placeholder
-    } catch {
+      // Import db client dynamically to avoid circular dependencies
+      const { db } = require('@/lib/db/client');
+      const { tables } = require('@/lib/db/schema');
+      const { eq } = require('drizzle-orm');
+
+      // Query table metadata from PostgreSQL
+      const tableRecord = await db
+        .select({
+          id: tables.id,
+          organizationId: tables.organizationId,
+          databaseId: tables.databaseId,
+          s3Path: tables.s3Path
+        })
+        .from(tables)
+        .where(eq(tables.id, tableId))
+        .limit(1);
+
+      if (tableRecord.length === 0) {
+        return null;
+      }
+
+      const table = tableRecord[0];
+      
+      // Use existing s3Path if available, otherwise construct from IDs
+      if (table.s3Path) {
+        return S3TablePath.fromPath(table.s3Path);
+      } else {
+        return new S3TablePath(table.organizationId, table.databaseId, table.id);
+      }
+    } catch (error) {
+      console.error('[DuckDB] Error getting table S3 path:', error);
       return null;
     }
   }
 
-  /**
-   * Advanced query method that accepts type-safe QueryFilters directly
-   * This provides more flexibility than the basic queryTable method
-   */
-  async queryWithFilters(
-    tableId: number, 
-    queryFilters: QueryFilter[],
-    orderBy?: string,
-    orderDirection?: 'ASC' | 'DESC',
-    limit?: number,
-    offset?: number
-  ): Promise<Result<QueryResult>> {
-    try {
-      // Get S3 path for table
-      const s3Path = await this.getTableS3Path(tableId);
-      if (!s3Path) {
-        return { success: false, error: 'Table not found' };
-      }
-
-      // Build SQL query using the type-safe builder
-      const s3Url = `s3://${BUCKET_NAME}/${s3Path.getDataPath()}`;
-      const sql = DuckDB.select(s3Url, {
-        filters: queryFilters,
-        orderBy,
-        orderDirection,
-        limit,
-        offset
-      });
-
-      console.log(`[DuckDB] Executing advanced query: ${sql}`);
-      return await this.executeQuery(sql);
-
-    } catch (error) {
-      console.error('[DuckDB] Error querying table with filters:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to query table'
-      };
-    }
-  }
 
   /**
    * Count rows in a table with optional filters

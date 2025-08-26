@@ -5,21 +5,20 @@ import type {
   Field, 
   CreateFieldData, 
   UpdateFieldData,
-  LinkToTableConfig,
-  FileFieldConfig
 } from '../entities/field';
+import { FieldId, TableId } from '@/ddd/domain/shared/value-objects';
 
 export interface IFieldRepository {
   // Basic CRUD
-  findById(id: number): Promise<Field | null>;
-  findByTableId(tableId: number): Promise<Field[]>;
+  findById(id: FieldId): Promise<Field | null>;
+  findByTableId(tableId: TableId): Promise<Field[]>;
   create(data: CreateFieldData): Promise<Field>;
-  update(id: number, data: UpdateFieldData): Promise<Field>;
-  delete(id: number): Promise<void>;
+  update(id: FieldId, data: UpdateFieldData): Promise<Field>;
+  delete(id: FieldId): Promise<void>;
   
   // Essential business logic
-  checkSlugUniqueness(tableId: number, slug: string, excludeFieldId?: number): Promise<boolean>;
-  canDeleteField(fieldId: number): Promise<boolean>;
+  checkSlugUniqueness(tableId: TableId, slug: string, excludeFieldId?: FieldId): Promise<boolean>;
+  canDeleteField(fieldId: FieldId): Promise<boolean>;
 }
 
 // AIDEV-NOTE: Physical schema operations (addFieldToTable, removeFieldFromTable, etc.)

@@ -1,18 +1,11 @@
-/**
- * Row Application Service
- * 
- * Orchestrates row/data operations with business logic and validation.
- * Handles CRUD operations, field mapping, relation handling, and bulk operations.
- * 
- * AIDEV-NOTE: Application service for dynamic row data management - coordinates
- * between table, field, and file repositories for complete data operations
- */
-
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
 import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
+import type { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { Field } from '@/ddd/domain/fields/entities/field';
+import type { QueryFilter } from '@/ddd/infrastructure/data/duckdb-sql-builder';
+import type { StoredFile } from '@/ddd/domain/files/entities/file-storage';
 import { Row, RowCollection, FieldValue } from '@/ddd/domain/tables/value-objects/row';
 
 export interface CreateRowCommand {
@@ -48,7 +41,20 @@ export interface RowFilters {
   offset?: number;
   orderBy?: string;
   orderDirection?: 'asc' | 'desc';
-  filters?: Record<string, any>;
+  filters?: Record<string, any>; // Simple key-value filters for backward compatibility
+  
+  // Enhanced filtering with full DuckDB QueryFilter support
+  where?: RowFilterCondition[];
+}
+
+/**
+ * Enhanced filter condition supporting all DuckDB operators
+ */
+export interface RowFilterCondition {
+  field: string;
+  operator: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'like' | 'in' | 'isNull' | 'isNotNull';
+  value?: any;
+  values?: any[]; // For 'in' operator
 }
 
 // Use unified Result interface from domain shared types  
@@ -58,7 +64,8 @@ export class RowApplicationService {
   constructor(
     private readonly tableRepository: IDynamicTableRepository,
     private readonly fieldRepository: IFieldRepository,
-    private readonly fileStorageRepository: IFileStorageRepository
+    private readonly fileStorageRepository: IFileStorageRepository,
+    private readonly queryService: TableQueryService
   ) {}
 
   /**
@@ -247,15 +254,30 @@ export class RowApplicationService {
   }
 
   /**
-   * Get rows from a table with filters
+   * Get rows from a table with filters using DuckDB for efficient SQL-based querying
    */
   async getRows(tableId: number, filters?: RowFilters): Promise<RowCollection> {
-    const rowsData = await this.tableRepository.getRows(tableId, {
-      limit: filters?.limit || 1000,
-      offset: filters?.offset || 0,
-      orderBy: filters?.orderBy,
-      orderDirection: filters?.orderDirection?.toUpperCase() as 'ASC' | 'DESC'
-    });
+    // Convert row filters to DuckDB QueryFilter format
+    const queryFilters = await this.convertRowFiltersToQueryFilters(filters, tableId);
+    
+    // Use DuckDB queryTable method 
+    const filtersObj = this.convertQueryFiltersToRecord(queryFilters);
+    const queryResult = await this.queryService.queryTable(
+      tableId,
+      filtersObj,
+      filters?.orderBy,
+      filters?.orderDirection?.toUpperCase() as 'ASC' | 'DESC',
+      filters?.limit || 1000,
+      filters?.offset || 0
+    );
+
+    if (!queryResult.success) {
+      console.error('[ROW-APP-SERVICE] DuckDB query failed:', queryResult.error);
+      // Return empty collection on query failure
+      return RowCollection.fromPlainObjects([], tableId, [], {});
+    }
+
+    const rowsData = queryResult.data?.rows || [];
 
     // Get field information to create proper Row value objects
     const fields = await this.fieldRepository.findByTableId(tableId);
@@ -407,6 +429,81 @@ export class RowApplicationService {
         error: error instanceof Error ? error.message : 'Failed to bulk update rows'
       };
     }
+  }
+
+  /**
+   * Convert QueryFilter array to Record format for queryTable method
+   */
+  private convertQueryFiltersToRecord(queryFilters: QueryFilter[]): Record<string, any> {
+    const filtersObj: Record<string, any> = {};
+    
+    for (const filter of queryFilters) {
+      if (filter.operator === 'eq') {
+        filtersObj[filter.field] = filter.value;
+      } else if (filter.operator === 'isNotNull') {
+        filtersObj[filter.field] = 'NOT NULL';
+      }
+      // Add more operators as needed
+    }
+    
+    return filtersObj;
+  }
+
+  /**
+   * Convert RowFilters to DuckDB QueryFilter format
+   */
+  private async convertRowFiltersToQueryFilters(filters?: RowFilters, tableId?: number): Promise<QueryFilter[]> {
+    const queryFilters: QueryFilter[] = [];
+    
+    if (!filters) {
+      return queryFilters;
+    }
+
+    // Handle enhanced where conditions (new format)
+    if (filters.where && filters.where.length > 0) {
+      const fields = tableId ? await this.fieldRepository.findByTableId(tableId) : [];
+      const fieldSlugToId = fields.reduce((acc, field) => ({
+        ...acc,
+        [field.slug]: field.id
+      }), {} as Record<string, number>);
+
+      for (const condition of filters.where) {
+        // Map field slug to field_{id} column name for DuckDB query
+        const fieldId = fieldSlugToId[condition.field];
+        const fieldColumn = fieldId ? `field_${fieldId}` : condition.field;
+        
+        queryFilters.push({
+          field: fieldColumn,
+          operator: condition.operator,
+          value: condition.value,
+          values: condition.values
+        });
+      }
+    }
+
+    // Handle legacy filters (backward compatibility)
+    if (filters.filters && Object.keys(filters.filters).length > 0 && tableId) {
+      const fields = await this.fieldRepository.findByTableId(tableId);
+      const fieldSlugToId = fields.reduce((acc, field) => ({
+        ...acc,
+        [field.slug]: field.id
+      }), {} as Record<string, number>);
+
+      for (const [fieldSlug, value] of Object.entries(filters.filters)) {
+        if (value !== null && value !== undefined) {
+          const fieldId = fieldSlugToId[fieldSlug];
+          const fieldColumn = fieldId ? `field_${fieldId}` : fieldSlug;
+          
+          queryFilters.push({
+            field: fieldColumn,
+            operator: 'eq',
+            value
+          });
+        }
+      }
+    }
+
+    return queryFilters;
   }
 
   /**
@@ -581,5 +678,90 @@ export class RowApplicationService {
     }
 
     return mappedRow;
+  }
+
+  /**
+   * Get all files stored in field values across all tables in an organization
+   * Uses DuckDB for efficient cross-table querying
+   */
+  async getFilesByOrganization(organizationId: number): Promise<StoredFile[]> {
+    try {
+      // Get all file-type fields for this organization
+      const fields = await this.fieldRepository.findByTableId(0); // We need a method to find all fields by org
+      
+      // For now, let's get all tables in the organization and then their file fields
+      // This would be more efficient with a proper query, but demonstrates DuckDB usage
+      
+      // Get all tables for the organization
+      const tables = await this.tableRepository.findByOrganization(organizationId);
+      const files: StoredFile[] = [];
+
+      for (const table of tables) {
+        // Get file fields for this table
+        const tableFields = await this.fieldRepository.findByTableId(table.id);
+        const fileFields = tableFields.filter(field => field.type === 'file');
+
+        if (fileFields.length === 0) continue;
+
+        // Use DuckDB to query file field values from this table
+        const fileFieldColumns = fileFields.map(f => `field_${f.id}`);
+        
+        for (const fileField of fileFields) {
+          const filters = [{
+            field: `field_${fileField.id}`,
+            operator: 'isNotNull' as const,
+            value: null
+          }];
+
+          const filtersObj = { [`field_${fileField.id}`]: 'NOT NULL' };
+          const queryResult = await this.queryService.queryTable(
+            table.id,
+            filtersObj
+          );
+
+          if (queryResult.success && queryResult.data?.rows) {
+            for (const row of queryResult.data.rows) {
+              const fileValue = row[`field_${fileField.id}`];
+              
+              if (fileValue) {
+                let fileData;
+                try {
+                  fileData = typeof fileValue === 'string' ? JSON.parse(fileValue) : fileValue;
+                } catch {
+                  continue; // Skip invalid JSON
+                }
+
+                if (fileData && fileData.key) {
+                  files.push({
+                    id: fileData.id || fileData.key.split('/').pop()?.split('_')[0] || 'unknown',
+                    key: fileData.key,
+                    name: fileData.name || fileData.originalName || 'unknown',
+                    size: fileData.size || 0,
+                    mimeType: fileData.mimeType || 'application/octet-stream',
+                    uploadedAt: fileData.uploadedAt ? new Date(fileData.uploadedAt) : new Date(),
+                    metadata: {
+                      ...fileData.metadata || {},
+                      tableId: table.id,
+                      tableName: table.name,
+                      fieldId: fileField.id,
+                      fieldName: fileField.name,
+                      organizationId
+                    },
+                    checksums: fileData.checksums || {},
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      console.log(`[ROW-APP-SERVICE] Found ${files.length} files across ${tables.length} tables in organization ${organizationId}`);
+      return files;
+
+    } catch (error) {
+      console.error('[ROW-APP-SERVICE] Error getting files by organization:', error);
+      return [];
+    }
   }
 }

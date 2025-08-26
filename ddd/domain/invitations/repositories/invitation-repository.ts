@@ -10,50 +10,51 @@ import type {
   BulkInvitationResult,
   InvitationStats
 } from '../entities/invitation';
+import { InvitationId, OrganizationId, UserId, EmailAddress, InvitationToken } from '@/ddd/domain/shared/value-objects';
 
 export interface IInvitationRepository {
   // Basic CRUD operations
-  findById(id: number): Promise<Invitation | null>;
-  findByToken(token: string): Promise<Invitation | null>;
-  findByEmail(organizationId: number, email: string): Promise<Invitation | null>;
+  findById(id: InvitationId): Promise<Invitation | null>;
+  findByToken(token: InvitationToken): Promise<Invitation | null>;
+  findByEmail(organizationId: OrganizationId, email: EmailAddress): Promise<Invitation | null>;
   create(data: CreateInvitationData): Promise<Invitation>;
-  update(id: number, data: UpdateInvitationData): Promise<Invitation>;
-  delete(id: number): Promise<void>;
+  update(id: InvitationId, data: UpdateInvitationData): Promise<Invitation>;
+  delete(id: InvitationId): Promise<void>;
   
   // Query operations
-  findByOrganization(organizationId: number): Promise<Invitation[]>;
-  findByInviter(invitedBy: string): Promise<Invitation[]>;
+  findByOrganization(organizationId: OrganizationId): Promise<Invitation[]>;
+  findByInviter(invitedBy: UserId): Promise<Invitation[]>;
   findByQuery(query: InvitationQuery): Promise<Invitation[]>;
   
   // Token and validation operations
-  validateToken(token: string): Promise<{ valid: boolean; invitation?: Invitation; error?: string }>;
-  isTokenExpired(token: string): Promise<boolean>;
-  generateUniqueToken(): Promise<string>;
+  validateToken(token: InvitationToken): Promise<{ valid: boolean; invitation?: Invitation; error?: string }>;
+  isTokenExpired(token: InvitationToken): Promise<boolean>;
+  generateUniqueToken(): Promise<InvitationToken>;
   
   // Invitation management
-  acceptInvitation(token: string, acceptingUserId: string): Promise<void>;
-  resendInvitation(id: number): Promise<Invitation>;
-  revokeInvitation(id: number): Promise<void>;
+  acceptInvitation(token: InvitationToken, acceptingUserId: UserId): Promise<void>;
+  resendInvitation(id: InvitationId): Promise<Invitation>;
+  revokeInvitation(id: InvitationId): Promise<void>;
   
   // Bulk operations
   createBulkInvitations(data: BulkInvitationData): Promise<BulkInvitationResult>;
-  deleteExpiredInvitations(organizationId?: number): Promise<number>;
-  deleteInvitationsByEmail(organizationId: number, email: string): Promise<number>;
+  deleteExpiredInvitations(organizationId?: OrganizationId): Promise<number>;
+  deleteInvitationsByEmail(organizationId: OrganizationId, email: EmailAddress): Promise<number>;
   
   // Statistics and analytics
-  getInvitationStats(organizationId: number): Promise<InvitationStats>;
-  getPendingInvitations(organizationId: number): Promise<Invitation[]>;
-  getExpiredInvitations(organizationId: number): Promise<Invitation[]>;
+  getInvitationStats(organizationId: OrganizationId): Promise<InvitationStats>;
+  getPendingInvitations(organizationId: OrganizationId): Promise<Invitation[]>;
+  getExpiredInvitations(organizationId: OrganizationId): Promise<Invitation[]>;
   
   // Business logic validations
-  canInviteToOrganization(inviterId: string, organizationId: number): Promise<boolean>;
-  hasExistingInvitation(organizationId: number, email: string): Promise<boolean>;
-  isUserAlreadyMember(organizationId: number, email: string): Promise<boolean>;
+  canInviteToOrganization(inviterId: UserId, organizationId: OrganizationId): Promise<boolean>;
+  hasExistingInvitation(organizationId: OrganizationId, email: EmailAddress): Promise<boolean>;
+  isUserAlreadyMember(organizationId: OrganizationId, email: EmailAddress): Promise<boolean>;
   
   // Email and notification support
-  getInvitationEmailData(id: number): Promise<{
+  getInvitationEmailData(id: InvitationId): Promise<{
     invitation: Invitation;
-    organization: { name: string; id: number };
-    inviter: { name?: string; email?: string };
+    organization: { name: string; id: OrganizationId };
+    inviter: { name?: string; email?: EmailAddress };
   } | null>;
 }

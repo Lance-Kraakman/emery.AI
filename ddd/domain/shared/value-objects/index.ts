@@ -5,8 +5,13 @@
 export { AgentId } from './agent-id';
 export { UserId } from './user-id';
 export { TeamId } from './team-id';
-export { TaskId } from './task-id';
+// Task-related value objects moved to tasks domain
+export { TaskId } from '@/ddd/domain/tasks/value-objects/task-id';
 export { OrganizationId } from './organization-id';
+export { InvitationId } from './invitation-id';
+export { FieldId } from './field-id';
+export { DatabaseId } from './database-id';
+export { TableId } from './table-id';
 
 // Authentication & Security Value Objects
 export { EmailAddress } from './email-address';
@@ -16,7 +21,8 @@ export { InvitationToken } from './invitation-token';
 // Domain Status & Role Value Objects
 export { OrganizationRole, ORGANIZATION_ROLES } from './organization-role';
 export { AgentStatus, AGENT_STATUS } from './agent-status';
-export { TaskStatus, TASK_STATUS } from './task-status';
+// Task status moved to tasks domain
+export { TaskStatus, TASK_STATUS } from '@/ddd/domain/tasks/value-objects/task-status';
 
 // Naming & Identifier Value Objects
 export { FieldName } from './field-name';

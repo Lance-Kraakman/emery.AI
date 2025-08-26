@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react';
-import type { Field } from '@/app/actions/types';
+import type { Field } from '@/ddd/domain/fields/entities/field';
 import type { Row } from '@/app/actions/types';
 import { createRowAction, updateRowAction, deleteRowAction } from '@/app/actions/rows';
 
@@ -76,7 +76,7 @@ export function useRowManager({ tableId, fields, onRowUpdate }: UseRowManagerPro
     setEditingRow(row.id);
     const rowData: Record<string, any> = {};
     fields.forEach(field => {
-      const fieldKey = `field_${field.id}`;
+      const fieldKey = `field_${field.id.value}`;
       rowData[field.slug] = row[fieldKey];
     });
     setEditRowData(rowData);

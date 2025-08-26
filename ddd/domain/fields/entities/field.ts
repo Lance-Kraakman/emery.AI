@@ -1,26 +1,184 @@
 // AIDEV-NOTE: Field domain entities - manages dynamic table field definitions in Baserow-style system
 // Fields create field_{id} columns in dynamic tables with proper type mapping and indexes
 
-export interface Field {
-  id: number;
-  tableId: number;
-  name: string;
-  slug: string;                        // URL-safe field identifier
-  type: FieldType;
-  orderIndex: number | null | undefined;  // Align with actions interface
-  relatedTableId: number | null;      // For relation field types
-  required: boolean | null;           // Align with actions interface (not optional)
-  metadata?: Record<string, any>;     // Additional field metadata
-  createdAt: Date | null;
+import { FieldId, TableId } from '@/ddd/domain/shared/value-objects';
+
+export class Field {
+  private constructor(
+    private readonly _id: FieldId,
+    private readonly _tableId: TableId,
+    private _name: string,
+    private _slug: string,                        // URL-safe field identifier
+    private _type: FieldType,
+    private _orderIndex: number | null,
+    private readonly _relatedTableId: TableId | null,     // For relation field types
+    private _required: boolean | null,           // Align with actions interface (not optional)
+    private _metadata: Record<string, any> | undefined,     // Additional field metadata
+    private readonly _createdAt: Date | null
+  ) {}
+
+  // Getters
+  get id(): FieldId { return this._id; }
+  get tableId(): TableId { return this._tableId; }
+  get name(): string { return this._name; }
+  get slug(): string { return this._slug; }
+  get type(): FieldType { return this._type; }
+  get orderIndex(): number | null { return this._orderIndex; }
+  get relatedTableId(): TableId | null { return this._relatedTableId; }
+  get required(): boolean | null { return this._required; }
+  get metadata(): Record<string, any> | undefined { return this._metadata ? { ...this._metadata } : undefined; }
+  get createdAt(): Date | null { return this._createdAt ? new Date(this._createdAt) : null; }
+
+  // Business methods
+  updateName(newName: string): void {
+    if (!newName || newName.trim().length === 0) {
+      throw new Error('Field name cannot be empty');
+    }
+    if (newName.length > 100) {
+      throw new Error('Field name cannot exceed 100 characters');
+    }
+    this._name = newName.trim();
+  }
+
+  updateSlug(newSlug: string): void {
+    if (!newSlug || newSlug.trim().length === 0) {
+      throw new Error('Field slug cannot be empty');
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(newSlug)) {
+      throw new Error('Field slug must contain only letters, numbers, underscores, and hyphens');
+    }
+    this._slug = newSlug.trim();
+  }
+
+  updateRequired(required: boolean): void {
+    this._required = required;
+  }
+
+  updateOrderIndex(orderIndex: number | null): void {
+    if (orderIndex !== null && orderIndex < 0) {
+      throw new Error('Order index must be non-negative');
+    }
+    this._orderIndex = orderIndex;
+  }
+
+  updateMetadata(metadata: Record<string, any> | undefined): void {
+    this._metadata = metadata ? { ...metadata } : undefined;
+  }
+
+  canBeDeleted(): boolean {
+    // Add business logic for when fields can be deleted
+    // For example, required fields with data might not be deletable
+    return true; // Placeholder - implement actual business rules
+  }
+
+  isRelationField(): boolean {
+    return this._type === 'relation';
+  }
+
+  isFileField(): boolean {
+    return this._type === 'file';
+  }
+
+  requiresIndex(): boolean {
+    return JSONB_FIELD_TYPES.includes(this._type);
+  }
+
+  getColumnName(): string {
+    return `field_${this._id.value}`;
+  }
+
+  getPostgresType(): string {
+    return FIELD_TYPE_MAPPING[this._type];
+  }
+
+  // Factory methods
+  static create(data: CreateFieldData): Field {
+    // Validate creation data
+    if (!data.name || data.name.trim().length === 0) {
+      throw new Error('Field name is required');
+    }
+    if (!data.slug || data.slug.trim().length === 0) {
+      throw new Error('Field slug is required');
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(data.slug)) {
+      throw new Error('Field slug must contain only letters, numbers, underscores, and hyphens');
+    }
+
+    return new Field(
+      FieldId.placeholder(), // Will be set by repository
+      data.tableId,
+      data.name.trim(),
+      data.slug.trim(),
+      data.type,
+      data.orderIndex ?? null,
+      data.relatedTableId ?? null,
+      data.required ?? null,
+      data.metadata,
+      null // Will be set by repository
+    );
+  }
+
+  static fromPersistence(data: {
+    id: number;
+    tableId: number;
+    name: string;
+    slug: string;
+    type: FieldType;
+    orderIndex: number | null;
+    relatedTableId: number | null;
+    required: boolean | null;
+    metadata?: Record<string, any>;
+    createdAt: Date | null;
+  }): Field {
+    return new Field(
+      FieldId.fromNumber(data.id),
+      TableId.fromNumber(data.tableId),
+      data.name,
+      data.slug,
+      data.type,
+      data.orderIndex,
+      data.relatedTableId ? TableId.fromNumber(data.relatedTableId) : null,
+      data.required,
+      data.metadata,
+      data.createdAt
+    );
+  }
+
+  // Conversion method for persistence
+  toPersistence(): {
+    id: number;
+    tableId: number;
+    name: string;
+    slug: string;
+    type: FieldType;
+    orderIndex: number | null;
+    relatedTableId: number | null;
+    required: boolean | null;
+    metadata?: Record<string, any>;
+    createdAt: Date | null;
+  } {
+    return {
+      id: this._id.value,
+      tableId: this._tableId.value,
+      name: this._name,
+      slug: this._slug,
+      type: this._type,
+      orderIndex: this._orderIndex,
+      relatedTableId: this._relatedTableId?.value ?? null,
+      required: this._required,
+      metadata: this._metadata,
+      createdAt: this._createdAt
+    };
+  }
 }
 
 export interface CreateFieldData {
-  tableId: number;
+  tableId: TableId;
   name: string;
   slug: string;                        // Generated from name via slugify
   type: FieldType;
   orderIndex?: number;
-  relatedTableId?: number;             // Required for relation fields
+  relatedTableId?: TableId;            // Required for relation fields
   required?: boolean;
   metadata?: Record<string, any>;      // Additional field metadata
 }
@@ -30,7 +188,7 @@ export interface UpdateFieldData {
   slug?: string;
   type?: FieldType;
   orderIndex?: number;
-  relatedTableId?: number;
+  relatedTableId?: TableId;
   required?: boolean;
   metadata?: Record<string, any>;      // Additional field metadata
   // Note: tableId typically not changed after creation
@@ -79,7 +237,7 @@ export interface FieldValidationError {
 export interface LinkToTableValue {
   id: string;                            // Related record UUID
   value: string;                         // Display value from primary field
-  tableId?: number;                      // Related table ID for validation
+  tableId?: TableId;                     // Related table ID for validation
 }
 
 // S3-integrated file field value structure  
@@ -93,8 +251,8 @@ export interface FileFieldValue {
   uploadedAt: string;                    // ISO timestamp
   metadata?: {                           // Additional S3 metadata
     organizationId?: number;
-    tableId?: number;
-    fieldId?: number;
+    tableId?: TableId;
+    fieldId?: FieldId;
     [key: string]: any;
   };
   thumbnails?: Array<{                   // Generated thumbnails (for images)
@@ -102,75 +260,6 @@ export interface FileFieldValue {
     s3Key: string;                       // Thumbnail S3 key
     url?: string;                        // Pre-signed thumbnail URL
   }>;
-}
-
-
-// Helper type for JSON field values
-export type FieldValue = 
-  | string                               // text, email, url
-  | number                               // number
-  | boolean                              // boolean
-  | Date | string                        // date (ISO string or Date)
-  | LinkToTableValue[]                   // relation (array of linked records)
-  | FileFieldValue[]                     // file (array of file objects)
-  | null;
-
-// Field operations and transformations
-export interface FieldOperation {
-  type: 'ADD_FIELD' | 'REMOVE_FIELD' | 'MODIFY_FIELD' | 'REORDER_FIELDS';
-  fieldId?: number;
-  oldField?: Field;
-  newField?: CreateFieldData | UpdateFieldData;
-  parameters?: Record<string, any>;
-}
-
-// Bulk field operations
-export interface BulkFieldOperation {
-  tableId: number;
-  operations: FieldOperation[];
-  validateOnly?: boolean;               // If true, only validate without executing
-}
-
-// Field statistics and metadata
-export interface FieldStats {
-  field: Field;
-  valueCount: number;                   // Non-null values
-  uniqueCount?: number;                 // Unique values (for applicable types)
-  commonValues?: Array<{
-    value: any;
-    count: number;
-  }>;
-  lastUpdated?: Date;
-}
-
-// Field processing utilities
-export interface FieldProcessingOptions {
-  validateRequired?: boolean;
-  parseJson?: boolean;                   // Auto-parse JSON strings for JSONB fields
-  debug?: boolean;
-}
-
-// Utility functions for field value processing
-export const isJsonbField = (fieldType: FieldType): boolean => {
-  return JSONB_FIELD_TYPES.includes(fieldType);
-};
-
-export const getPostgresType = (fieldType: FieldType): string => {
-  return FIELD_TYPE_MAPPING[fieldType] || 'TEXT';
-};
-
-export const needsGinIndex = (fieldType: FieldType): boolean => {
-  return isJsonbField(fieldType);
-};
-
-// Baserow-style Link to Table field configuration
-export interface LinkToTableConfig {
-  relatedTableId: number;
-  allowMultiple?: boolean;              // false = one-to-one, true = one/many-to-many
-  reverseFieldName?: string;            // Auto-created reverse field name
-  displayField?: string;                // Which field from related table to show (defaults to primary)
-  cascadeDelete?: boolean;              // Delete related records on parent delete
-  createReverseField?: boolean;         // Automatically create bidirectional link
 }
 
 
@@ -192,40 +281,3 @@ export interface FileFieldConfig {
   compressionEnabled?: boolean;         // Enable file compression
 }
 
-// Complex field queries
-export interface FieldQuery {
-  tableId?: number;
-  types?: FieldType[];
-  required?: boolean;
-  orderBy?: 'name' | 'orderIndex' | 'createdAt';
-  orderDirection?: 'ASC' | 'DESC';
-}
-
-// Field migration support
-export interface FieldMigration {
-  id: string;
-  fieldId: number;
-  fromType: FieldType;
-  toType: FieldType;
-  transformFunction?: string;           // SQL transformation function
-  dataLossRisk: 'none' | 'low' | 'medium' | 'high';
-  createdAt: Date;
-}
-
-// Enhanced field management
-export interface FieldTemplate {
-  name: string;
-  type: FieldType;
-  defaultConfig?: Record<string, any>;
-  validation?: Record<string, any>;
-  description?: string;
-}
-
-export interface FieldGroup {
-  id: number;
-  tableId: number;
-  name: string;
-  fieldIds: number[];
-  collapsed?: boolean;
-  orderIndex?: number;
-}

@@ -91,8 +91,8 @@ export async function getRowsData(tableId: number, limit = 100, offset = 0): Pro
     // Use RowApplicationService for row fetching
     const rowApplicationService = getRowApplicationService();
     
-    const rows = await rowApplicationService.getRows(tableId, { limit, offset });
-    return rows;
+    const rowCollection = await rowApplicationService.getRows(tableId, { limit, offset });
+    return [...rowCollection.rows];
   } catch (error) {
     console.error("Error fetching rows:", error);
     throw new Error(error instanceof Error ? error.message : "Failed to fetch rows");

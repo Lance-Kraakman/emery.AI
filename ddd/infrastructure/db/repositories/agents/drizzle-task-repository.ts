@@ -12,7 +12,7 @@ import { db } from '@/lib/db/client';
 import { tasks } from '@/lib/db/schema';
 import { eq, desc, asc, inArray, and } from 'drizzle-orm';
 import type { ITaskRepository } from '@/ddd/domain/agents/repositories/task-repository';
-import { Task } from '@/ddd/domain/agents/entities/task';
+import { Task } from '@/ddd/domain/tasks/entities/task';
 import { TaskId, AgentId, OrganizationId, UserId, TaskStatus } from '@/ddd/domain/shared/value-objects';
 
 export class DrizzleTaskRepository implements ITaskRepository {

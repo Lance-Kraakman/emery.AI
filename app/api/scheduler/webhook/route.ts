@@ -7,8 +7,8 @@ import { NextRequest } from 'next/server';
 import { db } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
 import { sql, eq, and } from 'drizzle-orm';
-import { getAgentTaskApplicationService } from '@/ddd/application/di/agent-container';
-import type { TaskInstructions } from '@/ddd/domain/agents/entities/task';
+import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
+import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import { v4 as uuidv4 } from 'uuid';
 import { createHmac, timingSafeEqual } from 'crypto';
 

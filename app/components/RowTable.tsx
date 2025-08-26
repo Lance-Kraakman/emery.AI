@@ -1,7 +1,7 @@
 'use client'
 
 import { Edit, Trash2, Save, X } from 'lucide-react';
-import type { Field } from '@/app/actions/types';
+import type { Field } from '@/ddd/domain/fields/entities/field';
 import type { Row } from '@/app/actions/types';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -59,7 +59,7 @@ export default function RowTable({
         <TableHeader>
           <TableRow>
             {fields.map((field) => (
-              <TableHead key={field.id}>
+              <TableHead key={field.id.value}>
                 {field.name}
                 {field.required && <span className="text-destructive ml-1">*</span>}
               </TableHead>
@@ -71,7 +71,7 @@ export default function RowTable({
           {rows.map((row) => (
             <TableRow key={row.id}>
               {fields.map((field) => (
-                <TableCell key={field.id} className="max-w-xs">
+                <TableCell key={field.id.value} className="max-w-xs">
                   {editingRow === row.id ? (
                     <FieldInput
                       field={field}
@@ -84,7 +84,7 @@ export default function RowTable({
                   ) : (
                     <CellRenderer 
                       field={field} 
-                      value={row[`field_${field.id}`]} 
+                      value={row[`field_${field.id.value}`]} 
                     />
                   )}
                 </TableCell>

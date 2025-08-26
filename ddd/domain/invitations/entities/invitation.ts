@@ -6,18 +6,140 @@ import {
   UserId, 
   EmailAddress, 
   InvitationToken, 
-  OrganizationRole 
+  OrganizationRole,
+  InvitationId
 } from '@/ddd/domain/shared/value-objects';
 
-export interface Invitation {
-  id: number;
-  organizationId: OrganizationId;
-  invitedBy: UserId;                       // UUID reference to users.id
-  email: EmailAddress;
-  role: OrganizationRole;                  // owner, admin, member
-  token: InvitationToken;                  // Unique invitation token
-  expiresAt: Date;
-  createdAt?: Date | null;
+export class Invitation {
+  private constructor(
+    private readonly _id: InvitationId,
+    private readonly _organizationId: OrganizationId,
+    private readonly _invitedBy: UserId,     // UUID reference to users.id
+    private _email: EmailAddress,
+    private _role: OrganizationRole,         // owner, admin, member
+    private readonly _token: InvitationToken,  // Unique invitation token
+    private _expiresAt: Date,
+    private readonly _createdAt: Date | null
+  ) {}
+
+  // Getters
+  get id(): InvitationId { return this._id; }
+  get organizationId(): OrganizationId { return this._organizationId; }
+  get invitedBy(): UserId { return this._invitedBy; }
+  get email(): EmailAddress { return this._email; }
+  get role(): OrganizationRole { return this._role; }
+  get token(): InvitationToken { return this._token; }
+  get expiresAt(): Date { return new Date(this._expiresAt); }
+  get createdAt(): Date | null { return this._createdAt ? new Date(this._createdAt) : null; }
+
+  // Business methods
+  updateEmail(newEmail: EmailAddress): void {
+    this._email = newEmail;
+  }
+
+  updateRole(newRole: OrganizationRole): void {
+    this._role = newRole;
+  }
+
+  updateExpirationDate(newExpiresAt: Date): void {
+    if (newExpiresAt <= new Date()) {
+      throw new Error('Expiration date must be in the future');
+    }
+    const maxDays = MAX_INVITATION_EXPIRY_DAYS;
+    const maxExpiryDate = new Date();
+    maxExpiryDate.setDate(maxExpiryDate.getDate() + maxDays);
+    
+    if (newExpiresAt > maxExpiryDate) {
+      throw new Error(`Expiration date cannot be more than ${maxDays} days from now`);
+    }
+    
+    this._expiresAt = newExpiresAt;
+  }
+
+  isExpired(): boolean {
+    return InvitationToken.isExpired(this._expiresAt);
+  }
+
+  canBeAccepted(): boolean {
+    return !this.isExpired();
+  }
+
+  validateToken(providedToken: string): boolean {
+    return this._token.equals(InvitationToken.fromString(providedToken));
+  }
+
+  getDaysUntilExpiry(): number {
+    const now = new Date();
+    const timeDiff = this._expiresAt.getTime() - now.getTime();
+    return Math.ceil(timeDiff / (1000 * 3600 * 24));
+  }
+
+  canBeModified(): boolean {
+    return !this.isExpired();
+  }
+
+  // Factory methods
+  static create(data: CreateInvitationData): Invitation {
+    const token = InvitationToken.generate();
+    const expiresAt = data.expiresAt || createInvitationExpiry(DEFAULT_INVITATION_EXPIRY_DAYS);
+    const role = data.role || OrganizationRole.member();
+
+    return new Invitation(
+      InvitationId.placeholder(), // Will be set by repository
+      data.organizationId,
+      data.invitedBy,
+      data.email,
+      role,
+      token,
+      expiresAt,
+      null // Will be set by repository
+    );
+  }
+
+  static fromPersistence(data: {
+    id: number;
+    organizationId: number;
+    invitedBy: string;
+    email: string;
+    role: string;
+    token: string;
+    expiresAt: Date;
+    createdAt?: Date | null;
+  }): Invitation {
+    return new Invitation(
+      InvitationId.fromNumber(data.id),
+      OrganizationId.fromNumber(data.organizationId),
+      UserId.fromString(data.invitedBy),
+      EmailAddress.fromString(data.email),
+      OrganizationRole.fromString(data.role),
+      InvitationToken.fromString(data.token),
+      data.expiresAt,
+      data.createdAt || null
+    );
+  }
+
+  // Conversion method for persistence
+  toPersistence(): {
+    id: number;
+    organizationId: number;
+    invitedBy: string;
+    email: string;
+    role: string;
+    token: string;
+    expiresAt: Date;
+    createdAt: Date | null;
+  } {
+    return {
+      id: this._id.value,
+      organizationId: this._organizationId.value,
+      invitedBy: this._invitedBy.value,
+      email: this._email.value,
+      role: this._role.value,
+      token: this._token.value,
+      expiresAt: this._expiresAt,
+      createdAt: this._createdAt
+    };
+  }
 }
 
 export interface CreateInvitationData {
@@ -72,7 +194,7 @@ export interface InvitationEmailContext {
 
 // Invitation statistics
 export interface InvitationStats {
-  organizationId: number;
+  organizationId: OrganizationId;
   totalInvitations: number;
   pendingInvitations: number;
   expiredInvitations: number;
@@ -86,10 +208,10 @@ export interface InvitationStats {
 
 // Invitation filtering and queries
 export interface InvitationQuery {
-  organizationId?: number;
-  invitedBy?: string;
-  email?: string;
-  role?: string;
+  organizationId?: OrganizationId;
+  invitedBy?: UserId;
+  email?: EmailAddress;
+  role?: OrganizationRole;
   isExpired?: boolean;
   dateRange?: {
     from: Date;
@@ -99,20 +221,20 @@ export interface InvitationQuery {
 
 // Bulk invitation operations
 export interface BulkInvitationData {
-  organizationId: number;
-  invitedBy: string;
+  organizationId: OrganizationId;
+  invitedBy: UserId;
   invitations: Array<{
-    email: string;
-    role?: string;
+    email: EmailAddress;
+    role?: OrganizationRole;
   }>;
-  defaultRole?: string;                    // Default role for invitations without specific role
+  defaultRole?: OrganizationRole;          // Default role for invitations without specific role
   expiresAt?: Date;
 }
 
 export interface BulkInvitationResult {
   successful: Invitation[];
   failed: Array<{
-    email: string;
+    email: EmailAddress;
     error: string;
   }>;
   totalSent: number;
@@ -122,9 +244,9 @@ export interface BulkInvitationResult {
 
 // Invitation token utilities
 export interface InvitationTokenData {
-  invitationId: number;
-  organizationId: number;
-  email: string;
+  invitationId: InvitationId;
+  organizationId: OrganizationId;
+  email: EmailAddress;
   expiresAt: Date;
 }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import type { Field } from '@/app/actions/types';
+import type { Field } from '@/ddd/domain/fields/entities/field';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import FileUpload from '../FileUpload';
@@ -86,7 +86,7 @@ export default function FieldInput({
           onChange={onChange}
           organizationId={organizationId}
           tableId={tableId}
-          fieldId={field.id}
+          fieldId={field.id.value}
         />
       );
     case 'relation':
@@ -98,7 +98,7 @@ export default function FieldInput({
         <RelationField
           value={value}
           onChange={onChange}
-          relatedTableId={field.relatedTableId}
+          relatedTableId={field.relatedTableId?.value ?? null}
           workspaceId={organizationId}
           disabled={disabled}
         />

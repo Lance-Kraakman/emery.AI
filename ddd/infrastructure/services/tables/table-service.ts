@@ -20,6 +20,7 @@ import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
 import { GetObjectCommand, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 
 import type { Result } from '@/ddd/domain/shared/result';
+import { TableId, DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { 
   IDynamicTableRepository,
   CreateDynamicTableData
@@ -97,11 +98,11 @@ export class TableService implements IDynamicTableRepository {
     }
   }
 
-  async findById(id: number): Promise<DynamicTable | null> {
+  async findById(id: TableId): Promise<DynamicTable | null> {
     try {
       // Get table metadata from PostgreSQL
       const tableRecord = await db.query.tables.findFirst({
-        where: eq(tables.id, id)
+        where: eq(tables.id, id.value)
       });
 
       if (!tableRecord) {
@@ -129,10 +130,10 @@ export class TableService implements IDynamicTableRepository {
     }
   }
 
-  async findByOrganization(organizationId: number): Promise<DynamicTable[]> {
+  async findByOrganization(organizationId: OrganizationId): Promise<DynamicTable[]> {
     try {
       const tableRecords = await db.query.tables.findMany({
-        where: eq(tables.organizationId, organizationId)
+        where: eq(tables.organizationId, organizationId.value)
       });
 
       return tableRecords.map(record => ({
@@ -153,10 +154,10 @@ export class TableService implements IDynamicTableRepository {
     }
   }
 
-  async findByDatabase(databaseId: number): Promise<DynamicTable[]> {
+  async findByDatabase(databaseId: DatabaseId): Promise<DynamicTable[]> {
     try {
       const tableRecords = await db.query.tables.findMany({
-        where: eq(tables.databaseId, databaseId)
+        where: eq(tables.databaseId, databaseId.value)
       });
 
       return tableRecords.map(record => ({
@@ -177,7 +178,7 @@ export class TableService implements IDynamicTableRepository {
     }
   }
 
-  async update(id: number, data: Partial<DynamicTable>): Promise<DynamicTable> {
+  async update(id: TableId, data: Partial<DynamicTable>): Promise<DynamicTable> {
     try {
       const [updatedRecord] = await db.update(tables)
         .set({
@@ -185,11 +186,11 @@ export class TableService implements IDynamicTableRepository {
           metadata: data.metadata || null,
           updatedAt: new Date()
         })
-        .where(eq(tables.id, id))
+        .where(eq(tables.id, id.value))
         .returning();
 
       if (!updatedRecord) {
-        throw new Error(`Table ${id} not found`);
+        throw new Error(`Table ${id.value} not found`);
       }
 
       return {
@@ -210,11 +211,11 @@ export class TableService implements IDynamicTableRepository {
     }
   }
 
-  async delete(id: number): Promise<void> {
+  async delete(id: TableId): Promise<void> {
     try {
       // 1. Get table to find S3 path
       const tableRecord = await db.query.tables.findFirst({
-        where: eq(tables.id, id)
+        where: eq(tables.id, id.value)
       });
 
       if (!tableRecord) {
@@ -226,10 +227,10 @@ export class TableService implements IDynamicTableRepository {
       await this.deleteS3Directory(s3Path.path);
 
       // 3. Delete fields from PostgreSQL
-      await db.delete(fields).where(eq(fields.tableId, id));
+      await db.delete(fields).where(eq(fields.tableId, id.value));
 
       // 4. Delete table from PostgreSQL
-      await db.delete(tables).where(eq(tables.id, id));
+      await db.delete(tables).where(eq(tables.id, id.value));
 
       console.log(`[TableService] Deleted table: ${tableRecord.name} (ID: ${id})`);
 
@@ -239,11 +240,11 @@ export class TableService implements IDynamicTableRepository {
     }
   }
 
-  async existsByStorageLocation(organizationId: number, storageLocation: string): Promise<boolean> {
+  async existsByStorageLocation(organizationId: OrganizationId, storageLocation: string): Promise<boolean> {
     try {
       const tableRecord = await db.query.tables.findFirst({
         where: and(
-          eq(tables.organizationId, organizationId),
+          eq(tables.organizationId, organizationId.value),
           eq(tables.s3Path, storageLocation)
         )
       });
@@ -256,7 +257,7 @@ export class TableService implements IDynamicTableRepository {
     }
   }
 
-  async insertRow(tableId: number, data: CreateRowData): Promise<DynamicTableRow> {
+  async insertRow(tableId: TableId, data: CreateRowData): Promise<DynamicTableRow> {
     // AIDEV-NOTE: Simple atomic approach - load all data, add row, save all data
     try {
       // 1. Get table metadata
@@ -304,11 +305,11 @@ export class TableService implements IDynamicTableRepository {
     }
   }
 
-  async findRows(tableId: number, options?: RowQueryOptions): Promise<DynamicTableRow[]> {
+  async findRows(tableId: TableId, options?: RowQueryOptions): Promise<DynamicTableRow[]> {
     return await this.getRows(tableId, options);
   }
 
-  async getRows(tableId: number, options?: RowQueryOptions): Promise<DynamicTableRow[]> {
+  async getRows(tableId: TableId, options?: RowQueryOptions): Promise<DynamicTableRow[]> {
     try {
       const table = await this.findById(tableId);
       if (!table) {
@@ -329,7 +330,7 @@ export class TableService implements IDynamicTableRepository {
     }
   }
 
-  async getRow(tableId: number, rowId: string): Promise<DynamicTableRow | null> {
+  async getRow(tableId: TableId, rowId: string): Promise<DynamicTableRow | null> {
     try {
       const table = await this.findById(tableId);
       if (!table) {
@@ -349,7 +350,7 @@ export class TableService implements IDynamicTableRepository {
     }
   }
 
-  async updateRow(tableId: number, rowId: string, data: UpdateRowData): Promise<DynamicTableRow> {
+  async updateRow(tableId: TableId, rowId: string, data: UpdateRowData): Promise<DynamicTableRow> {
     // AIDEV-NOTE: Simple atomic approach - load all data, update row, save all data
     try {
       // 1. Get table metadata and schema
@@ -401,7 +402,7 @@ export class TableService implements IDynamicTableRepository {
     }
   }
 
-  async deleteRow(tableId: number, rowId: string): Promise<void> {
+  async deleteRow(tableId: TableId, rowId: string): Promise<void> {
     // AIDEV-NOTE: Simple atomic approach - load all data, remove row, save all data
     try {
       // 1. Get table metadata
@@ -439,7 +440,7 @@ export class TableService implements IDynamicTableRepository {
     }
   }
 
-  async tableExists(tableId: number): Promise<boolean> {
+  async tableExists(tableId: TableId): Promise<boolean> {
     try {
       const table = await this.findById(tableId);
       return !!table;
@@ -450,7 +451,7 @@ export class TableService implements IDynamicTableRepository {
     }
   }
 
-  async getTableStats(tableId: number): Promise<{
+  async getTableStats(tableId: TableId): Promise<{
     rowCount: number;
     sizeBytes: number;
     lastModified: Date;
@@ -498,7 +499,7 @@ export class TableService implements IDynamicTableRepository {
     }
   }
 
-  async hasRows(tableId: number): Promise<boolean> {
+  async hasRows(tableId: TableId): Promise<boolean> {
     try {
       const stats = await this.getTableStats(tableId);
       return stats.rowCount > 0;

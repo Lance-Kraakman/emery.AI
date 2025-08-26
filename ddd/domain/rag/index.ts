@@ -1,17 +1,19 @@
-// AIDEV-NOTE: Main barrel export for RAG domain layer
-// Provides clean access to all RAG domain components
+// AIDEV-NOTE: Essential RAG domain exports only
+// Simplified imports - use direct paths for better clarity
 
-// Entities
-export * from './entities';
+// Core entities
+export { RagIndex } from './entities/rag-index';
+export { RagDocument } from './entities/rag-document';
 
-// Value Objects
-export * from './value-objects';
+// Core value objects
+export { RagIndexId } from './value-objects/rag-index-id';
+export { DocumentId } from './value-objects/document-id';
+export { SearchQuery } from './value-objects/search-query';
 
-// Repositories
-export * from './repositories';
+// Repository interfaces
+export type { RagIndexRepository } from './repositories/rag-index-repository';
+export type { RagDocumentRepository } from './repositories/rag-document-repository';
 
-// Domain Services
-export * from './services';
-
-// Events
-export * from './events';
+// Core domain services
+export type { IndexingDomainService } from './services/indexing-domain-service';
+export type { SearchDomainService } from './services/search-domain-service';

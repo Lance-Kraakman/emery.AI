@@ -23,6 +23,7 @@ import type {
   UpdateFieldData,
   FieldType
 } from '@/ddd/domain/fields/entities/field';
+import { FieldId, TableId } from '@/ddd/domain/shared/value-objects';
 
 export class DrizzleFieldRepository implements IFieldRepository {
   constructor(
@@ -31,11 +32,11 @@ export class DrizzleFieldRepository implements IFieldRepository {
   ) {}
 
   // Basic CRUD
-  async findById(id: number): Promise<Field | null> {
+  async findById(id: FieldId): Promise<Field | null> {
     const result = await this.db
       .select()
       .from(fields)
-      .where(eq(fields.id, id))
+      .where(eq(fields.id, id.value))
       .limit(1);
 
     const field = result[0];
@@ -44,11 +45,11 @@ export class DrizzleFieldRepository implements IFieldRepository {
     return this.mapToDomainEntity(field);
   }
 
-  async findByTableId(tableId: number): Promise<Field[]> {
+  async findByTableId(tableId: TableId): Promise<Field[]> {
     const result = await this.db
       .select()
       .from(fields)
-      .where(eq(fields.tableId, tableId))
+      .where(eq(fields.tableId, tableId.value))
       .orderBy(asc(fields.orderIndex), asc(fields.id));
 
     return result.map(field => this.mapToDomainEntity(field));
@@ -79,7 +80,7 @@ export class DrizzleFieldRepository implements IFieldRepository {
     return this.mapToDomainEntity(newField);
   }
 
-  async update(id: number, data: UpdateFieldData): Promise<Field> {
+  async update(id: FieldId, data: UpdateFieldData): Promise<Field> {
     const updateData: any = {};
     
     if (data.name !== undefined) updateData.name = data.name;
@@ -102,46 +103,46 @@ export class DrizzleFieldRepository implements IFieldRepository {
     const [updatedField] = await this.db
       .update(fields)
       .set(updateData)
-      .where(eq(fields.id, id))
+      .where(eq(fields.id, id.value))
       .returning();
 
     if (!updatedField) {
-      throw new Error(`Field with id ${id} not found or could not be updated`);
+      throw new Error(`Field with id ${id.value} not found or could not be updated`);
     }
 
     return this.mapToDomainEntity(updatedField);
   }
 
-  async delete(id: number): Promise<void> {
+  async delete(id: FieldId): Promise<void> {
     const result = await this.db
       .delete(fields)
-      .where(eq(fields.id, id))
+      .where(eq(fields.id, id.value))
       .returning();
 
     if (result.length === 0) {
-      throw new Error(`Field with id ${id} not found`);
+      throw new Error(`Field with id ${id.value} not found`);
     }
   }
 
   // Essential business logic
-  async checkSlugUniqueness(tableId: number, slug: string, excludeFieldId?: number): Promise<boolean> {
+  async checkSlugUniqueness(tableId: TableId, slug: string, excludeFieldId?: FieldId): Promise<boolean> {
     const result = await this.db
       .select()
       .from(fields)
       .where(and(
-        eq(fields.tableId, tableId),
+        eq(fields.tableId, tableId.value),
         eq(fields.slug, slug)
       ));
 
     // Filter out the excluded field if provided
     const filteredResult = excludeFieldId
-      ? result.filter(field => field.id !== excludeFieldId)
+      ? result.filter(field => field.id !== excludeFieldId.value)
       : result;
 
     return filteredResult.length === 0;
   }
 
-  async canDeleteField(fieldId: number): Promise<boolean> {
+  async canDeleteField(fieldId: FieldId): Promise<boolean> {
     try {
       const field = await this.findById(fieldId);
       if (!field) return false;
