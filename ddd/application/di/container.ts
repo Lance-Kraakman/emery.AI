@@ -10,12 +10,10 @@ import { DrizzleRoleRepository } from '@/ddd/infrastructure/db/repositories/role
 import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import { TableService } from '@/ddd/infrastructure/services/tables/table-service';
 import { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
-import { ArrowDataStorageService } from '@/ddd/infrastructure/data/arrow-data-storage-service';
 import { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
 import { DuckDBTableQueryService } from '@/ddd/infrastructure/data/duckdb-table-query-service';
 import { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
 import { S3FileStorageRepository } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
-import { FileFieldService } from '@/ddd/domain/files/services/file-field-service';
 
 // Agent domain imports
 import { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
@@ -71,7 +69,6 @@ import {
   DrizzleRagDocumentRepository,
   DrizzleRagQueryLogRepository
 } from '@/ddd/infrastructure/db/repositories/rag';
-import { DrizzleFileStorageRepository } from '@/ddd/infrastructure/db/repositories/files/drizzle-file-storage-repository';
 import { LlamaIndexContentProcessor } from '@/ddd/application/services/content-processing/llamaindex-content-processor';
 import { AutoReindexService } from '@/ddd/application/services/rag/auto-reindex-service';
 import { EmbeddingService } from '@/ddd/application/services/embedding-service';
@@ -89,7 +86,6 @@ interface RepositoryRegistry {
   DataStorageService: DataStorageService;
   TableQueryService: TableQueryService;
   IFileStorageRepository: IFileStorageRepository;
-  FileFieldService: FileFieldService;
   
   // Field and table services
   IFieldRepository: IFieldRepository;
@@ -132,7 +128,6 @@ interface RepositoryRegistry {
   IRagIndexRepository: DrizzleRagIndexRepository;
   IRagDocumentRepository: DrizzleRagDocumentRepository;
   IRagQueryLogRepository: DrizzleRagQueryLogRepository;
-  IFileStorageRepository2: DrizzleFileStorageRepository; // Separate from S3 file storage
 
   // RAG application services
   EmbeddingService: EmbeddingService;
@@ -196,16 +191,9 @@ export class DIContainer {
     this.repositories.set('IFileStorageRepository', fileStorageRepository);
 
     // Register S3 + Arrow + DuckDB services
-    const dataStorageService = new ArrowDataStorageService();
     const tableQueryService = new DuckDBTableQueryService();
-    
-    this.repositories.set('DataStorageService', dataStorageService);
     this.repositories.set('TableQueryService', tableQueryService);
 
-    // TODO: FileFieldService needs refactoring for S3 architecture
-    // For now, create a placeholder service
-    const fileFieldService = {} as any; // Placeholder - needs proper implementation
-    this.repositories.set('FileFieldService', fileFieldService);
 
     // Register other repository implementations
     this.repositories.set('IOrganizationRepository', 
@@ -244,8 +232,11 @@ export class DIContainer {
       teamRepository,
       agentRepository
     );
-    // TODO: DatabaseApplicationService needs refactoring for S3 architecture
-    const databaseApplicationService = {} as any; // Placeholder - needs proper implementation
+    // Initialize DatabaseApplicationService with proper dependencies
+    const databaseApplicationService = new DatabaseApplicationService(
+      databaseRepository,
+      this.repositories.get('IOrganizationRepository')
+    );
     const permissionApplicationService = new PermissionApplicationService(
       this.repositories.get('IRoleRepository'),
       this.repositories.get('IUserRepository')
@@ -275,10 +266,17 @@ export class DIContainer {
     // Register field repository and services
     const fieldRepository = new DrizzleFieldRepository(db);
     
-    // Create table service with all dependencies
+    // Create consolidated Arrow table data service
+    const arrowTableDataService = new ArrowTableDataService(
+      tableQueryService,
+      null as any, // Will be set after TableService creation
+      fieldRepository
+    );
+    
+    // Create table service with consolidated data service
     const tableService = new TableService(
       fieldRepository,
-      dataStorageService,
+      arrowTableDataService,
       tableQueryService
     );
     
@@ -291,15 +289,12 @@ export class DIContainer {
       tableService,
       tableQueryService
     );
-    const tableDataService = new ArrowTableDataService(
-      dataStorageService,
-      tableQueryService,
-      tableService,
-      fieldRepository
-    );
+    // Update the table reference in the consolidated service
+    (arrowTableDataService as any).tableRepository = tableService;
     
     this.repositories.set('FieldSchemaService', fieldSchemaService);
-    this.repositories.set('TableDataService', tableDataService);
+    this.repositories.set('TableDataService', arrowTableDataService);
+    this.repositories.set('DataStorageService', arrowTableDataService);
     
     // Initialize TableApplicationService with proper dependencies
     const tableApplicationService = new TableApplicationService(
@@ -314,12 +309,22 @@ export class DIContainer {
       fieldRepository,
       tableService,
       fieldSchemaService,
-      tableDataService
+      arrowTableDataService
     );
     
-    // TODO: Other application services still need refactoring for S3 architecture
-    const rowApplicationService = {} as any; // Placeholder
-    const fileApplicationService = {} as any; // Placeholder
+    // Initialize RowApplicationService with proper dependencies
+    const rowApplicationService = new RowApplicationService(
+      tableService,
+      fieldRepository,
+      fileStorageRepository
+    );
+    
+    // Initialize FileApplicationService with proper dependencies  
+    const fileApplicationService = new FileApplicationService(
+      fileStorageRepository,
+      fieldRepository,
+      tableService
+    );
     
     // Register chat repositories
     const chatRepository = new DrizzleChatRepository(db);
@@ -327,8 +332,13 @@ export class DIContainer {
     this.repositories.set('IChatRepository', chatRepository);
     this.repositories.set('IChatMessageRepository', chatMessageRepository);
     
-    // TODO: ChatApplicationService needs refactoring for S3 architecture
-    const chatApplicationService = {} as any; // Placeholder
+    // Initialize ChatApplicationService with proper dependencies
+    const chatApplicationService = new ChatApplicationService(
+      chatRepository,
+      chatMessageRepository,
+      this.repositories.get('IOrganizationRepository'),
+      this.repositories.get('IUserRepository')
+    );
     
     this.repositories.set('TableApplicationService', tableApplicationService);
     this.repositories.set('FieldApplicationService', fieldApplicationService);
@@ -340,12 +350,9 @@ export class DIContainer {
     const ragIndexRepository = new DrizzleRagIndexRepository(db);
     const ragDocumentRepository = new DrizzleRagDocumentRepository(db);
     const ragQueryLogRepository = new DrizzleRagQueryLogRepository(db);
-    const fileStorageRepository2 = new DrizzleFileStorageRepository(db); // For RAG files
-    
     this.repositories.set('IRagIndexRepository', ragIndexRepository);
     this.repositories.set('IRagDocumentRepository', ragDocumentRepository);
     this.repositories.set('IRagQueryLogRepository', ragQueryLogRepository);
-    this.repositories.set('IFileStorageRepository2', fileStorageRepository2);
 
     // Initialize RAG application services
     const embeddingService = new EmbeddingService();
@@ -460,7 +467,6 @@ type ServiceMap = {
   TableDataService: TableDataService;
   
   // Services
-  FileFieldService: FileFieldService;
   AgentTaskApplicationService: AgentTaskApplicationService;
   AgentApplicationService: AgentApplicationService;
   TeamApplicationService: TeamApplicationService;
@@ -500,7 +506,6 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
     'RagIndexRepository': 'IRagIndexRepository',
     'RagDocumentRepository': 'IRagDocumentRepository', 
     'RagQueryLogRepository': 'IRagQueryLogRepository',
-    'FileStorageRepository2': 'IFileStorageRepository2'
   };
   
   if (ragMappings[key as string]) {

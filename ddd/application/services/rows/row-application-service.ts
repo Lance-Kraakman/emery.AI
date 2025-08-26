@@ -11,8 +11,8 @@
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
 import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
-import type { FileFieldService } from '@/ddd/domain/files/services/file-field-service';
 import type { Result } from '@/ddd/domain/shared/result';
+import type { Field } from '@/ddd/domain/fields/entities/field';
 
 export interface CreateRowCommand {
   tableId: number;
@@ -57,8 +57,7 @@ export class RowApplicationService {
   constructor(
     private readonly tableRepository: IDynamicTableRepository,
     private readonly fieldRepository: IFieldRepository,
-    private readonly fileStorageRepository: IFileStorageRepository,
-    private readonly fileFieldService: FileFieldService
+    private readonly fileStorageRepository: IFileStorageRepository
   ) {}
 
   /**
@@ -221,7 +220,7 @@ export class RowApplicationService {
   /**
    * Get a single row by ID
    */
-  async getRow(tableId: number, rowId: string): Promise<any | null> {
+  async getRow(tableId: number, rowId: string): Promise<Record<string, any> | null> {
     const row = await this.tableRepository.getRow(tableId, rowId);
     if (!row) {
       return null;
@@ -234,7 +233,7 @@ export class RowApplicationService {
   /**
    * Get rows from a table with filters
    */
-  async getRows(tableId: number, filters?: RowFilters): Promise<any[]> {
+  async getRows(tableId: number, filters?: RowFilters): Promise<Record<string, any>[]> {
     const rows = await this.tableRepository.getRows(tableId, {
       limit: filters?.limit || 1000,
       offset: filters?.offset || 0,
@@ -254,7 +253,7 @@ export class RowApplicationService {
   /**
    * Bulk create multiple rows
    */
-  async bulkCreateRows(command: BulkCreateRowsCommand): Promise<RowApplicationServiceResult<any[]>> {
+  async bulkCreateRows(command: BulkCreateRowsCommand): Promise<RowApplicationServiceResult<Record<string, any>[]>> {
     try {
       // 1. Verify table exists
       const table = await this.tableRepository.findById(command.tableId);
@@ -313,7 +312,7 @@ export class RowApplicationService {
   /**
    * Bulk update multiple rows
    */
-  async bulkUpdateRows(command: BulkUpdateRowsCommand): Promise<RowApplicationServiceResult<any[]>> {
+  async bulkUpdateRows(command: BulkUpdateRowsCommand): Promise<RowApplicationServiceResult<Record<string, any>[]>> {
     try {
       // 1. Verify table exists
       const table = await this.tableRepository.findById(command.tableId);
@@ -445,7 +444,7 @@ export class RowApplicationService {
   /**
    * Validate row data against field definitions
    */
-  private validateRowData(fields: any[], data: Record<string, any>): { valid: boolean; errors: Array<{ field: string; error: string }> } {
+  private validateRowData(fields: Field[], data: Record<string, any>): { valid: boolean; errors: Array<{ field: string; error: string }> } {
     const errors: Array<{ field: string; error: string }> = [];
 
     for (const field of fields) {
