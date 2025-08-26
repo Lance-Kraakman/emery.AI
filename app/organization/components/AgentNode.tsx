@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Bot, User, Activity, CheckCircle, Clock, XCircle } from 'lucide-react';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import type { Task } from '@/ddd/domain/agents/entities/task';
+import type { Task } from '@/ddd/domain/tasks/entities/task';
 
 interface AgentNodeData extends Agent {
   type: 'agent';

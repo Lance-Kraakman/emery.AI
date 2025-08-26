@@ -15,6 +15,7 @@ import type { CreateRowData, UpdateRowData } from '@/app/actions/types';
 import type { Result } from '@/ddd/domain/shared/result';
 import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
+import { DatabaseId, TableId, FieldId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export interface CreateDatabaseCommand {
   name: string;
@@ -246,7 +247,7 @@ export class DatabaseApplicationService {
       }
 
       // Check if database has tables - prevent deletion if it does
-      const tables = await this.tableRepository.findByDatabase(databaseId);
+      const tables = await this.tableRepository.findByDatabase(DatabaseId.fromNumber(databaseId));
 
       if (tables.length > 0) {
         return {
@@ -299,7 +300,7 @@ export class DatabaseApplicationService {
       if (filters.hasTables !== undefined) {
         const databasesWithTableCounts = await Promise.all(
           databases.map(async (database) => {
-            const tables = await this.tableRepository.findByDatabase(database.id);
+            const tables = await this.tableRepository.findByDatabase(DatabaseId.fromNumber(database.id));
             return { database, tableCount: tables.length };
           })
         );
@@ -373,9 +374,9 @@ export class DatabaseApplicationService {
       const tableConfig: CreateDynamicTableData = {
         name: command.name.trim(),
         storageLocation: dbName, // Use dbName as storage location identifier
-        databaseId: command.databaseId,
-        organizationId: command.organizationId,
-        createdBy: command.createdBy,
+        databaseId: DatabaseId.fromNumber(command.databaseId),
+        organizationId: OrganizationId.fromNumber(command.organizationId),
+        createdBy: UserId.fromString(command.createdBy),
         metadata: tableMetadata
       };
 
@@ -401,7 +402,7 @@ export class DatabaseApplicationService {
   async updateTable(command: UpdateTableCommand): Promise<DatabaseApplicationResult<DynamicTable>> {
     try {
       // Load existing table
-      const existingTable = await this.tableRepository.findById(command.tableId);
+      const existingTable = await this.tableRepository.findById(TableId.fromNumber(command.tableId));
       if (!existingTable) {
         return {
           success: false,
@@ -459,7 +460,7 @@ export class DatabaseApplicationService {
   async deleteTable(tableId: number, organizationId: number): Promise<DatabaseApplicationResult<void>> {
     try {
       // Verify table exists and belongs to organization
-      const table = await this.tableRepository.findById(tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(tableId));
       if (!table) {
         return {
           success: false,
@@ -467,7 +468,7 @@ export class DatabaseApplicationService {
         };
       }
 
-      if (table.organizationId !== organizationId) {
+      if (table.organizationId.value !== organizationId) {
         return {
           success: false,
           error: "Access denied: Table does not belong to your organization"
@@ -475,7 +476,7 @@ export class DatabaseApplicationService {
       }
 
       // Delete table (removes both metadata and physical table)
-      await this.tableRepository.delete(tableId);
+      await this.tableRepository.delete(TableId.fromNumber(tableId));
 
       return {
         success: true,
@@ -495,11 +496,11 @@ export class DatabaseApplicationService {
    */
   async getTables(filters: TableFilters): Promise<DynamicTable[]> {
     try {
-      let tables = await this.tableRepository.findByOrganization(filters.organizationId);
+      let tables = await this.tableRepository.findByOrganization(OrganizationId.fromNumber(filters.organizationId));
 
       // Apply database filter
       if (filters.databaseId) {
-        tables = tables.filter(table => table.databaseId === filters.databaseId);
+        tables = tables.filter(table => table.databaseId.value === filters.databaseId);
       }
 
       // Apply search filter
@@ -547,7 +548,7 @@ export class DatabaseApplicationService {
    * Get single table by ID
    */
   async getTable(tableId: number): Promise<DynamicTable | null> {
-    return await this.tableRepository.findById(tableId);
+    return await this.tableRepository.findById(TableId.fromNumber(tableId));
   }
 
   /**
@@ -571,7 +572,7 @@ export class DatabaseApplicationService {
       }
 
       // Verify table exists
-      const table = await this.tableRepository.findById(command.tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(command.tableId));
       if (!table) {
         return {
           success: false,
@@ -581,7 +582,7 @@ export class DatabaseApplicationService {
 
       // Validate related table if provided
       if (command.relatedTableId) {
-        const relatedTable = await this.tableRepository.findById(command.relatedTableId);
+        const relatedTable = await this.tableRepository.findById(TableId.fromNumber(command.relatedTableId));
         if (!relatedTable) {
           return {
             success: false,
@@ -594,7 +595,7 @@ export class DatabaseApplicationService {
       const slug = command.slug || this.slugify(command.name);
 
       // Check for duplicate field names/slugs in table
-      const existingFields = await this.fieldRepository.findByTableId(command.tableId);
+      const existingFields = await this.fieldRepository.findByTableId(TableId.fromNumber(command.tableId));
       const duplicateName = existingFields.find(f => 
         f.name.toLowerCase() === command.name.trim().toLowerCase() ||
         f.slug === slug
@@ -609,12 +610,12 @@ export class DatabaseApplicationService {
 
       // Create field using domain interface
       const fieldConfig: CreateFieldData = {
-        tableId: command.tableId,
+        tableId: TableId.fromNumber(command.tableId),
         name: command.name.trim(),
         slug,
         type: command.type,
         required: command.required || false,
-        relatedTableId: command.relatedTableId,
+        relatedTableId: command.relatedTableId ? TableId.fromNumber(command.relatedTableId) : undefined,
         orderIndex: command.orderIndex
       };
 
@@ -640,7 +641,7 @@ export class DatabaseApplicationService {
   async deleteField(fieldId: number): Promise<DatabaseApplicationResult<void>> {
     try {
       // Verify field exists
-      const field = await this.fieldRepository.findById(fieldId);
+      const field = await this.fieldRepository.findById(FieldId.fromNumber(fieldId));
       if (!field) {
         return {
           success: false,
@@ -649,7 +650,7 @@ export class DatabaseApplicationService {
       }
 
       // Delete field (removes both metadata and physical column)
-      await this.fieldRepository.delete(fieldId);
+      await this.fieldRepository.delete(FieldId.fromNumber(fieldId));
 
       return {
         success: true,
@@ -669,7 +670,7 @@ export class DatabaseApplicationService {
    */
   async getFields(filters: FieldFilters): Promise<Field[]> {
     try {
-      let fields = await this.fieldRepository.findByTableId(filters.tableId);
+      let fields = await this.fieldRepository.findByTableId(TableId.fromNumber(filters.tableId));
 
       // Apply type filter
       if (filters.type) {
@@ -706,7 +707,7 @@ export class DatabaseApplicationService {
    * Get single field by ID
    */
   async getField(fieldId: number): Promise<Field | null> {
-    return await this.fieldRepository.findById(fieldId);
+    return await this.fieldRepository.findById(FieldId.fromNumber(fieldId));
   }
 
   /**
@@ -715,7 +716,7 @@ export class DatabaseApplicationService {
   async createRow(tableId: number, data: CreateRowData): Promise<DatabaseApplicationResult<any>> {
     try {
       // Verify table exists
-      const table = await this.tableRepository.findById(tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(tableId));
       if (!table) {
         return {
           success: false,
@@ -724,7 +725,7 @@ export class DatabaseApplicationService {
       }
 
       // Create row using repository
-      const newRow = await this.tableRepository.insertRow(tableId, data);
+      const newRow = await this.tableRepository.insertRow(TableId.fromNumber(tableId), data);
 
       return {
         success: true,
@@ -745,7 +746,7 @@ export class DatabaseApplicationService {
   async updateRow(tableId: number, rowId: string, data: UpdateRowData): Promise<DatabaseApplicationResult<any>> {
     try {
       // Verify table exists
-      const table = await this.tableRepository.findById(tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(tableId));
       if (!table) {
         return {
           success: false,
@@ -754,7 +755,7 @@ export class DatabaseApplicationService {
       }
 
       // Update row using repository
-      const updatedRow = await this.tableRepository.updateRow(tableId, rowId, data);
+      const updatedRow = await this.tableRepository.updateRow(TableId.fromNumber(tableId), rowId, data);
 
       return {
         success: true,
@@ -775,7 +776,7 @@ export class DatabaseApplicationService {
   async deleteRow(tableId: number, rowId: string): Promise<DatabaseApplicationResult<void>> {
     try {
       // Verify table exists
-      const table = await this.tableRepository.findById(tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(tableId));
       if (!table) {
         return {
           success: false,
@@ -784,7 +785,7 @@ export class DatabaseApplicationService {
       }
 
       // Delete row using repository
-      await this.tableRepository.deleteRow(tableId, rowId);
+      await this.tableRepository.deleteRow(TableId.fromNumber(tableId), rowId);
 
       return {
         success: true,
@@ -805,13 +806,13 @@ export class DatabaseApplicationService {
   async getRows(filters: RowFilters): Promise<any[]> {
     try {
       // Verify table exists
-      const table = await this.tableRepository.findById(filters.tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(filters.tableId));
       if (!table) {
         throw new Error(`Table with ID ${filters.tableId} not found`);
       }
 
       // Get rows using repository
-      const rows = await this.tableRepository.findRows(filters.tableId, {
+      const rows = await this.tableRepository.findRows(TableId.fromNumber(filters.tableId), {
         limit: filters.limit,
         offset: filters.offset,
         orderBy: filters.orderBy,
@@ -832,14 +833,14 @@ export class DatabaseApplicationService {
   async getRowCount(tableId: number): Promise<number> {
     try {
       // Verify table exists
-      const table = await this.tableRepository.findById(tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(tableId));
       if (!table) {
         throw new Error(`Table with ID ${tableId} not found`);
       }
 
       // Since countRows is not available in simplified interface,
       // we use findRows without limit to get count
-      const rows = await this.tableRepository.findRows(tableId);
+      const rows = await this.tableRepository.findRows(TableId.fromNumber(tableId));
       return rows.length;
     } catch (error) {
       console.error("Error counting rows:", error);

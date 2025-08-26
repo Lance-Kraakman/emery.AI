@@ -17,7 +17,7 @@ export async function GET(
     const { db } = await import('@/lib/db/client');
     const { agents } = await import('@/lib/db/schema');
     const { eq } = await import('drizzle-orm');
-    const { getAgentTaskApplicationService } = await import('@/ddd/application/di/agent-container');
+    const { getAgentTaskApplicationService } = await import('@/ddd/application/di/container');
     
     const userId = await getUserIdFromRequest(request);
     if (!userId) {

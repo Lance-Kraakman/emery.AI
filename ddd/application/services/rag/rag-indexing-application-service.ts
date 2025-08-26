@@ -7,7 +7,6 @@ import {
 } from '@/ddd/domain/rag/repositories';
 import { IndexingDomainService, type ContentProcessor } from '@/ddd/domain/rag/services';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
-import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import { db } from '@/lib/db/client';
 import { tables, fields } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -51,11 +50,9 @@ export class RagIndexingApplicationService {
     private readonly documentRepository: RagDocumentRepository,
     private readonly indexingDomainService: IndexingDomainService,
     private readonly organizationRepository: IOrganizationRepository,
-    private readonly tableRepository: IDynamicTableRepository,
     private readonly agentRepository: IAgentRepository,
     private readonly databaseRepository: IDatabaseRepository,
     private readonly teamRepository: ITeamRepository,
-    private readonly fileRepository: IFileStorageRepository,
     private readonly eventPublisher?: EventPublisher
   ) {}
 
@@ -449,7 +446,10 @@ export class RagIndexingApplicationService {
   }
 
   private async indexFiles(index: RagIndex): Promise<any[]> {
-    const files = await this.fileRepository.findByOrganization(index.organizationId.value);
+    // Use RowApplicationService to get files from organization's table data
+    const { getRowApplicationService } = require('@/ddd/application/di/container');
+    const rowService = getRowApplicationService();
+    const files = await rowService.getFilesByOrganization(index.organizationId.value);
     if (files.length === 0) return [];
 
     return await this.indexingDomainService.indexFileData(

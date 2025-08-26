@@ -1,7 +1,7 @@
 'use client'
 
 import { Save, X } from 'lucide-react';
-import type { Field } from '@/app/actions/types';
+import type { Field } from '@/ddd/domain/fields/entities/field';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -42,7 +42,7 @@ export default function RowForm({
           <input type="hidden" name="tableId" value={tableId} />
           
           {fields.map((field) => (
-            <div key={field.id} className="space-y-2">
+            <div key={field.id.value} className="space-y-2">
               <Label className="text-sm font-medium">
                 {field.name}
                 {field.required && <span className="text-destructive ml-1">*</span>}

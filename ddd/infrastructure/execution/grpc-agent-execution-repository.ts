@@ -1,13 +1,3 @@
-/**
- * gRPC Agent Execution Repository Implementation
- * 
- * Concrete implementation of IAgentExecutionRepository that uses gRPC workers
- * for agent execution. Moved from lib/agents/grpc-executor.ts to follow DDD patterns.
- * 
- * AIDEV-NOTE: Infrastructure implementation of execution repository - handles
- * all gRPC communication, proto mapping, and worker registry management
- */
-
 import type { 
   IAgentExecutionRepository, 
   AgentExecutionRequest, 

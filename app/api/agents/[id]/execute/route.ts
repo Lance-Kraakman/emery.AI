@@ -6,8 +6,8 @@ import { authenticateRequest } from '@/lib/auth/test-auth';
 import { db } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { getAgentTaskApplicationService } from '@/ddd/application/di/agent-container';
-import type { TaskInstructions } from '@/ddd/domain/agents/entities/task';
+import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
+import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 import crypto from 'crypto';
 
 export interface AgentExecuteRequest {

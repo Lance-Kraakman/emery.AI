@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { db } from '@/lib/db/client';
 import { tasks, agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { getAgentTaskApplicationService } from '@/ddd/application/di/agent-container';
+import { getAgentTaskApplicationService } from '@/ddd/application/di';
 
 export interface TaskCancelRequest {
   reason?: string;

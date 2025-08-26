@@ -14,7 +14,7 @@ import { getRagSearchApplicationService, getRagIndexRepository } from '@/ddd/app
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import { OrganizationId } from '@/ddd/domain/rag/value-objects';
-import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
+import { AgentId, TableId } from '@/ddd/domain/shared/value-objects';
 
 export interface RagDocument {
   id: string;
@@ -80,8 +80,8 @@ export class TableContextBuilder extends DomainContextBuilder {
 
   async buildContext(domainId: number, query: string, organizationId: number): Promise<RagDocument[]> {
     try {
-      const table = await this.tableRepository.findById(domainId);
-      if (!table || table.organizationId !== organizationId) {
+      const table = await this.tableRepository.findById(TableId.fromNumber(domainId));
+      if (!table || table.organizationId.value !== organizationId) {
         return [];
       }
 

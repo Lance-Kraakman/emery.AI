@@ -24,7 +24,7 @@ import {
   InstructionConfig as InstructionConfigProto,
   StepType
 } from './generated/agent_worker';
-import { Task, TaskStatus } from '@/ddd/domain/agents/entities/task';
+import { Task, TaskStatus } from '@/ddd/domain/tasks/entities/task';
 
 // AgentData interface for gRPC transport (uses primitives, not domain value objects)
 export interface AgentData {

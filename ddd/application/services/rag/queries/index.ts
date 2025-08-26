@@ -1,7 +1,3 @@
-// AIDEV-NOTE: Barrel export for RAG application queries
-// Centralizes query exports for clean imports
-
-export { 
-  type SearchRagQuery, 
-  SearchRagQueryValidator 
-} from './search-query';
+// AIDEV-NOTE: Essential RAG query exports
+export type { SearchRagQuery } from './search-query';
+export { SearchRagQueryValidator } from './search-query';

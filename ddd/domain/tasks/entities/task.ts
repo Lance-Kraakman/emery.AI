@@ -8,14 +8,13 @@
  * for task lifecycle and status transitions with DDD Value Objects
  */
 
-import type { ToolConfig, ServerConfig } from './agent';
+import type { ToolConfig, ServerConfig } from '@/ddd/domain/agents/entities/agent';
+import { TaskId } from '../value-objects/task-id';
+import { TaskStatus, TASK_STATUS } from '../value-objects/task-status';
 import { 
-  TaskId, 
   AgentId, 
   OrganizationId, 
-  UserId, 
-  TaskStatus,
-  TASK_STATUS
+  UserId
 } from '@/ddd/domain/shared/value-objects';
 
 // Re-export TaskStatus for external use

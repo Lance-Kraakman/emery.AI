@@ -1,25 +1,14 @@
-// AIDEV-NOTE: Barrel export for RAG domain services
-// Centralizes domain service exports for clean imports
+// AIDEV-NOTE: Essential RAG domain service exports only
+// Simplified export for commonly used service interfaces
 
-export { 
-  IndexingDomainService,
-  type IndexingResult
-} from './indexing-domain-service';
+export type { IndexingDomainService as IIndexingDomainService } from './indexing-domain-service';
+export type { SearchDomainService as ISearchDomainService } from './search-domain-service';
+export type { ContentProcessor } from './content-processor';
 
-export { 
-  type ContentProcessor,
-  type ProcessedContent,
-  type ContentProcessingConfig,
-  type FileProcessingContext
-} from './content-processor';
+// These might be used by other services
+export type { EmbeddingGenerator } from './indexing-domain-service';
+export type { SearchLogger } from './search-domain-service';
 
-export { 
-  SearchDomainService,
-  type SearchResult,
-  type SearchFilters,
-  type EmbeddingGenerator,
-  type SearchLogger
-} from './search-domain-service';
-
-// OrganizationDataService removed - eliminated redundant aggregation layer
-// Application services now call repositories directly
+// Export concrete classes that are needed by DI container
+export { IndexingDomainService } from './indexing-domain-service';
+export { SearchDomainService } from './search-domain-service';

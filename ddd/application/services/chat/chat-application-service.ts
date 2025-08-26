@@ -13,7 +13,7 @@ import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-reposi
 import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
-import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
+import { AgentId, TableId } from '@/ddd/domain/shared/value-objects';
 import type { Chat, CreateChatData, ChatContextMetadata, DomainType } from '@/ddd/domain/chat/entities/chat';
 import type { ChatMessage, CreateChatMessageData, ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 import type { Result } from '@/ddd/domain/shared/result';
@@ -169,11 +169,11 @@ export class ChatApplicationService {
   }> {
     switch (domainType) {
       case 'table':
-        const table = await this.tableRepository.findById(domainId);
+        const table = await this.tableRepository.findById(TableId.fromNumber(domainId));
         if (!table) {
           return { valid: false, error: `Table ${domainId} not found` };
         }
-        if (table.organizationId !== organizationId) {
+        if (table.organizationId.value !== organizationId) {
           return { valid: false, error: 'Access denied: table not in your organization' };
         }
         return {

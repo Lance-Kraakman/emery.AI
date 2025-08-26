@@ -1,7 +1,3 @@
-// AIDEV-NOTE: Simplified S3 implementation of IFileStorageRepository
-// Only implements the essential methods actually used in the application
-// See s3-file-storage-repository-full.ts for the complete implementation with all features
-
 import { 
   PutObjectCommand, 
   GetObjectCommand, 
@@ -25,22 +21,11 @@ export class S3FileStorageRepository implements IFileStorageRepository {
     this.s3 = s3Client;
   }
 
-  /**
-   * Determine if server-side encryption should be used
-   * Only use encryption for real AWS S3, not for MinIO/local development
-   */
   private shouldUseEncryption(): boolean {
-    // If S3_ENDPOINT_URL is set, we're using MinIO or custom endpoint (no encryption)
     const customEndpoint = process.env.S3_ENDPOINT_URL;
     return !customEndpoint;
   }
   
-  findByOrganization(organizationId: number): Promise<StoredFile[]> {
-    throw new Error('Method not implemented.');
-  }
-  countByOrganization(organizationId: number): Promise<number> {
-    throw new Error('Method not implemented.');
-  }
 
   // Core file upload operation
   async uploadFile(request: FileUploadRequest): Promise<StoredFile> {
@@ -184,58 +169,6 @@ export class S3FileStorageRepository implements IFileStorageRepository {
     };
   }
 
-  // Get storage usage statistics
-  async getStorageUsage(organizationId?: number): Promise<{
-    totalFiles: number;
-    totalSize: number;
-    quotaUsed: number;
-    quotaLimit?: number;
-  }> {
-    try {
-      const prefix = organizationId ? `org-${organizationId}/` : undefined;
-      const command = new ListObjectsV2Command({
-        Bucket: this.bucketName,
-        Prefix: prefix,
-      });
-
-      let totalFiles = 0;
-      let totalSize = 0;
-      let continuationToken: string | undefined;
-
-      // Paginate through all objects
-      do {
-        const paginatedCommand = new ListObjectsV2Command({
-          Bucket: this.bucketName,
-          Prefix: prefix,
-          ContinuationToken: continuationToken,
-        });
-        const response = await this.s3.send(paginatedCommand);
-
-        if (response.Contents) {
-          totalFiles += response.Contents.length;
-          totalSize += response.Contents.reduce((sum, obj) => sum + (obj.Size || 0), 0);
-        }
-
-        continuationToken = response.NextContinuationToken;
-      } while (continuationToken);
-
-      // Calculate quota (example: 5GB per organization)
-      const quotaLimit = 5 * 1024 * 1024 * 1024; // 5GB in bytes
-      const quotaUsed = (totalSize / quotaLimit) * 100;
-
-      return {
-        totalFiles,
-        totalSize,
-        quotaUsed,
-        quotaLimit,
-      };
-    } catch (error: any) {
-      throw new FileStorageError(
-        `Failed to get storage usage: ${error.message}`,
-        'NETWORK_ERROR'
-      );
-    }
-  }
 
   // Helper method to generate S3 key
   private generateS3Key(request: FileUploadRequest, fileId: string): string {
@@ -265,38 +198,3 @@ export class S3FileStorageRepository implements IFileStorageRepository {
     return parts.join('/');
   }
 }
-
-// FUTURE-WORK: Additional methods from the full implementation
-// The following methods are available in s3-file-storage-repository-full.ts
-// but are not currently used in the application:
-/*
-  - downloadFile(key: FileKey): Promise<FileDownloadResponse>
-  - fileExists(key: FileKey): Promise<boolean>
-  - getFileMetadata(key: FileKey): Promise<StoredFile>
-  - generateUploadUrl(key: FileKey, options?: FileUrlOptions): Promise<string>
-  - listFiles(options?: FileListOptions): Promise<FileListResponse>
-  - searchFiles(query: string, options?: FileListOptions): Promise<FileListResponse>
-  - getStorageStats(): Promise<FileStorageStats>
-  - uploadMultipleFiles(requests: FileUploadRequest[]): Promise<StoredFile[]>
-  - deleteMultipleFiles(keys: FileKey[]): Promise<FileOperationResult[]>
-  - batchOperation(operation: FileBatchOperation): Promise<FileBatchResult>
-  - verifyFileIntegrity(key: FileKey): Promise<{ valid: boolean; checksums?: Record<string, string> }>
-  - transformFile(key: FileKey, transform: FileTransformRequest): Promise<FileTransformResult>
-  - generateThumbnail(key: FileKey, sizes: string[]): Promise<StoredFile[]>
-  - cleanupOrphanedFiles(options?: FileCleanupOptions): Promise<FileCleanupResult>
-  - cleanupExpiredFiles(options?: FileCleanupOptions): Promise<FileCleanupResult>
-  - checkFileAccess(key: FileKey, context: FileAccessContext): Promise<boolean>
-  - setFileAccessPolicy(key: FileKey, policy: FileAccessPolicy): Promise<void>
-  - getFileAccessPolicy(key: FileKey): Promise<FileAccessPolicy | null>
-  - createFileVersion(key: FileKey, newContent: Buffer): Promise<StoredFile>
-  - getFileVersions(key: FileKey): Promise<StoredFile[]>
-  - restoreFileVersion(key: FileKey, versionId: string): Promise<StoredFile>
-  - deleteFileVersion(key: FileKey, versionId: string): Promise<void>
-  - updateFileMetadata(key: FileKey, metadata: Record<string, any>): Promise<StoredFile>
-  - addFileTag(key: FileKey, tags: Record<string, string>): Promise<void>
-  - removeFileTag(key: FileKey, tagKeys: string[]): Promise<void>
-  - searchFilesByTags(tags: Record<string, string>): Promise<StoredFile[]>
-  - getProviderInfo(): { name, version, capabilities, limits }
-  - healthCheck(): Promise<{ healthy, latency, errors }>
-  - streamToBuffer(stream: any): Promise<Buffer>
-*/

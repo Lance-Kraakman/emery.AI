@@ -1,208 +1,221 @@
 /**
- * Scheduling Domain Dependency Injection Container
+ * Task Scheduling DI Container
  * 
- * Configures and provides instances of all scheduling-related services and repositories
+ * Simplified container for task scheduling services following DDD patterns.
+ * Replaces the complex memory-based scheduling system with proper domain services.
+ * 
+ * AIDEV-NOTE: This follows the same pattern as the main container but focuses
+ * specifically on task scheduling and execution coordination.
  */
 
-import { SchedulingApplicationService } from '@/ddd/application/services/scheduling/scheduling-application-service';
-import { EventDrivenSchedulingService } from '@/ddd/application/services/scheduling/event-driven-scheduling-service';
-import { ScheduleManager } from '@/ddd/domain/scheduling/services/schedule-manager';
-import { EventDispatcher } from '@/ddd/domain/scheduling/services/event-dispatcher';
-import type { IEventScheduler } from '@/ddd/domain/scheduling/services/event-scheduler';
-import { PostgresEventScheduler } from '@/ddd/infrastructure/scheduling/services/postgres-event-scheduler';
+import type { DbClient } from '@/lib/db/client';
+import type postgres from 'postgres';
 
-// Import infrastructure implementations (these will be created next)
-import { MemoryScheduledJobRepository } from '@/ddd/infrastructure/scheduling/repositories/memory-scheduled-job-repository';
-import { MemoryDispatchEventRepository } from '@/ddd/infrastructure/scheduling/repositories/memory-dispatch-event-repository';
+// Task domain imports
+import { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
+import { DrizzleTaskRepository } from '@/ddd/infrastructure/db/repositories/tasks/drizzle-task-repository';
+import { ITaskQueueService, TaskQueueService } from '@/ddd/domain/tasks/services/task-queue-service';
+import { ISchedulerService, SchedulerService } from '@/ddd/domain/tasks/services/scheduler-service';
+import { TaskSchedulingApplicationService } from '@/ddd/application/services/tasks/task-scheduling-application-service';
 
-// Import agent task executor (existing service)
-import { getAgentTaskApplicationService } from '@/ddd/application/di/agent-container';
+// Agent repository for scheduler service
+import { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import { DrizzleAgentRepository } from '@/ddd/infrastructure/db/repositories/agents/drizzle-agent-repository';
 
-// Import domain interfaces
-import type { IScheduledJobRepository } from '@/ddd/domain/scheduling/repositories/scheduled-job-repository';
-import type { IDispatchEventRepository } from '@/ddd/domain/scheduling/repositories/dispatch-event-repository';
-import type { IScheduleManager } from '@/ddd/domain/scheduling/services/schedule-manager';
-import type { IEventDispatcher, IAgentTaskExecutor } from '@/ddd/domain/scheduling/services/event-dispatcher';
+// RAG indexing service
+import { RagIndexingApplicationService } from '@/ddd/application/services/rag/rag-indexing-application-service';
 
-// AIDEV-NOTE: Scheduling domain DI container setup
-// Uses in-memory repositories for now, can be easily swapped to persistent implementations
-
-class SchedulingContainer {
-  private static instance: SchedulingContainer;
+/**
+ * Container interface for task scheduling services
+ */
+export interface TaskSchedulingServices {
+  // Repository layer
+  ITaskRepository: ITaskRepository;
+  IAgentRepository: IAgentRepository;
   
-  // Repository instances
-  private scheduledJobRepository!: IScheduledJobRepository;
-  private dispatchEventRepository!: IDispatchEventRepository;
+  // Domain services
+  ITaskQueueService: ITaskQueueService;
+  ISchedulerService: ISchedulerService;
   
-  // Domain service instances
-  private scheduleManager!: IScheduleManager;
-  private eventDispatcher!: IEventDispatcher;
+  // Application services
+  TaskSchedulingApplicationService: TaskSchedulingApplicationService;
   
-  // Application service instances
-  private schedulingApplicationService!: SchedulingApplicationService;
-  private eventDrivenSchedulingService!: EventDrivenSchedulingService;
-  
-  // Event scheduling infrastructure
-  private eventScheduler!: IEventScheduler;
+  // Optional RAG service
+  RagIndexingApplicationService?: RagIndexingApplicationService;
+}
+
+export class TaskSchedulingContainer {
+  private static instance: TaskSchedulingContainer;
+  private services = new Map<string, any>();
+  private isInitialized = false;
 
   private constructor() {
-    this.initializeContainer();
-  }
-
-  static getInstance(): SchedulingContainer {
-    if (!SchedulingContainer.instance) {
-      SchedulingContainer.instance = new SchedulingContainer();
+    // Auto-initialize if in server environment
+    if (typeof window === 'undefined' && process.env.NODE_ENV !== 'test') {
+      this.autoInitialize();
     }
-    return SchedulingContainer.instance;
   }
 
-  private initializeContainer(): void {
-    console.log('🏗️ Initializing Scheduling Domain DI Container...');
-
-    // Initialize repositories
-    this.scheduledJobRepository = new MemoryScheduledJobRepository();
-    this.dispatchEventRepository = new MemoryDispatchEventRepository();
-
-    // Initialize domain services
-    this.scheduleManager = new ScheduleManager(
-      this.scheduledJobRepository,
-      this.dispatchEventRepository
-    );
-
-    // Create agent task executor adapter
-    const agentTaskExecutor: IAgentTaskExecutor = {
-      async executeTask(params) {
-        try {
-          const agentTaskService = getAgentTaskApplicationService();
-          const result = await agentTaskService.createAndExecuteTask({
-            agentId: params.agentId,
-            name: `Scheduled execution: ${params.instructions.substring(0, 50)}...`,
-            instructions: {
-              instructions: params.instructions,
-              tools: params.tools,
-              servers: params.servers,
-              metadata: params.metadata
-            },
-            timeoutSeconds: params.timeoutSeconds || 300
-          });
-
-          return {
-            success: result.executionResult.success,
-            taskId: result.task.id.value,
-            error: result.executionResult.error
-          };
-        } catch (error) {
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown execution error'
-          };
-        }
-      }
-    };
-
-    this.eventDispatcher = new EventDispatcher(
-      this.dispatchEventRepository,
-      agentTaskExecutor
-    );
-
-    // Initialize event scheduling infrastructure
-    this.eventScheduler = new PostgresEventScheduler();
-
-    // Initialize application services
-    this.schedulingApplicationService = new SchedulingApplicationService(
-      this.scheduleManager,
-      this.eventDispatcher,
-      this.scheduledJobRepository,
-      this.dispatchEventRepository
-    );
-
-    this.eventDrivenSchedulingService = new EventDrivenSchedulingService(
-      this.schedulingApplicationService,
-      this.eventScheduler
-    );
-
-    console.log('✅ Scheduling Domain DI Container initialized successfully');
+  private autoInitialize(): void {
+    try {
+      // Import db clients dynamically to avoid circular dependencies
+      const { db, rawClient } = require('@/lib/db/client');
+      this.initialize(db, rawClient);
+      console.log('✅ TaskSchedulingContainer auto-initialized successfully');
+    } catch (error) {
+      console.warn('⚠️ TaskSchedulingContainer auto-initialization failed, will require manual initialization:', error);
+    }
   }
 
-  // Essential service getters - removed bloat, keeping only main orchestrators
-
-  getSchedulingApplicationService(): SchedulingApplicationService {
-    return this.schedulingApplicationService;
+  static getInstance(): TaskSchedulingContainer {
+    if (!TaskSchedulingContainer.instance) {
+      TaskSchedulingContainer.instance = new TaskSchedulingContainer();
+    }
+    return TaskSchedulingContainer.instance;
   }
-
-  getEventDrivenSchedulingService(): EventDrivenSchedulingService {
-    return this.eventDrivenSchedulingService;
-  }
-
-  getEventScheduler(): IEventScheduler {
-    return this.eventScheduler;
-  }
-
-  // Utility methods for testing and monitoring
 
   /**
-   * Reset all repositories (useful for testing)
+   * Initialize the container with database clients
    */
-  resetRepositories(): void {
-    this.scheduledJobRepository = new MemoryScheduledJobRepository();
-    this.dispatchEventRepository = new MemoryDispatchEventRepository();
+  initialize(db: DbClient, rawClient: postgres.Sql, ragIndexingService?: RagIndexingApplicationService): void {
+    if (this.isInitialized) {
+      console.warn('TaskSchedulingContainer is already initialized');
+      return;
+    }
+
+    // Register repositories
+    const taskRepository = new DrizzleTaskRepository(db);
+    const agentRepository = new DrizzleAgentRepository(db);
     
-    // Reinitialize all services with fresh repositories
-    this.initializeContainer();
+    this.services.set('ITaskRepository', taskRepository);
+    this.services.set('IAgentRepository', agentRepository);
+
+    // Register domain services
+    const taskQueueService = new TaskQueueService({
+      maxConcurrentTasks: 10,
+      retryDelayMs: 30000,
+      maxRetries: 3,
+      timeoutMs: 300000
+    });
+    
+    const schedulerService = new SchedulerService(agentRepository);
+    
+    this.services.set('ITaskQueueService', taskQueueService);
+    this.services.set('ISchedulerService', schedulerService);
+
+    // Register application service
+    const taskSchedulingApplicationService = new TaskSchedulingApplicationService(
+      taskRepository,
+      taskQueueService,
+      schedulerService,
+      ragIndexingService
+    );
+    
+    this.services.set('TaskSchedulingApplicationService', taskSchedulingApplicationService);
+    
+    // Optional RAG service
+    if (ragIndexingService) {
+      this.services.set('RagIndexingApplicationService', ragIndexingService);
+    }
+
+    this.isInitialized = true;
   }
 
   /**
-   * Get container health status
+   * Get all scheduling services
    */
-  async getHealthStatus(): Promise<{
-    healthy: boolean;
-    repositories: Record<string, boolean>;
-    services: Record<string, boolean>;
-  }> {
-    const repositoryHealth = {
-      scheduledJobRepository: this.scheduledJobRepository !== null,
-      dispatchEventRepository: this.dispatchEventRepository !== null
-    };
-
-    const serviceHealth = {
-      scheduleManager: this.scheduleManager !== null,
-      eventDispatcher: this.eventDispatcher !== null,
-      schedulingApplicationService: this.schedulingApplicationService !== null,
-      eventDrivenSchedulingService: this.eventDrivenSchedulingService !== null,
-      eventScheduler: this.eventScheduler !== null
-    };
-
-    const allHealthy = Object.values(repositoryHealth).every(h => h) && 
-                      Object.values(serviceHealth).every(h => h);
+  getServices(): TaskSchedulingServices {
+    if (!this.isInitialized) {
+      throw new Error('TaskSchedulingContainer not initialized. Call initialize() first.');
+    }
 
     return {
-      healthy: allHealthy,
-      repositories: repositoryHealth,
-      services: serviceHealth
+      ITaskRepository: this.services.get('ITaskRepository'),
+      IAgentRepository: this.services.get('IAgentRepository'),
+      ITaskQueueService: this.services.get('ITaskQueueService'),
+      ISchedulerService: this.services.get('ISchedulerService'),
+      TaskSchedulingApplicationService: this.services.get('TaskSchedulingApplicationService'),
+      RagIndexingApplicationService: this.services.get('RagIndexingApplicationService')
     };
+  }
+
+  /**
+   * Get task scheduling application service (main entry point)
+   */
+  getTaskSchedulingApplicationService(): TaskSchedulingApplicationService {
+    if (!this.isInitialized) {
+      throw new Error('TaskSchedulingContainer not initialized. Call initialize() first.');
+    }
+    
+    return this.services.get('TaskSchedulingApplicationService');
+  }
+
+  /**
+   * Get task repository
+   */
+  getTaskRepository(): ITaskRepository {
+    if (!this.isInitialized) {
+      throw new Error('TaskSchedulingContainer not initialized. Call initialize() first.');
+    }
+    
+    return this.services.get('ITaskRepository');
+  }
+
+  /**
+   * Get task queue service
+   */
+  getTaskQueueService(): ITaskQueueService {
+    if (!this.isInitialized) {
+      throw new Error('TaskSchedulingContainer not initialized. Call initialize() first.');
+    }
+    
+    return this.services.get('ITaskQueueService');
+  }
+
+  /**
+   * Get scheduler service
+   */
+  getSchedulerService(): ISchedulerService {
+    if (!this.isInitialized) {
+      throw new Error('TaskSchedulingContainer not initialized. Call initialize() first.');
+    }
+    
+    return this.services.get('ISchedulerService');
+  }
+
+  /**
+   * Check if container is initialized
+   */
+  get initialized(): boolean {
+    return this.isInitialized;
+  }
+
+  /**
+   * Reset container (useful for testing)
+   */
+  reset(): void {
+    this.services.clear();
+    this.isInitialized = false;
+    TaskSchedulingContainer.instance = null as any;
   }
 }
 
-// Export singleton instance functions - simplified, removed getter bloat
-export const getSchedulingContainer = (): SchedulingContainer => {
-  return SchedulingContainer.getInstance();
+// Export singleton instance and convenience functions
+export const taskSchedulingContainer = TaskSchedulingContainer.getInstance();
+
+// Convenience getters that match the original API
+export const getTaskSchedulingApplicationService = (): TaskSchedulingApplicationService => {
+  return taskSchedulingContainer.getTaskSchedulingApplicationService();
 };
 
-// Main orchestration services
-export const getSchedulingApplicationService = (): SchedulingApplicationService => {
-  return getSchedulingContainer().getSchedulingApplicationService();
+export const getTaskRepository = (): ITaskRepository => {
+  return taskSchedulingContainer.getTaskRepository();
 };
 
-export const getEventDrivenSchedulingService = (): EventDrivenSchedulingService => {
-  return getSchedulingContainer().getEventDrivenSchedulingService();
+export const getTaskQueueService = (): ITaskQueueService => {
+  return taskSchedulingContainer.getTaskQueueService();
 };
 
-export const getEventScheduler = (): IEventScheduler => {
-  return getSchedulingContainer().getEventScheduler();
+export const getSchedulerService = (): ISchedulerService => {
+  return taskSchedulingContainer.getSchedulerService();
 };
-
-// Direct service exports for convenience
-const container = getSchedulingContainer();
-export const schedulingApplicationService = container.getSchedulingApplicationService();
-export const eventDrivenSchedulingService = container.getEventDrivenSchedulingService();
-export const eventScheduler = container.getEventScheduler();

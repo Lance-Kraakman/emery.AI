@@ -5,7 +5,7 @@
 import { useState, useTransition } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { createFieldAction, deleteFieldAction } from '@/app/actions/fields';
-import type { Field } from '@/app/actions/types';
+import type { Field } from '@/ddd/domain/fields/entities/field';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -182,7 +182,7 @@ export default function FieldManager({ tableId, organizationId, fields, availabl
       ) : (
         <div className="space-y-2">
           {fields.map((field) => (
-            <Card key={field.id}>
+            <Card key={field.id.value}>
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -197,7 +197,7 @@ export default function FieldManager({ tableId, organizationId, fields, availabl
                     )}
                   </div>
                   <Button
-                    onClick={() => handleDeleteField(field.id)}
+                    onClick={() => handleDeleteField(field.id.value)}
                     disabled={isPending}
                     variant="ghost"
                     size="icon"

@@ -18,8 +18,8 @@ import { S3FileStorageRepository } from '@/ddd/infrastructure/storage/repositori
 // Agent domain imports
 import { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import { DrizzleAgentRepository } from '@/ddd/infrastructure/db/repositories/agents/drizzle-agent-repository';
-import { ITaskRepository } from '@/ddd/domain/agents/repositories/task-repository';
-import { DrizzleTaskRepository } from '@/ddd/infrastructure/db/repositories/agents/drizzle-task-repository';
+import { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
+import { DrizzleTaskRepository } from '@/ddd/infrastructure/db/repositories/tasks/drizzle-task-repository';
 import { IAgentExecutionRepository } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 import { GrpcAgentExecutionRepository } from '@/ddd/infrastructure/execution/grpc-agent-execution-repository';
 import { AgentTaskApplicationService } from '@/ddd/application/services/agents/agent-task-application-service';
@@ -64,15 +64,13 @@ import { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-mess
 import { DrizzleChatMessageRepository } from '@/ddd/infrastructure/db/repositories/chat/drizzle-chat-message-repository';
 
 // RAG domain imports
-import { 
-  DrizzleRagIndexRepository,
-  DrizzleRagDocumentRepository,
-  DrizzleRagQueryLogRepository
-} from '@/ddd/infrastructure/db/repositories/rag';
+import { DrizzleRagIndexRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-index-repository';
+import { DrizzleRagDocumentRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-document-repository';
+import { DrizzleRagQueryLogRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-query-log-repository';
 import { LlamaIndexContentProcessor } from '@/ddd/application/services/content-processing/llamaindex-content-processor';
-import { AutoReindexService } from '@/ddd/application/services/rag/auto-reindex-service';
 import { EmbeddingService } from '@/ddd/application/services/embedding-service';
 import { SearchAnalyticsService } from '@/ddd/application/services/search-analytics-service';
+import type { IIndexingDomainService, ISearchDomainService } from '@/ddd/domain/rag/services';
 import { IndexingDomainService, SearchDomainService } from '@/ddd/domain/rag/services';
 import { RagIndexingApplicationService } from '@/ddd/application/services/rag/rag-indexing-application-service';
 import { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
@@ -135,13 +133,12 @@ interface RepositoryRegistry {
   LlamaIndexContentProcessor: LlamaIndexContentProcessor;
 
   // RAG domain services
-  IndexingDomainService: IndexingDomainService;
-  SearchDomainService: SearchDomainService;
+  IndexingDomainService: IIndexingDomainService;
+  SearchDomainService: ISearchDomainService;
 
   // RAG use case services
   RagIndexingApplicationService: RagIndexingApplicationService;
   RagSearchApplicationService: RagSearchApplicationService;
-  AutoReindexService: AutoReindexService;
 }
 
 export class DIContainer {
@@ -216,7 +213,7 @@ export class DIContainer {
     // Register agent domain repositories and services
     const agentRepository = new DrizzleAgentRepository(db);
     const roleRepository = new DrizzleRoleRepository(db, rawClient);
-    const taskRepository = new DrizzleTaskRepository();
+    const taskRepository = new DrizzleTaskRepository(db);
     const agentExecutionRepository = new GrpcAgentExecutionRepository(agentRepository);
     const agentTaskApplicationService = new AgentTaskApplicationService(
       agentRepository,
@@ -232,11 +229,31 @@ export class DIContainer {
       teamRepository,
       agentRepository
     );
+
+    // Register field repository and services
+    const fieldRepository = new DrizzleFieldRepository(db);
+
+    // Create consolidated Arrow table data service
+    const arrowTableDataService = new ArrowTableDataService(
+      tableQueryService,
+      this.repositories.get('IDynamicTableRepository'),
+      fieldRepository
+    );
+        
+    // Create table service with consolidated data service
+    const tableService = new TableService(
+      fieldRepository,
+      arrowTableDataService,
+      tableQueryService
+    );
+
     // Initialize DatabaseApplicationService with proper dependencies
     const databaseApplicationService = new DatabaseApplicationService(
-      databaseRepository,
+      tableService,
+      fieldRepository,
       this.repositories.get('IOrganizationRepository')
     );
+        
     const permissionApplicationService = new PermissionApplicationService(
       this.repositories.get('IRoleRepository'),
       this.repositories.get('IUserRepository')
@@ -262,24 +279,6 @@ export class DIContainer {
     this.repositories.set('PermissionApplicationService', permissionApplicationService);
     this.repositories.set('UserOrganizationApplicationService', userOrganizationApplicationService);
     this.repositories.set('InvitationApplicationService', invitationApplicationService);
-    
-    // Register field repository and services
-    const fieldRepository = new DrizzleFieldRepository(db);
-    
-    // Create consolidated Arrow table data service
-    const arrowTableDataService = new ArrowTableDataService(
-      tableQueryService,
-      null as any, // Will be set after TableService creation
-      fieldRepository
-    );
-    
-    // Create table service with consolidated data service
-    const tableService = new TableService(
-      fieldRepository,
-      arrowTableDataService,
-      tableQueryService
-    );
-    
     this.repositories.set('IFieldRepository', fieldRepository);
     this.repositories.set('IDynamicTableRepository', tableService);
     
@@ -316,7 +315,8 @@ export class DIContainer {
     const rowApplicationService = new RowApplicationService(
       tableService,
       fieldRepository,
-      fileStorageRepository
+      fileStorageRepository,
+      tableQueryService
     );
     
     // Initialize FileApplicationService with proper dependencies  
@@ -376,11 +376,9 @@ export class DIContainer {
       ragDocumentRepository,
       indexingDomainService,
       this.repositories.get('IOrganizationRepository'),
-      tableService, // Use existing table service
       agentRepository,
       databaseRepository,
       teamRepository,
-      fileStorageRepository2
     );
     
     const ragSearchApplicationService = new RagSearchApplicationService(
@@ -391,11 +389,9 @@ export class DIContainer {
       searchAnalyticsService
     );
     
-    const autoReindexService = new AutoReindexService();
     
     this.repositories.set('RagIndexingApplicationService', ragIndexingApplicationService);
     this.repositories.set('RagSearchApplicationService', ragSearchApplicationService);
-    this.repositories.set('AutoReindexService', autoReindexService);
 
     this.isInitialized = true;
     console.log('✅ DIContainer initialized with repositories, file storage, agent services, and RAG services');
@@ -484,15 +480,13 @@ type ServiceMap = {
   RagIndexRepository: DrizzleRagIndexRepository;
   RagDocumentRepository: DrizzleRagDocumentRepository;
   RagQueryLogRepository: DrizzleRagQueryLogRepository;
-  FileStorageRepository2: DrizzleFileStorageRepository;
   EmbeddingService: EmbeddingService;
   SearchAnalyticsService: SearchAnalyticsService;
   LlamaIndexContentProcessor: LlamaIndexContentProcessor;
-  IndexingDomainService: IndexingDomainService;
-  SearchDomainService: SearchDomainService;
+  IndexingDomainService: IIndexingDomainService;
+  SearchDomainService: ISearchDomainService;
   RagIndexingApplicationService: RagIndexingApplicationService;
   RagSearchApplicationService: RagSearchApplicationService;
-  AutoReindexService: AutoReindexService;
 };
 
 // Generate getter functions dynamically
@@ -539,7 +533,6 @@ export const getInvitationRepository = createGetter('InvitationRepository');
 export const getDatabaseRepository = createGetter('DatabaseRepository');
 export const getChatRepository = createGetter('ChatRepository');
 export const getChatMessageRepository = createGetter('ChatMessageRepository');
-export const getFileFieldService = createGetter('FileFieldService');
 export const getAgentTaskApplicationService = createGetter('AgentTaskApplicationService');
 export const getAgentApplicationService = createGetter('AgentApplicationService');
 export const getTeamApplicationService = createGetter('TeamApplicationService');
@@ -557,7 +550,6 @@ export const getChatApplicationService = createGetter('ChatApplicationService');
 export const getRagIndexRepository = createGetter('RagIndexRepository');
 export const getRagDocumentRepository = createGetter('RagDocumentRepository');
 export const getRagQueryLogRepository = createGetter('RagQueryLogRepository');
-export const getFileStorageRepository2 = createGetter('FileStorageRepository2');
 export const getEmbeddingService = createGetter('EmbeddingService');
 export const getSearchAnalyticsService = createGetter('SearchAnalyticsService');
 export const getLlamaIndexContentProcessor = createGetter('LlamaIndexContentProcessor');
@@ -565,7 +557,6 @@ export const getIndexingDomainService = createGetter('IndexingDomainService');
 export const getSearchDomainService = createGetter('SearchDomainService');
 export const getRagIndexingApplicationService = createGetter('RagIndexingApplicationService');
 export const getRagSearchApplicationService = createGetter('RagSearchApplicationService');
-export const getAutoReindexService = createGetter('AutoReindexService');
 
 // Helper to initialize container from existing clients
 export function initializeDI(db: DbClient, rawClient: postgres.Sql): void {

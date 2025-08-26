@@ -12,7 +12,7 @@ import { FieldManagerDialog } from "./components/FieldManagerDialog"
 import { useEmeryData, EmeryTable } from "@/hooks/useEmeryData"
 import { getFields } from "@/app/actions/fields"
 import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
-import type { Field } from "@/app/actions/types"
+import type { Field } from "@/ddd/domain/fields/entities/field"
 import type { RowData } from "@/types/db"
 
 export function DataViewsClientSimplified() {
@@ -83,7 +83,7 @@ export function DataViewsClientSimplified() {
 
     try {
       // Find the field to get its slug
-      const field = fields.find(f => f.id === fieldId)
+      const field = fields.find(f => f.id.value === fieldId)
       if (!field) {
         console.error('Field not found for fieldId:', fieldId)
         return
