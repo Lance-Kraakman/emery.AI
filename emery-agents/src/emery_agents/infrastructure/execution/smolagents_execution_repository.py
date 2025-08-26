@@ -299,17 +299,14 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
         self.agent_cache[context_id] = capability_agent
         return capability_agent
     
-    async def _create_step_agent(self, step: StepConfig, hf_token: str) -> Union[CodeAgent, ToolCallingAgent]:
+    async def _create_step_agent(self, step: StepConfig) -> Union[CodeAgent, ToolCallingAgent]:
         """
         Create step-level agent based on step type.
         
-        AIDEV-NOTE: Ported from SmolAgentsExecutionService._create_step_agent()
+        AIDEV-NOTE: Updated to use centralized model provider with proper step type routing.
         """
-        model_name = step.model or (
-            "Qwen/Qwen2.5-Coder-32B-Instruct" if step.type == StepType.CODE_STEP 
-            else "Qwen/Qwen2.5-14B-Instruct"
-        )
-        model = InferenceClientModel(model_name, token=hf_token)
+        # Get appropriate model for this step type using centralized provider
+        model = self.model_provider.get_model_for_step_type(step.type, model_override=step.model)
         
         # Load tools for this step
         step_tools = []

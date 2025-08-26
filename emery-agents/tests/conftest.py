@@ -133,3 +133,132 @@ def pipedream_env():
     """Mock Pipedream environment variables."""
     with patch.dict(os.environ, {'PIPEDREAM_API_KEY': 'test-api-key'}):
         yield
+
+
+# AIDEV-NOTE: Enhanced fixtures for standardized testing infrastructure
+@pytest.fixture
+def mock_model_provider():
+    """Mock model provider for standardized testing."""
+    from emery_agents.domain.ai.services.model_provider_service import ModelType
+    from emery_agents.core.types import StepType
+    
+    provider = Mock()
+    
+    # Mock a simple model object
+    mock_model = Mock()
+    mock_model.name = "test-model"
+    
+    # Standard method mocks
+    provider.get_model_for_step_type = Mock(return_value=mock_model)
+    provider.get_model_by_type = Mock(return_value=mock_model)
+    provider.get_default_model_for_capability = Mock(return_value=mock_model)
+    provider.list_available_models = Mock(return_value=[
+        'Qwen/Qwen2.5-Coder-32B-Instruct',
+        'Qwen/Qwen2.5-14B-Instruct',
+        'Qwen/Qwen2.5-Coder-7B-Instruct'
+    ])
+    provider.is_model_available = Mock(return_value=True)
+    provider.get_model_info = Mock(return_value={
+        'name': 'test-model',
+        'model_id': 'Qwen/Qwen2.5-14B-Instruct',
+        'available': True
+    })
+    
+    return provider
+
+
+@pytest.fixture
+def real_model_provider(mock_hf_env):
+    """Real model provider for integration tests."""
+    from emery_agents.infrastructure.ai.smolagents_model_provider import SmolagentsModelProvider
+    return SmolagentsModelProvider()
+
+
+@pytest.fixture
+def execution_context_factory():
+    """Factory for creating execution contexts."""
+    from emery_agents.domain.execution.entities.execution_context import ExecutionContext, ExecutionMode
+    
+    def create_context(
+        instructions: str = "Test execution",
+        available_tools: List[str] = None,
+        capability_name: str = None,
+        max_steps: int = 10,
+        timeout_seconds: int = 300
+    ):
+        return ExecutionContext(
+            instructions=instructions,
+            available_tools=available_tools or ['test_tool'],
+            capability_name=capability_name,
+            max_steps=max_steps,
+            timeout_seconds=timeout_seconds,
+            mode=ExecutionMode.INSTRUCTION if not capability_name else ExecutionMode.CAPABILITY
+        )
+    
+    return create_context
+
+
+@pytest.fixture
+def fixture_data_loader():
+    """Load test fixtures from JSON files."""
+    def load_fixture_data():
+        try:
+            from emery_agents.tests.fixtures.fixture_loader import FixtureLoader
+            loader = FixtureLoader()
+            return {
+                'tasks': loader.load_tasks(),
+                'agents': loader.load_agents()
+            }
+        except Exception as e:
+            # Return empty data if fixtures can't be loaded
+            logger.warning(f"Could not load fixture data: {e}")
+            return {'tasks': [], 'agents': []}
+    
+    return load_fixture_data
+
+
+@pytest.fixture
+def progress_tracker():
+    """Track execution progress for testing."""
+    events = []
+    
+    def track_event(event: Dict[str, Any]):
+        events.append(event)
+        logger.info(f"📊 Progress Event: {event.get('status')} - {event.get('step_id')}")
+    
+    # Provide both the events list and the tracker function
+    return events, track_event
+
+
+@pytest.fixture
+def test_categories():
+    """Standardized test categories for organization."""
+    return {
+        'validation': {
+            'name': 'Validation Tests',
+            'description': 'Basic validation and setup tests'
+        },
+        'unit': {
+            'name': 'Unit Tests', 
+            'description': 'Individual component tests with mocks'
+        },
+        'integration': {
+            'name': 'Integration Tests',
+            'description': 'Multi-component tests with real dependencies'
+        },
+        'real_execution': {
+            'name': 'Real Execution Tests',
+            'description': 'Full end-to-end tests with AI models'
+        }
+    }
+
+
+@pytest.fixture
+def enhanced_mock_integrations(mock_emery_client, mock_smolagents, mock_mcp_servers, mock_model_provider):
+    """Enhanced mock integrations with model provider."""
+    return {
+        "emery_client": mock_emery_client,
+        "smolagents": mock_smolagents,
+        "mcp_servers": mock_mcp_servers,
+        "model_provider": mock_model_provider
+    }
