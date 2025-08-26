@@ -66,7 +66,7 @@ async def main():
         description="Helps with email tasks",
         persona="Helpful email assistant",
         agent_type=AgentType.TOOL_CALLING_AGENT,
-        model="Qwen/Qwen2.5-72B-Instruct",
+        model="Qwen/Qwen2.5-14B-Instruct",
         steps=[
             AgentStep(
                 id="step1",

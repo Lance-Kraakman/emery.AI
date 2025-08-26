@@ -11,11 +11,6 @@ from .mappers import ProtoMapper
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-
-
-
-
-
 class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer):
     """gRPC service implementation for AgentWorker."""
     

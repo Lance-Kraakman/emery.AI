@@ -37,7 +37,7 @@
         "id": "transform_data",
         "type": "CODE_STEP",
         "instructions": "Apply necessary transformations to the data",
-        "model": "Qwen/Qwen2.5-72B-Instruct"
+        "model": "Qwen/Qwen2.5-14B-Instruct"
       },
       {
         "id": "output_results",
@@ -85,19 +85,19 @@
         "id": "structure_content",
         "type": "CODE_STEP",
         "instructions": "Structure and organize the content logically",
-        "model": "Qwen/Qwen2.5-72B-Instruct"
+        "model": "Qwen/Qwen2.5-14B-Instruct"
       },
       {
         "id": "write_content",
         "type": "CODE_STEP",
         "instructions": "Write the final content with proper formatting",
-        "model": "Qwen/Qwen2.5-72B-Instruct"
+        "model": "Qwen/Qwen2.5-14B-Instruct"
       },
       {
         "id": "review_quality",
         "type": "CODE_STEP",
         "instructions": "Review and improve content quality",
-        "model": "Qwen/Qwen2.5-72B-Instruct"
+        "model": "Qwen/Qwen2.5-14B-Instruct"
       }
     ]
   }

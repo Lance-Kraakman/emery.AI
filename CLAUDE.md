@@ -67,8 +67,8 @@ NEXTAUTH_URL=http://localhost:3000
 ```
 
 ### AI Models Used
-- **Chat**: `Qwen/Qwen2.5-Coder-32B-Instruct` (code generation)
-- **General**: `Qwen/Qwen2.5-72B-Instruct` (reasoning)
+- **Chat**: `Qwen/Qwen2.5-Coder-14B-Instruct` (code generation)
+- **General**: `Qwen/Qwen2.5-14B-Instruct` (reasoning)
 - **Fast**: `Qwen/Qwen2.5-Coder-7B-Instruct` (quick responses)
 - **Embeddings**: `sentence-transformers/all-mpnet-base-v2`
 

@@ -200,7 +200,7 @@ export class DrizzleUserRepository implements IUserRepository {
     const relationshipData = {
       userId: data.userId.value,
       organizationId: data.organizationId.value,
-      role: data.role || 'member',
+      role: data.role ? data.role.value : 'member',
     };
 
     const [newRelationship] = await this.db
@@ -212,7 +212,14 @@ export class DrizzleUserRepository implements IUserRepository {
       throw new Error('Failed to create user-organization relationship');
     }
 
-    return newRelationship;
+    // Convert database result back to domain entity
+    return {
+      id: newRelationship.id,
+      userId: UserId.fromString(newRelationship.userId),
+      organizationId: OrganizationId.fromNumber(newRelationship.organizationId),
+      role: OrganizationRole.fromString(newRelationship.role),
+      createdAt: newRelationship.createdAt
+    };
   }
 
   async removeUserFromOrganization(userId: UserId, organizationId: OrganizationId): Promise<void> {
@@ -269,7 +276,14 @@ export class DrizzleUserRepository implements IUserRepository {
       throw new Error(`User-organization relationship not found or could not be updated`);
     }
 
-    return updatedRelationship;
+    // Convert database result back to domain entity
+    return {
+      id: updatedRelationship.id,
+      userId: UserId.fromString(updatedRelationship.userId),
+      organizationId: OrganizationId.fromNumber(updatedRelationship.organizationId),
+      role: OrganizationRole.fromString(updatedRelationship.role),
+      createdAt: updatedRelationship.createdAt
+    };
   }
 
   // Session management (NextAuth integration)
@@ -277,7 +291,7 @@ export class DrizzleUserRepository implements IUserRepository {
     // Convert Value Objects to primitives for database
     const sessionData = {
       sessionToken: data.sessionToken,
-      userId: data.userId?.value || data.userId as string, // Handle both Value Object and string
+      userId: data.userId.value, // UserId is always a value object here
       expires: data.expires
     };
     
@@ -293,7 +307,16 @@ export class DrizzleUserRepository implements IUserRepository {
       .where(eq(sessions.sessionToken, sessionToken))
       .limit(1);
 
-    return result[0] || null;
+    if (!result[0]) {
+      return null;
+    }
+
+    // Convert database result back to domain entity
+    return {
+      sessionToken: result[0].sessionToken,
+      userId: UserId.fromString(result[0].userId),
+      expires: result[0].expires
+    };
   }
 
   async deleteSession(sessionToken: string): Promise<void> {
@@ -333,7 +356,7 @@ export class DrizzleUserRepository implements IUserRepository {
       .from(users)
       .where(eq(users.roleId, roleId));
 
-    return result;
+    return result.map(user => this.mapToEntity(user));
   }
 
   // Business logic operations
@@ -384,6 +407,8 @@ export class DrizzleUserRepository implements IUserRepository {
 
       const userOrgs = orgsResult.map(r => ({
         ...r.organization,
+        id: OrganizationId.fromNumber(r.organization.id),
+        name: OrganizationName.fromString(r.organization.name),
         viewConfig: r.organization.viewConfig as Record<string, any> | null
       }));
 
@@ -397,14 +422,15 @@ export class DrizzleUserRepository implements IUserRepository {
   // AIDEV-NOTE: Boundary conversion - maps database primitives to domain Value Objects
   private mapToEntity(data: any): User {
     return {
-      id: data.id,
+      id: UserId.fromString(data.id),
       name: data.name,
       email: data.email ? EmailAddress.fromString(data.email) : null,
       emailVerified: data.emailVerified,
       image: data.image,
       currentOrganizationId: data.currentOrganizationId ? OrganizationId.fromNumber(data.currentOrganizationId) : null,
       roleId: data.roleId,
-      apiKey: data.apiKey ? ApiKey.fromString(data.apiKey) : null
+      apiKey: data.apiKey ? ApiKey.fromString(data.apiKey) : null,
+      createdAt: data.createdAt
     };
   }
 }
