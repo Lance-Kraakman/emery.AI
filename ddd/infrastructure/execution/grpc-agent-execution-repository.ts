@@ -64,7 +64,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
           tools: tools || [], 
           servers: servers || [] 
         },
-        agent: this.mapAgentToAgentData(agent),
+        agent: agent,
         triggerData: {}, // Empty for proto compatibility
         organizationId: organizationIdStr,
         ownerId: agent.ownerId.value,
@@ -93,6 +93,10 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         // Map proto progress to TypeScript types
         const taskUpdate = mapTaskProgressFromProto(progress);
         
+        // Calculate completion time for terminal states
+        const isTerminal = ['completed', 'failed', 'cancelled'].includes(taskUpdate.status?.value || '');
+        const calculatedCompletedAt = isTerminal ? new Date() : undefined;
+        
         // Update execution tracking
         this.activeExecutions.set(executionId, {
           executionId,
@@ -102,7 +106,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
           result: taskUpdate.result,
           error: taskUpdate.error,
           startedAt,
-          completedAt: taskUpdate.completedAt
+          completedAt: calculatedCompletedAt
         });
         
         // Update final status based on progress

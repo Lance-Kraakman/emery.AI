@@ -11,7 +11,7 @@ import type { Result, CreateTableData } from "./types";
 import type { CreateTableCommand } from "@/ddd/application/services/tables/table-application-service";
 
 // Import the DI setup to ensure container is initialized
-import "@/ddd/application/di/setup";
+// AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
 
 export async function createTable(data: CreateTableData & { databaseId: number; description?: string }, revalidateUrl?: string): Promise<Result> {
   try {

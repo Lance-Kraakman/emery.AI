@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 
 // Import the DI setup to ensure container is initialized
-import "@/ddd/application/di/setup";
+// AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
 
 export async function updateOrganizationViewConfig(organizationId: number, viewConfig: any) {
   try {

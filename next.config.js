@@ -4,10 +4,12 @@ const nextConfig = {
   // output: 'standalone',
   // AIDEV-NOTE: Removed env config to allow runtime environment variable loading
   // App router is now stable in Next.js 15
+  
+  // Modern Next.js approach for native modules - replaces complex webpack externals
+  serverExternalPackages: ['@duckdb/node-api', '@duckdb/node-bindings', 'unpdf', '@z-skip/protoc', 'canvas'],
+  
   webpack: (config, { isServer }) => {
-    if (isServer) {
-      config.externals = [...config.externals, 'unpdf', '@z-skip/protoc', 'canvas', 'duckdb']
-    }
+    // Keep existing webpack config for other externals if needed
     return config
   },
   

@@ -21,9 +21,11 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         self.start_time = time.time()
         self.active_tasks: Dict[str, Any] = {}
         
-        # Initialize services
-        from ..execution.smolagents_execution_service import SmolAgentsExecutionService
-        self.execution_service = SmolAgentsExecutionService()
+        # Initialize services using DDD architecture
+        from ...application.di.container import container
+        container.initialize_defaults()
+        self.container = container  # Store container for use in other methods
+        self.agent_task_service = container.get_agent_task_service()
         self.proto_mapper = ProtoMapper()
         
         # Check HF_TOKEN at startup
@@ -57,10 +59,44 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         }
 
         try:
-            # Stream execution progress
-            async for progress in self.execution_service.execute_task(task_request):
+            # Convert TaskRequest to ExecutionContext for DDD execution
+            from ...domain.execution.services.capability_routing_service import CapabilityRoutingService
+            from ...domain.execution.repositories.execution_repository import IExecutionRepository
+            
+            routing_service = CapabilityRoutingService()
+            execution_context = routing_service.determine_execution_context(task_request)
+            
+            # Get execution repository from DI container
+            from ...application.di.container import container
+            execution_repo = container.get_repository(IExecutionRepository)
+            
+            # Stream execution progress using DDD architecture
+            async for progress_dict in execution_repo.execute_task(execution_context):
+                # Convert dict to TaskProgress entity
+                from ...core.entities import TaskProgress
+                from ...core.types import TaskStatus
+                
+                # Map status string to enum
+                status_map = {
+                    "in_progress": TaskStatus.TASK_IN_PROGRESS,
+                    "completed": TaskStatus.TASK_COMPLETED,
+                    "failed": TaskStatus.TASK_FAILED
+                }
+                
+                import json
+                task_progress = TaskProgress(
+                    task_id=task_request.task_id,
+                    status=status_map.get(progress_dict["status"], TaskStatus.TASK_IN_PROGRESS).name,
+                    step_id=progress_dict["step_id"],
+                    step_type=progress_dict["step_type"],
+                    output_json=json.dumps(progress_dict["output"]) if not isinstance(progress_dict["output"], str) else progress_dict["output"],
+                    error_message=progress_dict.get("error_message", ""),
+                    timestamp_ms=progress_dict["timestamp_ms"],
+                    progress_percent=progress_dict["progress_percent"]
+                )
+                
                 # Convert domain entity to protobuf
-                proto_progress = self.proto_mapper.task_progress_to_proto(progress)
+                proto_progress = self.proto_mapper.task_progress_to_proto(task_progress)
                 yield proto_progress
                 
         except Exception as e:
@@ -96,8 +132,10 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         hf_token = os.getenv("HF_TOKEN")
         status = WorkerStatus.WORKER_HEALTHY.name if hf_token else WorkerStatus.WORKER_UNHEALTHY.name
         
-        # Get available capabilities (from tool loader)
-        available_tools = self.execution_service.tool_registry.list_available_tools()
+        # Get available capabilities from DDD architecture
+        from ...domain.tools.repositories.tool_registry_repository import IToolRegistryRepository
+        tool_registry = self.container.get_repository(IToolRegistryRepository)
+        available_tools = tool_registry.list_available_tools()
         
         worker_info = WorkerInfo(
             worker_id=self.worker_id,

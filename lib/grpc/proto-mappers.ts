@@ -6,32 +6,11 @@
  * - Worker → Proto Progress → Database (TypeScript types)
  * 
  * This file maintains the separation between:
- * - Frontend/Database types (app/actions/types.ts) - Source of truth
+ * - Frontend/Database types (@/ddd/domain/agents/entities/agent) - Source of truth
  * - Proto messages (proto/agent_worker.proto) - Transport layer only
  */
 
-import type { 
-  CreateAgentData, 
-  ToolConfig, 
-  ServerConfig, 
-  StepConfig, 
-  CapabilityConfig,
-  Task,
-  TaskStatus
-} from '../../app/actions/types';
-
-// Add missing types that we need for the gRPC integration
-export interface AgentData extends CreateAgentData {
-  id: number;
-  organizationId: number;
-  ownerId: string;
-  apiKey?: string;
-  isActive?: boolean;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-// TaskStatus is now imported from types.ts - no need to redefine it
+import { Agent, CapabilityConfig, ServerConfig, StepConfig, ToolConfig } from '@/ddd/domain/agents/entities/agent';
 
 import { 
   AgentConfig as AgentConfigProto,
@@ -45,6 +24,28 @@ import {
   InstructionConfig as InstructionConfigProto,
   StepType
 } from './generated/agent_worker';
+import { Task, TaskStatus } from '@/ddd/domain/agents/entities/task';
+
+// AgentData interface for gRPC transport (uses primitives, not domain value objects)
+export interface AgentData {
+  id: number;
+  name: string;
+  role?: string;
+  description?: string;
+  persona?: string;
+  tools?: ToolConfig[];
+  servers?: ServerConfig[];
+  trigger?: any;
+  capabilities?: CapabilityConfig[];
+  status?: any;
+  organizationId: number;
+  ownerId: string;
+  roleId?: number;
+  apiKey?: string;
+  isActive?: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
 
 // AIDEV-NOTE: These mappers ensure clean separation between TypeScript types (source of truth) 
 // and proto messages (transport only), following the architecture plan
@@ -105,7 +106,7 @@ export function mapCapabilityToProto(capability: CapabilityConfig): CapabilityCo
 /**
  * Map TypeScript AgentData to protobuf AgentConfig
  */
-export function mapAgentToProto(agent: AgentData): AgentConfigProto {
+export function mapAgentToProto(agent: Agent): AgentConfigProto {
   return {
     name: agent.name,
     role: agent.role || '',
@@ -146,7 +147,7 @@ export function createTaskRequest(params: {
     tools?: ToolConfig[];
     servers?: ServerConfig[];
   };
-  agent: AgentData;
+  agent: Agent;
   triggerData: Record<string, any>;
   organizationId: string;
   ownerId: string;
@@ -191,59 +192,59 @@ export function createTaskRequest(params: {
 export function mapProtoStatusToTaskStatus(protoStatus: number | string): TaskStatus {
   // Handle both numeric and string enum values (gRPC client configured with enums: String)
   if (typeof protoStatus === 'string') {
-    const stringStatusMap: Record<string, TaskStatus> = {
+    const stringStatusMap: Record<string, string> = {
       'TASK_PENDING': 'pending',
       'TASK_IN_PROGRESS': 'in_progress',
       'TASK_COMPLETED': 'completed',
       'TASK_FAILED': 'failed',
-      'TASK_CANCELLED': 'cancelled', // Now properly mapped to cancelled status
-      'TASK_TIMEOUT': 'timeout'      // Now properly mapped to timeout status
+      'TASK_CANCELLED': 'cancelled',
+      'TASK_TIMEOUT': 'failed' // Map timeout to failed since we don't have timeout status
     };
-    return stringStatusMap[protoStatus] || 'failed';
+    const statusString = stringStatusMap[protoStatus] || 'failed';
+    return TaskStatus.fromString(statusString);
   }
   
   // Proto enum values: TASK_PENDING=0, TASK_IN_PROGRESS=1, TASK_COMPLETED=2, TASK_FAILED=3, TASK_CANCELLED=4, TASK_TIMEOUT=5
-  const statusMap: Record<number, TaskStatus> = {
+  const statusMap: Record<number, string> = {
     0: 'pending',
     1: 'in_progress', 
     2: 'completed',
     3: 'failed',
-    4: 'cancelled', // Now properly mapped to cancelled status
-    5: 'timeout'    // Now properly mapped to timeout status
+    4: 'cancelled',
+    5: 'failed' // Map timeout to failed since we don't have timeout status
   };
   
-  return statusMap[protoStatus] || 'failed';
+  const statusString = statusMap[protoStatus] || 'failed';
+  return TaskStatus.fromString(statusString);
 }
 
 /**
- * Map protobuf TaskProgress to partial Task update
+ * Map protobuf TaskProgress to parsed task update data
+ * Use with existing Task domain methods: task.start(), task.complete(), task.fail(), etc.
  */
-export function mapTaskProgressFromProto(progress: TaskProgressProto): Partial<Task> {
-  const update: Partial<Task> = {
-    status: mapProtoStatusToTaskStatus(progress.status as any)
-  };
-
-  // Parse JSON output if available
+export function mapTaskProgressFromProto(progress: TaskProgressProto): {
+  status: TaskStatus;
+  result?: any;
+  error?: string;
+} {
+  const status = mapProtoStatusToTaskStatus(progress.status as any);
+  
+  // Parse result if available
+  let result: any = undefined;
   if (progress.output_json) {
     try {
-      update.result = JSON.parse(progress.output_json);
+      result = JSON.parse(progress.output_json);
     } catch (error) {
       console.warn('Failed to parse task output JSON:', error);
-      update.result = { raw_output: progress.output_json };
+      result = { raw_output: progress.output_json };
     }
   }
 
-  // Set error message if failed
-  if (progress.error_message) {
-    update.error = progress.error_message;
-  }
-
-  // Set completion timestamp for final states
-  if (['completed', 'failed', 'cancelled', 'timeout'].includes(update.status!.value)) {
-    update.completedAt = new Date();
-  }
-
-  return update;
+  return {
+    status,
+    result,
+    error: progress.error_message || undefined
+  };
 }
 
 /**

@@ -1,7 +1,8 @@
 """Execution module for agent task execution."""
 
-from .capability_router import CapabilityRouter
+# AIDEV-NOTE: Legacy execution code moved to DDD architecture
+# Main execution logic is now in:
+# - domain/execution/services/capability_routing_service.py
+# - infrastructure/execution/smolagents_execution_repository.py
 
-__all__ = [
-    "CapabilityRouter",
-]
+__all__ = []

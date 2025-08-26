@@ -8,14 +8,12 @@ through domain entities to infrastructure. Tests the full orchestration.
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
 
-from src.emery_agents.application.di.agent_container import create_agent_container
-from src.emery_agents.application.commands.create_task_command import CreateTaskCommand
-from src.emery_agents.application.commands.execute_task_command import ExecuteTaskCommand
-from src.emery_agents.domain.agents.entities.agent import Agent, AgentConfig
-from src.emery_agents.domain.agents.entities.task import Task, TaskConfig, TaskInstructions
-from src.emery_agents.domain.agents.repositories.agent_execution_repository import AgentExecutionResult
-from src.emery_agents.domain.agents.value_objects.agent_id import AgentId
-from src.emery_agents.domain.agents.value_objects.task_id import TaskId
+from emery_agents.application.di.container import Container, container
+from emery_agents.domain.agents.entities.agent import Agent, AgentConfig
+from emery_agents.domain.agents.entities.task import Task, TaskConfig, TaskInstructions
+from emery_agents.domain.execution.entities.execution_context import ExecutionContext, ExecutionMode
+from emery_agents.domain.shared.value_objects.ids import AgentId, TaskId, OrganizationId
+from emery_agents.domain.agents.value_objects.agent_value_objects import AgentName, AgentStatus, ApiKey
 
 
 class TestAgentTaskIntegrationFlow:
@@ -27,229 +25,293 @@ class TestAgentTaskIntegrationFlow:
         return {
             'agent_repo': AsyncMock(),
             'task_repo': AsyncMock(),
-            'execution_repo': AsyncMock(),
-            'tool_repo': AsyncMock()
+            'execution_repo': Mock(),  # Use regular Mock for execute_task returning async iterator
+            'tool_repo': Mock()  # Tool repo methods are sync, not async
         }
     
     @pytest.fixture
     def test_agent(self):
-        """Create a test agent for integration tests."""
+        """Create a test agent for integration tests with value objects."""
         config = AgentConfig(
-            name="Integration Test Agent",
-            organization_id=1,
+            name=AgentName("Integration Test Agent"),
+            organization_id=OrganizationId(1),
             owner_id="user_123",
-            status="active",
-            api_key="test_api_key"
+            status=AgentStatus.active(),
+            api_key=ApiKey("ak_integration_secure_production_abcdef789")
         )
-        return Agent.create(config)
+        agent = Agent.create(config)
+        agent.id = AgentId(123)  # Set test ID
+        return agent
     
     @pytest.fixture
     def container_with_mocks(self, mock_repositories):
         """Create container with mocked dependencies."""
-        container = create_agent_container()
+        from emery_agents.domain.agents.repositories.agent_repository import IAgentRepository
+        from emery_agents.domain.agents.repositories.task_repository import ITaskRepository
+        from emery_agents.domain.execution.repositories.execution_repository import IExecutionRepository
+        from emery_agents.domain.tools.repositories.tool_registry_repository import IToolRegistryRepository
         
-        # Patch the container's repository methods
-        with patch.object(container, 'agent_repository', return_value=mock_repositories['agent_repo']):
-            with patch.object(container, 'task_repository', return_value=mock_repositories['task_repo']):
-                with patch.object(container, 'execution_repository', return_value=mock_repositories['execution_repo']):
-                    yield container, mock_repositories
+        test_container = Container()
+        
+        # Register mock repositories
+        test_container.register_repository(IAgentRepository, mock_repositories['agent_repo'])
+        test_container.register_repository(ITaskRepository, mock_repositories['task_repo'])
+        test_container.register_repository(IExecutionRepository, mock_repositories['execution_repo'])
+        test_container.register_repository(IToolRegistryRepository, mock_repositories['tool_repo'])
+        
+        yield test_container, mock_repositories
     
     @pytest.mark.asyncio
-    async def test_complete_create_and_execute_task_flow(self, container_with_mocks, test_agent):
-        """Test complete flow: create task -> validate -> execute -> record result."""
+    async def test_complete_agent_task_service_flow(self, container_with_mocks, test_agent):
+        """Test complete AgentTaskApplicationService flow with value objects."""
         container, mocks = container_with_mocks
         
         # Setup mocks
         mocks['agent_repo'].find_by_id.return_value = test_agent
-        mocks['task_repo'].save.return_value = AsyncMock()
+        mocks['tool_repo'].is_tool_available.return_value = True
+        mocks['tool_repo'].list_available_tools.return_value = ["test_tool"]
         
-        # Mock successful execution
-        execution_result = AgentExecutionResult(
-            success=True,
-            execution_id="test_execution_id",
-            status="completed",
-            output_data={"result": "Task completed successfully"}
-        )
-        mocks['execution_repo'].execute_agent.return_value = execution_result
+        # Create proper async iterator mock
+        class AsyncIteratorMock:
+            def __init__(self, values):
+                self.values = values
+                self.index = 0
+                
+            def __aiter__(self):
+                return self
+                
+            async def __anext__(self):
+                if self.index >= len(self.values):
+                    raise StopAsyncIteration
+                value = self.values[self.index]
+                self.index += 1
+                return value
         
-        # Execute complete flow
-        result = await container.create_task_and_execute(
+        # Mock execution repository to return async iterator
+        mocks['execution_repo'].execute_task.return_value = AsyncIteratorMock([
+            {"status": "initializing", "progress": 0},
+            {"status": "executing", "progress": 50},
+            {"status": "completed", "progress": 100, "result": "Task completed"}
+        ])
+        
+        # Create TaskRequest with core entities (not DDD entities yet)
+        from emery_agents.core.entities import TaskRequest, AgentConfig as CoreAgentConfig, InstructionConfig, ToolConfig
+        
+        task_request = TaskRequest(
+            task_id="test-task-123",
             agent_id=test_agent.id.value,
-            task_name="Integration Test Task",
-            instructions="Test instruction for integration",
-            tools=[{"name": "test_tool"}],
-            created_by="user_123"
+            agent_config=CoreAgentConfig(
+                name=test_agent.name.value,
+                role="test",
+                description="Test agent",
+                persona="Helpful assistant", 
+                tools=[ToolConfig(name="test_tool", version="1.0", config={})],
+                servers=[],
+                capabilities=[]
+            ),
+            trigger_data=None,
+            organization_id="1", 
+            owner_id="user_123",
+            timeout_seconds=30,
+            name="Integration Test Task",
+            instruction_config=InstructionConfig(
+                instructions="Test instruction for integration",
+                tools=[ToolConfig(name="test_tool", version="1.0", config={})],
+                servers=[]
+            )
         )
+        
+        # Execute via application service  
+        service = container.get_agent_task_service()
+        
+        # Collect progress updates
+        progress_updates = []
+        async for progress in service.execute_task(task_request):
+            progress_updates.append(progress)
         
         # Verify complete flow executed
-        assert result is not None
-        assert result.execution_result.success is True
-        assert result.task.is_successful() is True
+        assert len(progress_updates) >= 2  # At least initialization and completion
+        assert progress_updates[-1]["status"] == "completed"
         
-        # Verify all repository interactions
-        mocks['agent_repo'].find_by_id.assert_called()
-        assert mocks['task_repo'].save.call_count >= 2  # Create and complete
-        mocks['execution_repo'].execute_agent.assert_called_once()
+        # Verify repository interactions  
+        mocks['agent_repo'].find_by_id.assert_called_once_with(test_agent.id)
+        mocks['tool_repo'].is_tool_available.assert_called()
     
     @pytest.mark.asyncio
     async def test_agent_validation_flow(self, container_with_mocks):
-        """Test agent validation in the complete flow."""
+        """Test agent validation through application service."""
         container, mocks = container_with_mocks
         
-        # Create inactive agent
+        # Create inactive agent with value objects
         inactive_config = AgentConfig(
-            name="Inactive Agent",
-            organization_id=1,
+            name=AgentName("Inactive Agent"),
+            organization_id=OrganizationId(1),
             owner_id="user_123",
-            status="inactive"
+            status=AgentStatus.inactive()  # Inactive status
         )
         inactive_agent = Agent.create(inactive_config)
+        inactive_agent.id = AgentId(456)
         
         mocks['agent_repo'].find_by_id.return_value = inactive_agent
         
-        # Should fail validation
+        # Create TaskRequest for inactive agent
+        from emery_agents.core.entities import TaskRequest, AgentConfig as CoreAgentConfig, InstructionConfig
+        
+        task_request = TaskRequest(
+            task_id="test-validation-task",
+            agent_id=inactive_agent.id.value,
+            agent_config=CoreAgentConfig(
+                name=inactive_agent.name.value,
+                role="test",
+                description="Test agent",
+                persona="Assistant",
+                tools=[],
+                servers=[],
+                capabilities=[]
+            ),
+            trigger_data=None,
+            organization_id="1",
+            owner_id="user_123", 
+            timeout_seconds=30,
+            name="Validation Test",
+            instruction_config=InstructionConfig(
+                instructions="This should fail validation",
+                tools=[],
+                servers=[]
+            )
+        )
+        
+        service = container.get_agent_task_service()
+        
+        # Should fail validation because agent is inactive
         with pytest.raises(ValueError, match="is not active"):
-            await container.get_agent_with_validation(inactive_agent.id.value)
+            async for _ in service.execute_task(task_request):
+                pass  # Should not reach here
     
-    @pytest.mark.asyncio
-    async def test_task_lifecycle_through_application_service(self, container_with_mocks, test_agent):
-        """Test task moves through all states via application service."""
+    @pytest.mark.asyncio  
+    async def test_ddd_value_objects_integration(self, container_with_mocks, test_agent):
+        """Test that value objects work correctly through the complete flow."""
         container, mocks = container_with_mocks
         
-        # Setup mocks
+        # Setup mocks with value object validation
         mocks['agent_repo'].find_by_id.return_value = test_agent
-        saved_tasks = []
+        mocks['tool_repo'].is_tool_available.return_value = True
         
-        def capture_save(task):
-            saved_tasks.append(task)
-            return AsyncMock()
+        # Mock execution that returns value object compatible data
+        async def mock_execute_with_value_objects(context):
+            # Verify context has value objects
+            assert context.agent_id is None or isinstance(context.agent_id, AgentId) 
+            assert context.organization_id is None or isinstance(context.organization_id, OrganizationId)
+            yield {"status": "completed", "result": "Value objects working"}
+            
+        mocks['execution_repo'].execute_task.side_effect = mock_execute_with_value_objects
         
-        mocks['task_repo'].save.side_effect = capture_save
-        mocks['task_repo'].find_by_id.side_effect = lambda task_id: saved_tasks[-1] if saved_tasks else None
+        # Create request using current core entities interface  
+        from emery_agents.core.entities import TaskRequest, AgentConfig as CoreAgentConfig, InstructionConfig
         
-        # Mock execution result
-        execution_result = AgentExecutionResult(
-            success=True,
-            execution_id="test_id",
-            status="completed",
-            output_data={"message": "Success"}
-        )
-        mocks['execution_repo'].execute_agent.return_value = execution_result
-        
-        # Get application service
-        service = container.agent_task_service()
-        
-        # Create task
-        instructions = TaskInstructions(instructions="Test task")
-        create_command = CreateTaskCommand(
-            agent_id=test_agent.id.value,
-            name="Lifecycle Test Task",
-            instructions=instructions
-        )
-        
-        task = await service.create_task(create_command)
-        
-        # Execute task
-        execute_command = ExecuteTaskCommand(task_id=task.id.value)
-        result = await service.execute_task(execute_command)
-        
-        # Verify task went through lifecycle
-        assert len(saved_tasks) >= 3  # Initial, started, completed
-        
-        # First save: pending state
-        assert saved_tasks[0].is_pending()
-        
-        # Task should end up completed
-        assert result.task.is_successful()
-        assert result.execution_result.success is True
-    
-    @pytest.mark.asyncio
-    async def test_error_handling_through_layers(self, container_with_mocks, test_agent):
-        """Test error propagation through all DDD layers."""
-        container, mocks = container_with_mocks
-        
-        # Setup mocks
-        mocks['agent_repo'].find_by_id.return_value = test_agent
-        mocks['task_repo'].save.return_value = AsyncMock()
-        
-        # Mock execution failure
-        execution_result = AgentExecutionResult(
-            success=False,
-            execution_id="failed_execution",
-            status="failed",
-            error="Execution failed due to network error"
-        )
-        mocks['execution_repo'].execute_agent.return_value = execution_result
-        
-        # Execute with failure
-        service = container.agent_task_service()
-        
-        instructions = TaskInstructions(instructions="Failing task")
-        create_command = CreateTaskCommand(
-            agent_id=test_agent.id.value,
-            name="Error Test Task",
-            instructions=instructions
-        )
-        
-        # Create and execute
-        task = await service.create_task(create_command)
-        execute_command = ExecuteTaskCommand(task_id=task.id.value)
-        result = await service.execute_task(execute_command)
-        
-        # Verify error handling
-        assert result.execution_result.success is False
-        assert result.task.is_failed()
-        assert "network error" in result.task.error
-    
-    @pytest.mark.asyncio
-    async def test_domain_business_rules_enforcement(self, container_with_mocks, test_agent):
-        """Test domain business rules are enforced through the complete flow."""
-        container, mocks = container_with_mocks
-        
-        # Create agent without API key
-        no_api_key_config = AgentConfig(
-            name="No API Key Agent",
-            organization_id=1,
+        task_request = TaskRequest(
+            task_id="value-object-test",
+            agent_id=test_agent.id.value,  # Extract value from value object
+            agent_config=CoreAgentConfig(
+                name=test_agent.name.value,  # Extract value from value object
+                role="test",
+                description="DDD value object test",
+                persona="Assistant",
+                tools=[],
+                servers=[], 
+                capabilities=[]
+            ),
+            trigger_data=None,
+            organization_id=str(test_agent.organization_id.value),  # Extract value from value object
             owner_id="user_123",
-            status="active"  # Active but no API key
-        )
-        no_api_key_agent = Agent.create(no_api_key_config)
-        
-        mocks['agent_repo'].find_by_id.return_value = no_api_key_agent
-        
-        # Should fail business rule validation
-        service = container.agent_task_service()
-        
-        instructions = TaskInstructions(instructions="Test task")
-        create_command = CreateTaskCommand(
-            agent_id=no_api_key_agent.id.value,
-            name="Business Rule Test",
-            instructions=instructions
+            timeout_seconds=30,
+            name="Value Object Integration Test", 
+            instruction_config=InstructionConfig(
+                instructions="Test value objects integration",
+                tools=[],
+                servers=[]
+            )
         )
         
-        # Create task should work
-        task = await service.create_task(create_command)
+        service = container.get_agent_task_service()
         
-        # But execution should fail due to business rules
-        execute_command = ExecuteTaskCommand(task_id=task.id.value)
-        with pytest.raises(ValueError, match="has no API key configured"):
-            await service.execute_task(execute_command)
+        # Execute and verify value objects work
+        progress_updates = []
+        async for progress in service.execute_task(task_request):
+            progress_updates.append(progress)
+        
+        # Verify execution completed
+        assert len(progress_updates) >= 1
+        assert progress_updates[-1]["status"] == "completed"
+        
+        # Verify agent repository was called with value object
+        mocks['agent_repo'].find_by_id.assert_called_once_with(test_agent.id)
+    
+    @pytest.mark.asyncio
+    async def test_error_handling_through_ddd_layers(self, container_with_mocks, test_agent):
+        """Test error propagation through DDD layers with value objects."""
+        container, mocks = container_with_mocks
+        
+        # Setup mocks
+        mocks['agent_repo'].find_by_id.return_value = test_agent
+        mocks['tool_repo'].is_tool_available.return_value = True
+        
+        # Mock execution that raises an error
+        async def mock_execution_error(context):
+            yield {"status": "initializing", "progress": 0}
+            raise Exception("Simulated execution failure")
+            
+        mocks['execution_repo'].execute_task.side_effect = mock_execution_error
+        
+        from emery_agents.core.entities import TaskRequest, AgentConfig as CoreAgentConfig, InstructionConfig
+        
+        task_request = TaskRequest(
+            task_id="error-test-task",
+            agent_id=test_agent.id.value,
+            agent_config=CoreAgentConfig(
+                name=test_agent.name.value,
+                role="test",
+                description="Error test",
+                persona="Assistant",
+                tools=[],
+                servers=[],
+                capabilities=[]
+            ),
+            trigger_data=None,
+            organization_id=str(test_agent.organization_id.value),
+            owner_id="user_123",
+            timeout_seconds=30,
+            name="Error Test Task",
+            instruction_config=InstructionConfig(
+                instructions="This should fail",
+                tools=[],
+                servers=[]
+            )
+        )
+        
+        service = container.get_agent_task_service()
+        
+        # Should propagate the exception
+        with pytest.raises(Exception, match="Simulated execution failure"):
+            async for _ in service.execute_task(task_request):
+                pass
     
     @pytest.mark.asyncio
     async def test_dependency_injection_wiring(self, container_with_mocks):
-        """Test that dependency injection properly wires all components."""
+        """Test that DI container properly wires DDD components."""
         container, mocks = container_with_mocks
         
-        # Get various services
-        agent_task_service = container.agent_task_service()
-        execute_use_case = container.execute_task_use_case()
-        load_tools_use_case = container.load_tools_use_case()
+        # Test that service can be retrieved and properly configured
+        service = container.get_agent_task_service()
+        assert service is not None
         
-        # All should be properly instantiated
-        assert agent_task_service is not None
-        assert execute_use_case is not None
-        assert load_tools_use_case is not None
+        # Verify service has all required dependencies
+        assert service.agent_repository is not None
+        assert service.task_repository is not None  
+        assert service.execution_repository is not None
+        assert service.tool_registry_repository is not None
+        assert service.capability_routing_service is not None
         
-        # Should return same instances (singleton pattern)
-        assert container.agent_task_service() is agent_task_service
-        assert container.execute_task_use_case() is execute_use_case
+        # Should return same instance (singleton pattern)
+        service2 = container.get_agent_task_service()
+        assert service is service2

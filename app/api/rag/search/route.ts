@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { searchApplicationService } from '@/ddd/application/di/rag-container'
+import { getRagSearchApplicationService } from '@/ddd/application/di/container'
 import type { SearchRagQuery } from '@/ddd/application/services/rag/queries/search-query'
 
 // POST /api/rag/search - Search RAG index
@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       userId: session.user.id
     };
 
+    const searchApplicationService = getRagSearchApplicationService();
     const result = await searchApplicationService.search(searchQuery)
 
     return NextResponse.json({ success: true, result })

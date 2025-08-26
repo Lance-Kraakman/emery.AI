@@ -1,4 +1,4 @@
-import { indexingApplicationService, indexRepository } from '@/ddd/application/di/rag-container'
+import { getRagIndexingApplicationService, getRagIndexRepository } from '@/ddd/application/di/container'
 import { OrganizationId } from '@/ddd/domain/rag/value-objects'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
 
@@ -17,6 +17,7 @@ export class AutoReindexService {
       const orgId = new OrganizationId(organizationId);
       
       // Get all active RAG indexes for this organization
+      const indexRepository = getRagIndexRepository();
       const indexes = await indexRepository.findByOrganization(orgId);
       
       if (indexes.length === 0) {
@@ -30,13 +31,15 @@ export class AutoReindexService {
         .map(async (index) => {
           try {
             console.log(`[AUTO-REINDEX] Reindexing ${index.name} (${index.id.value.substring(0, 8)})`)
+            const indexingApplicationService = getRagIndexingApplicationService();
             await indexingApplicationService.rebuildIndex({ indexId: index.id.value });
             console.log(`[AUTO-REINDEX] Completed reindexing ${index.name}`)
           } catch (error) {
             console.error(`[AUTO-REINDEX] Failed to reindex ${index.name}:`, error)
             // Mark index as error status using domain entity
             index.failIndexing();
-            await indexRepository.save(index);
+            const indexRepo = getRagIndexRepository();
+            await indexRepo.save(index);
           }
         })
       
@@ -58,6 +61,7 @@ export class AutoReindexService {
       
       const orgId = new OrganizationId(organizationId);
       
+      const indexRepository = getRagIndexRepository();
       const indexes = await indexRepository.findByOrganization(orgId);
       const relevantIndexes = indexes.filter(index => 
         index.domainTypes.includes(domainType) && index.status === 'active'
@@ -71,13 +75,15 @@ export class AutoReindexService {
       // Reindex only the relevant indexes
       for (const index of relevantIndexes) {
         try {
+          const indexingApplicationService = getRagIndexingApplicationService();
           await indexingApplicationService.rebuildIndex({ indexId: index.id.value });
           console.log(`[AUTO-REINDEX] Reindexed ${index.name} for ${domainType}`)
         } catch (error) {
           console.error(`[AUTO-REINDEX] Failed to reindex ${index.name} for ${domainType}:`, error)
           // Mark index as error status using domain entity
           index.failIndexing();
-          await indexRepository.save(index);
+          const indexRepo = getRagIndexRepository();
+          await indexRepo.save(index);
         }
       }
       

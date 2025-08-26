@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { indexingApplicationService, searchApplicationService, indexRepository } from '@/ddd/application/di/rag-container'
+import { getRagIndexingApplicationService, getRagSearchApplicationService, getRagIndexRepository } from '@/ddd/application/di/container'
 import type { CreateIndexCommand } from '@/ddd/application/services/rag/commands/create-index-command'
 import { OrganizationId } from '@/ddd/domain/rag/value-objects'
 
@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     const organizationId = 1
 
     // AIDEV-NOTE: Using DDD repository directly instead of legacy ragService
+    const indexRepository = getRagIndexRepository();
     const indexes = await indexRepository.findByOrganization(OrganizationId.fromNumber(organizationId))
     
     // Convert domain entities to API response format
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest) {
       createdBy: session.user.id,
     };
 
+    const indexingApplicationService = getRagIndexingApplicationService();
     const indexId = await indexingApplicationService.createIndex(createIndexCommand)
 
     return NextResponse.json({ success: true, indexId })

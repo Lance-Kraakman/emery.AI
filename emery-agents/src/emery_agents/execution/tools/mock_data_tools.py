@@ -11,19 +11,34 @@ from ...core.entities import ToolConfig
 
 
 def load_mock_pandas(config: ToolConfig) -> Any:
-    """Load mock Pandas tool for testing data analysis scenarios."""
+    """Load mock Pandas tool for testing data analysis scenarios with DDD validation."""
+    # Validate ToolConfig using DDD patterns
+    if not config or not config.name:
+        raise ValueError("ToolConfig must have a name")
+    
+    if config.name != "pandas":
+        raise ValueError(f"Expected tool name 'pandas', got '{config.name}'")
+    
     try:
         class MockPandasTool(Tool):
             """Mock Pandas tool that simulates data analysis operations."""
             name = "pandas"
             description = "Mock Pandas for data loading and analysis"
+            inputs = {
+                "action": {
+                    "type": "string",
+                    "description": "Data action to perform (load_data, analyze)",
+                    "nullable": True
+                }
+            }
+            output_type = "object"
             
-            def forward(self, action: str = "load_data", **kwargs) -> Dict[str, Any]:
+            def forward(self, action: str = "load_data") -> Dict[str, Any]:
                 """Simulate pandas operations."""
                 if action == "load_data":
                     return {
                         "success": True,
-                        "message": f"Mock data loaded from {kwargs.get('source', 'unknown source')}",
+                        "message": f"Mock data loaded from test_data.csv",
                         "rows": 1000,
                         "columns": ["id", "name", "value", "category", "timestamp"],
                         "preview": [
@@ -58,14 +73,29 @@ def load_mock_pandas(config: ToolConfig) -> Any:
 
 
 def load_mock_matplotlib(config: ToolConfig) -> Any:
-    """Load mock Matplotlib tool for testing visualization scenarios."""
+    """Load mock Matplotlib tool for testing visualization scenarios with DDD validation."""
+    # Validate ToolConfig using DDD patterns
+    if not config or not config.name:
+        raise ValueError("ToolConfig must have a name")
+    
+    if config.name != "matplotlib":
+        raise ValueError(f"Expected tool name 'matplotlib', got '{config.name}'")
+    
     try:
         class MockMatplotlibTool(Tool):
             """Mock Matplotlib tool that simulates chart creation."""
             name = "matplotlib"
             description = "Mock Matplotlib for chart creation"
+            inputs = {
+                "chart_type": {
+                    "type": "string",
+                    "description": "Type of chart to create (line, bar, scatter, pie, histogram)",
+                    "nullable": True
+                }
+            }
+            output_type = "object"
             
-            def forward(self, chart_type: str = "line", **kwargs) -> Dict[str, Any]:
+            def forward(self, chart_type: str = "line") -> Dict[str, Any]:
                 """Simulate chart creation."""
                 chart_types = ["line", "bar", "scatter", "pie", "histogram"]
                 
@@ -76,8 +106,8 @@ def load_mock_matplotlib(config: ToolConfig) -> Any:
                     "success": True,
                     "message": f"Mock {chart_type} chart created",
                     "chart_type": chart_type,
-                    "data_points": kwargs.get('data_points', 50),
-                    "title": kwargs.get('title', f'{chart_type.title()} Chart'),
+                    "data_points": 50,
+                    "title": f'{chart_type.title()} Chart',
                     "file_path": f"/tmp/mock_{chart_type}_chart.png",
                     "insights": [
                         f"Chart shows clear {chart_type} pattern",

@@ -4,7 +4,7 @@ import { defaultAnnotationRenderers } from '@llamaindex/chat-ui'
 import { Markdown } from '@llamaindex/chat-ui/widgets'
 import { ReactNode } from 'react'
 import { auth } from '@/lib/auth'
-import { searchApplicationService, indexingApplicationService, indexRepository } from '@/ddd/application/di/rag-container'
+import { getRagSearchApplicationService, getRagIndexingApplicationService, getRagIndexRepository } from '@/ddd/application/di/container'
 import { generateText } from 'ai'
 import { getAIModel, getAIProviderInfo } from '@/lib/ai/models'
 import type { SearchRagQuery } from '@/ddd/application/services/rag/queries/search-query'
@@ -52,6 +52,7 @@ Your question: "${question}"`}
       const organizationId = 1 // AIDEV-TODO: Get from session
       
       // AIDEV-NOTE: Using DDD repository directly instead of legacy ragService
+      const indexRepository = getRagIndexRepository();
       const indexes = await indexRepository.findByOrganization(OrganizationId.fromNumber(organizationId))
       let ragIndex = indexes.find(idx => idx.domainTypes.includes('table'))
       
@@ -66,6 +67,7 @@ Your question: "${question}"`}
           createdBy: session.user.id,
         };
         
+        const indexingApplicationService = getRagIndexingApplicationService();
         const indexId = await indexingApplicationService.createIndex(createIndexCommand)
         ragIndex = await indexRepository.findById(RagIndexId.fromString(indexId)) || undefined
       }
@@ -81,6 +83,7 @@ Your question: "${question}"`}
           userId: session.user.id
         };
         
+        const searchApplicationService = getRagSearchApplicationService();
         const searchResult = await searchApplicationService.search(searchQuery)
 
         if (searchResult.documents.length > 0) {

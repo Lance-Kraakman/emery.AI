@@ -16,10 +16,9 @@ from .core.entities import (
 )
 from .core.types import StepType, TaskStatus, WorkerStatus
 
-# Execution services
-from .execution.capability_router import CapabilityRouter
-# Import SmolAgentsExecutionService only when needed to avoid smolagents dependency
-# from .infrastructure.execution.smolagents_execution_service import SmolAgentsExecutionService
+# DDD Application services
+from .application.di.container import container
+from .domain.execution.services.capability_routing_service import CapabilityRoutingService
 
 __version__ = "2.0.0-protobuf"
 __author__ = "Lance Kraakman"
@@ -44,7 +43,7 @@ __all__ = [
     "TaskStatus", 
     "WorkerStatus",
     
-    # Execution services
-    "CapabilityRouter",
-    # "SmolAgentsExecutionService",  # Import manually when needed
+    # DDD Application services
+    "container",
+    "CapabilityRoutingService",
 ]

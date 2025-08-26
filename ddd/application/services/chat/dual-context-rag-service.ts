@@ -10,7 +10,7 @@
  */
 
 import type { SearchRagQuery } from '@/ddd/application/services/rag/queries/search-query';
-import { searchApplicationService, indexRepository } from '@/ddd/application/di/rag-container';
+import { getRagSearchApplicationService, getRagIndexRepository } from '@/ddd/application/di/container';
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import { OrganizationId } from '@/ddd/domain/rag/value-objects';
@@ -238,6 +238,7 @@ export class DualContextRagService {
       // 2. Get organizational (secondary) context from existing RAG system
       try {
         // First check if organization has any RAG indexes
+        const indexRepository = getRagIndexRepository();
         const orgIndexes = await indexRepository.findByOrganization(
           OrganizationId.fromNumber(organizationId)
         );
@@ -261,6 +262,7 @@ export class DualContextRagService {
               userId: 'system' // System query for context building
             };
 
+            const searchApplicationService = getRagSearchApplicationService();
             const searchResult = await searchApplicationService.search(searchQuery);
         
             secondaryContext = searchResult.documents.map(doc => ({

@@ -10,8 +10,6 @@ import { requireCurrentOrganization } from "./user-organizations"
 import { getDatabaseApplicationService } from "@/ddd/application/di/container"
 import type { Result } from "./types"
 
-// Import the DI setup to ensure container is initialized
-import "@/ddd/application/di/setup"
 import type {
   CreateDatabaseCommand,
   UpdateDatabaseCommand,

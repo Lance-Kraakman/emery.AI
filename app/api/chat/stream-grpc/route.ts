@@ -18,8 +18,7 @@
 import { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
 
-// Import DI setup and existing chat services
-import "@/ddd/application/di/setup";
+// Import existing chat services (DIContainer now auto-initializes)
 import { getChatApplicationService, getDynamicTableRepository, getAgentRepository } from '@/ddd/application/di/container';
 import type { CreateChatCommand, SendMessageCommand } from '@/ddd/application/services/chat/chat-application-service';
 

@@ -1,4 +1,4 @@
-// AIDEV-NOTE: Barrel export for dependency injection containers
-// Centralizes DI container exports for clean imports
+// AIDEV-NOTE: Barrel export for dependency injection container
+// All services now consolidated into main container
 
-export * from './rag-container';
+export * from './container';

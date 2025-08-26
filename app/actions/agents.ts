@@ -10,8 +10,7 @@ import type { CreateAgentCommand, UpdateAgentCommand, AgentFilters } from "@/ddd
 import type { CapabilityConfig } from "@/ddd/domain/agents/entities/agent";
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
 
-// Import the DI setup to ensure container is initialized
-import "@/ddd/application/di/setup";
+// AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
 
 export async function createAgent(data: CreateAgentData, revalidateUrl?: string): Promise<Result> {
   try {

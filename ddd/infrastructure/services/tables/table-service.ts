@@ -1,19 +1,23 @@
 /**
- * S3 Table Repository Implementation
+ * Table Service Implementation
  * 
- * Infrastructure implementation for S3-based table operations using Apache Arrow files.
- * Replaces PostgreSQL dynamic tables with S3 storage for better scalability.
- * Uses simple atomic operations for small datasets (<100MB).
+ * Infrastructure service coordinating table operations across:
+ * - PostgreSQL metadata (tables table)
+ * - Field metadata (via IFieldRepository) 
+ * - S3 file storage (via IFileStorageRepository)
+ * - Arrow data conversion (via DataStorageService)
+ * - Query operations (via TableQueryService)
  * 
- * AIDEV-NOTE: Infrastructure implementation for S3 table storage with Apache Arrow files
+ * AIDEV-NOTE: Renamed from S3TableRepository → TableRepository → TableService
+ * This is a service coordinating multiple storage layers, not just a repository
  */
 
-import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
-import { GetObjectCommand, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { db } from '@/lib/db/client';
 import { tables, fields } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
+import { GetObjectCommand, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 
 import type { Result } from '@/ddd/domain/shared/result';
 import type { 
@@ -27,19 +31,20 @@ import type {
   UpdateRowData,
   RowQueryOptions
 } from '@/ddd/domain/tables/entities/dynamic-table';
+import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
 import type { FieldType } from '@/ddd/domain/fields/entities/field';
 import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import type { TableSchema, TableManifest, FieldSchema } from '@/ddd/domain/tables/value-objects/table-schema';
 import { TableSchemaValidator } from '@/ddd/domain/tables/value-objects/table-schema';
 import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
 import { FieldConfiguration } from '@/ddd/domain/tables/value-objects/field-configuration';
-// AIDEV-NOTE: Removed S3Error - using proper Result pattern instead
 import { ResultHelpers } from '@/ddd/domain/shared/result';
 import type { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
 import type { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
 
-export class S3TableRepository implements IDynamicTableRepository {
+export class TableService implements IDynamicTableRepository {
   constructor(
+    private readonly fieldRepository: IFieldRepository,
     private readonly dataStorageService: DataStorageService,
     private readonly queryService: TableQueryService
   ) {}
@@ -82,12 +87,12 @@ export class S3TableRepository implements IDynamicTableRepository {
         updatedAt: tableRecord.updatedAt!
       };
 
-      console.log(`[S3TableRepository] Created table: ${dynamicTable.name} (ID: ${dynamicTable.id})`);
+      console.log(`[TableService] Created table: ${dynamicTable.name} (ID: ${dynamicTable.id})`);
 
       return dynamicTable;
 
     } catch (error) {
-      console.error('[S3TableRepository] Error creating table:', error);
+      console.error('[TableService] Error creating table:', error);
       throw error;
     }
   }
@@ -119,7 +124,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       return dynamicTable;
 
     } catch (error) {
-      console.error('[S3TableRepository] Error getting table:', error);
+      console.error('[TableService] Error getting table:', error);
       throw error;
     }
   }
@@ -143,7 +148,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       }));
 
     } catch (error) {
-      console.error('[S3TableRepository] Error finding tables by organization:', error);
+      console.error('[TableService] Error finding tables by organization:', error);
       throw error;
     }
   }
@@ -167,7 +172,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       }));
 
     } catch (error) {
-      console.error('[S3TableRepository] Error finding tables by database:', error);
+      console.error('[TableService] Error finding tables by database:', error);
       throw error;
     }
   }
@@ -200,7 +205,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       };
 
     } catch (error) {
-      console.error('[S3TableRepository] Error updating table:', error);
+      console.error('[TableService] Error updating table:', error);
       throw error;
     }
   }
@@ -226,10 +231,10 @@ export class S3TableRepository implements IDynamicTableRepository {
       // 4. Delete table from PostgreSQL
       await db.delete(tables).where(eq(tables.id, id));
 
-      console.log(`[S3TableRepository] Deleted table: ${tableRecord.name} (ID: ${id})`);
+      console.log(`[TableService] Deleted table: ${tableRecord.name} (ID: ${id})`);
 
     } catch (error) {
-      console.error('[S3TableRepository] Error deleting table:', error);
+      console.error('[TableService] Error deleting table:', error);
       throw error;
     }
   }
@@ -246,7 +251,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       return !!tableRecord;
 
     } catch (error) {
-      console.error('[S3TableRepository] Error checking storage location existence:', error);
+      console.error('[TableService] Error checking storage location existence:', error);
       throw error;
     }
   }
@@ -294,7 +299,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       return rowWithId;
 
     } catch (error) {
-      console.error('[S3TableRepository] Error inserting row:', error);
+      console.error('[TableService] Error inserting row:', error);
       throw error;
     }
   }
@@ -319,7 +324,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       return this.applyQueryOptions(allData, options);
 
     } catch (error) {
-      console.error('[S3TableRepository] Error finding rows:', error);
+      console.error('[TableService] Error finding rows:', error);
       throw error;
     }
   }
@@ -339,7 +344,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       return allData.find(row => row.id === rowId) || null;
 
     } catch (error) {
-      console.error('[S3TableRepository] Error getting row:', error);
+      console.error('[TableService] Error getting row:', error);
       throw error;
     }
   }
@@ -386,12 +391,12 @@ export class S3TableRepository implements IDynamicTableRepository {
       // 5. Save all data back to S3
       await this.saveTableData(s3Path, allData, schema);
 
-      console.log(`[S3TableRepository] Updated row ${rowId} in table ${table.name} using atomic approach`);
+      console.log(`[TableService] Updated row ${rowId} in table ${table.name} using atomic approach`);
 
       return updatedRow;
 
     } catch (error) {
-      console.error('[S3TableRepository] Error updating row:', error);
+      console.error('[TableService] Error updating row:', error);
       throw error;
     }
   }
@@ -426,10 +431,10 @@ export class S3TableRepository implements IDynamicTableRepository {
       // 5. Save filtered data back to S3
       await this.saveTableData(s3Path, filteredData, schema);
 
-      console.log(`[S3TableRepository] Deleted row ${rowId} in table ${table.name} using atomic approach`);
+      console.log(`[TableService] Deleted row ${rowId} in table ${table.name} using atomic approach`);
 
     } catch (error) {
-      console.error('[S3TableRepository] Error deleting row:', error);
+      console.error('[TableService] Error deleting row:', error);
       throw error;
     }
   }
@@ -440,7 +445,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       return !!table;
 
     } catch (error) {
-      console.error('[S3TableRepository] Error checking table existence:', error);
+      console.error('[TableService] Error checking table existence:', error);
       throw error;
     }
   }
@@ -471,8 +476,8 @@ export class S3TableRepository implements IDynamicTableRepository {
 
         return {
           rowCount: data.length,
-          sizeBytes: response.ContentLength || 0,
-          lastModified: response.LastModified || table.updatedAt || new Date()
+          sizeBytes: (response as any).ContentLength || 0,
+          lastModified: (response as any).LastModified || table.updatedAt || new Date()
         };
 
       } catch (error) {
@@ -488,7 +493,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       }
 
     } catch (error) {
-      console.error('[S3TableRepository] Error getting table stats:', error);
+      console.error('[TableService] Error getting table stats:', error);
       throw error;
     }
   }
@@ -499,7 +504,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       return stats.rowCount > 0;
 
     } catch (error) {
-      console.error('[S3TableRepository] Error checking if table has rows:', error);
+      console.error('[TableService] Error checking if table has rows:', error);
       throw error;
     }
   }
@@ -521,7 +526,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       }));
 
     } catch (error) {
-      console.error('[S3TableRepository] Error finding all tables:', error);
+      console.error('[TableService] Error finding all tables:', error);
       throw error;
     }
   }
@@ -588,7 +593,7 @@ export class S3TableRepository implements IDynamicTableRepository {
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[S3TableRepository] Error getting table schema:', error);
+      console.error('[TableService] Error getting table schema:', error);
       return ResultHelpers.failure(`Failed to get table schema: ${errorMessage}`);
     }
   }
@@ -685,6 +690,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       throw new Error(`Failed to initialize empty table: ${result.error}`);
     }
     
+    // Store Arrow file directly to S3 (consistent with other table data operations)
     await s3Client.send(new PutObjectCommand({
       Bucket: BUCKET_NAME,
       Key: s3Path.getDataPath(),
@@ -752,7 +758,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       // Use the S3TablePath's built-in tableId property for reliable extraction
       return s3Path.tableId;
     } catch (error) {
-      console.error('[S3TableRepository] Error extracting table ID from path:', error);
+      console.error('[TableService] Error extracting table ID from path:', error);
       return 0;
     }
   }
@@ -776,7 +782,7 @@ export class S3TableRepository implements IDynamicTableRepository {
       return fieldType as FieldType;
     }
     
-    console.warn(`[S3TableRepository] Invalid field type: ${fieldType}, defaulting to 'text'`);
+    console.warn(`[TableService] Invalid field type: ${fieldType}, defaulting to 'text'`);
     return 'text';
   }
 }

@@ -44,17 +44,20 @@ class Container:
         return self._services[AgentTaskApplicationService]
     
     def initialize_defaults(self):
-        """Initialize with default infrastructure implementations."""
+        """Initialize with default pure infrastructure implementations."""
         if self._initialized:
             return
         
-        # Import infrastructure implementations
-        from ...infrastructure.repositories.smolagents_execution_repository import SmolAgentsExecutionRepository
-        from ...infrastructure.repositories.tool_registry_repository_impl import ToolRegistryRepositoryImpl
+        # Import pure infrastructure implementations (no bridge pattern)
+        from ...infrastructure.db.repositories.tools.tool_registry_repository import ToolRegistryRepository
+        from ...infrastructure.execution.smolagents_execution_repository import SmolAgentsExecutionRepository
         
-        # Register implementations
-        self.register_repository(IExecutionRepository, SmolAgentsExecutionRepository())
-        self.register_repository(IToolRegistryRepository, ToolRegistryRepositoryImpl())
+        # Create tool registry first (needed by execution repository)
+        tool_registry_repo = ToolRegistryRepository()
+        
+        # Register pure implementations
+        self.register_repository(IToolRegistryRepository, tool_registry_repo)
+        self.register_repository(IExecutionRepository, SmolAgentsExecutionRepository(tool_registry_repo))
         
         # TODO: Add agent and task repository implementations
         # For now, create mock implementations for testing
