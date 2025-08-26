@@ -204,7 +204,7 @@ class FixtureLoader:
             id=step_data["id"],
             type=step_type,
             instructions=step_data["instructions"],
-            model=step_data.get("model", "Qwen/Qwen2.5-72B-Instruct"),  # Default model
+            model=step_data.get("model", "Qwen/Qwen2.5-14B-Instruct"),  # Default model
             tools=tools,
             servers=servers
         )

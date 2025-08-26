@@ -58,7 +58,7 @@ class CapabilityRouter:
             id="instruction_step",
             type=StepType.TOOL_STEP if instruction_config.tools else StepType.CODE_STEP,
             instructions=instruction_config.instructions,
-            model="Qwen/Qwen2.5-72B-Instruct",  # Default model (HuggingFace)
+            model="Qwen/Qwen2.5-14B-Instruct",  # Default model (HuggingFace)
             tools=instruction_config.tools,
             servers=instruction_config.servers
         )

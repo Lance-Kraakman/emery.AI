@@ -45,7 +45,7 @@ class ModelFactory:
             ),
             'general': ModelConfig(
                 name='general', 
-                model_id='Qwen/Qwen2.5-72B-Instruct',
+                model_id='Qwen/Qwen2.5-14B-Instruct',
                 max_tokens=4096,
                 temperature=0.8
             ),

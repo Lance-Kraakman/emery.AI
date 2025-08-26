@@ -15,7 +15,6 @@ All database operations remain in Next.js ChatApplicationService.
 
 import logging
 import time
-import uuid
 from typing import AsyncIterator, Optional, List, Dict, Any
 
 import grpc

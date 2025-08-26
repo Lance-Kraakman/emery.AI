@@ -280,7 +280,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         type: agent.trigger.type || 'MANUAL'
       } as any : undefined,
       capabilities,
-      status: agent.status?.value || undefined,
+      status: agent.status || undefined,
       organizationId: agent.organizationId.value,
       roleId: agent.roleId || undefined,
       apiKey: agent.apiKey?.value || undefined,

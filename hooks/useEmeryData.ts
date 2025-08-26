@@ -97,7 +97,17 @@ export function useEmeryData() {
         getTeams(currentOrg.id)
       ]);
 
-      const tables = tablesResult as EmeryTable[];
+      const tables: EmeryTable[] = tablesResult.map(table => ({
+        id: table.id,
+        name: table.name,
+        dbName: table.storageLocation, // Map storageLocation to dbName for compatibility
+        databaseId: table.databaseId,
+        organizationId: table.organizationId,
+        metadata: table.metadata ? table.metadata.toDatabaseJson() : null,
+        createdAt: table.createdAt || null,
+        updatedAt: table.updatedAt || null,
+        database: null // TODO: Add database info if needed
+      }));
       const agents: EmeryAgent[] = agentsResult.map(agent => ({
         id: agent.id.value,
         name: agent.name,
@@ -108,9 +118,9 @@ export function useEmeryData() {
       const teams: EmeryTeam[] = teamsResult.map(team => ({
         id: team.id.value,
         name: team.name,
-        purpose: team.purpose,
+        purpose: team.purpose || undefined, // Convert null to undefined for compatibility
         organizationId: team.organizationId.value,
-        agentIds: team.agentIds || []
+        agentIds: team.agentIds ? team.agentIds.map(agentId => agentId.value) : []
       }));
 
       // Group tables by database

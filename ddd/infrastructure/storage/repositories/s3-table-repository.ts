@@ -300,6 +300,10 @@ export class S3TableRepository implements IDynamicTableRepository {
   }
 
   async findRows(tableId: number, options?: RowQueryOptions): Promise<DynamicTableRow[]> {
+    return await this.getRows(tableId, options);
+  }
+
+  async getRows(tableId: number, options?: RowQueryOptions): Promise<DynamicTableRow[]> {
     try {
       const table = await this.findById(tableId);
       if (!table) {
@@ -338,10 +342,6 @@ export class S3TableRepository implements IDynamicTableRepository {
       console.error('[S3TableRepository] Error getting row:', error);
       throw error;
     }
-  }
-
-  async getRows(tableId: number, options?: RowQueryOptions): Promise<DynamicTableRow[]> {
-    return this.findRows(tableId, options);
   }
 
   async updateRow(tableId: number, rowId: string, data: UpdateRowData): Promise<DynamicTableRow> {
@@ -607,127 +607,6 @@ export class S3TableRepository implements IDynamicTableRepository {
   }
 
 
-  // Delta Lake helper methods
-
-  // Delta Lake query-time resolution methods
-
-  /**
-   * Resolves final dataset by applying Delta Lake pattern:
-   * 1. Load all data files (main + additional inserts)
-   * 2. Load tombstones and updates
-   * 3. Apply tombstones to filter deleted rows
-   * 4. Apply updates to supersede old versions
-   * 5. Return resolved dataset
-   * 
-   * AIDEV-NOTE: Core Delta Lake resolution logic for query-time data consistency
-   */
-  private async resolveData(s3Path: S3TablePath, tableId: number): Promise<DynamicTableRow[]> {
-    try {
-      // 1. Get table schema for data loading
-      const schemaResult = await this.getTableSchema(tableId);
-      if (!schemaResult.success) {
-        throw new Error(`Table schema error: ${schemaResult.error}`);
-      }
-      const schema = schemaResult.data;
-
-      // 2. Load all data files (main table data)
-      const baseData = await this.loadTableData(s3Path);
-      
-      // 3. Load update files
-      const updateData = await this.loadUpdateFiles(s3Path, schema!);
-      
-      // 4. Load tombstones
-      const tombstonesResult = await this.loadTombstones(s3Path);
-      if (!tombstonesResult.success) {
-        throw new Error(`Failed to load tombstones: ${tombstonesResult.error}`);
-      }
-      const tombstones = tombstonesResult.data;
-      
-      // 5. Create lookup maps for efficiency
-      const deletedRowIds = new Set<string>();
-      const updatedRowData = new Map<string, DynamicTableRow>();
-      
-      if (tombstones) {
-        for (const entry of tombstones.entries) {
-          if (entry.operation === 'DELETE') {
-            deletedRowIds.add(entry.rowId);
-          } else if (entry.operation === 'UPDATE' && entry.updateFile) {
-            // Updated row data is in update files, will be added separately
-            deletedRowIds.add(entry.rowId); // Mark old version as deleted
-          }
-        }
-      }
-      
-      // 6. Add update data to the map
-      for (const row of updateData) {
-        updatedRowData.set(row.id, row);
-      }
-      
-      // 7. Filter base data (remove deleted rows)
-      const activeBaseData = baseData.filter(row => !deletedRowIds.has(row.id));
-      
-      // 8. Combine base data with updates
-      const resolvedData = [...activeBaseData, ...Array.from(updatedRowData.values())];
-      
-      console.log(`[S3TableRepository] Resolved ${resolvedData.length} rows (${baseData.length} base, ${updateData.length} updates, ${deletedRowIds.size} tombstoned)`);
-      
-      return resolvedData;
-      
-    } catch (error) {
-      console.error('[S3TableRepository] Error resolving data:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Load all update files for a table
-   */
-  private async loadUpdateFiles(s3Path: S3TablePath, schema: TableSchema): Promise<DynamicTableRow[]> {
-    try {
-      // List all update files in the updates/ subdirectory
-      const updatePrefix = s3Path.path + 'updates/';
-      
-      const listResponse = await s3Client.send(new ListObjectsV2Command({
-        Bucket: BUCKET_NAME,
-        Prefix: updatePrefix
-      }));
-      
-      const updateData: DynamicTableRow[] = [];
-      
-      if (listResponse.Contents && listResponse.Contents.length > 0) {
-        // Load each update file
-        for (const object of listResponse.Contents) {
-          if (object.Key && object.Key.endsWith('.parquet')) {
-            try {
-              const response = await s3Client.send(new GetObjectCommand({
-                Bucket: BUCKET_NAME,
-                Key: object.Key
-              }));
-              
-              if (response.Body) {
-                const buffer = await this.streamToBuffer(response.Body as any);
-                const result = await this.dataStorageService.retrieveData(buffer, schema!);
-                
-                if (result.success && result.data) {
-                  updateData.push(...(result.data as DynamicTableRow[]));
-                }
-              }
-            } catch (error) {
-              console.warn(`[S3TableRepository] Failed to load update file ${object.Key}:`, error);
-              // Continue with other files
-            }
-          }
-        }
-      }
-      
-      return updateData;
-      
-    } catch (error) {
-      console.error('[S3TableRepository] Error loading update files:', error);
-      return []; // Return empty array on error, don't fail entire query
-    }
-  }
-
   /**
    * Apply query options to resolved data (filters, sorting, pagination)
    */
@@ -884,18 +763,7 @@ export class S3TableRepository implements IDynamicTableRepository {
     console.warn('S3 directory deletion not yet implemented for:', prefix);
   }
 
-  /**
-   * Convert AWS S3 stream to Buffer
-   * Helper method for reading S3 object data
-   */
-  private async streamToBuffer(stream: any): Promise<Buffer> {
-    const chunks: Buffer[] = [];
-    return new Promise((resolve, reject) => {
-      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-      stream.on('error', reject);
-      stream.on('end', () => resolve(Buffer.concat(chunks)));
-    });
-  }
+
 
   /**
    * Validate field type and return proper FieldType
