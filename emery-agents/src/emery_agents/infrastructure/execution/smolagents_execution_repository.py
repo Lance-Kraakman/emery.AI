@@ -13,11 +13,11 @@ import json
 from typing import Dict, Any, List, Optional, Union, AsyncIterator
 
 from smolagents import CodeAgent, ToolCallingAgent
-from smolagents.models import InferenceClientModel
 
 from ...domain.execution.repositories.execution_repository import IExecutionRepository
 from ...domain.execution.entities.execution_context import ExecutionContext, ExecutionMode
 from ...domain.tools.repositories.tool_registry_repository import IToolRegistryRepository
+from ...domain.ai.services.model_provider_service import IModelProviderService
 from ...core.entities import ToolConfig, CapabilityConfig, StepConfig
 from ...core.types import StepType
 
@@ -32,10 +32,11 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
     Contains all ported smolagents agent creation and execution logic.
     """
     
-    def __init__(self, tool_registry_repository: IToolRegistryRepository):
+    def __init__(self, tool_registry_repository: IToolRegistryRepository, model_provider: IModelProviderService):
         self.tool_registry_repository = tool_registry_repository
+        self.model_provider = model_provider
         self.agent_cache: Dict[str, CodeAgent] = {}  # Cache by execution context hash
-        logger.info("SmolAgentsExecutionRepository initialized")
+        logger.info("SmolAgentsExecutionRepository initialized with centralized model provider")
     
     async def execute_task(self, context: ExecutionContext) -> AsyncIterator[Dict[str, Any]]:
         """
@@ -228,7 +229,7 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
             id="execution_step",
             type=StepType.TOOL_STEP if tool_configs else StepType.CODE_STEP,
             instructions=context.instructions,
-            model="Qwen/Qwen2.5-14B-Instruct",
+            model="Qwen/Qwen2.5-14B-Instruct",  # AIDEV-NOTE: Will be replaced by model provider in step agent creation
             tools=tool_configs,
             servers=[]
         )
@@ -243,20 +244,16 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
         """
         Create agent for direct tool execution.
         
-        AIDEV-NOTE: Ported from CapabilityRouterAgent logic.
+        AIDEV-NOTE: Updated to use centralized model provider instead of hardcoded model creation.
         """
-        hf_token = os.getenv("HF_TOKEN")
-        if not hf_token:
-            raise EnvironmentError("HF_TOKEN environment variable is required")
-        
         # Load tools from context
         tools = []
         if context.available_tools:
             tool_configs = [ToolConfig(name=name, version="1.0", config={}) for name in context.available_tools]
             tools = self.tool_registry_repository.load_tools(tool_configs)
         
-        # Create ToolCallingAgent for direct execution
-        model = InferenceClientModel("Qwen/Qwen2.5-14B-Instruct", token=hf_token)
+        # Get appropriate model from centralized provider
+        model = self.model_provider.get_default_model_for_capability()
         
         agent = ToolCallingAgent(
             tools=tools,
@@ -273,25 +270,21 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
         """
         Create smolagents agent from capability configuration.
         
-        AIDEV-NOTE: Ported from SmolAgentsExecutionService._create_smolagents_agent()
+        AIDEV-NOTE: Updated to use centralized model provider instead of hardcoded model creation.
         """
         if context_id in self.agent_cache:
             return self.agent_cache[context_id]
         
-        hf_token = os.getenv("HF_TOKEN")
-        if not hf_token:
-            raise EnvironmentError("HF_TOKEN environment variable is required")
-        
         # Create step agents for this capability
         step_agents = []
         for step in capability.steps:
-            step_agent = await self._create_step_agent(step, hf_token)
+            step_agent = await self._create_step_agent(step)
             step_agent.name = step.id
             step_agent.description = step.instructions
             step_agents.append(step_agent)
         
         # Create capability-level agent that manages step agents
-        model = InferenceClientModel("Qwen/Qwen2.5-14B-Instruct", token=hf_token)
+        model = self.model_provider.get_default_model_for_capability(capability.name)
         
         capability_agent = CodeAgent(
             tools=[],  # Capability agent delegates to step agents
