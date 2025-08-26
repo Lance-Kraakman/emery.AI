@@ -4,7 +4,7 @@
  * Tests if scheduler works with just the 5-minute periodic timer
  */
 
-import { getSchedulingApplicationService } from '../ddd/application/di/scheduling-container';
+import { getTaskSchedulingApplicationService } from '../ddd/application/di/scheduling-container';
 import { PostgresEventScheduler } from '../ddd/infrastructure/scheduling/services/postgres-event-scheduler';
 
 // Environment validation

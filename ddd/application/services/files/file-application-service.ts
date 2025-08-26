@@ -14,6 +14,7 @@ import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-re
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { FileFieldValue } from '@/ddd/domain/fields/entities/field';
 import type { Result } from '@/ddd/domain/shared/result';
+import { TableId, FieldId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 export interface UploadFileCommand {
   organizationId: number;
@@ -64,7 +65,7 @@ export class FileApplicationService {
   async uploadFile(command: UploadFileCommand): Promise<FileApplicationServiceResult<FileFieldValue>> {
     try {
       // 1. Validate organization and table exist
-      const table = await this.tableRepository.findById(command.tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(command.tableId));
       if (!table) {
         return {
           success: false,
@@ -72,7 +73,7 @@ export class FileApplicationService {
         };
       }
 
-      if (table.organizationId !== command.organizationId) {
+      if (table.organizationId.value !== command.organizationId) {
         return {
           success: false,
           error: 'Access denied: table not in your organization'
@@ -80,7 +81,7 @@ export class FileApplicationService {
       }
 
       // 2. Validate field exists and is a file field
-      const field = await this.fieldRepository.findById(command.fieldId);
+      const field = await this.fieldRepository.findById(FieldId.fromNumber(command.fieldId));
       if (!field) {
         return {
           success: false,
@@ -88,7 +89,7 @@ export class FileApplicationService {
         };
       }
 
-      if (field.tableId !== command.tableId) {
+      if (field.tableId.value !== command.tableId) {
         return {
           success: false,
           error: 'Field does not belong to the specified table'
@@ -152,7 +153,7 @@ export class FileApplicationService {
   async generateDownloadUrl(command: DownloadFileCommand): Promise<FileApplicationServiceResult<{ url: string; filename: string }>> {
     try {
       // 1. Validate field exists and user has access
-      const field = await this.fieldRepository.findById(command.fieldId);
+      const field = await this.fieldRepository.findById(FieldId.fromNumber(command.fieldId));
       if (!field) {
         return {
           success: false,
@@ -169,7 +170,7 @@ export class FileApplicationService {
 
       // 2. Validate table belongs to organization
       const table = await this.tableRepository.findById(field.tableId);
-      if (!table || table.organizationId !== command.organizationId) {
+      if (!table || table.organizationId.value !== command.organizationId) {
         return {
           success: false,
           error: 'Access denied: file not accessible to your organization'
@@ -208,7 +209,7 @@ export class FileApplicationService {
   async deleteFile(command: DeleteFileCommand): Promise<FileApplicationServiceResult<void>> {
     try {
       // 1. Validate field exists and user has access
-      const field = await this.fieldRepository.findById(command.fieldId);
+      const field = await this.fieldRepository.findById(FieldId.fromNumber(command.fieldId));
       if (!field) {
         return {
           success: false,
@@ -225,7 +226,7 @@ export class FileApplicationService {
 
       // 2. Validate table belongs to organization
       const table = await this.tableRepository.findById(field.tableId);
-      if (!table || table.organizationId !== command.organizationId) {
+      if (!table || table.organizationId.value !== command.organizationId) {
         return {
           success: false,
           error: 'Access denied: file not accessible to your organization'
@@ -260,7 +261,7 @@ export class FileApplicationService {
     try {
       // 1. If fieldId is provided, validate field access
       if (command.fieldId) {
-        const field = await this.fieldRepository.findById(command.fieldId);
+        const field = await this.fieldRepository.findById(FieldId.fromNumber(command.fieldId));
         if (!field) {
           return {
             success: false,
@@ -277,7 +278,7 @@ export class FileApplicationService {
 
         // Validate table belongs to organization
         const table = await this.tableRepository.findById(field.tableId);
-        if (!table || table.organizationId !== command.organizationId) {
+        if (!table || table.organizationId.value !== command.organizationId) {
           return {
             success: false,
             error: 'Access denied: field not accessible to your organization'
@@ -294,8 +295,8 @@ export class FileApplicationService {
 
       // 2. If tableId is provided, get all file fields and their files
       if (command.tableId) {
-        const table = await this.tableRepository.findById(command.tableId);
-        if (!table || table.organizationId !== command.organizationId) {
+        const table = await this.tableRepository.findById(TableId.fromNumber(command.tableId));
+        if (!table || table.organizationId.value !== command.organizationId) {
           return {
             success: false,
             error: 'Access denied: table not accessible to your organization'
@@ -303,8 +304,8 @@ export class FileApplicationService {
         }
 
         // Get all file fields for table
-        const fields = await this.fieldRepository.findByTableId(command.tableId);
-        const fileFields = fields.filter(f => f.type === 'file');
+        const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(command.tableId));
+        const fileFields = fields.filter((f: any) => f.type === 'file');
 
         // Get files for all file fields (would need aggregation implementation)
         // For now, return empty array as placeholder

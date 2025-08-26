@@ -14,6 +14,7 @@ import type { FieldSchemaService } from '@/ddd/domain/fields/services/field-sche
 import type { TableDataService } from '@/ddd/domain/tables/services/table-data-service';
 import type { Field, CreateFieldData, UpdateFieldData, FieldType } from '@/ddd/domain/fields/entities/field';
 import type { Result } from '@/ddd/domain/shared/result';
+import { TableId, FieldId } from '@/ddd/domain/shared/value-objects';
 import { slugify } from '@/utils/slugify';
 
 export interface CreateFieldCommand {
@@ -55,7 +56,7 @@ export class FieldApplicationService {
   async createField(command: CreateFieldCommand): Promise<FieldApplicationServiceResult<Field>> {
     try {
       // 1. Verify table exists
-      const table = await this.tableRepository.findById(command.tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(command.tableId));
       if (!table) {
         return {
           success: false,
@@ -67,7 +68,7 @@ export class FieldApplicationService {
       const slug = slugify(command.name);
       
       // Check if slug is unique for this table
-      const isUnique = await this.fieldRepository.checkSlugUniqueness(command.tableId, slug);
+      const isUnique = await this.fieldRepository.checkSlugUniqueness(TableId.fromNumber(command.tableId), slug);
       if (!isUnique) {
         return {
           success: false,
@@ -77,7 +78,7 @@ export class FieldApplicationService {
 
       // 3. Validate related table if it's a relation field
       if (command.type === 'relation' && command.relatedTableId) {
-        const relatedTable = await this.tableRepository.findById(command.relatedTableId);
+        const relatedTable = await this.tableRepository.findById(TableId.fromNumber(command.relatedTableId));
         if (!relatedTable) {
           return {
             success: false,
@@ -95,20 +96,20 @@ export class FieldApplicationService {
       }
 
       // 4. Get max order index for proper field ordering
-      const existingFields = await this.fieldRepository.findByTableId(command.tableId);
+      const existingFields = await this.fieldRepository.findByTableId(TableId.fromNumber(command.tableId));
       const orderIndex = existingFields.length > 0 
-        ? Math.max(...existingFields.map(f => f.orderIndex || 0)) + 1 
+        ? Math.max(...existingFields.map((f: Field) => f.orderIndex || 0)) + 1 
         : 0;
 
       // 5. Create field data
       const fieldData: CreateFieldData = {
-        tableId: command.tableId,
+        tableId: TableId.fromNumber(command.tableId),
         name: command.name,
         slug,
         type: command.type,
         required: command.required || false,
         orderIndex,
-        relatedTableId: command.relatedTableId,
+        relatedTableId: command.relatedTableId ? TableId.fromNumber(command.relatedTableId) : undefined,
         metadata: command.metadata
       };
 
@@ -154,7 +155,7 @@ export class FieldApplicationService {
   async updateField(command: UpdateFieldCommand): Promise<FieldApplicationServiceResult<Field>> {
     try {
       // 1. Get existing field
-      const field = await this.fieldRepository.findById(command.id);
+      const field = await this.fieldRepository.findById(FieldId.fromNumber(command.id));
       if (!field) {
         return {
           success: false,
@@ -212,7 +213,7 @@ export class FieldApplicationService {
 
       // 3. Update field if there are changes
       if (Object.keys(updates).length > 0) {
-        const updatedField = await this.fieldRepository.update(command.id, updates);
+        const updatedField = await this.fieldRepository.update(FieldId.fromNumber(command.id), updates);
         
         console.log(`[FIELD-APP-SERVICE] Updated field: ${updatedField.name}`);
         
@@ -242,7 +243,7 @@ export class FieldApplicationService {
   async deleteField(fieldId: number): Promise<FieldApplicationServiceResult<void>> {
     try {
       // 1. Verify field exists
-      const field = await this.fieldRepository.findById(fieldId);
+      const field = await this.fieldRepository.findById(FieldId.fromNumber(fieldId));
       if (!field) {
         return {
           success: false,
@@ -260,7 +261,7 @@ export class FieldApplicationService {
       }
 
       // 3. Remove field from table schema first
-      const schemaResult = await this.fieldSchemaService.removeFieldFromTable(field.tableId, fieldId);
+      const schemaResult = await this.fieldSchemaService.removeFieldFromTable(field.tableId.value, fieldId);
       if (!schemaResult.success) {
         return {
           success: false,
@@ -269,7 +270,7 @@ export class FieldApplicationService {
       }
 
       // 4. Delete the field metadata
-      await this.fieldRepository.delete(fieldId);
+      await this.fieldRepository.delete(FieldId.fromNumber(fieldId));
 
       console.log(`[FIELD-APP-SERVICE] Deleted field: ${field.name} from table ${field.tableId}`);
 
@@ -292,7 +293,7 @@ export class FieldApplicationService {
   async reorderFields(command: ReorderFieldsCommand): Promise<FieldApplicationServiceResult<Field[]>> {
     try {
       // 1. Verify table exists
-      const table = await this.tableRepository.findById(command.tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(command.tableId));
       if (!table) {
         return {
           success: false,
@@ -301,15 +302,15 @@ export class FieldApplicationService {
       }
 
       // 2. Get all fields for the table
-      const fields = await this.fieldRepository.findByTableId(command.tableId);
+      const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(command.tableId));
       
       // 3. Validate all field IDs in the reorder command exist
-      const fieldIds = new Set(fields.map(f => f.id));
+      const fieldIds = new Set(fields.map((f: Field) => f.id));
       for (const order of command.fieldOrders) {
-        if (!fieldIds.has(order.fieldId)) {
+        if (!fieldIds.has(FieldId.fromNumber(order.fieldId))) {
           return {
             success: false,
-            error: `Field ${order.fieldId} not found in table ${command.tableId}`
+            error: `Field ${FieldId.fromNumber(order.fieldId)} not found in table ${command.tableId}`
           };
         }
       }
@@ -317,7 +318,7 @@ export class FieldApplicationService {
       // 4. Update order indices
       const updatedFields: Field[] = [];
       for (const order of command.fieldOrders) {
-        const updatedField = await this.fieldRepository.update(order.fieldId, {
+        const updatedField = await this.fieldRepository.update(FieldId.fromNumber(order.fieldId), {
           orderIndex: order.orderIndex
         });
         updatedFields.push(updatedField);
@@ -343,14 +344,14 @@ export class FieldApplicationService {
    * Get field by ID
    */
   async getField(fieldId: number): Promise<Field | null> {
-    return await this.fieldRepository.findById(fieldId);
+    return await this.fieldRepository.findById(FieldId.fromNumber(fieldId));
   }
 
   /**
    * Get fields for a table
    */
   async getFieldsForTable(tableId: number): Promise<Field[]> {
-    const fields = await this.fieldRepository.findByTableId(tableId);
+    const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
     // Return fields sorted by order index
     return fields.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
   }
@@ -438,7 +439,7 @@ export class FieldApplicationService {
     valid: boolean;
     errors: Array<{ field: string; error: string }>;
   }> {
-    const fields = await this.fieldRepository.findByTableId(tableId);
+    const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
     const errors: Array<{ field: string; error: string }> = [];
 
     for (const field of fields) {

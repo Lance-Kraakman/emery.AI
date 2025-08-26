@@ -8,7 +8,7 @@
 import type { IInvitationRepository } from '@/ddd/domain/invitations/repositories/invitation-repository';
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
-import { OrganizationId, UserId, EmailAddress, OrganizationRole } from '@/ddd/domain/shared/value-objects';
+import { OrganizationId, UserId, EmailAddress, OrganizationRole, InvitationId } from '@/ddd/domain/shared/value-objects';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { 
   Invitation, 
@@ -98,7 +98,7 @@ export class InvitationApplicationService {
         };
       }
 
-      const canInvite = await this.invitationRepository.canInviteToOrganization(command.invitedBy, command.organizationId);
+      const canInvite = await this.invitationRepository.canInviteToOrganization(UserId.fromString(command.invitedBy), OrganizationId.fromNumber(command.organizationId));
       if (!canInvite) {
         return {
           success: false,
@@ -125,7 +125,7 @@ export class InvitationApplicationService {
       }
 
       // Check if user is already a member
-      const isAlreadyMember = await this.invitationRepository.isUserAlreadyMember(command.organizationId, command.email);
+      const isAlreadyMember = await this.invitationRepository.isUserAlreadyMember(OrganizationId.fromNumber(command.organizationId), EmailAddress.fromString(command.email));
       if (isAlreadyMember) {
         return {
           success: false,
@@ -134,7 +134,7 @@ export class InvitationApplicationService {
       }
 
       // Check for existing pending invitation
-      const existingInvitation = await this.invitationRepository.hasExistingInvitation(command.organizationId, command.email);
+      const existingInvitation = await this.invitationRepository.hasExistingInvitation(OrganizationId.fromNumber(command.organizationId), EmailAddress.fromString(command.email));
       if (existingInvitation) {
         return {
           success: false,
@@ -197,7 +197,7 @@ export class InvitationApplicationService {
       }
 
       // Verify inviter permissions
-      const canInvite = await this.invitationRepository.canInviteToOrganization(command.invitedBy, command.organizationId);
+      const canInvite = await this.invitationRepository.canInviteToOrganization(UserId.fromString(command.invitedBy), OrganizationId.fromNumber(command.organizationId));
       if (!canInvite) {
         return {
           success: false,
@@ -207,22 +207,22 @@ export class InvitationApplicationService {
 
       // Prepare bulk invitation data
       const bulkData: BulkInvitationData = {
-        organizationId: command.organizationId,
-        invitedBy: command.invitedBy,
-        invitations: command.invitations.map(inv => ({
-          email: inv.email.toLowerCase().trim(),
-          role: inv.role || command.defaultRole || 'member'
+        organizationId: OrganizationId.fromNumber(command.organizationId),
+        invitedBy: UserId.fromString(command.invitedBy),
+        invitations: command.invitations.map((inv: any) => ({
+          email: EmailAddress.fromString(inv.email.toLowerCase().trim()),
+          role: OrganizationRole.fromString(inv.role || command.defaultRole || 'member')
         })),
-        defaultRole: command.defaultRole || 'member',
+        defaultRole: OrganizationRole.fromString(command.defaultRole || 'member'),
         expiresAt: createInvitationExpiry(command.expiryDays)
       };
 
       // Validate all roles
       for (const inv of bulkData.invitations) {
-        if (!isValidInvitationRole(inv.role!)) {
+        if (!isValidInvitationRole(inv.role!.value)) {
           return {
             success: false,
-            error: `Invalid role: ${inv.role} for email ${inv.email}`
+            error: `Invalid role: ${inv.role!.value} for email ${inv.email.value}`
           };
         }
       }
@@ -273,7 +273,7 @@ export class InvitationApplicationService {
   async acceptInvitation(command: AcceptInvitationCommand): Promise<InvitationApplicationResult<InvitationAcceptanceResult>> {
     try {
       // Validate token and get invitation
-      const tokenValidation = await this.invitationRepository.validateToken(command.token);
+      const tokenValidation = await this.invitationRepository.validateToken(command.token as any);
       if (!tokenValidation.valid || !tokenValidation.invitation) {
         return {
           success: false,
@@ -347,7 +347,7 @@ export class InvitationApplicationService {
       }
 
       // Accept the invitation (marks as used)
-      await this.invitationRepository.acceptInvitation(command.token, user.id.value);
+      await this.invitationRepository.acceptInvitation(command.token as any, user.id);
 
       const result: InvitationAcceptanceResult = {
         success: true,
@@ -375,7 +375,7 @@ export class InvitationApplicationService {
   async revokeInvitation(invitationId: number, revokedBy: string): Promise<InvitationApplicationResult<void>> {
     try {
       // Verify invitation exists
-      const invitation = await this.invitationRepository.findById(invitationId);
+      const invitation = await this.invitationRepository.findById(InvitationId.fromNumber(invitationId));
       if (!invitation) {
         return {
           success: false,
@@ -384,7 +384,7 @@ export class InvitationApplicationService {
       }
 
       // Verify permissions to revoke
-      const canInvite = await this.invitationRepository.canInviteToOrganization(revokedBy, invitation.organizationId.value);
+      const canInvite = await this.invitationRepository.canInviteToOrganization(UserId.fromString(revokedBy), invitation.organizationId);
       if (!canInvite && invitation.invitedBy.value !== revokedBy) {
         return {
           success: false,
@@ -393,7 +393,7 @@ export class InvitationApplicationService {
       }
 
       // Revoke invitation
-      await this.invitationRepository.revokeInvitation(invitationId);
+      await this.invitationRepository.revokeInvitation(InvitationId.fromNumber(invitationId));
 
       return {
         success: true,
@@ -414,7 +414,7 @@ export class InvitationApplicationService {
   async resendInvitation(invitationId: number, resentBy: string): Promise<InvitationApplicationResult<Invitation>> {
     try {
       // Verify invitation exists
-      const invitation = await this.invitationRepository.findById(invitationId);
+      const invitation = await this.invitationRepository.findById(InvitationId.fromNumber(invitationId));
       if (!invitation) {
         return {
           success: false,
@@ -423,7 +423,7 @@ export class InvitationApplicationService {
       }
 
       // Verify permissions to resend
-      const canInvite = await this.invitationRepository.canInviteToOrganization(resentBy, invitation.organizationId.value);
+      const canInvite = await this.invitationRepository.canInviteToOrganization(UserId.fromString(resentBy), invitation.organizationId);
       if (!canInvite && invitation.invitedBy.value !== resentBy) {
         return {
           success: false,
@@ -433,13 +433,13 @@ export class InvitationApplicationService {
 
       // Check if invitation is expired and extend if needed
       if (isInvitationExpired(invitation)) {
-        await this.invitationRepository.update(invitationId, {
+        await this.invitationRepository.update(InvitationId.fromNumber(invitationId), {
           expiresAt: createInvitationExpiry()
         });
       }
 
       // Resend invitation
-      const updatedInvitation = await this.invitationRepository.resendInvitation(invitationId);
+      const updatedInvitation = await this.invitationRepository.resendInvitation(InvitationId.fromNumber(invitationId));
 
       // Send email notification
       try {
@@ -472,7 +472,7 @@ export class InvitationApplicationService {
    */
   async getInvitations(filters: InvitationFilters): Promise<Invitation[]> {
     try {
-      let invitations = await this.invitationRepository.findByOrganization(filters.organizationId);
+      let invitations = await this.invitationRepository.findByOrganization(OrganizationId.fromNumber(filters.organizationId));
 
       // Apply inviter filter
       if (filters.invitedBy) {
@@ -525,7 +525,7 @@ export class InvitationApplicationService {
    */
   async getInvitationStats(organizationId: number): Promise<InvitationStats> {
     try {
-      return await this.invitationRepository.getInvitationStats(organizationId);
+      return await this.invitationRepository.getInvitationStats(OrganizationId.fromNumber(organizationId));
     } catch (error) {
       console.error("Error getting invitation stats:", error);
       throw new Error("Failed to get invitation statistics");
@@ -537,7 +537,7 @@ export class InvitationApplicationService {
    */
   async getPendingInvitations(organizationId: number): Promise<Invitation[]> {
     try {
-      return await this.invitationRepository.getPendingInvitations(organizationId);
+      return await this.invitationRepository.getPendingInvitations(OrganizationId.fromNumber(organizationId));
     } catch (error) {
       console.error("Error getting pending invitations:", error);
       throw new Error("Failed to get pending invitations");
@@ -549,7 +549,7 @@ export class InvitationApplicationService {
    */
   async cleanupExpiredInvitations(organizationId?: number): Promise<InvitationApplicationResult<number>> {
     try {
-      const deletedCount = await this.invitationRepository.deleteExpiredInvitations(organizationId);
+      const deletedCount = await this.invitationRepository.deleteExpiredInvitations(organizationId ? OrganizationId.fromNumber(organizationId) : undefined);
 
       return {
         success: true,
@@ -569,7 +569,7 @@ export class InvitationApplicationService {
    */
   async getInvitationByToken(token: string): Promise<InvitationApplicationResult<Invitation>> {
     try {
-      const invitation = await this.invitationRepository.findByToken(token);
+      const invitation = await this.invitationRepository.findByToken(token as any);
       if (!invitation) {
         return {
           success: false,
@@ -603,7 +603,7 @@ export class InvitationApplicationService {
    */
   async getInvitationEmailContext(invitationId: number): Promise<InvitationEmailContext | null> {
     try {
-      const emailData = await this.invitationRepository.getInvitationEmailData(invitationId);
+      const emailData = await this.invitationRepository.getInvitationEmailData(InvitationId.fromNumber(invitationId));
       if (!emailData) {
         return null;
       }
@@ -613,8 +613,14 @@ export class InvitationApplicationService {
 
       return {
         invitation: emailData.invitation,
-        organization: emailData.organization,
-        inviter: emailData.inviter,
+        organization: {
+          ...emailData.organization,
+          id: emailData.organization.id.value
+        },
+        inviter: {
+          ...emailData.inviter,
+          email: emailData.inviter.email?.value
+        },
         acceptUrl
       };
     } catch (error) {

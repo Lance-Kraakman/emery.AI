@@ -88,7 +88,7 @@ export function getEmbeddingModel(modelOverride?: string) {
         } else {
           // Batch embeddings
           const results = await Promise.all(
-            values.map(value => 
+            values.map((value: string) => 
               hf.featureExtraction({
                 model: modelName,
                 inputs: value

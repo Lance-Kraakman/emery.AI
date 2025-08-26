@@ -337,12 +337,12 @@ Capabilities: The organization has access to Emery's full feature set including 
 
     let relationshipContext = '';
     if (relationshipFields.length > 0) {
-      relationshipContext = `\nRelationships: This table connects to other tables through ${relationshipFields.length} relationship field${relationshipFields.length > 1 ? 's' : ''}: ${relationshipFields.map(f => f.name).join(', ')}`;
+      relationshipContext = `\nRelationships: This table connects to other tables through ${relationshipFields.length} relationship field${relationshipFields.length > 1 ? 's' : ''}: ${relationshipFields.map((f: any) => f.name).join(', ')}`;
     }
 
     let fileContext = '';
     if (fileFields.length > 0) {
-      fileContext = `\nFile Storage: This table can store files in ${fileFields.length} field${fileFields.length > 1 ? 's' : ''}: ${fileFields.map(f => f.name).join(', ')}. These files are uploaded documents, spreadsheets, images, or other data that belong to records in this table.`;
+      fileContext = `\nFile Storage: This table can store files in ${fileFields.length} field${fileFields.length > 1 ? 's' : ''}: ${fileFields.map((f: any) => f.name).join(', ')}. These files are uploaded documents, spreadsheets, images, or other data that belong to records in this table.`;
     }
 
     return `Table: ${table.name}

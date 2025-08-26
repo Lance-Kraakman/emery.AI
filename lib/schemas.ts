@@ -72,7 +72,7 @@ export const updateTeamSchema = teamSchema.extend({
 // Form data parsers to handle FormData conversion
 export const parseArrayFromString = (value: string | null): string[] => {
   if (!value || value.trim() === "") return [];
-  return value.split(",").map(item => item.trim()).filter(item => item.length > 0);
+  return value.split(",").map((item: string) => item.trim()).filter((item: string) => item.length > 0);
 };
 
 export const parseFormDataToAgent = (formData: FormData) => {

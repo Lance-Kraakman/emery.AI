@@ -607,7 +607,7 @@ export class ArrowTableDataService implements TableDataService, DataStorageServi
       const row: Record<string, any> = {};
       
       for (const field of schema.fields) {
-        const columnIndex = table.schema.fields.findIndex(f => f.name === field.slug);
+        const columnIndex = table.schema.fields.findIndex((f: any) => f.name === field.slug);
         if (columnIndex !== -1) {
           let value = tableArray[columnIndex].get(i);
           

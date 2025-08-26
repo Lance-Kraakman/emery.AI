@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 
-import { getEventDrivenSchedulingService } from "@/ddd/application/di/scheduling-container";
+import { getTaskSchedulingApplicationService } from "@/ddd/application/di/scheduling-container";
 
 /**
  * Standalone Scheduler Runner
@@ -20,40 +20,46 @@ async function main() {
   console.log(`🗄️  Database: ${process.env.DATABASE_URL?.replace(/\/\/.*@/, '//***@')}`);
   
   try {
-    // Get the event-driven scheduling service
-    const eventDrivenScheduler = getEventDrivenSchedulingService();
+    // Get the task scheduling application service
+    const taskScheduler = getTaskSchedulingApplicationService();
     
-    // Start the event-driven scheduler (combines timer + database event callbacks)
-    await eventDrivenScheduler.start();
+    // Start processing tasks periodically
+    const processingInterval = setInterval(async () => {
+      try {
+        const result = await taskScheduler.processPendingTasks(10);
+        if (result.processed > 0 || result.failed > 0) {
+          console.log(`📊 Processed: ${result.processed}, Failed: ${result.failed}, Queued: ${result.queued}`);
+        }
+      } catch (error: any) {
+        console.error('❌ Error processing tasks:', error.message);
+      }
+    }, 30000); // Process every 30 seconds
     
-    console.log('✅ Event-driven scheduler started successfully');
-    console.log('🎧 Listening for database events and running periodic checks...');
-    console.log('📋 Architecture: Timer-based fallback + Real-time event callbacks');
+    console.log('✅ Task scheduler started successfully');
+    console.log('🎧 Processing tasks every 30 seconds...');
     console.log('📋 Press Ctrl+C to stop');
     
     // Log initial status
-    const status = await eventDrivenScheduler.getStatus();
-    console.log(`📊 Initial status: ${status.eventCallbacksRegistered} event callbacks registered`);
-    console.log(`📊 Active listeners: ${status.eventScheduler.activeListeners.join(', ')}`);
-    
-    // Signal handlers will be set up after status timer
+    const stats = await taskScheduler.getExecutionStats();
+    console.log(`📊 Initial stats: ${stats.taskStats.totalTasks} total tasks`);
     
     // Optional: Log status periodically for monitoring
     const statusTimer = setInterval(async () => {
       try {
-        const currentStatus = await eventDrivenScheduler.getStatus();
-        if (currentStatus.eventScheduler.eventsProcessed > 0) {
-          console.log(`📊 Status: ${currentStatus.eventScheduler.eventsProcessed} events processed, last event: ${currentStatus.eventScheduler.lastEventTime}`);
-        }
-      } catch (error) {
-        console.error('❌ Error getting status:', error);
+        const currentStats = await taskScheduler.getExecutionStats();
+        console.log(`📊 Queue: ${currentStats.queueStats.totalQueued} queued, ${currentStats.queueStats.processing} processing`);
+      } catch (error: any) {
+        console.error('❌ Error getting status:', error.message);
       }
     }, 60000); // Log every minute
     
-    // Clean up status timer on shutdown - simplified approach
-    const statusCleanup = () => {
+    // Clean up timers on shutdown
+    const cleanup = () => {
       if (statusTimer) {
         clearInterval(statusTimer);
+      }
+      if (processingInterval) {
+        clearInterval(processingInterval);
       }
     };
     
@@ -62,26 +68,24 @@ async function main() {
     process.removeAllListeners('SIGTERM');
     
     process.on('SIGINT', async () => {
-      statusCleanup();
+      cleanup();
       console.log('\n🛑 Received SIGINT, shutting down gracefully...');
-      await eventDrivenScheduler.stop();
-      console.log('✅ Event-driven scheduler stopped');
+      console.log('✅ Task scheduler stopped');
       process.exit(0);
     });
     
     process.on('SIGTERM', async () => {
-      statusCleanup();
+      cleanup();
       console.log('\n🛑 Received SIGTERM, shutting down gracefully...');
-      await eventDrivenScheduler.stop();
-      console.log('✅ Event-driven scheduler stopped');
+      console.log('✅ Task scheduler stopped');
       process.exit(0);
     });
     
     // Keep process alive
     await new Promise(() => {});
     
-  } catch (error) {
-    console.error('❌ Failed to start event-driven scheduler:', error);
+  } catch (error: any) {
+    console.error('❌ Failed to start task scheduler:', error.message);
     process.exit(1);
   }
 }

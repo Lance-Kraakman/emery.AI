@@ -30,7 +30,7 @@ export class Team {
 
   static create(config: TeamConfig): Team {
     return new Team(
-      TeamId.fromNumber(0), // Will be set by repository after persistence
+      TeamId.placeholder(), // Will be set by repository after persistence
       config.name,
       config.purpose || null,
       config.description || null,

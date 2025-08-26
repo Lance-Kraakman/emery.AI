@@ -103,7 +103,7 @@ export class AgentApplicationService {
       }
 
       // Generate API key for agent authentication
-      const apiKey = this.generateApiKey();
+      const apiKey = ApiKey.generate();
 
       // Create agent data with defaults - ensure required fields are set
       const agentData: CreateAgentData = {
@@ -130,7 +130,7 @@ export class AgentApplicationService {
         ...agentWithDefaults,
         organizationId: command.organizationId, // Ensure these required fields are set
         ownerId: command.ownerId,
-        apiKey: ApiKey.fromString(apiKey),
+        apiKey: apiKey,
         createdAt: null,
         updatedAt: null
       };
@@ -363,12 +363,12 @@ export class AgentApplicationService {
       }
 
       // Generate new API key
-      const newApiKey = this.generateApiKey();
+      const newApiKey = ApiKey.generate();
       
       // Create updated agent with new API key
       const updatedAgent: Agent = {
         ...existingAgent,
-        apiKey: ApiKey.fromString(newApiKey),
+        apiKey: newApiKey,
         updatedAt: new Date()
       };
       
@@ -376,7 +376,7 @@ export class AgentApplicationService {
 
       return {
         success: true,
-        data: { apiKey: newApiKey }
+        data: { apiKey: newApiKey.value }
       };
     } catch (error) {
       console.error("Error regenerating API key:", error);
@@ -431,11 +431,4 @@ export class AgentApplicationService {
     }
   }
 
-  /**
-   * Generate API key for agent authentication
-   * AIDEV-NOTE: Simple API key generator - use more secure method in production
-   */
-  private generateApiKey(): string {
-    return 'ag_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-  }
 }

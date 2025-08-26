@@ -7,6 +7,7 @@ import type { Field } from '@/ddd/domain/fields/entities/field';
 import type { QueryFilter } from '@/ddd/infrastructure/data/duckdb-sql-builder';
 import type { StoredFile } from '@/ddd/domain/files/entities/file-storage';
 import { Row, RowCollection, FieldValue } from '@/ddd/domain/tables/value-objects/row';
+import { TableId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 export interface CreateRowCommand {
   tableId: number;
@@ -74,7 +75,7 @@ export class RowApplicationService {
   async createRow(command: CreateRowCommand): Promise<RowApplicationServiceResult<Row>> {
     try {
       // 1. Verify table exists
-      const table = await this.tableRepository.findById(command.tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(command.tableId));
       if (!table) {
         return {
           success: false,
@@ -83,7 +84,7 @@ export class RowApplicationService {
       }
 
       // 2. Get field definitions and validate row data
-      const fields = await this.fieldRepository.findByTableId(command.tableId);
+      const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(command.tableId));
       const validation = this.validateRowData(fields, command.data);
       if (!validation.valid) {
         return {
@@ -97,11 +98,11 @@ export class RowApplicationService {
       const processedData = await this.processRowData(command.tableId, command.data);
 
       // 4. Create row using repository - pass processed field data directly
-      const newRowData = await this.tableRepository.insertRow(command.tableId, processedData);
+      const newRowData = await this.tableRepository.insertRow(TableId.fromNumber(command.tableId), processedData);
 
       // 5. Convert to domain Row value object
-      const fieldSlugs = fields.map(f => f.slug);
-      const fieldTypes = fields.reduce((acc, f) => ({ ...acc, [f.slug]: f.type }), {});
+      const fieldSlugs = fields.map((f: any) => f.slug);
+      const fieldTypes = fields.reduce((acc: any, f: any) => ({ ...acc, [f.slug]: f.type }), {});
       const row = Row.fromPlainObject(newRowData, command.tableId, fieldSlugs, fieldTypes);
 
       console.log(`[ROW-APP-SERVICE] Created row in table ${table.name}`);
@@ -126,7 +127,7 @@ export class RowApplicationService {
   async updateRow(command: UpdateRowCommand): Promise<RowApplicationServiceResult<Row>> {
     try {
       // 1. Verify table exists
-      const table = await this.tableRepository.findById(command.tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(command.tableId));
       if (!table) {
         return {
           success: false,
@@ -135,7 +136,7 @@ export class RowApplicationService {
       }
 
       // 2. Verify row exists
-      const existingRow = await this.tableRepository.getRow(command.tableId, command.rowId);
+      const existingRow = await this.tableRepository.getRow(TableId.fromNumber(command.tableId), command.rowId);
       if (!existingRow) {
         return {
           success: false,
@@ -144,7 +145,7 @@ export class RowApplicationService {
       }
 
       // 3. Get field definitions and validate update data
-      const fields = await this.fieldRepository.findByTableId(command.tableId);
+      const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(command.tableId));
       const validation = this.validateRowData(fields, command.data);
       if (!validation.valid) {
         return {
@@ -158,11 +159,11 @@ export class RowApplicationService {
       const processedData = await this.processRowData(command.tableId, command.data);
 
       // 5. Update row using repository
-      const updatedRowData = await this.tableRepository.updateRow(command.tableId, command.rowId, processedData);
+      const updatedRowData = await this.tableRepository.updateRow(TableId.fromNumber(command.tableId), command.rowId, processedData);
 
       // 6. Convert to domain Row value object
-      const fieldSlugs = fields.map(f => f.slug);
-      const fieldTypes = fields.reduce((acc, f) => ({ ...acc, [f.slug]: f.type }), {});
+      const fieldSlugs = fields.map((f: any) => f.slug);
+      const fieldTypes = fields.reduce((acc: any, f: any) => ({ ...acc, [f.slug]: f.type }), {});
       const row = Row.fromPlainObject(updatedRowData, command.tableId, fieldSlugs, fieldTypes);
 
       console.log(`[ROW-APP-SERVICE] Updated row ${command.rowId} in table ${table.name}`);
@@ -187,7 +188,7 @@ export class RowApplicationService {
   async deleteRow(tableId: number, rowId: string): Promise<RowApplicationServiceResult<void>> {
     try {
       // 1. Verify table exists
-      const table = await this.tableRepository.findById(tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(tableId));
       if (!table) {
         return {
           success: false,
@@ -196,7 +197,7 @@ export class RowApplicationService {
       }
 
       // 2. Verify row exists
-      const existingRow = await this.tableRepository.getRow(tableId, rowId);
+      const existingRow = await this.tableRepository.getRow(TableId.fromNumber(tableId), rowId);
       if (!existingRow) {
         return {
           success: false,
@@ -205,8 +206,8 @@ export class RowApplicationService {
       }
 
       // 3. Handle file cleanup if there are file fields
-      const fields = await this.fieldRepository.findByTableId(tableId);
-      const fileFields = fields.filter(f => f.type === 'file');
+      const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
+      const fileFields = fields.filter((f: any) => f.type === 'file');
       
       for (const fileField of fileFields) {
         const fileData = existingRow[`field_${fileField.id}`];
@@ -218,7 +219,7 @@ export class RowApplicationService {
       }
 
       // 4. Delete row using repository
-      await this.tableRepository.deleteRow(tableId, rowId);
+      await this.tableRepository.deleteRow(TableId.fromNumber(tableId), rowId);
 
       console.log(`[ROW-APP-SERVICE] Deleted row ${rowId} from table ${table.name}`);
 
@@ -239,16 +240,16 @@ export class RowApplicationService {
    * Get a single row by ID
    */
   async getRow(tableId: number, rowId: string): Promise<Row | null> {
-    const rowData = await this.tableRepository.getRow(tableId, rowId);
+    const rowData = await this.tableRepository.getRow(TableId.fromNumber(tableId), rowId);
     if (!rowData) {
       return null;
     }
 
     // Get field information to create proper Row value object
-    const fields = await this.fieldRepository.findByTableId(tableId);
+    const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
     const mappedData = await this.mapRowToFrontend(tableId, rowData);
-    const fieldSlugs = fields.map(f => f.slug);
-    const fieldTypes = fields.reduce((acc, f) => ({ ...acc, [f.slug]: f.type }), {});
+    const fieldSlugs = fields.map((f: any) => f.slug);
+    const fieldTypes = fields.reduce((acc: any, f: any) => ({ ...acc, [f.slug]: f.type }), {});
 
     return Row.fromPlainObject(mappedData, tableId, fieldSlugs, fieldTypes);
   }
@@ -280,9 +281,9 @@ export class RowApplicationService {
     const rowsData = queryResult.data?.rows || [];
 
     // Get field information to create proper Row value objects
-    const fields = await this.fieldRepository.findByTableId(tableId);
-    const fieldSlugs = fields.map(f => f.slug);
-    const fieldTypes = fields.reduce((acc, f) => ({ ...acc, [f.slug]: f.type }), {});
+    const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
+    const fieldSlugs = fields.map((f: any) => f.slug);
+    const fieldTypes = fields.reduce((acc: any, f: any) => ({ ...acc, [f.slug]: f.type }), {});
 
     // Map field_X columns back to field slugs and create Row objects
     const mappedRowsData = [];
@@ -299,7 +300,7 @@ export class RowApplicationService {
   async bulkCreateRows(command: BulkCreateRowsCommand): Promise<RowApplicationServiceResult<RowCollection>> {
     try {
       // 1. Verify table exists
-      const table = await this.tableRepository.findById(command.tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(command.tableId));
       if (!table) {
         return {
           success: false,
@@ -308,7 +309,7 @@ export class RowApplicationService {
       }
 
       // 2. Get field definitions and validate all rows
-      const fields = await this.fieldRepository.findByTableId(command.tableId);
+      const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(command.tableId));
       const validationErrors: Array<{ row: number; errors: Array<{ field: string; error: string }> }> = [];
       
       for (let i = 0; i < command.rows.length; i++) {
@@ -332,13 +333,13 @@ export class RowApplicationService {
       const createdRowsData = [];
       for (const rowData of command.rows) {
         const processedData = await this.processRowData(command.tableId, rowData);
-        const newRowData = await this.tableRepository.insertRow(command.tableId, processedData);
+        const newRowData = await this.tableRepository.insertRow(TableId.fromNumber(command.tableId), processedData);
         createdRowsData.push(newRowData);
       }
 
       // 4. Convert to domain Row collection
-      const fieldSlugs = fields.map(f => f.slug);
-      const fieldTypes = fields.reduce((acc, f) => ({ ...acc, [f.slug]: f.type }), {});
+      const fieldSlugs = fields.map((f: any) => f.slug);
+      const fieldTypes = fields.reduce((acc: any, f: any) => ({ ...acc, [f.slug]: f.type }), {});
       const rowCollection = RowCollection.fromPlainObjects(createdRowsData, command.tableId, fieldSlugs, fieldTypes);
 
       console.log(`[ROW-APP-SERVICE] Bulk created ${rowCollection.rows.length} rows in table ${table.name}`);
@@ -363,7 +364,7 @@ export class RowApplicationService {
   async bulkUpdateRows(command: BulkUpdateRowsCommand): Promise<RowApplicationServiceResult<RowCollection>> {
     try {
       // 1. Verify table exists
-      const table = await this.tableRepository.findById(command.tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(command.tableId));
       if (!table) {
         return {
           success: false,
@@ -378,7 +379,7 @@ export class RowApplicationService {
       for (const update of command.updates) {
         try {
           // Validate update data
-          const fields = await this.fieldRepository.findByTableId(command.tableId);
+          const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(command.tableId));
           const validation = this.validateRowData(fields, update.data);
           if (!validation.valid) {
             errors.push({
@@ -390,7 +391,7 @@ export class RowApplicationService {
 
           // Process and update row
           const processedData = await this.processRowData(command.tableId, update.data);
-          const updatedRow = await this.tableRepository.updateRow(command.tableId, update.rowId, processedData);
+          const updatedRow = await this.tableRepository.updateRow(TableId.fromNumber(command.tableId), update.rowId, processedData);
           updatedRows.push(updatedRow);
 
         } catch (error) {
@@ -410,9 +411,9 @@ export class RowApplicationService {
       }
 
       // Convert to domain Row collection
-      const fields = await this.fieldRepository.findByTableId(command.tableId);
-      const fieldSlugs = fields.map(f => f.slug);
-      const fieldTypes = fields.reduce((acc, f) => ({ ...acc, [f.slug]: f.type }), {});
+      const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(command.tableId));
+      const fieldSlugs = fields.map((f: any) => f.slug);
+      const fieldTypes = fields.reduce((acc: any, f: any) => ({ ...acc, [f.slug]: f.type }), {});
       const rowCollection = RowCollection.fromPlainObjects(updatedRows, command.tableId, fieldSlugs, fieldTypes);
 
       console.log(`[ROW-APP-SERVICE] Bulk updated ${rowCollection.rows.length} rows in table ${table.name}`);
@@ -461,10 +462,10 @@ export class RowApplicationService {
 
     // Handle enhanced where conditions (new format)
     if (filters.where && filters.where.length > 0) {
-      const fields = tableId ? await this.fieldRepository.findByTableId(tableId) : [];
+      const fields = tableId ? await this.fieldRepository.findByTableId(TableId.fromNumber(tableId)) : [];
       const fieldSlugToId = fields.reduce((acc, field) => ({
         ...acc,
-        [field.slug]: field.id
+        [field.slug]: field.id.value
       }), {} as Record<string, number>);
 
       for (const condition of filters.where) {
@@ -483,10 +484,10 @@ export class RowApplicationService {
 
     // Handle legacy filters (backward compatibility)
     if (filters.filters && Object.keys(filters.filters).length > 0 && tableId) {
-      const fields = await this.fieldRepository.findByTableId(tableId);
+      const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
       const fieldSlugToId = fields.reduce((acc, field) => ({
         ...acc,
-        [field.slug]: field.id
+        [field.slug]: field.id.value
       }), {} as Record<string, number>);
 
       for (const [fieldSlug, value] of Object.entries(filters.filters)) {
@@ -510,7 +511,7 @@ export class RowApplicationService {
    * Process row data to handle special field types
    */
   private async processRowData(tableId: number, data: Record<string, any>): Promise<Record<string, any>> {
-    const fields = await this.fieldRepository.findByTableId(tableId);
+    const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
     const processedData: Record<string, any> = {};
 
     for (const field of fields) {
@@ -647,7 +648,7 @@ export class RowApplicationService {
    * Map row data from database format to frontend format
    */
   private async mapRowToFrontend(tableId: number, row: Record<string, any>): Promise<Record<string, any>> {
-    const fields = await this.fieldRepository.findByTableId(tableId);
+    const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
     const mappedRow: Record<string, any> = {
       id: row.id,
       created_at: row.created_at,
@@ -687,13 +688,13 @@ export class RowApplicationService {
   async getFilesByOrganization(organizationId: number): Promise<StoredFile[]> {
     try {
       // Get all file-type fields for this organization
-      const fields = await this.fieldRepository.findByTableId(0); // We need a method to find all fields by org
+      const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(0)); // We need a method to find all fields by org
       
       // For now, let's get all tables in the organization and then their file fields
       // This would be more efficient with a proper query, but demonstrates DuckDB usage
       
       // Get all tables for the organization
-      const tables = await this.tableRepository.findByOrganization(organizationId);
+      const tables = await this.tableRepository.findByOrganization(OrganizationId.fromNumber(organizationId));
       const files: StoredFile[] = [];
 
       for (const table of tables) {
@@ -704,7 +705,7 @@ export class RowApplicationService {
         if (fileFields.length === 0) continue;
 
         // Use DuckDB to query file field values from this table
-        const fileFieldColumns = fileFields.map(f => `field_${f.id}`);
+        const fileFieldColumns = fileFields.map((f: any) => `field_${f.id}`);
         
         for (const fileField of fileFields) {
           const filters = [{
@@ -715,7 +716,7 @@ export class RowApplicationService {
 
           const filtersObj = { [`field_${fileField.id}`]: 'NOT NULL' };
           const queryResult = await this.queryService.queryTable(
-            table.id,
+            table.id.value,
             filtersObj
           );
 
