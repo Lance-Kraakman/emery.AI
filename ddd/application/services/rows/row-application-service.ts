@@ -13,6 +13,7 @@ import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-re
 import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { Field } from '@/ddd/domain/fields/entities/field';
+import { Row, RowCollection, FieldValue } from '@/ddd/domain/tables/value-objects/row';
 
 export interface CreateRowCommand {
   tableId: number;
@@ -63,7 +64,7 @@ export class RowApplicationService {
   /**
    * Create a new row in a dynamic table
    */
-  async createRow(command: CreateRowCommand): Promise<RowApplicationServiceResult<any>> {
+  async createRow(command: CreateRowCommand): Promise<RowApplicationServiceResult<Row>> {
     try {
       // 1. Verify table exists
       const table = await this.tableRepository.findById(command.tableId);
@@ -89,13 +90,18 @@ export class RowApplicationService {
       const processedData = await this.processRowData(command.tableId, command.data);
 
       // 4. Create row using repository - pass processed field data directly
-      const newRow = await this.tableRepository.insertRow(command.tableId, processedData);
+      const newRowData = await this.tableRepository.insertRow(command.tableId, processedData);
+
+      // 5. Convert to domain Row value object
+      const fieldSlugs = fields.map(f => f.slug);
+      const fieldTypes = fields.reduce((acc, f) => ({ ...acc, [f.slug]: f.type }), {});
+      const row = Row.fromPlainObject(newRowData, command.tableId, fieldSlugs, fieldTypes);
 
       console.log(`[ROW-APP-SERVICE] Created row in table ${table.name}`);
 
       return {
         success: true,
-        data: newRow
+        data: row
       };
 
     } catch (error) {
@@ -110,7 +116,7 @@ export class RowApplicationService {
   /**
    * Update an existing row
    */
-  async updateRow(command: UpdateRowCommand): Promise<RowApplicationServiceResult<any>> {
+  async updateRow(command: UpdateRowCommand): Promise<RowApplicationServiceResult<Row>> {
     try {
       // 1. Verify table exists
       const table = await this.tableRepository.findById(command.tableId);
@@ -145,13 +151,18 @@ export class RowApplicationService {
       const processedData = await this.processRowData(command.tableId, command.data);
 
       // 5. Update row using repository
-      const updatedRow = await this.tableRepository.updateRow(command.tableId, command.rowId, processedData);
+      const updatedRowData = await this.tableRepository.updateRow(command.tableId, command.rowId, processedData);
+
+      // 6. Convert to domain Row value object
+      const fieldSlugs = fields.map(f => f.slug);
+      const fieldTypes = fields.reduce((acc, f) => ({ ...acc, [f.slug]: f.type }), {});
+      const row = Row.fromPlainObject(updatedRowData, command.tableId, fieldSlugs, fieldTypes);
 
       console.log(`[ROW-APP-SERVICE] Updated row ${command.rowId} in table ${table.name}`);
 
       return {
         success: true,
-        data: updatedRow
+        data: row
       };
 
     } catch (error) {
@@ -220,40 +231,50 @@ export class RowApplicationService {
   /**
    * Get a single row by ID
    */
-  async getRow(tableId: number, rowId: string): Promise<Record<string, any> | null> {
-    const row = await this.tableRepository.getRow(tableId, rowId);
-    if (!row) {
+  async getRow(tableId: number, rowId: string): Promise<Row | null> {
+    const rowData = await this.tableRepository.getRow(tableId, rowId);
+    if (!rowData) {
       return null;
     }
 
-    // Map field_X columns back to field slugs for frontend
-    return await this.mapRowToFrontend(tableId, row);
+    // Get field information to create proper Row value object
+    const fields = await this.fieldRepository.findByTableId(tableId);
+    const mappedData = await this.mapRowToFrontend(tableId, rowData);
+    const fieldSlugs = fields.map(f => f.slug);
+    const fieldTypes = fields.reduce((acc, f) => ({ ...acc, [f.slug]: f.type }), {});
+
+    return Row.fromPlainObject(mappedData, tableId, fieldSlugs, fieldTypes);
   }
 
   /**
    * Get rows from a table with filters
    */
-  async getRows(tableId: number, filters?: RowFilters): Promise<Record<string, any>[]> {
-    const rows = await this.tableRepository.getRows(tableId, {
+  async getRows(tableId: number, filters?: RowFilters): Promise<RowCollection> {
+    const rowsData = await this.tableRepository.getRows(tableId, {
       limit: filters?.limit || 1000,
       offset: filters?.offset || 0,
       orderBy: filters?.orderBy,
       orderDirection: filters?.orderDirection?.toUpperCase() as 'ASC' | 'DESC'
     });
 
-    // Map field_X columns back to field slugs for frontend
-    const mappedRows = [];
-    for (const row of rows) {
-      mappedRows.push(await this.mapRowToFrontend(tableId, row));
+    // Get field information to create proper Row value objects
+    const fields = await this.fieldRepository.findByTableId(tableId);
+    const fieldSlugs = fields.map(f => f.slug);
+    const fieldTypes = fields.reduce((acc, f) => ({ ...acc, [f.slug]: f.type }), {});
+
+    // Map field_X columns back to field slugs and create Row objects
+    const mappedRowsData = [];
+    for (const rowData of rowsData) {
+      mappedRowsData.push(await this.mapRowToFrontend(tableId, rowData));
     }
 
-    return mappedRows;
+    return RowCollection.fromPlainObjects(mappedRowsData, tableId, fieldSlugs, fieldTypes);
   }
 
   /**
    * Bulk create multiple rows
    */
-  async bulkCreateRows(command: BulkCreateRowsCommand): Promise<RowApplicationServiceResult<Record<string, any>[]>> {
+  async bulkCreateRows(command: BulkCreateRowsCommand): Promise<RowApplicationServiceResult<RowCollection>> {
     try {
       // 1. Verify table exists
       const table = await this.tableRepository.findById(command.tableId);
@@ -286,18 +307,23 @@ export class RowApplicationService {
       }
 
       // 3. Process and insert all rows
-      const createdRows = [];
+      const createdRowsData = [];
       for (const rowData of command.rows) {
         const processedData = await this.processRowData(command.tableId, rowData);
-        const newRow = await this.tableRepository.insertRow(command.tableId, processedData);
-        createdRows.push(newRow);
+        const newRowData = await this.tableRepository.insertRow(command.tableId, processedData);
+        createdRowsData.push(newRowData);
       }
 
-      console.log(`[ROW-APP-SERVICE] Bulk created ${createdRows.length} rows in table ${table.name}`);
+      // 4. Convert to domain Row collection
+      const fieldSlugs = fields.map(f => f.slug);
+      const fieldTypes = fields.reduce((acc, f) => ({ ...acc, [f.slug]: f.type }), {});
+      const rowCollection = RowCollection.fromPlainObjects(createdRowsData, command.tableId, fieldSlugs, fieldTypes);
+
+      console.log(`[ROW-APP-SERVICE] Bulk created ${rowCollection.rows.length} rows in table ${table.name}`);
 
       return {
         success: true,
-        data: createdRows
+        data: rowCollection
       };
 
     } catch (error) {
@@ -312,7 +338,7 @@ export class RowApplicationService {
   /**
    * Bulk update multiple rows
    */
-  async bulkUpdateRows(command: BulkUpdateRowsCommand): Promise<RowApplicationServiceResult<Record<string, any>[]>> {
+  async bulkUpdateRows(command: BulkUpdateRowsCommand): Promise<RowApplicationServiceResult<RowCollection>> {
     try {
       // 1. Verify table exists
       const table = await this.tableRepository.findById(command.tableId);
@@ -361,11 +387,17 @@ export class RowApplicationService {
         };
       }
 
-      console.log(`[ROW-APP-SERVICE] Bulk updated ${updatedRows.length} rows in table ${table.name}`);
+      // Convert to domain Row collection
+      const fields = await this.fieldRepository.findByTableId(command.tableId);
+      const fieldSlugs = fields.map(f => f.slug);
+      const fieldTypes = fields.reduce((acc, f) => ({ ...acc, [f.slug]: f.type }), {});
+      const rowCollection = RowCollection.fromPlainObjects(updatedRows, command.tableId, fieldSlugs, fieldTypes);
+
+      console.log(`[ROW-APP-SERVICE] Bulk updated ${rowCollection.rows.length} rows in table ${table.name}`);
 
       return {
         success: true,
-        data: updatedRows
+        data: rowCollection
       };
 
     } catch (error) {
