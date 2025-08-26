@@ -10,9 +10,9 @@ import logging
 from typing import Any, Dict
 
 from smolagents import ToolCallingAgent
-from smolagents.models import InferenceClientModel
 
 from .tools.tool_registry import ToolRegistry
+from ..domain.ai.services.model_provider_service import IModelProviderService
 from ..core.entities import ToolConfig
 
 logger = logging.getLogger(__name__)
@@ -27,10 +27,11 @@ class CapabilityRouterAgent:
     No intermediate routing or step creation - just direct tool execution.
     """
     
-    def __init__(self):
+    def __init__(self, model_provider: IModelProviderService):
         self.tool_registry = ToolRegistry()
+        self.model_provider = model_provider
         self._agent_cache = {}  # Cache by tool configuration
-        logger.info("CapabilityRouterAgent initialized")
+        logger.info("CapabilityRouterAgent initialized with centralized model provider")
     
     async def execute_instructions(self, instructions: str, available_tools: list = None) -> str:
         """
@@ -66,11 +67,11 @@ class CapabilityRouterAgent:
             raise
     
     async def _create_tool_calling_agent(self, tool_names: list = None) -> ToolCallingAgent:
-        """Create ToolCallingAgent with specified tools."""
-        hf_token = os.getenv("HF_TOKEN")
-        if not hf_token:
-            raise EnvironmentError("HF_TOKEN environment variable is required")
+        """
+        Create ToolCallingAgent with specified tools.
         
+        AIDEV-NOTE: Updated to use centralized model provider instead of hardcoded model creation.
+        """        
         # Load only specified tools (avoid loading all tools to prevent performance issues)
         if tool_names:
             tool_configs = [ToolConfig(name=name, version="1.0", config={}) for name in tool_names]
@@ -83,9 +84,9 @@ class CapabilityRouterAgent:
             tools = self.tool_registry.load_tools(tool_configs)
             logger.info(f"Loaded {len(tools)} default tools: {default_tools}")
         
-        # Create ToolCallingAgent with optimized configuration  
-        # Use 14B model - good balance of speed and tool calling support
-        model = InferenceClientModel("Qwen/Qwen2.5-14B-Instruct", token=hf_token)
+        # Get appropriate model from centralized provider
+        # Use tool_calling model type - optimized for tool usage
+        model = self.model_provider.get_default_model_for_capability()
         
         agent = ToolCallingAgent(
             tools=tools,
