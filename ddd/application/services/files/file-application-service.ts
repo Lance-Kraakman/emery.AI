@@ -10,7 +10,6 @@
  */
 
 import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
-import type { FileFieldService } from '@/ddd/domain/files/services/file-field-service';
 import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { FileFieldValue } from '@/ddd/domain/fields/entities/field';
@@ -54,7 +53,6 @@ export type FileApplicationServiceResult<T = any> = Result<T>;
 
 export class FileApplicationService {
   constructor(
-    private readonly fileFieldService: FileFieldService,
     private readonly fileStorageRepository: IFileStorageRepository,
     private readonly fieldRepository: IFieldRepository,
     private readonly tableRepository: IDynamicTableRepository
@@ -104,44 +102,39 @@ export class FileApplicationService {
         };
       }
 
-      // 3. Use FileFieldService to handle file attachment with validation
-      const result = await this.fileFieldService.attachFiles({
-        fieldId: command.fieldId,
+      // 3. Upload file directly to storage
+      const uploadRequest = {
+        buffer: command.file.buffer,
+        filename: command.file.filename,
+        mimeType: command.file.mimeType,
+        metadata: {
+          uploadedBy: command.uploadedBy,
+          uploadedAt: new Date().toISOString()
+        },
         organizationId: command.organizationId,
         tableId: command.tableId,
-        files: [{
-          buffer: command.file.buffer,
-          filename: command.file.filename,
-          mimeType: command.file.mimeType,
-          metadata: {
-            uploadedBy: command.uploadedBy,
-            uploadedAt: new Date().toISOString()
-          }
-        }]
-      });
+        fieldId: command.fieldId,
+      };
 
-      if (!result.success) {
-        return {
-          success: false,
-          error: result.errors?.join(', ') || 'Failed to upload file',
-          warnings: result.warnings
-        };
-      }
-
-      const uploadedFile = result.files?.[0];
-      if (!uploadedFile) {
-        return {
-          success: false,
-          error: 'No file metadata returned from upload'
-        };
-      }
+      const storedFile = await this.fileStorageRepository.uploadFile(uploadRequest);
+      
+      // 4. Create file field value
+      const uploadedFile: FileFieldValue = {
+        id: storedFile.id,
+        name: storedFile.name,
+        size: storedFile.size,
+        mimeType: storedFile.mimeType,
+        s3Key: storedFile.key,
+        uploadedAt: storedFile.uploadedAt.toISOString(),
+        url: await this.fileStorageRepository.generateDownloadUrl(storedFile.key),
+        metadata: storedFile.metadata,
+      };
 
       console.log(`[FILE-APP-SERVICE] Uploaded file ${uploadedFile.name} to field ${field.name} in table ${table.name}`);
 
       return {
         success: true,
-        data: uploadedFile,
-        warnings: result.warnings
+        data: uploadedFile
       };
 
     } catch (error) {
