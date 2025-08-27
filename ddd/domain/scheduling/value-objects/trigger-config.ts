@@ -15,7 +15,6 @@ export interface BaseTriggerConfig {
 // Manual trigger - executed on-demand by users
 export interface ManualTriggerConfig extends BaseTriggerConfig {
   type: 'MANUAL';
-  requiresAuthentication?: boolean;
 }
 
 // Calendar/CRON-based trigger - scheduled execution
@@ -62,7 +61,6 @@ export const TriggerConfigs = {
   manual: (config?: Partial<ManualTriggerConfig>): ManualTriggerConfig => ({
     type: 'MANUAL',
     enabled: true,
-    requiresAuthentication: true,
     ...config
   }),
 

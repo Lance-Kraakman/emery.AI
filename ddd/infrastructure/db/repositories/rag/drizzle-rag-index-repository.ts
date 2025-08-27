@@ -5,12 +5,11 @@ import { eq, and, inArray, sql, desc } from 'drizzle-orm';
 import type { DbClient } from '@/lib/db/client';
 import { ragIndexes } from '@/lib/db/schema';
 
-import { 
-  type RagIndexRepository, 
-  type RagIndexFilters 
-} from '@/ddd/domain/rag/repositories';
+
 import { RagIndex } from '@/ddd/domain/rag/entities';
 import { RagIndexId, OrganizationId, type DomainType, type IndexStatus } from '@/ddd/domain/rag/value-objects';
+import { RagIndexRepository } from '@/ddd/domain/rag';
+import { RagIndexFilters } from '@/ddd/domain/rag/repositories/rag-index-repository';
 
 export class DrizzleRagIndexRepository implements RagIndexRepository {
   constructor(private readonly db: DbClient) {}

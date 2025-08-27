@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { getTeamApplicationService } from "@/ddd/application/di/container";
+import { AgentId } from "@/ddd/domain/shared/value-objects";
 import { createTeamSchema, updateTeamSchema, parseFormDataToTeam } from "@/lib/schemas";
 import type { Result, CreateTeamData, TeamMembershipData } from "./types";
 import type { CreateTeamCommand, UpdateTeamCommand, TeamFilters } from "@/ddd/application/services/teams/team-application-service";
@@ -346,7 +347,7 @@ export async function getTeamsForAgent(agentId: string) {
     }
 
     const teamApplicationService = getTeamApplicationService();
-    return await teamApplicationService.getTeamsForAgent(agentId);
+    return await teamApplicationService.getTeamsForAgent(AgentId.fromNumber(parseInt(agentId, 10)));
   } catch (error) {
     console.error("Error fetching teams for agent:", error);
     throw new Error("Failed to fetch teams for agent");
@@ -362,7 +363,8 @@ export async function getTeamCount(organizationId?: number) {
     const currentOrg = await requireCurrentOrganization();
     
     const teamApplicationService = getTeamApplicationService();
-    return await teamApplicationService.getTeamCount(organizationId || currentOrg.id.value);
+    const orgId = organizationId ? OrganizationId.fromNumber(organizationId) : currentOrg.id;
+    return await teamApplicationService.getTeamCount(orgId);
   } catch (error) {
     console.error("Error fetching team count:", error);
     throw new Error("Failed to fetch team count");
@@ -384,7 +386,9 @@ export async function bulkAssignAgents(teamId: number, agentIds: string[]): Prom
     }
 
     const teamApplicationService = getTeamApplicationService();
-    const result = await teamApplicationService.bulkAssignAgents(teamId, agentIds);
+    const teamIdValueObject = TeamId.fromNumber(teamId);
+    const agentIdValueObjects = agentIds.map(id => AgentId.fromNumber(parseInt(id, 10)));
+    const result = await teamApplicationService.bulkAssignAgents(teamIdValueObject, agentIdValueObjects);
 
     if (!result.success) {
       return {

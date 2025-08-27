@@ -444,7 +444,6 @@ export class RowApplicationService {
       } else if (filter.operator === 'isNotNull') {
         filtersObj[filter.field] = 'NOT NULL';
       }
-      // Add more operators as needed
     }
     
     return filtersObj;

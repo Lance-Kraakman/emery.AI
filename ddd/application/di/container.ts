@@ -67,13 +67,13 @@ import { DrizzleChatMessageRepository } from '@/ddd/infrastructure/db/repositori
 import { DrizzleRagIndexRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-index-repository';
 import { DrizzleRagDocumentRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-document-repository';
 import { DrizzleRagQueryLogRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-query-log-repository';
-import { LlamaIndexContentProcessor } from '@/ddd/application/services/content-processing/llamaindex-content-processor';
 import { EmbeddingService } from '@/ddd/application/services/embedding-service';
 import { SearchAnalyticsService } from '@/ddd/application/services/search-analytics-service';
 import type { IIndexingDomainService, ISearchDomainService } from '@/ddd/domain/rag/services';
 import { IndexingDomainService, SearchDomainService } from '@/ddd/domain/rag/services';
 import { RagIndexingApplicationService } from '@/ddd/application/services/rag/rag-indexing-application-service';
 import { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
+import { LlamaIndexContentProcessor } from '../services/content-processing/llamaindex-content-processor';
 
 // Registry of all available repository interfaces and services
 interface RepositoryRegistry {
@@ -361,7 +361,6 @@ export class DIContainer {
     
     this.repositories.set('EmbeddingService', embeddingService);
     this.repositories.set('SearchAnalyticsService', searchAnalyticsService);
-    this.repositories.set('LlamaIndexContentProcessor', contentProcessor);
 
     // Initialize RAG domain services
     const indexingDomainService = new IndexingDomainService(contentProcessor);
@@ -552,7 +551,6 @@ export const getRagDocumentRepository = createGetter('RagDocumentRepository');
 export const getRagQueryLogRepository = createGetter('RagQueryLogRepository');
 export const getEmbeddingService = createGetter('EmbeddingService');
 export const getSearchAnalyticsService = createGetter('SearchAnalyticsService');
-export const getLlamaIndexContentProcessor = createGetter('LlamaIndexContentProcessor');
 export const getIndexingDomainService = createGetter('IndexingDomainService');
 export const getSearchDomainService = createGetter('SearchDomainService');
 export const getRagIndexingApplicationService = createGetter('RagIndexingApplicationService');

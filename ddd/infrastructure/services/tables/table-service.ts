@@ -25,12 +25,12 @@ import type {
   IDynamicTableRepository,
   CreateDynamicTableData
 } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
-import type {
+import {
   DynamicTable,
-  DynamicTableRow,
-  CreateRowData,
-  UpdateRowData,
-  RowQueryOptions
+  type DynamicTableRow,
+  type CreateRowData,
+  type UpdateRowData,
+  type RowQueryOptions
 } from '@/ddd/domain/tables/entities/dynamic-table';
 import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
 import type { FieldType } from '@/ddd/domain/fields/entities/field';
@@ -54,20 +54,20 @@ export class TableService implements IDynamicTableRepository {
     try {
       // 1. Create S3 path for the table
       const tableId = Date.now(); // Temporary - will get real ID after DB insert
-      const s3Path = new S3TablePath(data.organizationId, data.databaseId, tableId);
+      const s3Path = new S3TablePath(data.organizationId.value, data.databaseId.value, tableId);
 
       // 2. Create table record in PostgreSQL metadata
       const [tableRecord] = await db.insert(tables).values({
         name: data.name,
-        databaseId: data.databaseId,
-        organizationId: data.organizationId,
+        databaseId: data.databaseId.value,
+        organizationId: data.organizationId.value,
         s3Path: s3Path.path,
         metadata: data.metadata || null,
-        createdBy: data.createdBy
+        createdBy: data.createdBy.value
       }).returning();
 
       // Update S3 path with real table ID
-      const realS3Path = new S3TablePath(data.organizationId, data.databaseId, tableRecord.id);
+      const realS3Path = new S3TablePath(data.organizationId.value, data.databaseId.value, tableRecord.id);
       await db.update(tables)
         .set({ s3Path: realS3Path.path })
         .where(eq(tables.id, tableRecord.id));
@@ -76,7 +76,7 @@ export class TableService implements IDynamicTableRepository {
       await this.initializeEmptyTable(realS3Path);
 
       // 4. Return domain entity
-      const dynamicTable: DynamicTable = {
+      const dynamicTable = DynamicTable.fromPersistence({
         id: tableRecord.id,
         databaseId: tableRecord.databaseId,
         organizationId: tableRecord.organizationId,
@@ -86,7 +86,7 @@ export class TableService implements IDynamicTableRepository {
         createdBy: tableRecord.createdBy,
         createdAt: tableRecord.createdAt!,
         updatedAt: tableRecord.updatedAt!
-      };
+      });
 
       console.log(`[TableService] Created table: ${dynamicTable.name} (ID: ${dynamicTable.id})`);
 
@@ -110,7 +110,7 @@ export class TableService implements IDynamicTableRepository {
       }
 
       // Convert to domain entity
-      const dynamicTable: DynamicTable = {
+      const dynamicTable = DynamicTable.fromPersistence({
         id: tableRecord.id,
         databaseId: tableRecord.databaseId,
         organizationId: tableRecord.organizationId,
@@ -120,7 +120,7 @@ export class TableService implements IDynamicTableRepository {
         createdBy: tableRecord.createdBy,
         createdAt: tableRecord.createdAt!,
         updatedAt: tableRecord.updatedAt!
-      };
+      });
 
       return dynamicTable;
 
@@ -136,7 +136,7 @@ export class TableService implements IDynamicTableRepository {
         where: eq(tables.organizationId, organizationId.value)
       });
 
-      return tableRecords.map(record => ({
+      return tableRecords.map(record => DynamicTable.fromPersistence({
         id: record.id,
         databaseId: record.databaseId,
         organizationId: record.organizationId,
@@ -160,7 +160,7 @@ export class TableService implements IDynamicTableRepository {
         where: eq(tables.databaseId, databaseId.value)
       });
 
-      return tableRecords.map(record => ({
+      return tableRecords.map(record => DynamicTable.fromPersistence({
         id: record.id,
         databaseId: record.databaseId,
         organizationId: record.organizationId,
@@ -193,7 +193,7 @@ export class TableService implements IDynamicTableRepository {
         throw new Error(`Table ${id.value} not found`);
       }
 
-      return {
+      return DynamicTable.fromPersistence({
         id: updatedRecord.id,
         databaseId: updatedRecord.databaseId,
         organizationId: updatedRecord.organizationId,
@@ -203,7 +203,7 @@ export class TableService implements IDynamicTableRepository {
         createdBy: updatedRecord.createdBy,
         createdAt: updatedRecord.createdAt!,
         updatedAt: updatedRecord.updatedAt!
-      };
+      });
 
     } catch (error) {
       console.error('[TableService] Error updating table:', error);
@@ -267,7 +267,7 @@ export class TableService implements IDynamicTableRepository {
       }
 
       // 2. Get table schema for validation
-      const schemaResult = await this.getTableSchema(tableId);
+      const schemaResult = await this.getTableSchema(tableId.value);
       if (!schemaResult.success || !schemaResult.data) {
         throw new Error(`Table schema error: ${schemaResult.error}`);
       }
@@ -359,7 +359,7 @@ export class TableService implements IDynamicTableRepository {
         throw new Error('Table not found');
       }
 
-      const schemaResult = await this.getTableSchema(tableId);
+      const schemaResult = await this.getTableSchema(tableId.value);
       if (!schemaResult.success || !schemaResult.data) {
         throw new Error(`Table schema error: ${schemaResult.error}`);
       }
@@ -412,7 +412,7 @@ export class TableService implements IDynamicTableRepository {
       }
 
       // 2. Get schema for saving data
-      const schemaResult = await this.getTableSchema(tableId);
+      const schemaResult = await this.getTableSchema(tableId.value);
       if (!schemaResult.success || !schemaResult.data) {
         throw new Error(`Table schema error: ${schemaResult.error}`);
       }
@@ -514,7 +514,7 @@ export class TableService implements IDynamicTableRepository {
     try {
       const tableRecords = await db.query.tables.findMany();
 
-      return tableRecords.map(record => ({
+      return tableRecords.map(record => DynamicTable.fromPersistence({
         id: record.id,
         databaseId: record.databaseId,
         organizationId: record.organizationId,

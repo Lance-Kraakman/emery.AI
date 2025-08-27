@@ -119,6 +119,7 @@ export async function createAgentAction(formData: FormData): Promise<Result> {
     const result = await createAgent({ 
       ...validatedData,
       organizationId: currentOrg.id,
+      roleId: 1, // Default role ID - will be set by application layer
       tools, 
       servers,
       status: AgentStatus.active()

@@ -19,6 +19,8 @@ import type { TableQueryService } from '@/ddd/domain/tables/services/table-query
 import type { Field, FieldType } from '@/ddd/domain/fields/entities/field';
 import type { Result } from '@/ddd/domain/shared/result';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
+import { TableId } from '@/ddd/domain/shared/value-objects/table-id';
+import { FieldId } from '@/ddd/domain/shared/value-objects/field-id';
 
 export class ArrowFieldSchemaService implements FieldSchemaService {
   constructor(
@@ -31,14 +33,16 @@ export class ArrowFieldSchemaService implements FieldSchemaService {
     try {
       console.log(`[ArrowFieldSchemaService] Adding field ${field.name} to table ${tableId}`);
 
+      const tableIdVO = TableId.fromNumber(tableId);
+
       // 1. Verify table exists
-      const table = await this.tableRepository.findById(tableId);
+      const table = await this.tableRepository.findById(tableIdVO);
       if (!table) {
         return ResultHelpers.failure(`Table ${tableId} not found`);
       }
 
       // 2. Validate field doesn't conflict with existing fields
-      const existingFields = await this.fieldRepository.findByTableId(tableId);
+      const existingFields = await this.fieldRepository.findByTableId(tableIdVO);
       const conflictingField = existingFields.find((f: any) => f.slug === field.slug);
       if (conflictingField) {
         return ResultHelpers.failure(`Field with slug '${field.slug}' already exists in table`);
@@ -64,9 +68,11 @@ export class ArrowFieldSchemaService implements FieldSchemaService {
     try {
       console.log(`[ArrowFieldSchemaService] Removing field ${fieldId} from table ${tableId}`);
 
+      const fieldIdVO = FieldId.fromNumber(fieldId);
+
       // 1. Verify field exists and belongs to the table
-      const field = await this.fieldRepository.findById(fieldId);
-      if (!field || field.tableId !== tableId) {
+      const field = await this.fieldRepository.findById(fieldIdVO);
+      if (!field || field.tableId.value !== tableId) {
         return ResultHelpers.failure(`Field ${fieldId} not found in table ${tableId}`);
       }
 
@@ -98,9 +104,11 @@ export class ArrowFieldSchemaService implements FieldSchemaService {
     try {
       console.log(`[ArrowFieldSchemaService] Modifying field ${fieldId} in table ${tableId} to type ${newType}`);
 
+      const fieldIdVO = FieldId.fromNumber(fieldId);
+
       // 1. Verify field exists
-      const field = await this.fieldRepository.findById(fieldId);
-      if (!field || field.tableId !== tableId) {
+      const field = await this.fieldRepository.findById(fieldIdVO);
+      if (!field || field.tableId.value !== tableId) {
         return ResultHelpers.failure(`Field ${fieldId} not found in table ${tableId}`);
       }
 
@@ -145,14 +153,17 @@ export class ArrowFieldSchemaService implements FieldSchemaService {
     try {
       console.log(`[ArrowFieldSchemaService] Renaming field ${fieldId} in table ${tableId} to ${newName}`);
 
+      const fieldIdVO = FieldId.fromNumber(fieldId);
+      const tableIdVO = TableId.fromNumber(tableId);
+
       // 1. Verify field exists
-      const field = await this.fieldRepository.findById(fieldId);
-      if (!field || field.tableId !== tableId) {
+      const field = await this.fieldRepository.findById(fieldIdVO);
+      if (!field || field.tableId.value !== tableId) {
         return ResultHelpers.failure(`Field ${fieldId} not found in table ${tableId}`);
       }
 
       // 2. Check for name conflicts (handled by repository layer, but double-check)
-      const existingFields = await this.fieldRepository.findByTableId(tableId);
+      const existingFields = await this.fieldRepository.findByTableId(tableIdVO);
       const conflictingField = existingFields.find((f: any) => f.name === newName && f.id !== fieldId);
       if (conflictingField) {
         return ResultHelpers.failure(`Field with name '${newName}' already exists in table`);
@@ -210,7 +221,8 @@ export class ArrowFieldSchemaService implements FieldSchemaService {
 
   async validateFieldData(fieldId: number, value: any): Promise<Result<{ valid: boolean; error?: string }>> {
     try {
-      const field = await this.fieldRepository.findById(fieldId);
+      const fieldIdVO = FieldId.fromNumber(fieldId);
+      const field = await this.fieldRepository.findById(fieldIdVO);
       if (!field) {
         return ResultHelpers.failure(`Field ${fieldId} not found`);
       }
@@ -326,7 +338,8 @@ export class ArrowFieldSchemaService implements FieldSchemaService {
 
   async canDeleteField(fieldId: number): Promise<Result<{ canDelete: boolean; blockers: string[]; warnings: string[] }>> {
     // Basic implementation - more sophisticated logic would check actual usage
-    const field = await this.fieldRepository.findById(fieldId);
+    const fieldIdVO = FieldId.fromNumber(fieldId);
+    const field = await this.fieldRepository.findById(fieldIdVO);
     if (!field) {
       return ResultHelpers.failure(`Field ${fieldId} not found`);
     }
@@ -350,7 +363,8 @@ export class ArrowFieldSchemaService implements FieldSchemaService {
   }
 
   async canModifyField(fieldId: number, newType: FieldType): Promise<Result<{ canModify: boolean; blockers: string[]; warnings: string[] }>> {
-    const field = await this.fieldRepository.findById(fieldId);
+    const fieldIdVO = FieldId.fromNumber(fieldId);
+    const field = await this.fieldRepository.findById(fieldIdVO);
     if (!field) {
       return ResultHelpers.failure(`Field ${fieldId} not found`);
     }

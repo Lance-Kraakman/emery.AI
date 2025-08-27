@@ -121,8 +121,9 @@ export class TaskQueueService implements ITaskQueueService {
         continue;
       }
 
-      // Skip if task is scheduled for later
-      if (task.scheduledFor && task.scheduledFor > now) {
+      // Skip if task is scheduled for later (check metadata)
+      const scheduledFor = task.instructions.metadata?.scheduled_for;
+      if (scheduledFor && new Date(scheduledFor) > now) {
         continue;
       }
 

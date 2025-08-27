@@ -4,6 +4,7 @@ WORKDIR /app
 
 # Copy package files first for better caching
 COPY package.json pnpm-lock.yaml ./
+# Install git for dependencies
 RUN apk add --no-cache git
 RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
 RUN npm i -g pnpm

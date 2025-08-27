@@ -26,6 +26,7 @@ import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-re
 import type { TableSchema, FieldSchema } from '@/ddd/domain/tables/value-objects/table-schema';
 import type { Result } from '@/ddd/domain/shared/result';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
+import { TableId } from '@/ddd/domain/shared/value-objects';
 import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 
 // Apache Arrow imports for direct conversion
@@ -60,13 +61,13 @@ export class ArrowTableDataService implements TableDataService, DataStorageServi
       const migrationId = nanoid();
 
       // 1. Get table information
-      const table = await this.tableRepository.findById(tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(tableId));
       if (!table) {
         return ResultHelpers.failure(`Table ${tableId} not found`);
       }
 
       // 2. Load current schema
-      const currentFields = await this.fieldRepository.findByTableId(tableId);
+      const currentFields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
       const currentSchema = this.buildTableSchemaFromFields(currentFields);
 
       // 3. Create backup before evolution
@@ -162,10 +163,10 @@ export class ArrowTableDataService implements TableDataService, DataStorageServi
   async previewSchemaEvolution(tableId: number, targetSchema: TableSchema): Promise<Result<any>> {
     try {
       // 1. Analyze current table data
-      const stats = await this.tableRepository.getTableStats(tableId);
+      const stats = await this.tableRepository.getTableStats(TableId.fromNumber(tableId));
       
       // 2. Compare schemas to identify changes
-      const currentFields = await this.fieldRepository.findByTableId(tableId);
+      const currentFields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
       const currentSchema = this.buildTableSchemaFromFields(currentFields);
       
       // Simple analysis - more sophisticated logic would examine actual data
@@ -204,7 +205,7 @@ export class ArrowTableDataService implements TableDataService, DataStorageServi
       const warnings: string[] = [];
 
       // 1. Load existing data from S3
-      const table = await this.tableRepository.findById(tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(tableId));
       if (!table) {
         return ResultHelpers.failure(`Table ${tableId} not found`);
       }
@@ -278,7 +279,7 @@ export class ArrowTableDataService implements TableDataService, DataStorageServi
       console.log(`[ArrowTableDataService] Validating data integrity for table ${tableId}`);
 
       const issues: any[] = [];
-      const stats = await this.tableRepository.getTableStats(tableId);
+      const stats = await this.tableRepository.getTableStats(TableId.fromNumber(tableId));
 
       // Basic integrity checks
       // Full implementation would validate:
@@ -332,7 +333,7 @@ export class ArrowTableDataService implements TableDataService, DataStorageServi
 
   async analyzeTablePerformance(tableId: number): Promise<Result<any>> {
     try {
-      const stats = await this.tableRepository.getTableStats(tableId);
+      const stats = await this.tableRepository.getTableStats(TableId.fromNumber(tableId));
       
       return ResultHelpers.success({
         totalRows: stats.rowCount,
@@ -354,13 +355,13 @@ export class ArrowTableDataService implements TableDataService, DataStorageServi
   async createTableBackup(tableId: number, backupOptions: any): Promise<Result<any>> {
     try {
       const backupId = nanoid();
-      const table = await this.tableRepository.findById(tableId);
+      const table = await this.tableRepository.findById(TableId.fromNumber(tableId));
       if (!table) {
         return ResultHelpers.failure(`Table ${tableId} not found`);
       }
 
       // Create backup in S3 with special backup prefix
-      const s3Path = new S3TablePath(table.organizationId, table.databaseId, tableId);
+      const s3Path = new S3TablePath(table.organizationId.value, table.databaseId.value, tableId);
       const backupPath = `${s3Path.path}/backups/${backupId}/`;
 
       // Implementation would copy current data to backup location

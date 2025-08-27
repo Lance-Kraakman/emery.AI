@@ -1,23 +1,11 @@
 // AIDEV-NOTE: Shared types for Server Actions - ensures type safety across actions
 // Uses unified Result<T> interface from DDD domain layer for consistent error handling
+import { FieldType } from '@/ddd/domain/fields/entities/field';
 import type { Result } from '@/ddd/domain/shared/result';
 
 // Export the unified Result interface for use in Server Actions
 export type { Result } from '@/ddd/domain/shared/result';
 
-export type FieldType = 'text' | 'number' | 'boolean' | 'email' | 'url' | 'date' | 'relation' | 'file';
-
-export interface Field {
-  id: number;
-  tableId: number;
-  name: string;
-  slug: string;
-  type: FieldType;
-  orderIndex: number | null | undefined;
-  relatedTableId: number | null;
-  required: boolean | null;
-  createdAt: Date | null;
-}
 
 export interface Row {
   id: string;
@@ -72,15 +60,6 @@ export interface UpdateUserData {
   name?: string;
   email?: string;
   roleId?: number;
-}
-
-export interface CreateDynamicTableData {
-  name: string;
-  dbName: string;
-  databaseId: number;
-  organizationId: number;
-  createdBy: string;
-  metadata?: any;
 }
 
 export interface CreateTeamData {

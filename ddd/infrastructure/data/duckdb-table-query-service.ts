@@ -7,7 +7,8 @@
  * AIDEV-NOTE: Infrastructure implementation of TableQueryService using DuckDB for Arrow analytical queries
  */
 
-import duckdb from '@duckdb/node-api';
+const duckdb = require('duckdb');
+
 import { BUCKET_NAME } from '@/lib/s3/client';
 
 import type { Result } from '@/ddd/domain/shared/result';
@@ -19,68 +20,118 @@ import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import { DuckDB, eq, gt, gte, lt, lte, like, type QueryFilter } from './duckdb-sql-builder';
 
 export class DuckDBTableQueryService implements TableQueryService {
-  private instance: any = null;
-  private connection: any = null;
+  private db: any = null;
+  private isInitialized = false;
 
   constructor() {
-    // Initialize asynchronously - connection will be created when first needed
-    this.initializeDatabase();
+    // AIDEV-NOTE: Defer DuckDB initialization until first actual query to avoid build-time failures
+    // The arrow extension HTTP 403 error occurs during Next.js build phase
   }
 
-  private async initializeDatabase(): Promise<void> {
+  private initializeDatabase(): void {
     try {
-      // Create DuckDB instance using new Neo API
-      this.instance = await duckdb.DuckDBInstance.create(':memory:');
-      this.connection = await this.instance.connect();
-
-      // Install required extensions
-      await this.connection.run("INSTALL arrow; LOAD arrow;");
+      // Create DuckDB database using stable API
+      this.db = new duckdb.Database(':memory:');
       
-      // Install and load httpfs for S3 access
-      await this.connection.run("INSTALL httpfs; LOAD httpfs;");
-      
-      // Configure S3 credentials if available
-      if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-        await this.connection.run(`SET s3_region='${process.env.AWS_REGION || 'ap-southeast-2'}';`);
-        await this.connection.run(`SET s3_access_key_id='${process.env.AWS_ACCESS_KEY_ID}';`);
-        await this.connection.run(`SET s3_secret_access_key='${process.env.AWS_SECRET_ACCESS_KEY}';`);
-        
-        if (process.env.S3_ENDPOINT_URL) {
-          await this.connection.run(`SET s3_endpoint='${process.env.S3_ENDPOINT_URL}';`);
-          await this.connection.run(`SET s3_use_ssl='${!process.env.S3_ENDPOINT_URL.startsWith('http://')}';`);
+      // Install extensions synchronously
+      this.db.exec("INSTALL arrow; LOAD arrow;", (err: Error | null) => {
+        if (err) {
+          console.error('[DuckDB] Failed to load arrow extension:', err);
+          throw err;
         }
-      }
+        console.log('[DuckDB] Arrow extension loaded successfully');
+        
+        // Install httpfs for S3 access
+        this.db.exec("INSTALL httpfs; LOAD httpfs;", (err: Error | null) => {
+          if (err) {
+            console.error('[DuckDB] Failed to load httpfs extension:', err);
+            throw err;
+          }
+          
+          // Configure S3 credentials if available
+          if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+            const s3Config = [
+              `SET s3_region='${process.env.AWS_REGION || 'ap-southeast-2'}';`,
+              `SET s3_access_key_id='${process.env.AWS_ACCESS_KEY_ID}';`,
+              `SET s3_secret_access_key='${process.env.AWS_SECRET_ACCESS_KEY}';`
+            ];
+            
+            if (process.env.S3_ENDPOINT_URL) {
+              s3Config.push(`SET s3_endpoint='${process.env.S3_ENDPOINT_URL}';`);
+              s3Config.push(`SET s3_use_ssl='${!process.env.S3_ENDPOINT_URL.startsWith('http://')}';`);
+            }
+            
+            this.db.exec(s3Config.join(' '), (err: Error | null) => {
+              if (err) {
+                console.warn('[DuckDB] Failed to configure S3:', err);
+              } else {
+                console.log('[DuckDB] S3 configuration applied');
+              }
+              this.isInitialized = true;
+            });
+          } else {
+            this.isInitialized = true;
+          }
+          
+          console.log('[DuckDB] Database initialized successfully');
+        });
+      });
       
-      console.log('[DuckDB-NEO] Database initialized successfully');
     } catch (error) {
-      console.error('[DuckDB-NEO] Failed to initialize database:', error);
+      console.error('[DuckDB] Failed to initialize database:', error);
+      throw error;
     }
   }
 
   private async executeQuery(sql: string): Promise<Result<QueryResult>> {
     try {
-      if (!this.connection) {
-        await this.initializeDatabase();
-        if (!this.connection) {
-          return { success: false, error: 'Failed to initialize DuckDB connection' };
-        }
+      // Initialize on first query if not already done
+      if (!this.db || !this.isInitialized) {
+        this.initializeDatabase();
+        // Wait for async initialization to complete
+        await new Promise<void>((resolve, reject) => {
+          const checkInitialized = () => {
+            if (this.isInitialized) {
+              resolve();
+            } else {
+              setTimeout(checkInitialized, 100);
+            }
+          };
+          checkInitialized();
+          // Timeout after 10 seconds
+          setTimeout(() => reject(new Error('DuckDB initialization timeout')), 10000);
+        });
+      }
+      
+      if (!this.db || !this.isInitialized) {
+        return { success: false, error: 'DuckDB initialization failed' };
       }
 
       const startTime = Date.now();
       
-      // Use new Neo API
-      const reader = await this.connection.runAndReadAll(sql);
-      const rows = reader.getRowObjects();
-      const executionTime = Date.now() - startTime;
-      
-      return {
-        success: true,
-        data: {
-          rows,
-          rowCount: rows.length,
-          executionTime
-        }
-      };
+      // Use stable API with Promise wrapper
+      return new Promise((resolve) => {
+        this.db.all(sql, (err: Error | null, rows: any[]) => {
+          const executionTime = Date.now() - startTime;
+          
+          if (err) {
+            console.error('[DuckDB] Error executing query:', err);
+            resolve({
+              success: false,
+              error: err.message || 'Failed to execute query'
+            });
+          } else {
+            resolve({
+              success: true,
+              data: {
+                rows: rows || [],
+                rowCount: rows?.length || 0,
+                executionTime
+              }
+            });
+          }
+        });
+      });
       
     } catch (error) {
       console.error('[DuckDB] Error executing query:', error);

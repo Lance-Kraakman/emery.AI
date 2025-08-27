@@ -11,14 +11,13 @@ import { eq } from 'drizzle-orm';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
-import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
 import { RagIndex } from '@/ddd/domain/rag/entities';
 import { RagIndexId, OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
+import { BaseDomainEvent } from '@/ddd/domain/shared/events/base-domain-event';
 import { 
   createRagIndexCreatedEvent, 
   createDataChangeEvent,
   type ChangeType,
-  type DomainEvent 
 } from '@/ddd/domain/rag/events';
 
 import { 
@@ -40,7 +39,7 @@ export interface IndexingResult {
 }
 
 export interface EventPublisher {
-  publish(event: DomainEvent): Promise<void>;
+  publish(event: BaseDomainEvent): Promise<void>;
 }
 
 export class RagIndexingApplicationService {

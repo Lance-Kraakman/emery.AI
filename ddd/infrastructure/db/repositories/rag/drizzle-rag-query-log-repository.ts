@@ -5,12 +5,9 @@ import { eq, and, sql, desc } from 'drizzle-orm';
 import type { DbClient } from '@/lib/db/client';
 import { ragQueryLogs } from '@/lib/db/schema';
 
-import { 
-  type RagQueryLogRepository,
-  type QueryLogEntry,
-  type QueryAnalytics
-} from '@/ddd/domain/rag/repositories';
+
 import { RagIndexId, SearchQuery } from '@/ddd/domain/rag/value-objects';
+import { QueryAnalytics, QueryLogEntry, RagQueryLogRepository } from '@/ddd/domain/rag/repositories/rag-query-log-repository';
 
 export class DrizzleRagQueryLogRepository implements RagQueryLogRepository {
   constructor(private readonly db: DbClient) {}

@@ -59,8 +59,7 @@ export class DrizzleTaskRepository implements ITaskRepository {
           result: data.result,
           error: data.error,
           startedAt: data.startedAt,
-          completedAt: data.completedAt,
-          updatedAt: new Date()
+          completedAt: data.completedAt
         }
       });
   }
@@ -72,64 +71,51 @@ export class DrizzleTaskRepository implements ITaskRepository {
   }
 
   async findPendingTasks(limit?: number): Promise<Task[]> {
-    let query = this.db
+    const baseQuery = this.db
       .select()
       .from(tasks)
       .where(eq(tasks.status, TASK_STATUS.PENDING))
       .orderBy(asc(tasks.createdAt));
 
-    if (limit) {
-      query = query.limit(limit);
-    }
-
-    const results = await query;
+    const results = limit 
+      ? await baseQuery.limit(limit)
+      : await baseQuery;
+      
     return results.map(r => this.mapToEntity(r));
   }
 
   async findReadyForExecution(before: Date = new Date()): Promise<Task[]> {
+    // Tasks are ready if they are pending - scheduled timing is handled via metadata
     const results = await this.db
       .select()
       .from(tasks)
-      .where(
-        and(
-          eq(tasks.status, TASK_STATUS.PENDING),
-          or(
-            isNull(tasks.scheduledFor),
-            lte(tasks.scheduledFor, before)
-          )
-        )
-      )
+      .where(eq(tasks.status, TASK_STATUS.PENDING))
       .orderBy(asc(tasks.createdAt));
 
     return results.map(r => this.mapToEntity(r));
   }
 
   async findByStatus(status: TaskStatus, limit?: number): Promise<Task[]> {
-    let query = this.db
+    const baseQuery = this.db
       .select()
       .from(tasks)
       .where(eq(tasks.status, status.value))
       .orderBy(desc(tasks.createdAt));
 
-    if (limit) {
-      query = query.limit(limit);
-    }
-
-    const results = await query;
+    const results = limit 
+      ? await baseQuery.limit(limit)
+      : await baseQuery;
+      
     return results.map(r => this.mapToEntity(r));
   }
 
   async findScheduledTasksDue(before: Date = new Date()): Promise<Task[]> {
+    // All pending tasks - actual scheduling timing is handled in task queue service via metadata
     const results = await this.db
       .select()
       .from(tasks)
-      .where(
-        and(
-          eq(tasks.status, TASK_STATUS.PENDING),
-          lte(tasks.scheduledFor!, before)
-        )
-      )
-      .orderBy(asc(tasks.scheduledFor));
+      .where(eq(tasks.status, TASK_STATUS.PENDING))
+      .orderBy(asc(tasks.createdAt));
 
     return results.map(r => this.mapToEntity(r));
   }
@@ -149,8 +135,7 @@ export class DrizzleTaskRepository implements ITaskRepository {
           result: sql`excluded.result`,
           error: sql`excluded.error`,
           startedAt: sql`excluded.started_at`,
-          completedAt: sql`excluded.completed_at`,
-          updatedAt: new Date()
+          completedAt: sql`excluded.completed_at`
         }
       });
   }
@@ -159,8 +144,7 @@ export class DrizzleTaskRepository implements ITaskRepository {
     await this.db
       .update(tasks)
       .set({ 
-        status: status.value,
-        updatedAt: new Date()
+        status: status.value
       })
       .where(eq(tasks.id, id.value));
   }
@@ -239,20 +223,19 @@ export class DrizzleTaskRepository implements ITaskRepository {
 
   private mapToEntity(row: any): Task {
     return Task.fromPersistence({
-      id: TaskId.fromString(row.id),
-      agentId: AgentId.fromNumber(row.agentId),
-      organizationId: OrganizationId.fromNumber(row.organizationId),
+      id: row.id,
+      agentId: row.agentId,
+      organizationId: row.organizationId,
       name: row.name,
       capabilityName: row.capabilityName,
       instructions: row.instructions || {},
-      status: TaskStatus.fromString(row.status),
+      status: row.status,
       result: row.result,
       error: row.error,
       startedAt: row.startedAt,
       completedAt: row.completedAt,
-      createdBy: row.createdBy ? UserId.fromString(row.createdBy) : undefined,
+      createdBy: row.createdBy,
       createdAt: row.createdAt,
-      scheduledFor: row.scheduledFor
     });
   }
 
@@ -270,7 +253,6 @@ export class DrizzleTaskRepository implements ITaskRepository {
       startedAt: task.startedAt || null,
       completedAt: task.completedAt || null,
       createdBy: task.createdBy?.value || null,
-      scheduledFor: task.scheduledFor || null,
       createdAt: task.createdAt || new Date()
     };
   }

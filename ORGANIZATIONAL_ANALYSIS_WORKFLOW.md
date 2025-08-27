@@ -194,7 +194,6 @@ const result = await agentService.createAgent(command);
 {
   type: 'MANUAL',
   enabled: true,
-  requiresAuthentication: true
 }
 
 // Database event trigger

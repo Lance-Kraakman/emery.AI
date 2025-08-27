@@ -362,10 +362,10 @@ export const PREDEFINED_SERVERS: ServerDefinition[] = [
 ];
 
 /**
- * Trigger type definitions
+ * Trigger type definitions aligned with domain TriggerConfig
  */
 export interface TriggerDefinition {
-  type: 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT' | 'CALENDAR';
+  type: 'MANUAL' | 'CALENDAR' | 'WEBHOOK' | 'DATABASE_EVENT' | 'RAG_REINDEX';
   display_name: string;
   description: string;
   parameters: Array<{
@@ -385,16 +385,23 @@ export const PREDEFINED_TRIGGERS: TriggerDefinition[] = [
     parameters: []
   },
   {
-    type: 'CRON',
-    display_name: 'Scheduled (Cron)',
-    description: 'Execute agent on a schedule using cron expressions',
+    type: 'CALENDAR',
+    display_name: 'Scheduled (Calendar)',
+    description: 'Execute agent based on calendar rules and schedules',
     parameters: [
       {
-        name: 'cron',
+        name: 'rrule',
         type: 'string',
         required: true,
-        description: 'Cron expression for scheduling',
-        placeholder: '0 9 * * MON-FRI (Every weekday at 9 AM)'
+        description: 'Recurrence rule string (iCalendar RFC 5545)',
+        placeholder: 'Select dates on the calendar or enter an RRule'
+      },
+      {
+        name: 'timezone',
+        type: 'string',
+        required: false,
+        description: 'Timezone for schedule evaluation',
+        placeholder: 'UTC'
       }
     ]
   },
@@ -427,23 +434,30 @@ export const PREDEFINED_TRIGGERS: TriggerDefinition[] = [
       {
         name: 'table_id',
         type: 'string',
-        required: true,
-        description: 'Database table ID to monitor',
+        required: false,
+        description: 'Database table ID to monitor (optional - monitors all if not specified)',
         placeholder: 'Select table to monitor'
       }
     ]
   },
   {
-    type: 'CALENDAR',
-    display_name: 'Calendar Event',
-    description: 'Execute agent based on a calendar schedule',
+    type: 'RAG_REINDEX',
+    display_name: 'RAG Reindex',
+    description: 'Execute agent when RAG indexes need to be updated',
     parameters: [
       {
-        name: 'rrule',
+        name: 'domain_types',
         type: 'string',
-        required: true,
-        description: 'Recurrence rule string (iCalendar RFC 5545)',
-        placeholder: 'Select dates on the calendar to generate an rrule'
+        required: false,
+        description: 'Comma-separated domain types to monitor',
+        placeholder: 'table,document,organization'
+      },
+      {
+        name: 'debounce_ms',
+        type: 'number',
+        required: false,
+        description: 'Debounce delay in milliseconds for batch processing',
+        placeholder: '5000'
       }
     ]
   }

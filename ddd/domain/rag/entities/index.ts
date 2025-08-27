@@ -1,3 +1,3 @@
 // AIDEV-NOTE: Essential RAG entity exports
 export { RagIndex } from './rag-index';
-export { RagDocument } from './rag-document';
+export { RagDocument, type DocumentMetadata } from './rag-document';

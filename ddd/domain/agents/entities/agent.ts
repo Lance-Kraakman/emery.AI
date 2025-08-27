@@ -11,8 +11,6 @@ import {
   ApiKey 
 } from '@/ddd/domain/shared/value-objects';
 
-// Agent-specific trigger config that extends domain trigger config for agent use cases
-export type AgentTriggerConfig = TriggerConfig | Record<string, any> | null;
 
 // Agent specialization types for organizational analysis
 export type AgentType = 
@@ -67,7 +65,7 @@ export interface Agent {
   persona: string;                         // required with default ''
   tools: ToolConfig[];                     // required with default []
   servers: ServerConfig[];                 // required with default []
-  trigger: AgentTriggerConfig;              // optional trigger configuration
+  trigger?: TriggerConfig;              // optional trigger configuration
   capabilities: CapabilityConfig[];        // required with default []
   databaseId?: string | null;              // optional - can be null
   status: AgentStatus;                     // required with default 'active'
@@ -88,13 +86,13 @@ export interface CreateAgentData {
   persona?: string;                        // defaults to ''
   tools?: ToolConfig[];                    // defaults to []
   servers?: ServerConfig[];                // defaults to []
-  trigger?: AgentTriggerConfig;             // optional trigger configuration
+  trigger?: TriggerConfig;             // optional trigger configuration
   capabilities?: CapabilityConfig[];       // defaults to []
   databaseId?: string;
   status?: AgentStatus;                    // defaults to 'active'
   organizationId?: OrganizationId;         // Set by application layer from session
   ownerId?: UserId;                        // Set by application layer from session
-  roleId?: number;
+  roleId: number;
   agentType?: AgentType;                   // defaults to 'general'
   specialization?: AgentSpecialization;    // optional specialization
 }
@@ -106,7 +104,7 @@ export interface UpdateAgentData {
   persona?: string;
   tools?: ToolConfig[];
   servers?: ServerConfig[];
-  trigger?: AgentTriggerConfig;
+  trigger?: TriggerConfig;
   capabilities?: CapabilityConfig[];
   databaseId?: string;
   status?: AgentStatus;
@@ -144,18 +142,32 @@ export const getCapabilitiesCount = (agent: Agent): number => {
   return agent.capabilities?.length || 0;
 };
 
-// Default values for agent creation
-export const createAgentDefaults = (data: CreateAgentData): Required<Omit<CreateAgentData, 'databaseId' | 'roleId' | 'organizationId' | 'ownerId'>> & Pick<CreateAgentData, 'databaseId' | 'roleId' | 'organizationId' | 'ownerId'> => {
+// Default values for agent creation - ensures all required fields have defaults
+export const createAgentDefaults = (data: CreateAgentData): Omit<CreateAgentData, 'organizationId' | 'ownerId'> & { 
+  role: string;
+  description: string;
+  persona: string;
+  tools: ToolConfig[];
+  servers: ServerConfig[];
+  capabilities: CapabilityConfig[];
+  status: AgentStatus;
+  organizationId?: OrganizationId;
+  ownerId?: UserId;
+} => {
+  const role: string = data.role || AGENT_ROLES.ASSISTANT;
+  const description: string = data.description || '';
+  const persona: string = data.persona || '';
+  
   return {
     name: data.name,
-    role: data.role || AGENT_ROLES.ASSISTANT,
-    description: data.description || '',
-    persona: data.persona || '',
+    role,
+    description,
+    persona,
     agentType: data.agentType || 'general',
     specialization: data.specialization || {},
     tools: data.tools || [],
     servers: data.servers || [],
-    trigger: data.trigger || null,
+    trigger: data.trigger,
     capabilities: data.capabilities || [],
     status: data.status || AgentStatus.active(),
     organizationId: data.organizationId, // Should be provided by application layer
