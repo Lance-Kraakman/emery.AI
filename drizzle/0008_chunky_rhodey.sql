@@ -1,0 +1,1 @@
+ALTER TABLE "rag_documents" RENAME COLUMN "source_type" TO "domain_type";

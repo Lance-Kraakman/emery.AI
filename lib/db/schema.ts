@@ -257,7 +257,7 @@ export const ragDocuments = pgTable("rag_documents", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id), // Denormalized for performance
   
   // Source identification
-  domainType: text("source_type").notNull(), // "table", "file", "agent", "workflow"
+  domainType: text("domain_type").notNull(), // "table", "file", "agent", "workflow"
   sourceId: text("source_id").notNull(), // ID of the source (table.id, file_path, etc.)
   sourceName: text("source_name").notNull(), // Human readable name
   

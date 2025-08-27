@@ -28,7 +28,7 @@ let testAgents: { agent1: number; agent2: number } = { agent1: 0, agent2: 0 };
 describe('RLS Multi-Tenant Isolation Integration Tests', () => {
   
   beforeAll(async () => {
-    // Create test organizations 
+    // Create test organizations (use SERIAL to auto-generate IDs after sequence reset)
     const org1Result = await testClient.query(`
       INSERT INTO organizations (name, slug, created_at) 
       VALUES ('RLS Test Org 1', 'rls-test-org-1', NOW())
@@ -43,33 +43,33 @@ describe('RLS Multi-Tenant Isolation Integration Tests', () => {
     `);
     testOrgs.org2 = org2Result[0].id;
 
-    // Create test users  
-    const user1Id = 'rls-user-1-' + Math.random().toString(36).substring(7);
-    const user2Id = 'rls-user-2-' + Math.random().toString(36).substring(7);
+    // Create test users with correct schema (current_organization_id, no updated_at, valid UUIDs)
+    const user1Id = '550e8400-e29b-41d4-a716-446655440101'; // Unique UUID for RLS test
+    const user2Id = '550e8400-e29b-41d4-a716-446655440102'; // Unique UUID for RLS test
     
     await testClient.query(`
-      INSERT INTO users (id, name, email, organization_id, created_at, updated_at) 
-      VALUES ($1, 'RLS User 1', $2, $3, NOW(), NOW())
-    `, [user1Id, `${user1Id}@test.com`, testOrgs.org1]);
+      INSERT INTO users (id, name, email, current_organization_id, created_at) 
+      VALUES ($1, 'RLS User 1', $2, $3, NOW())
+    `, [user1Id, `rls-user-1@test.com`, testOrgs.org1]);
     testUsers.user1 = user1Id;
 
     await testClient.query(`
-      INSERT INTO users (id, name, email, organization_id, created_at, updated_at) 
-      VALUES ($1, 'RLS User 2', $2, $3, NOW(), NOW())
-    `, [user2Id, `${user2Id}@test.com`, testOrgs.org2]);
+      INSERT INTO users (id, name, email, current_organization_id, created_at) 
+      VALUES ($1, 'RLS User 2', $2, $3, NOW())
+    `, [user2Id, `rls-user-2@test.com`, testOrgs.org2]);
     testUsers.user2 = user2Id;
 
-    // Create test agents
+    // Create test agents (no updated_at column)
     const agent1Result = await testClient.query(`
-      INSERT INTO agents (name, owner_id, organization_id, status, api_key, created_at, updated_at) 
-      VALUES ('RLS Agent 1', $1, $2, 'active', 'key_' || md5(random()::text), NOW(), NOW())
+      INSERT INTO agents (name, owner_id, organization_id, status, api_key, created_at) 
+      VALUES ('RLS Agent 1', $1, $2, 'active', 'key_' || md5(random()::text), NOW())
       RETURNING id
     `, [testUsers.user1, testOrgs.org1]);
     testAgents.agent1 = agent1Result[0].id;
 
     const agent2Result = await testClient.query(`
-      INSERT INTO agents (name, owner_id, organization_id, status, api_key, created_at, updated_at) 
-      VALUES ('RLS Agent 2', $1, $2, 'active', 'key_' || md5(random()::text), NOW(), NOW())
+      INSERT INTO agents (name, owner_id, organization_id, status, api_key, created_at) 
+      VALUES ('RLS Agent 2', $1, $2, 'active', 'key_' || md5(random()::text), NOW())
       RETURNING id
     `, [testUsers.user2, testOrgs.org2]);
     testAgents.agent2 = agent2Result[0].id;
@@ -146,10 +146,10 @@ describe('RLS Multi-Tenant Isolation Integration Tests', () => {
       await testClient.query("SELECT set_config('app.current_organization_id', $1, true)", [testOrgs.org1.toString()]);
       
       const ragResult = await testClient.query(`
-        INSERT INTO rag_indexes (name, organization_id, domain_type, domain_id, created_at, updated_at)
-        VALUES ('RLS RAG Index 1', $1, 'table', '1', NOW(), NOW())
+        INSERT INTO rag_indexes (name, organization_id, domain_types, domain_filters, created_at)
+        VALUES ('RLS RAG Index 1', $1, $2, $3, NOW())
         RETURNING id
-      `, [testOrgs.org1]);
+      `, [testOrgs.org1, JSON.stringify(['table']), JSON.stringify({domain_id: '1'})]);
       
       const ragIndexId = ragResult[0].id;
       expect(ragIndexId).toBeDefined();
@@ -196,17 +196,17 @@ describe('RLS Multi-Tenant Isolation Integration Tests', () => {
       
       // Create a test RAG index
       const ragResult = await testClient.query(`
-        INSERT INTO rag_indexes (name, organization_id, domain_type, domain_id, created_at, updated_at)
-        VALUES ('Vector Test Index', $1, 'table', '1', NOW(), NOW())
+        INSERT INTO rag_indexes (name, organization_id, domain_types, domain_filters, created_at)
+        VALUES ('Vector Test Index', $1, $2, $3, NOW())
         RETURNING id
-      `, [testOrgs.org1]);
+      `, [testOrgs.org1, JSON.stringify(['table']), JSON.stringify({domain_id: '1'})]);
       
       const ragIndexId = ragResult[0].id;
       
-      // Insert a test document (simplified)
+      // Insert a test document (simplified) - using correct schema
       await testClient.query(`
-        INSERT INTO rag_documents (rag_index_id, organization_id, content, created_at, updated_at)
-        VALUES ($1, $2, 'Test document content', NOW(), NOW())
+        INSERT INTO rag_documents (rag_index_id, organization_id, domain_type, source_id, source_name, title, content, content_hash, indexed_at)
+        VALUES ($1, $2, 'table', '1', 'Test Table', 'Test Document', 'Test document content', 'hash123', NOW())
       `, [ragIndexId, testOrgs.org1]);
       
       // Verify the document is accessible within the same organization

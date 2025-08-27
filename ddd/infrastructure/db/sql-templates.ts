@@ -161,7 +161,7 @@ export class RagSqlTemplates {
           id, 
           rag_index_id,
           organization_id,
-          source_type as domain_type, 
+          domain_type, 
           source_id, 
           source_name, 
           title, 
@@ -261,10 +261,10 @@ export class RagSqlTemplates {
   static getDomainTypeCounts(params: DomainTypeCountsParams): SqlQuery {
     return {
       query: `
-        SELECT source_type, COUNT(*) as count
+        SELECT domain_type, COUNT(*) as count
         FROM rag_documents
         WHERE rag_index_id = $1
-        GROUP BY source_type
+        GROUP BY domain_type
       `.trim(),
       params: [params.indexId]
     };

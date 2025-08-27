@@ -60,6 +60,7 @@ services:
     depends_on:
       postgres-integration:
         condition: service_healthy
+    command: ["python", "-m", "emery_agents.infrastructure.grpc.main"]
     healthcheck:
       test: ["CMD", "python", "-c", "import grpc; grpc.channel_ready_future(grpc.insecure_channel('localhost:50051')).result(timeout=5)"]
       interval: 15s
