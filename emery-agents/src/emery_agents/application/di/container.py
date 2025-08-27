@@ -51,13 +51,15 @@ class Container:
         # Import pure infrastructure implementations (no bridge pattern)
         from ...infrastructure.db.repositories.tools.tool_registry_repository import ToolRegistryRepository
         from ...infrastructure.execution.smolagents_execution_repository import SmolAgentsExecutionRepository
+        from ...infrastructure.ai.smolagents_model_provider import SmolagentsModelProvider
         
-        # Create tool registry first (needed by execution repository)
+        # Create dependencies first
         tool_registry_repo = ToolRegistryRepository()
+        model_provider = SmolagentsModelProvider()
         
         # Register pure implementations
         self.register_repository(IToolRegistryRepository, tool_registry_repo)
-        self.register_repository(IExecutionRepository, SmolAgentsExecutionRepository(tool_registry_repo))
+        self.register_repository(IExecutionRepository, SmolAgentsExecutionRepository(tool_registry_repo, model_provider))
         
         # TODO: Add agent and task repository implementations
         # For now, create mock implementations for testing
