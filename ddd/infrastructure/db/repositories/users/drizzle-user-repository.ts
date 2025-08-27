@@ -1,11 +1,11 @@
 // AIDEV-NOTE: Drizzle implementation of IUserRepository - handles user authentication and management
-// Integrates with NextAuth for session management and includes complex business operations
+// User business operations with organization relationships and role management
 
 import { eq, and } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import type postgres from 'postgres';
 
-import { users, userOrganizations, organizations, sessions } from '@/lib/db/schema';
+import { users, userOrganizations, organizations } from '@/lib/db/schema';
 import type { DbClient } from '@/lib/db/client';
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import type { 
@@ -13,9 +13,7 @@ import type {
   CreateUserData, 
   UpdateUserData, 
   UserOrganization,
-  CreateUserOrganizationData,
-  SessionData,
-  CreateSessionData
+  CreateUserOrganizationData
 } from '@/ddd/domain/users/entities/user';
 import type { Organization } from '@/ddd/domain/organizations/entities/organization';
 import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationName, OrganizationRole } from '@/ddd/domain/shared/value-objects';
@@ -239,26 +237,6 @@ export class DrizzleUserRepository implements IUserRepository {
       );
   }
 
-  async getUserOrganizationRole(userId: UserId, organizationId: OrganizationId): Promise<OrganizationRole | null> {
-    // Add defensive check
-    if (!organizationId || !organizationId.value) {
-      console.error('Invalid organizationId passed to getUserOrganizationRole:', organizationId);
-      return null;
-    }
-    
-    const result = await this.db
-      .select({ role: userOrganizations.role })
-      .from(userOrganizations)
-      .where(
-        and(
-          eq(userOrganizations.userId, userId.value),
-          eq(userOrganizations.organizationId, organizationId.value)
-        )
-      )
-      .limit(1);
-
-    return result[0]?.role ? OrganizationRole.fromString(result[0].role) : null;
-  }
 
   async updateUserOrganizationRole(userId: UserId, organizationId: OrganizationId, role: OrganizationRole): Promise<UserOrganization> {
     const [updatedRelationship] = await this.db
@@ -286,56 +264,6 @@ export class DrizzleUserRepository implements IUserRepository {
     };
   }
 
-  // Session management (NextAuth integration)
-  async createSession(data: CreateSessionData): Promise<void> {
-    // Convert Value Objects to primitives for database
-    const sessionData = {
-      sessionToken: data.sessionToken,
-      userId: data.userId.value, // UserId is always a value object here
-      expires: data.expires
-    };
-    
-    await this.db
-      .insert(sessions)
-      .values(sessionData);
-  }
-
-  async findSession(sessionToken: string): Promise<SessionData | null> {
-    const result = await this.db
-      .select()
-      .from(sessions)
-      .where(eq(sessions.sessionToken, sessionToken))
-      .limit(1);
-
-    if (!result[0]) {
-      return null;
-    }
-
-    // Convert database result back to domain entity
-    return {
-      sessionToken: result[0].sessionToken,
-      userId: UserId.fromString(result[0].userId),
-      expires: result[0].expires
-    };
-  }
-
-  async deleteSession(sessionToken: string): Promise<void> {
-    // First check if session exists
-    const existingSession = await this.findSession(sessionToken);
-    if (!existingSession) {
-      throw new Error(`Session with token ${sessionToken} not found`);
-    }
-
-    await this.db
-      .delete(sessions)
-      .where(eq(sessions.sessionToken, sessionToken));
-  }
-
-  async deleteAllUserSessions(userId: UserId): Promise<void> {
-    await this.db
-      .delete(sessions)
-      .where(eq(sessions.userId, userId.value));
-  }
 
   // User queries for admin operations
   async findByOrganizationId(organizationId: OrganizationId): Promise<User[]> {
@@ -348,15 +276,6 @@ export class DrizzleUserRepository implements IUserRepository {
       .where(eq(userOrganizations.organizationId, organizationId.value));
 
     return result.map(r => this.mapToEntity(r.user));
-  }
-
-  async findByRoleId(roleId: number): Promise<User[]> {
-    const result = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.roleId, roleId));
-
-    return result.map(user => this.mapToEntity(user));
   }
 
   // Business logic operations
@@ -417,6 +336,22 @@ export class DrizzleUserRepository implements IUserRepository {
         organizations: userOrgs,
       };
     });
+  }
+
+  async getUserOrganizationRole(userId: UserId, organizationId: OrganizationId): Promise<string | null> {
+    const result = await this.db
+      .select({ organizationRole: users.organizationRole })
+      .from(users)
+      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .where(
+        and(
+          eq(users.id, userId.value),
+          eq(userOrganizations.organizationId, organizationId.value)
+        )
+      )
+      .limit(1);
+
+    return result[0]?.organizationRole || null;
   }
 
   // AIDEV-NOTE: Boundary conversion - maps database primitives to domain Value Objects

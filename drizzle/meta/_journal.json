@@ -13,7 +13,7 @@
       "idx": 1,
       "version": "7",
       "when": 1755667000000,
-      "tag": "0001_rls_policies",
+      "tag": "0001_rls_functions",
       "breakpoints": true
     },
     {
@@ -63,6 +63,20 @@
       "version": "7",
       "when": 1756289758128,
       "tag": "0008_chunky_rhodey",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1756291193621,
+      "tag": "0009_slim_luckman",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1756291400000,
+      "tag": "0011_simplified_role_hierarchy",
       "breakpoints": true
     }
   ]

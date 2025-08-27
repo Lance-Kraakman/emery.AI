@@ -1,14 +1,12 @@
 // AIDEV-NOTE: User repository interface - authentication foundation for application
-// Defines business operations for user management, authentication, and session handling
+// Defines business operations for user management and authentication
 
 import type { 
   User, 
   CreateUserData, 
   UpdateUserData, 
   UserOrganization,
-  CreateUserOrganizationData,
-  SessionData,
-  CreateSessionData
+  CreateUserOrganizationData
 } from '../entities/user';
 import type { Organization } from '@/ddd/domain/organizations/entities/organization';
 import { 
@@ -36,21 +34,19 @@ export interface IUserRepository {
   switchOrganization(userId: UserId, organizationId: OrganizationId): Promise<void>;
   getUserOrganizations(userId: UserId): Promise<Organization[]>;
   
-  // User-Organization relationship management
+  // User-Organization relationship management  
   addUserToOrganization(data: CreateUserOrganizationData): Promise<UserOrganization>;
   removeUserFromOrganization(userId: UserId, organizationId: OrganizationId): Promise<void>;
-  getUserOrganizationRole(userId: UserId, organizationId: OrganizationId): Promise<OrganizationRole | null>;
-  updateUserOrganizationRole(userId: UserId, organizationId: OrganizationId, role: OrganizationRole): Promise<UserOrganization>;
+  // Simplified role management - just update the user's organizationRole
+  updateUserRole(userId: UserId, role: string): Promise<User>;
   
-  // Session management (NextAuth integration)
-  createSession(data: CreateSessionData): Promise<void>;
-  findSession(sessionToken: string): Promise<SessionData | null>;
-  deleteSession(sessionToken: string): Promise<void>;
-  deleteAllUserSessions(userId: UserId): Promise<void>;
   
   // User queries for admin operations
   findByOrganizationId(organizationId: OrganizationId): Promise<User[]>;
-  findByRoleId(roleId: number): Promise<User[]>;
+  findByRole(organizationId: OrganizationId, role: string): Promise<User[]>;
+  
+  // Role checking
+  getUserOrganizationRole(userId: UserId, organizationId: OrganizationId): Promise<string | null>;
   
   // Business logic operations
   verifyEmail(userId: UserId): Promise<User>;

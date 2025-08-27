@@ -54,7 +54,6 @@ export async function POST(request: NextRequest): Promise<Response> {
       persona,
       ownerId: UserId.fromString(userId),
       organizationId: OrganizationId.fromNumber(parseInt(organizationId)),
-      roleId: 1, // Default role ID - will be set by application layer
       trigger: trigger || { type: 'MANUAL', enabled: true },
       capabilities: capabilities || [],
       tools: tools || [],

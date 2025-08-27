@@ -5,8 +5,6 @@ import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories
 import { DrizzleOrganizationRepository } from '@/ddd/infrastructure/db/repositories/organizations/drizzle-organization-repository';
 import { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import { DrizzleUserRepository } from '@/ddd/infrastructure/db/repositories/users/drizzle-user-repository';
-import { IRoleRepository } from '@/ddd/domain/roles/repositories/role-repository';
-import { DrizzleRoleRepository } from '@/ddd/infrastructure/db/repositories/roles/drizzle-role-repository';
 import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import { TableService } from '@/ddd/infrastructure/services/tables/table-service';
 import { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
@@ -26,8 +24,7 @@ import { AgentTaskApplicationService } from '@/ddd/application/services/agents/a
 import { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
 import { TeamApplicationService } from '@/ddd/application/services/teams/team-application-service';
 import { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
-import { PermissionApplicationService } from '@/ddd/application/services/permissions/permission-application-service';
-import { UserOrganizationApplicationService } from '@/ddd/application/services/user-organizations/user-organization-application-service';
+import { UserRoleApplicationService } from '@/ddd/application/services/user-organizations/user-role-application-service';
 import { InvitationApplicationService } from '@/ddd/application/services/invitations/invitation-application-service';
 
 // Team domain imports
@@ -79,7 +76,6 @@ import { LlamaIndexContentProcessor } from '../services/content-processing/llama
 interface RepositoryRegistry {
   IOrganizationRepository: IOrganizationRepository;
   IUserRepository: IUserRepository;
-  IRoleRepository: IRoleRepository;
   IDynamicTableRepository: IDynamicTableRepository;
   DataStorageService: DataStorageService;
   TableQueryService: TableQueryService;
@@ -107,8 +103,7 @@ interface RepositoryRegistry {
   AgentApplicationService: AgentApplicationService;
   TeamApplicationService: TeamApplicationService;
   DatabaseApplicationService: DatabaseApplicationService;
-  PermissionApplicationService: PermissionApplicationService;
-  UserOrganizationApplicationService: UserOrganizationApplicationService;
+  UserRoleApplicationService: UserRoleApplicationService;
   InvitationApplicationService: InvitationApplicationService;
   
   // New application services for data management
@@ -197,8 +192,6 @@ export class DIContainer {
       new DrizzleOrganizationRepository(db, rawClient));
     this.repositories.set('IUserRepository', 
       new DrizzleUserRepository(db, rawClient));
-    this.repositories.set('IRoleRepository', 
-      new DrizzleRoleRepository(db, rawClient));
 
     // Register team and invitation repositories
     const teamRepository = new DrizzleTeamRepository(db);
@@ -212,7 +205,6 @@ export class DIContainer {
 
     // Register agent domain repositories and services
     const agentRepository = new DrizzleAgentRepository(db);
-    const roleRepository = new DrizzleRoleRepository(db, rawClient);
     const taskRepository = new DrizzleTaskRepository(db);
     const agentExecutionRepository = new GrpcAgentExecutionRepository(agentRepository);
     const agentTaskApplicationService = new AgentTaskApplicationService(
@@ -222,7 +214,6 @@ export class DIContainer {
     );
     const agentApplicationService = new AgentApplicationService(
       agentRepository,
-      roleRepository,
       teamRepository
     );
     const teamApplicationService = new TeamApplicationService(
@@ -254,14 +245,9 @@ export class DIContainer {
       this.repositories.get('IOrganizationRepository')
     );
         
-    const permissionApplicationService = new PermissionApplicationService(
-      this.repositories.get('IRoleRepository'),
-      this.repositories.get('IUserRepository')
-    );
-    const userOrganizationApplicationService = new UserOrganizationApplicationService(
+    const userRoleApplicationService = new UserRoleApplicationService(
       this.repositories.get('IUserRepository'),
-      this.repositories.get('IOrganizationRepository'),
-      this.repositories.get('IRoleRepository')
+      this.repositories.get('IOrganizationRepository')
     );
     const invitationApplicationService = new InvitationApplicationService(
       this.repositories.get('IInvitationRepository'),
@@ -276,8 +262,7 @@ export class DIContainer {
     this.repositories.set('AgentApplicationService', agentApplicationService);
     this.repositories.set('TeamApplicationService', teamApplicationService);
     this.repositories.set('DatabaseApplicationService', databaseApplicationService);
-    this.repositories.set('PermissionApplicationService', permissionApplicationService);
-    this.repositories.set('UserOrganizationApplicationService', userOrganizationApplicationService);
+    this.repositories.set('UserRoleApplicationService', userRoleApplicationService);
     this.repositories.set('InvitationApplicationService', invitationApplicationService);
     this.repositories.set('IFieldRepository', fieldRepository);
     this.repositories.set('IDynamicTableRepository', tableService);
@@ -442,7 +427,6 @@ type ServiceMap = {
   // Repositories
   OrganizationRepository: IOrganizationRepository;
   UserRepository: IUserRepository;
-  RoleRepository: IRoleRepository;
   DynamicTableRepository: IDynamicTableRepository;
   FileStorageRepository: IFileStorageRepository;
   FieldRepository: IFieldRepository;
@@ -466,8 +450,7 @@ type ServiceMap = {
   AgentApplicationService: AgentApplicationService;
   TeamApplicationService: TeamApplicationService;
   DatabaseApplicationService: DatabaseApplicationService;
-  PermissionApplicationService: PermissionApplicationService;
-  UserOrganizationApplicationService: UserOrganizationApplicationService;
+  UserRoleApplicationService: UserRoleApplicationService;
   InvitationApplicationService: InvitationApplicationService;
   TableApplicationService: TableApplicationService;
   FieldApplicationService: FieldApplicationService;
@@ -516,7 +499,6 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
 // Export typed getter functions
 export const getOrganizationRepository = createGetter('OrganizationRepository');
 export const getUserRepository = createGetter('UserRepository');
-export const getRoleRepository = createGetter('RoleRepository');
 export const getDynamicTableRepository = createGetter('DynamicTableRepository');
 export const getDataStorageService = createGetter('DataStorageService');
 export const getTableQueryService = createGetter('TableQueryService');
@@ -536,8 +518,7 @@ export const getAgentTaskApplicationService = createGetter('AgentTaskApplication
 export const getAgentApplicationService = createGetter('AgentApplicationService');
 export const getTeamApplicationService = createGetter('TeamApplicationService');
 export const getDatabaseApplicationService = createGetter('DatabaseApplicationService');
-export const getPermissionApplicationService = createGetter('PermissionApplicationService');
-export const getUserOrganizationApplicationService = createGetter('UserOrganizationApplicationService');
+export const getUserRoleApplicationService = createGetter('UserRoleApplicationService');
 export const getInvitationApplicationService = createGetter('InvitationApplicationService');
 export const getTableApplicationService = createGetter('TableApplicationService');
 export const getFieldApplicationService = createGetter('FieldApplicationService');

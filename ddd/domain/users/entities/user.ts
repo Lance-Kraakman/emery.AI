@@ -14,9 +14,9 @@ export interface User {
   emailVerified?: Date | null;
   image?: string | null;
   currentOrganizationId?: OrganizationId | null;
-  roleId?: number | null;
+  // Simplified 3-role system
+  organizationRole?: string | null; // 'owner' | 'admin' | 'member'
   jobTitle?: string | null;
-  role?: OrganizationRole | null;
   teams?: string[] | null;
   apiKey?: ApiKey | null;
   createdAt?: Date | null;
@@ -29,9 +29,9 @@ export interface CreateUserData {
   emailVerified?: Date;
   image?: string;
   currentOrganizationId?: OrganizationId;
-  roleId?: number;
+  // Simplified 3-role system
+  organizationRole?: string;           // 'owner' | 'admin' | 'member', defaults to 'member'
   jobTitle?: string;
-  role?: OrganizationRole;
   teams?: string[];
   apiKey?: ApiKey;                     // Usually generated, not provided
 }
@@ -42,9 +42,9 @@ export interface UpdateUserData {
   emailVerified?: Date;
   image?: string;
   currentOrganizationId?: OrganizationId | null;
-  roleId?: number;
+  // Simplified 3-role system
+  organizationRole?: string;           // 'owner' | 'admin' | 'member'
   jobTitle?: string;
-  role?: OrganizationRole;
   teams?: string[];
   // Note: apiKey updates handled through separate methods for security
 }
@@ -64,15 +64,3 @@ export interface CreateUserOrganizationData {
   role?: OrganizationRole;             // defaults to 'member'
 }
 
-// Session data for NextAuth integration
-export interface SessionData {
-  sessionToken: string;
-  userId: UserId;
-  expires: Date;
-}
-
-export interface CreateSessionData {
-  sessionToken: string;
-  userId: UserId;
-  expires: Date;
-}
