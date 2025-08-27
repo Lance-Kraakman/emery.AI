@@ -24,8 +24,9 @@ export class DuckDBTableQueryService implements TableQueryService {
   private isInitialized = false;
 
   constructor() {
-    // AIDEV-NOTE: Defer DuckDB initialization until first actual query to avoid build-time failures
-    // The arrow extension HTTP 403 error occurs during Next.js build phase
+    // AIDEV-NOTE: Initialize DuckDB at construction time following the documentation example
+    // https://duckdb.org/docs/stable/clients/nodejs/overview#inserting-data-via-arrow
+    this.initializeDatabase();
   }
 
   private initializeDatabase(): void {
@@ -34,7 +35,7 @@ export class DuckDBTableQueryService implements TableQueryService {
       this.db = new duckdb.Database(':memory:');
       
       // Install extensions synchronously
-      this.db.exec("INSTALL arrow; LOAD arrow;", (err: Error | null) => {
+      this.db.exec("INSTALL arrow FROM community; LOAD arrow;", (err: Error | null) => {
         if (err) {
           console.error('[DuckDB] Failed to load arrow extension:', err);
           throw err;
@@ -85,26 +86,8 @@ export class DuckDBTableQueryService implements TableQueryService {
 
   private async executeQuery(sql: string): Promise<Result<QueryResult>> {
     try {
-      // Initialize on first query if not already done
       if (!this.db || !this.isInitialized) {
-        this.initializeDatabase();
-        // Wait for async initialization to complete
-        await new Promise<void>((resolve, reject) => {
-          const checkInitialized = () => {
-            if (this.isInitialized) {
-              resolve();
-            } else {
-              setTimeout(checkInitialized, 100);
-            }
-          };
-          checkInitialized();
-          // Timeout after 10 seconds
-          setTimeout(() => reject(new Error('DuckDB initialization timeout')), 10000);
-        });
-      }
-      
-      if (!this.db || !this.isInitialized) {
-        return { success: false, error: 'DuckDB initialization failed' };
+        return { success: false, error: 'DuckDB not initialized' };
       }
 
       const startTime = Date.now();
