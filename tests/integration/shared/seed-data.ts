@@ -7,8 +7,8 @@ import { organizations, users, userOrganizations, roles } from '@/lib/db/schema'
 export async function seedTestOrganizations() {
   await db.insert(organizations)
     .values([
-      { id: 1, name: 'Test Organization 1' },
-      { id: 2, name: 'Test Organization 2' }
+      { id: 1, name: 'Test Organization 1', slug: 'test-organization-1' },
+      { id: 2, name: 'Test Organization 2', slug: 'test-organization-2' }
     ])
     .onConflictDoNothing();
 }

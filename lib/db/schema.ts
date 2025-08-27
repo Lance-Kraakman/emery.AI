@@ -73,6 +73,7 @@ export const fields = pgTable("fields", {
 export const organizations = pgTable("organizations", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
   mission: text("mission"),
   sharedTools: text("shared_tools").array(),
   sharedServers: text("shared_servers").array(),

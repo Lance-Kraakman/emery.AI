@@ -56,9 +56,9 @@ export class IntegrationTestClient {
     // Seed essential test data (organizations and test users)
     // This data persists across individual tests
     await this.query(`
-      INSERT INTO organizations (id, name) VALUES 
-      (1, 'Test Organization 1'),
-      (2, 'Test Organization 2')
+      INSERT INTO organizations (id, name, slug) VALUES 
+      (1, 'Test Organization 1', 'test-org-1'),
+      (2, 'Test Organization 2', 'test-org-2')
       ON CONFLICT (id) DO NOTHING
     `);
     
