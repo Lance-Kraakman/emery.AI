@@ -36,9 +36,9 @@ export async function setup() {
   
   // Wait for services to be healthy
   console.log('⏳ Waiting for services to become healthy...');
-  await waitForHealthy('postgres-integration', 60000); // 1 minute timeout
-  await waitForHealthy('app-integration', 120000);     // 2 minute timeout for build
-  await waitForHealthy('agent-integration', 90000);    // 1.5 minute timeout
+  await waitForHealthy('emery-integration-db', 60000);    // 1 minute timeout
+  await waitForHealthy('emery-integration-app', 120000);  // 2 minute timeout for build
+  await waitForHealthy('emery-integration-agent', 90000); // 1.5 minute timeout
   
   console.log('🔄 Running database migrations on clean database...');
   
@@ -65,7 +65,7 @@ export async function setup() {
   // Verify migrations worked by checking essential tables exist
   console.log('🔍 Verifying database schema after migration...');
   try {
-    const verifyCommand = 'DATABASE_URL="postgresql://postgres:integration_test_password@localhost:5436/emery_integration_test" psql -c "\\dt" -t';
+    const verifyCommand = 'docker exec emery-integration-db psql -U postgres -d emery_integration_test -c "\\dt" -t';
     const result = execSync(verifyCommand, { stdio: 'pipe', encoding: 'utf8', cwd: process.cwd() });
     
     // Check for essential tables
