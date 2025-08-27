@@ -50,6 +50,20 @@
       "when": 1756157176642,
       "tag": "0006_sturdy_vision",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1756285747644,
+      "tag": "0007_needy_praxagora",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1756289758128,
+      "tag": "0008_chunky_rhodey",
+      "breakpoints": true
     }
   ]
 }

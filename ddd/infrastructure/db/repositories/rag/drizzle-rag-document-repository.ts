@@ -337,7 +337,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
 
     const domainTypeCounts: Record<DomainType, number> = {} as any;
     for (const result of domainTypeResults) {
-      domainTypeCounts[result.source_type as DomainType] = Number(result.count);
+      domainTypeCounts[result.domain_type as DomainType] = Number(result.count);
     }
 
     return {

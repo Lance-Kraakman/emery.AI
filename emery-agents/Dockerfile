@@ -27,4 +27,4 @@ EXPOSE 50051
 # Removed HEALTHCHECK to avoid conflicts with ECS container health checks
 
 # Command to run the gRPC server
-CMD ["python", "-m", "emery_agents.grpc.main"]
+CMD ["python", "-m", "emery_agents.infrastructure.grpc.main"]

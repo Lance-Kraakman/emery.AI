@@ -62,6 +62,13 @@ export class IntegrationTestClient {
       ON CONFLICT (id) DO NOTHING
     `);
     
+    // Reset sequence to avoid conflicts with auto-increment in other tests
+    // Set to MAX(id) + 1 to ensure next auto-increment doesn't conflict
+    await this.query(`
+      SELECT setval(pg_get_serial_sequence('organizations', 'id'), 
+                   GREATEST(COALESCE(MAX(id), 0) + 1, 3)) FROM organizations
+    `);
+    
     await this.query(`
       INSERT INTO users (id, email, name, current_organization_id) VALUES 
       ('550e8400-e29b-41d4-a716-446655440001', 'test1@example.com', 'Test User 1', 1),
@@ -76,7 +83,7 @@ export class IntegrationTestClient {
       ON CONFLICT DO NOTHING  
     `);
     
-    console.log('✅ Basic test data seeded');
+    console.log('✅ Basic test data seeded with sequence reset');
   }
   
   async cleanTestData(): Promise<void> {
