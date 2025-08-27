@@ -36,9 +36,9 @@ describe('Basic Infrastructure Integration Tests', () => {
     
     // Insert test organization (use a high ID to avoid conflicts)
     const orgResult = await testClient.query(`
-      INSERT INTO organizations (id, name) 
-      VALUES (9999, 'Test Infrastructure Org') 
-      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+      INSERT INTO organizations (id, name, slug) 
+      VALUES (9999, 'Test Infrastructure Org', 'test-infrastructure-org') 
+      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, slug = EXCLUDED.slug
       RETURNING id, name
     `);
     expect(orgResult).toHaveLength(1);

@@ -30,15 +30,15 @@ describe('RLS Multi-Tenant Isolation Integration Tests', () => {
   beforeAll(async () => {
     // Create test organizations 
     const org1Result = await testClient.query(`
-      INSERT INTO organizations (name, slug, created_at, updated_at) 
-      VALUES ('RLS Test Org 1', 'rls-test-org-1', NOW(), NOW())
+      INSERT INTO organizations (name, slug, created_at) 
+      VALUES ('RLS Test Org 1', 'rls-test-org-1', NOW())
       RETURNING id
     `);
     testOrgs.org1 = org1Result[0].id;
 
     const org2Result = await testClient.query(`
-      INSERT INTO organizations (name, slug, created_at, updated_at) 
-      VALUES ('RLS Test Org 2', 'rls-test-org-2', NOW(), NOW())
+      INSERT INTO organizations (name, slug, created_at) 
+      VALUES ('RLS Test Org 2', 'rls-test-org-2', NOW())
       RETURNING id
     `);
     testOrgs.org2 = org2Result[0].id;
