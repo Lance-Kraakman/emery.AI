@@ -17,8 +17,10 @@ import { fields } from '@/lib/db/schema';
 import type { 
   IFieldRepository 
 } from '@/ddd/domain/fields/repositories/field-repository';
+import { 
+  Field
+} from '@/ddd/domain/fields/entities/field';
 import type { 
-  Field, 
   CreateFieldData, 
   UpdateFieldData,
   FieldType
@@ -59,7 +61,7 @@ export class DrizzleFieldRepository implements IFieldRepository {
     const [newField] = await this.db
       .insert(fields)
       .values({
-        tableId: data.tableId,
+        tableId: data.tableId.value,
         name: data.name,
         slug: data.slug,
         type: data.type,
@@ -67,9 +69,9 @@ export class DrizzleFieldRepository implements IFieldRepository {
         required: data.required || false,
         fieldConfig: data.metadata ? {
           // Map generic metadata to fieldConfig structure
-          targetTableId: data.relatedTableId,
+          targetTableId: data.relatedTableId?.value,
           ...data.metadata
-        } : (data.relatedTableId ? { targetTableId: data.relatedTableId } : null)
+        } : (data.relatedTableId ? { targetTableId: data.relatedTableId.value } : null)
       })
       .returning();
 
@@ -157,7 +159,7 @@ export class DrizzleFieldRepository implements IFieldRepository {
 
   // Helper method to convert from database to domain entity
   private mapToDomainEntity(field: any): Field {
-    return {
+    return Field.fromPersistence({
       id: field.id,
       tableId: field.tableId,
       name: field.name,
@@ -168,6 +170,6 @@ export class DrizzleFieldRepository implements IFieldRepository {
       relatedTableId: field.fieldConfig?.targetTableId || null,
       metadata: field.fieldConfig || null,
       createdAt: field.createdAt!
-    };
+    });
   }
 }

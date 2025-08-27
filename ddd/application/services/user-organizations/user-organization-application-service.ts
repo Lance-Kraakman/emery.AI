@@ -4,7 +4,6 @@
  * Orchestrates user-organization membership operations.
  * Handles business logic for membership management, role assignment, and organization switching.
  */
-
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { IRoleRepository } from '@/ddd/domain/roles/repositories/role-repository';

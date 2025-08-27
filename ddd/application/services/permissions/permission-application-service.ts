@@ -8,7 +8,7 @@
 import type { IRoleRepository } from '@/ddd/domain/roles/repositories/role-repository';
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import type { Role, CreateRoleData, UpdateRoleData, RoleType, Permission } from '@/ddd/domain/roles/entities/role';
-import { PERMISSIONS, DEFAULT_ROLE_PERMISSIONS } from '@/ddd/domain/roles/entities/role';
+import { PERMISSIONS } from '@/ddd/domain/roles/entities/role';
 import type { Result } from '@/ddd/domain/shared/result';
 import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
 

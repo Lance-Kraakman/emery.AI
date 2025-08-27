@@ -1,14 +1,14 @@
 // AIDEV-NOTE: Domain event for data changes requiring RAG reindexing
 // Represents database changes that should trigger RAG index updates
 
+import { BaseDomainEvent, createBaseDomainEvent } from '@/ddd/domain/shared/events/base-domain-event';
 import { OrganizationId, type DomainType } from '../value-objects';
 
 export type ChangeType = 'INSERT' | 'UPDATE' | 'DELETE';
 
-export interface DataChangeEvent {
+export interface DataChangeEvent extends BaseDomainEvent {
   readonly eventType: 'DataChange';
-  readonly eventId: string;
-  readonly occurredAt: Date;
+  readonly aggregateType: 'DataChange';
   readonly data: {
     organizationId: OrganizationId;
     domainType: DomainType;
@@ -30,16 +30,20 @@ export function createDataChangeEvent(
   }
 ): DataChangeEvent {
   return {
-    eventType: 'DataChange',
-    eventId: crypto.randomUUID(),
-    occurredAt: new Date(),
-    data: {
-      organizationId,
-      domainType,
-      changeType,
+    ...createBaseDomainEvent(
+      'DataChange',
       sourceId,
-      tableName: options?.tableName,
-      metadata: options?.metadata ? { ...options.metadata } : undefined
-    }
-  };
+      'DataChange',
+      {
+        organizationId,
+        domainType,
+        changeType,
+        sourceId,
+        tableName: options?.tableName,
+        metadata: options?.metadata ? { ...options.metadata } : undefined
+      }
+    ),
+    eventType: 'DataChange',
+    aggregateType: 'DataChange'
+  } as DataChangeEvent;
 }

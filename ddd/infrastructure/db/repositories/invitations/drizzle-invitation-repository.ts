@@ -7,53 +7,54 @@ import { invitations, users, organizations, userOrganizations } from '@/lib/db/s
 import type { 
   IInvitationRepository,
 } from '@/ddd/domain/invitations/repositories/invitation-repository';
+import { Invitation } from '@/ddd/domain/invitations/entities/invitation';
 import type { 
-  Invitation, 
   CreateInvitationData, 
   UpdateInvitationData,
   InvitationQuery,
   BulkInvitationData,
   BulkInvitationResult,
-  InvitationStats,
-  generateInvitationToken
+  InvitationStats
 } from '@/ddd/domain/invitations/entities/invitation';
 import { generateInvitationToken as generateToken } from '@/ddd/domain/invitations/entities/invitation';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
 import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
 import { EmailAddress } from '@/ddd/domain/shared/value-objects/email-address';
 import { OrganizationRole } from '@/ddd/domain/shared/value-objects/organization-role';
+import { InvitationId, InvitationToken } from '@/ddd/domain/shared/value-objects';
+import type { InvitationRow } from '@/types/db';
 
 export class DrizzleInvitationRepository implements IInvitationRepository {
   constructor(private readonly db: DbClient) {}
 
   // Basic CRUD operations
-  async findById(id: number): Promise<Invitation | null> {
+  async findById(id: InvitationId): Promise<Invitation | null> {
     const results = await this.db
       .select()
       .from(invitations)
-      .where(eq(invitations.id, id))
+      .where(eq(invitations.id, id.value))
       .limit(1);
 
     return results[0] ? this.mapToEntity(results[0]) : null;
   }
 
-  async findByToken(token: string): Promise<Invitation | null> {
+  async findByToken(token: InvitationToken): Promise<Invitation | null> {
     const results = await this.db
       .select()
       .from(invitations)
-      .where(eq(invitations.token, token))
+      .where(eq(invitations.token, token.value))
       .limit(1);
 
     return results[0] ? this.mapToEntity(results[0]) : null;
   }
 
-  async findByEmail(organizationId: number, email: string): Promise<Invitation | null> {
+  async findByEmail(organizationId: OrganizationId, email: EmailAddress): Promise<Invitation | null> {
     const results = await this.db
       .select()
       .from(invitations)
       .where(and(
-        eq(invitations.organizationId, organizationId),
-        eq(invitations.email, email.toLowerCase())
+        eq(invitations.organizationId, organizationId.value),
+        eq(invitations.email, email.value.toLowerCase())
       ))
       .limit(1);
 
@@ -68,7 +69,7 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
       invitedBy: data.invitedBy.value,
       email: data.email.value.toLowerCase(),
       role: data.role?.value || 'member',
-      token,
+      token: token.value,
       expiresAt: data.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days default
     };
 
@@ -80,7 +81,7 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     return this.mapToEntity(results[0]);
   }
 
-  async update(id: number, data: UpdateInvitationData): Promise<Invitation> {
+  async update(id: InvitationId, data: UpdateInvitationData): Promise<Invitation> {
     const updateData: any = {};
     if (data.email !== undefined) updateData.email = data.email.value.toLowerCase();
     if (data.role !== undefined) updateData.role = data.role;
@@ -89,34 +90,34 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     const results = await this.db
       .update(invitations)
       .set(updateData)
-      .where(eq(invitations.id, id))
+      .where(eq(invitations.id, id.value))
       .returning();
 
     return this.mapToEntity(results[0]);
   }
 
-  async delete(id: number): Promise<void> {
+  async delete(id: InvitationId): Promise<void> {
     await this.db
       .delete(invitations)
-      .where(eq(invitations.id, id));
+      .where(eq(invitations.id, id.value));
   }
 
   // Query operations
-  async findByOrganization(organizationId: number): Promise<Invitation[]> {
+  async findByOrganization(organizationId: OrganizationId): Promise<Invitation[]> {
     const results = await this.db
       .select()
       .from(invitations)
-      .where(eq(invitations.organizationId, organizationId))
+      .where(eq(invitations.organizationId, organizationId.value))
       .orderBy(desc(invitations.createdAt));
 
     return results.map(result => this.mapToEntity(result));
   }
 
-  async findByInviter(invitedBy: string): Promise<Invitation[]> {
+  async findByInviter(invitedBy: UserId): Promise<Invitation[]> {
     const results = await this.db
       .select()
       .from(invitations)
-      .where(eq(invitations.invitedBy, invitedBy))
+      .where(eq(invitations.invitedBy, invitedBy.value))
       .orderBy(desc(invitations.createdAt));
 
     return results.map(result => this.mapToEntity(result));
@@ -126,16 +127,16 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     let whereConditions: any[] = [];
 
     if (query.organizationId) {
-      whereConditions.push(eq(invitations.organizationId, query.organizationId));
+      whereConditions.push(eq(invitations.organizationId, query.organizationId.value));
     }
     if (query.invitedBy) {
-      whereConditions.push(eq(invitations.invitedBy, query.invitedBy));
+      whereConditions.push(eq(invitations.invitedBy, query.invitedBy.value));
     }
     if (query.email) {
-      whereConditions.push(eq(invitations.email, query.email.toLowerCase()));
+      whereConditions.push(eq(invitations.email, query.email.value.toLowerCase()));
     }
     if (query.role) {
-      whereConditions.push(eq(invitations.role, query.role));
+      whereConditions.push(eq(invitations.role, query.role.value));
     }
     if (query.isExpired !== undefined) {
       const now = new Date();
@@ -164,7 +165,7 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
   }
 
   // Token and validation operations
-  async validateToken(token: string): Promise<{ valid: boolean; invitation?: Invitation; error?: string }> {
+  async validateToken(token: InvitationToken): Promise<{ valid: boolean; invitation?: Invitation; error?: string }> {
     const invitation = await this.findByToken(token);
     
     if (!invitation) {
@@ -178,19 +179,19 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     return { valid: true, invitation };
   }
 
-  async isTokenExpired(token: string): Promise<boolean> {
+  async isTokenExpired(token: InvitationToken): Promise<boolean> {
     const invitation = await this.findByToken(token);
     if (!invitation) return true;
     return invitation.expiresAt < new Date();
   }
 
-  async generateUniqueToken(): Promise<string> {
-    let token: string;
+  async generateUniqueToken(): Promise<InvitationToken> {
+    let token: InvitationToken;
     let attempts = 0;
     const maxAttempts = 10;
 
     do {
-      token = generateToken().value;
+      token = generateToken();
       const existing = await this.findByToken(token);
       if (!existing) {
         return token;
@@ -199,11 +200,11 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     } while (attempts < maxAttempts);
 
     // Fallback with timestamp to ensure uniqueness
-    return generateToken() + '_' + Date.now();
+    return InvitationToken.fromString(generateToken().value + '_' + Date.now());
   }
 
   // Invitation management
-  async acceptInvitation(token: string, acceptingUserId: string): Promise<void> {
+  async acceptInvitation(token: InvitationToken, acceptingUserId: UserId): Promise<void> {
     // Delete the invitation after acceptance
     const invitation = await this.findByToken(token);
     if (invitation) {
@@ -211,7 +212,7 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     }
   }
 
-  async resendInvitation(id: number): Promise<Invitation> {
+  async resendInvitation(id: InvitationId): Promise<Invitation> {
     // Generate new token and extend expiry
     const newToken = await this.generateUniqueToken();
     const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
@@ -221,49 +222,58 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     });
   }
 
-  async revokeInvitation(id: number): Promise<void> {
+  async revokeInvitation(id: InvitationId): Promise<void> {
     await this.delete(id);
   }
 
   // Bulk operations
   async createBulkInvitations(data: BulkInvitationData): Promise<BulkInvitationResult> {
     const successful: Invitation[] = [];
-    const failed: Array<{ email: string; error: string }> = [];
+    const failed: Array<{ email: EmailAddress; error: string }> = [];
 
     for (const invitationData of data.invitations) {
       try {
+        // Convert to Value Objects
+        const organizationIdVO = typeof data.organizationId === 'number' ? OrganizationId.fromNumber(data.organizationId) : data.organizationId;
+        const emailVO = typeof invitationData.email === 'string' ? EmailAddress.fromString(invitationData.email) : invitationData.email;
+
         // Check if user is already a member
-        const isAlreadyMember = await this.isUserAlreadyMember(data.organizationId, invitationData.email);
+        const isAlreadyMember = await this.isUserAlreadyMember(organizationIdVO, emailVO);
         if (isAlreadyMember) {
           failed.push({
-            email: invitationData.email,
+            email: emailVO,
             error: 'User is already a member of this organization'
           });
           continue;
         }
 
         // Check for existing invitation
-        const existingInvitation = await this.hasExistingInvitation(data.organizationId, invitationData.email);
+        const existingInvitation = await this.hasExistingInvitation(organizationIdVO, emailVO);
         if (existingInvitation) {
           failed.push({
-            email: invitationData.email,
+            email: emailVO,
             error: 'Invitation already exists for this email'
           });
           continue;
         }
 
         const invitation = await this.create({
-          organizationId: typeof data.organizationId === 'number' ? OrganizationId.fromNumber(data.organizationId) : data.organizationId,
+          organizationId: organizationIdVO,
           invitedBy: typeof data.invitedBy === 'string' ? UserId.fromString(data.invitedBy) : data.invitedBy,
-          email: typeof invitationData.email === 'string' ? EmailAddress.fromString(invitationData.email) : invitationData.email,
-          role: typeof invitationData.role === 'string' ? OrganizationRole.fromString(invitationData.role || data.defaultRole || 'member') : invitationData.role || OrganizationRole.fromString(data.defaultRole || 'member'),
+          email: emailVO,
+          role: invitationData.role 
+            ? (typeof invitationData.role === 'string' ? OrganizationRole.fromString(invitationData.role) : invitationData.role)
+            : (data.defaultRole 
+                ? (typeof data.defaultRole === 'string' ? OrganizationRole.fromString(data.defaultRole) : data.defaultRole)
+                : OrganizationRole.fromString('member')),
           expiresAt: data.expiresAt
         });
 
         successful.push(invitation);
       } catch (error) {
+        const emailVO = typeof invitationData.email === 'string' ? EmailAddress.fromString(invitationData.email) : invitationData.email;
         failed.push({
-          email: invitationData.email,
+          email: emailVO,
           error: error instanceof Error ? error.message : 'Unknown error'
         });
       }
@@ -277,12 +287,12 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     };
   }
 
-  async deleteExpiredInvitations(organizationId?: number): Promise<number> {
+  async deleteExpiredInvitations(organizationId?: OrganizationId): Promise<number> {
     const now = new Date();
     const conditions = [lt(invitations.expiresAt, now)];
     
     if (organizationId) {
-      conditions.push(eq(invitations.organizationId, organizationId));
+      conditions.push(eq(invitations.organizationId, organizationId.value));
     }
     
     const whereCondition = conditions.length > 1 ? and(...conditions) : conditions[0];
@@ -303,10 +313,10 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     return count;
   }
 
-  async deleteInvitationsByEmail(organizationId: number, email: string): Promise<number> {
+  async deleteInvitationsByEmail(organizationId: OrganizationId, email: EmailAddress): Promise<number> {
     const whereCondition = and(
-      eq(invitations.organizationId, organizationId),
-      eq(invitations.email, email.toLowerCase())
+      eq(invitations.organizationId, organizationId.value),
+      eq(invitations.email, email.value.toLowerCase())
     );
 
     // First count how many will be deleted
@@ -326,7 +336,7 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
   }
 
   // Statistics and analytics
-  async getInvitationStats(organizationId: number): Promise<InvitationStats> {
+  async getInvitationStats(organizationId: OrganizationId): Promise<InvitationStats> {
     const now = new Date();
     
     // Get all invitations for the organization
@@ -336,7 +346,7 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
         expiresAt: invitations.expiresAt
       })
       .from(invitations)
-      .where(eq(invitations.organizationId, organizationId));
+      .where(eq(invitations.organizationId, organizationId.value));
 
     const stats = {
       organizationId,
@@ -354,14 +364,14 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     return stats;
   }
 
-  async getPendingInvitations(organizationId: number): Promise<Invitation[]> {
+  async getPendingInvitations(organizationId: OrganizationId): Promise<Invitation[]> {
     const now = new Date();
     
     const results = await this.db
       .select()
       .from(invitations)
       .where(and(
-        eq(invitations.organizationId, organizationId),
+        eq(invitations.organizationId, organizationId.value),
         gte(invitations.expiresAt, now)
       ))
       .orderBy(desc(invitations.createdAt));
@@ -369,14 +379,14 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     return results.map(result => this.mapToEntity(result));
   }
 
-  async getExpiredInvitations(organizationId: number): Promise<Invitation[]> {
+  async getExpiredInvitations(organizationId: OrganizationId): Promise<Invitation[]> {
     const now = new Date();
     
     const results = await this.db
       .select()
       .from(invitations)
       .where(and(
-        eq(invitations.organizationId, organizationId),
+        eq(invitations.organizationId, organizationId.value),
         lt(invitations.expiresAt, now)
       ))
       .orderBy(desc(invitations.createdAt));
@@ -385,14 +395,14 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
   }
 
   // Business logic validations
-  async canInviteToOrganization(inviterId: string, organizationId: number): Promise<boolean> {
+  async canInviteToOrganization(inviterId: UserId, organizationId: OrganizationId): Promise<boolean> {
     // Check if inviter is a member with admin or owner role
     const membership = await this.db
       .select({ role: userOrganizations.role })
       .from(userOrganizations)
       .where(and(
-        eq(userOrganizations.userId, inviterId),
-        eq(userOrganizations.organizationId, organizationId)
+        eq(userOrganizations.userId, inviterId.value),
+        eq(userOrganizations.organizationId, organizationId.value)
       ))
       .limit(1);
 
@@ -402,20 +412,20 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     return role === 'owner' || role === 'admin';
   }
 
-  async hasExistingInvitation(organizationId: number, email: string): Promise<boolean> {
+  async hasExistingInvitation(organizationId: OrganizationId, email: EmailAddress): Promise<boolean> {
     const existing = await this.findByEmail(organizationId, email);
     return existing !== null;
   }
 
-  async isUserAlreadyMember(organizationId: number, email: string): Promise<boolean> {
+  async isUserAlreadyMember(organizationId: OrganizationId, email: EmailAddress): Promise<boolean> {
     // Check if user with this email is already a member
     const membership = await this.db
       .select({ id: userOrganizations.id })
       .from(userOrganizations)
       .innerJoin(users, eq(users.id, userOrganizations.userId))
       .where(and(
-        eq(users.email, email.toLowerCase()),
-        eq(userOrganizations.organizationId, organizationId)
+        eq(users.email, email.value.toLowerCase()),
+        eq(userOrganizations.organizationId, organizationId.value)
       ))
       .limit(1);
 
@@ -423,10 +433,10 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
   }
 
   // Email and notification support
-  async getInvitationEmailData(id: number): Promise<{
+  async getInvitationEmailData(id: InvitationId): Promise<{
     invitation: Invitation;
-    organization: { name: string; id: number };
-    inviter: { name?: string; email?: string };
+    organization: { name: string; id: OrganizationId };
+    inviter: { name?: string; email?: EmailAddress };
   } | null> {
     const results = await this.db
       .select({
@@ -438,7 +448,7 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
       .from(invitations)
       .innerJoin(organizations, eq(invitations.organizationId, organizations.id))
       .innerJoin(users, eq(invitations.invitedBy, users.id))
-      .where(eq(invitations.id, id))
+      .where(eq(invitations.id, id.value))
       .limit(1);
 
     if (results.length === 0) return null;
@@ -448,18 +458,18 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
       invitation: this.mapToEntity(result.invitation),
       organization: {
         name: result.organizationName,
-        id: result.invitation.organizationId
+        id: OrganizationId.fromNumber(result.invitation.organizationId)
       },
       inviter: {
         name: result.inviterName || undefined,
-        email: result.inviterEmail || undefined
+        email: result.inviterEmail ? EmailAddress.fromString(result.inviterEmail) : undefined
       }
     };
   }
 
   // Helper method to map database result to domain entity
-  private mapToEntity(data: any): Invitation {
-    return {
+  private mapToEntity(data: InvitationRow): Invitation {
+    return Invitation.fromPersistence({
       id: data.id,
       organizationId: data.organizationId,
       invitedBy: data.invitedBy,
@@ -467,7 +477,7 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
       role: data.role,
       token: data.token,
       expiresAt: data.expiresAt,
-      createdAt: data.createdAt || null
-    };
+      createdAt: data.createdAt
+    });
   }
 }

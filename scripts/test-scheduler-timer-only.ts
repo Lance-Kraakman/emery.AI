@@ -20,7 +20,7 @@ async function main() {
   
   try {
     // Get just the scheduling application service (core logic)
-    const schedulingService = getSchedulingApplicationService();
+    const schedulingService = getTaskSchedulingApplicationService();
     
     // Create event scheduler but DON'T register callbacks
     const eventScheduler = new PostgresEventScheduler();
@@ -35,8 +35,8 @@ async function main() {
     
     // Manually trigger a scheduling cycle to test
     console.log('🎯 Testing manual scheduling cycle...');
-    const result = await schedulingService.processSchedulingCycle();
-    console.log(`✅ Manual cycle completed: ${result.dueJobs} jobs, ${result.eventsProcessed} events processed`);
+    const result = await schedulingService.processPendingTasks();
+    console.log(`✅ Manual cycle completed: ${result.processed} processed, ${result.failed} failed, ${result.queued} queued`);
     
     // Wait for periodic timer
     let cycles = 0;

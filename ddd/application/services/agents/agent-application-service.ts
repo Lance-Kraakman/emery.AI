@@ -15,12 +15,12 @@ import type {
   ToolConfig,
   ServerConfig,
   CapabilityConfig,
-  AgentTriggerConfig,
   AgentType
 } from '@/ddd/domain/agents/entities/agent';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createAgentDefaults } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, OrganizationId, UserId, TeamId, AgentStatus, ApiKey, AGENT_STATUS } from '@/ddd/domain/shared/value-objects';
+import { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 export interface CreateAgentCommand {
   name: string;
@@ -29,12 +29,12 @@ export interface CreateAgentCommand {
   persona?: string;
   ownerId: UserId;
   organizationId: OrganizationId;
-  roleId?: number;
+  roleId: number;
   agentType?: AgentType;
   specialization?: any;
   tools?: ToolConfig[];
   servers?: ServerConfig[];
-  trigger?: AgentTriggerConfig;
+  trigger?: TriggerConfig;
   capabilities?: CapabilityConfig[];
   status?: 'active' | 'inactive' | 'archived';
 }
@@ -48,7 +48,7 @@ export interface UpdateAgentCommand {
   roleId?: number;
   tools?: ToolConfig[];
   servers?: ServerConfig[];
-  trigger?: AgentTriggerConfig;
+  trigger?: TriggerConfig;
   capabilities?: CapabilityConfig[];
   status?: 'active' | 'inactive' | 'archived';
 }

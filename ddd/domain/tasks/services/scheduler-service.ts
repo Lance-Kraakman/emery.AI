@@ -12,22 +12,7 @@ import { Task, TaskInstructions } from '../entities/task';
 import { TaskId } from '../value-objects/task-id';
 import { TaskStatus } from '../value-objects/task-status';
 import type { AgentId, OrganizationId } from '@/ddd/domain/shared/value-objects';
-
-export type TriggerType = 'CRON' | 'DATABASE_EVENT' | 'WEBHOOK' | 'MANUAL';
-
-export interface TriggerConfig {
-  type: TriggerType;
-  cron?: string; // CRON expression for scheduled tasks
-  eventConfig?: {
-    table: string;
-    operation: 'INSERT' | 'UPDATE' | 'DELETE';
-    condition?: string;
-  };
-  webhookConfig?: {
-    secret?: string;
-    headers?: Record<string, string>;
-  };
-}
+import type { TriggerConfig, TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 export interface ScheduledTask {
   agentId: AgentId;
@@ -120,13 +105,13 @@ export class SchedulerService implements ISchedulerService {
   }
 
   async getTasksDueForExecution(before: Date = new Date()): Promise<Task[]> {
-    // Find all active agents with CRON triggers that are due
+    // Find all active agents with CALENDAR triggers that are due
     const activeAgents = await this.agentRepository.findActiveAgentsWithTriggers();
     const dueTasks: Task[] = [];
 
     for (const agent of activeAgents) {
       const trigger = agent.trigger;
-      if (!trigger || trigger.type !== 'CRON' || !trigger.cron) {
+      if (!trigger || trigger.type !== 'CALENDAR' || !trigger.rrule) {
         continue;
       }
 
@@ -143,12 +128,12 @@ export class SchedulerService implements ISchedulerService {
             tools: agent.tools || [],
             servers: agent.servers || [],
             metadata: {
-              trigger_type: 'CRON',
+              trigger_type: 'CALENDAR',
               scheduled_for: nextExecution.toISOString(),
-              cron_expression: trigger.cron
+              rrule: trigger.rrule,
+              timezone: trigger.timezone || 'UTC'
             }
-          },
-          scheduledFor: nextExecution
+          }
         });
         
         dueTasks.push(task);
@@ -176,7 +161,7 @@ export class SchedulerService implements ISchedulerService {
       },
       trigger: agent.trigger,
       isActive: agent.isActive,
-      nextExecution: this.calculateNextExecution(agent.trigger, agent.lastExecution),
+      nextExecution: this.calculateNextExecution(agent.trigger, agent.lastExecution || undefined) || undefined,
       lastExecution: agent.lastExecution,
       executionCount: agent.executionCount || 0,
       failureCount: agent.failureCount || 0,
@@ -241,27 +226,55 @@ export class SchedulerService implements ISchedulerService {
   }
 
   calculateNextExecution(trigger: TriggerConfig, lastExecution?: Date): Date | null {
-    if (trigger.type !== 'CRON' || !trigger.cron) {
+    if (trigger.type !== 'CALENDAR' || !trigger.rrule) {
       return null;
     }
 
-    // Simple CRON parsing - in real implementation, use a CRON library
+    // Basic RRule parsing - in real implementation, use rrule.js library
     const baseTime = lastExecution || new Date();
     
-    // For now, parse simple patterns like "0 */30 * * * *" (every 30 minutes)
-    const cronParts = trigger.cron.split(' ');
-    if (cronParts.length >= 6) {
-      // Basic parsing for minute/hour patterns
-      const minutes = cronParts[1];
+    // For now, parse simple RRule patterns
+    // Example: FREQ=HOURLY;INTERVAL=1 (every hour)
+    // Example: FREQ=DAILY;BYHOUR=9 (daily at 9 AM)
+    try {
+      const rrule = trigger.rrule.toUpperCase();
       
-      if (minutes.startsWith('*/')) {
-        const interval = parseInt(minutes.substring(2));
+      if (rrule.includes('FREQ=HOURLY')) {
+        const intervalMatch = rrule.match(/INTERVAL=(\d+)/);
+        const interval = intervalMatch ? parseInt(intervalMatch[1]) : 1;
+        
         const nextTime = new Date(baseTime);
-        nextTime.setMinutes(nextTime.getMinutes() + interval);
+        nextTime.setHours(nextTime.getHours() + interval);
+        nextTime.setMinutes(0);
         nextTime.setSeconds(0);
         nextTime.setMilliseconds(0);
         return nextTime;
       }
+      
+      if (rrule.includes('FREQ=DAILY')) {
+        const hourMatch = rrule.match(/BYHOUR=(\d+)/);
+        const hour = hourMatch ? parseInt(hourMatch[1]) : 9; // Default to 9 AM
+        
+        const nextTime = new Date(baseTime);
+        nextTime.setDate(nextTime.getDate() + 1); // Next day
+        nextTime.setHours(hour);
+        nextTime.setMinutes(0);
+        nextTime.setSeconds(0);
+        nextTime.setMilliseconds(0);
+        return nextTime;
+      }
+      
+      if (rrule.includes('FREQ=WEEKLY')) {
+        const nextTime = new Date(baseTime);
+        nextTime.setDate(nextTime.getDate() + 7); // Next week
+        nextTime.setHours(9); // Default to 9 AM
+        nextTime.setMinutes(0);
+        nextTime.setSeconds(0);
+        nextTime.setMilliseconds(0);
+        return nextTime;
+      }
+    } catch (error) {
+      console.warn('Failed to parse RRule:', trigger.rrule, error);
     }
 
     // Fallback: execute in 1 hour

@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { getTableApplicationService } from "@/ddd/application/di/container";
+import { OrganizationId, TableId } from "@/ddd/domain/shared/value-objects";
 import type { Result, CreateTableData } from "./types";
 import type { CreateTableCommand } from "@/ddd/application/services/tables/table-application-service";
 
@@ -99,7 +100,7 @@ export async function getTables() {
     const currentOrg = await requireCurrentOrganization();
     const tableApplicationService = getTableApplicationService();
     
-    const tableList = await tableApplicationService.getTablesForOrganization(currentOrg.id.value);
+    const tableList = await tableApplicationService.getTablesForOrganization(OrganizationId.fromNumber(currentOrg.id.value));
 
     console.log(`[GET-TABLES] Found ${tableList.length} tables for org ${currentOrg.id}`);
     return tableList;
@@ -128,7 +129,7 @@ export async function deleteTable(tableId: number, revalidateUrl?: string): Prom
 
     const tableApplicationService = getTableApplicationService();
 
-    const result = await tableApplicationService.deleteTable(tableId);
+    const result = await tableApplicationService.deleteTable(TableId.fromNumber(tableId));
 
     if (!result.success) {
       return {

@@ -194,10 +194,10 @@ export class TableApplicationService {
   /**
    * Delete a table and all its associated data
    */
-  async deleteTable(tableId: number): Promise<TableApplicationServiceResult<void>> {
+  async deleteTable(tableId: TableId): Promise<TableApplicationServiceResult<void>> {
     try {
       // 1. Verify table exists
-      const table = await this.tableRepository.findById(TableId.fromNumber(tableId));
+      const table = await this.tableRepository.findById(tableId);
       if (!table) {
         return {
           success: false,
@@ -206,10 +206,10 @@ export class TableApplicationService {
       }
 
       // 2. Check if table has any fields with data
-      const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
+      const fields = await this.fieldRepository.findByTableId(tableId);
       
       // 3. Check if table has any rows (optional - could be expensive)
-      const hasData = await this.tableRepository.hasRows(TableId.fromNumber(tableId));
+      const hasData = await this.tableRepository.hasRows(tableId);
       if (hasData) {
         console.warn(`[TABLE-APP-SERVICE] Deleting table ${table.name} with existing data`);
       }
@@ -220,7 +220,7 @@ export class TableApplicationService {
       }
 
       // 5. Delete the table (handles both metadata and physical table)
-      await this.tableRepository.delete(TableId.fromNumber(tableId));
+      await this.tableRepository.delete(tableId);
 
       console.log(`[TABLE-APP-SERVICE] Deleted table: ${table.name} (S3: ${table.storageLocation})`);
 
@@ -240,144 +240,15 @@ export class TableApplicationService {
   /**
    * Get table by ID
    */
-  async getTable(tableId: number): Promise<DynamicTable | null> {
-    return await this.tableRepository.findById(TableId.fromNumber(tableId));
+  async getTable(tableId: TableId): Promise<DynamicTable | null> {
+    return await this.tableRepository.findById(tableId);
   }
 
   /**
    * Get tables for an organization
    */
-  async getTablesForOrganization(organizationId: number): Promise<DynamicTable[]> {
-    return await this.tableRepository.findByOrganization(OrganizationId.fromNumber(organizationId));
+  async getTablesForOrganization(organizationId: OrganizationId): Promise<DynamicTable[]> {
+    return await this.tableRepository.findByOrganization(organizationId);
   }
-
-  /**
-   * Get tables for a database
-   */
-  async getTablesForDatabase(databaseId: number): Promise<DynamicTable[]> {
-    return await this.tableRepository.findByDatabase(DatabaseId.fromNumber(databaseId));
-  }
-
-  /**
-   * Get tables with filters
-   */
-  async getTables(filters: TableFilters): Promise<DynamicTable[]> {
-    if (filters.organizationId) {
-      return await this.tableRepository.findByOrganization(OrganizationId.fromNumber(filters.organizationId));
-    }
-    
-    if (filters.databaseId) {
-      return await this.tableRepository.findByDatabase(DatabaseId.fromNumber(filters.databaseId));
-    }
-
-    if (filters.createdBy) {
-      // TODO: Add findByCreator method to repository if needed
-      const allTables = await this.tableRepository.findAll();
-      const createdByUserId = UserId.fromString(filters.createdBy);
-      return allTables.filter(t => t.createdBy.equals(createdByUserId));
-    }
-
-    return await this.tableRepository.findAll();
-  }
-
-  /**
-   * Check if user has access to table
-   */
-  async hasAccessToTable(tableId: number, userId: string, organizationId: number): Promise<boolean> {
-    const table = await this.tableRepository.findById(TableId.fromNumber(tableId));
-    
-    if (!table) {
-      return false;
-    }
-
-    // Check if table belongs to user's organization
-    if (!table.organizationId.equals(OrganizationId.fromNumber(organizationId))) {
-      return false;
-    }
-
-    // Additional permission checks could be added here
-    // For example, checking role-based permissions
-
-    return true;
-  }
-
-  /**
-   * Clone a table structure (without data)
-   */
-  async cloneTableStructure(
-    sourceTableId: number, 
-    newName: string,
-    targetDatabaseId: number,
-    userId: string,
-    organizationId: number
-  ): Promise<TableApplicationServiceResult<DynamicTable>> {
-    try {
-      // 1. Get source table
-      const sourceTable = await this.tableRepository.findById(TableId.fromNumber(sourceTableId));
-      if (!sourceTable) {
-        return {
-          success: false,
-          error: `Source table ${sourceTableId} not found`
-        };
-      }
-
-      // 2. Verify access to source table
-      if (!sourceTable.organizationId.equals(OrganizationId.fromNumber(organizationId))) {
-        return {
-          success: false,
-          error: 'Access denied: source table not in your organization'
-        };
-      }
-
-      // 3. Create new table
-      const createResult = await this.createTable({
-        name: newName,
-        databaseId: targetDatabaseId,
-        organizationId,
-        createdBy: userId,
-        description: `Cloned from ${sourceTable.name}`,
-        metadata: {
-          ...sourceTable.metadata,
-          clonedFrom: sourceTableId,
-          clonedAt: new Date().toISOString()
-        }
-      });
-
-      if (!createResult.success || !createResult.data) {
-        return createResult;
-      }
-
-      const newTable = createResult.data;
-
-      // 4. Clone fields structure
-      const sourceFields = await this.fieldRepository.findByTableId(TableId.fromNumber(sourceTableId));
-      
-      for (const sourceField of sourceFields) {
-        await this.fieldRepository.create({
-          tableId: newTable.id,
-          name: sourceField.name,
-          slug: sourceField.slug,
-          type: sourceField.type,
-          required: sourceField.required ?? false,
-          orderIndex: sourceField.orderIndex ?? undefined,
-          relatedTableId: sourceField.relatedTableId ?? undefined,
-          metadata: sourceField.metadata
-        });
-      }
-
-      console.log(`[TABLE-APP-SERVICE] Cloned table structure from ${sourceTable.name} to ${newTable.name}`);
-
-      return {
-        success: true,
-        data: newTable
-      };
-
-    } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error cloning table:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to clone table'
-      };
-    }
-  }
+  
 }

@@ -79,7 +79,7 @@ export class IndexingDomainService {
     const documents: RagDocument[] = [];
 
     for (const table of tables) {
-      const fields = fieldsMap?.get(table.id) || [];
+      const fields = fieldsMap?.get(table.id.value) || [];
       const content = this.generateTableSchemaContent(table, fields, databasesMap);
       const embedding = await this.contentProcessor.generateEmbedding(content);
       const contentHash = this.contentProcessor.calculateContentHash(content);
@@ -329,8 +329,8 @@ Capabilities: The organization has access to Emery's full feature set including 
       ? `\nDescription: ${table.metadata.description}` 
       : '';
 
-    const database = databasesMap?.get(table.databaseId);
-    const databaseName = database?.name || `Database ID ${table.databaseId}`;
+    const database = databasesMap?.get(table.databaseId.value);
+    const databaseName = database?.name || `Database ID ${table.databaseId.value}`;
 
     const relationshipFields = fields.filter(f => f.relatedTableId);
     const fileFields = fields.filter(f => f.type === 'file');

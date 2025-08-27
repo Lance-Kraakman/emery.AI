@@ -154,15 +154,54 @@ export default function AgentConfigurationWizard({
         }];
       }
 
-      // Create trigger config
-      const trigger = {
-        type: formData.triggerType as 'MANUAL' | 'CRON' | 'WEBHOOK' | 'DATABASE_EVENT' | 'CALENDAR',
-        ...formData.triggerConfig,
-        // Include task definition for non-manual triggers
-        ...(formData.triggerType !== 'MANUAL' && {
-          taskDefinition: formData.taskDefinition
-        })
-      };
+      // Create trigger config aligned with domain TriggerConfig
+      // Note: taskDefinition is handled separately in agent instructions/capabilities
+      const trigger = (() => {
+        const baseConfig = { enabled: true };
+        switch (formData.triggerType) {
+          case 'MANUAL':
+            return {
+              type: 'MANUAL' as const,
+              ...baseConfig,
+              ...formData.triggerConfig
+            };
+          case 'CALENDAR':
+            return {
+              type: 'CALENDAR' as const,
+              ...baseConfig,
+              rrule: formData.triggerConfig.rrule || '',
+              timezone: formData.triggerConfig.timezone || 'UTC',
+              startDate: new Date(),
+              ...formData.triggerConfig
+            };
+          case 'WEBHOOK':
+            return {
+              type: 'WEBHOOK' as const,
+              ...baseConfig,
+              requiresSignature: true,
+              ...formData.triggerConfig
+            };
+          case 'DATABASE_EVENT':
+            return {
+              type: 'DATABASE_EVENT' as const,
+              ...baseConfig,
+              operations: ['INSERT', 'UPDATE', 'DELETE'] as ('INSERT' | 'UPDATE' | 'DELETE')[],
+              ...formData.triggerConfig
+            };
+          case 'RAG_REINDEX':
+            return {
+              type: 'RAG_REINDEX' as const,
+              ...baseConfig,
+              debounceMs: 5000,
+              ...formData.triggerConfig
+            };
+          default:
+            return {
+              type: 'MANUAL' as const,
+              ...baseConfig,
+            };
+        }
+      })();
 
       const agentData = {
         name: formData.name,
@@ -172,7 +211,8 @@ export default function AgentConfigurationWizard({
         tools,
         trigger,
         capabilities,
-        status: AgentStatus.active()
+        status: AgentStatus.active(),
+        roleId: 1 // Default role ID - will be set by application layer
       };
 
       let result;
@@ -378,18 +418,6 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                 </FormField>
 
                 {/* Trigger-specific configuration */}
-                {formData.triggerType === 'CRON' && (
-                  <FormField label="Cron Schedule" description="Unix cron expression">
-                    <Input
-                      value={formData.triggerConfig.cron || ''}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        triggerConfig: { ...prev.triggerConfig, cron: e.target.value }
-                      }))}
-                      placeholder="0 9 * * MON-FRI (Every weekday at 9 AM)"
-                    />
-                  </FormField>
-                )}
 
                 {formData.triggerType === 'CALENDAR' && agent?.id && (
                   <FormField label="Calendar Schedule">
@@ -576,10 +604,10 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                           <span className="font-semibold">{
                             PREDEFINED_TRIGGERS.find(t => t.type === formData.triggerType)?.display_name
                           }</span>
-                          {formData.triggerType === 'CRON' && formData.triggerConfig.cron && (
+                          {formData.triggerType === 'CALENDAR' && formData.triggerConfig.rrule && (
                             <div className="mt-1">
                               <span className="font-medium text-muted-foreground">Schedule: </span>
-                              <span className="font-mono bg-muted/50 px-1 py-0.5 rounded text-xs">{formData.triggerConfig.cron}</span>
+                              <span className="font-mono bg-muted/50 px-1 py-0.5 rounded text-xs">{formData.triggerConfig.rrule}</span>
                             </div>
                           )}
                           {formData.triggerType !== 'MANUAL' && formData.taskDefinition.name && (

@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getTableApplicationService } from "@/ddd/application/di/container";
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { CreateTableCommand } from '@/ddd/application/services/tables/table-application-service';
 
 /**
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 
     // Use TableApplicationService for table listing
     const tableApplicationService = getTableApplicationService();
-    const userTables = await tableApplicationService.getTablesForOrganization(authResult.user.organizationId);
+    const userTables = await tableApplicationService.getTablesForOrganization(OrganizationId.fromNumber(authResult.user.organizationId));
 
     return Response.json({
       success: true,

@@ -10,10 +10,10 @@
 
 import { Task, TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 import { TaskId } from '@/ddd/domain/tasks/value-objects/task-id';
-import { TaskStatus } from '@/ddd/domain/tasks/value-objects/task-status';
 import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
 import type { ITaskQueueService, TaskQueueConfig } from '@/ddd/domain/tasks/services/task-queue-service';
-import type { ISchedulerService, TriggerConfig } from '@/ddd/domain/tasks/services/scheduler-service';
+import type { ISchedulerService } from '@/ddd/domain/tasks/services/scheduler-service';
+import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import type { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export interface TaskExecutionRequest {
@@ -51,14 +51,21 @@ export class TaskSchedulingApplicationService {
    * Execute a task immediately or schedule for later
    */
   async executeTask(request: TaskExecutionRequest): Promise<TaskId> {
-    // Create task entity
+    // Create task entity with scheduling info in metadata if provided
+    const instructions = { ...request.instructions };
+    if (request.scheduledFor) {
+      instructions.metadata = {
+        ...instructions.metadata,
+        scheduled_for: request.scheduledFor.toISOString()
+      };
+    }
+
     const task = Task.create({
       agentId: request.agentId,
       organizationId: request.organizationId,
       name: request.name,
       capabilityName: request.capabilityName,
-      instructions: request.instructions,
-      scheduledFor: request.scheduledFor,
+      instructions,
       createdBy: request.createdBy
     });
 
@@ -69,21 +76,6 @@ export class TaskSchedulingApplicationService {
     await this.taskQueueService.enqueue(task, request.priority);
 
     return task.id;
-  }
-
-  /**
-   * Schedule a recurring task
-   */
-  async scheduleRecurringTask(request: ScheduleTaskRequest): Promise<void> {
-    await this.schedulerService.scheduleTask(request);
-
-    // If this is a RAG indexing task, also notify the RAG service
-    if (request.capabilityName === 'rag_indexing' && this.ragIndexingApplicationService) {
-      await this.ragIndexingApplicationService.scheduleIndexing({
-        organizationId: request.organizationId.value,
-        trigger: request.trigger
-      });
-    }
   }
 
   /**
@@ -120,7 +112,8 @@ export class TaskSchedulingApplicationService {
         processed++;
       } catch (error) {
         console.error(`Failed to process task ${task.id.value}:`, error);
-        await this.taskQueueService.markTaskFailed(task.id, error.message);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        await this.taskQueueService.markTaskFailed(task.id, errorMessage);
         failed++;
       }
     }

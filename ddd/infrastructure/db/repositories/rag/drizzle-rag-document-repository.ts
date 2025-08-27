@@ -18,7 +18,7 @@ import {
   type VectorSearchParams as DomainVectorSearchParams,
   type VectorSearchResult,
   type DocumentSyncResult
-} from '@/ddd/domain/rag/repositories';
+} from '@/ddd/domain/rag/repositories/rag-document-repository';
 import { RagDocument, type DocumentMetadata } from '@/ddd/domain/rag/entities';
 import { DocumentId, RagIndexId, type DomainType } from '@/ddd/domain/rag/value-objects';
 

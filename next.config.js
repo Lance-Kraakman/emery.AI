@@ -6,10 +6,27 @@ const nextConfig = {
   // App router is now stable in Next.js 15
   
   // Modern Next.js approach for native modules - replaces complex webpack externals
-  serverExternalPackages: ['@duckdb/node-api', '@duckdb/node-bindings', 'unpdf', '@z-skip/protoc', 'canvas'],
+  serverExternalPackages: [
+    'duckdb',
+    '@duckdb/node-api', 
+    '@duckdb/node-bindings',
+    '@duckdb/node-bindings-darwin-arm64',
+    '@duckdb/node-bindings-linux-x64',
+    'unpdf', 
+    '@z-skip/protoc', 
+    'canvas'
+  ],
   
   webpack: (config, { isServer }) => {
-    // Keep existing webpack config for other externals if needed
+    // Externalize DuckDB and its dependencies from webpack bundling
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push(
+        'duckdb',
+        '@mapbox/node-pre-gyp',
+        'mock-aws-s3'
+      );
+    }
     return config
   },
   

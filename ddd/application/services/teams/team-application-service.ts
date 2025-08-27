@@ -8,7 +8,7 @@
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { Result } from '@/ddd/domain/shared/result';
-import { Team, type TeamConfig } from '@/ddd/domain/teams/entities/team';
+import { Team } from '@/ddd/domain/teams/entities/team';
 import { TeamId, OrganizationId, AgentId } from '@/ddd/domain/shared/value-objects';
 
 export interface CreateTeamCommand {
@@ -41,6 +41,7 @@ export interface TeamFilters {
 export type TeamApplicationResult<T = any> = Result<T>;
 
 export class TeamApplicationService {
+
   constructor(
     private readonly teamRepository: ITeamRepository,
     private readonly agentRepository: IAgentRepository
@@ -351,23 +352,23 @@ export class TeamApplicationService {
   /**
    * Get teams that contain a specific agent
    */
-  async getTeamsForAgent(agentId: string): Promise<Team[]> {
-    return await this.teamRepository.findByAgentId(AgentId.fromNumber(parseInt(agentId)));
+  async getTeamsForAgent(agentId: AgentId): Promise<Team[]> {
+    return await this.teamRepository.findByAgentId(agentId);
   }
 
   /**
    * Get team count for organization
    */
-  async getTeamCount(organizationId: number): Promise<number> {
-    return await this.teamRepository.countByOrganization(OrganizationId.fromNumber(organizationId));
+  async getTeamCount(organizationId: OrganizationId): Promise<number> {
+    return await this.teamRepository.countByOrganization(organizationId);
   }
 
   /**
    * Bulk assign agents to team
    */
-  async bulkAssignAgents(teamId: number, agentIds: string[]): Promise<TeamApplicationResult<Team>> {
+  async bulkAssignAgents(teamId: TeamId, agentIds: AgentId[]): Promise<TeamApplicationResult<Team>> {
     try {
-      const existingTeam = await this.teamRepository.findById(TeamId.fromNumber(teamId));
+      const existingTeam = await this.teamRepository.findById(teamId);
       if (!existingTeam) {
         return {
           success: false,
@@ -378,7 +379,7 @@ export class TeamApplicationService {
       // Validate all agent IDs
       const agents = await this.agentRepository.findByOrganization(existingTeam.organizationId);
       const validAgentIds = agents.map(a => a.id.toString());
-      const invalidAgentIds = agentIds.filter(id => !validAgentIds.includes(id));
+      const invalidAgentIds = agentIds.filter(id => !validAgentIds.includes(id.toString()));
       
       if (invalidAgentIds.length > 0) {
         return {
@@ -395,7 +396,7 @@ export class TeamApplicationService {
         description: existingTeam.description,
         responsibilities: existingTeam.responsibilities,
         goals: existingTeam.goals,
-        agentIds: agentIds,
+        agentIds: agentIds.map(id => id.value.toString()),
         organizationId: existingTeam.organizationId.value,
         createdAt: existingTeam.createdAt
       });

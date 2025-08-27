@@ -1,0 +1,76 @@
+services:
+  postgres-integration:
+    image: pgvector/pgvector:pg17
+    container_name: emery-integration-db
+    environment:
+      POSTGRES_DB: emery_integration_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: integration_test_password
+    ports:
+      - "127.0.0.1:5436:5432"  # Different from main (5433) and RLS tests (5434)
+    volumes:
+      - integration_postgres_data:/var/lib/postgresql/data
+      - ../initdb.d:/docker-entrypoint-initdb.d  # Same init scripts as main
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d emery_integration_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - integration-test-network
+
+  app-integration:
+    build: 
+      context: ..
+      dockerfile: Dockerfile
+    container_name: emery-integration-app
+    ports:
+      - "127.0.0.1:3002:3000"  # Different from main (3000) and potential dev (3001)
+    env_file:
+      - ../.env.local.test
+    environment:
+      DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
+      NODE_ENV: test
+      NEXTAUTH_URL: http://localhost:3002
+    depends_on:
+      postgres-integration:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - integration-test-network
+
+  agent-integration:
+    build:
+      context: ../emery-agents
+      dockerfile: Dockerfile  
+    container_name: emery-integration-agent
+    ports:
+      - "127.0.0.1:50053:50051"  # Different from main (50051) and dev (50052)
+    env_file:
+      - ../.env.local.test
+    environment:
+      DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
+      PYTHONPATH: /usr/src/app/src
+      WORKER_PORT: 50051
+      ORGANIZATION_ID: default
+    depends_on:
+      postgres-integration:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import grpc; grpc.channel_ready_future(grpc.insecure_channel('localhost:50051')).result(timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+    networks:
+      - integration-test-network
+
+volumes:
+  integration_postgres_data:  # Isolated volume for integration tests
+
+networks:
+  integration-test-network:
+    driver: bridge

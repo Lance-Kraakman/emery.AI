@@ -64,6 +64,7 @@ export async function POST(
           persona: createPersonaForAgentType(agentType),
           ownerId: UserId.fromString(session.user.id),
           organizationId: OrganizationId.fromNumber(organizationId),
+          roleId: 1, // Default role ID - will be set by application layer
           agentType,
           tools: getDefaultToolsForType(agentType).map(toolName => ({
             name: toolName,
@@ -281,7 +282,6 @@ function createTriggerConfig(schedule: string): TriggerConfig {
       return {
         type: 'MANUAL',
         enabled: true,
-        requiresAuthentication: true
       };
   }
 }

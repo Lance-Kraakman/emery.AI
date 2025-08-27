@@ -98,11 +98,11 @@ export function useEmeryData() {
       ]);
 
       const tables: EmeryTable[] = tablesResult.map(table => ({
-        id: table.id,
+        id: table.id.value,
         name: table.name,
         dbName: table.storageLocation, // Map storageLocation to dbName for compatibility
-        databaseId: table.databaseId,
-        organizationId: table.organizationId,
+        databaseId: table.databaseId.value,
+        organizationId: table.organizationId.value,
         metadata: table.metadata ? table.metadata.toDatabaseJson() : null,
         createdAt: table.createdAt || null,
         updatedAt: table.updatedAt || null,
