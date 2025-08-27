@@ -66,7 +66,7 @@ describe('RLS Multi-Tenant Isolation Integration Tests', () => {
         VALUES ('RLS Agent 1', ${testUsers.user1}, ${testOrgs.org1}, 'active', 'rls_test_key_1', NOW())
         RETURNING id
       `);
-      return result[0].id;
+      return (result[0] as any).id as number;
     });
 
     testAgents.agent2 = await testClient.db.transaction(async (tx) => {
@@ -76,7 +76,7 @@ describe('RLS Multi-Tenant Isolation Integration Tests', () => {
         VALUES ('RLS Agent 2', ${testUsers.user2}, ${testOrgs.org2}, 'active', 'rls_test_key_2', NOW())
         RETURNING id
       `);
-      return result[0].id;
+      return (result[0] as any).id as number;
     });
   });
 
@@ -195,7 +195,7 @@ describe('RLS Multi-Tenant Isolation Integration Tests', () => {
           VALUES ('RLS RAG Index 1', ${testOrgs.org1}, ${JSON.stringify(['table'])}, ${JSON.stringify({domain_id: '1'})}, NOW())
           RETURNING id
         `);
-        return result[0].id;
+        return (result[0] as any).id as number;
       });
       expect(ragIndexId).toBeDefined();
 
@@ -207,7 +207,7 @@ describe('RLS Multi-Tenant Isolation Integration Tests', () => {
           SELECT COUNT(*) as count FROM rag_indexes 
           WHERE organization_id = ${testOrgs.org1}
         `);
-        return parseInt(result[0].count);
+        return parseInt((result[0] as any).count as string);
       });
       expect(org1Count).toBeGreaterThan(0);
 
@@ -219,7 +219,7 @@ describe('RLS Multi-Tenant Isolation Integration Tests', () => {
           SELECT COUNT(*) as count FROM rag_indexes 
           WHERE organization_id = ${testOrgs.org1}
         `);
-        return parseInt(result[0].count);
+        return parseInt((result[0] as any).count as string);
       });
       expect(org2Count).toBe(0);
     });
@@ -260,7 +260,7 @@ describe('RLS Multi-Tenant Isolation Integration Tests', () => {
           VALUES ('Vector Test Index', ${testOrgs.org1}, ${JSON.stringify(['table'])}, ${JSON.stringify({domain_id: '1'})}, NOW())
           RETURNING id
         `);
-        return result[0].id;
+        return (result[0] as any).id as number;
       });
       
       // Insert a test document with proper RLS context
@@ -281,7 +281,7 @@ describe('RLS Multi-Tenant Isolation Integration Tests', () => {
           SELECT COUNT(*) as count FROM rag_documents 
           WHERE rag_index_id = ${ragIndexId}
         `);
-        return parseInt(result[0].count);
+        return parseInt((result[0] as any).count as string);
       });
       expect(docCount).toBe(1);
       
@@ -293,7 +293,7 @@ describe('RLS Multi-Tenant Isolation Integration Tests', () => {
           SELECT COUNT(*) as count FROM rag_documents 
           WHERE rag_index_id = ${ragIndexId}
         `);
-        return parseInt(result[0].count);
+        return parseInt((result[0] as any).count as string);
       });
       expect(isolatedDocCount).toBe(0);
     });

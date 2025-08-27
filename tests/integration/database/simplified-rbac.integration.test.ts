@@ -5,11 +5,11 @@
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { sql } from 'drizzle-orm';
-import { testDb, closeTestDb } from '../shared/integration-helpers';
+import { testClient } from '../shared/integration-helpers';
 import { organizations, users, agents, teams } from '@/lib/db/schema';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
 import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
-import { UserRole } from '@/ddd/domain/users/entities/user-role';
+import { UserRole } from '@/ddd/domain/shared/value-objects/user-role';
 import { ORGANIZATION_ROLES } from '@/ddd/domain/shared/value-objects/organization-role';
 
 describe('Simplified 3-Role RBAC System', () => {
@@ -19,71 +19,66 @@ describe('Simplified 3-Role RBAC System', () => {
   let memberUserId: string;
 
   beforeAll(async () => {
-    // Ensure database is clean
-    await testDb.execute(sql`DELETE FROM agents`);
-    await testDb.execute(sql`DELETE FROM teams`);
-    await testDb.execute(sql`DELETE FROM users WHERE email LIKE '%rbac-test%'`);
-    await testDb.execute(sql`DELETE FROM organizations WHERE name LIKE '%RBAC Test%'`);
-
-    // Enable RLS on all tables
-    await testDb.execute(sql`ALTER TABLE organizations ENABLE ROW LEVEL SECURITY`);
-    await testDb.execute(sql`ALTER TABLE users ENABLE ROW LEVEL SECURITY`);
-    await testDb.execute(sql`ALTER TABLE agents ENABLE ROW LEVEL SECURITY`);
-    await testDb.execute(sql`ALTER TABLE teams ENABLE ROW LEVEL SECURITY`);
+    // Ensure database is clean - RLS is already enabled by migrations
+    await testClient.db.execute(sql`DELETE FROM agents WHERE name LIKE '%RBAC Test%'`);
+    await testClient.db.execute(sql`DELETE FROM teams WHERE name LIKE '%RBAC Test%'`);
+    await testClient.db.execute(sql`DELETE FROM users WHERE email LIKE '%rbac-test%'`);
+    await testClient.db.execute(sql`DELETE FROM organizations WHERE name LIKE '%RBAC Test%'`);
   });
 
   afterAll(async () => {
-    await closeTestDb();
+    await testClient.disconnect();
   });
 
   beforeEach(async () => {
-    // Create test organization
-    const [testOrg] = await testDb.insert(organizations).values({
-      name: 'Simplified RBAC Test Org',
-      slug: 'simplified-rbac-test-org',
-    }).returning();
-    testOrgId = testOrg.id;
+    // Use existing test organizations from seed data (to avoid RLS issues)
+    testOrgId = 1; // From seed data: 'Test Organization 1'
 
-    // Create test users with different roles
-    const ownerUser = UserId.create();
-    const adminUser = UserId.create();
-    const memberUser = UserId.create();
+    // Create test users with different roles using proper RLS context
+    const ownerUser = UserId.generate();
+    const adminUser = UserId.generate();
+    const memberUser = UserId.generate();
 
     ownerUserId = ownerUser.value;
     adminUserId = adminUser.value;
     memberUserId = memberUser.value;
 
-    await testDb.insert(users).values([
-      {
-        id: ownerUserId,
-        email: 'owner@rbac-test.com',
-        name: 'Test Owner',
-        organizationRole: ORGANIZATION_ROLES.OWNER,
-        currentOrganizationId: testOrgId,
-      },
-      {
-        id: adminUserId,
-        email: 'admin@rbac-test.com',
-        name: 'Test Admin',
-        organizationRole: ORGANIZATION_ROLES.ADMIN,
-        currentOrganizationId: testOrgId,
-      },
-      {
-        id: memberUserId,
-        email: 'member@rbac-test.com',
-        name: 'Test Member',
-        organizationRole: ORGANIZATION_ROLES.MEMBER,
-        currentOrganizationId: testOrgId,
-      },
-    ]);
+    // Create users with proper RLS context
+    await testClient.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgId.toString()}, true)`);
+      
+      await tx.insert(users).values([
+        {
+          id: ownerUserId,
+          email: 'owner@rbac-test.com',
+          name: 'Test Owner',
+          organizationRole: ORGANIZATION_ROLES.OWNER,
+          currentOrganizationId: testOrgId,
+        },
+        {
+          id: adminUserId,
+          email: 'admin@rbac-test.com',
+          name: 'Test Admin',
+          organizationRole: ORGANIZATION_ROLES.ADMIN,
+          currentOrganizationId: testOrgId,
+        },
+        {
+          id: memberUserId,
+          email: 'member@rbac-test.com',
+          name: 'Test Member',
+          organizationRole: ORGANIZATION_ROLES.MEMBER,
+          currentOrganizationId: testOrgId,
+        },
+      ]);
+    });
   });
 
   afterEach(async () => {
     // Clean up test data
-    await testDb.execute(sql`DELETE FROM agents`);
-    await testDb.execute(sql`DELETE FROM teams`);
-    await testDb.execute(sql`DELETE FROM users WHERE email LIKE '%rbac-test%'`);
-    await testDb.execute(sql`DELETE FROM organizations WHERE name LIKE '%RBAC Test%'`);
+    await testClient.db.execute(sql`DELETE FROM agents`);
+    await testClient.db.execute(sql`DELETE FROM teams`);
+    await testClient.db.execute(sql`DELETE FROM users WHERE email LIKE '%rbac-test%'`);
+    await testClient.db.execute(sql`DELETE FROM organizations WHERE name LIKE '%RBAC Test%'`);
   });
 
   describe('User Role Capabilities', () => {
@@ -143,7 +138,7 @@ describe('Simplified 3-Role RBAC System', () => {
 
   describe('Database Integration', () => {
     it('should store users with organization roles correctly', async () => {
-      const users = await testDb.query.users.findMany({
+      const users = await testClient.db.query.users.findMany({
         where: (users, { eq }) => eq(users.currentOrganizationId, testOrgId)
       });
 
@@ -163,9 +158,9 @@ describe('Simplified 3-Role RBAC System', () => {
     });
 
     it('should default new users to member role', async () => {
-      const newUserId = UserId.create().value;
+      const newUserId = UserId.generate().value;
       
-      await testDb.insert(users).values({
+      await testClient.db.insert(users).values({
         id: newUserId,
         email: 'newuser@rbac-test.com',
         name: 'New User',
@@ -173,7 +168,7 @@ describe('Simplified 3-Role RBAC System', () => {
         // No organizationRole specified - should default to 'member'
       });
 
-      const newUser = await testDb.query.users.findFirst({
+      const newUser = await testClient.db.query.users.findFirst({
         where: (users, { eq }) => eq(users.id, newUserId)
       });
 
@@ -187,16 +182,16 @@ describe('Simplified 3-Role RBAC System', () => {
 
     it('should conceptually allow owners full access to organizations', async () => {
       // Set user context (in real app, this would be handled by auth middleware)
-      await testDb.execute(sql`
+      await testClient.db.execute(sql`
         SELECT set_config('app.current_organization_id', ${testOrgId.toString()}, true)
       `);
-      await testDb.execute(sql`
+      await testClient.db.execute(sql`
         SELECT set_config('auth.user_id', ${ownerUserId}, true)
       `);
 
       // Owner should be able to update organization
       // (This would be enforced by RLS policies in production)
-      const orgUpdate = testDb.update(organizations)
+      const orgUpdate = testClient.db.update(organizations)
         .set({ name: 'Updated by Owner' })
         .where(sql`id = ${testOrgId}`);
 
@@ -207,12 +202,12 @@ describe('Simplified 3-Role RBAC System', () => {
 
     it('should conceptually restrict members from creating agents', async () => {
       // Set member user context
-      await testDb.execute(sql`
+      await testClient.db.execute(sql`
         SELECT set_config('auth.user_id', ${memberUserId}, true)
       `);
 
       // Member attempting to create agent
-      const agentCreation = testDb.insert(agents).values({
+      const agentCreation = testClient.db.insert(agents).values({
         name: 'Member Created Agent',
         organizationId: testOrgId,
         ownerId: memberUserId,
@@ -226,12 +221,12 @@ describe('Simplified 3-Role RBAC System', () => {
 
     it('should conceptually allow admins to create agents', async () => {
       // Set admin user context
-      await testDb.execute(sql`
+      await testClient.db.execute(sql`
         SELECT set_config('auth.user_id', ${adminUserId}, true)
       `);
 
       // Admin creating agent
-      const agentCreation = testDb.insert(agents).values({
+      const agentCreation = testClient.db.insert(agents).values({
         name: 'Admin Created Agent',
         organizationId: testOrgId,
         ownerId: adminUserId,
