@@ -6,7 +6,6 @@
  */
 
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
-import type { IRoleRepository } from '@/ddd/domain/roles/repositories/role-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
 import type { 
   Agent, 
@@ -29,7 +28,6 @@ export interface CreateAgentCommand {
   persona?: string;
   ownerId: UserId;
   organizationId: OrganizationId;
-  roleId: number;
   agentType?: AgentType;
   specialization?: any;
   tools?: ToolConfig[];
@@ -45,7 +43,6 @@ export interface UpdateAgentCommand {
   role?: string;
   description?: string;
   persona?: string;
-  roleId?: number;
   tools?: ToolConfig[];
   servers?: ServerConfig[];
   trigger?: TriggerConfig;
@@ -74,7 +71,6 @@ export type AgentApplicationResult<T = any> = Result<T>;
 export class AgentApplicationService {
   constructor(
     private readonly agentRepository: IAgentRepository,
-    private readonly roleRepository: IRoleRepository,
     private readonly teamRepository: ITeamRepository
   ) {}
 
@@ -91,16 +87,7 @@ export class AgentApplicationService {
         };
       }
 
-      // Validate role exists if provided
-      if (command.roleId) {
-        const role = await this.roleRepository.findById(command.roleId);
-        if (!role) {
-          return {
-            success: false,
-            error: `Role with ID ${command.roleId} not found`
-          };
-        }
-      }
+      // Role validation removed - using simplified 3-role system
 
       // Generate API key for agent authentication
       const apiKey = ApiKey.generate();
@@ -113,7 +100,6 @@ export class AgentApplicationService {
         persona: command.persona,
         ownerId: command.ownerId, // Required from command
         organizationId: command.organizationId, // Required from command
-        roleId: command.roleId,
         agentType: command.agentType,
         specialization: command.specialization,
         tools: command.tools,
@@ -165,16 +151,7 @@ export class AgentApplicationService {
         };
       }
 
-      // Validate role exists if provided
-      if (command.roleId) {
-        const role = await this.roleRepository.findById(command.roleId);
-        if (!role) {
-          return {
-            success: false,
-            error: `Role with ID ${command.roleId} not found`
-          };
-        }
-      }
+      // Role validation removed - using simplified 3-role system
 
       // Create updated agent with existing values as defaults
       const updatedAgent: Agent = {
@@ -183,7 +160,6 @@ export class AgentApplicationService {
         role: command.role !== undefined ? command.role : existingAgent.role,
         description: command.description !== undefined ? command.description : existingAgent.description,
         persona: command.persona !== undefined ? command.persona : existingAgent.persona,
-        roleId: command.roleId !== undefined ? command.roleId : existingAgent.roleId,
         tools: command.tools !== undefined ? command.tools : existingAgent.tools,
         servers: command.servers !== undefined ? command.servers : existingAgent.servers,
         trigger: command.trigger !== undefined ? command.trigger : existingAgent.trigger,

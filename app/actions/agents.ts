@@ -24,7 +24,6 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
       persona: data.persona,
       ownerId: UserId.fromString(session.user.id),
       organizationId: OrganizationId.fromNumber(session.user.currentOrganizationId),
-      roleId: data.roleId,
       tools: data.tools,
       servers: data.servers,
       trigger: data.trigger,
@@ -119,7 +118,6 @@ export async function createAgentAction(formData: FormData): Promise<Result> {
     const result = await createAgent({ 
       ...validatedData,
       organizationId: currentOrg.id,
-      roleId: 1, // Default role ID - will be set by application layer
       tools, 
       servers,
       status: AgentStatus.active()
@@ -194,7 +192,6 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       role: data.role,
       description: data.description,
       persona: data.persona,
-      roleId: data.roleId,
       tools: data.tools,
       servers: data.servers,
       trigger: data.trigger,

@@ -1,6 +1,9 @@
 import { describe, test, expect, beforeEach, beforeAll } from 'vitest';
 import { testClient } from '../shared/integration-helpers';
 import { TestCase } from '../shared/test-case';
+import { organizations, users, agents, ragIndexes, ragDocuments } from '@/lib/db/schema';
+import { eq, and } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 // AIDEV-NOTE: Integration tests for Row Level Security (RLS) multi-tenant isolation
 // Ports existing Python-based RLS tests to unified Vitest system with TestCase pattern
@@ -28,204 +31,271 @@ let testAgents: { agent1: number; agent2: number } = { agent1: 0, agent2: 0 };
 describe('RLS Multi-Tenant Isolation Integration Tests', () => {
   
   beforeAll(async () => {
-    // Create test organizations (use SERIAL to auto-generate IDs after sequence reset)
-    const org1Result = await testClient.query(`
-      INSERT INTO organizations (name, slug, created_at) 
-      VALUES ('RLS Test Org 1', 'rls-test-org-1', NOW())
-      RETURNING id
-    `);
-    testOrgs.org1 = org1Result[0].id;
+    // Use the existing organizations from seed data (IDs 1 and 2)
+    // The organizations RLS policy prevents creating new orgs without existing context
+    testOrgs.org1 = 1; // From seed data: 'Test Organization 1'
+    testOrgs.org2 = 2; // From seed data: 'Test Organization 2'
 
-    const org2Result = await testClient.query(`
-      INSERT INTO organizations (name, slug, created_at) 
-      VALUES ('RLS Test Org 2', 'rls-test-org-2', NOW())
-      RETURNING id
-    `);
-    testOrgs.org2 = org2Result[0].id;
-
-    // Create test users with correct schema (current_organization_id, no updated_at, valid UUIDs)
+    // Create test users with proper RLS context
     const user1Id = '550e8400-e29b-41d4-a716-446655440101'; // Unique UUID for RLS test
     const user2Id = '550e8400-e29b-41d4-a716-446655440102'; // Unique UUID for RLS test
     
-    await testClient.query(`
-      INSERT INTO users (id, name, email, current_organization_id, created_at) 
-      VALUES ($1, 'RLS User 1', $2, $3, NOW())
-    `, [user1Id, `rls-user-1@test.com`, testOrgs.org1]);
+    await testClient.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org1.toString()}, true)`);
+      await tx.execute(sql`
+        INSERT INTO users (id, name, email, current_organization_id, created_at) 
+        VALUES (${user1Id}, 'RLS User 1', 'rls-user-1@test.com', ${testOrgs.org1}, NOW())
+      `);
+    });
     testUsers.user1 = user1Id;
 
-    await testClient.query(`
-      INSERT INTO users (id, name, email, current_organization_id, created_at) 
-      VALUES ($1, 'RLS User 2', $2, $3, NOW())
-    `, [user2Id, `rls-user-2@test.com`, testOrgs.org2]);
+    await testClient.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org2.toString()}, true)`);
+      await tx.execute(sql`
+        INSERT INTO users (id, name, email, current_organization_id, created_at) 
+        VALUES (${user2Id}, 'RLS User 2', 'rls-user-2@test.com', ${testOrgs.org2}, NOW())
+      `);
+    });
     testUsers.user2 = user2Id;
 
-    // Create test agents (no updated_at column)
-    const agent1Result = await testClient.query(`
-      INSERT INTO agents (name, owner_id, organization_id, status, api_key, created_at) 
-      VALUES ('RLS Agent 1', $1, $2, 'active', 'key_' || md5(random()::text), NOW())
-      RETURNING id
-    `, [testUsers.user1, testOrgs.org1]);
-    testAgents.agent1 = agent1Result[0].id;
+    // Create test agents with proper RLS context
+    testAgents.agent1 = await testClient.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org1.toString()}, true)`);
+      const result = await tx.execute(sql`
+        INSERT INTO agents (name, owner_id, organization_id, status, api_key, created_at) 
+        VALUES ('RLS Agent 1', ${testUsers.user1}, ${testOrgs.org1}, 'active', 'rls_test_key_1', NOW())
+        RETURNING id
+      `);
+      return result[0].id;
+    });
 
-    const agent2Result = await testClient.query(`
-      INSERT INTO agents (name, owner_id, organization_id, status, api_key, created_at) 
-      VALUES ('RLS Agent 2', $1, $2, 'active', 'key_' || md5(random()::text), NOW())
-      RETURNING id
-    `, [testUsers.user2, testOrgs.org2]);
-    testAgents.agent2 = agent2Result[0].id;
+    testAgents.agent2 = await testClient.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org2.toString()}, true)`);
+      const result = await tx.execute(sql`
+        INSERT INTO agents (name, owner_id, organization_id, status, api_key, created_at) 
+        VALUES ('RLS Agent 2', ${testUsers.user2}, ${testOrgs.org2}, 'active', 'rls_test_key_2', NOW())
+        RETURNING id
+      `);
+      return result[0].id;
+    });
   });
 
   beforeEach(async () => {
     // Clear RLS context before each test
-    await testClient.query("SELECT set_config('app.current_organization_id', '', true)");
-    await testClient.query("SELECT set_config('app.current_user_id', '', true)");
+    await testClient.clearRLSContext();
   });
 
   describe('Organization-Level Data Isolation', () => {
     test('should show organizations only to their members', async () => {
-      // Set context for org 1
-      await testClient.query("SELECT set_config('app.current_organization_id', $1, true)", [testOrgs.org1.toString()]);
-      
-      const org1Result = await testClient.query("SELECT id, name FROM organizations ORDER BY id");
+      // Test org 1 isolation - set context and query within same transaction
+      const org1Result = await testClient.db.transaction(async (tx) => {
+        // Set context within transaction
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org1.toString()}, true)`);
+        
+        // Query within same transaction 
+        return await tx.select({ id: organizations.id, name: organizations.name })
+          .from(organizations)
+          .orderBy(organizations.id);
+      });
       expect(org1Result).toHaveLength(1);
       expect(org1Result[0].id).toBe(testOrgs.org1);
-      expect(org1Result[0].name).toBe('RLS Test Org 1');
+      expect(org1Result[0].name).toBe('Test Organization 1'); // From seed data
 
-      // Set context for org 2
-      await testClient.query("SELECT set_config('app.current_organization_id', $1, true)", [testOrgs.org2.toString()]);
-      
-      const org2Result = await testClient.query("SELECT id, name FROM organizations ORDER BY id");
+      // Test org 2 isolation - set context and query within same transaction
+      const org2Result = await testClient.db.transaction(async (tx) => {
+        // Set context within transaction
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org2.toString()}, true)`);
+        
+        // Query within same transaction
+        return await tx.select({ id: organizations.id, name: organizations.name })
+          .from(organizations)
+          .orderBy(organizations.id);
+      });
       expect(org2Result).toHaveLength(1);
       expect(org2Result[0].id).toBe(testOrgs.org2);
-      expect(org2Result[0].name).toBe('RLS Test Org 2');
+      expect(org2Result[0].name).toBe('Test Organization 2'); // From seed data
     });
 
     test('should isolate users by organization', async () => {
-      // Set context for org 1  
-      await testClient.query("SELECT set_config('app.current_organization_id', $1, true)", [testOrgs.org1.toString()]);
-      
-      const org1Users = await testClient.query("SELECT id, name FROM users WHERE name LIKE 'RLS User %' ORDER BY name");
+      // Test org 1 user isolation
+      const org1Users = await testClient.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org1.toString()}, true)`);
+        
+        return await tx.select({ id: users.id, name: users.name })
+          .from(users)
+          .where(sql`${users.name} LIKE 'RLS User %'`)
+          .orderBy(users.name);
+      });
       expect(org1Users).toHaveLength(1);
       expect(org1Users[0].id).toBe(testUsers.user1);
       expect(org1Users[0].name).toBe('RLS User 1');
 
-      // Set context for org 2
-      await testClient.query("SELECT set_config('app.current_organization_id', $1, true)", [testOrgs.org2.toString()]);
-      
-      const org2Users = await testClient.query("SELECT id, name FROM users WHERE name LIKE 'RLS User %' ORDER BY name");
+      // Test org 2 user isolation
+      const org2Users = await testClient.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org2.toString()}, true)`);
+        
+        return await tx.select({ id: users.id, name: users.name })
+          .from(users)
+          .where(sql`${users.name} LIKE 'RLS User %'`)
+          .orderBy(users.name);
+      });
       expect(org2Users).toHaveLength(1);
       expect(org2Users[0].id).toBe(testUsers.user2);
       expect(org2Users[0].name).toBe('RLS User 2');
     });
 
     test('should isolate agents by organization', async () => {
-      // Set context for org 1
-      await testClient.query("SELECT set_config('app.current_organization_id', $1, true)", [testOrgs.org1.toString()]);
-      
-      const org1Agents = await testClient.query("SELECT id, name, organization_id FROM agents WHERE name LIKE 'RLS Agent %' ORDER BY id");
+      // Test org 1 agent isolation
+      const org1Agents = await testClient.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org1.toString()}, true)`);
+        
+        return await tx.select({ 
+          id: agents.id, 
+          name: agents.name, 
+          organizationId: agents.organizationId 
+        })
+          .from(agents)
+          .where(sql`${agents.name} LIKE 'RLS Agent %'`)
+          .orderBy(agents.id);
+      });
       expect(org1Agents).toHaveLength(1);
       expect(org1Agents[0].id).toBe(testAgents.agent1);
       expect(org1Agents[0].name).toBe('RLS Agent 1');
-      expect(org1Agents[0].organization_id).toBe(testOrgs.org1);
+      expect(org1Agents[0].organizationId).toBe(testOrgs.org1);
 
-      // Set context for org 2
-      await testClient.query("SELECT set_config('app.current_organization_id', $1, true)", [testOrgs.org2.toString()]);
-      
-      const org2Agents = await testClient.query("SELECT id, name, organization_id FROM agents WHERE name LIKE 'RLS Agent %' ORDER BY id");
+      // Test org 2 agent isolation
+      const org2Agents = await testClient.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org2.toString()}, true)`);
+        
+        return await tx.select({ 
+          id: agents.id, 
+          name: agents.name, 
+          organizationId: agents.organizationId 
+        })
+          .from(agents)
+          .where(sql`${agents.name} LIKE 'RLS Agent %'`)
+          .orderBy(agents.id);
+      });
       expect(org2Agents).toHaveLength(1);
       expect(org2Agents[0].id).toBe(testAgents.agent2);
       expect(org2Agents[0].name).toBe('RLS Agent 2');
-      expect(org2Agents[0].organization_id).toBe(testOrgs.org2);
+      expect(org2Agents[0].organizationId).toBe(testOrgs.org2);
     });
 
   });
 
   describe('RAG Index Isolation', () => {
     test('should isolate RAG indexes by organization', async () => {
-      // Create RAG index for org 1
-      await testClient.query("SELECT set_config('app.current_organization_id', $1, true)", [testOrgs.org1.toString()]);
-      
-      const ragResult = await testClient.query(`
-        INSERT INTO rag_indexes (name, organization_id, domain_types, domain_filters, created_at)
-        VALUES ('RLS RAG Index 1', $1, $2, $3, NOW())
-        RETURNING id
-      `, [testOrgs.org1, JSON.stringify(['table']), JSON.stringify({domain_id: '1'})]);
-      
-      const ragIndexId = ragResult[0].id;
+      // Create RAG index for org 1 using transaction with proper RLS context
+      const ragIndexId = await testClient.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org1.toString()}, true)`);
+        
+        const result = await tx.execute(sql`
+          INSERT INTO rag_indexes (name, organization_id, domain_types, domain_filters, created_at)
+          VALUES ('RLS RAG Index 1', ${testOrgs.org1}, ${JSON.stringify(['table'])}, ${JSON.stringify({domain_id: '1'})}, NOW())
+          RETURNING id
+        `);
+        return result[0].id;
+      });
       expect(ragIndexId).toBeDefined();
 
-      // Verify index is visible in org 1
-      const org1Indexes = await testClient.query(`
-        SELECT COUNT(*) as count FROM rag_indexes 
-        WHERE organization_id = $1
-      `, [testOrgs.org1]);
-      expect(parseInt(org1Indexes[0].count)).toBeGreaterThan(0);
+      // Verify index is visible in org 1 context
+      const org1Count = await testClient.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org1.toString()}, true)`);
+        
+        const result = await tx.execute(sql`
+          SELECT COUNT(*) as count FROM rag_indexes 
+          WHERE organization_id = ${testOrgs.org1}
+        `);
+        return parseInt(result[0].count);
+      });
+      expect(org1Count).toBeGreaterThan(0);
 
-      // Switch to org 2 context and verify isolation
-      await testClient.query("SELECT set_config('app.current_organization_id', $1, true)", [testOrgs.org2.toString()]);
-      
-      const org2Indexes = await testClient.query(`
-        SELECT COUNT(*) as count FROM rag_indexes 
-        WHERE organization_id = $1
-      `, [testOrgs.org1]);
-      expect(parseInt(org2Indexes[0].count)).toBe(0);
+      // Verify index is NOT visible from org 2 context (should return 0)
+      const org2Count = await testClient.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org2.toString()}, true)`);
+        
+        const result = await tx.execute(sql`
+          SELECT COUNT(*) as count FROM rag_indexes 
+          WHERE organization_id = ${testOrgs.org1}
+        `);
+        return parseInt(result[0].count);
+      });
+      expect(org2Count).toBe(0);
     });
   });
 
   describe('RLS Helper Functions', () => {
     test('should return current organization ID from RLS context', async () => {
-      await testClient.query("SELECT set_config('app.current_organization_id', $1, true)", [testOrgs.org1.toString()]);
+      const orgId = await testClient.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org1.toString()}, true)`);
+        
+        const result = await tx.execute(sql`SELECT get_current_organization_id() as org_id`);
+        return result[0]?.org_id || null;
+      });
       
-      const result = await testClient.query('SELECT get_current_organization_id() as org_id');
-      expect(result[0].org_id).toBe(testOrgs.org1);
+      expect(orgId).toBe(testOrgs.org1);
     });
 
     test('should handle missing organization context gracefully', async () => {
-      // Clear organization context
-      await testClient.query("SELECT set_config('app.current_organization_id', '', true)");
+      const orgId = await testClient.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', '', true)`);
+        
+        const result = await tx.execute(sql`SELECT get_current_organization_id() as org_id`);
+        return result[0]?.org_id || null;
+      });
       
-      const result = await testClient.query('SELECT get_current_organization_id() as org_id');
-      expect(result[0].org_id).toBeNull();
+      expect(orgId).toBeNull();
     });
   });
 
   describe('Vector Search Isolation', () => {
     test('should isolate vector search by organization', async () => {
-      // Set context for org 1
-      await testClient.query("SELECT set_config('app.current_organization_id', $1, true)", [testOrgs.org1.toString()]);
+      // Create a test RAG index with transaction and proper RLS context
+      const ragIndexId = await testClient.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org1.toString()}, true)`);
+        
+        const result = await tx.execute(sql`
+          INSERT INTO rag_indexes (name, organization_id, domain_types, domain_filters, created_at)
+          VALUES ('Vector Test Index', ${testOrgs.org1}, ${JSON.stringify(['table'])}, ${JSON.stringify({domain_id: '1'})}, NOW())
+          RETURNING id
+        `);
+        return result[0].id;
+      });
       
-      // Create a test RAG index
-      const ragResult = await testClient.query(`
-        INSERT INTO rag_indexes (name, organization_id, domain_types, domain_filters, created_at)
-        VALUES ('Vector Test Index', $1, $2, $3, NOW())
-        RETURNING id
-      `, [testOrgs.org1, JSON.stringify(['table']), JSON.stringify({domain_id: '1'})]);
+      // Insert a test document with proper RLS context
+      await testClient.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org1.toString()}, true)`);
+        
+        await tx.execute(sql`
+          INSERT INTO rag_documents (rag_index_id, organization_id, domain_type, source_id, source_name, title, content, content_hash, indexed_at)
+          VALUES (${ragIndexId}, ${testOrgs.org1}, 'table', '1', 'Test Table', 'Test Document', 'Test document content', 'hash123', NOW())
+        `);
+      });
       
-      const ragIndexId = ragResult[0].id;
+      // Verify the document is accessible within org 1 context
+      const docCount = await testClient.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org1.toString()}, true)`);
+        
+        const result = await tx.execute(sql`
+          SELECT COUNT(*) as count FROM rag_documents 
+          WHERE rag_index_id = ${ragIndexId}
+        `);
+        return parseInt(result[0].count);
+      });
+      expect(docCount).toBe(1);
       
-      // Insert a test document (simplified) - using correct schema
-      await testClient.query(`
-        INSERT INTO rag_documents (rag_index_id, organization_id, domain_type, source_id, source_name, title, content, content_hash, indexed_at)
-        VALUES ($1, $2, 'table', '1', 'Test Table', 'Test Document', 'Test document content', 'hash123', NOW())
-      `, [ragIndexId, testOrgs.org1]);
-      
-      // Verify the document is accessible within the same organization
-      const docs = await testClient.query(`
-        SELECT COUNT(*) as count FROM rag_documents 
-        WHERE rag_index_id = $1
-      `, [ragIndexId]);
-      
-      expect(parseInt(docs[0].count)).toBe(1);
-      
-      // Switch organization context and verify isolation
-      await testClient.query("SELECT set_config('app.current_organization_id', $1, true)", [testOrgs.org2.toString()]);
-      
-      const isolatedDocs = await testClient.query(`
-        SELECT COUNT(*) as count FROM rag_documents 
-        WHERE rag_index_id = $1
-      `, [ragIndexId]);
-      
-      expect(parseInt(isolatedDocs[0].count)).toBe(0);
+      // Verify isolation from org 2 context (should return 0)
+      const isolatedDocCount = await testClient.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT set_config('app.current_organization_id', ${testOrgs.org2.toString()}, true)`);
+        
+        const result = await tx.execute(sql`
+          SELECT COUNT(*) as count FROM rag_documents 
+          WHERE rag_index_id = ${ragIndexId}
+        `);
+        return parseInt(result[0].count);
+      });
+      expect(isolatedDocCount).toBe(0);
     });
   });
 });

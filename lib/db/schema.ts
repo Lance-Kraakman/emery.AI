@@ -1,7 +1,39 @@
-import { pgTable, text, uuid, serial, integer, timestamp, boolean, primaryKey, jsonb, unique, customType } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, serial, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
+
+// AIDEV-NOTE: Database roles for multi-tenant RBAC system
+// These roles provide database-level security in addition to application-level permissions
+
+// Application-wide roles (created once during initial setup)
+export const appOwnerRole = pgRole('app_owner', { 
+  createRole: false,
+  inherit: true 
+});
+
+export const appAdminRole = pgRole('app_admin', { 
+  createRole: false,
+  inherit: true 
+});
+
+export const appMemberRole = pgRole('app_member', { 
+  createRole: false,
+  inherit: true 
+});
+
+// Authenticated user role - base role for all logged-in users
+export const authenticatedRole = pgRole('authenticated', {
+  createRole: false,
+  inherit: true
+});
+
+// Anonymous role for public access (if needed)
+export const anonymousRole = pgRole('anon', {
+  createRole: false,
+  inherit: false
+});
 
 // Custom vector type for pgvector
 const vector = customType<{ data: number[]; notNull: false; default: false }>({
@@ -28,7 +60,14 @@ export const databases = pgTable("databases", {
   createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  pgPolicy("databases_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = get_current_organization_id()`,
+  }),
+]);
 
 export const tables = pgTable("tables", {
   id: serial("id").primaryKey(),
@@ -40,7 +79,14 @@ export const tables = pgTable("tables", {
   createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  pgPolicy("tables_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = get_current_organization_id()`,
+  }),
+]);
 
 export const fields = pgTable("fields", {
   id: serial("id").primaryKey(),
@@ -68,7 +114,14 @@ export const fields = pgTable("fields", {
   }>(),
   
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  pgPolicy("fields_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`EXISTS (SELECT 1 FROM tables t WHERE t.id = table_id AND t.organization_id = get_current_organization_id())`,
+  }),
+]);
 
 export const organizations = pgTable("organizations", {
   id: serial("id").primaryKey(),
@@ -85,18 +138,41 @@ export const organizations = pgTable("organizations", {
   stripeSubscriptionStatus: text("stripe_subscription_status"),
   analysisCapabilities: jsonb("analysis_capabilities").$type<OrganizationAnalysisCapabilities>(), // Type-safe organizational analysis configuration
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  // Primary RLS policy - organization context based
+  pgPolicy("organizations_member_access", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`id = get_current_organization_id()`,
+  }),
+  // Role-based policy for owners - full access to their organizations
+  pgPolicy("organizations_owner_access", {
+    as: "permissive", 
+    for: "all",
+    to: appOwnerRole,
+    using: sql`EXISTS (
+      SELECT 1 FROM user_organizations 
+      WHERE organization_id = ${table.id} 
+      AND user_id = current_setting('app.current_user_id', true)::uuid
+      AND role = 'owner'
+    )`,
+  }),
+  // Role-based policy for admins - read and update access
+  pgPolicy("organizations_admin_access", {
+    as: "permissive",
+    for: "select",
+    to: appAdminRole,
+    using: sql`EXISTS (
+      SELECT 1 FROM user_organizations 
+      WHERE organization_id = ${table.id} 
+      AND user_id = current_setting('app.current_user_id', true)::uuid
+      AND role IN ('admin', 'owner')
+    )`,
+  }),
+]);
 
-export const roles = pgTable("roles", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  permissions: text("permissions").array(),
-  organizationId: integer("organization_id").references(() => organizations.id),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => ({
-  // Unique constraint: role name must be unique within an organization
-  nameOrgUnique: unique().on(table.name, table.organizationId),
-}));
+// AIDEV-NOTE: Removed complex roles table - using simplified 3-role system in users.organization_role
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -105,13 +181,34 @@ export const users = pgTable("users", {
   emailVerified: timestamp("email_verified"),
   image: text("image"),
   currentOrganizationId: integer("current_organization_id").references(() => organizations.id),
-  roleId: integer("role_id").references(() => roles.id),
+  // Simplified 3-role system: 'owner' | 'admin' | 'member'
+  organizationRole: text("organization_role").notNull().default("member"), // Fixed 3-role RBAC
   jobTitle: text("job_title"),
-  role: text("role"),
   teams: text("teams").array(),
   apiKey: text("api_key").unique(), // User API key for management APIs
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  // Pure Drizzle simplified role-based policies
+  pgPolicy("users_owner_management", {
+    as: "permissive",
+    for: "all",
+    to: [appOwnerRole],
+    using: sql`current_organization_id = get_current_organization_id()`,
+    withCheck: sql`current_organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("users_admin_management", {
+    as: "permissive", 
+    for: "select",
+    to: [appAdminRole],
+    using: sql`current_organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("users_member_self", {
+    as: "permissive",
+    for: "select",
+    to: [appMemberRole],
+    using: sql`id = auth.uid()`,
+  }),
+]);
 
 export const userOrganizations = pgTable("user_organizations", {
   id: serial("id").primaryKey(),
@@ -120,7 +217,14 @@ export const userOrganizations = pgTable("user_organizations", {
   role: text("role").notNull().default("member"), // owner, admin, member
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  pgPolicy("user_organizations_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`user_id = current_setting('app.current_user_id')::uuid AND organization_id = get_current_organization_id()`,
+  }),
+]);
 
 export const invitations = pgTable("invitations", {
   id: serial("id").primaryKey(),
@@ -131,7 +235,14 @@ export const invitations = pgTable("invitations", {
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  pgPolicy("invitations_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = get_current_organization_id()`,
+  }),
+]);
 
 export const teams = pgTable("teams", {
   id: serial("id").primaryKey(),
@@ -144,14 +255,58 @@ export const teams = pgTable("teams", {
   agentIds: text("agent_ids").array(),
   databaseId: text("database_id"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  // Enhanced role-based team policies
+  pgPolicy("teams_owner_management", {
+    as: "permissive",
+    for: "all",
+    to: [appOwnerRole],
+    using: sql`organization_id = get_current_organization_id()`,
+    withCheck: sql`organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("teams_admin_management", {
+    as: "permissive",
+    for: "all",
+    to: [appAdminRole],
+    using: sql`organization_id = get_current_organization_id()`,
+    withCheck: sql`organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("teams_member_view", {
+    as: "permissive",
+    for: "select",
+    to: [appMemberRole],
+    using: sql`organization_id = get_current_organization_id()`,
+  }),
+]);
 
 export const teamMemberships = pgTable("team_memberships", {
   id: serial("id").primaryKey(),
   teamId: integer("team_id").notNull().references(() => teams.id),
   userId: uuid("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  // Enhanced role-based team membership policies
+  pgPolicy("team_memberships_owner_management", {
+    as: "permissive",
+    for: "all",
+    to: [appOwnerRole],
+    using: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())`,
+    withCheck: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())`,
+  }),
+  pgPolicy("team_memberships_admin_management", {
+    as: "permissive",
+    for: "all", 
+    to: [appAdminRole],
+    using: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())`,
+    withCheck: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())`,
+  }),
+  pgPolicy("team_memberships_member_view", {
+    as: "permissive",
+    for: "select",
+    to: [appMemberRole],
+    using: sql`user_id = auth.uid() OR EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())`,
+  }),
+]);
 
 export const agents = pgTable("agents", {
   id: serial("id").primaryKey(),
@@ -167,12 +322,50 @@ export const agents = pgTable("agents", {
   databaseId: text("database_id"),
   status: text("status").default("active"),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
-  roleId: integer("role_id").references(() => roles.id),
   apiKey: text("api_key").unique(), // For API authentication
   lastUsedAt: timestamp("last_used_at"), // Track API key usage
   agentType: text("agent_type").default("general"), // Agent specialization type
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  // Pure Drizzle simplified role-based policies
+  pgPolicy("agents_owner_management", {
+    as: "permissive",
+    for: "all",
+    to: [appOwnerRole],
+    using: sql`organization_id = get_current_organization_id() AND EXISTS(
+      SELECT 1 FROM users WHERE id = auth.uid() 
+      AND current_organization_id = agents.organization_id 
+      AND organization_role = 'owner'
+    )`,
+    withCheck: sql`organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("agents_admin_view", {
+    as: "permissive", 
+    for: "select",
+    to: [appAdminRole],
+    using: sql`organization_id = get_current_organization_id() AND EXISTS(
+      SELECT 1 FROM users WHERE id = auth.uid() 
+      AND current_organization_id = agents.organization_id 
+      AND organization_role IN ('admin', 'owner')
+    )`,
+  }),
+  pgPolicy("agents_member_view", {
+    as: "permissive",
+    for: "select",
+    to: [appMemberRole],
+    using: sql`organization_id = get_current_organization_id() AND EXISTS(
+      SELECT 1 FROM users WHERE id = auth.uid() 
+      AND current_organization_id = agents.organization_id
+    )`,
+  }),
+  pgPolicy("agents_owner_control", {
+    as: "permissive", 
+    for: "all",
+    to: [authenticatedRole],
+    using: sql`owner_id = auth.uid() AND organization_id = get_current_organization_id()`,
+    withCheck: sql`owner_id = auth.uid() AND organization_id = get_current_organization_id()`,
+  }),
+]);
 
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -190,7 +383,42 @@ export const tasks = pgTable("tasks", {
   completedAt: timestamp("completed_at"),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  // Enhanced role-based task policies
+  pgPolicy("tasks_owner_management", {
+    as: "permissive",
+    for: "all",
+    to: [appOwnerRole],
+    using: sql`organization_id = get_current_organization_id()`,
+    withCheck: sql`organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("tasks_admin_management", {
+    as: "permissive", 
+    for: "select",
+    to: [appAdminRole],
+    using: sql`organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("tasks_admin_updates", {
+    as: "permissive",
+    for: "update", 
+    to: [appAdminRole],
+    using: sql`organization_id = get_current_organization_id()`,
+    withCheck: sql`organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("tasks_member_view", {
+    as: "permissive",
+    for: "select",
+    to: [appMemberRole],
+    using: sql`organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("tasks_creator_control", {
+    as: "permissive", 
+    for: "all",
+    to: [authenticatedRole],
+    using: sql`created_by = auth.uid() AND organization_id = get_current_organization_id()`,
+    withCheck: sql`created_by = auth.uid() AND organization_id = get_current_organization_id()`,
+  }),
+]);
 
 export const accounts = pgTable("accounts", {
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -249,7 +477,36 @@ export const ragIndexes = pgTable("rag_indexes", {
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  // Enhanced role-based RAG index policies
+  pgPolicy("rag_indexes_owner_management", {
+    as: "permissive",
+    for: "all",
+    to: [appOwnerRole],
+    using: sql`organization_id = get_current_organization_id()`,
+    withCheck: sql`organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("rag_indexes_admin_management", {
+    as: "permissive",
+    for: "all",
+    to: [appAdminRole],
+    using: sql`organization_id = get_current_organization_id()`,
+    withCheck: sql`organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("rag_indexes_member_view", {
+    as: "permissive",
+    for: "select",
+    to: [appMemberRole],
+    using: sql`organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("rag_indexes_creator_control", {
+    as: "permissive",
+    for: "all",
+    to: [authenticatedRole],
+    using: sql`created_by = auth.uid() AND organization_id = get_current_organization_id()`,
+    withCheck: sql`created_by = auth.uid() AND organization_id = get_current_organization_id()`,
+  }),
+]);
 
 export const ragDocuments = pgTable("rag_documents", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -275,7 +532,29 @@ export const ragDocuments = pgTable("rag_documents", {
   // Timestamps
   indexedAt: timestamp("indexed_at").defaultNow(),
   sourceUpdatedAt: timestamp("source_updated_at"),
-});
+}, (table) => [
+  // Enhanced role-based RAG document policies
+  pgPolicy("rag_documents_owner_management", {
+    as: "permissive",
+    for: "all",
+    to: [appOwnerRole],
+    using: sql`organization_id = get_current_organization_id()`,
+    withCheck: sql`organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("rag_documents_admin_management", {
+    as: "permissive",
+    for: "all",
+    to: [appAdminRole],
+    using: sql`organization_id = get_current_organization_id()`,
+    withCheck: sql`organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("rag_documents_member_view", {
+    as: "permissive",
+    for: "select",
+    to: [appMemberRole],
+    using: sql`organization_id = get_current_organization_id()`,
+  }),
+]);
 
 export const ragQueryLogs = pgTable("rag_query_logs", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -300,7 +579,29 @@ export const ragQueryLogs = pgTable("rag_query_logs", {
   threshold: integer("threshold"),
   
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  // Enhanced role-based RAG query logs policies
+  pgPolicy("rag_query_logs_owner_management", {
+    as: "permissive",
+    for: "all",
+    to: [appOwnerRole],
+    using: sql`organization_id = get_current_organization_id() OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = get_current_organization_id()))`,
+    withCheck: sql`organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("rag_query_logs_admin_management", {
+    as: "permissive",
+    for: "all",
+    to: [appAdminRole],
+    using: sql`organization_id = get_current_organization_id() OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = get_current_organization_id()))`,
+    withCheck: sql`organization_id = get_current_organization_id()`,
+  }),
+  pgPolicy("rag_query_logs_user_access", {
+    as: "permissive",
+    for: "select",
+    to: [appMemberRole, authenticatedRole],
+    using: sql`user_id = auth.uid() AND (organization_id = get_current_organization_id() OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = get_current_organization_id())))`,
+  }),
+]);
 
 // Chat System Tables - Connected to All Domain Types
 export const chats = pgTable("chats", {
@@ -333,7 +634,14 @@ export const chats = pgTable("chats", {
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  pgPolicy("chats_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = get_current_organization_id()`,
+  }),
+]);
 
 export const chatMessages: any = pgTable("chat_messages", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -362,7 +670,14 @@ export const chatMessages: any = pgTable("chat_messages", {
   parentMessageId: uuid("parent_message_id").references(() => chatMessages.id), // For threading/editing
   
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  pgPolicy("chat_messages_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`EXISTS (SELECT 1 FROM chats c WHERE c.id = chat_id AND c.organization_id = get_current_organization_id())`,
+  }),
+]);
 
 // Index for efficient chat message retrieval
 // Note: This would be created in a migration file

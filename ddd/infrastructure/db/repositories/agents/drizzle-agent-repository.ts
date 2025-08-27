@@ -74,7 +74,6 @@ export class DrizzleAgentRepository implements IAgentRepository {
         status: agent.status.value,
         organizationId: agent.organizationId.value,
         ownerId: agent.ownerId.value,
-        roleId: agent.roleId,
         apiKey: agent.apiKey?.value
       }).returning();
       
@@ -96,7 +95,6 @@ export class DrizzleAgentRepository implements IAgentRepository {
           status: agent.status.value,
           organizationId: agent.organizationId.value,
           ownerId: agent.ownerId.value,
-          roleId: agent.roleId,
           apiKey: agent.apiKey?.value
         })
         .where(eq(agents.id, agent.id.value))
@@ -135,7 +133,6 @@ export class DrizzleAgentRepository implements IAgentRepository {
       status: data.status || 'active',
       organizationId: OrganizationId.fromNumber(data.organizationId),
       ownerId: UserId.fromString(data.ownerId),
-      roleId: data.roleId,
       apiKey: data.apiKey,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt

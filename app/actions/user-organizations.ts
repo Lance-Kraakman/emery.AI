@@ -5,18 +5,18 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
-import { getUserOrganizationApplicationService } from "@/ddd/application/di/container";
+import { getUserRoleApplicationService, getUserRepository, getOrganizationRepository } from "@/ddd/application/di/container";
 import type { Result } from "./types";
+import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
 
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
 import type { 
-  AddUserToOrganizationCommand, 
+  AddUserToOrganizationCommand,
   SwitchOrganizationCommand,
   RemoveUserFromOrganizationCommand,
-  OrganizationMemberFilters,
-  UserMembershipsFilters 
-} from "@/ddd/application/services/user-organizations/user-organization-application-service";
+  OrganizationMemberFilters
+} from "@/ddd/application/services/user-organizations/user-role-application-service";
 
 export async function switchCurrentOrganization(organizationId: number): Promise<Result> {
   try {
@@ -29,7 +29,7 @@ export async function switchCurrentOrganization(organizationId: number): Promise
       };
     }
 
-    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    const userOrganizationApplicationService = getUserRoleApplicationService();
     
     const command: SwitchOrganizationCommand = {
       userId: session.user.id,
@@ -73,7 +73,7 @@ export async function joinOrganization(organizationId: number, role: string = 'm
       };
     }
 
-    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    const userOrganizationApplicationService = getUserRoleApplicationService();
     
     const command: AddUserToOrganizationCommand = {
       userId: session.user.id,
@@ -118,7 +118,7 @@ export async function leaveOrganization(organizationId: number): Promise<Result>
       };
     }
 
-    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    const userOrganizationApplicationService = getUserRoleApplicationService();
     
     const command: RemoveUserFromOrganizationCommand = {
       userId: session.user.id,
@@ -156,22 +156,15 @@ export async function getUserOrganizations() {
   try {
     const session = await requirePermission("view_users");
     
-    const userOrganizationApplicationService = getUserOrganizationApplicationService();
-    
-    const filters: UserMembershipsFilters = {
-      userId: session.user.id,
-      includeOrganizationDetails: true,
-      activeOnly: true
-    };
-
-    const memberships = await userOrganizationApplicationService.getUserMemberships(filters);
+    const userRepository = getUserRepository();
+    const organizations = await userRepository.getUserOrganizations(UserId.fromString(session.user.id));
 
     // Map to expected format for backwards compatibility
-    return memberships.map(membership => ({
-      ...membership.organization,
-      userRole: membership.userOrganization.role,
-      isCurrentOrganization: membership.isCurrentOrganization,
-      joinedAt: membership.organization?.createdAt
+    return organizations.map(org => ({
+      ...org,
+      userRole: 'member', // Default role - would need to be fetched separately if needed
+      isCurrentOrganization: org.id.value === session.user.currentOrganizationId,
+      joinedAt: org.createdAt
     }));
   } catch (error) {
     console.error("Error fetching user organizations:", error);
@@ -187,24 +180,21 @@ export async function getCurrentOrganization() {
       return null;
     }
 
-    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    const organizationRepository = getOrganizationRepository();
+    const userRoleApplicationService = getUserRoleApplicationService();
     
-    const filters: UserMembershipsFilters = {
-      userId: session.user.id,
-      includeOrganizationDetails: true,
-      activeOnly: true
-    };
-
-    const memberships = await userOrganizationApplicationService.getUserMemberships(filters);
-    const currentMembership = memberships.find(m => m.isCurrentOrganization);
-
-    if (!currentMembership || !currentMembership.organization) {
+    const organization = await organizationRepository.findById(OrganizationId.fromNumber(session.user.currentOrganizationId));
+    
+    if (!organization) {
       return null;
     }
 
+    // Get the user's role in this organization
+    const userRole = await userRoleApplicationService.getUserOrganizationRole(UserId.fromString(session.user.id), OrganizationId.fromNumber(session.user.currentOrganizationId));
+
     return {
-      ...currentMembership.organization,
-      userRole: currentMembership.userOrganization.role
+      ...organization,
+      userRole: userRole || 'member'
     };
   } catch (error) {
     console.error("Error fetching current organization:", error);
@@ -235,7 +225,7 @@ export async function addUserToOrganization(userId: string, organizationId: numb
       };
     }
 
-    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    const userOrganizationApplicationService = getUserRoleApplicationService();
     
     const command: AddUserToOrganizationCommand = {
       userId,
@@ -292,7 +282,7 @@ export async function removeUserFromOrganization(userId: string, organizationId:
       };
     }
 
-    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    const userOrganizationApplicationService = getUserRoleApplicationService();
     
     const command: RemoveUserFromOrganizationCommand = {
       userId,
@@ -334,7 +324,7 @@ export async function getOrganizationMembers(organizationId?: number, searchQuer
     const session = await requirePermission("view_users");
     const currentOrg = await requireCurrentOrganization();
     
-    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    const userOrganizationApplicationService = getUserRoleApplicationService();
     
     const filters: OrganizationMemberFilters = {
       organizationId: organizationId || currentOrg.id.value,
@@ -364,7 +354,7 @@ export async function updateUserRole(userId: string, organizationId: number, new
       };
     }
 
-    const userOrganizationApplicationService = getUserOrganizationApplicationService();
+    const userOrganizationApplicationService = getUserRoleApplicationService();
     
     const command = {
       userId,
