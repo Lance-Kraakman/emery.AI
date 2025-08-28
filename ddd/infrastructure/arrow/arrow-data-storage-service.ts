@@ -203,16 +203,14 @@ export class ArrowDataStorageService implements DataStorageService {
   ): Promise<Array<Record<string, any>>> {
     const rows: Array<Record<string, any>> = [];
     
-    // Convert Arrow table to array of objects
-    const tableArray = table.toArray();
-    
+    // Get columns directly from table
     for (let i = 0; i < table.numRows; i++) {
       const row: Record<string, any> = {};
       
       for (const field of fields) {
-        const columnIndex = table.schema.fields.findIndex((f: any) => f.name === field.slug);
-        if (columnIndex !== -1) {
-          let value = tableArray[columnIndex].get(i);
+        const column = table.getChild(field.slug);
+        if (column) {
+          let value = column.get(i);
           
           // Type conversions back from Arrow
           switch (field.type) {
