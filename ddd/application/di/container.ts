@@ -184,7 +184,7 @@ export class DIContainer {
    * Initialize the container with database clients
    * This should be called once at application startup
    */
-  async initialize(db: DbClient, rawClient: postgres.Sql): Promise<void> {
+  initialize(db: DbClient, rawClient: postgres.Sql): void {
     if (this.isInitialized) {
       console.warn('DIContainer is already initialized');
       return;
@@ -543,8 +543,8 @@ export const getContextAwareDb = (): ContextAwareDbClient => {
 };
 
 // Helper to initialize container from existing clients
-export function initializeDI(db: DbClient, rawClient: postgres.Sql): Promise<void> {
-  return DIContainer.getInstance().initialize(db, rawClient);
+export function initializeDI(db: DbClient, rawClient: postgres.Sql): void {
+  DIContainer.getInstance().initialize(db, rawClient);
 }
 
 // Export container instance for direct access if needed
