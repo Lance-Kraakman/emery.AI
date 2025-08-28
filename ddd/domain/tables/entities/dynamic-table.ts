@@ -1,8 +1,8 @@
-// AIDEV-NOTE: Dynamic Table domain entities - manages runtime-created tables in Baserow-style system
-// Dynamic tables use field_{id} column naming and support complex types like JSONB relations
+// AIDEV-NOTE: Clean Dynamic Table domain entity - pure domain object without infrastructure dependencies
+// All row operations moved to TableRowDomainService for proper separation of concerns
 
 import type { TableMetadata } from '../value-objects/table-metadata';
-import { TableId, DatabaseId, OrganizationId, UserId, FieldId } from '@/ddd/domain/shared/value-objects';
+import { TableId, DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export class DynamicTable {
   private constructor(
@@ -11,6 +11,7 @@ export class DynamicTable {
     private readonly _organizationId: OrganizationId,      // References organizations.id (denormalized for RLS)
     private _name: string,                                 // Human-readable table name
     private _storageLocation: string,                      // Generic storage location (S3 path, table name, etc.)
+    private _description: string | undefined,              // Optional description
     private _metadata: TableMetadata | undefined,         // JSONB metadata using value object
     private readonly _createdBy: UserId,                   // UUID reference to users.id
     private readonly _createdAt: Date | null,
@@ -23,6 +24,7 @@ export class DynamicTable {
   get organizationId(): OrganizationId { return this._organizationId; }
   get name(): string { return this._name; }
   get storageLocation(): string { return this._storageLocation; }
+  get description(): string | undefined { return this._description; }
   get metadata(): TableMetadata | undefined { return this._metadata; }
   get createdBy(): UserId { return this._createdBy; }
   get createdAt(): Date | null { return this._createdAt ? new Date(this._createdAt) : null; }
@@ -37,6 +39,11 @@ export class DynamicTable {
       throw new Error('Table name cannot exceed 100 characters');
     }
     this._name = newName.trim();
+    this._updatedAt = new Date();
+  }
+
+  updateDescription(newDescription: string | undefined): void {
+    this._description = newDescription;
     this._updatedAt = new Date();
   }
 
@@ -68,13 +75,13 @@ export class DynamicTable {
   }
 
   // Factory methods - entity only created from persistence with real ID
-
   static fromPersistence(data: {
     id: number;
     databaseId: number;
     organizationId: number;
     name: string;
     storageLocation: string;
+    description?: string;
     metadata?: TableMetadata;
     createdBy: string;
     createdAt?: Date | null;
@@ -86,6 +93,7 @@ export class DynamicTable {
       OrganizationId.fromNumber(data.organizationId),
       data.name,
       data.storageLocation,
+      data.description,
       data.metadata,
       UserId.fromString(data.createdBy),
       data.createdAt || null,
@@ -99,6 +107,7 @@ export class DynamicTable {
     databaseId: number;
     organizationId: number;
     name: string;
+    description: string | undefined;
     storageLocation: string;
     metadata?: TableMetadata;
     createdBy: string;
@@ -110,6 +119,7 @@ export class DynamicTable {
       databaseId: this._databaseId.value,
       organizationId: this._organizationId.value,
       name: this._name,
+      description: this._description,
       storageLocation: this._storageLocation,
       metadata: this._metadata,
       createdBy: this._createdBy.value,
@@ -136,11 +146,11 @@ export interface DatabaseMetadata {
   [key: string]: any;                  // Additional metadata for RAG indexing
 }
 
-
 export interface CreateDynamicTableData {
   databaseId: DatabaseId;
   organizationId: OrganizationId;
   name: string;
+  description?: string;
   storageLocation: string;             // Generated storage location (S3 path, table name, etc.)
   metadata?: TableMetadata;
   createdBy: UserId;
@@ -149,6 +159,7 @@ export interface CreateDynamicTableData {
 export interface UpdateDynamicTableData {
   databaseId?: DatabaseId;
   name?: string;
+  description?: string;
   metadata?: TableMetadata;
   // Note: dbName and organizationId typically not changed after creation
 }
@@ -198,46 +209,3 @@ export type FilterOperator =
   | 'contains'     // JSONB contains (for relation fields)
   | 'contained_by' // JSONB contained by
   | 'has_key';     // JSONB has key
-
-// Table statistics and metadata
-export interface DynamicTableStats {
-  table: DynamicTable;
-  rowCount: number;
-  fieldCount: number;
-  lastUpdated?: Date;
-  sizeBytes?: number;                  // Approximate table size
-}
-
-// Complex queries and operations
-export interface TableOperation {
-  type: 'CREATE_TABLE' | 'DROP_TABLE' | 'RENAME_TABLE' | 'UPDATE_METADATA';
-  tableName: string;
-  parameters?: Record<string, any>;
-}
-
-export interface BulkRowOperation {
-  type: 'INSERT' | 'UPDATE' | 'DELETE';
-  rows: Array<{
-    id?: string;                       // Required for UPDATE/DELETE
-    data?: CreateRowData | UpdateRowData; // Required for INSERT/UPDATE
-  }>;
-}
-
-// Migration and schema operations
-export interface TableMigration {
-  id: string;
-  fromSchema: TableSchema;
-  toSchema: TableSchema;
-  operations: TableOperation[];
-  createdAt: Date;
-}
-
-export interface TableSchema {
-  tableName: string;
-  fields: Array<{
-    id: FieldId;
-    name: string;
-    type: string;
-    required: boolean;
-  }>;
-}

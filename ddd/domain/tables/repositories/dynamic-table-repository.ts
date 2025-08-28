@@ -3,10 +3,10 @@
 
 import type { 
   DynamicTable, 
+  CreateDynamicTableData,
   CreateRowData,
   UpdateRowData,
-  RowQueryOptions,
-  CreateDynamicTableData
+  RowQueryOptions
 } from '../entities/dynamic-table';
 import { Row } from '../value-objects/row';
 import { TableId, DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
@@ -23,11 +23,10 @@ export interface IDynamicTableRepository {
   delete(id: TableId): Promise<void>;
   existsByStorageLocation(organizationId: OrganizationId, storageLocation: string): Promise<boolean>;
   
-  // Row CRUD - returns domain Row objects
+  // Row CRUD - used by domain services
   insertRow(tableId: TableId, data: CreateRowData): Promise<Row>;
   findRows(tableId: TableId, options?: RowQueryOptions): Promise<Row[]>;
   getRow(tableId: TableId, rowId: string): Promise<Row | null>;
-  getRows(tableId: TableId, options?: RowQueryOptions): Promise<Row[]>; 
   updateRow(tableId: TableId, rowId: string, data: UpdateRowData): Promise<Row>;
   deleteRow(tableId: TableId, rowId: string): Promise<void>;
   

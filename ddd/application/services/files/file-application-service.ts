@@ -11,7 +11,7 @@
 
 import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
 import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
-import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import type { FileFieldValue } from '@/ddd/domain/fields/entities/field';
 import type { Result } from '@/ddd/domain/shared/result';
 import { TableId, FieldId, OrganizationId } from '@/ddd/domain/shared/value-objects';
@@ -56,7 +56,7 @@ export class FileApplicationService {
   constructor(
     private readonly fileStorageRepository: IFileStorageRepository,
     private readonly fieldRepository: IFieldRepository,
-    private readonly tableRepository: IDynamicTableRepository
+    private readonly dynamicTableService: DynamicTableService
   ) {}
 
   /**
@@ -65,7 +65,7 @@ export class FileApplicationService {
   async uploadFile(command: UploadFileCommand): Promise<FileApplicationServiceResult<FileFieldValue>> {
     try {
       // 1. Validate organization and table exist
-      const table = await this.tableRepository.findById(TableId.fromNumber(command.tableId));
+      const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
       if (!table) {
         return {
           success: false,
@@ -169,7 +169,7 @@ export class FileApplicationService {
       }
 
       // 2. Validate table belongs to organization
-      const table = await this.tableRepository.findById(field.tableId);
+      const table = await this.dynamicTableService.getTable(field.tableId);
       if (!table || table.organizationId.value !== command.organizationId) {
         return {
           success: false,
@@ -225,7 +225,7 @@ export class FileApplicationService {
       }
 
       // 2. Validate table belongs to organization
-      const table = await this.tableRepository.findById(field.tableId);
+      const table = await this.dynamicTableService.getTable(field.tableId);
       if (!table || table.organizationId.value !== command.organizationId) {
         return {
           success: false,
@@ -277,7 +277,7 @@ export class FileApplicationService {
         }
 
         // Validate table belongs to organization
-        const table = await this.tableRepository.findById(field.tableId);
+        const table = await this.dynamicTableService.getTable(field.tableId);
         if (!table || table.organizationId.value !== command.organizationId) {
           return {
             success: false,
@@ -295,7 +295,7 @@ export class FileApplicationService {
 
       // 2. If tableId is provided, get all file fields and their files
       if (command.tableId) {
-        const table = await this.tableRepository.findById(TableId.fromNumber(command.tableId));
+        const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
         if (!table || table.organizationId.value !== command.organizationId) {
           return {
             success: false,

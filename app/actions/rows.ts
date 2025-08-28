@@ -1,13 +1,13 @@
 'use server'
 
-// AIDEV-NOTE: Server Actions for row data management using RowApplicationService
-// Uses application service for business logic and validation
+// AIDEV-NOTE: Server Actions for row data management using DynamicTableService
+// Uses domain service for business logic and validation
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
-import { getRowApplicationService } from "@/ddd/application/di/container";
+import { getDynamicTableRepository, getTableRowDomainService } from "@/ddd/application/di/container";
 import type { Result, CreateRowData, UpdateRowData } from "./types";
-import type { CreateRowCommand, UpdateRowCommand } from "@/ddd/application/services/rows/row-application-service";
+import { TableId, UserId } from "@/ddd/domain/shared/value-objects";
 
 
 export async function createRow(data: CreateRowData, revalidateUrl?: string): Promise<Result> {
@@ -22,16 +22,24 @@ export async function createRow(data: CreateRowData, revalidateUrl?: string): Pr
       };
     }
 
-    // Use RowApplicationService for row creation
-    const rowApplicationService = getRowApplicationService();
+    // Use table row domain service for row creation
+    const tableRepository = getDynamicTableRepository();
+    const tableRowService = getTableRowDomainService();
     
-    const command: CreateRowCommand = {
-      tableId,
-      data: rowData || {},
-      createdBy: session.user.id
-    };
+    const table = await tableRepository.findById(TableId.fromNumber(tableId));
+    
+    if (!table) {
+      return {
+        success: false,
+        error: "Table not found"
+      };
+    }
 
-    const result = await rowApplicationService.createRow(command);
+    const result = await tableRowService.addRow({
+      table,
+      data: rowData || {},
+      createdBy: UserId.fromString(session.userId)
+    });
 
     if (!result.success) {
       return {
@@ -88,11 +96,18 @@ export async function getRowsData(tableId: number, limit = 100, offset = 0): Pro
       throw new Error("tableId is required");
     }
 
-    // Use RowApplicationService for row fetching
-    const rowApplicationService = getRowApplicationService();
+    // Use table row domain service for row fetching
+    const tableRepository = getDynamicTableRepository();
+    const tableRowService = getTableRowDomainService();
     
-    const rowCollection = await rowApplicationService.getRows(tableId, { limit, offset });
-    return [...rowCollection.rows];
+    const table = await tableRepository.findById(TableId.fromNumber(tableId));
+    
+    if (!table) {
+      throw new Error("Table not found");
+    }
+    
+    const rowCollection = await tableRowService.getRows(table, { limit, offset });
+    return rowCollection.toPlainObjects();
   } catch (error) {
     console.error("Error fetching rows:", error);
     throw new Error(error instanceof Error ? error.message : "Failed to fetch rows");
@@ -111,17 +126,25 @@ export async function updateRowData(data: UpdateRowData, revalidateUrl?: string)
       };
     }
 
-    // Use RowApplicationService for row updates
-    const rowApplicationService = getRowApplicationService();
+    // Use table row domain service for row updates
+    const tableRepository = getDynamicTableRepository();
+    const tableRowService = getTableRowDomainService();
     
-    const command: UpdateRowCommand = {
-      tableId,
+    const table = await tableRepository.findById(TableId.fromNumber(tableId));
+    
+    if (!table) {
+      return {
+        success: false,
+        error: "Table not found"
+      };
+    }
+
+    const result = await tableRowService.updateRow({
+      table,
       rowId,
       data: rowData || {},
-      updatedBy: session.user.id
-    };
-
-    const result = await rowApplicationService.updateRow(command);
+      updatedBy: UserId.fromString(session.userId)
+    });
 
     if (!result.success) {
       return {
@@ -181,10 +204,20 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
       };
     }
 
-    // Use RowApplicationService for row deletion
-    const rowApplicationService = getRowApplicationService();
+    // Use table row domain service for row deletion
+    const tableRepository = getDynamicTableRepository();
+    const tableRowService = getTableRowDomainService();
     
-    const result = await rowApplicationService.deleteRow(tableId, rowId);
+    const table = await tableRepository.findById(TableId.fromNumber(tableId));
+    
+    if (!table) {
+      return {
+        success: false,
+        error: "Table not found"
+      };
+    }
+    
+    const result = await tableRowService.deleteRow(table, rowId);
 
     if (!result.success) {
       return {

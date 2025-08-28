@@ -9,7 +9,7 @@
  */
 
 import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
-import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import type { Field, CreateFieldData, UpdateFieldData, FieldType } from '@/ddd/domain/fields/entities/field';
 import type { Result } from '@/ddd/domain/shared/result';
 import { TableId, FieldId } from '@/ddd/domain/shared/value-objects';
@@ -43,7 +43,7 @@ export type FieldApplicationServiceResult<T = any> = Result<T>;
 export class FieldApplicationService {
   constructor(
     private readonly fieldRepository: IFieldRepository,
-    private readonly tableRepository: IDynamicTableRepository
+    private readonly dynamicTableService: DynamicTableService
   ) {}
 
   /**
@@ -52,7 +52,7 @@ export class FieldApplicationService {
   async createField(command: CreateFieldCommand): Promise<FieldApplicationServiceResult<Field>> {
     try {
       // 1. Verify table exists
-      const table = await this.tableRepository.findById(TableId.fromNumber(command.tableId));
+      const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
       if (!table) {
         return {
           success: false,
@@ -74,7 +74,7 @@ export class FieldApplicationService {
 
       // 3. Validate related table if it's a relation field
       if (command.type === 'relation' && command.relatedTableId) {
-        const relatedTable = await this.tableRepository.findById(TableId.fromNumber(command.relatedTableId));
+        const relatedTable = await this.dynamicTableService.getTable(TableId.fromNumber(command.relatedTableId));
         if (!relatedTable) {
           return {
             success: false,
@@ -168,7 +168,7 @@ export class FieldApplicationService {
       if (command.required !== undefined && command.required !== field.required) {
         // If making field required, check if table has existing rows
         if (command.required) {
-          const hasRows = await this.tableRepository.hasRows(field.tableId);
+          const hasRows = await this.dynamicTableService.hasRows(field.tableId);
           if (hasRows) {
             return {
               success: false,
@@ -268,7 +268,7 @@ export class FieldApplicationService {
   async reorderFields(command: ReorderFieldsCommand): Promise<FieldApplicationServiceResult<Field[]>> {
     try {
       // 1. Verify table exists
-      const table = await this.tableRepository.findById(TableId.fromNumber(command.tableId));
+      const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
       if (!table) {
         return {
           success: false,

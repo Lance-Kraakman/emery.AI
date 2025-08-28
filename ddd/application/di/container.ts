@@ -43,15 +43,15 @@ import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/
 // New application services for tables, fields, rows, files, and chat
 import { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
 import { FieldApplicationService } from '@/ddd/application/services/fields/field-application-service';
-import { RowApplicationService } from '@/ddd/application/services/rows/row-application-service';
 import { FileApplicationService } from '@/ddd/application/services/files/file-application-service';
 import { ChatApplicationService } from '@/ddd/application/services/chat/chat-application-service';
 
 // Domain services
 import { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
+import { TableRowDomainService } from '@/ddd/domain/tables/services/table-row-domain-service';
 
 // Field and table services
-import { ArrowDataStorageService } from '@/ddd/infrastructure/tables/arrow-data-storage-service';
+import { ArrowDataStorageService } from '@/ddd/infrastructure/arrow/arrow-data-storage-service';
 import { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
 import { DrizzleFieldRepository } from '@/ddd/infrastructure/db/repositories/fields/drizzle-field-repository';
 
@@ -109,11 +109,11 @@ interface RepositoryRegistry {
   // New application services for data management
   TableApplicationService: TableApplicationService;
   FieldApplicationService: FieldApplicationService;
-  RowApplicationService: RowApplicationService;
   FileApplicationService: FileApplicationService;
   
   // Domain services
   DynamicTableService: DynamicTableService;
+  TableRowDomainService: TableRowDomainService;
   
   // Chat domain services
   IChatRepository: IChatRepository;
@@ -256,6 +256,11 @@ export class DIContainer {
 
     // Create DynamicTableService - central domain service for all table operations
     const dynamicTableService = new DynamicTableService(
+      tableRepository
+    );
+
+    // Create TableRowDomainService for row operations
+    const tableRowDomainService = new TableRowDomainService(
       tableRepository,
       fieldRepository
     );
@@ -263,8 +268,7 @@ export class DIContainer {
     // Initialize DatabaseApplicationService with proper dependencies
     const databaseApplicationService = new DatabaseApplicationService(
       tableRepository,
-      fieldRepository,
-      this.repositories.get('IOrganizationRepository')
+      databaseRepository
     );
         
     const userRoleApplicationService = new UserRoleApplicationService(
@@ -289,13 +293,14 @@ export class DIContainer {
     this.repositories.set('IFieldRepository', fieldRepository);
     this.repositories.set('IDynamicTableRepository', tableRepository);
     this.repositories.set('DynamicTableService', dynamicTableService);
+    this.repositories.set('TableRowDomainService', tableRowDomainService);
     
     // Register simplified data storage service
     this.repositories.set('DataStorageService', arrowDataStorageService);
     
     // Initialize TableApplicationService with proper dependencies
     const tableApplicationService = new TableApplicationService(
-      tableRepository,
+      dynamicTableService,
       fieldRepository,
       databaseRepository,
       this.repositories.get('IOrganizationRepository')
@@ -304,22 +309,15 @@ export class DIContainer {
     // Initialize FieldApplicationService with simplified dependencies
     const fieldApplicationService = new FieldApplicationService(
       fieldRepository,
-      tableRepository
+      dynamicTableService
     );
     
-    // Initialize RowApplicationService with proper dependencies
-    const rowApplicationService = new RowApplicationService(
-      tableRepository,
-      fieldRepository,
-      fileStorageRepository,
-      tableQueryService
-    );
     
     // Initialize FileApplicationService with proper dependencies  
     const fileApplicationService = new FileApplicationService(
       fileStorageRepository,
       fieldRepository,
-      tableRepository
+      dynamicTableService
     );
     
     // Register chat repositories
@@ -332,13 +330,12 @@ export class DIContainer {
     const chatApplicationService = new ChatApplicationService(
       chatRepository,
       chatMessageRepository,
-      this.repositories.get('IOrganizationRepository'),
-      this.repositories.get('IUserRepository')
+      dynamicTableService,
+      agentRepository
     );
     
     this.repositories.set('TableApplicationService', tableApplicationService);
     this.repositories.set('FieldApplicationService', fieldApplicationService);
-    this.repositories.set('RowApplicationService', rowApplicationService);
     this.repositories.set('FileApplicationService', fileApplicationService);
     this.repositories.set('ChatApplicationService', chatApplicationService);
 
@@ -456,6 +453,7 @@ type ServiceMap = {
   DataStorageService: DataStorageService;
   TableQueryService: TableQueryService;
   DynamicTableService: DynamicTableService;
+  TableRowDomainService: TableRowDomainService;
   
   // Services
   AgentTaskApplicationService: AgentTaskApplicationService;
@@ -466,7 +464,6 @@ type ServiceMap = {
   InvitationApplicationService: InvitationApplicationService;
   TableApplicationService: TableApplicationService;
   FieldApplicationService: FieldApplicationService;
-  RowApplicationService: RowApplicationService;
   FileApplicationService: FileApplicationService;
   ChatApplicationService: ChatApplicationService;
   
@@ -514,6 +511,7 @@ export const getOrganizationRepository = createGetter('OrganizationRepository');
 export const getUserRepository = createGetter('UserRepository');
 export const getDynamicTableRepository = createGetter('DynamicTableRepository');
 export const getDynamicTableService = createGetter('DynamicTableService');
+export const getTableRowDomainService = createGetter('TableRowDomainService');
 export const getDataStorageService = createGetter('DataStorageService');
 export const getTableQueryService = createGetter('TableQueryService');
 export const getFieldRepository = createGetter('FieldRepository');
@@ -534,7 +532,6 @@ export const getUserRoleApplicationService = createGetter('UserRoleApplicationSe
 export const getInvitationApplicationService = createGetter('InvitationApplicationService');
 export const getTableApplicationService = createGetter('TableApplicationService');
 export const getFieldApplicationService = createGetter('FieldApplicationService');
-export const getRowApplicationService = createGetter('RowApplicationService');
 export const getFileApplicationService = createGetter('FileApplicationService');
 export const getChatApplicationService = createGetter('ChatApplicationService');
 

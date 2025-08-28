@@ -1,11 +1,10 @@
 #!/usr/bin/env tsx
 /**
  * Test Scheduler with Timer-Only (No Event Callbacks)
- * Tests if scheduler works with just the 5-minute periodic timer
+ * Tests the new TaskSchedulingApplicationService with periodic execution
  */
 
 import { getTaskSchedulingApplicationService } from '../ddd/application/di/scheduling-container';
-import { PostgresEventScheduler } from '../ddd/infrastructure/scheduling/services/postgres-event-scheduler';
 
 // Environment validation
 if (!process.env.DATABASE_URL) {
@@ -14,78 +13,65 @@ if (!process.env.DATABASE_URL) {
 }
 
 async function main() {
-  console.log('🚀 Starting Timer-Only Scheduler Test...');
+  console.log('🚀 Starting TaskSchedulingApplicationService Test...');
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🗄️  Database: ${process.env.DATABASE_URL?.replace(/\/\/.*@/, '//***@')}`);
   
   try {
-    // Get just the scheduling application service (core logic)
+    // Get the new task scheduling application service
     const schedulingService = getTaskSchedulingApplicationService();
     
-    // Create event scheduler but DON'T register callbacks
-    const eventScheduler = new PostgresEventScheduler();
+    console.log('⏰ Testing task scheduling service...');
     
-    console.log('⏰ Testing timer-only periodic scheduling...');
-    
-    // Start the event scheduler (this starts the 5-minute timer)
-    await eventScheduler.start();
-    
-    console.log('✅ Timer-based scheduler started (no event callbacks registered)');
-    console.log('🎧 Only periodic timer running (every 5 minutes)...');
-    
-    // Manually trigger a scheduling cycle to test
+    // Test manual scheduling cycle
     console.log('🎯 Testing manual scheduling cycle...');
     const result = await schedulingService.processPendingTasks();
     console.log(`✅ Manual cycle completed: ${result.processed} processed, ${result.failed} failed, ${result.queued} queued`);
     
-    // Wait for periodic timer
-    let cycles = 0;
-    const maxCycles = 2; // Wait for 2 periodic cycles
+    // Test execution stats
+    const stats = await schedulingService.getExecutionStats();
+    console.log(`📊 Execution stats: ${stats.taskStats.totalTasks} total tasks, ${stats.queueStats.processing} processing`);
     
-    console.log(`⏰ Waiting for ${maxCycles} periodic timer cycles (${maxCycles * 5} minutes total)...`);
+    // Set up periodic processing every 30 seconds for testing
+    let cycles = 0;
+    const maxCycles = 5; // Run 5 cycles for testing
+    
+    console.log(`⏰ Starting periodic processing (every 30 seconds for ${maxCycles} cycles)...`);
     
     const intervalId = setInterval(async () => {
       cycles++;
-      console.log(`⏰ Periodic cycle ${cycles} should have occurred...`);
+      console.log(`⏰ Periodic cycle ${cycles}...`);
       
-      // Check scheduler status
-      const status = await eventScheduler.getStatus();
-      console.log(`📊 Events processed so far: ${status.eventsProcessed}`);
+      // Process pending tasks
+      try {
+        const cycleResult = await schedulingService.processPendingTasks();
+        console.log(`  📊 Processed: ${cycleResult.processed}, Failed: ${cycleResult.failed}, Queued: ${cycleResult.queued}`);
+        
+        // Show current stats
+        const currentStats = await schedulingService.getExecutionStats();
+        console.log(`  📈 Queue: ${currentStats.queueStats.totalQueued} queued, ${currentStats.queueStats.processing} processing`);
+      } catch (error: any) {
+        console.error(`  ❌ Cycle ${cycles} failed:`, error.message);
+      }
       
       if (cycles >= maxCycles) {
-        console.log('✅ Timer-only test completed successfully');
+        console.log('✅ Periodic test completed successfully');
         clearInterval(intervalId);
-        await eventScheduler.stop();
         process.exit(0);
       }
-    }, 5 * 60 * 1000); // Check every 5 minutes
-    
-    // For testing, let's also manually trigger a few cycles
-    setTimeout(async () => {
-      console.log('🎯 Triggering manual periodic check...');
-      await eventScheduler.triggerEvent({
-        type: 'periodic_check',
-        payload: {
-          timestamp: new Date(),
-          metadata: { source: 'manual_test' }
-        },
-        priority: 'high'
-      });
-    }, 10000); // After 10 seconds
+    }, 30000); // Check every 30 seconds
     
     // Signal handlers
     process.on('SIGINT', async () => {
-      console.log('\n🛑 Stopping timer-only scheduler...');
+      console.log('\n🛑 Stopping scheduler test...');
       clearInterval(intervalId);
-      await eventScheduler.stop();
-      console.log('✅ Timer-only scheduler stopped');
+      console.log('✅ Scheduler test stopped');
       process.exit(0);
     });
     
     process.on('SIGTERM', async () => {
       console.log('\n🛑 Received SIGTERM, stopping...');
       clearInterval(intervalId);
-      await eventScheduler.stop();
       process.exit(0);
     });
     

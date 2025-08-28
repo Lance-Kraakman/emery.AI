@@ -56,21 +56,15 @@ export class Row {
   public readonly id: RowId;
   public readonly tableId: number;
   public readonly fieldValues: ReadonlyArray<FieldValue>;
-  public readonly createdAt: Date;
-  public readonly updatedAt: Date;
 
   constructor(
     id: string | RowId,
     tableId: number,
-    fieldValues: FieldValue[],
-    createdAt: Date,
-    updatedAt: Date
+    fieldValues: FieldValue[]
   ) {
     this.id = id instanceof RowId ? id : new RowId(id);
     this.tableId = tableId;
     this.fieldValues = Object.freeze([...fieldValues]);
-    this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
 
     if (tableId <= 0) {
       throw new Error('Table ID must be positive');
@@ -85,32 +79,10 @@ export class Row {
     return this.fieldValues.some(fv => fv.fieldSlug === fieldSlug);
   }
 
-  withUpdatedField(fieldSlug: string, newValue: any, fieldType: string): Row {
-    const updatedFieldValues = this.fieldValues.map(fv => 
-      fv.fieldSlug === fieldSlug 
-        ? new FieldValue(fieldSlug, newValue, fieldType)
-        : fv
-    );
-
-    // If field doesn't exist, add it
-    if (!this.hasField(fieldSlug)) {
-      updatedFieldValues.push(new FieldValue(fieldSlug, newValue, fieldType));
-    }
-
-    return new Row(
-      this.id,
-      this.tableId,
-      updatedFieldValues,
-      this.createdAt,
-      new Date() // Updated timestamp
-    );
-  }
 
   toPlainObject(): Record<string, any> {
     const obj: Record<string, any> = {
-      id: this.id.value,
-      created_at: this.createdAt,
-      updated_at: this.updatedAt
+      id: this.id.value
     };
 
     for (const fieldValue of this.fieldValues) {
@@ -129,7 +101,7 @@ export class Row {
     const fieldValues: FieldValue[] = [];
     
     for (const slug of fieldSlugs) {
-      if (slug in data && slug !== 'id' && slug !== 'created_at' && slug !== 'updated_at') {
+      if (slug in data && slug !== 'id') {
         const fieldType = fieldTypes[slug] || 'text';
         fieldValues.push(new FieldValue(slug, data[slug], fieldType));
       }
@@ -138,9 +110,7 @@ export class Row {
     return new Row(
       data.id || crypto.randomUUID(),
       tableId,
-      fieldValues,
-      data.created_at ? new Date(data.created_at) : new Date(),
-      data.updated_at ? new Date(data.updated_at) : new Date()
+      fieldValues
     );
   }
 }
