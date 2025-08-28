@@ -91,32 +91,7 @@ export class Field {
     return FIELD_TYPE_MAPPING[this._type];
   }
 
-  // Factory methods
-  static create(data: CreateFieldData): Field {
-    // Validate creation data
-    if (!data.name || data.name.trim().length === 0) {
-      throw new Error('Field name is required');
-    }
-    if (!data.slug || data.slug.trim().length === 0) {
-      throw new Error('Field slug is required');
-    }
-    if (!/^[a-zA-Z0-9_-]+$/.test(data.slug)) {
-      throw new Error('Field slug must contain only letters, numbers, underscores, and hyphens');
-    }
-
-    return new Field(
-      FieldId.placeholder(), // Will be set by repository
-      data.tableId,
-      data.name.trim(),
-      data.slug.trim(),
-      data.type,
-      data.orderIndex ?? null,
-      data.relatedTableId ?? null,
-      data.required ?? null,
-      data.metadata,
-      null // Will be set by repository
-    );
-  }
+  // Factory methods - entity only created from persistence with real ID
 
   static fromPersistence(data: {
     id: number;

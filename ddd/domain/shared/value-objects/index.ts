@@ -5,6 +5,8 @@
 export { AgentId } from './agent-id';
 export { UserId } from './user-id';
 export { TeamId } from './team-id';
+export { ChatId } from './chat-id';
+export { ChatMessageId } from './chat-message-id';
 // Task-related value objects moved to tasks domain
 export { TaskId } from '@/ddd/domain/tasks/value-objects/task-id';
 export { OrganizationId } from './organization-id';

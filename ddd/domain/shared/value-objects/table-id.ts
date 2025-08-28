@@ -10,7 +10,4 @@ export class TableId extends BaseId<'TableId'> {
     return new TableId(value);
   }
 
-  static placeholder(): TableId {
-    return new TableId(0);
-  }
 }

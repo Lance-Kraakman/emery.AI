@@ -1,12 +1,13 @@
 import type { DbClient } from '@/lib/db/client';
 import type postgres from 'postgres';
+import { initializeContextAwareDb, type ContextAwareDbClient } from '@/lib/db/context-client';
 
 import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { DrizzleOrganizationRepository } from '@/ddd/infrastructure/db/repositories/organizations/drizzle-organization-repository';
 import { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import { DrizzleUserRepository } from '@/ddd/infrastructure/db/repositories/users/drizzle-user-repository';
 import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
-import { TableService } from '@/ddd/infrastructure/services/tables/table-service';
+import { DrizzleDynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/drizzle-dynamic-table-repository';
 import { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
 import { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
 import { DuckDBTableQueryService } from '@/ddd/infrastructure/data/duckdb-table-query-service';
@@ -47,10 +48,7 @@ import { FileApplicationService } from '@/ddd/application/services/files/file-ap
 import { ChatApplicationService } from '@/ddd/application/services/chat/chat-application-service';
 
 // Field and table services
-import { FieldSchemaService } from '@/ddd/domain/fields/services/field-schema-service';
-import { ArrowFieldSchemaService } from '@/ddd/infrastructure/fields/arrow-field-schema-service';
-import { TableDataService } from '@/ddd/domain/tables/services/table-data-service';
-import { ArrowTableDataService } from '@/ddd/infrastructure/tables/arrow-table-data-service';
+import { ArrowDataStorageService } from '@/ddd/infrastructure/tables/arrow-data-storage-service';
 import { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
 import { DrizzleFieldRepository } from '@/ddd/infrastructure/db/repositories/fields/drizzle-field-repository';
 
@@ -72,6 +70,7 @@ import { RagIndexingApplicationService } from '@/ddd/application/services/rag/ra
 import { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
 import { LlamaIndexContentProcessor } from '../services/content-processing/llamaindex-content-processor';
 
+
 // Registry of all available repository interfaces and services
 interface RepositoryRegistry {
   IOrganizationRepository: IOrganizationRepository;
@@ -83,8 +82,6 @@ interface RepositoryRegistry {
   
   // Field and table services
   IFieldRepository: IFieldRepository;
-  FieldSchemaService: FieldSchemaService;
-  TableDataService: TableDataService;
   
   // Team domain
   ITeamRepository: ITeamRepository;
@@ -134,11 +131,13 @@ interface RepositoryRegistry {
   // RAG use case services
   RagIndexingApplicationService: RagIndexingApplicationService;
   RagSearchApplicationService: RagSearchApplicationService;
+  
 }
 
 export class DIContainer {
   private static instance: DIContainer;
   private repositories = new Map<string, any>();
+  private contextAwareDb: ContextAwareDbClient | null = null;
   private isInitialized = false;
   private initializationAttempted = false;
 
@@ -154,8 +153,11 @@ export class DIContainer {
     try {
       // Import db clients dynamically to avoid circular dependencies
       const { db, rawClient } = require('@/lib/db/client');
-      this.initialize(db, rawClient);
-      console.log('✅ DIContainer auto-initialized successfully');
+      this.initialize(db, rawClient).then(() => {
+        console.log('✅ DIContainer auto-initialized successfully');
+      }).catch((error) => {
+        console.warn('⚠️ DIContainer auto-initialization failed, will require manual initialization:', error);
+      });
     } catch (error) {
       console.warn('⚠️ DIContainer auto-initialization failed, will require manual initialization:', error);
     }
@@ -169,14 +171,27 @@ export class DIContainer {
   }
 
   /**
+   * Get the context-aware database client (public accessor)
+   */
+  getContextAwareDbClient(): ContextAwareDbClient {
+    if (!this.contextAwareDb) {
+      throw new Error('Context-aware DB client not initialized. Call initialize() first.');
+    }
+    return this.contextAwareDb;
+  }
+
+  /**
    * Initialize the container with database clients
    * This should be called once at application startup
    */
-  initialize(db: DbClient, rawClient: postgres.Sql): void {
+  async initialize(db: DbClient, rawClient: postgres.Sql): Promise<void> {
     if (this.isInitialized) {
       console.warn('DIContainer is already initialized');
       return;
     }
+
+    // Initialize context-aware database client for hidden RLS
+    this.contextAwareDb = initializeContextAwareDb(db);
 
     // Register storage repository
     const fileStorageRepository = new S3FileStorageRepository();
@@ -185,7 +200,6 @@ export class DIContainer {
     // Register S3 + Arrow + DuckDB services
     const tableQueryService = new DuckDBTableQueryService();
     this.repositories.set('TableQueryService', tableQueryService);
-
 
     // Register other repository implementations
     this.repositories.set('IOrganizationRepository', 
@@ -203,7 +217,7 @@ export class DIContainer {
     const databaseRepository = new DrizzleDatabaseRepository(db);
     this.repositories.set('IDatabaseRepository', databaseRepository);
 
-    // Register agent domain repositories and services
+    // Register agent domain repositories and services  
     const agentRepository = new DrizzleAgentRepository(db);
     const taskRepository = new DrizzleTaskRepository(db);
     const agentExecutionRepository = new GrpcAgentExecutionRepository(agentRepository);
@@ -224,23 +238,19 @@ export class DIContainer {
     // Register field repository and services
     const fieldRepository = new DrizzleFieldRepository(db);
 
-    // Create consolidated Arrow table data service
-    const arrowTableDataService = new ArrowTableDataService(
-      tableQueryService,
-      this.repositories.get('IDynamicTableRepository'),
-      fieldRepository
-    );
+    // Create simplified Arrow data storage service
+    const arrowDataStorageService = new ArrowDataStorageService();
         
-    // Create table service with consolidated data service
-    const tableService = new TableService(
+    // Create table repository with data storage service
+    const tableRepository = new DrizzleDynamicTableRepository(
       fieldRepository,
-      arrowTableDataService,
+      arrowDataStorageService,
       tableQueryService
     );
 
     // Initialize DatabaseApplicationService with proper dependencies
     const databaseApplicationService = new DatabaseApplicationService(
-      tableService,
+      tableRepository,
       fieldRepository,
       this.repositories.get('IOrganizationRepository')
     );
@@ -265,40 +275,28 @@ export class DIContainer {
     this.repositories.set('UserRoleApplicationService', userRoleApplicationService);
     this.repositories.set('InvitationApplicationService', invitationApplicationService);
     this.repositories.set('IFieldRepository', fieldRepository);
-    this.repositories.set('IDynamicTableRepository', tableService);
+    this.repositories.set('IDynamicTableRepository', tableRepository);
     
-    // Create field schema and table data services
-    const fieldSchemaService = new ArrowFieldSchemaService(
-      fieldRepository,
-      tableService,
-      tableQueryService
-    );
-    // Update the table reference in the consolidated service
-    (arrowTableDataService as any).tableRepository = tableService;
-    
-    this.repositories.set('FieldSchemaService', fieldSchemaService);
-    this.repositories.set('TableDataService', arrowTableDataService);
-    this.repositories.set('DataStorageService', arrowTableDataService);
+    // Register simplified data storage service
+    this.repositories.set('DataStorageService', arrowDataStorageService);
     
     // Initialize TableApplicationService with proper dependencies
     const tableApplicationService = new TableApplicationService(
-      tableService,
+      tableRepository,
       fieldRepository,
       databaseRepository,
       this.repositories.get('IOrganizationRepository')
     );
     
-    // Initialize FieldApplicationService with new services
+    // Initialize FieldApplicationService with simplified dependencies
     const fieldApplicationService = new FieldApplicationService(
       fieldRepository,
-      tableService,
-      fieldSchemaService,
-      arrowTableDataService
+      tableRepository
     );
     
     // Initialize RowApplicationService with proper dependencies
     const rowApplicationService = new RowApplicationService(
-      tableService,
+      tableRepository,
       fieldRepository,
       fileStorageRepository,
       tableQueryService
@@ -308,7 +306,7 @@ export class DIContainer {
     const fileApplicationService = new FileApplicationService(
       fileStorageRepository,
       fieldRepository,
-      tableService
+      tableRepository
     );
     
     // Register chat repositories
@@ -377,6 +375,8 @@ export class DIContainer {
     this.repositories.set('RagIndexingApplicationService', ragIndexingApplicationService);
     this.repositories.set('RagSearchApplicationService', ragSearchApplicationService);
 
+
+    
     this.isInitialized = true;
     console.log('✅ DIContainer initialized with repositories, file storage, agent services, and RAG services');
   }
@@ -442,8 +442,6 @@ type ServiceMap = {
   // New data services
   DataStorageService: DataStorageService;
   TableQueryService: TableQueryService;
-  FieldSchemaService: FieldSchemaService;
-  TableDataService: TableDataService;
   
   // Services
   AgentTaskApplicationService: AgentTaskApplicationService;
@@ -457,6 +455,7 @@ type ServiceMap = {
   RowApplicationService: RowApplicationService;
   FileApplicationService: FileApplicationService;
   ChatApplicationService: ChatApplicationService;
+  
 
   // RAG Services
   RagIndexRepository: DrizzleRagIndexRepository;
@@ -503,8 +502,6 @@ export const getDynamicTableRepository = createGetter('DynamicTableRepository');
 export const getDataStorageService = createGetter('DataStorageService');
 export const getTableQueryService = createGetter('TableQueryService');
 export const getFieldRepository = createGetter('FieldRepository');
-export const getFieldSchemaService = createGetter('FieldSchemaService');
-export const getTableDataService = createGetter('TableDataService');
 export const getFileStorageRepository = createGetter('FileStorageRepository');
 export const getAgentRepository = createGetter('AgentRepository');
 export const getTaskRepository = createGetter('TaskRepository');
@@ -537,9 +534,17 @@ export const getSearchDomainService = createGetter('SearchDomainService');
 export const getRagIndexingApplicationService = createGetter('RagIndexingApplicationService');
 export const getRagSearchApplicationService = createGetter('RagSearchApplicationService');
 
+/**
+ * Get the context-aware database client for RLS context management
+ */
+export const getContextAwareDb = (): ContextAwareDbClient => {
+  const container = DIContainer.getInstance();
+  return container.getContextAwareDbClient();
+};
+
 // Helper to initialize container from existing clients
-export function initializeDI(db: DbClient, rawClient: postgres.Sql): void {
-  DIContainer.getInstance().initialize(db, rawClient);
+export function initializeDI(db: DbClient, rawClient: postgres.Sql): Promise<void> {
+  return DIContainer.getInstance().initialize(db, rawClient);
 }
 
 // Export container instance for direct access if needed

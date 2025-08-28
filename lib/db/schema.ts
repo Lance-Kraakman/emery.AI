@@ -172,6 +172,7 @@ export const organizations = pgTable("organizations", {
   }),
 ]);
 
+
 // AIDEV-NOTE: Removed complex roles table - using simplified 3-role system in users.organization_role
 
 export const users = pgTable("users", {
@@ -459,7 +460,7 @@ export const ragIndexes = pgTable("rag_indexes", {
   // Scoping - configurable domain filtering
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   agentId: integer("agent_id").references(() => agents.id),
-  roleId: integer("role_id").references(() => roles.id),
+  // Note: roleId removed for simplified RBAC - use organization-level permissions instead
   
   // Domain configuration - what to RAG against
   domainTypes: jsonb("domain_types").notNull(), // ["tables", "files", "agents", "workflows"]
@@ -609,10 +610,6 @@ export const chats = pgTable("chats", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   createdBy: uuid("created_by").notNull().references(() => users.id),
   
-  // Domain connections - flexible connections to any domain type
-  domainType: text("domain_type"), // 'table', 'agent', 'file', 'team', 'workflow', null for org-wide
-  domainId: integer("domain_id"), // ID of connected domain entity
-  tableId: integer("table_id").references(() => tables.id), // Legacy table connection (for compatibility)
   
   // Chat metadata
   title: text("title").notNull(),
@@ -622,7 +619,12 @@ export const chats = pgTable("chats", {
   contextMetadata: jsonb("context_metadata").$type<{
     ragIndexId?: string;
     contextType?: 'table' | 'agent' | 'file' | 'team' | 'workflow' | 'organization' | 'mixed';
-    domainSchema?: any;
+    domainSchema?: {
+      id?: number;        // Domain entity ID (replaces domainId/tableId)
+      name?: string;      // Domain entity name
+      type?: string;      // Additional type info if needed
+      [key: string]: any; // Flexible domain-specific data
+    };
     primaryRagWeight?: number; // Weight for primary domain context (0.0-1.0)
     lastRagUpdate?: string;
   }>(),

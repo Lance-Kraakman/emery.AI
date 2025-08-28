@@ -8,6 +8,7 @@
  */
 
 import type { Result } from '@/ddd/domain/shared/result';
+import type { TableId } from '@/ddd/domain/shared/value-objects';
 
 export interface QueryResult {
   rows: Array<Record<string, any>>;
@@ -20,7 +21,7 @@ export interface TableQueryService {
    * Query single table with filters, ordering, pagination
    */
   queryTable(
-    tableId: number,
+    tableId: TableId,
     filters?: Record<string, any>,
     orderBy?: string,
     orderDirection?: 'ASC' | 'DESC',

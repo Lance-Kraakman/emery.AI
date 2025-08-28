@@ -14,6 +14,7 @@ import {
 export interface Organization {
   id: OrganizationId;
   name: OrganizationName;
+  slug?: string | null;
   mission?: string | null;
   sharedTools?: string[] | null;
   sharedServers?: string[] | null;
@@ -30,6 +31,7 @@ export interface Organization {
 
 export interface CreateOrganizationData {
   name: OrganizationName;
+  slug?: string; // Optional - will be generated from name if not provided
   mission?: string;
   sharedTools?: string[];
   sharedServers?: string[];

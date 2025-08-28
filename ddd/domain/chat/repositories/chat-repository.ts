@@ -9,6 +9,7 @@
  */
 
 import type { Chat, CreateChatData, UpdateChatData } from '../entities/chat';
+import type { ChatId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export interface IChatRepository {
   /**
@@ -19,52 +20,52 @@ export interface IChatRepository {
   /**
    * Find a chat by ID with organization scoping
    */
-  findById(id: string, organizationId: number): Promise<Chat | null>;
+  findById(id: ChatId, organizationId: OrganizationId): Promise<Chat | null>;
 
   /**
    * Find all chats for an organization
    */
-  findByOrganization(organizationId: number, limit?: number, offset?: number): Promise<Chat[]>;
+  findByOrganization(organizationId: OrganizationId, limit?: number, offset?: number): Promise<Chat[]>;
 
   /**
    * Find chats for a specific user in an organization
    */
-  findByUser(userId: string, organizationId: number, limit?: number, offset?: number): Promise<Chat[]>;
+  findByUser(userId: UserId, organizationId: OrganizationId, limit?: number, offset?: number): Promise<Chat[]>;
 
   /**
    * Find chats connected to a specific table
    */
-  findByTable(tableId: number, organizationId: number, limit?: number, offset?: number): Promise<Chat[]>;
+  findByTable(tableId: number, organizationId: OrganizationId, limit?: number, offset?: number): Promise<Chat[]>;
 
   /**
    * Find active chats for an organization
    */
-  findActiveByOrganization(organizationId: number, limit?: number, offset?: number): Promise<Chat[]>;
+  findActiveByOrganization(organizationId: OrganizationId, limit?: number, offset?: number): Promise<Chat[]>;
 
   /**
    * Update a chat
    */
-  update(id: string, data: UpdateChatData, organizationId: number): Promise<Chat | null>;
+  update(id: ChatId, data: UpdateChatData, organizationId: OrganizationId): Promise<Chat | null>;
 
   /**
    * Archive a chat (soft delete)
    */
-  archive(id: string, organizationId: number): Promise<boolean>;
+  archive(id: ChatId, organizationId: OrganizationId): Promise<boolean>;
 
   /**
    * Permanently delete a chat
    */
-  delete(id: string, organizationId: number): Promise<boolean>;
+  delete(id: ChatId, organizationId: OrganizationId): Promise<boolean>;
 
   /**
    * Check if a chat exists and user has access
    */
-  exists(id: string, organizationId: number): Promise<boolean>;
+  exists(id: ChatId, organizationId: OrganizationId): Promise<boolean>;
 
   /**
    * Get chat statistics for an organization
    */
-  getOrganizationStats(organizationId: number): Promise<{
+  getOrganizationStats(organizationId: OrganizationId): Promise<{
     totalChats: number;
     activeChats: number;
     archivedChats: number;
@@ -75,15 +76,15 @@ export interface IChatRepository {
   /**
    * Get recent chats for a user
    */
-  getRecentChats(userId: string, organizationId: number, limit?: number): Promise<Chat[]>;
+  getRecentChats(userId: UserId, organizationId: OrganizationId, limit?: number): Promise<Chat[]>;
 
   /**
    * Search chats by title or description
    */
-  search(query: string, organizationId: number, limit?: number, offset?: number): Promise<Chat[]>;
+  search(query: string, organizationId: OrganizationId, limit?: number, offset?: number): Promise<Chat[]>;
 
   /**
    * Update message count and last message timestamp
    */
-  updateMessageStats(chatId: string, messageCount: number, lastMessageAt: Date): Promise<boolean>;
+  updateMessageStats(chatId: ChatId, messageCount: number, lastMessageAt: Date): Promise<boolean>;
 }

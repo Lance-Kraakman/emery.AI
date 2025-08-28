@@ -7,14 +7,14 @@
 
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
-import type { 
+import { 
   Agent, 
-  CreateAgentData, 
-  UpdateAgentData,
-  ToolConfig,
-  ServerConfig,
-  CapabilityConfig,
-  AgentType
+  type CreateAgentData, 
+  type UpdateAgentData,
+  type ToolConfig,
+  type ServerConfig,
+  type CapabilityConfig,
+  type AgentType
 } from '@/ddd/domain/agents/entities/agent';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createAgentDefaults } from '@/ddd/domain/agents/entities/agent';
@@ -111,18 +111,22 @@ export class AgentApplicationService {
 
       // Apply defaults and add generated fields
       const agentWithDefaults = createAgentDefaults(agentData);
-      const agent: Agent = {
-        id: AgentId.placeholder(), // Will be set by repository after insert
+      const createData: CreateAgentData = {
         ...agentWithDefaults,
         organizationId: command.organizationId, // Ensure these required fields are set
         ownerId: command.ownerId,
-        apiKey: apiKey,
-        createdAt: null,
-        updatedAt: null
       };
 
-      // Save to repository and get the saved agent with ID
-      const savedAgent = await this.agentRepository.save(agent);
+      // Create agent entity object, then save via repository
+      const newAgent: Agent = {
+        ...createData,
+        id: AgentId.newEntity(), // New agent starts with ID 0
+        apiKey: apiKey,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      const savedAgent = await this.agentRepository.save(newAgent);
 
       return {
         success: true,

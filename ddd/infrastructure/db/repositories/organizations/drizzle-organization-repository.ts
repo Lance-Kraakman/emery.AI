@@ -1,11 +1,10 @@
 import { eq, ilike, and, count } from 'drizzle-orm';
 import type postgres from 'postgres';
 
-import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import { IOrganizationRepository, TransactionContext } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
-import { ROLE_TYPES, PERMISSIONS, DEFAULT_ROLE_PERMISSIONS } from '@/ddd/domain/roles/entities/role';
 import type { DbClient } from '@/lib/db/client';
-import { organizations, users, userOrganizations, roles } from '@/lib/db/schema';
+import { organizations, users, userOrganizations } from '@/lib/db/schema';
 import { OrganizationId, UserId, OrganizationRole, OrganizationName, EmailAddress } from '@/ddd/domain/shared/value-objects';
 
 export class DrizzleOrganizationRepository implements IOrganizationRepository {
@@ -14,8 +13,21 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
     private rawClient: postgres.Sql
   ) {}
 
-  async findById(id: OrganizationId): Promise<Organization | null> {
-    const result = await this.db.query.organizations.findFirst({
+  /**
+   * Generate URL-safe slug from organization name
+   */
+  private generateSlug(name: string): string {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '') // Remove special characters
+      .replace(/[\s_-]+/g, '-') // Replace spaces, underscores, multiple hyphens with single hyphen
+      .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+  }
+
+  async findById(id: OrganizationId, tx?: TransactionContext): Promise<Organization | null> {
+    const dbClient = tx || this.db;
+    const result = await dbClient.query.organizations.findFirst({
       where: eq(organizations.id, id.value)
     });
 
@@ -84,10 +96,11 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
   }
 
   async create(data: CreateOrganizationData): Promise<Organization> {
-    // Convert Value Objects to database primitives
+    // Convert Value Objects to database primitives and generate slug
     const dbData = {
       ...data,
-      name: data.name.value // Convert OrganizationName to string
+      name: data.name.value, // Convert OrganizationName to string
+      slug: data.slug || this.generateSlug(data.name.value) // Generate slug if not provided
     };
     
     const [result] = await this.db
@@ -98,59 +111,52 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
     return this.mapToEntity(result);
   }
 
-  async createWithOwner(data: CreateOrganizationData, ownerId: UserId): Promise<Organization> {
-    return await this.db.transaction(async (tx) => {
-      // Convert Value Objects to database primitives
-      const dbData = {
-        ...data,
-        name: data.name.value // Convert OrganizationName to string
-      };
-      
-      // Create organization
-      const [org] = await tx
-        .insert(organizations)
-        .values(dbData)
-        .returning();
-
-      // Create default admin role for this organization
-      const [adminRole] = await tx
-        .insert(roles)
-        .values({
-          name: ROLE_TYPES.ADMIN,
-          organizationId: org.id,
-          permissions: [...DEFAULT_ROLE_PERMISSIONS[ROLE_TYPES.ADMIN]]
-        })
-        .returning();
-
-      // Create member role for this organization  
-      await tx
-        .insert(roles)
-        .values({
-          name: ROLE_TYPES.MEMBER,
-          organizationId: org.id,
-          permissions: [PERMISSIONS.VIEW_TABLES, PERMISSIONS.CREATE_AGENTS]
-        });
-
-      // Add owner as organization member with owner role
-      await tx
-        .insert(userOrganizations)
-        .values({
-          userId: ownerId.value,
-          organizationId: org.id,
-          role: ROLE_TYPES.OWNER
-        });
-
-      // Update user's current organization
-      await tx
-        .update(users)
-        .set({ 
-          currentOrganizationId: org.id,
-          roleId: adminRole.id 
-        })
-        .where(eq(users.id, ownerId.value));
-
-      return this.mapToEntity(org);
+  async createWithOwner(data: CreateOrganizationData, ownerId: UserId, tx?: TransactionContext): Promise<Organization> {
+    if (tx) {
+      // Use existing transaction (e.g., from withRLSContext)
+      return this.createWithOwnerBootstrap(data, ownerId, tx);
+    }
+    
+    // Create new transaction
+    return await this.db.transaction(async (newTx) => {
+      return this.createWithOwnerBootstrap(data, ownerId, newTx);
     });
+  }
+  
+  // Bootstrap method that works within an RLS context transaction
+  async createWithOwnerBootstrap(data: CreateOrganizationData, ownerId: UserId, tx: TransactionContext): Promise<Organization> {
+    // Convert Value Objects to database primitives and generate slug
+    const dbData = {
+      ...data,
+      name: data.name.value, // Convert OrganizationName to string
+      slug: data.slug || this.generateSlug(data.name.value) // Generate slug if not provided
+    };
+    
+    // Create organization
+    const [org] = await tx
+      .insert(organizations)
+      .values(dbData)
+      .returning();
+
+    // Add owner as organization member with owner role (simplified RBAC)
+    await tx
+      .insert(userOrganizations)
+      .values({
+        userId: ownerId.value,
+        organizationId: org.id,
+        role: 'owner' // Use simple string role instead of ROLE_TYPES
+      });
+
+    // Update user's current organization and role (simplified RBAC)
+    await tx
+      .update(users)
+      .set({ 
+        currentOrganizationId: org.id,
+        organizationRole: 'owner' // Set organizationRole directly
+      })
+      .where(eq(users.id, ownerId.value));
+
+    return this.mapToEntity(org);
   }
 
   async update(id: OrganizationId, data: UpdateOrganizationData): Promise<Organization> {
@@ -180,19 +186,14 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
         .delete(userOrganizations)
         .where(eq(userOrganizations.organizationId, id.value));
 
-      // Clean up roles for this organization
-      await tx
-        .delete(roles)
-        .where(eq(roles.organizationId, id.value));
-
-      // Delete the organization
+      // Delete the organization (no separate roles table in simplified RBAC)
       await tx
         .delete(organizations)
         .where(eq(organizations.id, id.value));
     });
   }
 
-  async addMember(organizationId: OrganizationId, userId: UserId, role: OrganizationRole = new OrganizationRole(ROLE_TYPES.MEMBER)): Promise<void> {
+  async addMember(organizationId: OrganizationId, userId: UserId, role: OrganizationRole = new OrganizationRole('member')): Promise<void> {
     // Check if user is already a member
     const existing = await this.db.query.userOrganizations.findFirst({
       where: and(
@@ -275,6 +276,7 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
     return {
       id: new OrganizationId(data.id),
       name: new OrganizationName(data.name),
+      slug: data.slug,
       mission: data.mission,
       sharedTools: data.sharedTools,
       sharedServers: data.sharedServers, 

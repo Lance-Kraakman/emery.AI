@@ -8,7 +8,7 @@
  */
 
 import type { Result } from '@/ddd/domain/shared/result';
-import type { TableSchema, FieldSchema } from '../value-objects/table-schema';
+import type { TableSchema } from '../types/schema-types';
 
 export interface StorageMetadata {
   format: string;

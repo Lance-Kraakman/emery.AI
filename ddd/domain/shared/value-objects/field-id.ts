@@ -10,7 +10,4 @@ export class FieldId extends BaseId<'FieldId'> {
     return new FieldId(value);
   }
 
-  static placeholder(): FieldId {
-    return new FieldId(0);
-  }
 }

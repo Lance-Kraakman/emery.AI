@@ -78,23 +78,7 @@ export class Invitation {
     return !this.isExpired();
   }
 
-  // Factory methods
-  static create(data: CreateInvitationData): Invitation {
-    const token = InvitationToken.generate();
-    const expiresAt = data.expiresAt || createInvitationExpiry(DEFAULT_INVITATION_EXPIRY_DAYS);
-    const role = data.role || OrganizationRole.member();
-
-    return new Invitation(
-      InvitationId.placeholder(), // Will be set by repository
-      data.organizationId,
-      data.invitedBy,
-      data.email,
-      role,
-      token,
-      expiresAt,
-      null // Will be set by repository
-    );
-  }
+  // Factory methods - entity only created from persistence with real ID
 
   static fromPersistence(data: {
     id: number;

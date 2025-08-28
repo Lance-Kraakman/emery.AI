@@ -3,46 +3,71 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
+import { withRLSContext, withOrganizationContext } from '@/lib/db/rls-context';
 
 // AIDEV-NOTE: Integration test client for HTTP API, gRPC, and direct database operations
 // Provides a unified interface for testing across all system boundaries
 // Now includes Drizzle ORM support for RLS testing
 
 export class IntegrationTestClient {
-  private dbClient: Client;
-  private pgClient: ReturnType<typeof postgres>;
-  public db: ReturnType<typeof drizzle>;
+  private dbClient: Client | null = null;
+  private pgClient: ReturnType<typeof postgres> | null = null;
+  private _db: ReturnType<typeof drizzle> | null = null;
   
   constructor(
     private dbUrl = process.env.TEST_DATABASE_URL!,
     private appUrl = process.env.TEST_APP_URL!,
     private grpcUrl = process.env.TEST_GRPC_URL!
   ) {
-    this.dbClient = new Client({ connectionString: this.dbUrl });
-    
-    // Initialize shared postgres connection for RLS testing  
-    // Use single connection to ensure RLS context is shared across all queries
-    this.pgClient = postgres(this.dbUrl, {
-      max: 1,         // Single connection for RLS context
-      min: 1,         // Keep connection alive
-      prepare: false, // Disable prepared statements for easier debugging
-      onnotice: () => {}, // Suppress notices
-      connection: {
-        // Ensure session variables persist
-        application_name: 'integration_test_rls'
-      }
-    });
-    this.db = drizzle(this.pgClient, { schema });
+    // AIDEV-NOTE: Connections are now lazy-initialized to avoid creating them
+    // before migrations run. This prevents "unrecognized configuration parameter" 
+    // errors when RLS functions don't exist yet.
+  }
+
+  // Lazy getter for database client
+  private getDbClient(): Client {
+    if (!this.dbClient) {
+      this.dbClient = new Client({ connectionString: this.dbUrl });
+    }
+    return this.dbClient;
+  }
+
+  // Lazy getter for postgres client
+  private getPgClient(): ReturnType<typeof postgres> {
+    if (!this.pgClient) {
+      // Initialize shared postgres connection for RLS testing  
+      // Use single connection to ensure RLS context is shared across all queries
+      this.pgClient = postgres(this.dbUrl, {
+        max: 1,         // Single connection for RLS context
+        min: 1,         // Keep connection alive
+        prepare: false, // Disable prepared statements for easier debugging
+        onnotice: () => {}, // Suppress notices
+        connection: {
+          // Ensure session variables persist
+          application_name: 'integration_test_rls'
+        }
+      });
+    }
+    return this.pgClient;
+  }
+
+  // Lazy getter for Drizzle database
+  public get db(): ReturnType<typeof drizzle> {
+    if (!this._db) {
+      this._db = drizzle(this.getPgClient(), { schema });
+    }
+    return this._db;
   }
 
   // Database operations
   async verifyDatabaseConnection(): Promise<void> {
     try {
+      const dbClient = this.getDbClient();
       // Only connect if not already connected
-      if (!(this.dbClient as any)._connected) {
-        await this.dbClient.connect();
+      if (!(dbClient as any)._connected) {
+        await dbClient.connect();
       }
-      const result = await this.dbClient.query('SELECT 1 as connected');
+      const result = await dbClient.query('SELECT 1 as connected');
       if (!result.rows[0]?.connected) {
         throw new Error('Database connection test failed');
       }
@@ -74,49 +99,10 @@ export class IntegrationTestClient {
   }
   
   async seedBasicTestData(): Promise<void> {
-    // Seed essential test data (organizations and test users)
-    // This data persists across individual tests
-    // For RLS-enabled setup, we need to temporarily bypass RLS for data seeding
-    await this.db.transaction(async (tx) => {
-      // Insert organizations - set context for each org as we insert
-      await tx.execute(sql`SELECT set_config('app.current_organization_id', '1', true)`);
-      await tx.execute(sql`
-        INSERT INTO organizations (id, name, slug) VALUES (1, 'Test Organization 1', 'test-org-1')
-        ON CONFLICT (id) DO NOTHING
-      `);
-      
-      await tx.execute(sql`SELECT set_config('app.current_organization_id', '2', true)`);
-      await tx.execute(sql`
-        INSERT INTO organizations (id, name, slug) VALUES (2, 'Test Organization 2', 'test-org-2') 
-        ON CONFLICT (id) DO NOTHING
-      `);
-      
-      // Reset sequence to avoid conflicts with auto-increment in other tests
-      // Set to MAX(id) + 1 to ensure next auto-increment doesn't conflict
-      await tx.execute(sql`
-        SELECT setval(pg_get_serial_sequence('organizations', 'id'), 
-                     GREATEST(COALESCE(MAX(id), 0) + 1, 3)) FROM organizations
-      `);
-      
-      // Insert users with proper RLS context
-      await tx.execute(sql`SELECT set_config('app.current_organization_id', '1', true)`);
-      await tx.execute(sql`
-        INSERT INTO users (id, email, name, current_organization_id) VALUES 
-        ('550e8400-e29b-41d4-a716-446655440001', 'test1@example.com', 'Test User 1', 1)
-        ON CONFLICT (id) DO NOTHING  
-      `);
-      
-      await tx.execute(sql`SELECT set_config('app.current_organization_id', '2', true)`);
-      await tx.execute(sql`
-        INSERT INTO users (id, email, name, current_organization_id) VALUES 
-        ('550e8400-e29b-41d4-a716-446655440002', 'test2@example.com', 'Test User 2', 2)
-        ON CONFLICT (id) DO NOTHING  
-      `);
-      
-      // Skip user_organizations for basic RLS tests - they require both org and user context
-    });
-    
-    console.log('✅ Basic test data seeded with sequence reset');
+    // AIDEV-NOTE: No longer doing manual SQL inserts here. 
+    // Test data will be seeded in individual tests using proper domain services
+    // with withRLSContext, exactly as the application does.
+    console.log('✅ Basic test data seeding skipped - will use domain services in tests');
   }
   
   async cleanTestData(): Promise<void> {
@@ -143,11 +129,12 @@ export class IntegrationTestClient {
   
   async query(sql: string, params: any[] = []): Promise<any[]> {
     try {
+      const dbClient = this.getDbClient();
       // Ensure connection is established
-      if (!(this.dbClient as any)._connected) {
-        await this.dbClient.connect();
+      if (!(dbClient as any)._connected) {
+        await dbClient.connect();
       }
-      const result = await this.dbClient.query(sql, params);
+      const result = await dbClient.query(sql, params);
       return result.rows;
     } catch (error) {
       console.error('Database query failed:', sql, params, error);
@@ -293,7 +280,15 @@ export class IntegrationTestClient {
   // Cleanup method for graceful shutdown
   async disconnect(): Promise<void> {
     try {
-      await this.dbClient.end();
+      if (this.dbClient) {
+        await this.dbClient.end();
+        this.dbClient = null;
+      }
+      if (this.pgClient) {
+        await this.pgClient.end();
+        this.pgClient = null;
+        this._db = null;
+      }
     } catch (error) {
       console.warn('Error disconnecting from database:', error);
     }

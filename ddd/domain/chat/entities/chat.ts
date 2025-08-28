@@ -8,134 +8,66 @@
  * domain-connected chats with dual-context RAG integration and organizational scoping
  */
 
+import { ChatId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+
 export type DomainType = 'table' | 'agent' | 'file' | 'team' | 'workflow';
 
 export interface ChatContextMetadata {
   ragIndexId?: string;
   contextType?: DomainType | 'organization' | 'mixed';
-  domainSchema?: any; // Schema/config for connected domain
+  domainSchema?: {
+    id?: number;        // Domain entity ID (replaces domainId/tableId)
+    name?: string;      // Domain entity name
+    type?: string;      // Additional type info if needed
+    [key: string]: any; // Flexible domain-specific data
+  };
   primaryRagWeight?: number; // Weight for primary domain context (0.0-1.0)
   lastRagUpdate?: string;
 }
 
-export interface Chat {
-  id: string;
-  organizationId: number;
-  createdBy: string;
-  
-  // Domain connections - flexible connections to any domain type
-  domainType?: DomainType | null; // Type of connected domain
-  domainId?: number | null; // ID of connected domain entity
-  tableId?: number | null; // Legacy table connection (for compatibility)
-  
-  // Chat metadata
-  title: string;
-  description?: string;
-  
-  // RAG and AI context
-  contextMetadata?: ChatContextMetadata;
-  
-  // Status and lifecycle
-  status: 'active' | 'archived' | 'deleted';
-  messageCount: number;
-  lastMessageAt?: Date;
-  
-  createdAt: Date;
-  updatedAt: Date;
-}
+export type ChatStatus = 'active' | 'archived' | 'deleted';
 
-export interface CreateChatData {
-  organizationId: number;
-  createdBy: string;
-  title: string;
-  description?: string;
-  
-  // Domain connections
-  domainType?: DomainType;
-  domainId?: number;
-  tableId?: number; // Legacy compatibility
-  
-  contextMetadata?: ChatContextMetadata;
-}
+export class Chat {
+  private constructor(
+    private readonly _id: ChatId,
+    private readonly _organizationId: OrganizationId,
+    private readonly _createdBy: UserId,
+    private _title: string,
+    private _description: string | undefined,
+    private _contextMetadata: ChatContextMetadata | undefined,
+    private _status: ChatStatus,
+    private _messageCount: number,
+    private _lastMessageAt: Date | undefined,
+    private readonly _createdAt: Date,
+    private _updatedAt: Date
+  ) {}
 
-export interface UpdateChatData {
-  title?: string;
-  description?: string;
-  contextMetadata?: ChatContextMetadata;
-  status?: 'active' | 'archived' | 'deleted';
-  lastMessageAt?: Date;
-  messageCount?: number;
-}
+  // Getters
+  get id(): ChatId { return this._id; }
+  get organizationId(): OrganizationId { return this._organizationId; }
+  get createdBy(): UserId { return this._createdBy; }
+  get title(): string { return this._title; }
+  get description(): string | undefined { return this._description; }
+  get contextMetadata(): ChatContextMetadata | undefined { return this._contextMetadata; }
+  get status(): ChatStatus { return this._status; }
+  get messageCount(): number { return this._messageCount; }
+  get lastMessageAt(): Date | undefined { return this._lastMessageAt; }
+  get createdAt(): Date { return this._createdAt; }
+  get updatedAt(): Date { return this._updatedAt; }
 
-/**
- * Chat business rules and validation
- */
-export class ChatEntity {
-  constructor(private readonly chat: Chat) {}
-
-  get id(): string {
-    return this.chat.id;
-  }
-
-  get organizationId(): number {
-    return this.chat.organizationId;
-  }
-
-  get domainType(): DomainType | null {
-    return this.chat.domainType || null;
-  }
-
-  get domainId(): number | null {
-    return this.chat.domainId || null;
-  }
-
-  get tableId(): number | null {
-    return this.chat.tableId ?? null;
-  }
-
-  get title(): string {
-    return this.chat.title;
-  }
-
-  get status(): string {
-    return this.chat.status;
-  }
-
-  get messageCount(): number {
-    return this.chat.messageCount;
-  }
-
-  get isConnectedToDomain(): boolean {
-    return this.chat.domainType !== null && this.chat.domainId !== null;
-  }
-
-  get isConnectedToTable(): boolean {
-    return this.chat.tableId !== null || (this.chat.domainType === 'table' && this.chat.domainId !== null);
-  }
-
-  get isActive(): boolean {
-    return this.chat.status === 'active';
-  }
-
-  get contextType(): string {
-    return this.chat.contextMetadata?.contextType || (this.chat.domainType || 'organization');
-  }
-
-  get primaryRagWeight(): number {
-    return this.chat.contextMetadata?.primaryRagWeight || 0.7;
-  }
+  // Business methods - only keep what's actually used
 
   /**
    * Check if user can access this chat
    */
-  canUserAccess(userId: string, userOrganizationId: number): boolean {
+  canUserAccess(userId: UserId, userOrganizationId: OrganizationId): boolean {
     // User must be in same organization
-    if (userOrganizationId !== this.chat.organizationId) {
+    if (!userOrganizationId.equals(this._organizationId)) {
       return false;
     }
 
     // Chat must be active (not deleted)
-    if (this.chat.status === 'deleted') {
+    if (this._status === 'deleted') {
       return false;
     }
 
@@ -145,51 +77,100 @@ export class ChatEntity {
   /**
    * Check if user can edit this chat
    */
-  canUserEdit(userId: string): boolean {
+  canUserEdit(userId: UserId): boolean {
     // Only the chat creator can edit
-    return this.chat.createdBy === userId;
+    return this._createdBy.equals(userId);
   }
 
   /**
    * Check if user can send messages to this chat
    */
-  canUserMessage(userId: string, userOrganizationId: number): boolean {
+  canUserMessage(userId: UserId, userOrganizationId: OrganizationId): boolean {
     // Must have access and chat must be active
-    return this.canUserAccess(userId, userOrganizationId) && this.chat.status === 'active';
+    return this.canUserAccess(userId, userOrganizationId) && this._status === 'active';
   }
 
-  /**
-   * Update the message count when a new message is added
-   */
-  incrementMessageCount(): void {
-    this.chat.messageCount += 1;
-    this.chat.lastMessageAt = new Date();
-    this.chat.updatedAt = new Date();
+  // Factory methods - entity only created from persistence with real ID
+  static fromPersistence(data: {
+    id: string;
+    organizationId: number;
+    createdBy: string;
+    title: string;
+    description?: string;
+    contextMetadata?: ChatContextMetadata;
+    status: ChatStatus;
+    messageCount: number;
+    lastMessageAt?: Date;
+    createdAt: Date;
+    updatedAt: Date;
+  }): Chat {
+    return new Chat(
+      ChatId.fromString(data.id),
+      OrganizationId.fromNumber(data.organizationId),
+      UserId.fromString(data.createdBy),
+      data.title,
+      data.description,
+      data.contextMetadata,
+      data.status,
+      data.messageCount,
+      data.lastMessageAt,
+      data.createdAt,
+      data.updatedAt
+    );
   }
 
-  /**
-   * Generate a context-aware title if not provided
-   */
-  static generateContextTitle(domainType?: DomainType | null, domainName?: string, tableId?: number, tableName?: string): string {
-    // New domain-based titles
-    if (domainType && domainName) {
-      switch (domainType) {
-        case 'table': return `Table Chat: ${domainName}`;
-        case 'agent': return `Agent Chat: ${domainName}`;
-        case 'file': return `File Chat: ${domainName}`;
-        case 'team': return `Team Chat: ${domainName}`;
-        case 'workflow': return `Workflow Chat: ${domainName}`;
-      }
-    }
-    
-    // Legacy table support
-    if (tableId && tableName) {
-      return `Table Chat: ${tableName}`;
-    }
-    
-    return `Organization Chat - ${new Date().toLocaleDateString()}`;
+  // Convert to plain object for persistence
+  toPersistence(): {
+    id: string;
+    organizationId: number;
+    createdBy: string;
+    title: string;
+    description?: string;
+    contextMetadata?: ChatContextMetadata;
+    status: ChatStatus;
+    messageCount: number;
+    lastMessageAt?: Date;
+    createdAt: Date;
+    updatedAt: Date;
+  } {
+    return {
+      id: this._id.value,
+      organizationId: this._organizationId.value,
+      createdBy: this._createdBy.value,
+      title: this._title,
+      description: this._description,
+      contextMetadata: this._contextMetadata,
+      status: this._status,
+      messageCount: this._messageCount,
+      lastMessageAt: this._lastMessageAt,
+      createdAt: this._createdAt,
+      updatedAt: this._updatedAt
+    };
   }
+}
 
+export interface CreateChatData {
+  organizationId: OrganizationId;
+  createdBy: UserId;
+  title: string;
+  description?: string;
+  
+  contextMetadata?: ChatContextMetadata;
+}
+
+export interface UpdateChatData {
+  title?: string;
+  description?: string;
+  contextMetadata?: ChatContextMetadata;
+  status?: ChatStatus;
+  lastMessageAt?: Date;
+  messageCount?: number;
+}
+
+/**
+ * Static utility methods for chat validation and context metadata creation
+ */
+export class ChatUtils {
   /**
    * Validate chat data before creation/update
    */
@@ -225,23 +206,21 @@ export class ChatEntity {
   /**
    * Create context metadata for domain-connected chats
    */
-  static createDomainContextMetadata(domainType: DomainType, domainSchema?: any, primaryWeight: number = 0.7): ChatContextMetadata {
+  static createDomainContextMetadata(
+    domainType: DomainType, 
+    domainId: number, 
+    domainName: string, 
+    additionalSchema?: any, 
+    primaryWeight: number = 0.7
+  ): ChatContextMetadata {
     return {
       contextType: domainType,
-      domainSchema,
+      domainSchema: {
+        id: domainId,
+        name: domainName,
+        ...additionalSchema
+      },
       primaryRagWeight: primaryWeight,
-      lastRagUpdate: new Date().toISOString()
-    };
-  }
-
-  /**
-   * Create default context metadata for table-connected chats (legacy support)
-   */
-  static createTableContextMetadata(tableId: number, tableSchema?: any): ChatContextMetadata {
-    return {
-      contextType: 'table',
-      domainSchema: tableSchema,
-      primaryRagWeight: 0.7,
       lastRagUpdate: new Date().toISOString()
     };
   }
@@ -258,9 +237,22 @@ export class ChatEntity {
   }
 
   /**
-   * Convert to plain object for API responses
+   * Generate a context-aware title if not provided
    */
-  toJSON(): Chat {
-    return { ...this.chat };
+  static generateContextTitle(contextMetadata?: ChatContextMetadata): string {
+    if (contextMetadata?.contextType && contextMetadata.domainSchema?.name) {
+      const domainType = contextMetadata.contextType;
+      const domainName = contextMetadata.domainSchema.name;
+      
+      switch (domainType) {
+        case 'table': return `Table Chat: ${domainName}`;
+        case 'agent': return `Agent Chat: ${domainName}`;
+        case 'file': return `File Chat: ${domainName}`;
+        case 'team': return `Team Chat: ${domainName}`;
+        case 'workflow': return `Workflow Chat: ${domainName}`;
+      }
+    }
+    
+    return `Organization Chat - ${new Date().toLocaleDateString()}`;
   }
 }

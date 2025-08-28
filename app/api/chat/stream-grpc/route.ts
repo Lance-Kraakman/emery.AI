@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Parse request
-    const { messages, chatId, tableId, domainType, domainId } = await req.json();
+    const { messages, chatId, domainType, domainId } = await req.json();
     const latestMessage = messages[messages.length - 1]?.content;
     
     if (!latestMessage) {
@@ -112,8 +112,7 @@ export async function POST(req: NextRequest) {
         organizationId,
         createdBy: userId,
         domainType: domainType as any,
-        domainId: domainId ? parseInt(domainId) : undefined,
-        tableId: tableId ? parseInt(tableId) : undefined
+        domainId: domainId ? parseInt(domainId) : undefined
       };
 
       const chatResult = await chatApplicationService.createChat(createChatCommand);
@@ -180,14 +179,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Determine processing options
-    let resolvedDomainType = currentChat?.domainType || domainType;
-    let resolvedDomainId = currentChat?.domainId || domainId;
+    // 5. Determine processing options from contextMetadata or request params
+    let resolvedDomainType = currentChat?.contextMetadata?.contextType || domainType;
+    let resolvedDomainId = currentChat?.contextMetadata?.domainSchema?.id || domainId;
     
-    // Handle legacy table ID
-    if (!resolvedDomainType && (currentChat?.tableId || tableId)) {
-      resolvedDomainType = 'table';
-      resolvedDomainId = currentChat?.tableId || parseInt(tableId);
+    // Convert 'organization' contextType to null for processing
+    if (resolvedDomainType === 'organization') {
+      resolvedDomainType = null;
+      resolvedDomainId = null;
     }
 
     const processingOptions: ChatProcessingOptions = {

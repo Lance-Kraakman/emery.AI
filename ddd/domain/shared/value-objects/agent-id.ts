@@ -5,14 +5,17 @@ import { BaseId } from './base-id';
 
 export class AgentId extends BaseId<'AgentId'> {
   constructor(value: number) {
-    super(value, 'AgentId', true); // Allow zero for placeholder
+    super(value, 'AgentId');
   }
 
   static fromNumber(value: number): AgentId {
     return new AgentId(value);
   }
 
-  static placeholder(): AgentId {
-    return new AgentId(0);
+  /**
+   * Create an AgentId for a new entity (allows 0 as placeholder before persistence)
+   */
+  static newEntity(): AgentId {
+    return this.createNew('AgentId', 0) as AgentId;
   }
 }

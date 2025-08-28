@@ -11,8 +11,8 @@ beforeAll(async () => {
   await testClient.verifyDatabaseConnection();
   await testClient.verifyDatabaseSchema();
   
-  // Seed minimal test data required for all tests
-  await testClient.seedBasicTestData();
+  // AIDEV-NOTE: No longer seeding global test data - each test creates its own
+  // This ensures proper isolation and lets each test use domain services
   
   console.log('✅ Integration test setup complete');
 });

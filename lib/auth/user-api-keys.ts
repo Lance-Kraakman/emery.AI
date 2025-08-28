@@ -50,7 +50,7 @@ export async function validateUserApiKey(apiKey: string): Promise<UserApiKeyInfo
         email: users.email,
         name: users.name,
         organizationId: users.currentOrganizationId,
-        roleId: users.roleId,
+        organizationRole: users.organizationRole,
       })
       .from(users)
       .where(eq(users.apiKey, apiKey))

@@ -26,10 +26,9 @@ export interface CreateChatCommand {
   title?: string; // Auto-generated if not provided
   description?: string;
   
-  // Domain connections - choose one
+  // Domain connections
   domainType?: DomainType;
   domainId?: number;
-  tableId?: number; // Legacy table connection
 }
 
 export interface SendMessageCommand {
@@ -74,52 +73,36 @@ export class ChatApplicationService {
    */
   async createChat(command: CreateChatCommand): Promise<ChatApplicationServiceResult<Chat>> {
     try {
-      // 1. Validate domain connection
-      let domainName: string | undefined;
-      let domainSchema: any = undefined;
-      let resolvedDomainType = command.domainType;
-      let resolvedDomainId = command.domainId;
-
-      // Handle legacy table connection
-      if (command.tableId && !command.domainType) {
-        resolvedDomainType = 'table';
-        resolvedDomainId = command.tableId;
-      }
-
-      if (resolvedDomainType && resolvedDomainId) {
-        const validation = await this.validateDomainConnection(resolvedDomainType, resolvedDomainId, command.organizationId);
+      // 1. Validate domain connection and get domain info
+      let contextMetadata: ChatContextMetadata;
+      
+      if (command.domainType && command.domainId) {
+        const validation = await this.validateDomainConnection(command.domainType, command.domainId, command.organizationId);
         if (!validation.valid) {
           return { success: false, error: validation.error };
         }
-        domainName = validation.domainName;
-        domainSchema = validation.domainSchema;
-      }
-
-      // 2. Generate title if not provided
-      const title = command.title || ChatEntity.generateContextTitle(
-        resolvedDomainType, 
-        domainName, 
-        command.tableId, 
-        resolvedDomainType === 'table' ? domainName : undefined
-      );
-
-      // 3. Create context metadata
-      let contextMetadata: ChatContextMetadata;
-      if (resolvedDomainType) {
-        contextMetadata = ChatEntity.createDomainContextMetadata(resolvedDomainType, domainSchema);
+        
+        // Create domain-specific context metadata
+        contextMetadata = ChatEntity.createDomainContextMetadata(
+          command.domainType,
+          command.domainId,
+          validation.domainName!,
+          validation.domainSchema
+        );
       } else {
+        // Create organization-wide context metadata
         contextMetadata = ChatEntity.createOrganizationContextMetadata();
       }
 
-      // 4. Validate chat data
+      // 2. Generate title if not provided
+      const title = command.title || ChatEntity.generateContextTitle(contextMetadata);
+
+      // 3. Validate chat data
       const chatData: CreateChatData = {
         organizationId: command.organizationId,
         createdBy: command.createdBy,
         title,
         description: command.description,
-        domainType: resolvedDomainType,
-        domainId: resolvedDomainId,
-        tableId: command.tableId, // Maintain legacy compatibility
         contextMetadata
       };
 
@@ -134,14 +117,14 @@ export class ChatApplicationService {
       // 5. Create chat
       const chat = await this.chatRepository.create(chatData);
 
-      // 6. Create welcome message
-      const welcomeMessageData = this.createWelcomeMessage(chat.id, resolvedDomainType, domainName);
+      // 4. Create welcome message
+      const welcomeMessageData = this.createWelcomeMessage(chat.id, contextMetadata);
       await this.messageRepository.create(welcomeMessageData);
 
-      // 7. Update chat message count
+      // 5. Update chat message count
       await this.chatRepository.updateMessageStats(chat.id, 1, new Date());
 
-      const chatTypeDesc = resolvedDomainType ? `${resolvedDomainType}-connected` : 'organization';
+      const chatTypeDesc = contextMetadata.contextType === 'organization' ? 'organization' : `${contextMetadata.contextType}-connected`;
       console.log(`[CHAT-APP-SERVICE] Created ${chatTypeDesc} chat: ${chat.title}`);
 
       return {
@@ -229,10 +212,13 @@ export class ChatApplicationService {
   }
 
   /**
-   * Create appropriate welcome message based on domain type
+   * Create appropriate welcome message based on context metadata
    */
-  private createWelcomeMessage(chatId: string, domainType?: DomainType | null, domainName?: string): CreateChatMessageData {
-    if (domainType && domainName) {
+  private createWelcomeMessage(chatId: string, contextMetadata: ChatContextMetadata): CreateChatMessageData {
+    if (contextMetadata.contextType !== 'organization' && contextMetadata.domainSchema?.name) {
+      const domainType = contextMetadata.contextType;
+      const domainName = contextMetadata.domainSchema.name;
+      
       switch (domainType) {
         case 'table':
           return ChatMessageEntity.createTableWelcomeMessage(chatId, 0, domainName);

@@ -263,7 +263,6 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
     return {
       id: agent.id.value,
       name: agent.name,
-      role: agent.role || undefined,
       description: agent.description || undefined,
       persona: agent.persona || undefined,
       ownerId: agent.ownerId.value,
@@ -276,7 +275,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       capabilities,
       status: agent.status || undefined,
       organizationId: agent.organizationId.value,
-      roleId: agent.roleId || undefined,
+      role: agent.role || 'assistant',
       apiKey: agent.apiKey?.value || undefined,
     };
   }

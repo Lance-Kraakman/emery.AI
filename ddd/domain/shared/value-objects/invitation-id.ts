@@ -10,7 +10,4 @@ export class InvitationId extends BaseId<'InvitationId'> {
     return new InvitationId(value);
   }
 
-  static placeholder(): InvitationId {
-    return new InvitationId(0);
-  }
 }

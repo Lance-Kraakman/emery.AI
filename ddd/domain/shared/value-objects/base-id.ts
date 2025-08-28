@@ -5,14 +5,12 @@ export abstract class BaseId<T extends string = string> {
   protected readonly _value: number;
   protected readonly _type: T;
 
-  constructor(value: number, type: T, allowZero = false) {
+  constructor(value: number, type: T) {
     if (!Number.isInteger(value)) {
       throw new Error(`${type} must be an integer`);
     }
     
-    if (allowZero && value < 0) {
-      throw new Error(`${type} must be a non-negative integer`);
-    } else if (!allowZero && value <= 0) {
+    if (value <= 0) {
       throw new Error(`${type} must be a positive integer`);
     }
     
@@ -30,5 +28,23 @@ export abstract class BaseId<T extends string = string> {
 
   toString(): string {
     return this._value.toString();
+  }
+
+  /**
+   * Create an ID for a new entity (allows 0 as placeholder before persistence)
+   * @param type - The ID type for error messages
+   * @returns BaseId with value 0
+   */
+  protected static createNew<T extends string>(type: T, value: number = 0): BaseId<T> {
+    // Allow 0 for new entities, but still validate it's an integer
+    if (!Number.isInteger(value)) {
+      throw new Error(`${type} must be an integer`);
+    }
+    
+    // Create instance without calling constructor to bypass positive integer check
+    const instance = Object.create(BaseId.prototype);
+    instance._value = value;
+    instance._type = type;
+    return instance;
   }
 }

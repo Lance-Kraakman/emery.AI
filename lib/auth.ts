@@ -5,7 +5,7 @@ import EmailProvider from "next-auth/providers/email"
 import { DrizzleAdapter } from "@auth/drizzle-adapter"
 import { db } from "./db/client"
 import { sendVerificationRequestEmail } from "./email"
-import { users, accounts, sessions, verificationTokens, roles, organizations, userOrganizations } from "./db/schema"
+import { users, accounts, sessions, verificationTokens, organizations, userOrganizations } from "./db/schema"
 import { eq } from "drizzle-orm"
 import { getServerSession } from "next-auth"
 import { getSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react"
@@ -80,7 +80,7 @@ export const authOptions = {
 
           session.user.id = user.id;
           session.user.currentOrganizationId = userRecord?.currentOrganizationId;
-          session.user.roleId = userRecord?.roleId;
+          session.user.organizationRole = userRecord?.organizationRole;
           session.user.jobTitle = userRecord?.jobTitle;
           
           // Get user's organizations and current organization details
@@ -131,7 +131,7 @@ export const authOptions = {
           }
           
           // After attempting to set the organization, check if the user still needs setup.
-          const needsSetup = !session.user.currentOrganizationId || !userRecord.roleId;
+          const needsSetup = !session.user.currentOrganizationId || !userRecord?.organizationRole;
           session.user.needsSetup = needsSetup;
 
           if (needsSetup) {
@@ -214,23 +214,40 @@ export const signOut = nextAuthSignOut
 
 export async function hasPermission(userId: string, permission: string): Promise<boolean> {
   try {
-    // Check if it's a user
+    // Check user's organization role using simplified RBAC
     const userQuery = await db
       .select({
-        user: users,
-        role: roles,
+        organizationRole: users.organizationRole,
       })
       .from(users)
-      .leftJoin(roles, eq(users.roleId, roles.id))
       .where(eq(users.id, userId))
       .limit(1);
 
     if (userQuery.length > 0) {
       const user = userQuery[0];
-      if (!user?.role?.permissions) {
+      if (!user?.organizationRole) {
         return false;
       }
-      return user.role.permissions.includes(permission);
+      
+      // Simple permission check based on organization role
+      const role = user.organizationRole;
+      
+      // Owner has all permissions
+      if (role === 'owner') return true;
+      
+      // Admin has most permissions except organization management
+      if (role === 'admin') {
+        const adminPermissions = ['canManageUsers', 'canCreateAgents', 'canManageAgents', 'canViewAgents', 'canExecuteAgents'];
+        return adminPermissions.includes(permission);
+      }
+      
+      // Member has basic permissions
+      if (role === 'member') {
+        const memberPermissions = ['canViewAgents', 'canExecuteAgents'];
+        return memberPermissions.includes(permission);
+      }
+      
+      return false;
     }
 
     // If not a user, check if it's a worker (by API key or worker ID)
