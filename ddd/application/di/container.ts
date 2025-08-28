@@ -7,7 +7,7 @@ import { DrizzleOrganizationRepository } from '@/ddd/infrastructure/db/repositor
 import { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import { DrizzleUserRepository } from '@/ddd/infrastructure/db/repositories/users/drizzle-user-repository';
 import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
-import { DrizzleDynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/drizzle-dynamic-table-repository';
+import { DynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/dynamic-table-repository';
 import { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
 import { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
 import { DuckDBTableQueryService } from '@/ddd/infrastructure/data/duckdb-table-query-service';
@@ -46,6 +46,9 @@ import { FieldApplicationService } from '@/ddd/application/services/fields/field
 import { RowApplicationService } from '@/ddd/application/services/rows/row-application-service';
 import { FileApplicationService } from '@/ddd/application/services/files/file-application-service';
 import { ChatApplicationService } from '@/ddd/application/services/chat/chat-application-service';
+
+// Domain services
+import { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 
 // Field and table services
 import { ArrowDataStorageService } from '@/ddd/infrastructure/tables/arrow-data-storage-service';
@@ -108,6 +111,9 @@ interface RepositoryRegistry {
   FieldApplicationService: FieldApplicationService;
   RowApplicationService: RowApplicationService;
   FileApplicationService: FileApplicationService;
+  
+  // Domain services
+  DynamicTableService: DynamicTableService;
   
   // Chat domain services
   IChatRepository: IChatRepository;
@@ -242,10 +248,16 @@ export class DIContainer {
     const arrowDataStorageService = new ArrowDataStorageService();
         
     // Create table repository with data storage service
-    const tableRepository = new DrizzleDynamicTableRepository(
+    const tableRepository = new DynamicTableRepository(
       fieldRepository,
       arrowDataStorageService,
       tableQueryService
+    );
+
+    // Create DynamicTableService - central domain service for all table operations
+    const dynamicTableService = new DynamicTableService(
+      tableRepository,
+      fieldRepository
     );
 
     // Initialize DatabaseApplicationService with proper dependencies
@@ -276,6 +288,7 @@ export class DIContainer {
     this.repositories.set('InvitationApplicationService', invitationApplicationService);
     this.repositories.set('IFieldRepository', fieldRepository);
     this.repositories.set('IDynamicTableRepository', tableRepository);
+    this.repositories.set('DynamicTableService', dynamicTableService);
     
     // Register simplified data storage service
     this.repositories.set('DataStorageService', arrowDataStorageService);
@@ -442,6 +455,7 @@ type ServiceMap = {
   // New data services
   DataStorageService: DataStorageService;
   TableQueryService: TableQueryService;
+  DynamicTableService: DynamicTableService;
   
   // Services
   AgentTaskApplicationService: AgentTaskApplicationService;
@@ -499,6 +513,7 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
 export const getOrganizationRepository = createGetter('OrganizationRepository');
 export const getUserRepository = createGetter('UserRepository');
 export const getDynamicTableRepository = createGetter('DynamicTableRepository');
+export const getDynamicTableService = createGetter('DynamicTableService');
 export const getDataStorageService = createGetter('DataStorageService');
 export const getTableQueryService = createGetter('TableQueryService');
 export const getFieldRepository = createGetter('FieldRepository');

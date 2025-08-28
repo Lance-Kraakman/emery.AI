@@ -16,6 +16,7 @@ import type {
   TableQueryService, 
   QueryResult
 } from '@/ddd/domain/tables/services/table-query-service';
+import { TableId } from '@/ddd/domain/shared/value-objects';
 import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import { DuckDB, eq, gt, gte, lt, lte, like, type QueryFilter } from './duckdb-sql-builder';
 
@@ -126,7 +127,7 @@ export class DuckDBTableQueryService implements TableQueryService {
   }
 
   async queryTable(
-    tableId: number,
+    tableId: TableId,
     filters?: Record<string, any>,
     orderBy?: string,
     orderDirection?: 'ASC' | 'DESC',
@@ -135,7 +136,7 @@ export class DuckDBTableQueryService implements TableQueryService {
   ): Promise<Result<QueryResult>> {
     try {
       // Get S3 path for table
-      const s3Path = await this.getTableS3Path(tableId);
+      const s3Path = await this.getTableS3Path(tableId.value);
       if (!s3Path) {
         return { success: false, error: 'Table not found' };
       }

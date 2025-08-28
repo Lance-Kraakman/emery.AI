@@ -79,18 +79,6 @@ export class Field {
     return this._type === 'file';
   }
 
-  requiresIndex(): boolean {
-    return JSONB_FIELD_TYPES.includes(this._type);
-  }
-
-  getColumnName(): string {
-    return `field_${this._id.value}`;
-  }
-
-  getPostgresType(): string {
-    return FIELD_TYPE_MAPPING[this._type];
-  }
-
   // Factory methods - entity only created from persistence with real ID
 
   static fromPersistence(data: {
@@ -180,20 +168,8 @@ export type FieldType =
   | 'relation'       // JSONB with GIN index
   | 'file';          // JSONB with GIN index for file metadata
 
-// Type mapping from field types to PostgreSQL types
-export const FIELD_TYPE_MAPPING: Record<FieldType, string> = {
-  text: 'TEXT',
-  number: 'INTEGER', 
-  boolean: 'BOOLEAN',
-  email: 'TEXT',
-  url: 'TEXT',
-  date: 'DATE',
-  relation: 'JSONB',
-  file: 'JSONB',
-} as const;
-
-// Field types that require GIN indexes for performance
-export const JSONB_FIELD_TYPES: FieldType[] = ['relation', 'file'];
+// NOTE: Database-specific type mapping and indexing requirements 
+// have been moved to FieldMapper infrastructure service
 
 // Field validation and constraints
 export interface FieldValidation {

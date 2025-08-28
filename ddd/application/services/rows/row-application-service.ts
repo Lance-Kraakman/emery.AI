@@ -3,11 +3,11 @@ import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-re
 import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
 import type { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
 import type { Result } from '@/ddd/domain/shared/result';
-import type { Field } from '@/ddd/domain/fields/entities/field';
 import type { QueryFilter } from '@/ddd/infrastructure/data/duckdb-sql-builder';
-import type { StoredFile } from '@/ddd/domain/files/entities/file-storage';
-import { Row, RowCollection, FieldValue } from '@/ddd/domain/tables/value-objects/row';
-import { TableId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { Row, RowCollection } from '@/ddd/domain/tables/value-objects/row';
+import { TableId } from '@/ddd/domain/shared/value-objects';
+import { FieldProcessor } from '@/ddd/domain/fields/services/field-processor';
+import { FieldMapper } from '@/ddd/infrastructure/fields/field-mapper';
 
 export interface CreateRowCommand {
   tableId: number;
@@ -62,6 +62,9 @@ export interface RowFilterCondition {
 export type RowApplicationServiceResult<T = any> = Result<T>;
 
 export class RowApplicationService {
+  private readonly fieldProcessor = new FieldProcessor();
+  private readonly fieldMapper = new FieldMapper();
+
   constructor(
     private readonly tableRepository: IDynamicTableRepository,
     private readonly fieldRepository: IFieldRepository,
@@ -83,9 +86,9 @@ export class RowApplicationService {
         };
       }
 
-      // 2. Get field definitions and validate row data
+      // 2. Get field definitions and validate row data using domain service
       const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(command.tableId));
-      const validation = this.validateRowData(fields, command.data);
+      const validation = this.fieldProcessor.validateRowData(fields, command.data);
       if (!validation.valid) {
         return {
           success: false,
@@ -94,11 +97,8 @@ export class RowApplicationService {
         };
       }
 
-      // 3. Process special field types
-      const processedData = await this.processRowData(command.tableId, command.data);
-
-      // 4. Create row using repository - pass processed field data directly
-      const newRowData = await this.tableRepository.insertRow(TableId.fromNumber(command.tableId), processedData);
+      // 3. Repository handles all processing (field conversion, storage, etc.)
+      const newRowData = await this.tableRepository.insertRow(TableId.fromNumber(command.tableId), command.data);
 
       // 5. Convert to domain Row value object
       const fieldSlugs = fields.map((f: any) => f.slug);
@@ -144,9 +144,9 @@ export class RowApplicationService {
         };
       }
 
-      // 3. Get field definitions and validate update data
+      // 3. Get field definitions and validate update data using domain service
       const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(command.tableId));
-      const validation = this.validateRowData(fields, command.data);
+      const validation = this.fieldProcessor.validateRowData(fields, command.data);
       if (!validation.valid) {
         return {
           success: false,
@@ -155,11 +155,8 @@ export class RowApplicationService {
         };
       }
 
-      // 4. Process special field types
-      const processedData = await this.processRowData(command.tableId, command.data);
-
-      // 5. Update row using repository
-      const updatedRowData = await this.tableRepository.updateRow(TableId.fromNumber(command.tableId), command.rowId, processedData);
+      // 4. Repository handles all processing (field conversion, storage, etc.)
+      const updatedRowData = await this.tableRepository.updateRow(TableId.fromNumber(command.tableId), command.rowId, command.data);
 
       // 6. Convert to domain Row value object
       const fieldSlugs = fields.map((f: any) => f.slug);
@@ -245,9 +242,9 @@ export class RowApplicationService {
       return null;
     }
 
-    // Get field information to create proper Row value object
+    // Get field information and process row data using domain service
     const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
-    const mappedData = await this.mapRowToFrontend(tableId, rowData);
+    const mappedData = this.fieldProcessor.processRowFromStorage(fields, rowData);
     const fieldSlugs = fields.map((f: any) => f.slug);
     const fieldTypes = fields.reduce((acc: any, f: any) => ({ ...acc, [f.slug]: f.type }), {});
 
@@ -257,7 +254,7 @@ export class RowApplicationService {
   /**
    * Get rows from a table with filters using DuckDB for efficient SQL-based querying
    */
-  async getRows(tableId: number, filters?: RowFilters): Promise<RowCollection> {
+  async getRows(tableId: TableId, filters?: RowFilters): Promise<RowCollection> {
     // Convert row filters to DuckDB QueryFilter format
     const queryFilters = await this.convertRowFiltersToQueryFilters(filters, tableId);
     
@@ -275,23 +272,23 @@ export class RowApplicationService {
     if (!queryResult.success) {
       console.error('[ROW-APP-SERVICE] DuckDB query failed:', queryResult.error);
       // Return empty collection on query failure
-      return RowCollection.fromPlainObjects([], tableId, [], {});
+      return RowCollection.fromPlainObjects([], tableId.value, [], {});
     }
 
     const rowsData = queryResult.data?.rows || [];
 
     // Get field information to create proper Row value objects
-    const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
+    const fields = await this.fieldRepository.findByTableId(tableId);
     const fieldSlugs = fields.map((f: any) => f.slug);
     const fieldTypes = fields.reduce((acc: any, f: any) => ({ ...acc, [f.slug]: f.type }), {});
 
-    // Map field_X columns back to field slugs and create Row objects
+    // Process rows using domain service and create Row objects
     const mappedRowsData = [];
     for (const rowData of rowsData) {
-      mappedRowsData.push(await this.mapRowToFrontend(tableId, rowData));
+      mappedRowsData.push(this.fieldProcessor.processRowFromStorage(fields, rowData));
     }
 
-    return RowCollection.fromPlainObjects(mappedRowsData, tableId, fieldSlugs, fieldTypes);
+    return RowCollection.fromPlainObjects(mappedRowsData, tableId.value, fieldSlugs, fieldTypes);
   }
 
   /**
@@ -308,12 +305,12 @@ export class RowApplicationService {
         };
       }
 
-      // 2. Get field definitions and validate all rows
+      // 2. Get field definitions and validate all rows using domain service
       const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(command.tableId));
       const validationErrors: Array<{ row: number; errors: Array<{ field: string; error: string }> }> = [];
       
       for (let i = 0; i < command.rows.length; i++) {
-        const validation = this.validateRowData(fields, command.rows[i]);
+        const validation = this.fieldProcessor.validateRowData(fields, command.rows[i]);
         if (!validation.valid) {
           validationErrors.push({ row: i, errors: validation.errors });
         }
@@ -329,11 +326,10 @@ export class RowApplicationService {
         };
       }
 
-      // 3. Process and insert all rows
+      // 3. Insert all rows (repository handles processing)
       const createdRowsData = [];
       for (const rowData of command.rows) {
-        const processedData = await this.processRowData(command.tableId, rowData);
-        const newRowData = await this.tableRepository.insertRow(TableId.fromNumber(command.tableId), processedData);
+        const newRowData = await this.tableRepository.insertRow(TableId.fromNumber(command.tableId), rowData);
         createdRowsData.push(newRowData);
       }
 
@@ -378,9 +374,9 @@ export class RowApplicationService {
 
       for (const update of command.updates) {
         try {
-          // Validate update data
+          // Validate update data using domain service
           const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(command.tableId));
-          const validation = this.validateRowData(fields, update.data);
+          const validation = this.fieldProcessor.validateRowData(fields, update.data);
           if (!validation.valid) {
             errors.push({
               rowId: update.rowId,
@@ -389,9 +385,8 @@ export class RowApplicationService {
             continue;
           }
 
-          // Process and update row
-          const processedData = await this.processRowData(command.tableId, update.data);
-          const updatedRow = await this.tableRepository.updateRow(TableId.fromNumber(command.tableId), update.rowId, processedData);
+          // Update row (repository handles processing)
+          const updatedRow = await this.tableRepository.updateRow(TableId.fromNumber(command.tableId), update.rowId, update.data);
           updatedRows.push(updatedRow);
 
         } catch (error) {
@@ -450,27 +445,24 @@ export class RowApplicationService {
   }
 
   /**
-   * Convert RowFilters to DuckDB QueryFilter format
+   * Convert RowFilters to DuckDB QueryFilter format using FieldMapper
    */
-  private async convertRowFiltersToQueryFilters(filters?: RowFilters, tableId?: number): Promise<QueryFilter[]> {
+  private async convertRowFiltersToQueryFilters(filters?: RowFilters, tableId?: TableId): Promise<QueryFilter[]> {
     const queryFilters: QueryFilter[] = [];
     
     if (!filters) {
       return queryFilters;
     }
 
+    // Get fields for mapping
+    const fields = tableId ? await this.fieldRepository.findByTableId(tableId) : [];
+    const slugToColumnMapping = this.fieldMapper.createSlugToColumnMapping(fields);
+
     // Handle enhanced where conditions (new format)
     if (filters.where && filters.where.length > 0) {
-      const fields = tableId ? await this.fieldRepository.findByTableId(TableId.fromNumber(tableId)) : [];
-      const fieldSlugToId = fields.reduce((acc, field) => ({
-        ...acc,
-        [field.slug]: field.id.value
-      }), {} as Record<string, number>);
-
       for (const condition of filters.where) {
         // Map field slug to field_{id} column name for DuckDB query
-        const fieldId = fieldSlugToId[condition.field];
-        const fieldColumn = fieldId ? `field_${fieldId}` : condition.field;
+        const fieldColumn = slugToColumnMapping[condition.field] || condition.field;
         
         queryFilters.push({
           field: fieldColumn,
@@ -482,17 +474,10 @@ export class RowApplicationService {
     }
 
     // Handle legacy filters (backward compatibility)
-    if (filters.filters && Object.keys(filters.filters).length > 0 && tableId) {
-      const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
-      const fieldSlugToId = fields.reduce((acc, field) => ({
-        ...acc,
-        [field.slug]: field.id.value
-      }), {} as Record<string, number>);
-
+    if (filters.filters && Object.keys(filters.filters).length > 0) {
       for (const [fieldSlug, value] of Object.entries(filters.filters)) {
         if (value !== null && value !== undefined) {
-          const fieldId = fieldSlugToId[fieldSlug];
-          const fieldColumn = fieldId ? `field_${fieldId}` : fieldSlug;
+          const fieldColumn = slugToColumnMapping[fieldSlug] || fieldSlug;
           
           queryFilters.push({
             field: fieldColumn,
@@ -504,264 +489,5 @@ export class RowApplicationService {
     }
 
     return queryFilters;
-  }
-
-  /**
-   * Process row data to handle special field types
-   */
-  private async processRowData(tableId: number, data: Record<string, any>): Promise<Record<string, any>> {
-    const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
-    const processedData: Record<string, any> = {};
-
-    for (const field of fields) {
-      const value = data[field.slug];
-      
-      // Only skip if value is explicitly undefined - allow null, empty strings, 0, false, etc.
-      // These are all legitimate field values that should be stored in the database
-      if (value === undefined) {
-        continue;
-      }
-
-      // Map from field slug to field_{id} column name
-      const columnName = `field_${field.id}`;
-
-      // Handle special field types
-      switch (field.type) {
-        case 'relation':
-          // Ensure relation data is properly formatted as JSONB
-          if (typeof value === 'string') {
-            try {
-              processedData[columnName] = JSON.parse(value);
-            } catch {
-              processedData[columnName] = value;
-            }
-          } else {
-            processedData[columnName] = value;
-          }
-          break;
-
-        case 'file':
-          // Handle file field data
-          if (typeof value === 'string') {
-            try {
-              processedData[columnName] = JSON.parse(value);
-            } catch {
-              processedData[columnName] = value;
-            }
-          } else {
-            processedData[columnName] = value;
-          }
-          break;
-
-        case 'date':
-          // Ensure date is properly formatted
-          if (value instanceof Date) {
-            processedData[columnName] = value.toISOString();
-          } else {
-            processedData[columnName] = value;
-          }
-          break;
-
-        default:
-          processedData[columnName] = value;
-      }
-    }
-
-    return processedData;
-  }
-
-  /**
-   * Validate row data against field definitions
-   */
-  private validateRowData(fields: Field[], data: Record<string, any>): { valid: boolean; errors: Array<{ field: string; error: string }> } {
-    const errors: Array<{ field: string; error: string }> = [];
-
-    for (const field of fields) {
-      const value = data[field.slug];
-      
-      // Check required fields
-      if (field.required && (value === undefined || value === null || value === '')) {
-        errors.push({
-          field: field.name,
-          error: 'Field is required'
-        });
-      }
-
-      // Type validation
-      if (value !== undefined && value !== null) {
-        switch (field.type) {
-          case 'number':
-            if (isNaN(Number(value))) {
-              errors.push({
-                field: field.name,
-                error: 'Must be a valid number'
-              });
-            }
-            break;
-          case 'boolean':
-            if (typeof value !== 'boolean' && value !== 'true' && value !== 'false') {
-              errors.push({
-                field: field.name,
-                error: 'Must be a valid boolean'
-              });
-            }
-            break;
-          case 'date':
-            if (!(value instanceof Date) && isNaN(Date.parse(value))) {
-              errors.push({
-                field: field.name,
-                error: 'Must be a valid date'
-              });
-            }
-            break;
-          case 'email':
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(String(value))) {
-              errors.push({
-                field: field.name,
-                error: 'Must be a valid email address'
-              });
-            }
-            break;
-          case 'url':
-            try {
-              new URL(String(value));
-            } catch {
-              errors.push({
-                field: field.name,
-                error: 'Must be a valid URL'
-              });
-            }
-            break;
-        }
-      }
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors
-    };
-  }
-
-  /**
-   * Map row data from database format to frontend format
-   */
-  private async mapRowToFrontend(tableId: number, row: Record<string, any>): Promise<Record<string, any>> {
-    const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(tableId));
-    const mappedRow: Record<string, any> = {
-      id: row.id,
-      created_at: row.created_at,
-      updated_at: row.updated_at
-    };
-
-    for (const field of fields) {
-      const dbColumn = `field_${field.id}`;
-      const value = row[dbColumn];
-      
-      if (value !== undefined) {
-        // Handle special field types - allow null values to be displayed as empty
-        if (field.type === 'relation' || field.type === 'file') {
-          // JSONB fields might need parsing
-          if (typeof value === 'string') {
-            try {
-              mappedRow[field.slug] = JSON.parse(value);
-            } catch {
-              mappedRow[field.slug] = value;
-            }
-          } else {
-            mappedRow[field.slug] = value;
-          }
-        } else {
-          mappedRow[field.slug] = value;
-        }
-      }
-    }
-
-    return mappedRow;
-  }
-
-  /**
-   * Get all files stored in field values across all tables in an organization
-   * Uses DuckDB for efficient cross-table querying
-   */
-  async getFilesByOrganization(organizationId: number): Promise<StoredFile[]> {
-    try {
-      // Get all file-type fields for this organization
-      const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(0)); // We need a method to find all fields by org
-      
-      // For now, let's get all tables in the organization and then their file fields
-      // This would be more efficient with a proper query, but demonstrates DuckDB usage
-      
-      // Get all tables for the organization
-      const tables = await this.tableRepository.findByOrganization(OrganizationId.fromNumber(organizationId));
-      const files: StoredFile[] = [];
-
-      for (const table of tables) {
-        // Get file fields for this table
-        const tableFields = await this.fieldRepository.findByTableId(table.id);
-        const fileFields = tableFields.filter(field => field.type === 'file');
-
-        if (fileFields.length === 0) continue;
-
-        // Use DuckDB to query file field values from this table
-        const fileFieldColumns = fileFields.map((f: any) => `field_${f.id}`);
-        
-        for (const fileField of fileFields) {
-          const filters = [{
-            field: `field_${fileField.id}`,
-            operator: 'isNotNull' as const,
-            value: null
-          }];
-
-          const filtersObj = { [`field_${fileField.id}`]: 'NOT NULL' };
-          const queryResult = await this.queryService.queryTable(
-            table.id.value,
-            filtersObj
-          );
-
-          if (queryResult.success && queryResult.data?.rows) {
-            for (const row of queryResult.data.rows) {
-              const fileValue = row[`field_${fileField.id}`];
-              
-              if (fileValue) {
-                let fileData;
-                try {
-                  fileData = typeof fileValue === 'string' ? JSON.parse(fileValue) : fileValue;
-                } catch {
-                  continue; // Skip invalid JSON
-                }
-
-                if (fileData && fileData.key) {
-                  files.push({
-                    id: fileData.id || fileData.key.split('/').pop()?.split('_')[0] || 'unknown',
-                    key: fileData.key,
-                    name: fileData.name || fileData.originalName || 'unknown',
-                    size: fileData.size || 0,
-                    mimeType: fileData.mimeType || 'application/octet-stream',
-                    uploadedAt: fileData.uploadedAt ? new Date(fileData.uploadedAt) : new Date(),
-                    metadata: {
-                      ...fileData.metadata || {},
-                      tableId: table.id,
-                      tableName: table.name,
-                      fieldId: fileField.id,
-                      fieldName: fileField.name,
-                      organizationId
-                    },
-                    checksums: fileData.checksums || {},
-                  });
-                }
-              }
-            }
-          }
-        }
-      }
-
-      console.log(`[ROW-APP-SERVICE] Found ${files.length} files across ${tables.length} tables in organization ${organizationId}`);
-      return files;
-
-    } catch (error) {
-      console.error('[ROW-APP-SERVICE] Error getting files by organization:', error);
-      return [];
-    }
   }
 }

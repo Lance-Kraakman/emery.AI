@@ -13,6 +13,7 @@ import { eq, and, asc } from 'drizzle-orm';
 import type { DbClient } from '@/lib/db/client';
 import type postgres from 'postgres';
 import { fields } from '@/lib/db/schema';
+import { FieldMapper } from '@/ddd/infrastructure/fields/field-mapper';
 
 import type { 
   IFieldRepository 
@@ -28,6 +29,8 @@ import type {
 import { FieldId, TableId } from '@/ddd/domain/shared/value-objects';
 
 export class DrizzleFieldRepository implements IFieldRepository {
+  private readonly fieldMapper = new FieldMapper();
+
   constructor(
     private readonly db: DbClient,
     private readonly rawClient?: postgres.Sql
@@ -58,6 +61,22 @@ export class DrizzleFieldRepository implements IFieldRepository {
   }
 
   async create(data: CreateFieldData): Promise<Field> {
+    // Use FieldMapper to get database-specific information
+    const tempField = Field.fromPersistence({
+      id: 0, // temporary
+      tableId: data.tableId.value,
+      name: data.name,
+      slug: data.slug,
+      type: data.type,
+      orderIndex: data.orderIndex || 0,
+      required: data.required || false,
+      relatedTableId: data.relatedTableId?.value || null,
+      metadata: data.metadata || null,
+      createdAt: new Date()
+    });
+
+    const dbMapping = this.fieldMapper.getDatabaseMapping(tempField);
+
     const [newField] = await this.db
       .insert(fields)
       .values({
@@ -70,8 +89,17 @@ export class DrizzleFieldRepository implements IFieldRepository {
         fieldConfig: data.metadata ? {
           // Map generic metadata to fieldConfig structure
           targetTableId: data.relatedTableId?.value,
+          postgresType: dbMapping.postgresType,
+          requiresIndex: dbMapping.requiresIndex,
           ...data.metadata
-        } : (data.relatedTableId ? { targetTableId: data.relatedTableId.value } : null)
+        } : (data.relatedTableId ? { 
+          targetTableId: data.relatedTableId.value,
+          postgresType: dbMapping.postgresType,
+          requiresIndex: dbMapping.requiresIndex
+        } : {
+          postgresType: dbMapping.postgresType,
+          requiresIndex: dbMapping.requiresIndex
+        })
       })
       .returning();
 
@@ -164,12 +192,26 @@ export class DrizzleFieldRepository implements IFieldRepository {
       tableId: field.tableId,
       name: field.name,
       slug: field.slug,
-      type: field.type as FieldType,
+      type: this.fieldMapper.validateFieldType(field.type),
       orderIndex: field.orderIndex || 0,
       required: field.required || false,
       relatedTableId: field.fieldConfig?.targetTableId || null,
       metadata: field.fieldConfig || null,
       createdAt: field.createdAt!
     });
+  }
+
+  /**
+   * Get database mapping information for a field (used by other infrastructure services)
+   */
+  getFieldDatabaseMapping(field: Field) {
+    return this.fieldMapper.getDatabaseMapping(field);
+  }
+
+  /**
+   * Get column name for a field ID (used by other infrastructure services)
+   */
+  getColumnName(fieldId: FieldId): string {
+    return this.fieldMapper.getColumnName(fieldId);
   }
 }

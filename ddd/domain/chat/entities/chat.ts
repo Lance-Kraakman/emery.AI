@@ -256,3 +256,6 @@ export class ChatUtils {
     return `Organization Chat - ${new Date().toLocaleDateString()}`;
   }
 }
+
+// Export Chat as ChatEntity for backward compatibility
+export { Chat as ChatEntity };

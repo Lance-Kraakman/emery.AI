@@ -1,12 +1,13 @@
 /**
- * Drizzle Dynamic Table Repository
+ * Dynamic Table Repository
  * 
  * Infrastructure repository implementation coordinating:
- * - PostgreSQL metadata (tables table)
+ * - PostgreSQL metadata (tables table) via Drizzle
  * - S3 Arrow data storage
- * - Field metadata coordination
+ * - Pure data access layer - no business logic
  * 
- * AIDEV-NOTE: Proper DDD repository implementation following consistent naming patterns
+ * AIDEV-NOTE: Hybrid repository implementation using both Drizzle and S3,
+ * focused on data access only. Business logic handled by DynamicTableService.
  */
 
 import { db } from '@/lib/db/client';
@@ -24,13 +25,15 @@ import type {
 } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import {
   DynamicTable,
-  type DynamicTableRow,
   type CreateRowData,
   type UpdateRowData,
   type RowQueryOptions
 } from '@/ddd/domain/tables/entities/dynamic-table';
+import { Row } from '@/ddd/domain/tables/value-objects/row';
 import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
 import type { FieldType } from '@/ddd/domain/fields/entities/field';
+import { FieldProcessor } from '@/ddd/domain/fields/services/field-processor';
+import { FieldMapper } from '@/ddd/infrastructure/fields/field-mapper';
 import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import type { TableSchema, FieldSchema } from '@/ddd/domain/tables/types/schema-types';
 import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
@@ -38,7 +41,10 @@ import { ResultHelpers } from '@/ddd/domain/shared/result';
 import type { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
 import type { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
 
-export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
+export class DynamicTableRepository implements IDynamicTableRepository {
+  private readonly fieldProcessor = new FieldProcessor();
+  private readonly fieldMapper = new FieldMapper();
+
   constructor(
     private readonly fieldRepository: IFieldRepository,
     private readonly dataStorageService: DataStorageService,
@@ -252,7 +258,7 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
-  async insertRow(tableId: TableId, data: CreateRowData): Promise<DynamicTableRow> {
+  async insertRow(tableId: TableId, data: CreateRowData): Promise<Row> {
     // AIDEV-NOTE: Simple atomic approach - load all data, add row, save all data
     try {
       // 1. Get table metadata
@@ -268,24 +274,29 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
       }
       const schema = schemaResult.data;
 
-      // 3. Basic data validation - complex validation moved to application layer
+      // 3. Get fields for processing
+      const fields = await this.fieldRepository.findByTableId(tableId);
 
-      // 4. Add system fields
+      // 4. Process row data using domain service (converts slug → column format)
+      const processedData = this.fieldProcessor.processRowForStorage(fields, data);
+      const columnData = this.fieldMapper.convertRowToColumnFormat(fields, processedData);
+
+      // 5. Add system fields
       const rowWithId: DynamicTableRow = {
         id: nanoid(),
-        ...validation.data,
+        ...columnData,
         created_at: new Date(),
         updated_at: new Date()
       };
 
-      // 5. Get existing data from S3
+      // 6. Get existing data from S3
       const s3Path = S3TablePath.fromPath(table.storageLocation);
       const existingData = await this.loadTableData(s3Path);
 
-      // 6. Add new row
+      // 7. Add new row
       existingData.push(rowWithId);
 
-      // 7. Save back to S3
+      // 8. Save back to S3
       await this.saveTableData(s3Path, existingData, schema);
 
       return rowWithId;
@@ -296,11 +307,11 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
-  async findRows(tableId: TableId, options?: RowQueryOptions): Promise<DynamicTableRow[]> {
+  async findRows(tableId: TableId, options?: RowQueryOptions): Promise<Row[]> {
     return await this.getRows(tableId, options);
   }
 
-  async getRows(tableId: TableId, options?: RowQueryOptions): Promise<DynamicTableRow[]> {
+  async getRows(tableId: TableId, options?: RowQueryOptions): Promise<Row[]> {
     try {
       const table = await this.findById(tableId);
       if (!table) {
@@ -321,7 +332,7 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
-  async getRow(tableId: TableId, rowId: string): Promise<DynamicTableRow | null> {
+  async getRow(tableId: TableId, rowId: string): Promise<Row | null> {
     try {
       const table = await this.findById(tableId);
       if (!table) {
@@ -341,7 +352,7 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
-  async updateRow(tableId: TableId, rowId: string, data: UpdateRowData): Promise<DynamicTableRow> {
+  async updateRow(tableId: TableId, rowId: string, data: UpdateRowData): Promise<Row> {
     // AIDEV-NOTE: Simple atomic approach - load all data, update row, save all data
     try {
       // 1. Get table metadata and schema
@@ -356,7 +367,10 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
       }
       const schema = schemaResult.data;
 
-      // 2. Basic data validation - complex validation moved to application layer
+      // 2. Get fields and process update data
+      const fields = await this.fieldRepository.findByTableId(tableId);
+      const processedData = this.fieldProcessor.processRowForStorage(fields, data);
+      const columnData = this.fieldMapper.convertRowToColumnFormat(fields, processedData);
 
       // 3. Load all existing data
       const s3Path = S3TablePath.fromPath(table.storageLocation);
@@ -370,7 +384,7 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
 
       const updatedRow: DynamicTableRow = {
         ...allData[rowIndex],
-        ...validation.data,
+        ...columnData,
         updated_at: new Date()
       };
       
@@ -762,13 +776,6 @@ export class DrizzleDynamicTableRepository implements IDynamicTableRepository {
    * Ensures field types conform to domain specifications
    */
   private validateFieldType(fieldType: string): FieldType {
-    const validTypes: FieldType[] = ['text', 'number', 'boolean', 'email', 'url', 'date', 'relation', 'file'];
-    
-    if (validTypes.includes(fieldType as FieldType)) {
-      return fieldType as FieldType;
-    }
-    
-    console.warn(`[TableService] Invalid field type: ${fieldType}, defaulting to 'text'`);
-    return 'text';
+    return this.fieldMapper.validateFieldType(fieldType);
   }
 }
