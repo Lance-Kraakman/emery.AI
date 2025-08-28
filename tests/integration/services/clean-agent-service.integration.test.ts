@@ -61,9 +61,9 @@ const createAgentTestCases: TestCase<CreateAgentInput, CreateAgentOutput>[] = [
 
 describe('Agent Application Service Integration Tests', () => {
   
-  beforeAll(async () => {
-    // Initialize DI container (async now due to seeding)
-    await initializeDI(testClient.db as any, testClient.db as any);
+  beforeAll(() => {
+    // Initialize DI container
+    initializeDI(testClient.db as any, testClient.db as any);
   });
 
   afterAll(async () => {
