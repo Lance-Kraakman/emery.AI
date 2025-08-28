@@ -176,8 +176,9 @@ export class ArrowDataStorageService implements DataStorageService {
               value = Boolean(value);
               break;
             case 'date':
-              const dateValue = value instanceof Date ? value : new Date(value);
-              value = isNaN(dateValue.getTime()) ? null : dateValue.getTime();
+              // FieldProcessor converts dates to ISO strings
+              // Convert ISO string to timestamp for Arrow storage
+              value = new Date(value).getTime();
               break;
             case 'relation':
             case 'file':
@@ -216,9 +217,8 @@ export class ArrowDataStorageService implements DataStorageService {
           // Type conversions back from Arrow
           switch (field.type) {
             case 'date':
-              if (value !== null && value !== undefined) {
-                value = new Date(value);
-              }
+              // Convert timestamp back to ISO string for FieldProcessor
+              value = value ? new Date(value).toISOString() : value;
               break;
             case 'relation':
             case 'file':
