@@ -1,7 +1,7 @@
 import { Client } from 'pg';
 import { initializeDI } from '@/ddd/application/di/container';
 import { db, rawClient } from '@/lib/db/client';
-import { organizations, users, userOrganizations, roles, agents, tasks } from '@/lib/db/schema';
+import { organizations, users, userOrganizations, agents, tasks } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import type { TestCase } from '../../shared/types';
 
@@ -9,7 +9,8 @@ import type { TestCase } from '../../shared/types';
 // Provides minimal, maintainable integration test utilities
 
 export class TestDatabaseClient {
-  private dbClient: Client;
+  private dbClient: Client | null = null;
+  private dbUrl: string;
   
   constructor() {
     // Use standard DATABASE_URL from .env.local.test
@@ -17,7 +18,16 @@ export class TestDatabaseClient {
     if (!dbUrl) {
       throw new Error('DATABASE_URL environment variable is required');
     }
-    this.dbClient = new Client({ connectionString: dbUrl });
+    this.dbUrl = dbUrl;
+    // AIDEV-NOTE: Lazy initialization to avoid creating connections before migrations run
+  }
+
+  // Lazy getter for database client
+  private getDbClient(): Client {
+    if (!this.dbClient) {
+      this.dbClient = new Client({ connectionString: this.dbUrl });
+    }
+    return this.dbClient;
   }
 
   // Direct access to Drizzle instance
@@ -26,20 +36,23 @@ export class TestDatabaseClient {
   }
 
   async connect(): Promise<void> {
-    if (!(this.dbClient as any)._connected) {
-      await this.dbClient.connect();
+    const dbClient = this.getDbClient();
+    if (!(dbClient as any)._connected) {
+      await dbClient.connect();
     }
   }
 
   async disconnect(): Promise<void> {
-    if ((this.dbClient as any)._connected) {
+    if (this.dbClient && (this.dbClient as any)._connected) {
       await this.dbClient.end();
+      this.dbClient = null;
     }
   }
 
   async query(sql: string, params: any[] = []): Promise<any[]> {
     await this.connect();
-    const result = await this.dbClient.query(sql, params);
+    const dbClient = this.getDbClient();
+    const result = await dbClient.query(sql, params);
     return result.rows;
   }
 
@@ -59,4 +72,4 @@ export function initializeTestDI(): void {
 export const testDb = new TestDatabaseClient();
 
 // Re-export seed functions for convenience
-export { seedBasicTestData, seedTestOrganizations, seedTestUsers, seedTestRoles } from './seed-data';
+export { seedBasicTestData, seedTestOrganizations, seedTestUsers } from './seed-data';

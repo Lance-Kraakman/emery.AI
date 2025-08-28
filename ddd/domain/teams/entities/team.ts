@@ -28,19 +28,7 @@ export class Team {
     public readonly createdAt?: Date | null
   ) {}
 
-  static create(config: TeamConfig): Team {
-    return new Team(
-      TeamId.placeholder(), // Will be set by repository after persistence
-      config.name,
-      config.purpose || null,
-      config.description || null,
-      config.responsibilities || null,
-      config.goals || null,
-      config.agentIds || null,
-      config.databaseId || null,
-      config.organizationId
-    );
-  }
+  // Entity only created from persistence with real ID
 
   static fromPersistence(data: {
     id: number;

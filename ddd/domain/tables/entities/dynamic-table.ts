@@ -67,28 +67,7 @@ export class DynamicTable {
     return this._databaseId.equals(databaseId);
   }
 
-  // Factory methods
-  static create(data: CreateDynamicTableData): DynamicTable {
-    // Validate creation data
-    if (!data.name || data.name.trim().length === 0) {
-      throw new Error('Table name is required');
-    }
-    if (!data.storageLocation || data.storageLocation.trim().length === 0) {
-      throw new Error('Storage location is required');
-    }
-
-    return new DynamicTable(
-      TableId.placeholder(), // Will be set by repository
-      data.databaseId,
-      data.organizationId,
-      data.name.trim(),
-      data.storageLocation.trim(),
-      data.metadata,
-      data.createdBy,
-      null, // Will be set by repository
-      null
-    );
-  }
+  // Factory methods - entity only created from persistence with real ID
 
   static fromPersistence(data: {
     id: number;

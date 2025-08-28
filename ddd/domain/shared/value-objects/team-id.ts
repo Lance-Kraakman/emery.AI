@@ -5,14 +5,10 @@ import { BaseId } from './base-id';
 
 export class TeamId extends BaseId<'TeamId'> {
   constructor(value: number) {
-    super(value, 'TeamId', true); // Allow zero for placeholder
+    super(value, 'TeamId');
   }
 
   static fromNumber(value: number): TeamId {
     return new TeamId(value);
-  }
-
-  static placeholder(): TeamId {
-    return new TeamId(0);
   }
 }

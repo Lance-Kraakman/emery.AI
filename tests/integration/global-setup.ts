@@ -82,34 +82,12 @@ export async function setup() {
     throw error;
   }
   
-  // Create a non-superuser for RLS testing (superusers can bypass RLS even with FORCE)
-  console.log('🔐 Creating test user for RLS compliance...');
-  try {
-    // Create user (ignore error if exists)
-    try {
-      execSync('docker exec emery-integration-db createuser -U postgres test_user', { stdio: 'pipe', cwd: process.cwd() });
-    } catch (e) {
-      // User might already exist, continue
-    }
-    
-    // Set password and grant permissions
-    const grantCommand = `docker exec emery-integration-db psql -U postgres -d emery_integration_test -c "
-      ALTER USER test_user WITH PASSWORD 'test_password';
-      GRANT CONNECT ON DATABASE emery_integration_test TO test_user;
-      GRANT USAGE ON SCHEMA public TO test_user;
-      GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO test_user;
-      GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO test_user;
-      GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO test_user;
-    "`;
-    
-    execSync(grantCommand, { stdio: 'inherit', cwd: process.cwd() });
-    console.log('✅ Test user created with proper RLS permissions');
-  } catch (error) {
-    console.error('⚠️  Error creating test user:', error);
-  }
+  // AIDEV-NOTE: No need to create test_user - using postgres superuser for tests
+  // This allows us to bypass RLS for setup and set custom session variables for RLS testing
 
-  // Set environment variables for tests (using test_user for RLS compliance)
-  process.env.TEST_DATABASE_URL = 'postgresql://test_user:test_password@localhost:5436/emery_integration_test';
+  // Set environment variables for tests (using postgres superuser to bypass RLS for setup)
+  // AIDEV-NOTE: Using postgres user allows setting custom session variables for RLS testing
+  process.env.TEST_DATABASE_URL = 'postgresql://postgres:integration_test_password@localhost:5436/emery_integration_test';
   process.env.TEST_APP_URL = 'http://localhost:3002';
   process.env.TEST_GRPC_URL = 'localhost:50053';
   

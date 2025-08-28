@@ -5,7 +5,7 @@ import { BaseId } from './base-id';
 
 export class OrganizationId extends BaseId<'OrganizationId'> {
   constructor(value: number) {
-    super(value, 'OrganizationId', false); // Positive integers only
+    super(value, 'OrganizationId');
   }
 
   static fromNumber(value: number): OrganizationId {

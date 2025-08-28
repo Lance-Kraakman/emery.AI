@@ -7,7 +7,7 @@ import type postgres from 'postgres';
 
 import { users, userOrganizations, organizations } from '@/lib/db/schema';
 import type { DbClient } from '@/lib/db/client';
-import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
+import type { IUserRepository, TransactionContext } from '@/ddd/domain/users/repositories/user-repository';
 import type { 
   User, 
   CreateUserData, 
@@ -25,8 +25,9 @@ export class DrizzleUserRepository implements IUserRepository {
   ) {}
 
   // Basic CRUD operations
-  async findById(id: UserId): Promise<User | null> {
-    const result = await this.db
+  async findById(id: UserId, tx?: TransactionContext): Promise<User | null> {
+    const dbClient = tx || this.db;
+    const result = await dbClient
       .select()
       .from(users)
       .where(eq(users.id, id.value))
@@ -35,8 +36,9 @@ export class DrizzleUserRepository implements IUserRepository {
     return result[0] ? this.mapToEntity(result[0]) : null;
   }
 
-  async findByEmail(email: EmailAddress): Promise<User | null> {
-    const result = await this.db
+  async findByEmail(email: EmailAddress, tx?: TransactionContext): Promise<User | null> {
+    const dbClient = tx || this.db;
+    const result = await dbClient
       .select()
       .from(users)
       .where(eq(users.email, email.value))
@@ -45,7 +47,7 @@ export class DrizzleUserRepository implements IUserRepository {
     return result[0] ? this.mapToEntity(result[0]) : null;
   }
 
-  async create(data: CreateUserData): Promise<User> {
+  async create(data: CreateUserData, tx?: TransactionContext): Promise<User> {
     // Convert Value Objects to primitives for database
     const userData = {
       id: data.id?.value || crypto.randomUUID(),
@@ -54,11 +56,12 @@ export class DrizzleUserRepository implements IUserRepository {
       emailVerified: data.emailVerified,
       image: data.image,
       currentOrganizationId: data.currentOrganizationId?.value || null,
-      roleId: data.roleId,
+      organizationRole: data.organizationRole || 'member', // Use simplified RBAC
       apiKey: data.apiKey?.value || null
     };
 
-    const [newUser] = await this.db
+    const dbClient = tx || this.db;
+    const [newUser] = await dbClient
       .insert(users)
       .values(userData)
       .returning();
@@ -69,6 +72,12 @@ export class DrizzleUserRepository implements IUserRepository {
 
     return this.mapToEntity(newUser);
   }
+  
+  // Bootstrap method for RLS-aware user creation
+  async createWithinTransaction(data: CreateUserData, tx: TransactionContext): Promise<User> {
+    return this.create(data, tx);
+  }
+
 
   async update(id: UserId, data: UpdateUserData): Promise<User> {
     // Convert Value Objects to primitives for database
@@ -78,7 +87,7 @@ export class DrizzleUserRepository implements IUserRepository {
     if (data.emailVerified !== undefined) updateData.emailVerified = data.emailVerified;
     if (data.image !== undefined) updateData.image = data.image;
     if (data.currentOrganizationId !== undefined) updateData.currentOrganizationId = data.currentOrganizationId?.value || null;
-    if (data.roleId !== undefined) updateData.roleId = data.roleId;
+    if (data.organizationRole !== undefined) updateData.organizationRole = data.organizationRole;
     if (data.jobTitle !== undefined) updateData.jobTitle = data.jobTitle;
     if (data.teams !== undefined) updateData.teams = data.teams;
     // Note: apiKey updates handled through separate methods for security
@@ -363,7 +372,7 @@ export class DrizzleUserRepository implements IUserRepository {
       emailVerified: data.emailVerified,
       image: data.image,
       currentOrganizationId: data.currentOrganizationId ? OrganizationId.fromNumber(data.currentOrganizationId) : null,
-      roleId: data.roleId,
+      organizationRole: data.organizationRole || 'member', // Use simplified RBAC
       apiKey: data.apiKey ? ApiKey.fromString(data.apiKey) : null,
       createdAt: data.createdAt
     };

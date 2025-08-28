@@ -44,7 +44,7 @@ export interface DualContextResult {
 }
 
 export interface DomainContextOptions {
-  domainType: 'table' | 'agent' | 'file' | 'team' | 'workflow' | null;
+  domainType: 'table' | 'agent' | 'file' | 'team' | 'workflow' | 'organization' | null;
   domainId?: number;
   organizationId: number;
   query: string;
@@ -217,7 +217,7 @@ export class DualContextRagService {
       const ragSources: RagSource[] = [];
 
       // 1. Get domain-specific (primary) context
-      if (domainType && domainId) {
+      if (domainType && domainType !== 'organization' && domainId) {
         const builder = this.contextBuilders.get(domainType);
         if (builder) {
           primaryContext = await builder.buildContext(domainId, query, organizationId);

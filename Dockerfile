@@ -7,6 +7,7 @@ COPY package.json pnpm-lock.yaml ./
 # Install git for dependencies
 RUN apk add --no-cache git
 RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
+RUN apt install gtimout timeout
 RUN npm i -g pnpm
 
 # AIDEV-NOTE: Install dependencies with frozen lockfile for cache efficiency

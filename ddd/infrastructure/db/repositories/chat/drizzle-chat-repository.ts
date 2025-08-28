@@ -26,12 +26,6 @@ export class DrizzleChatRepository implements IChatRepository {
       createdBy: data.createdBy,
       title: data.title,
       description: data.description || null,
-      
-      // Domain connections
-      domainType: data.domainType || null,
-      domainId: data.domainId || null,
-      tableId: data.tableId || null, // Legacy compatibility
-      
       contextMetadata: data.contextMetadata || null,
       status: 'active',
       messageCount: 0,
@@ -90,7 +84,7 @@ export class DrizzleChatRepository implements IChatRepository {
   }
 
   /**
-   * Find chats connected to a specific table (legacy method)
+   * Find chats connected to a specific table
    */
   async findByTable(tableId: number, organizationId: number, limit = 20, offset = 0): Promise<Chat[]> {
     const results = await this.db
@@ -98,7 +92,7 @@ export class DrizzleChatRepository implements IChatRepository {
       .from(chats)
       .where(and(
         eq(chats.organizationId, organizationId),
-        sql`(${chats.tableId} = ${tableId} OR (${chats.domainType} = 'table' AND ${chats.domainId} = ${tableId}))`
+        sql`${chats.contextMetadata}->>'contextType' = 'table' AND (${chats.contextMetadata}->'domainSchema'->>'id')::integer = ${tableId}`
       ))
       .orderBy(desc(chats.updatedAt))
       .limit(limit)
@@ -115,9 +109,8 @@ export class DrizzleChatRepository implements IChatRepository {
       .select()
       .from(chats)
       .where(and(
-        eq(chats.domainType, domainType),
-        eq(chats.domainId, domainId),
-        eq(chats.organizationId, organizationId)
+        eq(chats.organizationId, organizationId),
+        sql`${chats.contextMetadata}->>'contextType' = ${domainType} AND (${chats.contextMetadata}->'domainSchema'->>'id')::integer = ${domainId}`
       ))
       .orderBy(desc(chats.updatedAt))
       .limit(limit)
@@ -134,8 +127,8 @@ export class DrizzleChatRepository implements IChatRepository {
       .select()
       .from(chats)
       .where(and(
-        eq(chats.domainType, domainType),
-        eq(chats.organizationId, organizationId)
+        eq(chats.organizationId, organizationId),
+        sql`${chats.contextMetadata}->>'contextType' = ${domainType}`
       ))
       .orderBy(desc(chats.updatedAt))
       .limit(limit)
@@ -253,7 +246,7 @@ export class DrizzleChatRepository implements IChatRepository {
         totalChats: sql<number>`count(*)`,
         activeChats: sql<number>`count(*) filter (where status = 'active')`,
         archivedChats: sql<number>`count(*) filter (where status = 'archived')`,
-        tableConnectedChats: sql<number>`count(*) filter (where table_id is not null)`,
+        tableConnectedChats: sql<number>`count(*) filter (where context_metadata->>'contextType' = 'table')`,
         totalMessages: sql<number>`coalesce(sum(message_count), 0)`
       })
       .from(chats)
@@ -331,12 +324,6 @@ export class DrizzleChatRepository implements IChatRepository {
       id: row.id,
       organizationId: row.organizationId,
       createdBy: row.createdBy,
-      
-      // Domain connections
-      domainType: row.domainType,
-      domainId: row.domainId,
-      tableId: row.tableId, // Legacy compatibility
-      
       title: row.title,
       description: row.description,
       contextMetadata: row.contextMetadata,

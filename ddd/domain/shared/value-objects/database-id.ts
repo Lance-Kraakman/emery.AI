@@ -10,7 +10,4 @@ export class DatabaseId extends BaseId<'DatabaseId'> {
     return new DatabaseId(value);
   }
 
-  static placeholder(): DatabaseId {
-    return new DatabaseId(0);
-  }
 }

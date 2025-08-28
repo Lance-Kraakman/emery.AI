@@ -19,7 +19,7 @@ export interface AuthResult {
     email: string;
     name: string | null;
     organizationId: number | null;
-    roleId?: number | null;
+    organizationRole?: string;
   };
   error?: string;
 }
@@ -44,7 +44,7 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
           email: session.user.email || '',
           name: session.user.name || null,
           organizationId: session.user.currentOrganizationId || null,
-          roleId: session.user.roleId || null,
+          organizationRole: session.user.organizationRole || 'member',
         },
       };
     }
@@ -63,7 +63,7 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
             email: apiKeyUser.email,
             name: apiKeyUser.name,
             organizationId: apiKeyUser.organizationId,
-            roleId: apiKeyUser.roleId,
+            organizationRole: apiKeyUser.organizationRole || 'member',
           },
         };
       }
@@ -87,7 +87,7 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
             email: user.email || '',
             name: user.name,
             organizationId: user.currentOrganizationId,
-            roleId: user.roleId,
+            organizationRole: user.organizationRole || 'member',
           },
         };
       }
