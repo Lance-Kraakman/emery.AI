@@ -11,7 +11,7 @@
 
 import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
 import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
-import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import { AgentId, TableId } from '@/ddd/domain/shared/value-objects';
 import type { Chat, CreateChatData, ChatContextMetadata, DomainType } from '@/ddd/domain/chat/entities/chat';
@@ -64,7 +64,7 @@ export class ChatApplicationService {
   constructor(
     private readonly chatRepository: IChatRepository,
     private readonly messageRepository: IChatMessageRepository,
-    private readonly tableRepository: IDynamicTableRepository,
+    private readonly dynamicTableService: DynamicTableService,
     private readonly agentRepository?: IAgentRepository // Optional for agent domain support
   ) {}
 
@@ -152,7 +152,7 @@ export class ChatApplicationService {
   }> {
     switch (domainType) {
       case 'table':
-        const table = await this.tableRepository.findById(TableId.fromNumber(domainId));
+        const table = await this.dynamicTableService.getTable(TableId.fromNumber(domainId));
         if (!table) {
           return { valid: false, error: `Table ${domainId} not found` };
         }
