@@ -11,6 +11,7 @@
 import type { Field } from '../entities/field';
 import type { Result } from '@/ddd/domain/shared/result';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
+import { validateRelationFieldStructure, validateFileFieldStructure } from './jsonb-validation-helpers';
 
 export interface FieldValidationError {
   field: string;
@@ -214,19 +215,11 @@ export class FieldProcessor {
   }
 
   private validateRelationValue(field: Field, value: unknown): { valid: boolean; error?: string } {
-    // Relation fields store JSONB data - should be objects
-    if (typeof value !== 'object' || value === null) {
-      return { valid: false, error: 'Must be an object' };
-    }
-    return { valid: true };
+    return validateRelationFieldStructure(value);
   }
 
   private validateFileValue(field: Field, value: unknown): { valid: boolean; error?: string } {
-    // File fields store file metadata as JSONB - should be objects
-    if (typeof value !== 'object' || value === null) {
-      return { valid: false, error: 'Must be a file object' };
-    }
-    return { valid: true };
+    return validateFileFieldStructure(value);
   }
 
   // Private processing methods
@@ -234,25 +227,13 @@ export class FieldProcessor {
   private processFieldValueForStorage(field: Field, value: unknown): unknown {
     switch (field.type) {
       case 'relation':
-        // Ensure relation data is properly formatted as JSONB
-        if (typeof value === 'string') {
-          try {
-            return JSON.parse(value);
-          } catch {
-            return value;
-          }
-        }
+        // Relation fields should already be arrays of RelationValue/LinkToTableValue objects
+        // No string parsing - validation ensures proper structure
         return value;
 
       case 'file':
-        // Handle file field data
-        if (typeof value === 'string') {
-          try {
-            return JSON.parse(value);
-          } catch {
-            return value;
-          }
-        }
+        // File fields should already be arrays of FileFieldValue objects
+        // No string parsing - validation ensures proper structure
         return value;
 
       case 'date':
