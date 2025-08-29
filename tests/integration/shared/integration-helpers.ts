@@ -1,7 +1,7 @@
 import { Client } from 'pg';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { sql } from 'drizzle-orm';
+import { sql, inArray, or, like } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
 
 // AIDEV-NOTE: Integration test client for HTTP API, gRPC, and direct database operations
@@ -105,23 +105,85 @@ export class IntegrationTestClient {
   }
   
   async cleanTestData(): Promise<void> {
-    // Clean up test data created during individual tests
-    // Preserve organizations and basic users for next test
-    const tables = [
-      'tasks', 
-      'agents',
-      'rag_documents',
-      'rag_indexes'
-    ];
-    
-    for (const table of tables) {
-      try {
-        await this.query(`DELETE FROM ${table} WHERE organization_id IN (1, 2)`);
-      } catch (error: any) {
-        // Skip if table doesn't exist
-        if (error.code !== '42P01') {
-          console.error(`Error cleaning ${table}:`, error.message);
-        }
+    // Clean up test data created during individual tests using type-safe Drizzle operations
+    // Find and clean up ALL test organizations (not just hardcoded IDs 1,2)
+    try {
+      const db = this.db;
+      
+      // Find all test organizations (they have distinctive naming patterns)
+      const testOrgs = await db
+        .select({ id: schema.organizations.id })
+        .from(schema.organizations)
+        .where(
+          or(
+            like(schema.organizations.name, '%Test Organization%'),
+            like(schema.organizations.name, '%Integration Test%'),
+            like(schema.organizations.name, '%Debug Test%'),
+            like(schema.organizations.slug, '%-test-%'),
+            like(schema.organizations.slug, '%test-organization%')
+          )
+        );
+      
+      if (testOrgs.length === 0) {
+        console.log('🧹 No test organizations found, skipping cleanup');
+        return;
+      }
+      
+      const testOrgIds = testOrgs.map(org => org.id);
+      console.log(`🧹 Starting cleanup for ${testOrgIds.length} test organizations: [${testOrgIds.join(', ')}]`);
+      
+      // Delete in proper cascade order (children first, then parents)
+      // This prevents foreign key constraint violations
+      
+      // 1. Delete tasks (no foreign key dependencies to other test entities)
+      await this.safeDelete(schema.tasks, inArray(schema.tasks.organizationId, testOrgIds), 'tasks');
+      
+      // 2. Delete agents (may reference tasks)  
+      await this.safeDelete(schema.agents, inArray(schema.agents.organizationId, testOrgIds), 'agents');
+      
+      // 3. Delete RAG documents and indexes (may reference other entities)
+      await this.safeDelete(schema.ragDocuments, inArray(schema.ragDocuments.organizationId, testOrgIds), 'rag_documents');
+      await this.safeDelete(schema.ragIndexes, inArray(schema.ragIndexes.organizationId, testOrgIds), 'rag_indexes');
+      
+      // 4. Delete fields (reference tables)
+      await this.safeDelete(schema.fields, inArray(schema.fields.organizationId, testOrgIds), 'fields');
+      
+      // 5. Delete tables (reference databases)  
+      await this.safeDelete(schema.tables, inArray(schema.tables.organizationId, testOrgIds), 'tables');
+      
+      // 6. Delete databases (top-level entities, referenced by tables)
+      await this.safeDelete(schema.databases, inArray(schema.databases.organizationId, testOrgIds), 'databases');
+      
+      // 7. Clean up user_organizations relationships
+      await this.safeDelete(schema.userOrganizations, inArray(schema.userOrganizations.organizationId, testOrgIds), 'user_organizations');
+      
+      // 8. Finally delete the test organizations themselves
+      await this.safeDelete(schema.organizations, inArray(schema.organizations.id, testOrgIds), 'organizations');
+      
+      console.log(`✅ Test data cleanup completed successfully for organizations [${testOrgIds.join(', ')}]`);
+      
+    } catch (error) {
+      console.error('❌ Error during test cleanup:', error);
+      // Don't throw - let tests continue even if cleanup partially fails
+    }
+  }
+
+  // Helper method to safely delete from table with proper error handling
+  private async safeDelete<T>(
+    table: T, 
+    condition: any,
+    tableName: string
+  ): Promise<void> {
+    try {
+      const result = await this.db.delete(table as any).where(condition);
+      console.log(`  🗑️  Cleaned ${tableName}: ${result.rowCount || 0} rows deleted`);
+    } catch (error: any) {
+      // Skip if table doesn't exist (42P01 = undefined_table)
+      if (error.code === '42P01') {
+        console.log(`  ⏭️  Skipped ${tableName}: table doesn't exist`);
+      } else {
+        console.error(`  ⚠️  Error cleaning ${tableName}:`, error.message);
+        // Don't throw - continue with other tables
       }
     }
   }

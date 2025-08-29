@@ -692,7 +692,10 @@ describe('TableRowDomainService Integration Tests', () => {
     }
     
     const testDbId = createDbResult.data.id;
-    console.log('✅ Created database with ID:', testDbId.value, 'Type:', typeof testDbId.value);
+    console.log(`✅ Created database with ID: ${testDbId.value} for organization: ${testOrgId}`);
+    
+    // Wait to ensure database transaction is committed before creating table
+    await new Promise(resolve => setTimeout(resolve, 10));
     
     const dynamicTableService = getDynamicTableService();
     
@@ -709,6 +712,7 @@ describe('TableRowDomainService Integration Tests', () => {
     }
     
     const table = createTableResult.data;
+    console.log(`✅ Created table with ID: ${table.id.value} in database: ${testDbId.value}`);
     
     // Create fields
     const fieldRepository = getFieldRepository();
