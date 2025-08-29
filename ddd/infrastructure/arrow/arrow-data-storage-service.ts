@@ -220,11 +220,16 @@ export class ArrowDataStorageService implements DataStorageService {
               break;
             case 'relation':
             case 'file':
+              // Relation and file fields should already be proper JSONB structures
+              // No string parsing needed - they are stored as serialized JSON objects
+              // and retrieved as structured data by Arrow
               if (value !== null && value !== undefined && typeof value === 'string') {
                 try {
                   value = JSON.parse(value);
                 } catch {
-                  // Keep as string if not valid JSON
+                  // If parsing fails, this indicates malformed data
+                  console.warn(`[ArrowDataStorageService] Malformed ${field.type} field data:`, value);
+                  value = null;
                 }
               }
               break;

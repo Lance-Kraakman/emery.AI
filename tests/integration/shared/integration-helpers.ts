@@ -3,7 +3,6 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
-import { withRLSContext, withOrganizationContext } from '@/lib/db/rls-context';
 
 // AIDEV-NOTE: Integration test client for HTTP API, gRPC, and direct database operations
 // Provides a unified interface for testing across all system boundaries
@@ -166,13 +165,7 @@ export class IntegrationTestClient {
     await this.db.execute(sql`SELECT set_config('app.current_organization_id', '', true)`);
     await this.db.execute(sql`SELECT set_config('app.current_user_id', '', true)`);
   }
-  
-  async getCurrentOrganizationId(): Promise<number | null> {
-    const result = await this.db.execute(sql`SELECT get_current_organization_id() as org_id`);
-    const orgId = result[0]?.org_id || null;
-    console.log(`🔍 getCurrentOrganizationId() returned: ${orgId}`);
-    return orgId;
-  }
+
   
   // Execute a query with RLS context in the same transaction
   async queryWithContext<T>(orgId: number, query: () => Promise<T>): Promise<T> {

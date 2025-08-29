@@ -186,12 +186,22 @@ describe('ArrowDataStorageService Integration Tests', () => {
         input: {
           data: [
             { 
-              related_user: { id: 123, name: 'John', email: 'john@example.com' },
-              tags: ['urgent', 'customer', 'vip']
+              related_user: [
+                { id: '123', displayValue: 'John', tableId: 2 }
+              ],
+              tags: [
+                { id: 'tag-1', displayValue: 'urgent' },
+                { id: 'tag-2', displayValue: 'customer' },
+                { id: 'tag-3', displayValue: 'vip' }
+              ]
             },
             { 
-              related_user: { id: 456, name: 'Jane', email: 'jane@example.com' },
-              tags: ['low-priority']
+              related_user: [
+                { id: '456', displayValue: 'Jane', tableId: 2 }
+              ],
+              tags: [
+                { id: 'tag-4', displayValue: 'low-priority' }
+              ]
             }
           ],
           table: mockTable,
@@ -207,19 +217,29 @@ describe('ArrowDataStorageService Integration Tests', () => {
         input: {
           data: [
             { 
-              avatar: { 
-                url: 'https://cdn.example.com/avatar.jpg', 
-                size: 1024, 
-                type: 'image/jpeg',
-                metadata: { width: 200, height: 200 }
-              }
+              avatar: [
+                {
+                  id: 'file-uuid-1',
+                  name: 'avatar.jpg',
+                  size: 1024,
+                  mimeType: 'image/jpeg',
+                  s3Key: 'org_1/files/avatar.jpg',
+                  uploadedAt: '2024-01-15T10:30:00.000Z',
+                  metadata: { width: 200, height: 200 }
+                }
+              ]
             },
             { 
-              avatar: { 
-                url: 'https://cdn.example.com/profile.png', 
-                size: 2048, 
-                type: 'image/png' 
-              }
+              avatar: [
+                {
+                  id: 'file-uuid-2',
+                  name: 'profile.png',
+                  size: 2048,
+                  mimeType: 'image/png',
+                  s3Key: 'org_1/files/profile.png',
+                  uploadedAt: '2024-01-16T11:00:00.000Z'
+                }
+              ]
             }
           ],
           table: mockTable,
@@ -228,21 +248,41 @@ describe('ArrowDataStorageService Integration Tests', () => {
         expected: { success: true, retrievedDataMatches: true }
       },
       {
-        name: 'should handle string values in relation/file fields',
+        name: 'should handle multiple files and relations in single field',
         input: {
           data: [
             { 
-              config: '{"theme": "dark", "notifications": true}',
-              document: 'simple-string-value'
+              attachments: [
+                {
+                  id: 'file-uuid-3',
+                  name: 'document.pdf',
+                  size: 5120,
+                  mimeType: 'application/pdf',
+                  s3Key: 'org_1/files/document.pdf',
+                  uploadedAt: '2024-01-17T09:15:00.000Z'
+                },
+                {
+                  id: 'file-uuid-4',
+                  name: 'spreadsheet.xlsx',
+                  size: 3072,
+                  mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                  s3Key: 'org_1/files/spreadsheet.xlsx',
+                  uploadedAt: '2024-01-17T09:20:00.000Z'
+                }
+              ],
+              assigned_users: [
+                { id: '789', displayValue: 'Alice Johnson', tableId: 2 },
+                { id: '101', displayValue: 'Bob Smith', tableId: 2 }
+              ]
             }
           ],
           table: mockTable,
           fields: [
-            createMockField('config', 'relation'),
-            createMockField('document', 'file')
+            createMockField('attachments', 'file'),
+            createMockField('assigned_users', 'relation')
           ]
         },
-        expected: { success: true, retrievedDataMatches: false } // JSON string gets parsed to object
+        expected: { success: true, retrievedDataMatches: true }
       }
     ];
 
@@ -261,15 +301,6 @@ describe('ArrowDataStorageService Integration Tests', () => {
         // Verify JSON serialization works correctly
         if (testCase.expected.retrievedDataMatches) {
           expect(retrieveResult.data).toEqual(data);
-        } else if (testCase.name === 'should handle string values in relation/file fields') {
-          // Special verification for JSON string parsing behavior
-          const expectedParsedData = [
-            {
-              config: { theme: "dark", notifications: true }, // JSON string gets parsed
-              document: 'simple-string-value' // Non-JSON string stays as string
-            }
-          ];
-          expect(retrieveResult.data).toEqual(expectedParsedData);
         }
       });
     });
@@ -394,8 +425,19 @@ describe('ArrowDataStorageService Integration Tests', () => {
         number_field: 42,
         boolean_field: true,
         date_field: '2024-01-15T10:30:00.000Z',
-        relation_field: { id: 123, name: 'Related Item' },
-        file_field: { url: 'https://example.com/file.pdf', size: 1024 }
+        relation_field: [
+          { id: '123', displayValue: 'Related Item', tableId: 2 }
+        ],
+        file_field: [
+          {
+            id: 'comprehensive-file-1',
+            name: 'test-file.pdf',
+            size: 1024,
+            mimeType: 'application/pdf',
+            s3Key: 'org_1/files/test-file.pdf',
+            uploadedAt: '2024-01-15T10:30:00.000Z'
+          }
+        ]
       }];
 
       const allTypeFields = [
