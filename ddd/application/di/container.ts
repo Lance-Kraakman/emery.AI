@@ -498,9 +498,8 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
     containerKey = ragMappings[key as string];
   } else if (key.includes('Repository')) {
     containerKey = `I${key}`;
-  } else if (key.includes('Service') && !key.includes('ApplicationService')) {
-    containerKey = `I${key}`;
   } else {
+    // All other services are registered as-is (domain services, application services)
     containerKey = key;
   }
   return diContainer.get(containerKey as any) as ServiceMap[K];

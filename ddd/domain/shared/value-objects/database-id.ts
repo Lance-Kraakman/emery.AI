@@ -10,4 +10,9 @@ export class DatabaseId extends BaseId<'DatabaseId'> {
     return new DatabaseId(value);
   }
 
+  static temporary(): DatabaseId {
+    // Use negative values for temporary IDs to distinguish from real IDs
+    return new DatabaseId(-1);
+  }
+
 }

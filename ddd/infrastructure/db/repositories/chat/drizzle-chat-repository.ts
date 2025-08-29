@@ -12,7 +12,8 @@ import type { DbClient } from '@/lib/db/client';
 import { chats } from '@/lib/db/schema';
 import { eq, and, desc, asc, ilike, isNull, isNotNull, sql } from 'drizzle-orm';
 import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
-import type { Chat, CreateChatData, UpdateChatData } from '@/ddd/domain/chat/entities/chat';
+import { Chat, type CreateChatData, type UpdateChatData } from '@/ddd/domain/chat/entities/chat';
+import type { ChatId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export class DrizzleChatRepository implements IChatRepository {
   constructor(private readonly db: DbClient) {}
@@ -22,8 +23,8 @@ export class DrizzleChatRepository implements IChatRepository {
    */
   async create(data: CreateChatData): Promise<Chat> {
     const [chat] = await this.db.insert(chats).values({
-      organizationId: data.organizationId,
-      createdBy: data.createdBy,
+      organizationId: data.organizationId.value,
+      createdBy: data.createdBy.value,
       title: data.title,
       description: data.description || null,
       contextMetadata: data.contextMetadata || null,
@@ -38,13 +39,13 @@ export class DrizzleChatRepository implements IChatRepository {
   /**
    * Find a chat by ID with organization scoping
    */
-  async findById(id: string, organizationId: number): Promise<Chat | null> {
+  async findById(id: ChatId, organizationId: OrganizationId): Promise<Chat | null> {
     const [chat] = await this.db
       .select()
       .from(chats)
       .where(and(
-        eq(chats.id, id),
-        eq(chats.organizationId, organizationId)
+        eq(chats.id, id.value),
+        eq(chats.organizationId, organizationId.value)
       ));
 
     return chat ? this.mapToChat(chat) : null;
@@ -53,11 +54,11 @@ export class DrizzleChatRepository implements IChatRepository {
   /**
    * Find all chats for an organization
    */
-  async findByOrganization(organizationId: number, limit = 20, offset = 0): Promise<Chat[]> {
+  async findByOrganization(organizationId: OrganizationId, limit = 20, offset = 0): Promise<Chat[]> {
     const results = await this.db
       .select()
       .from(chats)
-      .where(eq(chats.organizationId, organizationId))
+      .where(eq(chats.organizationId, organizationId.value))
       .orderBy(desc(chats.updatedAt))
       .limit(limit)
       .offset(offset);
@@ -68,13 +69,13 @@ export class DrizzleChatRepository implements IChatRepository {
   /**
    * Find chats for a specific user in an organization
    */
-  async findByUser(userId: string, organizationId: number, limit = 20, offset = 0): Promise<Chat[]> {
+  async findByUser(userId: UserId, organizationId: OrganizationId, limit = 20, offset = 0): Promise<Chat[]> {
     const results = await this.db
       .select()
       .from(chats)
       .where(and(
-        eq(chats.createdBy, userId),
-        eq(chats.organizationId, organizationId)
+        eq(chats.createdBy, userId.value),
+        eq(chats.organizationId, organizationId.value)
       ))
       .orderBy(desc(chats.updatedAt))
       .limit(limit)
@@ -86,12 +87,12 @@ export class DrizzleChatRepository implements IChatRepository {
   /**
    * Find chats connected to a specific table
    */
-  async findByTable(tableId: number, organizationId: number, limit = 20, offset = 0): Promise<Chat[]> {
+  async findByTable(tableId: number, organizationId: OrganizationId, limit = 20, offset = 0): Promise<Chat[]> {
     const results = await this.db
       .select()
       .from(chats)
       .where(and(
-        eq(chats.organizationId, organizationId),
+        eq(chats.organizationId, organizationId.value),
         sql`${chats.contextMetadata}->>'contextType' = 'table' AND (${chats.contextMetadata}->'domainSchema'->>'id')::integer = ${tableId}`
       ))
       .orderBy(desc(chats.updatedAt))
@@ -140,12 +141,12 @@ export class DrizzleChatRepository implements IChatRepository {
   /**
    * Find active chats for an organization
    */
-  async findActiveByOrganization(organizationId: number, limit = 20, offset = 0): Promise<Chat[]> {
+  async findActiveByOrganization(organizationId: OrganizationId, limit = 20, offset = 0): Promise<Chat[]> {
     const results = await this.db
       .select()
       .from(chats)
       .where(and(
-        eq(chats.organizationId, organizationId),
+        eq(chats.organizationId, organizationId.value),
         eq(chats.status, 'active')
       ))
       .orderBy(desc(chats.updatedAt))
@@ -158,7 +159,7 @@ export class DrizzleChatRepository implements IChatRepository {
   /**
    * Update a chat
    */
-  async update(id: string, data: UpdateChatData, organizationId: number): Promise<Chat | null> {
+  async update(id: ChatId, data: UpdateChatData, organizationId: OrganizationId): Promise<Chat | null> {
     const updateData: any = {
       updatedAt: new Date()
     };
@@ -174,8 +175,8 @@ export class DrizzleChatRepository implements IChatRepository {
       .update(chats)
       .set(updateData)
       .where(and(
-        eq(chats.id, id),
-        eq(chats.organizationId, organizationId)
+        eq(chats.id, id.value),
+        eq(chats.organizationId, organizationId.value)
       ))
       .returning();
 
@@ -185,7 +186,7 @@ export class DrizzleChatRepository implements IChatRepository {
   /**
    * Archive a chat (soft delete)
    */
-  async archive(id: string, organizationId: number): Promise<boolean> {
+  async archive(id: ChatId, organizationId: OrganizationId): Promise<boolean> {
     const result = await this.db
       .update(chats)
       .set({
@@ -193,8 +194,8 @@ export class DrizzleChatRepository implements IChatRepository {
         updatedAt: new Date()
       })
       .where(and(
-        eq(chats.id, id),
-        eq(chats.organizationId, organizationId)
+        eq(chats.id, id.value),
+        eq(chats.organizationId, organizationId.value)
       ))
       .returning({ id: chats.id });
 
@@ -204,12 +205,12 @@ export class DrizzleChatRepository implements IChatRepository {
   /**
    * Permanently delete a chat
    */
-  async delete(id: string, organizationId: number): Promise<boolean> {
+  async delete(id: ChatId, organizationId: OrganizationId): Promise<boolean> {
     const result = await this.db
       .delete(chats)
       .where(and(
-        eq(chats.id, id),
-        eq(chats.organizationId, organizationId)
+        eq(chats.id, id.value),
+        eq(chats.organizationId, organizationId.value)
       ))
       .returning({ id: chats.id });
 
@@ -219,13 +220,13 @@ export class DrizzleChatRepository implements IChatRepository {
   /**
    * Check if a chat exists and user has access
    */
-  async exists(id: string, organizationId: number): Promise<boolean> {
+  async exists(id: ChatId, organizationId: OrganizationId): Promise<boolean> {
     const [chat] = await this.db
       .select({ id: chats.id })
       .from(chats)
       .where(and(
-        eq(chats.id, id),
-        eq(chats.organizationId, organizationId)
+        eq(chats.id, id.value),
+        eq(chats.organizationId, organizationId.value)
       ));
 
     return !!chat;
@@ -234,7 +235,7 @@ export class DrizzleChatRepository implements IChatRepository {
   /**
    * Get chat statistics for an organization
    */
-  async getOrganizationStats(organizationId: number): Promise<{
+  async getOrganizationStats(organizationId: OrganizationId): Promise<{
     totalChats: number;
     activeChats: number;
     archivedChats: number;
@@ -250,7 +251,7 @@ export class DrizzleChatRepository implements IChatRepository {
         totalMessages: sql<number>`coalesce(sum(message_count), 0)`
       })
       .from(chats)
-      .where(eq(chats.organizationId, organizationId));
+      .where(eq(chats.organizationId, organizationId.value));
 
     return {
       totalChats: stats?.totalChats || 0,
@@ -264,13 +265,13 @@ export class DrizzleChatRepository implements IChatRepository {
   /**
    * Get recent chats for a user
    */
-  async getRecentChats(userId: string, organizationId: number, limit = 10): Promise<Chat[]> {
+  async getRecentChats(userId: UserId, organizationId: OrganizationId, limit = 10): Promise<Chat[]> {
     const results = await this.db
       .select()
       .from(chats)
       .where(and(
-        eq(chats.createdBy, userId),
-        eq(chats.organizationId, organizationId),
+        eq(chats.createdBy, userId.value),
+        eq(chats.organizationId, organizationId.value),
         eq(chats.status, 'active')
       ))
       .orderBy(desc(chats.lastMessageAt), desc(chats.updatedAt))
@@ -282,14 +283,14 @@ export class DrizzleChatRepository implements IChatRepository {
   /**
    * Search chats by title or description
    */
-  async search(query: string, organizationId: number, limit = 20, offset = 0): Promise<Chat[]> {
+  async search(query: string, organizationId: OrganizationId, limit = 20, offset = 0): Promise<Chat[]> {
     const searchTerm = `%${query}%`;
     
     const results = await this.db
       .select()
       .from(chats)
       .where(and(
-        eq(chats.organizationId, organizationId),
+        eq(chats.organizationId, organizationId.value),
         sql`(${chats.title} ilike ${searchTerm} or ${chats.description} ilike ${searchTerm})`
       ))
       .orderBy(desc(chats.updatedAt))
@@ -302,7 +303,7 @@ export class DrizzleChatRepository implements IChatRepository {
   /**
    * Update message count and last message timestamp
    */
-  async updateMessageStats(chatId: string, messageCount: number, lastMessageAt: Date): Promise<boolean> {
+  async updateMessageStats(chatId: ChatId, messageCount: number, lastMessageAt: Date): Promise<boolean> {
     const result = await this.db
       .update(chats)
       .set({
@@ -310,7 +311,7 @@ export class DrizzleChatRepository implements IChatRepository {
         lastMessageAt,
         updatedAt: new Date()
       })
-      .where(eq(chats.id, chatId))
+      .where(eq(chats.id, chatId.value))
       .returning({ id: chats.id });
 
     return result.length > 0;
@@ -320,7 +321,7 @@ export class DrizzleChatRepository implements IChatRepository {
    * Map database row to Chat domain entity
    */
   private mapToChat(row: any): Chat {
-    return {
+    return Chat.fromPersistence({
       id: row.id,
       organizationId: row.organizationId,
       createdBy: row.createdBy,
@@ -332,6 +333,6 @@ export class DrizzleChatRepository implements IChatRepository {
       lastMessageAt: row.lastMessageAt,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt
-    };
+    });
   }
 }

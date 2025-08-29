@@ -10,25 +10,25 @@ import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/d
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import { Database } from '@/ddd/domain/databases/entities/database';
 import type { Result } from '@/ddd/domain/shared/result';
-import { DatabaseId } from '@/ddd/domain/shared/value-objects';
+import { DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export interface CreateDatabaseCommand {
   name: string;
   description?: string;
-  organizationId: number;
-  createdBy: string;
+  organizationId: OrganizationId;
+  createdBy: UserId;
   metadata?: Record<string, any>;
 }
 
 export interface UpdateDatabaseCommand {
-  databaseId: number;
+  databaseId: DatabaseId;
   name?: string;
   description?: string;
   metadata?: Record<string, any>;
 }
 
 export interface DatabaseFilters {
-  organizationId: number;
+  organizationId: OrganizationId;
   searchQuery?: string;
   hasTables?: boolean;
 }
@@ -84,12 +84,12 @@ export class DatabaseApplicationService {
         createdBy: command.createdBy
       });
 
-      // Save to repository
-      await this.databaseRepository.save(database);
+      // Save to repository and get the created entity with ID
+      const savedDatabase = await this.databaseRepository.save(database);
 
       return {
         success: true,
-        data: database
+        data: savedDatabase
       };
     } catch (error) {
       console.error("Error creating database:", error);
@@ -163,7 +163,7 @@ export class DatabaseApplicationService {
   /**
    * Delete a database with safety checks
    */
-  async deleteDatabase(databaseId: number, organizationId: number): Promise<DatabaseApplicationResult<void>> {
+  async deleteDatabase(databaseId: DatabaseId, organizationId: OrganizationId): Promise<DatabaseApplicationResult<void>> {
     try {
       // Verify database exists and belongs to organization
       const database = await this.databaseRepository.findById(databaseId);
@@ -174,7 +174,7 @@ export class DatabaseApplicationService {
         };
       }
 
-      if (database.organizationId !== organizationId) {
+      if (database.organizationId.value !== organizationId.value) {
         return {
           success: false,
           error: "Access denied: Database does not belong to your organization"
@@ -210,7 +210,7 @@ export class DatabaseApplicationService {
   /**
    * Get database by ID
    */
-  async getDatabase(databaseId: number): Promise<Database | null> {
+  async getDatabase(databaseId: DatabaseId): Promise<Database | null> {
     return await this.databaseRepository.findById(databaseId);
   }
 
@@ -264,7 +264,7 @@ export class DatabaseApplicationService {
   /**
    * Get database count for organization
    */
-  async getDatabaseCount(organizationId: number): Promise<number> {
+  async getDatabaseCount(organizationId: OrganizationId): Promise<number> {
     return await this.databaseRepository.countByOrganization(organizationId);
   }
 }
