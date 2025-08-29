@@ -249,6 +249,7 @@ export class DIContainer {
         
     // Create table repository with data storage service
     const tableRepository = new DynamicTableRepository(
+      db,
       fieldRepository,
       arrowDataStorageService,
       tableQueryService

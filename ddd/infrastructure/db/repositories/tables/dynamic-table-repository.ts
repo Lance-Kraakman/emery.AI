@@ -10,7 +10,7 @@
  * focused on data access only. Business logic handled by DynamicTableService.
  */
 
-import { db } from '@/lib/db/client';
+import type { DbClient } from '@/lib/db/client';
 import { tables, fields } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
@@ -46,6 +46,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
   private readonly fieldMapper = new FieldMapper();
 
   constructor(
+    private readonly db: DbClient,
     private readonly fieldRepository: IFieldRepository,
     private readonly dataStorageService: DataStorageService,
     private readonly queryService: TableQueryService
@@ -58,7 +59,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       const s3Path = new S3TablePath(data.organizationId.value, data.databaseId.value, tableId);
 
       // 2. Create table record in PostgreSQL metadata
-      const [tableRecord] = await db.insert(tables).values({
+      const [tableRecord] = await this.db.insert(tables).values({
         name: data.name,
         databaseId: data.databaseId.value,
         organizationId: data.organizationId.value,
@@ -69,7 +70,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
       // Update S3 path with real table ID
       const realS3Path = new S3TablePath(data.organizationId.value, data.databaseId.value, tableRecord.id);
-      await db.update(tables)
+      await this.db.update(tables)
         .set({ s3Path: realS3Path.path })
         .where(eq(tables.id, tableRecord.id));
 
@@ -102,7 +103,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
   async findById(id: TableId): Promise<DynamicTable | null> {
     try {
       // Get table metadata from PostgreSQL
-      const tableRecord = await db.query.tables.findFirst({
+      const tableRecord = await this.db.query.tables.findFirst({
         where: eq(tables.id, id.value)
       });
 
@@ -133,7 +134,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
   async findByOrganization(organizationId: OrganizationId): Promise<DynamicTable[]> {
     try {
-      const tableRecords = await db.query.tables.findMany({
+      const tableRecords = await this.db.query.tables.findMany({
         where: eq(tables.organizationId, organizationId.value)
       });
 
@@ -157,7 +158,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
   async findByDatabase(databaseId: DatabaseId): Promise<DynamicTable[]> {
     try {
-      const tableRecords = await db.query.tables.findMany({
+      const tableRecords = await this.db.query.tables.findMany({
         where: eq(tables.databaseId, databaseId.value)
       });
 
@@ -181,7 +182,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
   async update(id: TableId, data: Partial<DynamicTable>): Promise<DynamicTable> {
     try {
-      const [updatedRecord] = await db.update(tables)
+      const [updatedRecord] = await this.db.update(tables)
         .set({
           name: data.name,
           metadata: data.metadata || null,
@@ -215,7 +216,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
   async delete(id: TableId): Promise<void> {
     try {
       // 1. Get table to find S3 path
-      const tableRecord = await db.query.tables.findFirst({
+      const tableRecord = await this.db.query.tables.findFirst({
         where: eq(tables.id, id.value)
       });
 
@@ -228,10 +229,10 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       await this.deleteS3Directory(s3Path.path);
 
       // 3. Delete fields from PostgreSQL
-      await db.delete(fields).where(eq(fields.tableId, id.value));
+      await this.db.delete(fields).where(eq(fields.tableId, id.value));
 
       // 4. Delete table from PostgreSQL
-      await db.delete(tables).where(eq(tables.id, id.value));
+      await this.db.delete(tables).where(eq(tables.id, id.value));
 
       console.log(`[TableService] Deleted table: ${tableRecord.name} (ID: ${id})`);
 
@@ -243,7 +244,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
   async existsByStorageLocation(organizationId: OrganizationId, storageLocation: string): Promise<boolean> {
     try {
-      const tableRecord = await db.query.tables.findFirst({
+      const tableRecord = await this.db.query.tables.findFirst({
         where: and(
           eq(tables.organizationId, organizationId.value),
           eq(tables.s3Path, storageLocation)
@@ -527,7 +528,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
   async findAll(): Promise<DynamicTable[]> {
     try {
-      const tableRecords = await db.query.tables.findMany();
+      const tableRecords = await this.db.query.tables.findMany();
 
       return tableRecords.map(record => DynamicTable.fromPersistence({
         id: record.id,
@@ -550,7 +551,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
   // Helper method to get S3 path (used internally)
   private async getS3Path(tableId: number): Promise<S3TablePath> {
-    const tableRecord = await db.query.tables.findFirst({
+    const tableRecord = await this.db.query.tables.findFirst({
       where: eq(tables.id, tableId)
     });
 
