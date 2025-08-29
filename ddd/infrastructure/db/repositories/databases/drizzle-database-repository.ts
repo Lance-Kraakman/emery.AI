@@ -3,6 +3,7 @@
 
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import { Database } from '@/ddd/domain/databases/entities/database';
+import type { DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { DbClient } from '@/lib/db/client';
 import { databases } from '@/lib/db/schema';
 import { eq, and, ne } from 'drizzle-orm';
@@ -10,11 +11,11 @@ import { eq, and, ne } from 'drizzle-orm';
 export class DrizzleDatabaseRepository implements IDatabaseRepository {
   constructor(private readonly db: DbClient) {}
 
-  async findByOrganization(organizationId: number): Promise<Database[]> {
+  async findByOrganization(organizationId: OrganizationId): Promise<Database[]> {
     const results = await this.db
       .select()
       .from(databases)
-      .where(eq(databases.organizationId, organizationId));
+      .where(eq(databases.organizationId, organizationId.value));
 
     return results.map(result => Database.fromPersistence({
       id: result.id,
@@ -28,11 +29,11 @@ export class DrizzleDatabaseRepository implements IDatabaseRepository {
     }));
   }
 
-  async findById(id: number): Promise<Database | null> {
+  async findById(id: DatabaseId): Promise<Database | null> {
     const results = await this.db
       .select()
       .from(databases)
-      .where(eq(databases.id, id))
+      .where(eq(databases.id, id.value))
       .limit(1);
 
     if (results.length === 0) {
@@ -76,14 +77,14 @@ export class DrizzleDatabaseRepository implements IDatabaseRepository {
     });
   }
 
-  async isSlugUnique(organizationId: number, slug: string, excludeId?: number): Promise<boolean> {
+  async isSlugUnique(organizationId: OrganizationId, slug: string, excludeId?: DatabaseId): Promise<boolean> {
     const conditions = [
-      eq(databases.organizationId, organizationId),
+      eq(databases.organizationId, organizationId.value),
       eq(databases.slug, slug)
     ];
 
     if (excludeId) {
-      conditions.push(ne(databases.id, excludeId));
+      conditions.push(ne(databases.id, excludeId.value));
     }
 
     const results = await this.db
@@ -95,41 +96,64 @@ export class DrizzleDatabaseRepository implements IDatabaseRepository {
     return results.length === 0;
   }
 
-  async save(database: Database): Promise<void> {
-    if (database.id === 0) {
-      // Insert new database
-      await this.db.insert(databases).values({
+  async save(database: Database): Promise<Database> {
+    if (database.id.value === -1) { // Check for temporary ID
+      // Insert new database and return with generated ID
+      const [inserted] = await this.db.insert(databases).values({
         name: database.name,
         slug: database.slug,
         metadata: database.metadata,
-        organizationId: database.organizationId,
-        createdBy: database.createdBy
+        organizationId: database.organizationId.value,
+        createdBy: database.createdBy.value
+      }).returning();
+      
+      return Database.fromPersistence({
+        id: inserted.id,
+        name: inserted.name,
+        slug: inserted.slug,
+        metadata: inserted.metadata as Record<string, any> | null,
+        organizationId: inserted.organizationId,
+        createdBy: inserted.createdBy,
+        createdAt: inserted.createdAt,
+        updatedAt: inserted.updatedAt
       });
     } else {
-      // Update existing database
-      await this.db
+      // Update existing database and return updated entity
+      const [updated] = await this.db
         .update(databases)
         .set({
           name: database.name,
           slug: database.slug,
           metadata: database.metadata,
-          organizationId: database.organizationId,
-          createdBy: database.createdBy,
+          organizationId: database.organizationId.value,
+          createdBy: database.createdBy.value,
           updatedAt: new Date()
         })
-        .where(eq(databases.id, database.id));
+        .where(eq(databases.id, database.id.value))
+        .returning();
+        
+      return Database.fromPersistence({
+        id: updated.id,
+        name: updated.name,
+        slug: updated.slug,
+        metadata: updated.metadata as Record<string, any> | null,
+        organizationId: updated.organizationId,
+        createdBy: updated.createdBy,
+        createdAt: updated.createdAt,
+        updatedAt: updated.updatedAt
+      });
     }
   }
 
-  async delete(id: number): Promise<void> {
-    await this.db.delete(databases).where(eq(databases.id, id));
+  async delete(id: DatabaseId): Promise<void> {
+    await this.db.delete(databases).where(eq(databases.id, id.value));
   }
 
-  async countByOrganization(organizationId: number): Promise<number> {
+  async countByOrganization(organizationId: OrganizationId): Promise<number> {
     const result = await this.db
       .select({ count: databases.id })
       .from(databases)
-      .where(eq(databases.organizationId, organizationId));
+      .where(eq(databases.organizationId, organizationId.value));
 
     return result.length;
   }

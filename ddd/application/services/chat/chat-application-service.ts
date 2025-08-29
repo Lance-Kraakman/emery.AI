@@ -13,11 +13,10 @@ import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-reposi
 import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
-import { AgentId, TableId } from '@/ddd/domain/shared/value-objects';
-import type { Chat, CreateChatData, ChatContextMetadata, DomainType } from '@/ddd/domain/chat/entities/chat';
+import { AgentId, TableId, OrganizationId, UserId, ChatId } from '@/ddd/domain/shared/value-objects';
+import { Chat, ChatUtils, type CreateChatData, type ChatContextMetadata, type DomainType } from '@/ddd/domain/chat/entities/chat';
 import type { ChatMessage, CreateChatMessageData, ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 import type { Result } from '@/ddd/domain/shared/result';
-import { ChatEntity } from '@/ddd/domain/chat/entities/chat';
 import { ChatMessageEntity } from '@/ddd/domain/chat/entities/chat-message';
 
 export interface CreateChatCommand {
@@ -83,7 +82,7 @@ export class ChatApplicationService {
         }
         
         // Create domain-specific context metadata
-        contextMetadata = ChatEntity.createDomainContextMetadata(
+        contextMetadata = ChatUtils.createDomainContextMetadata(
           command.domainType,
           command.domainId,
           validation.domainName!,
@@ -91,22 +90,22 @@ export class ChatApplicationService {
         );
       } else {
         // Create organization-wide context metadata
-        contextMetadata = ChatEntity.createOrganizationContextMetadata();
+        contextMetadata = ChatUtils.createOrganizationContextMetadata();
       }
 
       // 2. Generate title if not provided
-      const title = command.title || ChatEntity.generateContextTitle(contextMetadata);
+      const title = command.title || ChatUtils.generateContextTitle(contextMetadata);
 
       // 3. Validate chat data
       const chatData: CreateChatData = {
-        organizationId: command.organizationId,
-        createdBy: command.createdBy,
+        organizationId: OrganizationId.fromNumber(command.organizationId),
+        createdBy: UserId.fromString(command.createdBy),
         title,
         description: command.description,
         contextMetadata
       };
 
-      const validation = ChatEntity.validateChatData(chatData);
+      const validation = ChatUtils.validateChatData(chatData);
       if (!validation.valid) {
         return {
           success: false,
@@ -118,7 +117,7 @@ export class ChatApplicationService {
       const chat = await this.chatRepository.create(chatData);
 
       // 4. Create welcome message
-      const welcomeMessageData = this.createWelcomeMessage(chat.id, contextMetadata);
+      const welcomeMessageData = this.createWelcomeMessage(chat.id.value, contextMetadata);
       await this.messageRepository.create(welcomeMessageData);
 
       // 5. Update chat message count
@@ -242,7 +241,7 @@ export class ChatApplicationService {
   async sendMessage(command: SendMessageCommand): Promise<ChatApplicationServiceResult<ChatMessage>> {
     try {
       // 1. Verify chat exists and user has access
-      const chat = await this.chatRepository.findById(command.chatId, command.organizationId);
+      const chat = await this.chatRepository.findById(ChatId.fromString(command.chatId), OrganizationId.fromNumber(command.organizationId));
       if (!chat) {
         return {
           success: false,
@@ -250,8 +249,7 @@ export class ChatApplicationService {
         };
       }
 
-      const chatEntity = new ChatEntity(chat);
-      if (!chatEntity.canUserMessage(command.userId, command.organizationId)) {
+      if (!chat.canUserMessage(UserId.fromString(command.userId), OrganizationId.fromNumber(command.organizationId))) {
         return {
           success: false,
           error: 'Access denied: cannot send messages to this chat'
@@ -283,7 +281,7 @@ export class ChatApplicationService {
 
       // 5. Update chat statistics
       const newMessageCount = await this.messageRepository.getMessageCount(command.chatId);
-      await this.chatRepository.updateMessageStats(command.chatId, newMessageCount, new Date());
+      await this.chatRepository.updateMessageStats(ChatId.fromString(command.chatId), newMessageCount, new Date());
 
       console.log(`[CHAT-APP-SERVICE] Added ${command.role} message to chat ${chat.title}`);
 
@@ -311,7 +309,7 @@ export class ChatApplicationService {
   }>> {
     try {
       // 1. Verify chat exists and user has access
-      const chat = await this.chatRepository.findById(query.chatId, query.organizationId);
+      const chat = await this.chatRepository.findById(ChatId.fromString(query.chatId), OrganizationId.fromNumber(query.organizationId));
       if (!chat) {
         return {
           success: false,
@@ -319,8 +317,7 @@ export class ChatApplicationService {
         };
       }
 
-      const chatEntity = new ChatEntity(chat);
-      if (!chatEntity.canUserAccess(query.userId, query.organizationId)) {
+      if (!chat.canUserAccess(UserId.fromString(query.userId), OrganizationId.fromNumber(query.organizationId))) {
         return {
           success: false,
           error: 'Access denied: cannot view this chat'
@@ -366,15 +363,15 @@ export class ChatApplicationService {
         // Get chats for specific table
         chats = await this.chatRepository.findByTable(
           query.tableId,
-          query.organizationId,
+          OrganizationId.fromNumber(query.organizationId),
           query.limit || 20,
           query.offset || 0
         );
       } else if (query.userId) {
         // Get chats for specific user
         chats = await this.chatRepository.findByUser(
-          query.userId,
-          query.organizationId,
+          UserId.fromString(query.userId),
+          OrganizationId.fromNumber(query.organizationId),
           query.limit || 20,
           query.offset || 0
         );
@@ -382,13 +379,13 @@ export class ChatApplicationService {
         // Get all chats for organization
         if (query.status === 'active') {
           chats = await this.chatRepository.findActiveByOrganization(
-            query.organizationId,
+            OrganizationId.fromNumber(query.organizationId),
             query.limit || 20,
             query.offset || 0
           );
         } else {
           chats = await this.chatRepository.findByOrganization(
-            query.organizationId,
+            OrganizationId.fromNumber(query.organizationId),
             query.limit || 20,
             query.offset || 0
           );
@@ -415,7 +412,7 @@ export class ChatApplicationService {
   async getConversationContext(chatId: string, organizationId: number, contextSize: number = 10): Promise<ChatApplicationServiceResult<ChatMessage[]>> {
     try {
       // 1. Verify chat exists
-      const chat = await this.chatRepository.findById(chatId, organizationId);
+      const chat = await this.chatRepository.findById(ChatId.fromString(chatId), OrganizationId.fromNumber(organizationId));
       if (!chat) {
         return {
           success: false,
@@ -446,7 +443,7 @@ export class ChatApplicationService {
   async archiveChat(chatId: string, userId: string, organizationId: number): Promise<ChatApplicationServiceResult<void>> {
     try {
       // 1. Verify chat exists and user can edit
-      const chat = await this.chatRepository.findById(chatId, organizationId);
+      const chat = await this.chatRepository.findById(ChatId.fromString(chatId), OrganizationId.fromNumber(organizationId));
       if (!chat) {
         return {
           success: false,
@@ -454,8 +451,7 @@ export class ChatApplicationService {
         };
       }
 
-      const chatEntity = new ChatEntity(chat);
-      if (!chatEntity.canUserEdit(userId)) {
+      if (!chat.canUserEdit(UserId.fromString(userId))) {
         return {
           success: false,
           error: 'Access denied: only chat creator can archive chat'
@@ -463,7 +459,7 @@ export class ChatApplicationService {
       }
 
       // 2. Archive chat
-      const success = await this.chatRepository.archive(chatId, organizationId);
+      const success = await this.chatRepository.archive(ChatId.fromString(chatId), OrganizationId.fromNumber(organizationId));
       if (!success) {
         return {
           success: false,
@@ -492,7 +488,7 @@ export class ChatApplicationService {
   async deleteChat(chatId: string, userId: string, organizationId: number): Promise<ChatApplicationServiceResult<void>> {
     try {
       // 1. Verify chat exists and user can edit
-      const chat = await this.chatRepository.findById(chatId, organizationId);
+      const chat = await this.chatRepository.findById(ChatId.fromString(chatId), OrganizationId.fromNumber(organizationId));
       if (!chat) {
         return {
           success: false,
@@ -500,8 +496,7 @@ export class ChatApplicationService {
         };
       }
 
-      const chatEntity = new ChatEntity(chat);
-      if (!chatEntity.canUserEdit(userId)) {
+      if (!chat.canUserEdit(UserId.fromString(userId))) {
         return {
           success: false,
           error: 'Access denied: only chat creator can delete chat'
@@ -512,7 +507,7 @@ export class ChatApplicationService {
       await this.messageRepository.deleteByChatId(chatId);
 
       // 3. Delete chat
-      const success = await this.chatRepository.delete(chatId, organizationId);
+      const success = await this.chatRepository.delete(ChatId.fromString(chatId), OrganizationId.fromNumber(organizationId));
       if (!success) {
         return {
           success: false,
@@ -546,7 +541,7 @@ export class ChatApplicationService {
     totalMessages: number;
   }>> {
     try {
-      const stats = await this.chatRepository.getOrganizationStats(organizationId);
+      const stats = await this.chatRepository.getOrganizationStats(OrganizationId.fromNumber(organizationId));
 
       return {
         success: true,

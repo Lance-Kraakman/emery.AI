@@ -2,7 +2,6 @@ import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } fr
 import { ArrowDataStorageService } from '@/ddd/infrastructure/arrow/arrow-data-storage-service';
 import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import { Field, type FieldType } from '@/ddd/domain/fields/entities/field';
-import { TableId, DatabaseId, OrganizationId, FieldId } from '@/ddd/domain/shared/value-objects';
 import type { TestCase } from '../../shared/types';
 
 // AIDEV-NOTE: ArrowDataStorageService integration tests focusing on lowest-level

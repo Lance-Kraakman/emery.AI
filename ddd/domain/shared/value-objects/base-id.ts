@@ -10,7 +10,7 @@ export abstract class BaseId<T extends string = string> {
       throw new Error(`${type} must be an integer`);
     }
     
-    if (value <= 0) {
+    if (value <= 0 && value !== -1) {
       throw new Error(`${type} must be a positive integer`);
     }
     
