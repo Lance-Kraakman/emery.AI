@@ -59,11 +59,10 @@ export class TableRowDomainService {
       // 1. Validate row data using table's domain methods
       const validation = table.validateRowData(data);
       if (!validation.valid) {
-        // Build detailed error message from validation errors
-        const errorMessages = validation.errors.map(e => e.error).join(', ');
+        // Return consistent error message for validation failures
         return {
           success: false,
-          error: errorMessages || 'Validation failed',
+          error: 'Validation failed',
           validationErrors: validation.errors
         };
       }
@@ -132,11 +131,10 @@ export class TableRowDomainService {
       // 2. Validate update data using table's domain methods
       const validation = table.validateRowData(data);
       if (!validation.valid) {
-        // Build detailed error message from validation errors
-        const errorMessages = validation.errors.map(e => e.error).join(', ');
+        // Return consistent error message for validation failures
         return {
           success: false,
-          error: errorMessages || 'Validation failed',
+          error: 'Validation failed',
           validationErrors: validation.errors
         };
       }
@@ -171,7 +169,7 @@ export class TableRowDomainService {
       if (!existingRow) {
         return {
           success: false,
-          error: `Row ${rowId} not found`
+          error: 'Row not found'
         };
       }
 

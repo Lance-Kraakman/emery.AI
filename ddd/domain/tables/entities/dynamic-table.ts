@@ -177,6 +177,7 @@ export class DynamicTable {
     for (const field of this._fields) {
       const value = data[field.name];
       const columnName = field.getColumnName();
+      // Debug: console.log(`[DynamicTable] DEBUG processRowForStorage: field '${field.name}' -> column '${columnName}', value:`, value, 'type:', typeof value, 'isArray:', Array.isArray(value));
       processed[columnName] = this.processFieldValueForStorage(field, value);
     }
     
