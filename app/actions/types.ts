@@ -1,7 +1,8 @@
-// AIDEV-NOTE: Shared types for Server Actions - ensures type safety across actions
-// Uses unified Result<T> interface from DDD domain layer for consistent error handling
+// AIDEV-NOTE: Application Layer DTOs - Commands and types for Server Actions
+// Re-exports domain types and defines application-specific command interfaces
 import { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { Result } from '@/ddd/domain/shared/result';
+import type { RowData } from '@/ddd/domain/tables/value-objects/field-values';
 
 // Export the unified Result interface for use in Server Actions
 export type { Result } from '@/ddd/domain/shared/result';
@@ -28,15 +29,16 @@ export interface CreateFieldData {
   relatedTableId?: number;
 }
 
-export interface CreateRowData {
-  tableId: number;
-  data: Record<string, any>;
+// Application-specific command DTOs (not domain types)
+export interface CreateRowCommand {
+  tableId: number;    // Infrastructure concern
+  data: RowData;      // Domain data
 }
 
-export interface UpdateRowData {
-  rowId: string;
-  tableId: number;
-  data: Record<string, any>;
+export interface UpdateRowCommand {
+  rowId: string;      // Infrastructure concern
+  tableId: number;    // Infrastructure concern
+  data: Partial<RowData>;  // Domain data (partial update)
 }
 
 export interface CreateOrganizationData {

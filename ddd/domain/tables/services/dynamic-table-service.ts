@@ -11,10 +11,8 @@
 
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { Result } from '@/ddd/domain/shared/result';
-import type { 
-  DynamicTable, 
-  CreateDynamicTableData
-} from '@/ddd/domain/tables/entities/dynamic-table';
+import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
+import type { CreateDynamicTableData } from '@/ddd/application/services/tables/table-application-service';
 import { TableId, OrganizationId, DatabaseId, UserId } from '@/ddd/domain/shared/value-objects';
 import { TableMetadata } from '../value-objects/table-metadata';
 

@@ -1,21 +1,10 @@
-// AIDEV-NOTE: Clean Dynamic Table domain entity - pure domain object without infrastructure dependencies
-// All row operations moved to TableRowDomainService for proper separation of concerns
+// AIDEV-NOTE: Dynamic Table domain entity with table-owns-fields approach
+// Entity manages its own fields and handles validation/data processing internally
 
 import type { TableMetadata } from '../value-objects/table-metadata';
-import { TableField, type CreateTableFieldData, type UpdateTableFieldData } from '../value-objects/table-field';
+import { TableField } from '../value-objects/table-field';
+import type { RowData, ColumnData, FieldValidationResult, FieldValidationError } from '../value-objects/field-values';
 import { TableId, DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
-import type { Result } from '@/ddd/domain/shared/result';
-import { ResultHelpers } from '@/ddd/domain/shared/result';
-
-export interface FieldValidationError {
-  field: string;
-  error: string;
-}
-
-export interface FieldValidationResult {
-  valid: boolean;
-  errors: FieldValidationError[];
-}
 
 export class DynamicTable {
   private constructor(
@@ -25,11 +14,11 @@ export class DynamicTable {
     private _name: string,                                 // Human-readable table name
     private _storageLocation: string,                      // Generic storage location (S3 path, table name, etc.)
     private _description: string | undefined,              // Optional description
-    private _metadata: TableMetadata | undefined,         // JSONB metadata using value object
+    private _metadata: TableMetadata | undefined,         // Metadata using value object
+    private _fields: TableField[],                        // Fields owned by this table (mutable within aggregate)
     private readonly _createdBy: UserId,                   // UUID reference to users.id
     private readonly _createdAt: Date | null,
-    private _updatedAt: Date | null,
-    private _fields: TableField[] = []                     // Fields owned by this table
+    private _updatedAt: Date | null
   ) {}
 
   // Getters
@@ -40,6 +29,7 @@ export class DynamicTable {
   get storageLocation(): string { return this._storageLocation; }
   get description(): string | undefined { return this._description; }
   get metadata(): TableMetadata | undefined { return this._metadata; }
+  get fields(): TableField[] { return [...this._fields]; } // Return copy to maintain encapsulation
   get createdBy(): UserId { return this._createdBy; }
   get createdAt(): Date | null { return this._createdAt ? new Date(this._createdAt) : null; }
   get updatedAt(): Date | null { return this._updatedAt ? new Date(this._updatedAt) : null; }
@@ -88,70 +78,80 @@ export class DynamicTable {
     return this._databaseId.equals(databaseId);
   }
 
-  // Field management methods (pure domain logic)
-  get fields(): readonly TableField[] { 
-    return [...this._fields]; 
+  // ===== FIELD QUERY METHODS =====
+
+  /**
+   * Get a field by name
+   */
+  getField(fieldName: string): TableField | undefined {
+    return this._fields.find(field => field.name === fieldName);
   }
 
-  addField(data: CreateTableFieldData): Result<void> {
-    // Validate field name uniqueness within table
-    if (this._fields.some(f => f.name === data.name)) {
-      return ResultHelpers.failure(`Field name '${data.name}' already exists`);
+  /**
+   * Check if field exists by name
+   */
+  hasField(fieldName: string): boolean {
+    return this._fields.some(field => field.name === fieldName);
+  }
+
+  /**
+   * Get field by ID
+   */
+  getFieldById(fieldId: number): TableField | undefined {
+    return this._fields.find(field => field.id === fieldId);
+  }
+
+  // ===== FIELD MUTATION METHODS (for aggregate consistency) =====
+
+  /**
+   * Add a field to the table (within aggregate boundary)
+   */
+  addField(field: TableField): void {
+    // Check if field name already exists
+    if (this._fields.some(f => f.name === field.name)) {
+      throw new Error(`Field with name '${field.name}' already exists`);
     }
     
-    const field = TableField.create(data);
     this._fields.push(field);
     this._updatedAt = new Date();
-    return ResultHelpers.success();
   }
 
-  removeField(name: string): Result<void> {
-    const index = this._fields.findIndex(f => f.name === name);
+  /**
+   * Update a field in the table
+   */
+  updateField(fieldId: number, updatedField: TableField): void {
+    const index = this._fields.findIndex(f => f.id === fieldId);
     if (index === -1) {
-      return ResultHelpers.failure(`Field '${name}' not found`);
+      throw new Error(`Field with ID ${fieldId} not found`);
+    }
+    
+    this._fields[index] = updatedField;
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Remove a field from the table
+   */
+  removeField(fieldId: number): void {
+    const index = this._fields.findIndex(f => f.id === fieldId);
+    if (index === -1) {
+      throw new Error(`Field with ID ${fieldId} not found`);
     }
     
     this._fields.splice(index, 1);
     this._updatedAt = new Date();
-    return ResultHelpers.success();
   }
 
-  updateField(name: string, updates: UpdateTableFieldData): Result<void> {
-    const index = this._fields.findIndex(f => f.name === name);
-    if (index === -1) {
-      return ResultHelpers.failure(`Field '${name}' not found`);
-    }
+  // ===== TABLE-OWNS-FIELDS METHODS =====
 
-    // If updating name, check for uniqueness
-    if (updates.name && updates.name !== name) {
-      if (this._fields.some(f => f.name === updates.name)) {
-        return ResultHelpers.failure(`Field name '${updates.name}' already exists`);
-      }
-    }
-
-    const currentField = this._fields[index];
-    let updatedField = currentField;
-
-    // Apply updates immutably
-    if (updates.name) updatedField = updatedField.updateName(updates.name);
-    if (updates.type) updatedField = updatedField.updateType(updates.type);
-
-    this._fields[index] = updatedField;
-    this._updatedAt = new Date();
-    return ResultHelpers.success();
-  }
-
-  getField(name: string): TableField | null {
-    return this._fields.find(f => f.name === name) || null;
-  }
-
-  // Field validation methods (pure domain logic)
-  validateRowData(data: Record<string, any>): FieldValidationResult {
+  /**
+   * Validate row data against this table's field definitions
+   */
+  validateRowData(data: RowData): FieldValidationResult {
     const errors: FieldValidationError[] = [];
 
     for (const field of this._fields) {
       const value = data[field.name];
-      
       const validation = field.validateValue(value);
       
       if (!validation.valid && validation.error) {
@@ -168,30 +168,38 @@ export class DynamicTable {
     };
   }
 
-  // Process row data for storage (field name to column name mapping)
-  processRowForStorage(data: Record<string, any>): Record<string, any> {
-    const processed: Record<string, any> = {};
+  /**
+   * Process row data for storage (convert field names to database column names)
+   */
+  processRowForStorage(data: RowData): ColumnData {
+    const processed: ColumnData = {};
     
     for (const field of this._fields) {
       const value = data[field.name];
-      processed[field.getColumnName()] = this.processFieldValueForStorage(field, value);
+      const columnName = field.getColumnName();
+      processed[columnName] = this.processFieldValueForStorage(field, value);
     }
+    
     return processed;
   }
 
-  // Process row data from storage (column name to field name mapping)
-  processRowFromStorage(data: Record<string, any>): Record<string, any> {
-    const processed: Record<string, any> = {};
+  /**
+   * Process row data from storage (convert database column names to field names)
+   */
+  processRowFromStorage(data: ColumnData): RowData {
+    const processed: RowData = {};
     
     for (const field of this._fields) {
-      const value = data[field.getColumnName()];
+      const columnName = field.getColumnName();
+      const value = data[columnName];
       processed[field.name] = this.processFieldValueFromStorage(field, value);
     }
     
     return processed;
   }
 
-  // Private field processing helpers
+  // ===== PRIVATE FIELD PROCESSING HELPERS =====
+
   private processFieldValueForStorage(field: TableField, value: unknown): any {
     if (value === null || value === undefined) {
       return null;
@@ -206,8 +214,7 @@ export class DynamicTable {
         return value;
       case 'relation':
       case 'file':
-      case 'jsonb':
-        // Serialize objects to JSON for JSONB storage
+        // These are stored as JSONB - already in correct format
         return typeof value === 'object' ? value : value;
       default:
         return value;
@@ -244,12 +251,12 @@ export class DynamicTable {
     storageLocation: string;
     description?: string;
     metadata?: TableMetadata;
+    fields: TableField[];
     createdBy: string;
     createdAt?: Date | null;
     updatedAt?: Date | null;
-    fields?: TableField[];  // Already converted domain objects
   }): DynamicTable {
-    const table = new DynamicTable(
+    return new DynamicTable(
       TableId.fromNumber(data.id),
       DatabaseId.fromNumber(data.databaseId),
       OrganizationId.fromNumber(data.organizationId),
@@ -257,20 +264,14 @@ export class DynamicTable {
       data.storageLocation,
       data.description,
       data.metadata,
+      data.fields,
       UserId.fromString(data.createdBy),
       data.createdAt || null,
       data.updatedAt || null
     );
-
-    // Add fields if provided (already domain objects)
-    if (data.fields) {
-      table._fields = [...data.fields];
-    }
-
-    return table;
   }
 
-  // Conversion method for persistence (table metadata only - fields handled by repository)
+  // Conversion method for persistence
   toPersistence(): {
     id: number;
     databaseId: number;
@@ -279,6 +280,7 @@ export class DynamicTable {
     description: string | undefined;
     storageLocation: string;
     metadata?: TableMetadata;
+    fields: TableField[];
     createdBy: string;
     createdAt: Date | null;
     updatedAt: Date | null;
@@ -291,6 +293,7 @@ export class DynamicTable {
       description: this._description,
       storageLocation: this._storageLocation,
       metadata: this._metadata,
+      fields: this._fields,
       createdBy: this._createdBy.value,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt
@@ -298,83 +301,6 @@ export class DynamicTable {
   }
 }
 
-// Database entity (parent of tables)
-export interface Database {
-  id: DatabaseId;
-  organizationId: OrganizationId;
-  name: string;
-  slug: string;                        // URL-safe database identifier
-  metadata?: DatabaseMetadata | null;
-  createdBy: UserId;
-  createdAt?: Date | null;
-  updatedAt?: Date | null;
-}
-
-export interface DatabaseMetadata {
-  description?: string;
-  [key: string]: any;                  // Additional metadata for RAG indexing
-}
-
-export interface CreateDynamicTableData {
-  databaseId: DatabaseId;
-  organizationId: OrganizationId;
-  name: string;
-  description?: string;
-  storageLocation: string;             // Generated storage location (S3 path, table name, etc.)
-  metadata?: TableMetadata;
-  createdBy: UserId;
-}
-
-export interface UpdateDynamicTableData {
-  databaseId?: DatabaseId;
-  name?: string;
-  description?: string;
-  metadata?: TableMetadata;
-  // Note: dbName and organizationId typically not changed after creation
-}
-
-export interface DynamicTableRow {
-  id: string;                          // UUID primary key
-  created_at?: Date | string | null;   // Auto-managed timestamp
-  updated_at?: Date | string | null;   // Auto-managed timestamp
-  [fieldKey: string]: any;             // Dynamic field_{id} columns with typed values
-}
-
-export interface CreateRowData {
-  [fieldKey: string]: any;             // Keys should be field_{id} format or field slugs
-}                                      // Field processor will map slugs to field_{id}
-
-export interface UpdateRowData {
-  [fieldKey: string]: any;             // Partial updates - field_{id} format or field slugs
-}                                      // Field processor will handle mapping and JSON parsing
-
-export interface RowQueryOptions {
-  limit?: number;
-  offset?: number;
-  orderBy?: string;                    // Column name to order by
-  orderDirection?: 'ASC' | 'DESC';
-  filters?: RowFilter[];               // Complex filtering options
-}
-
-export interface RowFilter {
-  field: string;                       // field_{id} format
-  operator: FilterOperator;
-  value: any;
-}
-
-export type FilterOperator = 
-  | 'eq'           // equals
-  | 'ne'           // not equals  
-  | 'gt'           // greater than
-  | 'gte'          // greater than or equal
-  | 'lt'           // less than
-  | 'lte'          // less than or equal
-  | 'like'         // SQL LIKE pattern
-  | 'ilike'        // case-insensitive LIKE
-  | 'in'           // value in array
-  | 'not_in'       // value not in array
-  | 'is_null'      // IS NULL
-  | 'is_not_null'  // IS NOT NULL
-  | 'contains'     // JSONB contains (for relation fields)
-  | 'contained_by' // JSONB contained by
-  | 'has_key';     // JSONB has key
+// AIDEV-NOTE: Entity cleaned up - Command DTOs moved to application service
+// Database entity exists in proper location: ddd/domain/databases/entities/database.ts
+// Row types and query interfaces moved to proper value-objects or infrastructure types

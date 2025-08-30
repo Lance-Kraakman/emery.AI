@@ -15,6 +15,7 @@ import type {
   UpdateDatabaseCommand,
   DatabaseFilters
 } from "@/ddd/application/services/database/database-application-service"
+import { UserId, DatabaseId } from "@/ddd/domain/shared/value-objects"
 
 const createDatabaseSchema = z.object({
   name: z.string().min(1, "Database name is required"),
@@ -37,7 +38,7 @@ export async function getDatabases(searchQuery?: string, hasTables?: boolean) {
     const databaseApplicationService = getDatabaseApplicationService();
     
     const filters: DatabaseFilters = {
-      organizationId: currentOrg.id.value,
+      organizationId: currentOrg.id,
       searchQuery,
       hasTables
     };
@@ -58,7 +59,7 @@ export async function getDatabase(id: number) {
     }
     
     const databaseApplicationService = getDatabaseApplicationService();
-    const database = await databaseApplicationService.getDatabase(id);
+    const database = await databaseApplicationService.getDatabase(DatabaseId.fromNumber(id));
     
     if (!database) {
       throw new Error("Database not found");
@@ -84,8 +85,8 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
       name: validatedData.name,
       description: validatedData.description,
       metadata: validatedData.metadata,
-      organizationId: currentOrg.id.value,
-      createdBy: session.user.id
+      organizationId: currentOrg.id,
+      createdBy: UserId.fromString(session.user.id)
     };
 
     const result = await databaseApplicationService.createDatabase(command);
@@ -138,7 +139,7 @@ export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>,
     const databaseApplicationService = getDatabaseApplicationService();
     
     const command: UpdateDatabaseCommand = {
-      databaseId: validatedData.id,
+      databaseId: DatabaseId.fromNumber(validatedData.id),
       name: validatedData.name,
       description: validatedData.description,
       metadata: validatedData.metadata
@@ -191,7 +192,7 @@ export async function deleteDatabase(id: number, revalidateUrl?: string): Promis
     }
     
     const databaseApplicationService = getDatabaseApplicationService();
-    const result = await databaseApplicationService.deleteDatabase(id, currentOrg.id.value);
+    const result = await databaseApplicationService.deleteDatabase(DatabaseId.fromNumber(id), currentOrg.id);
 
     if (!result.success) {
       return {
@@ -229,7 +230,7 @@ export async function getDatabaseCount() {
     const currentOrg = await requireCurrentOrganization();
     
     const databaseApplicationService = getDatabaseApplicationService();
-    return await databaseApplicationService.getDatabaseCount(currentOrg.id.value);
+    return await databaseApplicationService.getDatabaseCount(currentOrg.id);
   } catch (error) {
     console.error('Error fetching database count:', error);
     throw new Error('Failed to fetch database count');

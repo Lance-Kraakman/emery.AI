@@ -5,7 +5,8 @@
 
 import { auth, hasPermission } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { getFileApplicationService } from "@/ddd/application/di/container";
+import { getFileApplicationService, getTableApplicationService } from "@/ddd/application/di/container";
+import { TableId } from "@/ddd/domain/shared/value-objects";
 import type { UploadFileCommand, DeleteFileCommand } from "@/ddd/application/services/files/file-application-service";
 import type { Result } from "./types";
 
@@ -46,6 +47,23 @@ export async function uploadFileAction(formData: FormData): Promise<Result> {
       };
     }
 
+    // Use TableApplicationService to find field by name and get its ID
+    const tableApplicationService = getTableApplicationService();
+    const table = await tableApplicationService.getTable(TableId.fromNumber(tableId));
+    if (!table) {
+      return {
+        success: false,
+        error: "Table not found"
+      };
+    }
+    const field = table.getField(fieldName);
+    if (!field) {
+      return {
+        success: false,
+        error: `Field '${fieldName}' not found in table`
+      };
+    }
+
     // Use FileApplicationService for file upload
     const fileApplicationService = getFileApplicationService();
     
@@ -53,7 +71,7 @@ export async function uploadFileAction(formData: FormData): Promise<Result> {
     const command: UploadFileCommand = {
       organizationId,
       tableId,
-      fieldName,
+      fieldId: field.id,
       file: {
         buffer,
         filename: file.name,
@@ -103,12 +121,30 @@ export async function deleteFileAction(fileId: string, fieldName: string, tableI
       };
     }
 
+    // Use TableApplicationService to find field by name and get its ID
+    const tableApplicationService = getTableApplicationService();
+    const table = await tableApplicationService.getTable(TableId.fromNumber(tableId));
+    if (!table) {
+      return {
+        success: false,
+        error: "Table not found"
+      };
+    }
+
+    const field = table.getField(fieldName);
+    if (!field) {
+      return {
+        success: false,
+        error: `Field '${fieldName}' not found in table`
+      };
+    }
+
     // Use FileApplicationService for file deletion
     const fileApplicationService = getFileApplicationService();
     
     const command: DeleteFileCommand = {
       fileId,
-      fieldName,
+      fieldId: field.id,
       tableId,
       organizationId,
       deletedBy: session.user.id

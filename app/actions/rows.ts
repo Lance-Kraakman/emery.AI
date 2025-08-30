@@ -6,11 +6,12 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { getDynamicTableRepository, getTableRowDomainService } from "@/ddd/application/di/container";
-import type { Result, CreateRowData, UpdateRowData } from "./types";
+import type { Result, CreateRowCommand, UpdateRowCommand } from "./types";
+import type { RowData } from "@/ddd/domain/tables/value-objects/field-values";
 import { TableId, UserId } from "@/ddd/domain/shared/value-objects";
 
 
-export async function createRow(data: CreateRowData, revalidateUrl?: string): Promise<Result> {
+export async function createRow(data: CreateRowCommand, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("manage_data");
     const { tableId, data: rowData } = data;
@@ -106,15 +107,15 @@ export async function getRowsData(tableId: number, limit = 100, offset = 0): Pro
       throw new Error("Table not found");
     }
     
-    const rowCollection = await tableRowService.getRows(table, { limit, offset });
-    return rowCollection.toPlainObjects();
+    const rowsData = await tableRowService.getRows(table, { limit, offset });
+    return rowsData; // RowData[] is already in the correct format
   } catch (error) {
     console.error("Error fetching rows:", error);
     throw new Error(error instanceof Error ? error.message : "Failed to fetch rows");
   }
 }
 
-export async function updateRowData(data: UpdateRowData, revalidateUrl?: string): Promise<Result> {
+export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("manage_data");
     const { tableId, rowId, data: rowData } = data;

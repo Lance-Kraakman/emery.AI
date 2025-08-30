@@ -417,7 +417,7 @@ export class RagIndexingApplicationService {
   }
 
   private async indexDatabases(index: RagIndex): Promise<any[]> {
-    const databases = await this.databaseRepository.findByOrganization(index.organizationId.value);
+    const databases = await this.databaseRepository.findByOrganization(index.organizationId);
     if (databases.length === 0) return [];
 
     return await this.indexingDomainService.indexDatabaseData(

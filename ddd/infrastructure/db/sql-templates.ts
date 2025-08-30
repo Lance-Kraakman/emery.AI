@@ -330,7 +330,7 @@ export class SqlExecutor {
         } else if (value === null || value === undefined) {
           substitutedValue = 'NULL';
         } else if (Array.isArray(value) || typeof value === 'object') {
-          // For arrays and objects (JSONB), serialize to JSON string
+          // For arrays and objects, serialize to JSON string
           const jsonString = JSON.stringify(value);
           substitutedValue = `'${jsonString.replace(/'/g, "''")}'::jsonb`;
         } else {

@@ -15,11 +15,11 @@ export interface IndexingResult {
 // Import domain entities directly 
 import type { Organization } from '@/ddd/domain/organizations/entities/organization';
 import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
+import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { getCapabilitiesCount } from '@/ddd/domain/agents/entities/agent';
 import type { Database } from '@/ddd/domain/databases/entities/database';
 import type { Team } from '@/ddd/domain/teams/entities/team';
-import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import type { StoredFile } from '@/ddd/domain/files/entities/file-storage';
 
 // Import content processing interfaces
@@ -73,7 +73,7 @@ export class IndexingDomainService {
     indexId: RagIndexId,
     organizationId: OrganizationId,
     tables: DynamicTable[],
-    fieldsMap?: Map<number, Field[]>,
+    fieldsMap?: Map<number, TableField[]>,
     databasesMap?: Map<number, Database>
   ): Promise<RagDocument[]> {
     const documents: RagDocument[] = [];

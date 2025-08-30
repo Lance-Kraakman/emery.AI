@@ -13,11 +13,12 @@ import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/fil
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import type { Result } from '@/ddd/domain/shared/result';
 import { TableId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import type { FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 export interface UploadFileCommand {
   organizationId: number;
   tableId: number;
-  fieldName: string; // Use field name instead of fieldId
+  fieldId: number; // Use fieldId to match repository interface
   file: {
     buffer: Buffer;
     filename: string;
@@ -28,7 +29,7 @@ export interface UploadFileCommand {
 
 export interface DownloadFileCommand {
   fileId: string;
-  fieldName: string; // Use field name instead of fieldId
+  fieldId: number; // Use fieldId to match repository interface
   tableId: number; // Need table context
   organizationId: number;
   requestedBy: string;
@@ -36,7 +37,7 @@ export interface DownloadFileCommand {
 
 export interface DeleteFileCommand {
   fileId: string;
-  fieldName: string; // Use field name instead of fieldId
+  fieldId: number; // Use fieldId to match repository interface  
   tableId: number; // Need table context
   organizationId: number;
   deletedBy: string;
@@ -80,21 +81,21 @@ export class FileApplicationService {
       }
 
       // 2. Validate field exists and is a file field using table aggregate
-      const field = table.getField(command.fieldName);
+      const field = table.getFieldById(command.fieldId);
       if (!field) {
         return {
           success: false,
-          error: `Field '${command.fieldName}' not found in table`
+          error: `Field with ID '${command.fieldId}' not found in table`
         };
       }
 
-      // Field belongs to table by definition since we got it from table.getField()
+      // Field belongs to table by definition since we got it from table.getFieldById()
       // No need to validate tableId separately
 
       if (field.type !== 'file') {
         return {
           success: false,
-          error: `Field ${command.fieldName} is not a file field`
+          error: `Field ${field.name} is not a file field`
         };
       }
 
@@ -109,7 +110,7 @@ export class FileApplicationService {
         },
         organizationId: command.organizationId,
         tableId: command.tableId,
-        fieldId: command.fieldName,
+        fieldId: command.fieldId,
       };
 
       const storedFile = await this.fileStorageRepository.uploadFile(uploadRequest);
@@ -122,8 +123,6 @@ export class FileApplicationService {
         mimeType: storedFile.mimeType,
         s3Key: storedFile.key,
         uploadedAt: storedFile.uploadedAt.toISOString(),
-        url: await this.fileStorageRepository.generateDownloadUrl(storedFile.key),
-        metadata: storedFile.metadata,
       };
 
       console.log(`[FILE-APP-SERVICE] Uploaded file ${uploadedFile.name} to field ${field.name} in table ${table.name}`);
@@ -147,32 +146,39 @@ export class FileApplicationService {
    */
   async generateDownloadUrl(command: DownloadFileCommand): Promise<FileApplicationServiceResult<{ url: string; filename: string }>> {
     try {
-      // 1. Validate field exists and user has access
-      const field = await this.fieldRepository.findById(FieldId.fromNumber(command.fieldName));
+      // 1. Get table and validate field exists and is a file field
+      const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
+      if (!table) {
+        return {
+          success: false,
+          error: 'Table not found'
+        };
+      }
+
+      // Verify table belongs to organization
+      if (table.organizationId.value !== command.organizationId) {
+        return {
+          success: false,
+          error: 'Access denied: table not in your organization'
+        };
+      }
+
+      const field = table.getFieldById(command.fieldId);
       if (!field) {
         return {
           success: false,
-          error: `Field ${command.fieldName} not found`
+          error: `Field with ID '${command.fieldId}' not found in table`
         };
       }
 
       if (field.type !== 'file') {
         return {
           success: false,
-          error: `Field ${command.fieldName} is not a file field`
+          error: `Field ${field.name} is not a file field`
         };
       }
 
-      // 2. Validate table belongs to organization
-      const table = await this.dynamicTableService.getTable(field.tableId);
-      if (!table || table.organizationId.value !== command.organizationId) {
-        return {
-          success: false,
-          error: 'Access denied: file not accessible to your organization'
-        };
-      }
-
-      // 3. Get file metadata and generate download URL
+      // 2. Get file metadata and generate download URL
       // Note: This would require getting current file values from the field
       // For now, we'll generate URL directly using the file storage repository
       const downloadUrl = await this.fileStorageRepository.generateDownloadUrl(command.fileId, { 
@@ -203,28 +209,35 @@ export class FileApplicationService {
    */
   async deleteFile(command: DeleteFileCommand): Promise<FileApplicationServiceResult<void>> {
     try {
-      // 1. Validate field exists and user has access
-      const field = await this.fieldRepository.findById(FieldId.fromNumber(command.fieldName));
+      // 1. Get table and validate field exists and is a file field
+      const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
+      if (!table) {
+        return {
+          success: false,
+          error: 'Table not found'
+        };
+      }
+
+      // Verify table belongs to organization
+      if (table.organizationId.value !== command.organizationId) {
+        return {
+          success: false,
+          error: 'Access denied: table not in your organization'
+        };
+      }
+
+      const field = table.getFieldById(command.fieldId);
       if (!field) {
         return {
           success: false,
-          error: `Field ${command.fieldName} not found`
+          error: `Field with ID '${command.fieldId}' not found in table`
         };
       }
 
       if (field.type !== 'file') {
         return {
           success: false,
-          error: `Field ${command.fieldName} is not a file field`
-        };
-      }
-
-      // 2. Validate table belongs to organization
-      const table = await this.dynamicTableService.getTable(field.tableId);
-      if (!table || table.organizationId.value !== command.organizationId) {
-        return {
-          success: false,
-          error: 'Access denied: file not accessible to your organization'
+          error: `Field ${field.name} is not a file field`
         };
       }
 
@@ -254,29 +267,44 @@ export class FileApplicationService {
    */
   async getFiles(command: GetFilesCommand): Promise<FileApplicationServiceResult<FileFieldValue[]>> {
     try {
-      // 1. If fieldId is provided, validate field access
-      if (command.fieldName) {
-        const field = await this.fieldRepository.findById(FieldId.fromNumber(command.fieldName));
+      // 1. Get table and validate access
+      if (!command.tableId) {
+        return {
+          success: false,
+          error: 'Table ID is required'
+        };
+      }
+
+      const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
+      if (!table) {
+        return {
+          success: false,
+          error: 'Table not found'
+        };
+      }
+
+      // Verify table belongs to organization
+      if (table.organizationId.value !== command.organizationId) {
+        return {
+          success: false,
+          error: 'Access denied: table not in your organization'
+        };
+      }
+
+      // 2. If fieldId is provided, validate field access
+      if (command.fieldId) {
+        const field = table.getFieldById(command.fieldId);
         if (!field) {
           return {
             success: false,
-            error: `Field ${command.fieldName} not found`
+            error: `Field with ID '${command.fieldId}' not found in table`
           };
         }
 
         if (field.type !== 'file') {
           return {
             success: false,
-            error: `Field ${command.fieldName} is not a file field`
-          };
-        }
-
-        // Validate table belongs to organization
-        const table = await this.dynamicTableService.getTable(field.tableId);
-        if (!table || table.organizationId.value !== command.organizationId) {
-          return {
-            success: false,
-            error: 'Access denied: field not accessible to your organization'
+            error: `Field ${field.name} is not a file field`
           };
         }
 
@@ -286,21 +314,9 @@ export class FileApplicationService {
           success: true,
           data: []
         };
-      }
-
-      // 2. If tableId is provided, get all file fields and their files
-      if (command.tableId) {
-        const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
-        if (!table || table.organizationId.value !== command.organizationId) {
-          return {
-            success: false,
-            error: 'Access denied: table not accessible to your organization'
-          };
-        }
-
-        // Get all file fields for table
-        const fields = await this.fieldRepository.findByTableId(TableId.fromNumber(command.tableId));
-        const fileFields = fields.filter((f: any) => f.type === 'file');
+      } else {
+        // Get all file fields for table and their files
+        const fileFields = table.fields.filter(field => field.type === 'file');
 
         // Get files for all file fields (would need aggregation implementation)
         // For now, return empty array as placeholder
@@ -309,12 +325,6 @@ export class FileApplicationService {
           data: []
         };
       }
-
-      // 3. Get all files for organization (would need organization-wide query)
-      return {
-        success: true,
-        data: []
-      };
 
     } catch (error) {
       console.error('[FILE-APP-SERVICE] Error getting files:', error);

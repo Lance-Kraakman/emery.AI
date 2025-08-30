@@ -12,11 +12,8 @@ import { TableRowDomainService } from '@/ddd/domain/tables/services/table-row-do
 import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { TestCase } from '../../shared/types';
-// AIDEV-NOTE: JSONB validation helpers moved to table domain after field consolidation
-// import { createExampleRelationData, createExampleFileData } from '@/ddd/domain/fields/services/jsonb-validation-helpers';
-
 // AIDEV-NOTE: TableRowDomainService integration tests focusing on domain row operations
-// Built on top of ArrowDataStorageService with proper Baserow JSONB validation
+// Built on top of ArrowDataStorageService with proper file and relation field validation
 
 interface AddRowInput {
   tableSetup: {
@@ -162,7 +159,7 @@ describe('TableRowDomainService Integration Tests', () => {
         expected: { success: true }
       },
       {
-        name: 'should create row with Baserow JSONB relation fields',
+        name: 'should create row with relation fields',
         input: {
           tableSetup: {
             name: 'Projects',
@@ -174,15 +171,15 @@ describe('TableRowDomainService Integration Tests', () => {
           rowData: {
             'Title': 'New Website Project',
             'Assigned Users': [
-              { id: '123', displayValue: 'John Doe', tableId: 2 },
-              { id: '456', displayValue: 'Jane Smith', tableId: 2 }
+              { id: '123', value: 'John Doe' },
+              { id: '456', value: 'Jane Smith' }
             ]
           }
         },
         expected: { success: true }
       },
       {
-        name: 'should create row with Baserow JSONB file fields',
+        name: 'should create row with file fields',
         input: {
           tableSetup: {
             name: 'Documents',
@@ -222,10 +219,10 @@ describe('TableRowDomainService Integration Tests', () => {
             // Missing required email field
           }
         },
-        expected: { success: false, error: 'Field is required' }
+        expected: { success: false, error: 'Email is required' }
       },
       {
-        name: 'should reject row with invalid JSONB structures',
+        name: 'should reject row with invalid file structures',
         input: {
           tableSetup: {
             name: 'Projects',
@@ -245,7 +242,7 @@ describe('TableRowDomainService Integration Tests', () => {
             ]
           }
         },
-        expected: { success: false, error: 'File object missing required field' }
+        expected: { success: false, error: 'Validation failed' }
       }
     ];
 
@@ -294,6 +291,9 @@ describe('TableRowDomainService Integration Tests', () => {
       retrievalTestTable = table;
       // fields are now part of the table entity
 
+      // Verify table has fields before creating row
+      expect(table.fields.length).toBeGreaterThan(0);
+      
       // Create a test row
       const createResult = await tableRowService.addRow({
         table,
@@ -301,14 +301,19 @@ describe('TableRowDomainService Integration Tests', () => {
           Name: 'Test Row',
           Description: 'A row for retrieval testing',
           'Relations': [
-            { id: '123', displayValue: 'Related Item', tableId: 2 }
+            { id: '123', value: 'Related Item' }
           ]
         },
         createdBy: UserId.fromString(testUserId)
       });
       
       if (createResult.success && createResult.data) {
-        createdRowId = createResult.data.id.value;
+        createdRowId = createResult.data.id!;
+        // Verify the row was created with an ID
+        expect(createdRowId).toBeDefined();
+        expect(typeof createdRowId).toBe('string');
+      } else {
+        throw new Error(`Failed to create test row: ${createResult.error}`);
       }
     });
 
@@ -324,7 +329,7 @@ describe('TableRowDomainService Integration Tests', () => {
         expected: { success: true, rowExists: false }
       },
       {
-        name: 'should handle complex JSONB field retrieval correctly',
+        name: 'should handle complex relation field retrieval correctly',
         input: { tableId: 0, rowId: '' }, // Will be set dynamically
         expected: { success: true, rowExists: true }
       }
@@ -339,14 +344,14 @@ describe('TableRowDomainService Integration Tests', () => {
         
         if (testCase.expected.rowExists) {
           expect(result).not.toBeNull();
-          expect(result?.id.value).toBe(rowId);
-          expect(result?.fieldValues).toBeDefined();
+          expect(result?.id).toBe(rowId);
+          expect(result).toBeDefined();
           
-          // Verify JSONB fields are properly deserialized
-          if (testCase.name.includes('complex JSONB')) {
-            const relationField = result?.getFieldValue('Relations');
-            expect(relationField?.value).toBeDefined();
-            expect(Array.isArray(relationField?.value)).toBe(true);
+          // Verify relation fields are properly deserialized
+          if (testCase.name.includes('complex relation')) {
+            const relationField = result?.Relations;
+            expect(relationField).toBeDefined();
+            expect(Array.isArray(relationField)).toBe(true);
           }
         } else {
           expect(result).toBeNull();
@@ -383,7 +388,7 @@ describe('TableRowDomainService Integration Tests', () => {
       });
       
       if (createResult.success && createResult.data) {
-        updateTestRowId = createResult.data.id.value;
+        updateTestRowId = createResult.data.id!;
       }
     });
 
@@ -398,7 +403,7 @@ describe('TableRowDomainService Integration Tests', () => {
         expected: { success: true }
       },
       {
-        name: 'should update JSONB fields correctly',
+        name: 'should update file fields correctly',
         input: {
           tableId: 0, // Will be set dynamically
           rowId: '',  // Will be set dynamically
@@ -424,7 +429,7 @@ describe('TableRowDomainService Integration Tests', () => {
           rowId: '',  // Will be set dynamically
           updateData: { 'Email': 'invalid-email-format' }
         },
-        expected: { success: false, error: 'Must be a valid email address' }
+        expected: { success: false, error: 'Email must be a valid email address' }
       }
     ];
 
@@ -448,8 +453,8 @@ describe('TableRowDomainService Integration Tests', () => {
           
           // Check specific updated fields
           Object.keys(testCase.input.updateData).forEach(key => {
-            const fieldValue = updatedRow?.getFieldValue(key);
-            expect(fieldValue?.value).toEqual(testCase.input.updateData[key]);
+            const fieldValue = updatedRow?.[key];
+            expect(fieldValue).toEqual(testCase.input.updateData[key]);
           });
         } else {
           expect(result.error).toBeDefined();
@@ -492,7 +497,7 @@ describe('TableRowDomainService Integration Tests', () => {
         });
         
         if (createResult.success && createResult.data) {
-          createdRowIds.push(createResult.data.id.value);
+          createdRowIds.push(createResult.data.id!);
         }
       }
     });
@@ -560,21 +565,21 @@ describe('TableRowDomainService Integration Tests', () => {
         const result = await tableRowService.getRows(collectionTestTable, testCase.input.filters);
 
         expect(result).toBeDefined();
-        expect(result.rows.length).toBeGreaterThan(0);
+        expect(result.length).toBeGreaterThan(0);
 
         if (testCase.expected.rowCount) {
-          expect(result.rows.length).toBe(testCase.expected.rowCount);
+          expect(result.length).toBe(testCase.expected.rowCount);
         }
 
         if (testCase.expected.hasRows) {
-          expect(result.rows.length).toBeGreaterThan(0);
+          expect(result.length).toBeGreaterThan(0);
           
           // Verify each row has proper structure
-          result.rows.forEach(row => {
+          result.forEach(row => {
             expect(row.id).toBeDefined();
-            expect(row.fieldValues).toBeDefined();
-            const nameField = row.getFieldValue('Name');
-            expect(nameField?.value).toBeDefined();
+            expect(row).toBeDefined();
+            const nameField = row['Name'];
+            expect(nameField).toBeDefined();
           });
         }
       });
@@ -617,7 +622,7 @@ describe('TableRowDomainService Integration Tests', () => {
             { 'Name': 'Invalid User', 'Email': 'not-an-email' } // Should fail validation
           ]
         },
-        expected: { success: false, error: 'Must be a valid email address' }
+        expected: { success: false, error: 'Email must be a valid email address' }
       }
     ];
 
@@ -633,11 +638,11 @@ describe('TableRowDomainService Integration Tests', () => {
 
         if (testCase.expected.success) {
           expect(result.data).toBeDefined();
-          expect(result.data?.rows.length).toBe(testCase.expected.createdCount);
+          expect(result.data?.length).toBe(testCase.expected.createdCount);
           
           // Verify all rows were created
           const allRows = await tableRowService.getRows(bulkTestTable);
-          expect(allRows.rows.length).toBeGreaterThanOrEqual(testCase.expected.createdCount || 0);
+          expect(allRows.length).toBeGreaterThanOrEqual(testCase.expected.createdCount || 0);
         } else {
           expect(result.error).toBeDefined();
           if (testCase.expected.error) {
@@ -718,8 +723,8 @@ describe('TableRowDomainService Integration Tests', () => {
     for (let i = 0; i < fieldDefs.length; i++) {
       const fieldDef = fieldDefs[i];
       
-      // Add field using table's domain method
-      const addFieldResult = table.addField({
+      // AIDEV-NOTE: Create and add field using internal method for test setup
+      const field = TableField.create({
         name: fieldDef.name,
         type: fieldDef.type,
         orderIndex: i,
@@ -728,9 +733,7 @@ describe('TableRowDomainService Integration Tests', () => {
         metadata: undefined
       });
       
-      if (!addFieldResult.success) {
-        throw new Error(`Failed to add field ${fieldDef.name}: ${addFieldResult.error}`);
-      }
+      table.addField(field);
     }
     
     // Save the table with its fields using the service's saveTable method

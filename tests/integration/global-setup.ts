@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 import path from 'path';
+import { S3Client, HeadBucketCommand, ListObjectsV2Command, CreateBucketCommand } from '@aws-sdk/client-s3';
 
 // AIDEV-NOTE: Global setup for integration tests
 // Manages Docker container lifecycle and ensures clean state between test runs
@@ -37,6 +38,7 @@ export async function setup() {
   // Wait for services to be healthy
   console.log('⏳ Waiting for services to become healthy...');
   await waitForHealthy('emery-integration-db', 60000);    // 1 minute timeout
+  await waitForHealthy('emery-integration-minio', 60000); // 1 minute timeout for MinIO
   await waitForHealthy('emery-integration-app', 120000);  // 2 minute timeout for build
   await waitForHealthy('emery-integration-agent', 90000); // 1.5 minute timeout
   
@@ -91,8 +93,13 @@ export async function setup() {
   process.env.TEST_APP_URL = 'http://localhost:3002';
   process.env.TEST_GRPC_URL = 'localhost:50053';
   
+  // Verify S3 (MinIO) connectivity and bucket existence
+  console.log('🪣 Verifying S3 connectivity and bucket setup...');
+  await verifyS3Setup();
+
   console.log('✅ Integration test environment ready');
   console.log('   📊 Database: localhost:5436');
+  console.log('   🪣 S3:       localhost:9005 (emery-files bucket)');
   console.log('   🌐 App:      localhost:3002');
   console.log('   🤖 Agent:    localhost:50053');
 }
@@ -108,6 +115,63 @@ export async function teardown() {
     console.log('✅ Integration test cleanup complete');
   } catch (error) {
     console.error('⚠️  Error during cleanup (may be expected):', error);
+  }
+}
+
+// Helper function to verify S3 setup
+async function verifyS3Setup(): Promise<void> {
+  const maxRetries = 10;
+  const retryDelay = 2000; // 2 seconds
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // Use external MinIO endpoint for testing from local machine
+      const s3Client = new S3Client({
+        endpoint: 'http://localhost:9005',
+        region: 'us-east-1',
+        credentials: {
+          accessKeyId: 'minioadmin',
+          secretAccessKey: 'minioadmin',
+        },
+        forcePathStyle: true,
+      });
+
+      console.log(`   🔍 Attempt ${attempt}/${maxRetries}: Checking if emery-files bucket exists...`);
+      
+      try {
+        await s3Client.send(new HeadBucketCommand({ Bucket: 'emery-files' }));
+        console.log('   ✅ emery-files bucket exists and is accessible');
+      } catch (bucketError: any) {
+        if (bucketError.name === 'NotFound') {
+          console.log('   🪣 Bucket does not exist, creating it...');
+          await s3Client.send(new CreateBucketCommand({ Bucket: 'emery-files' }));
+          console.log('   ✅ emery-files bucket created successfully');
+        } else {
+          throw bucketError;
+        }
+      }
+
+      // Test basic list operation
+      console.log('   🔍 Testing bucket list operation...');
+      await s3Client.send(new ListObjectsV2Command({ 
+        Bucket: 'emery-files',
+        MaxKeys: 1
+      }));
+      console.log('   ✅ Bucket list operation successful');
+      console.log('   ✅ S3 connectivity verification passed');
+      return; // Success, exit retry loop
+      
+    } catch (error: any) {
+      console.log(`   ⚠️  Attempt ${attempt}/${maxRetries} failed:`, error.message);
+      
+      if (attempt === maxRetries) {
+        console.error('   ❌ S3 connectivity verification failed after all retries');
+        throw new Error(`S3 setup verification failed after ${maxRetries} attempts: ${error}`);
+      }
+      
+      console.log(`   ⏳ Waiting ${retryDelay/1000}s before retry...`);
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+    }
   }
 }
 

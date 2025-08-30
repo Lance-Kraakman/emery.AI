@@ -18,36 +18,36 @@ export class TableMetadata {
   ) {}
 
   /**
-   * Create TableMetadata from database JSONB data
+   * Create TableMetadata from database data
    */
-  static fromDatabase(jsonb: unknown): Result<TableMetadata> {
+  static fromDatabase(data: unknown): Result<TableMetadata> {
     try {
-      if (jsonb === null || jsonb === undefined) {
+      if (data === null || data === undefined) {
         return ResultHelpers.success(this.empty());
       }
 
-      if (typeof jsonb !== 'object') {
+      if (typeof data !== 'object') {
         return ResultHelpers.failure('Table metadata must be an object');
       }
 
-      const data = jsonb as Record<string, unknown>;
+      const metadata = data as Record<string, unknown>;
       
       // Validate and extract known fields
-      const description = typeof data.description === 'string' ? data.description : undefined;
+      const description = typeof metadata.description === 'string' ? metadata.description : undefined;
       
       let tags: string[] = [];
-      if (Array.isArray(data.tags)) {
-        const validTags = data.tags.filter((tag): tag is string => typeof tag === 'string');
-        if (validTags.length !== data.tags.length) {
+      if (Array.isArray(metadata.tags)) {
+        const validTags = metadata.tags.filter((tag): tag is string => typeof tag === 'string');
+        if (validTags.length !== metadata.tags.length) {
           return ResultHelpers.failure('All tags must be strings');
         }
         tags = validTags;
-      } else if (data.tags !== undefined) {
+      } else if (metadata.tags !== undefined) {
         return ResultHelpers.failure('Tags must be an array of strings');
       }
 
       // Extract extra properties (excluding known fields)
-      const { description: _, tags: __, ...extra } = data;
+      const { description: _, tags: __, ...extra } = metadata;
       
       return ResultHelpers.success(
         new TableMetadata(description, tags, extra)
