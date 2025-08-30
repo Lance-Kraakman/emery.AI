@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useTransition } from 'react';
-import type { Field } from '@/ddd/domain/fields/entities/field';
+import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import type { Row } from '@/app/actions/types';
 import { createRowAction, updateRowAction, deleteRowAction } from '@/app/actions/rows';
 
 interface UseRowManagerProps {
   tableId: number;
-  fields: Field[];
+  fields: TableField[];
   onRowUpdate: () => void;
 }
 

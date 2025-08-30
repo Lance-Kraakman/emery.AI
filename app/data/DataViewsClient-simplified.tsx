@@ -83,7 +83,7 @@ export function DataViewsClientSimplified() {
 
     try {
       // Find the field to get its slug
-      const field = fields.find(f => f.id.value === fieldId)
+      const field = fields.find(f => f.id === fieldId)
       if (!field) {
         console.error('Field not found for fieldId:', fieldId)
         return

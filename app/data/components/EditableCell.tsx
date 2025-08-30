@@ -118,7 +118,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
           </a>
         )
       case "relation":
-        // Handle JSONB relation data
+        // Handle relation data
         if (typeof value === 'object' && value !== null) {
           if (Array.isArray(value)) {
             return (
@@ -145,7 +145,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         }
         return <span className="text-muted-foreground italic text-xs">No relation</span>
       case "file":
-        // Handle JSONB file data
+        // Handle file data
         if (typeof value === 'object' && value !== null) {
           if (Array.isArray(value)) {
             return (

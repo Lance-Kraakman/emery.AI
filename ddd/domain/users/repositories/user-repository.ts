@@ -40,9 +40,9 @@ export interface IUserRepository {
   // User-Organization relationship management  
   addUserToOrganization(data: CreateUserOrganizationData, tx?: TransactionContext): Promise<UserOrganization>;
   removeUserFromOrganization(userId: UserId, organizationId: OrganizationId, tx?: TransactionContext): Promise<void>;
+  
   // Simplified role management - just update the user's organizationRole
   updateUserRole(userId: UserId, role: string, tx?: TransactionContext): Promise<User>;
-  
   
   // User queries for admin operations
   findByOrganizationId(organizationId: OrganizationId, tx?: TransactionContext): Promise<User[]>;

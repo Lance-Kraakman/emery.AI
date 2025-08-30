@@ -134,12 +134,12 @@ export class DatabaseApplicationService {
 
       // Create updated database
       const updatedDatabase = Database.fromPersistence({
-        id: existingDatabase.id,
+        id: existingDatabase.id.value,
         name: command.name !== undefined ? command.name : existingDatabase.name,
         slug: existingDatabase.slug, // Slug doesn't change on update
         metadata: metadata || null,
-        organizationId: existingDatabase.organizationId,
-        createdBy: existingDatabase.createdBy,
+        organizationId: existingDatabase.organizationId.value,
+        createdBy: existingDatabase.createdBy.value,
         createdAt: existingDatabase.createdAt,
         updatedAt: new Date()
       });
@@ -182,7 +182,7 @@ export class DatabaseApplicationService {
       }
 
       // Check if database has tables - prevent deletion if it does
-      const tables = await this.tableRepository.findByDatabase(DatabaseId.fromNumber(databaseId));
+      const tables = await this.tableRepository.findByDatabase(databaseId);
 
       if (tables.length > 0) {
         return {
@@ -235,7 +235,7 @@ export class DatabaseApplicationService {
       if (filters.hasTables !== undefined) {
         const databasesWithTableCounts = await Promise.all(
           databases.map(async (database) => {
-            const tables = await this.tableRepository.findByDatabase(DatabaseId.fromNumber(database.id));
+            const tables = await this.tableRepository.findByDatabase(database.id);
             return { database, tableCount: tables.length };
           })
         );

@@ -4,8 +4,11 @@
  * Domain value objects for table row data that encapsulate business rules
  * and provide type safety for row operations in dynamic tables.
  * 
- * AIDEV-NOTE: Value objects for row data - immutable, validated, domain-focused
+ * AIDEV-NOTE: Updated to use type-safe FieldValue system instead of generic `any` types.
+ * Works with new field-values.ts type definitions for better type safety.
  */
+
+import type { FieldValue as TypedFieldValue, RowData } from './field-values';
 
 export class RowId {
   constructor(private readonly _value: string) {
@@ -33,7 +36,7 @@ export class RowId {
 export class FieldValue {
   constructor(
     public readonly fieldSlug: string,
-    public readonly value: any,
+    public readonly value: TypedFieldValue | null | undefined,
     public readonly fieldType: string
   ) {
     if (!fieldSlug || fieldSlug.trim().length === 0) {
@@ -80,10 +83,8 @@ export class Row {
   }
 
 
-  toPlainObject(): Record<string, any> {
-    const obj: Record<string, any> = {
-      id: this.id.value
-    };
+  toPlainObject(): RowData {
+    const obj: RowData = {};
 
     for (const fieldValue of this.fieldValues) {
       obj[fieldValue.fieldSlug] = fieldValue.value;
@@ -93,7 +94,7 @@ export class Row {
   }
 
   static fromPlainObject(
-    data: Record<string, any>, 
+    data: RowData & { id?: string }, 
     tableId: number,
     fieldSlugs: string[],
     fieldTypes: Record<string, string> = {}

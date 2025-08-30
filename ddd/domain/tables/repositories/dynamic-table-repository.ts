@@ -3,15 +3,13 @@
 
 import type { 
   DynamicTable, 
-  CreateDynamicTableData,
-  CreateRowData,
-  UpdateRowData,
-  RowQueryOptions
 } from '../entities/dynamic-table';
-import { Row } from '../value-objects/row';
+import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
+import type { ColumnData, RowData } from '../value-objects/field-values';
 import { TableId, DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
-export type { CreateDynamicTableData } from '../entities/dynamic-table';
+// AIDEV-NOTE: CreateDynamicTableData moved to application service
+import type { CreateDynamicTableData } from '@/ddd/application/services/tables/table-application-service';
 
 export interface IDynamicTableRepository {
   // Table CRUD - just the basics
@@ -23,11 +21,11 @@ export interface IDynamicTableRepository {
   delete(id: TableId): Promise<void>;
   existsByStorageLocation(organizationId: OrganizationId, storageLocation: string): Promise<boolean>;
   
-  // Row CRUD - used by domain services
-  insertRow(tableId: TableId, data: CreateRowData): Promise<Row>;
-  findRows(tableId: TableId, options?: RowQueryOptions): Promise<Row[]>;
-  getRow(tableId: TableId, rowId: string): Promise<Row | null>;
-  updateRow(tableId: TableId, rowId: string, data: UpdateRowData): Promise<Row>;
+  // Row CRUD - used by domain services (works with ColumnData internally, returns RowData)
+  insertRow(tableId: TableId, data: ColumnData): Promise<RowData>;
+  findRows(tableId: TableId, options?: RowQueryOptions): Promise<RowData[]>;
+  getRow(tableId: TableId, rowId: string): Promise<RowData | null>;
+  updateRow(tableId: TableId, rowId: string, data: ColumnData): Promise<RowData>;
   deleteRow(tableId: TableId, rowId: string): Promise<void>;
   
   // Generic table operations for any storage backend

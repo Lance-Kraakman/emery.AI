@@ -111,16 +111,24 @@ export class AgentApplicationService {
 
       // Apply defaults and add generated fields
       const agentWithDefaults = createAgentDefaults(agentData);
-      const createData: CreateAgentData = {
-        ...agentWithDefaults,
-        organizationId: command.organizationId, // Ensure these required fields are set
-        ownerId: command.ownerId,
-      };
 
       // Create agent entity object, then save via repository
       const newAgent: Agent = {
-        ...createData,
         id: AgentId.newEntity(), // New agent starts with ID 0
+        name: agentWithDefaults.name,
+        role: agentWithDefaults.role,
+        description: agentWithDefaults.description,
+        persona: agentWithDefaults.persona,
+        tools: agentWithDefaults.tools,
+        servers: agentWithDefaults.servers,
+        trigger: agentWithDefaults.trigger,
+        capabilities: agentWithDefaults.capabilities,
+        databaseId: agentWithDefaults.databaseId,
+        status: agentWithDefaults.status,
+        organizationId: command.organizationId,
+        ownerId: command.ownerId,
+        agentType: agentWithDefaults.agentType,
+        specialization: agentWithDefaults.specialization,
         apiKey: apiKey,
         createdAt: new Date(),
         updatedAt: new Date()

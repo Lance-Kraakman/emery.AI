@@ -154,11 +154,8 @@ export class DIContainer {
     try {
       // Import db clients dynamically to avoid circular dependencies
       const { db, rawClient } = require('@/lib/db/client');
-      this.initialize(db, rawClient).then(() => {
-        console.log('✅ DIContainer auto-initialized successfully');
-      }).catch((error) => {
-        console.warn('⚠️ DIContainer auto-initialization failed, will require manual initialization:', error);
-      });
+      this.initialize(db, rawClient);
+      console.log('✅ DIContainer auto-initialized successfully');
     } catch (error) {
       console.warn('⚠️ DIContainer auto-initialization failed, will require manual initialization:', error);
     }

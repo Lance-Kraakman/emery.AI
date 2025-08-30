@@ -24,6 +24,7 @@ export class DrizzleUserRepository implements IUserRepository {
     private rawClient: postgres.Sql
   ) {}
 
+
   // Basic CRUD operations
   async findById(id: UserId, tx?: TransactionContext): Promise<User | null> {
     const dbClient = tx || this.db;
@@ -115,6 +116,23 @@ export class DrizzleUserRepository implements IUserRepository {
     await this.db
       .delete(users)
       .where(eq(users.id, id.value));
+  }
+
+  // Simplified role management - just update the user's organizationRole
+  async updateUserRole(userId: UserId, role: string, tx?: TransactionContext): Promise<User> {
+    const dbClient = tx || this.db;
+    
+    const [updatedUser] = await dbClient
+      .update(users)
+      .set({ organizationRole: role })
+      .where(eq(users.id, userId.value))
+      .returning();
+
+    if (!updatedUser) {
+      throw new Error(`User with id ${userId.value} not found`);
+    }
+
+    return this.mapToEntity(updatedUser);
   }
 
   // API Key management
@@ -283,6 +301,25 @@ export class DrizzleUserRepository implements IUserRepository {
       .from(userOrganizations)
       .innerJoin(users, eq(userOrganizations.userId, users.id))
       .where(eq(userOrganizations.organizationId, organizationId.value));
+
+    return result.map(r => this.mapToEntity(r.user));
+  }
+
+  async findByRole(organizationId: OrganizationId, role: string, tx?: TransactionContext): Promise<User[]> {
+    const dbClient = tx || this.db;
+    
+    const result = await dbClient
+      .select({
+        user: users
+      })
+      .from(userOrganizations)
+      .innerJoin(users, eq(userOrganizations.userId, users.id))
+      .where(
+        and(
+          eq(userOrganizations.organizationId, organizationId.value),
+          eq(users.organizationRole, role)
+        )
+      );
 
     return result.map(r => this.mapToEntity(r.user));
   }

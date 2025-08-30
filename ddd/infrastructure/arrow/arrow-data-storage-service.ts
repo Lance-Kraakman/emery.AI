@@ -50,7 +50,7 @@ export class ArrowDataStorageService implements DataStorageService {
     table: DynamicTable
   ): Promise<Result<Buffer>> {
     try {
-      // 1. Build Arrow schema from table's fields
+      // 1. Build Arrow schema from table's fields (now includes system fields)
       const arrowSchema = this.buildArrowSchema(table.fields);
       
       // 2. Process data to match Arrow schema requirements
@@ -87,7 +87,7 @@ export class ArrowDataStorageService implements DataStorageService {
       // Read Arrow Table from IPC buffer
       const arrowTable = tableFromIPC(uint8Array);
       
-      // Convert Arrow Table back to JavaScript objects
+      // Convert Arrow Table back to JavaScript objects (now includes system fields)
       const rows = await this.processRowsFromArrow(arrowTable, table.fields);
       
       return { success: true, data: rows };
@@ -134,14 +134,23 @@ export class ArrowDataStorageService implements DataStorageService {
 
   // Arrow conversion helper methods
   private buildArrowSchema(fields: readonly TableField[]): Schema {
-    const arrowFields = fields.map(field => {
+    // Start with system fields that are always present in stored data
+    const systemFields = [
+      new ArrowField('id', new Utf8(), false), // ID is required
+      new ArrowField('created_at', new Timestamp(TimeUnit.MILLISECOND), false), // Created timestamp is required
+      new ArrowField('updated_at', new Timestamp(TimeUnit.MILLISECOND), false), // Updated timestamp is required
+    ];
+    
+    // Add user-defined table fields
+    const tableFields = fields.map(field => {
       const createDataType = FIELD_TYPE_TO_ARROW_TYPE[field.type];
       const dataType = createDataType ? createDataType() : new Utf8();
       
       return new ArrowField(field.name, dataType, !field.required);
     });
 
-    return new Schema(arrowFields);
+    // Combine system fields + table fields
+    return new Schema([...systemFields, ...tableFields]);
   }
 
   private async processDataForArrow(
@@ -150,13 +159,24 @@ export class ArrowDataStorageService implements DataStorageService {
   ): Promise<Record<string, any[]>> {
     const columns: Record<string, any[]> = {};
     
-    // Initialize columns
+    // Initialize system field columns
+    columns['id'] = [];
+    columns['created_at'] = [];
+    columns['updated_at'] = [];
+    
+    // Initialize table field columns
     fields.forEach(field => {
       columns[field.name] = [];
     });
     
     // Process each row
     for (const row of data) {
+      // Process system fields first
+      columns['id'].push(row.id || null);
+      columns['created_at'].push(row.created_at ? new Date(row.created_at).getTime() : null);
+      columns['updated_at'].push(row.updated_at ? new Date(row.updated_at).getTime() : null);
+      
+      // Process table fields
       for (const field of fields) {
         let value = row[field.name];
         
@@ -205,6 +225,26 @@ export class ArrowDataStorageService implements DataStorageService {
     for (let i = 0; i < table.numRows; i++) {
       const row: Record<string, any> = {};
       
+      // Process system fields first
+      const idColumn = table.getChild('id');
+      const createdAtColumn = table.getChild('created_at');
+      const updatedAtColumn = table.getChild('updated_at');
+      
+      if (idColumn) {
+        row.id = idColumn.get(i);
+      }
+      
+      if (createdAtColumn) {
+        const timestamp = createdAtColumn.get(i);
+        row.created_at = timestamp ? new Date(timestamp) : null;
+      }
+      
+      if (updatedAtColumn) {
+        const timestamp = updatedAtColumn.get(i);
+        row.updated_at = timestamp ? new Date(timestamp) : null;
+      }
+      
+      // Process table fields
       for (const field of fields) {
         const column = table.getChild(field.name);
         if (column) {
@@ -218,7 +258,7 @@ export class ArrowDataStorageService implements DataStorageService {
               break;
             case 'relation':
             case 'file':
-              // Relation and file fields should already be proper JSONB structures
+              // Relation and file fields should already be proper structured data
               // No string parsing needed - they are stored as serialized JSON objects
               // and retrieved as structured data by Arrow
               if (value !== null && value !== undefined && typeof value === 'string') {

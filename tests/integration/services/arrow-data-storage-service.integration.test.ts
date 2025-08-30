@@ -456,6 +456,7 @@ function createMockTable(id: number, name: string): DynamicTable {
     organizationId: 1,
     databaseId: 1,
     storageLocation: `s3://test-bucket/org_1/db_1/table_${id}`,
+    fields: [], // Mock table with empty fields for testing
     createdBy: '550e8400-e29b-41d4-a716-446655440000', // Valid UUID format
     createdAt: new Date('2024-01-01T00:00:00.000Z'),
     updatedAt: new Date('2024-01-01T00:00:00.000Z')
@@ -468,7 +469,8 @@ function createMockTableWithFields(name: string, fieldDefs: Array<{ name: string
   // Add fields to the table using the consolidated approach
   for (let i = 0; i < fieldDefs.length; i++) {
     const fieldDef = fieldDefs[i];
-    const addResult = table.addField({
+    // AIDEV-NOTE: Use internal method for test setup only - normal code should use TableApplicationService
+    const field = TableField.create({
       name: fieldDef.name,
       type: fieldDef.type,
       orderIndex: i,
@@ -477,9 +479,7 @@ function createMockTableWithFields(name: string, fieldDefs: Array<{ name: string
       metadata: undefined
     });
     
-    if (!addResult.success) {
-      throw new Error(`Failed to add field ${fieldDef.name}: ${addResult.error}`);
-    }
+    table.addField(field);
   }
   
   return table;

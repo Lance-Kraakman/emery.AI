@@ -248,18 +248,19 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
     return !!result;
   }
 
-  async getUserRole(organizationId: number, userId: string): Promise<string | null> {
-    const result = await this.db.query.userOrganizations.findFirst({
+  async getUserRole(organizationId: OrganizationId, userId: UserId, tx?: TransactionContext): Promise<OrganizationRole | null> {
+    const dbClient = tx || this.db;
+    const result = await dbClient.query.userOrganizations.findFirst({
       where: and(
-        eq(userOrganizations.organizationId, organizationId),
-        eq(userOrganizations.userId, userId)
+        eq(userOrganizations.organizationId, organizationId.value),
+        eq(userOrganizations.userId, userId.value)
       ),
       columns: {
         role: true
       }
     });
 
-    return result?.role || null;
+    return result?.role ? new OrganizationRole(result.role) : null;
   }
 
   async findByName(name: string, limit: number = 10): Promise<Organization[]> {

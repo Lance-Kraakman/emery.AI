@@ -9,6 +9,7 @@
  */
 
 import { TableId } from '@/ddd/domain/shared/value-objects';
+import type { FileArrayFieldValue, RelationArrayFieldValue } from './field-values';
 
 export type FieldType = 
   | 'text' 
@@ -18,8 +19,7 @@ export type FieldType =
   | 'boolean' 
   | 'date' 
   | 'relation' 
-  | 'file' 
-  | 'jsonb';
+  | 'file';
 
 export interface CreateTableFieldData {
   name: string;
@@ -156,19 +156,109 @@ export class TableField {
       'boolean': 'BOOLEAN',
       'date': 'TIMESTAMP WITH TIME ZONE',
       'relation': 'JSONB',
-      'file': 'JSONB',
-      'jsonb': 'JSONB'
+      'file': 'JSONB'
     };
     
     return typeMapping[this._type];
   }
 
   requiresGinIndex(): boolean {
-    const jsonbTypes: FieldType[] = ['relation', 'file', 'jsonb'];
-    return jsonbTypes.includes(this._type);
+    const complexTypes: FieldType[] = ['relation', 'file'];
+    return complexTypes.includes(this._type);
   }
 
   // Validation methods (consolidated from FieldProcessor)
+  private validateFileArray(value: unknown): { valid: boolean; error?: string } {
+    if (!Array.isArray(value)) {
+      return { valid: false, error: `${this._name} must be an array of files` };
+    }
+
+    if (value.length === 0) {
+      return { valid: true }; // Empty array is valid
+    }
+
+    const requiredFields = ['id', 'name', 'size', 'mimeType', 's3Key', 'uploadedAt'];
+
+    for (let i = 0; i < value.length; i++) {
+      const file = value[i];
+
+      if (typeof file !== 'object' || file === null) {
+        return { valid: false, error: `${this._name}[${i}] must be a file object` };
+      }
+
+      // Check required fields
+      for (const field of requiredFields) {
+        if (!(field in file)) {
+          return { valid: false, error: `${this._name}[${i}] missing required field: ${field}` };
+        }
+      }
+
+      // Validate field types
+      if (typeof file.size !== 'number' || file.size < 0) {
+        return { valid: false, error: `${this._name}[${i}].size must be a positive number` };
+      }
+
+      if (typeof file.name !== 'string' || !file.name) {
+        return { valid: false, error: `${this._name}[${i}].name must be a non-empty string` };
+      }
+
+      if (typeof file.mimeType !== 'string') {
+        return { valid: false, error: `${this._name}[${i}].mimeType must be a string` };
+      }
+
+      if (typeof file.id !== 'string' || !file.id) {
+        return { valid: false, error: `${this._name}[${i}].id must be a non-empty string` };
+      }
+
+      if (typeof file.s3Key !== 'string' || !file.s3Key) {
+        return { valid: false, error: `${this._name}[${i}].s3Key must be a non-empty string` };
+      }
+
+      if (typeof file.uploadedAt !== 'string' || !file.uploadedAt) {
+        return { valid: false, error: `${this._name}[${i}].uploadedAt must be a non-empty string` };
+      }
+    }
+
+    return { valid: true };
+  }
+
+  private validateRelationArray(value: unknown): { valid: boolean; error?: string } {
+    if (!Array.isArray(value)) {
+      return { valid: false, error: `${this._name} must be an array of relations` };
+    }
+
+    if (value.length === 0) {
+      return { valid: true }; // Empty array is valid
+    }
+
+    for (let i = 0; i < value.length; i++) {
+      const relation = value[i];
+
+      if (typeof relation !== 'object' || relation === null) {
+        return { valid: false, error: `${this._name}[${i}] must be a relation object` };
+      }
+
+      if (!('id' in relation) || !relation.id) {
+        return { valid: false, error: `${this._name}[${i}] missing required field: id` };
+      }
+
+      if (!('value' in relation)) {
+        return { valid: false, error: `${this._name}[${i}] missing required field: value` };
+      }
+
+      // Validate field types
+      if (typeof relation.id !== 'string' && typeof relation.id !== 'number') {
+        return { valid: false, error: `${this._name}[${i}].id must be a string or number` };
+      }
+
+      if (typeof relation.value !== 'string') {
+        return { valid: false, error: `${this._name}[${i}].value must be a string` };
+      }
+    }
+
+    return { valid: true };
+  }
+
   validateValue(value: unknown): { valid: boolean; error?: string } {
     // Handle null/undefined
     if (value === null || value === undefined || value === '') {
@@ -234,14 +324,11 @@ export class TableField {
         }
         break;
 
-      case 'relation':
       case 'file':
-      case 'jsonb':
-        // For JSONB fields, basic structure validation
-        if (typeof value !== 'object' || Array.isArray(value)) {
-          return { valid: false, error: `${this._name} must be a valid object` };
-        }
-        break;
+        return this.validateFileArray(value);
+
+      case 'relation':
+        return this.validateRelationArray(value);
 
       default:
         return { valid: false, error: `Unknown field type: ${this._type}` };

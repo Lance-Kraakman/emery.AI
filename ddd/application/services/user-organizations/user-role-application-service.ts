@@ -7,8 +7,6 @@
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { UserOrganization, CreateUserOrganizationData } from '@/ddd/domain/users/entities/user';
-import type { Organization } from '@/ddd/domain/organizations/entities/organization';
-import type { User } from '@/ddd/domain/users/entities/user';
 import { UserId, OrganizationId, OrganizationRole } from '@/ddd/domain/shared/value-objects';
 import type { Result } from '@/ddd/domain/shared/result';
 

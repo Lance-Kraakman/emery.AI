@@ -18,6 +18,7 @@ export interface CreateTeamCommand {
   responsibilities?: string[];
   goals?: string[];
   agentIds?: string[];
+  databaseId?: string;
   organizationId: number;
 }
 
@@ -74,15 +75,17 @@ export class TeamApplicationService {
         }
       }
 
-      // Create team using domain entity
-      const team = Team.create({
+      // Create team using domain entity with temporary ID (repository will assign real ID)
+      const team = Team.fromPersistence({
+        id: 0, // Temporary ID - repository will assign real ID
         name: command.name.trim(),
         purpose: command.purpose,
         description: command.description,
         responsibilities: command.responsibilities,
         goals: command.goals,
-        agentIds: command.agentIds ? command.agentIds.map(id => AgentId.fromNumber(parseInt(id))) : undefined,
-        organizationId: OrganizationId.fromNumber(command.organizationId)
+        agentIds: command.agentIds ? command.agentIds.map(id => id.toString()) : undefined,
+        databaseId: command.databaseId,
+        organizationId: command.organizationId
       });
 
       // Save to repository

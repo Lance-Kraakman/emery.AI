@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+
+// AIDEV-NOTE: Field types support text, email, url, number, boolean, date, file, relation
 import type { CreateFieldCommand } from '@/ddd/application/services/tables/table-application-service';
 
 export async function POST(request: NextRequest) {
@@ -23,6 +25,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
 
     // Use TableApplicationService for field creation
     const tableApplicationService = getTableApplicationService();

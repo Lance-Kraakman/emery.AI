@@ -18,20 +18,17 @@ import { s3Client, BUCKET_NAME, ensureBucketExists } from '@/lib/s3/client';
 import { GetObjectCommand, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 
 import type { Result } from '@/ddd/domain/shared/result';
-import { TableId, DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { TableId, DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { 
-  IDynamicTableRepository,
-  CreateDynamicTableData
+  IDynamicTableRepository
 } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import type { CreateDynamicTableData } from '@/ddd/application/services/tables/table-application-service';
 import {
-  DynamicTable,
-  type DynamicTableRow,
-  type CreateRowData,
-  type UpdateRowData,
-  type RowQueryOptions
+  DynamicTable
 } from '@/ddd/domain/tables/entities/dynamic-table';
-import { TableField } from '@/ddd/domain/tables/value-objects/table-field';
-import { Row } from '@/ddd/domain/tables/value-objects/row';
+import type { ColumnData, RowData } from '@/ddd/domain/tables/value-objects/field-values';
+import type { DynamicTableRow, RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
+import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
@@ -70,7 +67,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       // 3. Initialize empty table in S3 (no fields created here - handled separately)
       await this.initializeEmptyTable(realS3Path, data.organizationId, data.databaseId, TableId.fromNumber(tableRecord.id), data.name, data.createdBy);
 
-      // 4. Return domain entity
+      // 4. Return domain entity with empty fields (no fields created yet)
       const dynamicTable = DynamicTable.fromPersistence({
         id: tableRecord.id,
         databaseId: tableRecord.databaseId,
@@ -78,6 +75,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         name: tableRecord.name,
         storageLocation: realS3Path.path,
         metadata: tableRecord.metadata ? TableMetadata.fromDatabase(tableRecord.metadata).data : undefined,
+        fields: [], // No fields created yet - handled separately
         createdBy: tableRecord.createdBy,
         createdAt: tableRecord.createdAt!,
         updatedAt: tableRecord.updatedAt!
@@ -116,11 +114,11 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           id: fieldRecord.id,
           tableId: fieldRecord.tableId,
           name: fieldRecord.name,
-          type: fieldRecord.type,
+          type: fieldRecord.type as FieldType,
           orderIndex: fieldRecord.orderIndex,
-          relatedTableId: fieldRecord.relatedTableId,
+          relatedTableId: fieldRecord.fieldConfig?.relatedTableId || null,
           required: fieldRecord.required,
-          metadata: fieldRecord.metadata || undefined,
+          metadata: fieldRecord.fieldConfig || undefined,
           createdAt: fieldRecord.createdAt
         })
       );
@@ -136,7 +134,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         createdBy: tableRecord.createdBy,
         createdAt: tableRecord.createdAt!,
         updatedAt: tableRecord.updatedAt!,
-        fields: tableFields  // Include converted field domain objects
+        fields: tableFields
       });
 
       return dynamicTable;
@@ -164,8 +162,8 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         metadata: record.metadata ? TableMetadata.fromDatabase(record.metadata).data : undefined,
         createdBy: record.createdBy,
         createdAt: record.createdAt!,
-        updatedAt: record.updatedAt!
-        // fields: undefined - not loaded for bulk operations
+        updatedAt: record.updatedAt!,
+        fields: [] // Not loaded for bulk operations - use findById for full entity
       }));
 
     } catch (error) {
@@ -189,7 +187,8 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         metadata: record.metadata ? TableMetadata.fromDatabase(record.metadata).data : undefined,
         createdBy: record.createdBy,
         createdAt: record.createdAt!,
-        updatedAt: record.updatedAt!
+        updatedAt: record.updatedAt!,
+        fields: [] // Not loaded for bulk operations - use findById for full entity
       }));
 
     } catch (error) {
@@ -257,10 +256,11 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           slug: field.name.toLowerCase().replace(/\s+/g, '_'), // Generate slug from name
           type: field.type,
           orderIndex: field.orderIndex,
-          relatedTableId: field.relatedTableId?.value || null,
           required: field.required,
-          metadata: field.metadata || null,
-          createdAt: new Date()
+          fieldConfig: field.relatedTableId || field.metadata ? {
+            ...(field.metadata || {}),
+            ...(field.relatedTableId ? { relatedTableId: field.relatedTableId.value } : {})
+          } : null
         });
       }
 
@@ -318,7 +318,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
-  async insertRow(tableId: TableId, data: CreateRowData): Promise<Row> {
+  async insertRow(tableId: TableId, data: ColumnData): Promise<RowData> {
     // AIDEV-NOTE: Simple atomic approach - load all data, add row, save all data
     try {
       // 1. Get table metadata
@@ -351,12 +351,11 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       // 7. Save back to S3
       await this.saveTableData(s3Path, existingData, table);
 
-      // 8. Convert DynamicTableRow to Row domain object before returning
-      const fieldNames = table.fields.map(f => f.name);
-      const fieldTypes = table.fields.reduce((acc, f) => ({ ...acc, [f.name]: f.type }), {});
-      const storageData = table.processRowFromStorage(rowWithId);
+      // 8. Convert DynamicTableRow to RowData using entity's method
+      const rowData = table.processRowFromStorage(rowWithId);
       
-      return Row.fromPlainObject(storageData, tableId.value, fieldNames, fieldTypes);
+      // Add row ID to RowData for tests and consumer code
+      return { id: rowWithId.id, ...rowData };
 
     } catch (error) {
       console.error('[TableService] Error inserting row:', error);
@@ -364,11 +363,11 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
-  async findRows(tableId: TableId, options?: RowQueryOptions): Promise<Row[]> {
+  async findRows(tableId: TableId, options?: RowQueryOptions): Promise<RowData[]> {
     return await this.getRows(tableId, options);
   }
 
-  async getRows(tableId: TableId, options?: RowQueryOptions): Promise<Row[]> {
+  async getRows(tableId: TableId, options?: RowQueryOptions): Promise<RowData[]> {
     try {
       const table = await this.findById(tableId);
       if (!table) {
@@ -383,13 +382,10 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       // Apply query options (filters, sorting, pagination)
       const filteredData = this.applyQueryOptions(allData, options);
       
-      // Convert DynamicTableRow[] to Row[] before returning
-      const fieldNames = table.fields.map(f => f.name);
-      const fieldTypes = table.fields.reduce((acc, f) => ({ ...acc, [f.name]: f.type }), {});
-      
-      return filteredData.map(rowData => {
-        const processedData = table.processRowFromStorage(rowData);
-        return Row.fromPlainObject(processedData, tableId.value, fieldNames, fieldTypes);
+      // Convert DynamicTableRow[] to RowData[] using entity's method
+      return filteredData.map(row => {
+        const rowData = table.processRowFromStorage(row);
+        return { id: row.id, ...rowData };
       });
 
     } catch (error) {
@@ -398,7 +394,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
-  async getRow(tableId: TableId, rowId: string): Promise<Row | null> {
+  async getRow(tableId: TableId, rowId: string): Promise<RowData | null> {
     try {
       const table = await this.findById(tableId);
       if (!table) {
@@ -415,12 +411,11 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         return null;
       }
       
-      // Convert DynamicTableRow to Row domain object before returning
-      const fieldNames = table.fields.map(f => f.name);
-      const fieldTypes = table.fields.reduce((acc, f) => ({ ...acc, [f.name]: f.type }), {});
-      const processedData = table.processRowFromStorage(foundRow);
+      // Convert DynamicTableRow to RowData using entity's method
+      const rowData = table.processRowFromStorage(foundRow);
       
-      return Row.fromPlainObject(processedData, tableId.value, fieldNames, fieldTypes);
+      // Add row ID to RowData (now properly preserved through Arrow serialization)
+      return { id: foundRow.id, ...rowData };
 
     } catch (error) {
       console.error('[TableService] Error getting row:', error);
@@ -428,7 +423,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
-  async updateRow(tableId: TableId, rowId: string, data: UpdateRowData): Promise<Row> {
+  async updateRow(tableId: TableId, rowId: string, data: ColumnData): Promise<RowData> {
     // AIDEV-NOTE: Simple atomic approach - load all data, update row, save all data
     try {
       // 1. Get table metadata and schema
@@ -466,12 +461,11 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
       console.log(`[TableService] Updated row ${rowId} in table ${table.name} using atomic approach`);
 
-      // 6. Convert DynamicTableRow to Row domain object before returning
-      const fieldSlugs = fields.map(f => f.slug);
-      const fieldTypes = fields.reduce((acc, f) => ({ ...acc, [f.slug]: f.type }), {});
-      const processedRowData = this.fieldProcessor.processRowFromStorage(fields, updatedRow);
+      // 6. Convert DynamicTableRow to RowData using entity's method
+      const rowData = table.processRowFromStorage(updatedRow);
       
-      return Row.fromPlainObject(processedRowData, tableId.value, fieldSlugs, fieldTypes);
+      // Add row ID to RowData
+      return { id: updatedRow.id, ...rowData };
 
     } catch (error) {
       console.error('[TableService] Error updating row:', error);
@@ -595,7 +589,8 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         metadata: record.metadata ? TableMetadata.fromDatabase(record.metadata).data : undefined,
         createdBy: record.createdBy,
         createdAt: record.createdAt!,
-        updatedAt: record.updatedAt!
+        updatedAt: record.updatedAt!,
+        fields: [] // Not loaded for bulk operations - use findById for full entity
       }));
 
     } catch (error) {
@@ -692,6 +687,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       name: tableName,
       storageLocation: s3Path.path,
       metadata: undefined,
+      fields: [], // Empty table has no fields initially
       createdBy: createdBy.value,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -719,9 +715,11 @@ export class DynamicTableRepository implements IDynamicTableRepository {
   // Empty table initialization is handled by initializeEmptyTable instead
   private async loadTableData(s3Path: S3TablePath): Promise<any[]> {
     try {
+      const s3Key = s3Path.getDataPath();
+      
       const response = await s3Client.send(new GetObjectCommand({
         Bucket: BUCKET_NAME,
-        Key: s3Path.getDataPath()
+        Key: s3Key
       }));
 
       if (!response.Body) {
@@ -749,23 +747,31 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       if ((error as any).name === 'NoSuchKey') {
         return [];
       }
+      console.error(`[DynamicTableRepository] Error loading table data from S3:`, error);
       throw error;
     }
   }
 
   private async saveTableData(s3Path: S3TablePath, data: any[], table: DynamicTable): Promise<void> {
+    const s3Key = s3Path.getDataPath();
+    
     const storageBuffer = await this.dataStorageService.storeData(data, table);
     
     if (!storageBuffer.success) {
       throw new Error(`Failed to store data: ${storageBuffer.error}`);
     }
-
-    await s3Client.send(new PutObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: s3Path.getDataPath(),
-      Body: storageBuffer.data,
-      ContentType: 'application/vnd.apache.arrow.file'
-    }));
+    
+    try {
+      await s3Client.send(new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: s3Key,
+        Body: storageBuffer.data,
+        ContentType: 'application/vnd.apache.arrow.file'
+      }));
+    } catch (error) {
+      console.error(`[DynamicTableRepository] Error saving to S3:`, error);
+      throw error;
+    }
   }
 
   // Helper method to extract table ID from S3 path
@@ -787,11 +793,6 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
 
 
-  /**
-   * Validate field type and return proper FieldType
-   * Ensures field types conform to domain specifications
-   */
-  private validateFieldType(fieldType: string): FieldType {
-    return this.fieldMapper.validateFieldType(fieldType);
-  }
+  // AIDEV-NOTE: Field validation now handled by TableField value object
+  // No separate field mapper needed with table-owns-fields approach
 }

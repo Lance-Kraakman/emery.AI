@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, hasPermission } from "@/lib/auth";
-import { getFileApplicationService } from "@/ddd/application/di/container";
+import { getFileApplicationService, getTableApplicationService } from "@/ddd/application/di/container";
+import { TableId } from "@/ddd/domain/shared/value-objects";
 import type { UploadFileCommand } from "@/ddd/application/services/files/file-application-service";
 
 export async function POST(request: NextRequest) {
@@ -43,6 +44,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Use TableApplicationService to find field by name and get its ID
+    const tableApplicationService = getTableApplicationService();
+    const table = await tableApplicationService.getTable(TableId.fromNumber(tableId));
+    if (!table) {
+      return NextResponse.json(
+        { error: "Table not found" },
+        { status: 404 }
+      );
+    }
+    const field = table.getField(fieldName);
+    if (!field) {
+      return NextResponse.json(
+        { error: `Field '${fieldName}' not found in table` },
+        { status: 404 }
+      );
+    }
+
     // Use FileApplicationService for file upload
     const fileApplicationService = getFileApplicationService();
     
@@ -50,7 +68,7 @@ export async function POST(request: NextRequest) {
     const command: UploadFileCommand = {
       organizationId,
       tableId,
-      fieldName,
+      fieldId: field.id,
       file: {
         buffer,
         filename: file.name,

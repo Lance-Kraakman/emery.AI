@@ -2,18 +2,17 @@
  * Table Row Domain Service
  * 
  * Pure domain service that coordinates row operations between DynamicTable entity
- * and repositories. Uses table's consolidated field methods for validation and
- * processing, eliminating need for separate field repositories and processors.
+ * and field repository. Gets fields separately and handles validation/processing
+ * through dedicated field services.
  * 
- * AIDEV-NOTE: Updated to use table's domain methods (validateRowData, processRowForStorage)
- * instead of separate FieldRepository/FieldProcessor. Clean consolidation complete.
+ * AIDEV-NOTE: Uses separate field repository pattern - table entity stays pure
  */
 
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
-import { Row, RowCollection } from '@/ddd/domain/tables/value-objects/row';
 import { TableId, UserId } from '@/ddd/domain/shared/value-objects';
+import type { RowData } from '@/ddd/domain/tables/value-objects/field-values';
 
 export interface RowFilters {
   limit?: number;
@@ -25,20 +24,20 @@ export interface RowFilters {
 
 export interface AddRowCommand {
   table: DynamicTable;
-  data: Record<string, any>;
+  data: RowData;
   createdBy?: UserId;
 }
 
 export interface UpdateRowCommand {
   table: DynamicTable;
   rowId: string;
-  data: Record<string, any>;
+  data: Partial<RowData>;
   updatedBy?: UserId;
 }
 
 export interface BulkAddRowsCommand {
   table: DynamicTable;
-  rows: Array<Record<string, any>>;
+  rows: Array<RowData>;
   createdBy?: UserId;
 }
 
@@ -53,16 +52,18 @@ export class TableRowDomainService {
   /**
    * Add a new row to a table
    */
-  async addRow(command: AddRowCommand): Promise<Result<Row>> {
+  async addRow(command: AddRowCommand): Promise<Result<RowData>> {
     try {
       const { table, data } = command;
 
       // 1. Validate row data using table's domain methods
       const validation = table.validateRowData(data);
       if (!validation.valid) {
+        // Build detailed error message from validation errors
+        const errorMessages = validation.errors.map(e => e.error).join(', ');
         return {
           success: false,
-          error: 'Validation failed',
+          error: errorMessages || 'Validation failed',
           validationErrors: validation.errors
         };
       }
@@ -73,15 +74,10 @@ export class TableRowDomainService {
       // 3. Create row through repository
       const rowData = await this.tableRepository.insertRow(table.id, columnData);
 
-      // 4. Convert back to domain Row object using field names
-      const fieldNames = table.fields.map(f => f.name);
-      const fieldTypes = table.fields.reduce((acc, f) => ({ ...acc, [f.name]: f.type }), {});
-      const processedRowData = table.processRowFromStorage(rowData);
-      const row = Row.fromPlainObject(processedRowData, table.id.value, fieldNames, fieldTypes);
-
+      // 4. Repository returns RowData directly
       return {
         success: true,
-        data: row
+        data: rowData
       };
 
     } catch (error) {
@@ -95,54 +91,32 @@ export class TableRowDomainService {
   /**
    * Get a single row from a table
    */
-  async getRow(table: DynamicTable, rowId: string): Promise<Row | null> {
+  async getRow(table: DynamicTable, rowId: string): Promise<RowData | null> {
     const rowData = await this.tableRepository.getRow(table.id, rowId);
-    if (!rowData) {
-      return null;
-    }
-
-    // Process row data from storage format using table's domain methods
-    const processedData = table.processRowFromStorage(rowData);
-    const fieldNames = table.fields.map(f => f.name);
-    const fieldTypes = table.fields.reduce((acc, f) => ({ ...acc, [f.name]: f.type }), {});
-
-    return Row.fromPlainObject(processedData, table.id.value, fieldNames, fieldTypes);
+    return rowData; // Repository returns RowData directly
   }
 
   /**
    * Get rows from a table with optional filters
    */
-  async getRows(table: DynamicTable, filters?: RowFilters): Promise<RowCollection> {
+  async getRows(table: DynamicTable, filters?: RowFilters): Promise<RowData[]> {
     try {
       // Convert filters to repository format
       const options = this.convertFiltersToQueryOptions(filters);
       
-      // Get rows from repository
-      const rowsData = await this.tableRepository.findRows(table.id, options);
-
-      // Process rows from storage format to domain objects using table's methods
-      const fieldNames = table.fields.map(f => f.name);
-      const fieldTypes = table.fields.reduce((acc, f) => ({ ...acc, [f.name]: f.type }), {});
-
-      const processedRowsData = [];
-      for (const rowData of rowsData) {
-        const processedData = table.processRowFromStorage(rowData);
-        processedRowsData.push(processedData);
-      }
-
-      return RowCollection.fromPlainObjects(processedRowsData, table.id.value, fieldNames, fieldTypes);
+      // Get rows from repository (returns RowData directly)
+      return await this.tableRepository.findRows(table.id, options);
 
     } catch (error) {
       console.error('[TableRowDomainService] Error getting rows:', error);
-      // Return empty collection on error
-      return RowCollection.fromPlainObjects([], table.id.value, [], {});
+      return []; // Return empty array on error
     }
   }
 
   /**
    * Update a row in a table
    */
-  async updateRow(command: UpdateRowCommand): Promise<Result<Row>> {
+  async updateRow(command: UpdateRowCommand): Promise<Result<RowData>> {
     try {
       const { table, rowId, data } = command;
 
@@ -158,9 +132,11 @@ export class TableRowDomainService {
       // 2. Validate update data using table's domain methods
       const validation = table.validateRowData(data);
       if (!validation.valid) {
+        // Build detailed error message from validation errors
+        const errorMessages = validation.errors.map(e => e.error).join(', ');
         return {
           success: false,
-          error: 'Validation failed',
+          error: errorMessages || 'Validation failed',
           validationErrors: validation.errors
         };
       }
@@ -171,15 +147,10 @@ export class TableRowDomainService {
       // 4. Update row through repository
       const updatedRowData = await this.tableRepository.updateRow(table.id, rowId, columnData);
 
-      // 5. Convert back to domain Row object using field names
-      const fieldNames = table.fields.map(f => f.name);
-      const fieldTypes = table.fields.reduce((acc, f) => ({ ...acc, [f.name]: f.type }), {});
-      const processedRowData = table.processRowFromStorage(updatedRowData);
-      const row = Row.fromPlainObject(processedRowData, table.id.value, fieldNames, fieldTypes);
-
+      // 5. Repository returns RowData directly
       return {
         success: true,
-        data: row
+        data: updatedRowData
       };
 
     } catch (error) {
@@ -222,7 +193,7 @@ export class TableRowDomainService {
   /**
    * Bulk add multiple rows to a table
    */
-  async bulkAddRows(command: BulkAddRowsCommand): Promise<Result<RowCollection>> {
+  async bulkAddRows(command: BulkAddRowsCommand): Promise<Result<RowData[]>> {
     try {
       const { table, rows } = command;
 
@@ -254,21 +225,10 @@ export class TableRowDomainService {
         createdRowsData.push(newRowData);
       }
 
-      // 3. Convert to domain objects using field names
-      const fieldNames = table.fields.map(f => f.name);
-      const fieldTypes = table.fields.reduce((acc, f) => ({ ...acc, [f.name]: f.type }), {});
-      
-      const processedRowsData = [];
-      for (const rowData of createdRowsData) {
-        const processedData = table.processRowFromStorage(rowData);
-        processedRowsData.push(processedData);
-      }
-
-      const rowCollection = RowCollection.fromPlainObjects(processedRowsData, table.id.value, fieldNames, fieldTypes);
-
+      // 3. Repository returns RowData directly
       return {
         success: true,
-        data: rowCollection
+        data: createdRowsData
       };
 
     } catch (error) {
