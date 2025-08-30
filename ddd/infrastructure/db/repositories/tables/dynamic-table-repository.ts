@@ -382,11 +382,9 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       // Apply query options (filters, sorting, pagination)
       const filteredData = this.applyQueryOptions(allData, options);
       
-      // Convert DynamicTableRow[] to RowData[] using entity's method
-      return filteredData.map(row => {
-        const rowData = table.processRowFromStorage(row);
-        return { id: row.id, ...rowData };
-      });
+      // Data from Arrow storage is already in field name format (Relations, Name, etc.)
+      // No need to process through processRowFromStorage since we converted to field format before storage
+      return filteredData;
 
     } catch (error) {
       console.error('[TableService] Error finding rows:', error);
@@ -411,11 +409,9 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         return null;
       }
       
-      // Convert DynamicTableRow to RowData using entity's method
-      const rowData = table.processRowFromStorage(foundRow);
-      
-      // Add row ID to RowData (now properly preserved through Arrow serialization)
-      return { id: foundRow.id, ...rowData };
+      // Data from Arrow storage is already in field name format (Relations, Name, etc.)
+      // No need to process through processRowFromStorage since we converted to field format before storage
+      return foundRow;
 
     } catch (error) {
       console.error('[TableService] Error getting row:', error);
@@ -755,7 +751,12 @@ export class DynamicTableRepository implements IDynamicTableRepository {
   private async saveTableData(s3Path: S3TablePath, data: any[], table: DynamicTable): Promise<void> {
     const s3Key = s3Path.getDataPath();
     
-    const storageBuffer = await this.dataStorageService.storeData(data, table);
+    // Convert data from column format (field_1, field_2, etc.) back to field name format (Relations, Name, etc.)
+    // for Arrow storage service which expects field names to match table.fields
+    const fieldNameData = data.map(row => table.processRowFromStorage(row));
+    // Debug: console.log('[DynamicTableRepository] DEBUG: Converting column data to field name data for Arrow storage');
+    
+    const storageBuffer = await this.dataStorageService.storeData(fieldNameData, table);
     
     if (!storageBuffer.success) {
       throw new Error(`Failed to store data: ${storageBuffer.error}`);

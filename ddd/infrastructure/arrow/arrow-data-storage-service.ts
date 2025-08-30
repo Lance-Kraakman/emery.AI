@@ -180,6 +180,8 @@ export class ArrowDataStorageService implements DataStorageService {
       for (const field of fields) {
         let value = row[field.name];
         
+        // Debug: console.log(`[ArrowDataStorageService] STORAGE DEBUG: ${field.type} field '${field.name}' input value:`, value, 'type:', typeof value, 'isArray:', Array.isArray(value));
+        
         // Handle null/undefined values
         if (value === undefined || value === null) {
           value = null;
@@ -261,14 +263,18 @@ export class ArrowDataStorageService implements DataStorageService {
               // Relation and file fields should already be proper structured data
               // No string parsing needed - they are stored as serialized JSON objects
               // and retrieved as structured data by Arrow
+              // Debug: console.log(`[ArrowDataStorageService] DEBUG: ${field.type} field '${field.name}' raw value:`, value, 'type:', typeof value);
               if (value !== null && value !== undefined && typeof value === 'string') {
                 try {
                   value = JSON.parse(value);
+                  // Debug: console.log(`[ArrowDataStorageService] DEBUG: ${field.type} field '${field.name}' after JSON.parse:`, value, 'isArray:', Array.isArray(value));
                 } catch {
                   // If parsing fails, this indicates malformed data
                   console.warn(`[ArrowDataStorageService] Malformed ${field.type} field data:`, value);
                   value = null;
                 }
+              } else {
+                // Debug: console.log(`[ArrowDataStorageService] DEBUG: ${field.type} field '${field.name}' not a string, value:`, value, 'isArray:', Array.isArray(value));
               }
               break;
           }
