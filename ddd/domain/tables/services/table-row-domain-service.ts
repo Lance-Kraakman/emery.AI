@@ -2,21 +2,18 @@
  * Table Row Domain Service
  * 
  * Pure domain service that coordinates row operations between DynamicTable entity
- * and repositories. Handles all row-related business logic while keeping the
- * DynamicTable entity pure and free from infrastructure dependencies.
+ * and repositories. Uses table's consolidated field methods for validation and
+ * processing, eliminating need for separate field repositories and processors.
  * 
- * AIDEV-NOTE: Domain service implementing "Table owns Rows" pattern correctly.
- * Entity stays pure, domain service coordinates with infrastructure.
+ * AIDEV-NOTE: Updated to use table's domain methods (validateRowData, processRowForStorage)
+ * instead of separate FieldRepository/FieldProcessor. Clean consolidation complete.
  */
 
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
-import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import { Row, RowCollection } from '@/ddd/domain/tables/value-objects/row';
 import { TableId, UserId } from '@/ddd/domain/shared/value-objects';
-import { FieldProcessor } from '@/ddd/domain/fields/services/field-processor';
-import { FieldMapper } from '@/ddd/infrastructure/fields/field-mapper';
 
 export interface RowFilters {
   limit?: number;
@@ -49,12 +46,8 @@ export interface BulkAddRowsCommand {
  * Domain service for table row operations
  */
 export class TableRowDomainService {
-  private readonly fieldProcessor = new FieldProcessor();
-  private readonly fieldMapper = new FieldMapper();
-
   constructor(
-    private readonly tableRepository: IDynamicTableRepository,
-    private readonly fieldRepository: IFieldRepository
+    private readonly tableRepository: IDynamicTableRepository
   ) {}
 
   /**
@@ -64,9 +57,8 @@ export class TableRowDomainService {
     try {
       const { table, data } = command;
 
-      // 1. Get field definitions and validate row data
-      const fields = await this.fieldRepository.findByTableId(table.id);
-      const validation = this.fieldProcessor.validateRowData(fields, data);
+      // 1. Validate row data using table's domain methods
+      const validation = table.validateRowData(data);
       if (!validation.valid) {
         return {
           success: false,
@@ -75,18 +67,17 @@ export class TableRowDomainService {
         };
       }
 
-      // 2. Process data for storage
-      const processedData = this.fieldProcessor.processRowForStorage(fields, data);
-      const columnData = this.fieldMapper.convertRowToColumnFormat(fields, processedData);
+      // 2. Process data for storage using table's domain methods
+      const columnData = table.processRowForStorage(data);
 
       // 3. Create row through repository
       const rowData = await this.tableRepository.insertRow(table.id, columnData);
 
-      // 4. Convert back to domain Row object
-      const fieldSlugs = fields.map((f: any) => f.slug);
-      const fieldTypes = fields.reduce((acc: any, f: any) => ({ ...acc, [f.slug]: f.type }), {});
-      const processedRowData = this.fieldProcessor.processRowFromStorage(fields, rowData);
-      const row = Row.fromPlainObject(processedRowData, table.id.value, fieldSlugs, fieldTypes);
+      // 4. Convert back to domain Row object using field names
+      const fieldNames = table.fields.map(f => f.name);
+      const fieldTypes = table.fields.reduce((acc, f) => ({ ...acc, [f.name]: f.type }), {});
+      const processedRowData = table.processRowFromStorage(rowData);
+      const row = Row.fromPlainObject(processedRowData, table.id.value, fieldNames, fieldTypes);
 
       return {
         success: true,
@@ -110,13 +101,12 @@ export class TableRowDomainService {
       return null;
     }
 
-    // Process row data from storage format
-    const fields = await this.fieldRepository.findByTableId(table.id);
-    const processedData = this.fieldProcessor.processRowFromStorage(fields, rowData);
-    const fieldSlugs = fields.map((f: any) => f.slug);
-    const fieldTypes = fields.reduce((acc: any, f: any) => ({ ...acc, [f.slug]: f.type }), {});
+    // Process row data from storage format using table's domain methods
+    const processedData = table.processRowFromStorage(rowData);
+    const fieldNames = table.fields.map(f => f.name);
+    const fieldTypes = table.fields.reduce((acc, f) => ({ ...acc, [f.name]: f.type }), {});
 
-    return Row.fromPlainObject(processedData, table.id.value, fieldSlugs, fieldTypes);
+    return Row.fromPlainObject(processedData, table.id.value, fieldNames, fieldTypes);
   }
 
   /**
@@ -130,18 +120,17 @@ export class TableRowDomainService {
       // Get rows from repository
       const rowsData = await this.tableRepository.findRows(table.id, options);
 
-      // Process rows from storage format to domain objects
-      const fields = await this.fieldRepository.findByTableId(table.id);
-      const fieldSlugs = fields.map((f: any) => f.slug);
-      const fieldTypes = fields.reduce((acc: any, f: any) => ({ ...acc, [f.slug]: f.type }), {});
+      // Process rows from storage format to domain objects using table's methods
+      const fieldNames = table.fields.map(f => f.name);
+      const fieldTypes = table.fields.reduce((acc, f) => ({ ...acc, [f.name]: f.type }), {});
 
       const processedRowsData = [];
       for (const rowData of rowsData) {
-        const processedData = this.fieldProcessor.processRowFromStorage(fields, rowData);
+        const processedData = table.processRowFromStorage(rowData);
         processedRowsData.push(processedData);
       }
 
-      return RowCollection.fromPlainObjects(processedRowsData, table.id.value, fieldSlugs, fieldTypes);
+      return RowCollection.fromPlainObjects(processedRowsData, table.id.value, fieldNames, fieldTypes);
 
     } catch (error) {
       console.error('[TableRowDomainService] Error getting rows:', error);
@@ -166,9 +155,8 @@ export class TableRowDomainService {
         };
       }
 
-      // 2. Validate update data
-      const fields = await this.fieldRepository.findByTableId(table.id);
-      const validation = this.fieldProcessor.validateRowData(fields, data);
+      // 2. Validate update data using table's domain methods
+      const validation = table.validateRowData(data);
       if (!validation.valid) {
         return {
           success: false,
@@ -177,18 +165,17 @@ export class TableRowDomainService {
         };
       }
 
-      // 3. Process data for storage
-      const processedData = this.fieldProcessor.processRowForStorage(fields, data);
-      const columnData = this.fieldMapper.convertRowToColumnFormat(fields, processedData);
+      // 3. Process data for storage using table's domain methods
+      const columnData = table.processRowForStorage(data);
 
       // 4. Update row through repository
       const updatedRowData = await this.tableRepository.updateRow(table.id, rowId, columnData);
 
-      // 5. Convert back to domain Row object
-      const fieldSlugs = fields.map((f: any) => f.slug);
-      const fieldTypes = fields.reduce((acc: any, f: any) => ({ ...acc, [f.slug]: f.type }), {});
-      const processedRowData = this.fieldProcessor.processRowFromStorage(fields, updatedRowData);
-      const row = Row.fromPlainObject(processedRowData, table.id.value, fieldSlugs, fieldTypes);
+      // 5. Convert back to domain Row object using field names
+      const fieldNames = table.fields.map(f => f.name);
+      const fieldTypes = table.fields.reduce((acc, f) => ({ ...acc, [f.name]: f.type }), {});
+      const processedRowData = table.processRowFromStorage(updatedRowData);
+      const row = Row.fromPlainObject(processedRowData, table.id.value, fieldNames, fieldTypes);
 
       return {
         success: true,
@@ -239,12 +226,11 @@ export class TableRowDomainService {
     try {
       const { table, rows } = command;
 
-      // 1. Get field definitions and validate all rows
-      const fields = await this.fieldRepository.findByTableId(table.id);
+      // 1. Validate all rows using table's domain methods
       const validationErrors: Array<{ row: number; errors: Array<{ field: string; error: string }> }> = [];
       
       for (let i = 0; i < rows.length; i++) {
-        const validation = this.fieldProcessor.validateRowData(fields, rows[i]);
+        const validation = table.validateRowData(rows[i]);
         if (!validation.valid) {
           validationErrors.push({ row: i, errors: validation.errors });
         }
@@ -260,26 +246,25 @@ export class TableRowDomainService {
         };
       }
 
-      // 2. Create all rows
+      // 2. Create all rows using table's domain methods
       const createdRowsData = [];
       for (const rowData of rows) {
-        const processedData = this.fieldProcessor.processRowForStorage(fields, rowData);
-        const columnData = this.fieldMapper.convertRowToColumnFormat(fields, processedData);
+        const columnData = table.processRowForStorage(rowData);
         const newRowData = await this.tableRepository.insertRow(table.id, columnData);
         createdRowsData.push(newRowData);
       }
 
-      // 3. Convert to domain objects
-      const fieldSlugs = fields.map((f: any) => f.slug);
-      const fieldTypes = fields.reduce((acc: any, f: any) => ({ ...acc, [f.slug]: f.type }), {});
+      // 3. Convert to domain objects using field names
+      const fieldNames = table.fields.map(f => f.name);
+      const fieldTypes = table.fields.reduce((acc, f) => ({ ...acc, [f.name]: f.type }), {});
       
       const processedRowsData = [];
       for (const rowData of createdRowsData) {
-        const processedData = this.fieldProcessor.processRowFromStorage(fields, rowData);
+        const processedData = table.processRowFromStorage(rowData);
         processedRowsData.push(processedData);
       }
 
-      const rowCollection = RowCollection.fromPlainObjects(processedRowsData, table.id.value, fieldSlugs, fieldTypes);
+      const rowCollection = RowCollection.fromPlainObjects(processedRowsData, table.id.value, fieldNames, fieldTypes);
 
       return {
         success: true,

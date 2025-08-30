@@ -12,14 +12,14 @@ import { Badge } from "@/components/ui/badge"
 import { Plus, Trash2 } from "lucide-react"
 import { createField, deleteField } from "@/app/actions/fields"
 import { getTables } from "@/app/actions/tables"
-import type { Field, FieldType } from "@/ddd/domain/fields/entities/field"
+import type { TableField, FieldType } from "@/ddd/domain/tables/value-objects/table-field"
 import type { DynamicTable } from "@/ddd/domain/tables/entities/dynamic-table"
 
 interface FieldManagerDialogProps {
   isOpen: boolean
   onClose: () => void
   tableId: number
-  fields: Field[]
+  fields: TableField[]
   onFieldsUpdated: () => void
 }
 
@@ -74,14 +74,14 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
     }
   }
 
-  const handleDeleteField = async (fieldId: number) => {
+  const handleDeleteField = async (fieldName: string) => {
     if (!confirm("Are you sure you want to delete this field? All data in this field will be lost.")) {
       return
     }
 
     try {
       setLoading(true)
-      const result = await deleteField(fieldId)
+      const result = await deleteField(tableId, fieldName)
 
       if (result.success) {
         onFieldsUpdated()
@@ -146,7 +146,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
                 </TableHeader>
                 <TableBody>
                   {sortedFields.map((field) => (
-                    <TableRow key={field.id.value}>
+                    <TableRow key={field.id}>
                       <TableCell className="font-medium">{field.name}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="capitalize">
@@ -163,7 +163,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDeleteField(field.id.value)}
+                          onClick={() => handleDeleteField(field.name)}
                           disabled={loading}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >

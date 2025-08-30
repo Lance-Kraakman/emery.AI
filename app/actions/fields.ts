@@ -1,14 +1,14 @@
 'use server'
 
-// AIDEV-NOTE: Server Actions for field management using FieldApplicationService
-// Uses application service for business logic and validation
+// AIDEV-NOTE: Server Actions for field management using TableApplicationService (consolidated)
+// Uses table application service for field operations as part of table aggregate
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
-import { getFieldApplicationService } from "@/ddd/application/di/container";
+import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateFieldData } from "./types";
-import type { Field, FieldType } from "@/ddd/domain/fields/entities/field";
-import type { CreateFieldCommand } from "@/ddd/application/services/fields/field-application-service";
+import type { TableField, FieldType } from "@/ddd/domain/tables/value-objects/table-field";
+import type { CreateFieldCommand } from "@/ddd/application/services/tables/table-application-service";
 
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<Result> {
   try {
@@ -22,7 +22,7 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
       };
     }
 
-    const fieldApplicationService = getFieldApplicationService();
+    const tableApplicationService = getTableApplicationService();
 
     const command: CreateFieldCommand = {
       tableId,
@@ -33,7 +33,7 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
       metadata: {}
     };
 
-    const result = await fieldApplicationService.createField(command);
+    const result = await tableApplicationService.createField(command);
 
     if (!result.success) {
       return {
@@ -81,14 +81,14 @@ export async function createFieldAction(formData: FormData) {
   return result;
 }
 
-export async function getFields(tableId: number): Promise<Field[]> {
+export async function getFields(tableId: number): Promise<TableField[]> {
   try {
     if (!tableId) {
       throw new Error("tableId is required");
     }
 
-    const fieldApplicationService = getFieldApplicationService();
-    const fieldList = await fieldApplicationService.getFieldsForTable(tableId);
+    const tableApplicationService = getTableApplicationService();
+    const fieldList = await tableApplicationService.getFieldsForTable(tableId);
 
     return fieldList;
   } catch (error) {
@@ -97,20 +97,20 @@ export async function getFields(tableId: number): Promise<Field[]> {
   }
 }
 
-export async function deleteField(fieldId: number, revalidateUrl?: string): Promise<Result> {
+export async function deleteField(tableId: number, fieldName: string, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("manage_fields");
     
-    if (!fieldId) {
+    if (!tableId || !fieldName) {
       return {
         success: false,
-        error: "Field ID is required",
+        error: "Table ID and field name are required",
       };
     }
 
-    const fieldApplicationService = getFieldApplicationService();
+    const tableApplicationService = getTableApplicationService();
 
-    const result = await fieldApplicationService.deleteField(fieldId);
+    const result = await tableApplicationService.deleteField(tableId, fieldName);
 
     if (!result.success) {
       return {
@@ -139,15 +139,13 @@ export async function deleteField(fieldId: number, revalidateUrl?: string): Prom
   }
 }
 
-export async function deleteFieldAction(formData: FormData) {
-  const fieldId = parseInt(formData.get('fieldId') as string);
-
-  const result = await deleteField(fieldId);
+// Legacy wrapper for old deleteField signature - DEPRECATED
+export async function deleteFieldAction(formData: FormData): Promise<Result> {
+  const fieldId = formData.get('fieldId') as string;
   
-  if (!result.success) {
-    throw new Error(result.error);
-  }
-
-  // Note: revalidatePath is handled in the main deleteField function
-  return result;
+  // This is deprecated and will fail - frontend components need to be updated
+  return {
+    success: false,
+    error: "deleteFieldAction is deprecated - use deleteField with tableId and fieldName"
+  };
 }

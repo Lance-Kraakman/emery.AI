@@ -4,12 +4,11 @@
  * Domain service interface for storing and retrieving table data using proper Value Objects.
  * Implementation can be Arrow IPC, CSV, JSON, Avro, etc.
  * 
- * AIDEV-NOTE: Refactored to use DynamicTable and Field entities instead of primitive schemas
+ * AIDEV-NOTE: Fields are accessed via table.fields - no separate fields parameter needed
  */
 
 import type { Result } from '@/ddd/domain/shared/result';
 import type { DynamicTable } from '../entities/dynamic-table';
-import type { Field } from '@/ddd/domain/fields/entities/field';
 import type { TableId } from '@/ddd/domain/shared/value-objects/table-id';
 import type { DatabaseId } from '@/ddd/domain/shared/value-objects/database-id';
 import type { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
@@ -27,20 +26,20 @@ export interface StorageMetadata {
 export interface DataStorageService {
   /**
    * Convert and store row data in optimized format using domain entities
+   * Fields are accessed via table.fields
    */
   storeData(
     data: Array<Record<string, any>>,
-    table: DynamicTable,
-    fields: Field[]
+    table: DynamicTable
   ): Promise<Result<Buffer>>;
 
   /**
    * Retrieve and convert stored data back to JSON using domain entities
+   * Fields are accessed via table.fields
    */
   retrieveData(
     buffer: Buffer,
-    table: DynamicTable,
-    fields: Field[]
+    table: DynamicTable
   ): Promise<Result<Array<Record<string, any>>>>;
 
   /**

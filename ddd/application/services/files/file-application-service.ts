@@ -10,16 +10,14 @@
  */
 
 import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
-import type { IFieldRepository } from '@/ddd/domain/fields/repositories/field-repository';
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
-import type { FileFieldValue } from '@/ddd/domain/fields/entities/field';
 import type { Result } from '@/ddd/domain/shared/result';
-import { TableId, FieldId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { TableId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 export interface UploadFileCommand {
   organizationId: number;
   tableId: number;
-  fieldId: number;
+  fieldName: string; // Use field name instead of fieldId
   file: {
     buffer: Buffer;
     filename: string;
@@ -30,14 +28,16 @@ export interface UploadFileCommand {
 
 export interface DownloadFileCommand {
   fileId: string;
-  fieldId: number;
+  fieldName: string; // Use field name instead of fieldId
+  tableId: number; // Need table context
   organizationId: number;
   requestedBy: string;
 }
 
 export interface DeleteFileCommand {
   fileId: string;
-  fieldId: number;
+  fieldName: string; // Use field name instead of fieldId
+  tableId: number; // Need table context
   organizationId: number;
   deletedBy: string;
 }
@@ -55,14 +55,13 @@ export type FileApplicationServiceResult<T = any> = Result<T>;
 export class FileApplicationService {
   constructor(
     private readonly fileStorageRepository: IFileStorageRepository,
-    private readonly fieldRepository: IFieldRepository,
     private readonly dynamicTableService: DynamicTableService
   ) {}
 
   /**
    * Upload a file to a specific field in a dynamic table
    */
-  async uploadFile(command: UploadFileCommand): Promise<FileApplicationServiceResult<FileFieldValue>> {
+  async uploadFile(command: UploadFileCommand): Promise<FileApplicationServiceResult<any>> {
     try {
       // 1. Validate organization and table exist
       const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
@@ -80,26 +79,22 @@ export class FileApplicationService {
         };
       }
 
-      // 2. Validate field exists and is a file field
-      const field = await this.fieldRepository.findById(FieldId.fromNumber(command.fieldId));
+      // 2. Validate field exists and is a file field using table aggregate
+      const field = table.getField(command.fieldName);
       if (!field) {
         return {
           success: false,
-          error: `Field ${command.fieldId} not found`
+          error: `Field '${command.fieldName}' not found in table`
         };
       }
 
-      if (field.tableId.value !== command.tableId) {
-        return {
-          success: false,
-          error: 'Field does not belong to the specified table'
-        };
-      }
+      // Field belongs to table by definition since we got it from table.getField()
+      // No need to validate tableId separately
 
       if (field.type !== 'file') {
         return {
           success: false,
-          error: `Field ${command.fieldId} is not a file field`
+          error: `Field ${command.fieldName} is not a file field`
         };
       }
 
@@ -114,7 +109,7 @@ export class FileApplicationService {
         },
         organizationId: command.organizationId,
         tableId: command.tableId,
-        fieldId: command.fieldId,
+        fieldId: command.fieldName,
       };
 
       const storedFile = await this.fileStorageRepository.uploadFile(uploadRequest);
@@ -153,18 +148,18 @@ export class FileApplicationService {
   async generateDownloadUrl(command: DownloadFileCommand): Promise<FileApplicationServiceResult<{ url: string; filename: string }>> {
     try {
       // 1. Validate field exists and user has access
-      const field = await this.fieldRepository.findById(FieldId.fromNumber(command.fieldId));
+      const field = await this.fieldRepository.findById(FieldId.fromNumber(command.fieldName));
       if (!field) {
         return {
           success: false,
-          error: `Field ${command.fieldId} not found`
+          error: `Field ${command.fieldName} not found`
         };
       }
 
       if (field.type !== 'file') {
         return {
           success: false,
-          error: `Field ${command.fieldId} is not a file field`
+          error: `Field ${command.fieldName} is not a file field`
         };
       }
 
@@ -209,18 +204,18 @@ export class FileApplicationService {
   async deleteFile(command: DeleteFileCommand): Promise<FileApplicationServiceResult<void>> {
     try {
       // 1. Validate field exists and user has access
-      const field = await this.fieldRepository.findById(FieldId.fromNumber(command.fieldId));
+      const field = await this.fieldRepository.findById(FieldId.fromNumber(command.fieldName));
       if (!field) {
         return {
           success: false,
-          error: `Field ${command.fieldId} not found`
+          error: `Field ${command.fieldName} not found`
         };
       }
 
       if (field.type !== 'file') {
         return {
           success: false,
-          error: `Field ${command.fieldId} is not a file field`
+          error: `Field ${command.fieldName} is not a file field`
         };
       }
 
@@ -260,19 +255,19 @@ export class FileApplicationService {
   async getFiles(command: GetFilesCommand): Promise<FileApplicationServiceResult<FileFieldValue[]>> {
     try {
       // 1. If fieldId is provided, validate field access
-      if (command.fieldId) {
-        const field = await this.fieldRepository.findById(FieldId.fromNumber(command.fieldId));
+      if (command.fieldName) {
+        const field = await this.fieldRepository.findById(FieldId.fromNumber(command.fieldName));
         if (!field) {
           return {
             success: false,
-            error: `Field ${command.fieldId} not found`
+            error: `Field ${command.fieldName} not found`
           };
         }
 
         if (field.type !== 'file') {
           return {
             success: false,
-            error: `Field ${command.fieldId} is not a file field`
+            error: `Field ${command.fieldName} is not a file field`
           };
         }
 

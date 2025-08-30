@@ -192,7 +192,7 @@ export class RagSqlTemplates {
           f.slug as field_slug,
           t.id as table_id,
           t.name as table_name,
-          t.db_name as table_db_name,
+          t.name as table_db_name,
           d.name as database_name
         FROM fields f
         JOIN tables t ON f.table_id = t.id  

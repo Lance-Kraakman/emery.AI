@@ -8,7 +8,7 @@ import { ArrowLeft } from 'lucide-react';
 import { getFields } from '@/app/actions/fields';
 import { getRowsData } from '@/app/actions/rows';
 import { getTables } from '@/app/actions/tables';
-import type { Field } from '@/ddd/domain/fields/entities/field';
+import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import type { Row } from '@/app/actions/types';
 import FieldManager from './FieldManager';
 import RowManager from './RowManager';
@@ -21,7 +21,7 @@ interface TableEditorClientProps {
 }
 
 export default function TableEditorClient({ tableId, tableName, organizationId, onBack }: TableEditorClientProps) {
-  const [fields, setFields] = useState<Field[]>([]);
+  const [fields, setFields] = useState<TableField[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [availableTables, setAvailableTables] = useState<Array<{ id: number; name: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);

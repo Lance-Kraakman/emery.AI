@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     const organizationId = parseInt(formData.get('organizationId') as string);
     const tableId = parseInt(formData.get('tableId') as string);
-    const fieldId = parseInt(formData.get('fieldId') as string);
+    const fieldName = formData.get('fieldName') as string;
 
     if (!file) {
       return NextResponse.json(
@@ -36,9 +36,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!organizationId || !tableId || !fieldId) {
+    if (!organizationId || !tableId || !fieldName) {
       return NextResponse.json(
-        { error: "organizationId, tableId, and fieldId are required" },
+        { error: "organizationId, tableId, and fieldName are required" },
         { status: 400 }
       );
     }
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     const command: UploadFileCommand = {
       organizationId,
       tableId,
-      fieldId,
+      fieldName,
       file: {
         buffer,
         filename: file.name,

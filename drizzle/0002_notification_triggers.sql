@@ -81,7 +81,7 @@ BEGIN
     'sourceId', COALESCE(NEW.id, OLD.id)::text,
     'metadata', json_build_object(
       'tableName', COALESCE(NEW.name, OLD.name),
-      'tableDbName', COALESCE(NEW.db_name, OLD.db_name)
+      'databaseId', COALESCE(NEW.database_id, OLD.database_id)
     ),
     'timestamp', extract(epoch from now())
   )::text);

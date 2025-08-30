@@ -9,7 +9,7 @@
 
 import type { DataStorageService, StorageMetadata } from '@/ddd/domain/tables/services/data-storage-service';
 import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
-import type { Field } from '@/ddd/domain/fields/entities/field';
+import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import type { Result } from '@/ddd/domain/shared/result';
 
 // Apache Arrow imports for direct conversion
@@ -47,15 +47,14 @@ export class ArrowDataStorageService implements DataStorageService {
    */
   async storeData(
     data: Array<Record<string, any>>,
-    table: DynamicTable,
-    fields: Field[]
+    table: DynamicTable
   ): Promise<Result<Buffer>> {
     try {
-      // 1. Build Arrow schema from domain entities
-      const arrowSchema = this.buildArrowSchema(fields);
+      // 1. Build Arrow schema from table's fields
+      const arrowSchema = this.buildArrowSchema(table.fields);
       
       // 2. Process data to match Arrow schema requirements
-      const processedData = await this.processDataForArrow(data, fields);
+      const processedData = await this.processDataForArrow(data, table.fields);
       
       // 3. Create Arrow Table using tableFromArrays
       const arrowTable = tableFromArrays(processedData);
@@ -79,8 +78,7 @@ export class ArrowDataStorageService implements DataStorageService {
    */
   async retrieveData(
     buffer: Buffer,
-    table: DynamicTable,
-    fields: Field[]
+    table: DynamicTable
   ): Promise<Result<Array<Record<string, any>>>> {
     try {
       // Convert Buffer to Uint8Array for Arrow
@@ -90,7 +88,7 @@ export class ArrowDataStorageService implements DataStorageService {
       const arrowTable = tableFromIPC(uint8Array);
       
       // Convert Arrow Table back to JavaScript objects
-      const rows = await this.processRowsFromArrow(arrowTable, fields);
+      const rows = await this.processRowsFromArrow(arrowTable, table.fields);
       
       return { success: true, data: rows };
       
@@ -135,12 +133,12 @@ export class ArrowDataStorageService implements DataStorageService {
   }
 
   // Arrow conversion helper methods
-  private buildArrowSchema(fields: Field[]): Schema {
+  private buildArrowSchema(fields: readonly TableField[]): Schema {
     const arrowFields = fields.map(field => {
       const createDataType = FIELD_TYPE_TO_ARROW_TYPE[field.type];
       const dataType = createDataType ? createDataType() : new Utf8();
       
-      return new ArrowField(field.slug, dataType, !field.required);
+      return new ArrowField(field.name, dataType, !field.required);
     });
 
     return new Schema(arrowFields);
@@ -148,19 +146,19 @@ export class ArrowDataStorageService implements DataStorageService {
 
   private async processDataForArrow(
     data: Array<Record<string, any>>,
-    fields: Field[]
+    fields: readonly TableField[]
   ): Promise<Record<string, any[]>> {
     const columns: Record<string, any[]> = {};
     
     // Initialize columns
     fields.forEach(field => {
-      columns[field.slug] = [];
+      columns[field.name] = [];
     });
     
     // Process each row
     for (const row of data) {
       for (const field of fields) {
-        let value = row[field.slug];
+        let value = row[field.name];
         
         // Handle null/undefined values
         if (value === undefined || value === null) {
@@ -190,7 +188,7 @@ export class ArrowDataStorageService implements DataStorageService {
           }
         }
         
-        columns[field.slug].push(value);
+        columns[field.name].push(value);
       }
     }
     
@@ -199,7 +197,7 @@ export class ArrowDataStorageService implements DataStorageService {
 
   private async processRowsFromArrow(
     table: Table,
-    fields: Field[]
+    fields: readonly TableField[]
   ): Promise<Array<Record<string, any>>> {
     const rows: Array<Record<string, any>> = [];
     
@@ -208,14 +206,14 @@ export class ArrowDataStorageService implements DataStorageService {
       const row: Record<string, any> = {};
       
       for (const field of fields) {
-        const column = table.getChild(field.slug);
+        const column = table.getChild(field.name);
         if (column) {
           let value = column.get(i);
           
           // Type conversions back from Arrow
           switch (field.type) {
             case 'date':
-              // Convert timestamp back to ISO string for FieldProcessor
+              // Convert timestamp back to ISO string for domain processing
               value = value ? new Date(value).toISOString() : value;
               break;
             case 'relation':
@@ -235,7 +233,7 @@ export class ArrowDataStorageService implements DataStorageService {
               break;
           }
           
-          row[field.slug] = value;
+          row[field.name] = value;
         }
       }
       

@@ -1,6 +1,6 @@
 // AIDEV-NOTE: Shared types for Server Actions - ensures type safety across actions
 // Uses unified Result<T> interface from DDD domain layer for consistent error handling
-import { FieldType } from '@/ddd/domain/fields/entities/field';
+import { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { Result } from '@/ddd/domain/shared/result';
 
 // Export the unified Result interface for use in Server Actions
