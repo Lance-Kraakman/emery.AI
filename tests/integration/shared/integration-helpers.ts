@@ -145,19 +145,16 @@ export class IntegrationTestClient {
       await this.safeDelete(schema.ragDocuments, inArray(schema.ragDocuments.organizationId, testOrgIds), 'rag_documents');
       await this.safeDelete(schema.ragIndexes, inArray(schema.ragIndexes.organizationId, testOrgIds), 'rag_indexes');
       
-      // 4. Delete fields (reference tables)
-      await this.safeDelete(schema.fields, inArray(schema.fields.organizationId, testOrgIds), 'fields');
-      
-      // 5. Delete tables (reference databases)  
+      // 4. Delete tables (reference databases) - fields are now part of table aggregate  
       await this.safeDelete(schema.tables, inArray(schema.tables.organizationId, testOrgIds), 'tables');
       
-      // 6. Delete databases (top-level entities, referenced by tables)
+      // 5. Delete databases (top-level entities, referenced by tables)
       await this.safeDelete(schema.databases, inArray(schema.databases.organizationId, testOrgIds), 'databases');
       
-      // 7. Clean up user_organizations relationships
+      // 6. Clean up user_organizations relationships
       await this.safeDelete(schema.userOrganizations, inArray(schema.userOrganizations.organizationId, testOrgIds), 'user_organizations');
       
-      // 8. Finally delete the test organizations themselves
+      // 7. Finally delete the test organizations themselves
       await this.safeDelete(schema.organizations, inArray(schema.organizations.id, testOrgIds), 'organizations');
       
       console.log(`✅ Test data cleanup completed successfully for organizations [${testOrgIds.join(', ')}]`);

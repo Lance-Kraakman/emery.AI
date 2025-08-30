@@ -6,19 +6,20 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Trash2 } from "lucide-react"
 import { EditableCell } from "./EditableCell"
-import type { Field } from "@/ddd/domain/fields/entities/field"
+import type { TableField } from "@/ddd/domain/tables/value-objects/table-field"
 import type { RowData } from "@/types/db"
 
 interface DynamicDataTableProps {
-  fields: Field[];
+  fields: TableField[];
   rows: RowData[];
   organizationId: number;
+  tableId: number;
   onUpdateRow: (rowId: string, fieldId: number, value: any) => void;
   onAddRow: () => void;
   onDeleteRow: (rowId: string) => void;
 }
 
-export function DynamicDataTable({ fields, rows, organizationId, onUpdateRow, onAddRow, onDeleteRow }: DynamicDataTableProps) {
+export function DynamicDataTable({ fields, rows, organizationId, tableId, onUpdateRow, onAddRow, onDeleteRow }: DynamicDataTableProps) {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
 
   const handleSelectRow = (rowId: string, selected: boolean) => {
@@ -84,7 +85,7 @@ export function DynamicDataTable({ fields, rows, organizationId, onUpdateRow, on
                 />
               </TableHead>
               {sortedFields.map((field) => (
-                <TableHead key={field.id.value} className="min-w-[120px] p-2">
+                <TableHead key={field.id} className="min-w-[120px] p-2">
                   <div className="flex items-center gap-1.5">
                     <span className="font-semibold">{field.name}</span>
                     {field.required && <span className="text-red-500">*</span>}
@@ -107,12 +108,13 @@ export function DynamicDataTable({ fields, rows, organizationId, onUpdateRow, on
                   />
                 </TableCell>
                 {sortedFields.map((field) => (
-                  <TableCell key={field.id.value} className="p-1">
+                  <TableCell key={field.id} className="p-1">
                     <EditableCell
                       field={field}
-                      value={row[field.slug]}
+                      value={row[field.name]}
                       organizationId={organizationId}
-                      onSave={(value) => onUpdateRow(row.id, field.id.value, value)}
+                      tableId={tableId}
+                      onSave={(value) => onUpdateRow(row.id, field.id, value)}
                     />
                   </TableCell>
                 ))}

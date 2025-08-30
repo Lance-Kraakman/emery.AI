@@ -19,7 +19,7 @@ import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { getCapabilitiesCount } from '@/ddd/domain/agents/entities/agent';
 import type { Database } from '@/ddd/domain/databases/entities/database';
 import type { Team } from '@/ddd/domain/teams/entities/team';
-import type { Field } from '@/ddd/domain/fields/entities/field';
+import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import type { StoredFile } from '@/ddd/domain/files/entities/file-storage';
 
 // Import content processing interfaces
@@ -303,7 +303,7 @@ About: ${organization.name} is an active organization on the Emery platform, whi
 Capabilities: The organization has access to Emery's full feature set including dynamic table creation, field management, data operations, agent-powered workflows, team collaboration, role-based access control, and integration with external services through shared tools and servers.`;
   }
 
-  private generateTableSchemaContent(table: DynamicTable, fields: Field[], databasesMap?: Map<number, Database>): string {
+  private generateTableSchemaContent(table: DynamicTable, fields: TableField[], databasesMap?: Map<number, Database>): string {
     const fieldsDescription = fields.map(field => {
       let desc = `- ${field.name} (${field.type})`;
       if (field.required) desc += ' *required*';

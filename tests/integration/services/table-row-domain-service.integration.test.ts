@@ -1,20 +1,19 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { 
   getDynamicTableRepository, 
-  getFieldRepository, 
   getContextAwareDb, 
   initializeDI,
-  getDynamicTableService,
-  getDatabaseApplicationService
+  getDatabaseApplicationService,
+  getDynamicTableService
 } from '@/ddd/application/di/container';
 import { testClient } from '../shared/integration-helpers';
-import { OrganizationId, UserId, DatabaseId, TableId, FieldId } from '@/ddd/domain/shared/value-objects';
+import { OrganizationId, UserId, DatabaseId, TableId } from '@/ddd/domain/shared/value-objects';
 import { TableRowDomainService } from '@/ddd/domain/tables/services/table-row-domain-service';
 import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
-import { Field, type FieldType } from '@/ddd/domain/fields/entities/field';
-import { testClient } from '../shared/integration-helpers';
+import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { TestCase } from '../../shared/types';
-import { createExampleRelationData, createExampleFileData } from '@/ddd/domain/fields/services/jsonb-validation-helpers';
+// AIDEV-NOTE: JSONB validation helpers moved to table domain after field consolidation
+// import { createExampleRelationData, createExampleFileData } from '@/ddd/domain/fields/services/jsonb-validation-helpers';
 
 // AIDEV-NOTE: TableRowDomainService integration tests focusing on domain row operations
 // Built on top of ArrowDataStorageService with proper Baserow JSONB validation
@@ -22,7 +21,7 @@ import { createExampleRelationData, createExampleFileData } from '@/ddd/domain/f
 interface AddRowInput {
   tableSetup: {
     name: string;
-    fields: Array<{ name: string; type: FieldType; slug: string; required: boolean }>;
+    fields: Array<{ name: string; type: FieldType; required: boolean }>;
   };
   rowData: Record<string, any>;
 }
@@ -100,15 +99,14 @@ describe('TableRowDomainService Integration Tests', () => {
   let testOrgId: number;
   let testUserId: string;
   let testTable: DynamicTable;
-  let testFields: Field[];
+  // testFields no longer needed - fields are now part of table entity
 
   beforeAll(() => {
     // Initialize DI container with test database clients
     initializeDI(testClient.db as any, testClient.db as any);
     
     const tableRepository = getDynamicTableRepository();
-    const fieldRepository = getFieldRepository();
-    tableRowService = new TableRowDomainService(tableRepository, fieldRepository);
+    tableRowService = new TableRowDomainService(tableRepository);
   });
 
   afterAll(async () => {
@@ -144,21 +142,21 @@ describe('TableRowDomainService Integration Tests', () => {
           tableSetup: {
             name: 'Customer Data',
             fields: [
-              { name: 'Name', type: 'text', slug: 'name', required: true },
-              { name: 'Age', type: 'number', slug: 'age', required: false },
-              { name: 'Active', type: 'boolean', slug: 'active', required: false },
-              { name: 'Email', type: 'email', slug: 'email', required: true },
-              { name: 'Website', type: 'url', slug: 'website', required: false },
-              { name: 'Birth Date', type: 'date', slug: 'birth_date', required: false }
+              { name: 'Name', type: 'text', required: true },
+              { name: 'Age', type: 'number', required: false },
+              { name: 'Active', type: 'boolean', required: false },
+              { name: 'Email', type: 'email', required: true },
+              { name: 'Website', type: 'url', required: false },
+              { name: 'Birth Date', type: 'date', required: false }
             ]
           },
           rowData: {
-            name: 'John Doe',
-            age: 30,
-            active: true,
-            email: 'john@example.com',
-            website: 'https://johndoe.com',
-            birth_date: '1994-01-15T00:00:00.000Z'
+            'Name': 'John Doe',
+            'Age': 30,
+            'Active': true,
+            'Email': 'john@example.com',
+            'Website': 'https://johndoe.com',
+            'Birth Date': '1994-01-15T00:00:00.000Z'
           }
         },
         expected: { success: true }
@@ -169,13 +167,13 @@ describe('TableRowDomainService Integration Tests', () => {
           tableSetup: {
             name: 'Projects',
             fields: [
-              { name: 'Title', type: 'text', slug: 'title', required: true },
-              { name: 'Assigned Users', type: 'relation', slug: 'assigned_users', required: false }
+              { name: 'Title', type: 'text', required: true },
+              { name: 'Assigned Users', type: 'relation', required: false }
             ]
           },
           rowData: {
-            title: 'New Website Project',
-            assigned_users: [
+            'Title': 'New Website Project',
+            'Assigned Users': [
               { id: '123', displayValue: 'John Doe', tableId: 2 },
               { id: '456', displayValue: 'Jane Smith', tableId: 2 }
             ]
@@ -189,13 +187,13 @@ describe('TableRowDomainService Integration Tests', () => {
           tableSetup: {
             name: 'Documents',
             fields: [
-              { name: 'Name', type: 'text', slug: 'name', required: true },
-              { name: 'Attachments', type: 'file', slug: 'attachments', required: false }
+              { name: 'Name', type: 'text', required: true },
+              { name: 'Attachments', type: 'file', required: false }
             ]
           },
           rowData: {
-            name: 'Project Proposal',
-            attachments: [
+            'Name': 'Project Proposal',
+            'Attachments': [
               {
                 id: 'file-uuid-1',
                 name: 'proposal.pdf',
@@ -215,12 +213,12 @@ describe('TableRowDomainService Integration Tests', () => {
           tableSetup: {
             name: 'Customers',
             fields: [
-              { name: 'Name', type: 'text', slug: 'name', required: true },
-              { name: 'Email', type: 'email', slug: 'email', required: true }
+              { name: 'Name', type: 'text', required: true },
+              { name: 'Email', type: 'email', required: true }
             ]
           },
           rowData: {
-            name: 'John Doe'
+            Name: 'John Doe'
             // Missing required email field
           }
         },
@@ -232,13 +230,13 @@ describe('TableRowDomainService Integration Tests', () => {
           tableSetup: {
             name: 'Projects',
             fields: [
-              { name: 'Title', type: 'text', slug: 'title', required: true },
-              { name: 'Files', type: 'file', slug: 'files', required: false }
+              { name: 'Title', type: 'text', required: true },
+              { name: 'Files', type: 'file', required: false }
             ]
           },
           rowData: {
-            title: 'Test Project',
-            files: [
+            'Title': 'Test Project',
+            'Files': [
               {
                 id: 'file-1',
                 name: 'test.pdf'
@@ -253,8 +251,7 @@ describe('TableRowDomainService Integration Tests', () => {
 
     addRowTestCases.forEach((testCase) => {
       test(testCase.name, async () => {
-        // Create test table and fields
-        const { table, fields } = await createTestTableWithFields(
+        const { table } = await createTestTableWithFields(
           testCase.input.tableSetup.name,
           testCase.input.tableSetup.fields
         );
@@ -284,26 +281,26 @@ describe('TableRowDomainService Integration Tests', () => {
   describe('Row Retrieval Tests', () => {
     let createdRowId: string;
     let retrievalTestTable: DynamicTable;
-    let retrievalTestFields: Field[];
+    // retrievalTestFields no longer needed - fields are now part of table entity
 
     beforeEach(async () => {
       // Create a test table for retrieval tests
-      const { table, fields } = await createTestTableWithFields('Retrieval Test Table', [
-        { name: 'Name', type: 'text', slug: 'name', required: true },
-        { name: 'Description', type: 'text', slug: 'description', required: false },
-        { name: 'Relations', type: 'relation', slug: 'relations', required: false }
+      const { table } = await createTestTableWithFields('Retrieval Test Table', [
+        { name: 'Name', type: 'text', required: true },
+        { name: 'Description', type: 'text', required: false },
+        { name: 'Relations', type: 'relation', required: false }
       ]);
       
       retrievalTestTable = table;
-      retrievalTestFields = fields;
+      // fields are now part of the table entity
 
       // Create a test row
       const createResult = await tableRowService.addRow({
         table,
         data: {
-          name: 'Test Row',
-          description: 'A row for retrieval testing',
-          relations: [
+          Name: 'Test Row',
+          Description: 'A row for retrieval testing',
+          'Relations': [
             { id: '123', displayValue: 'Related Item', tableId: 2 }
           ]
         },
@@ -343,12 +340,13 @@ describe('TableRowDomainService Integration Tests', () => {
         if (testCase.expected.rowExists) {
           expect(result).not.toBeNull();
           expect(result?.id.value).toBe(rowId);
-          expect(result?.data).toBeDefined();
+          expect(result?.fieldValues).toBeDefined();
           
           // Verify JSONB fields are properly deserialized
           if (testCase.name.includes('complex JSONB')) {
-            expect(result?.data.relations).toBeDefined();
-            expect(Array.isArray(result?.data.relations)).toBe(true);
+            const relationField = result?.getFieldValue('Relations');
+            expect(relationField?.value).toBeDefined();
+            expect(Array.isArray(relationField?.value)).toBe(true);
           }
         } else {
           expect(result).toBeNull();
@@ -363,11 +361,11 @@ describe('TableRowDomainService Integration Tests', () => {
 
     beforeEach(async () => {
       // Create test table and row for update tests
-      const { table, fields } = await createTestTableWithFields('Update Test Table', [
-        { name: 'Name', type: 'text', slug: 'name', required: true },
-        { name: 'Email', type: 'email', slug: 'email', required: true },
-        { name: 'Age', type: 'number', slug: 'age', required: false },
-        { name: 'Files', type: 'file', slug: 'files', required: false }
+      const { table } = await createTestTableWithFields('Update Test Table', [
+        { name: 'Name', type: 'text', required: true },
+        { name: 'Email', type: 'email', required: true },
+        { name: 'Age', type: 'number', required: false },
+        { name: 'Files', type: 'file', required: false }
       ]);
       
       updateTestTable = table;
@@ -376,10 +374,10 @@ describe('TableRowDomainService Integration Tests', () => {
       const createResult = await tableRowService.addRow({
         table,
         data: {
-          name: 'Original Name',
-          email: 'original@example.com',
-          age: 25,
-          files: []
+          'Name': 'Original Name',
+          'Email': 'original@example.com',
+          'Age': 25,
+          'Files': []
         },
         createdBy: UserId.fromString(testUserId)
       });
@@ -395,7 +393,7 @@ describe('TableRowDomainService Integration Tests', () => {
         input: {
           tableId: 0, // Will be set dynamically
           rowId: '',  // Will be set dynamically
-          updateData: { name: 'Updated Name', age: 26 }
+          updateData: { 'Name': 'Updated Name', 'Age': 26 }
         },
         expected: { success: true }
       },
@@ -405,7 +403,7 @@ describe('TableRowDomainService Integration Tests', () => {
           tableId: 0, // Will be set dynamically
           rowId: '',  // Will be set dynamically
           updateData: {
-            files: [
+            'Files': [
               {
                 id: 'updated-file-1',
                 name: 'updated-document.pdf',
@@ -424,7 +422,7 @@ describe('TableRowDomainService Integration Tests', () => {
         input: {
           tableId: 0, // Will be set dynamically
           rowId: '',  // Will be set dynamically
-          updateData: { email: 'invalid-email-format' }
+          updateData: { 'Email': 'invalid-email-format' }
         },
         expected: { success: false, error: 'Must be a valid email address' }
       }
@@ -450,7 +448,8 @@ describe('TableRowDomainService Integration Tests', () => {
           
           // Check specific updated fields
           Object.keys(testCase.input.updateData).forEach(key => {
-            expect(updatedRow?.data[key]).toEqual(testCase.input.updateData[key]);
+            const fieldValue = updatedRow?.getFieldValue(key);
+            expect(fieldValue?.value).toEqual(testCase.input.updateData[key]);
           });
         } else {
           expect(result.error).toBeDefined();
@@ -468,21 +467,21 @@ describe('TableRowDomainService Integration Tests', () => {
 
     beforeEach(async () => {
       // Create test table for collection tests
-      const { table, fields } = await createTestTableWithFields('Collection Test Table', [
-        { name: 'Name', type: 'text', slug: 'name', required: true },
-        { name: 'Category', type: 'text', slug: 'category', required: false },
-        { name: 'Priority', type: 'number', slug: 'priority', required: false }
+      const { table } = await createTestTableWithFields('Collection Test Table', [
+        { name: 'Name', type: 'text', required: true },
+        { name: 'Category', type: 'text', required: false },
+        { name: 'Priority', type: 'number', required: false }
       ]);
       
       collectionTestTable = table;
 
       // Create multiple test rows for collection operations
       const testRows = [
-        { name: 'Item A', category: 'Category 1', priority: 1 },
-        { name: 'Item B', category: 'Category 2', priority: 2 },
-        { name: 'Item C', category: 'Category 1', priority: 3 },
-        { name: 'Item D', category: 'Category 3', priority: 1 },
-        { name: 'Item E', category: 'Category 2', priority: 2 }
+        { Name: 'Item A', Category: 'Category 1', Priority: 1 },
+        { Name: 'Item B', Category: 'Category 2', Priority: 2 },
+        { Name: 'Item C', Category: 'Category 1', Priority: 3 },
+        { Name: 'Item D', Category: 'Category 3', Priority: 1 },
+        { Name: 'Item E', Category: 'Category 2', Priority: 2 }
       ];
 
       for (const rowData of testRows) {
@@ -550,7 +549,7 @@ describe('TableRowDomainService Integration Tests', () => {
         name: 'should retrieve rows with ordering',
         input: { 
           tableId: 0,
-          filters: { orderBy: 'name', orderDirection: 'asc' }
+          filters: { orderBy: 'Name', orderDirection: 'asc' }
         },
         expected: { success: true, hasRows: true }
       }
@@ -573,8 +572,9 @@ describe('TableRowDomainService Integration Tests', () => {
           // Verify each row has proper structure
           result.rows.forEach(row => {
             expect(row.id).toBeDefined();
-            expect(row.data).toBeDefined();
-            expect(row.data.name).toBeDefined();
+            expect(row.fieldValues).toBeDefined();
+            const nameField = row.getFieldValue('Name');
+            expect(nameField?.value).toBeDefined();
           });
         }
       });
@@ -586,10 +586,10 @@ describe('TableRowDomainService Integration Tests', () => {
 
     beforeEach(async () => {
       // Create test table for bulk operations
-      const { table, fields } = await createTestTableWithFields('Bulk Operations Table', [
-        { name: 'Name', type: 'text', slug: 'name', required: true },
-        { name: 'Email', type: 'email', slug: 'email', required: true },
-        { name: 'Department', type: 'text', slug: 'department', required: false }
+      const { table } = await createTestTableWithFields('Bulk Operations Table', [
+        { name: 'Name', type: 'text', required: true },
+        { name: 'Email', type: 'email', required: true },
+        { name: 'Department', type: 'text', required: false }
       ]);
       
       bulkTestTable = table;
@@ -601,9 +601,9 @@ describe('TableRowDomainService Integration Tests', () => {
         input: {
           tableId: 0, // Will be set dynamically
           rows: [
-            { name: 'User 1', email: 'user1@example.com', department: 'Engineering' },
-            { name: 'User 2', email: 'user2@example.com', department: 'Marketing' },
-            { name: 'User 3', email: 'user3@example.com', department: 'Sales' }
+            { 'Name': 'User 1', 'Email': 'user1@example.com', 'Department': 'Engineering' },
+            { 'Name': 'User 2', 'Email': 'user2@example.com', 'Department': 'Marketing' },
+            { 'Name': 'User 3', 'Email': 'user3@example.com', 'Department': 'Sales' }
           ]
         },
         expected: { success: true, createdCount: 3 }
@@ -613,8 +613,8 @@ describe('TableRowDomainService Integration Tests', () => {
         input: {
           tableId: 0, // Will be set dynamically
           rows: [
-            { name: 'Valid User', email: 'valid@example.com', department: 'Engineering' },
-            { name: 'Invalid User', email: 'invalid-email-format' } // Should fail validation
+            { 'Name': 'Valid User', 'Email': 'valid@example.com', 'Department': 'Engineering' },
+            { 'Name': 'Invalid User', 'Email': 'not-an-email' } // Should fail validation
           ]
         },
         expected: { success: false, error: 'Must be a valid email address' }
@@ -633,7 +633,7 @@ describe('TableRowDomainService Integration Tests', () => {
 
         if (testCase.expected.success) {
           expect(result.data).toBeDefined();
-          expect(result.data?.length).toBe(testCase.expected.createdCount);
+          expect(result.data?.rows.length).toBe(testCase.expected.createdCount);
           
           // Verify all rows were created
           const allRows = await tableRowService.getRows(bulkTestTable);
@@ -641,7 +641,12 @@ describe('TableRowDomainService Integration Tests', () => {
         } else {
           expect(result.error).toBeDefined();
           if (testCase.expected.error) {
-            expect(result.error).toContain(testCase.expected.error);
+            // Check if the error is in the main message or in validationErrors
+            const hasExpectedError = result.error?.includes(testCase.expected.error) ||
+              (result.validationErrors && result.validationErrors.some((ve: any) => 
+                ve.error && ve.error.includes(testCase.expected.error)
+              ));
+            expect(hasExpectedError).toBe(true);
           }
         }
       });
@@ -652,7 +657,7 @@ describe('TableRowDomainService Integration Tests', () => {
   describe('Table State Tests', () => {
     test('should check if table has rows', async () => {
       const { table } = await createTestTableWithFields('Empty Table', [
-        { name: 'Name', type: 'text', slug: 'name', required: true }
+        { name: 'Name', type: 'text', required: true }
       ]);
 
       // Initially empty
@@ -662,7 +667,7 @@ describe('TableRowDomainService Integration Tests', () => {
       // Add a row
       await tableRowService.addRow({
         table,
-        data: { name: 'Test Row' },
+        data: { 'Name': 'Test Row' },
         createdBy: UserId.fromString(testUserId)
       });
 
@@ -675,8 +680,8 @@ describe('TableRowDomainService Integration Tests', () => {
   // Helper function to create test table with fields
   async function createTestTableWithFields(
     tableName: string, 
-    fieldDefs: Array<{ name: string; type: FieldType; slug: string; required: boolean }>
-  ): Promise<{ table: DynamicTable; fields: Field[] }> {
+    fieldDefs: Array<{ name: string; type: FieldType; required: boolean }>
+  ): Promise<{ table: DynamicTable }> {
     // Create a unique test database for this table
     const timestamp = Date.now();
     const random = Math.random().toString(36).substr(2, 5);
@@ -698,7 +703,7 @@ describe('TableRowDomainService Integration Tests', () => {
     // Create table
     const createTableResult = await dynamicTableService.createTable({
       name: tableName,
-      databaseId: testDbId, // testDbId is already a DatabaseId object
+      databaseId: DatabaseId.fromNumber(testDbId.value), // Convert DatabaseId to number then back to DatabaseId
       organizationId: OrganizationId.fromNumber(testOrgId),
       createdBy: UserId.fromString(testUserId)
     });
@@ -709,30 +714,32 @@ describe('TableRowDomainService Integration Tests', () => {
     
     const table = createTableResult.data;
     
-    // Create fields
-    const fieldRepository = getFieldRepository();
-    const fields: Field[] = [];
-    
+    // Add fields to table using table's domain methods
     for (let i = 0; i < fieldDefs.length; i++) {
       const fieldDef = fieldDefs[i];
-      const field = Field.fromPersistence({
-        id: 1000 + i + Math.floor(Math.random() * 1000), // Use unique field IDs
-        tableId: table.id.value,
+      
+      // Add field using table's domain method
+      const addFieldResult = table.addField({
         name: fieldDef.name,
-        slug: fieldDef.slug,
         type: fieldDef.type,
         orderIndex: i,
-        relatedTableId: fieldDef.type === 'relation' ? 2 : null,
+        relatedTableId: fieldDef.type === 'relation' ? TableId.fromNumber(2) : undefined,
         required: fieldDef.required,
-        metadata: undefined,
-        createdAt: new Date()
+        metadata: undefined
       });
       
-      // Save field to repository
-      await fieldRepository.save(field);
-      fields.push(field);
+      if (!addFieldResult.success) {
+        throw new Error(`Failed to add field ${fieldDef.name}: ${addFieldResult.error}`);
+      }
     }
     
-    return { table, fields };
+    // Save the table with its fields using the service's saveTable method
+    // This properly handles field synchronization to the database
+    const saveResult = await dynamicTableService.saveTable(table);
+    if (!saveResult.success || !saveResult.data) {
+      throw new Error(`Failed to save table with fields: ${saveResult.error}`);
+    }
+    
+    return { table: saveResult.data };
   }
 });

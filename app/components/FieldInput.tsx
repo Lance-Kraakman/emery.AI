@@ -1,13 +1,13 @@
 'use client'
 
-import type { Field } from '@/ddd/domain/fields/entities/field';
+import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import FileUpload from '../FileUpload';
 import RelationField from './RelationField';
 
 interface FieldInputProps {
-  field: Field;
+  field: TableField;
   value: any;
   onChange: (value: any) => void;
   disabled?: boolean;
@@ -28,7 +28,7 @@ export default function FieldInput({
       return (
         <Input
           type="number"
-          name={field.slug}
+          name={field.name}
           value={value || ''}
           onChange={(e) => onChange(e.target.value ? Number(e.target.value) : '')}
           disabled={disabled}
@@ -38,7 +38,7 @@ export default function FieldInput({
       return (
         <div className="flex items-center">
           <Checkbox
-            name={field.slug}
+            name={field.name}
             checked={Boolean(value)}
             onCheckedChange={onChange}
             disabled={disabled}
@@ -49,7 +49,7 @@ export default function FieldInput({
       return (
         <Input
           type="date"
-          name={field.slug}
+          name={field.name}
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
@@ -59,7 +59,7 @@ export default function FieldInput({
       return (
         <Input
           type="email"
-          name={field.slug}
+          name={field.name}
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
@@ -69,7 +69,7 @@ export default function FieldInput({
       return (
         <Input
           type="url"
-          name={field.slug}
+          name={field.name}
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
@@ -86,7 +86,7 @@ export default function FieldInput({
           onChange={onChange}
           organizationId={organizationId}
           tableId={tableId}
-          fieldId={field.id.value}
+          fieldId={field.id}
         />
       );
     case 'relation':
@@ -107,7 +107,7 @@ export default function FieldInput({
       return (
         <Input
           type="text"
-          name={field.slug}
+          name={field.name}
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from '@/lib/auth/test-auth';
-import { getFieldApplicationService } from "@/ddd/application/di/container";
-import type { FieldType } from '@/ddd/domain/fields/entities/field';
-import type { CreateFieldCommand } from '@/ddd/application/services/fields/field-application-service';
+import { getTableApplicationService } from "@/ddd/application/di/container";
+import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import type { CreateFieldCommand } from '@/ddd/application/services/tables/table-application-service';
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,8 +24,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use FieldApplicationService for field creation
-    const fieldApplicationService = getFieldApplicationService();
+    // Use TableApplicationService for field creation
+    const tableApplicationService = getTableApplicationService();
 
     const command: CreateFieldCommand = {
       tableId: parseInt(tableId),
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       metadata: {}
     };
 
-    const result = await fieldApplicationService.createField(command);
+    const result = await tableApplicationService.createField(command);
 
     if (!result.success) {
       return NextResponse.json(
@@ -67,9 +67,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Use FieldApplicationService for field listing
-    const fieldApplicationService = getFieldApplicationService();
-    const fieldList = await fieldApplicationService.getFieldsForTable(parseInt(tableId));
+    // Use TableApplicationService for field listing
+    const tableApplicationService = getTableApplicationService();
+    const fieldList = await tableApplicationService.getFieldsForTable(parseInt(tableId));
 
     return NextResponse.json(fieldList);
   } catch (error) {
@@ -84,19 +84,20 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const fieldId = searchParams.get("id");
+    const tableId = searchParams.get("tableId");
+    const fieldName = searchParams.get("fieldName");
 
-    if (!fieldId) {
+    if (!tableId || !fieldName) {
       return NextResponse.json(
-        { error: "Field ID is required" },
+        { error: "Table ID and field name are required" },
         { status: 400 }
       );
     }
 
-    // Use FieldApplicationService for field deletion
-    const fieldApplicationService = getFieldApplicationService();
+    // Use TableApplicationService for field deletion
+    const tableApplicationService = getTableApplicationService();
     
-    const result = await fieldApplicationService.deleteField(parseInt(fieldId));
+    const result = await tableApplicationService.deleteField(parseInt(tableId), fieldName);
 
     if (!result.success) {
       return NextResponse.json(

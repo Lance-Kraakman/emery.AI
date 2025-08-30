@@ -1,9 +1,9 @@
 'use client'
 
-import type { Field } from '@/ddd/domain/fields/entities/field';
+import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 
 interface CellRendererProps {
-  field: Field;
+  field: TableField;
   value: any;
 }
 

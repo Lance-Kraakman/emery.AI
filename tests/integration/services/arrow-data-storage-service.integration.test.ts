@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ArrowDataStorageService } from '@/ddd/infrastructure/arrow/arrow-data-storage-service';
 import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
-import { Field, type FieldType } from '@/ddd/domain/fields/entities/field';
+import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { TestCase } from '../../shared/types';
 
 // AIDEV-NOTE: ArrowDataStorageService integration tests focusing on lowest-level
@@ -11,7 +11,6 @@ import type { TestCase } from '../../shared/types';
 interface ArrowStorageTestInput {
   data: Array<Record<string, any>>;
   table: DynamicTable;
-  fields: Field[];
 }
 
 interface ArrowStorageTestOutput {
@@ -23,21 +22,13 @@ interface ArrowStorageTestOutput {
 
 describe('ArrowDataStorageService Integration Tests', () => {
   let arrowService: ArrowDataStorageService;
-  let mockTable: DynamicTable;
 
   beforeAll(() => {
     arrowService = new ArrowDataStorageService();
   });
 
-  beforeEach(() => {
-    // Create a consistent mock table for all tests
-    mockTable = createMockTable(1, 'Test Table');
-  });
-
-  afterEach(() => {
-    // Clean up any test data or references
-    mockTable = undefined as any;
-  });
+  // No need for beforeEach/afterEach since tables are created per test with fields
+  // This ensures proper field setup for each test case
 
   describe('Basic Type Mapping', () => {
     const basicTypeTests: TestCase<ArrowStorageTestInput, ArrowStorageTestOutput>[] = [
@@ -45,15 +36,14 @@ describe('ArrowDataStorageService Integration Tests', () => {
         name: 'should store and retrieve text fields',
         input: {
           data: [
-            { name: 'John Doe', email: 'john@example.com', website: 'https://example.com' },
-            { name: 'Jane Smith', email: 'jane@example.com', website: 'https://jane.dev' }
+            { Name: 'John Doe', Email: 'john@example.com', Website: 'https://example.com' },
+            { Name: 'Jane Smith', Email: 'jane@example.com', Website: 'https://jane.dev' }
           ],
-          table: mockTable,
-          fields: [
-            createMockField('name', 'text'),
-            createMockField('email', 'email'), 
-            createMockField('website', 'url')
-          ]
+          table: createMockTableWithFields('Test Table', [
+            { name: 'Name', type: 'text', required: false },
+            { name: 'Email', type: 'email', required: false },
+            { name: 'Website', type: 'url', required: false }
+          ])
         },
         expected: { success: true, retrievedDataMatches: true }
       },
@@ -61,15 +51,14 @@ describe('ArrowDataStorageService Integration Tests', () => {
         name: 'should store and retrieve numeric fields',
         input: {
           data: [
-            { age: 30, score: 95.5, count: 0 },
-            { age: 25, score: 87.2, count: 10 }
+            { Age: 30, Score: 95.5, Count: 0 },
+            { Age: 25, Score: 87.2, Count: 10 }
           ],
-          table: mockTable,
-          fields: [
-            createMockField('age', 'number'),
-            createMockField('score', 'number'), 
-            createMockField('count', 'number')
-          ]
+          table: createMockTableWithFields('Test Table', [
+            { name: 'Age', type: 'number', required: false },
+            { name: 'Score', type: 'number', required: false },
+            { name: 'Count', type: 'number', required: false }
+          ])
         },
         expected: { success: true, retrievedDataMatches: true }
       },
@@ -77,14 +66,13 @@ describe('ArrowDataStorageService Integration Tests', () => {
         name: 'should store and retrieve boolean fields',
         input: {
           data: [
-            { active: true, verified: false },
-            { active: false, verified: true }
+            { Active: true, Verified: false },
+            { Active: false, Verified: true }
           ],
-          table: mockTable,
-          fields: [
-            createMockField('active', 'boolean'),
-            createMockField('verified', 'boolean')
-          ]
+          table: createMockTableWithFields('Test Table', [
+            { name: 'Active', type: 'boolean', required: false },
+            { name: 'Verified', type: 'boolean', required: false }
+          ])
         },
         expected: { success: true, retrievedDataMatches: true }
       }
@@ -92,10 +80,10 @@ describe('ArrowDataStorageService Integration Tests', () => {
 
     basicTypeTests.forEach((testCase) => {
       test(testCase.name, async () => {
-        const { data, table, fields } = testCase.input;
+        const { data, table } = testCase.input;
         
-        // Store data using Arrow service
-        const storeResult = await arrowService.storeData(data, table, fields);
+        // Store data using Arrow service (new interface with table.fields)
+        const storeResult = await arrowService.storeData(data, table);
         expect(storeResult.success).toBe(true);
         expect(storeResult.data).toBeDefined();
         expect(Buffer.isBuffer(storeResult.data)).toBe(true);
@@ -104,8 +92,8 @@ describe('ArrowDataStorageService Integration Tests', () => {
           expect((storeResult.data as Buffer).length).toBeGreaterThan(0);
         }
         
-        // Retrieve data using Arrow service
-        const retrieveResult = await arrowService.retrieveData(storeResult.data as Buffer, table, fields);
+        // Retrieve data using Arrow service (new interface with table.fields)
+        const retrieveResult = await arrowService.retrieveData(storeResult.data as Buffer, table);
         expect(retrieveResult.success).toBe(true);
         expect(retrieveResult.data).toBeDefined();
         
@@ -125,19 +113,18 @@ describe('ArrowDataStorageService Integration Tests', () => {
         input: {
           data: [
             { 
-              created_at: '2024-01-15T10:30:00.000Z', 
-              updated_at: '2024-01-16T15:45:30.000Z' 
+              'Created At': '2024-01-15T10:30:00.000Z', 
+              'Updated At': '2024-01-16T15:45:30.000Z' 
             },
             { 
-              created_at: '2023-12-25T00:00:00.000Z', 
-              updated_at: '2023-12-25T23:59:59.999Z' 
+              'Created At': '2023-12-25T00:00:00.000Z', 
+              'Updated At': '2023-12-25T23:59:59.999Z' 
             }
           ],
-          table: mockTable,
-          fields: [
-            createMockField('created_at', 'date'),
-            createMockField('updated_at', 'date')
-          ]
+          table: createMockTableWithFields('Test Table', [
+            { name: 'Created At', type: 'date', required: false },
+            { name: 'Updated At', type: 'date', required: false }
+          ])
         },
         expected: { success: true, retrievedDataMatches: true }
       },
@@ -145,14 +132,13 @@ describe('ArrowDataStorageService Integration Tests', () => {
         name: 'should handle null date values',
         input: {
           data: [
-            { start_date: null, end_date: null },
-            { start_date: '2024-01-01T00:00:00.000Z', end_date: null }
+            { 'Start Date': null, 'End Date': null },
+            { 'Start Date': '2024-01-01T00:00:00.000Z', 'End Date': null }
           ],
-          table: mockTable,
-          fields: [
-            createMockField('start_date', 'date', false),
-            createMockField('end_date', 'date', false)
-          ]
+          table: createMockTableWithFields('Test Table', [
+            { name: 'Start Date', type: 'date', required: false },
+            { name: 'End Date', type: 'date', required: false }
+          ])
         },
         expected: { success: true, retrievedDataMatches: true }
       }
@@ -160,14 +146,14 @@ describe('ArrowDataStorageService Integration Tests', () => {
 
     dateConversionTests.forEach((testCase) => {
       test(testCase.name, async () => {
-        const { data, table, fields } = testCase.input;
+        const { data, table } = testCase.input;
         
         // Store data
-        const storeResult = await arrowService.storeData(data, table, fields);
+        const storeResult = await arrowService.storeData(data, table);
         expect(storeResult.success).toBe(true);
         
         // Retrieve data
-        const retrieveResult = await arrowService.retrieveData(storeResult.data as Buffer, table, fields);
+        const retrieveResult = await arrowService.retrieveData(storeResult.data as Buffer, table);
         expect(retrieveResult.success).toBe(true);
         
         // Verify date conversion pipeline works correctly
@@ -185,29 +171,28 @@ describe('ArrowDataStorageService Integration Tests', () => {
         input: {
           data: [
             { 
-              related_user: [
+              'Related User': [
                 { id: '123', displayValue: 'John', tableId: 2 }
               ],
-              tags: [
+              'Tags': [
                 { id: 'tag-1', displayValue: 'urgent' },
                 { id: 'tag-2', displayValue: 'customer' },
                 { id: 'tag-3', displayValue: 'vip' }
               ]
             },
             { 
-              related_user: [
+              'Related User': [
                 { id: '456', displayValue: 'Jane', tableId: 2 }
               ],
-              tags: [
+              'Tags': [
                 { id: 'tag-4', displayValue: 'low-priority' }
               ]
             }
           ],
-          table: mockTable,
-          fields: [
-            createMockField('related_user', 'relation'),
-            createMockField('tags', 'relation')
-          ]
+          table: createMockTableWithFields('Test Table', [
+            { name: 'Related User', type: 'relation', required: false },
+            { name: 'Tags', type: 'relation', required: false }
+          ])
         },
         expected: { success: true, retrievedDataMatches: true }
       },
@@ -216,7 +201,7 @@ describe('ArrowDataStorageService Integration Tests', () => {
         input: {
           data: [
             { 
-              avatar: [
+              'Avatar': [
                 {
                   id: 'file-uuid-1',
                   name: 'avatar.jpg',
@@ -229,7 +214,7 @@ describe('ArrowDataStorageService Integration Tests', () => {
               ]
             },
             { 
-              avatar: [
+              'Avatar': [
                 {
                   id: 'file-uuid-2',
                   name: 'profile.png',
@@ -241,8 +226,9 @@ describe('ArrowDataStorageService Integration Tests', () => {
               ]
             }
           ],
-          table: mockTable,
-          fields: [createMockField('avatar', 'file')]
+          table: createMockTableWithFields('Test Table', [
+            { name: 'Avatar', type: 'file', required: false }
+          ])
         },
         expected: { success: true, retrievedDataMatches: true }
       },
@@ -251,7 +237,7 @@ describe('ArrowDataStorageService Integration Tests', () => {
         input: {
           data: [
             { 
-              attachments: [
+              'Attachments': [
                 {
                   id: 'file-uuid-3',
                   name: 'document.pdf',
@@ -269,17 +255,16 @@ describe('ArrowDataStorageService Integration Tests', () => {
                   uploadedAt: '2024-01-17T09:20:00.000Z'
                 }
               ],
-              assigned_users: [
+              'Assigned Users': [
                 { id: '789', displayValue: 'Alice Johnson', tableId: 2 },
                 { id: '101', displayValue: 'Bob Smith', tableId: 2 }
               ]
             }
           ],
-          table: mockTable,
-          fields: [
-            createMockField('attachments', 'file'),
-            createMockField('assigned_users', 'relation')
-          ]
+          table: createMockTableWithFields('Test Table', [
+            { name: 'Attachments', type: 'file', required: false },
+            { name: 'Assigned Users', type: 'relation', required: false }
+          ])
         },
         expected: { success: true, retrievedDataMatches: true }
       }
@@ -287,14 +272,14 @@ describe('ArrowDataStorageService Integration Tests', () => {
 
     jsonSerializationTests.forEach((testCase) => {
       test(testCase.name, async () => {
-        const { data, table, fields } = testCase.input;
+        const { data, table } = testCase.input;
         
         // Store data
-        const storeResult = await arrowService.storeData(data, table, fields);
+        const storeResult = await arrowService.storeData(data, table);
         expect(storeResult.success).toBe(true);
         
         // Retrieve data
-        const retrieveResult = await arrowService.retrieveData(storeResult.data as Buffer, table, fields);
+        const retrieveResult = await arrowService.retrieveData(storeResult.data as Buffer, table);
         expect(retrieveResult.success).toBe(true);
         
         // Verify JSON serialization works correctly
@@ -308,16 +293,17 @@ describe('ArrowDataStorageService Integration Tests', () => {
   describe('Buffer and Metadata Operations', () => {
     test('should create valid Arrow IPC buffer', async () => {
       const testData = [
-        { id: 1, name: 'test1', active: true },
-        { id: 2, name: 'test2', active: false }
-      ];
-      const fields = [
-        createMockField('id', 'number'),
-        createMockField('name', 'text'),
-        createMockField('active', 'boolean')
+        { Id: 1, Name: 'test1', Active: true },
+        { Id: 2, Name: 'test2', Active: false }
       ];
       
-      const result = await arrowService.storeData(testData, mockTable, fields);
+      const testTable = createMockTableWithFields('Buffer Test Table', [
+        { name: 'Id', type: 'number', required: false },
+        { name: 'Name', type: 'text', required: false },
+        { name: 'Active', type: 'boolean', required: false }
+      ]);
+      
+      const result = await arrowService.storeData(testData, testTable);
       
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
@@ -326,18 +312,19 @@ describe('ArrowDataStorageService Integration Tests', () => {
     });
 
     test('should read metadata with domain context', async () => {
-      const testData = [{ name: 'test', count: 5 }];
-      const fields = [
-        createMockField('name', 'text'),
-        createMockField('count', 'number')
-      ];
+      const testData = [{ Name: 'test', Count: 5 }];
+      
+      const testTable = createMockTableWithFields('Metadata Test Table', [
+        { name: 'Name', type: 'text', required: false },
+        { name: 'Count', type: 'number', required: false }
+      ]);
       
       // Store data first
-      const storeResult = await arrowService.storeData(testData, mockTable, fields);
+      const storeResult = await arrowService.storeData(testData, testTable);
       expect(storeResult.success).toBe(true);
       
       // Read metadata
-      const metadataResult = await arrowService.readMetadata(storeResult.data as Buffer, mockTable);
+      const metadataResult = await arrowService.readMetadata(storeResult.data as Buffer, testTable);
       
       expect(metadataResult.success).toBe(true);
       expect(metadataResult.data).toBeDefined();
@@ -346,9 +333,9 @@ describe('ArrowDataStorageService Integration Tests', () => {
       expect(metadata.format).toBe('Apache Arrow IPC');
       expect(metadata.totalRows).toBe(1);
       expect(metadata.totalBytes).toBeGreaterThan(0);
-      expect(metadata.tableId).toEqual(mockTable.id);
-      expect(metadata.databaseId).toEqual(mockTable.databaseId);
-      expect(metadata.organizationId).toEqual(mockTable.organizationId);
+      expect(metadata.tableId).toEqual(testTable.id);
+      expect(metadata.databaseId).toEqual(testTable.databaseId);
+      expect(metadata.organizationId).toEqual(testTable.organizationId);
     });
   });
 
@@ -358,23 +345,23 @@ describe('ArrowDataStorageService Integration Tests', () => {
         name: 'should handle empty data arrays',
         input: {
           data: [],
-          table: mockTable,
-          fields: [createMockField('name', 'text')]
+          table: createMockTableWithFields('Test Table', [
+            { name: 'Name', type: 'text', required: false }
+          ])
         },
         expected: { success: true, retrievedDataMatches: true }
       },
       {
-        name: 'should handle missing field slugs in data',
+        name: 'should handle missing field names in data',
         input: {
           data: [
-            { name: 'John' }, // missing 'age' field
-            { name: 'Jane', age: 25 } // complete data
+            { Name: 'John' }, // missing 'Age' field
+            { Name: 'Jane', Age: 25 } // complete data
           ],
-          table: mockTable,
-          fields: [
-            createMockField('name', 'text'),
-            createMockField('age', 'number')
-          ]
+          table: createMockTableWithFields('Test Table', [
+            { name: 'Name', type: 'text', required: false },
+            { name: 'Age', type: 'number', required: false }
+          ])
         },
         expected: { success: true } // Should fill missing values with null
       },
@@ -382,15 +369,14 @@ describe('ArrowDataStorageService Integration Tests', () => {
         name: 'should handle null and undefined values',
         input: {
           data: [
-            { name: null, age: undefined, active: false },
-            { name: 'Valid', age: 30, active: true }
+            { Name: null, Age: undefined, Active: false },
+            { Name: 'Valid', Age: 30, Active: true }
           ],
-          table: mockTable,
-          fields: [
-            createMockField('name', 'text', false),
-            createMockField('age', 'number', false),
-            createMockField('active', 'boolean')
-          ]
+          table: createMockTableWithFields('Test Table', [
+            { name: 'Name', type: 'text', required: false },
+            { name: 'Age', type: 'number', required: false },
+            { name: 'Active', type: 'boolean', required: false }
+          ])
         },
         expected: { success: true }
       }
@@ -398,14 +384,14 @@ describe('ArrowDataStorageService Integration Tests', () => {
 
     errorHandlingTests.forEach((testCase) => {
       test(testCase.name, async () => {
-        const { data, table, fields } = testCase.input;
+        const { data, table } = testCase.input;
         
         // Store data
-        const storeResult = await arrowService.storeData(data, table, fields);
+        const storeResult = await arrowService.storeData(data, table);
         expect(storeResult.success).toBe(true);
         
         // Retrieve data
-        const retrieveResult = await arrowService.retrieveData(storeResult.data as Buffer, table, fields);
+        const retrieveResult = await arrowService.retrieveData(storeResult.data as Buffer, table);
         expect(retrieveResult.success).toBe(true);
         
         if (testCase.expected.retrievedDataMatches) {
@@ -418,16 +404,16 @@ describe('ArrowDataStorageService Integration Tests', () => {
   describe('Type Mapping Registry Validation', () => {
     test('should handle all supported field types', async () => {
       const allTypesData = [{
-        text_field: 'Sample text',
-        email_field: 'test@example.com',
-        url_field: 'https://example.com',
-        number_field: 42,
-        boolean_field: true,
-        date_field: '2024-01-15T10:30:00.000Z',
-        relation_field: [
+        'Text Field': 'Sample text',
+        'Email Field': 'test@example.com',
+        'URL Field': 'https://example.com',
+        'Number Field': 42,
+        'Boolean Field': true,
+        'Date Field': '2024-01-15T10:30:00.000Z',
+        'Relation Field': [
           { id: '123', displayValue: 'Related Item', tableId: 2 }
         ],
-        file_field: [
+        'File Field': [
           {
             id: 'comprehensive-file-1',
             name: 'test-file.pdf',
@@ -439,30 +425,30 @@ describe('ArrowDataStorageService Integration Tests', () => {
         ]
       }];
 
-      const allTypeFields = [
-        createMockField('text_field', 'text'),
-        createMockField('email_field', 'email'),
-        createMockField('url_field', 'url'),
-        createMockField('number_field', 'number'),
-        createMockField('boolean_field', 'boolean'),
-        createMockField('date_field', 'date'),
-        createMockField('relation_field', 'relation'),
-        createMockField('file_field', 'file')
-      ];
+      const allTypesTable = createMockTableWithFields('All Types Table', [
+        { name: 'Text Field', type: 'text', required: false },
+        { name: 'Email Field', type: 'email', required: false },
+        { name: 'URL Field', type: 'url', required: false },
+        { name: 'Number Field', type: 'number', required: false },
+        { name: 'Boolean Field', type: 'boolean', required: false },
+        { name: 'Date Field', type: 'date', required: false },
+        { name: 'Relation Field', type: 'relation', required: false },
+        { name: 'File Field', type: 'file', required: false }
+      ]);
 
       // Store all types
-      const storeResult = await arrowService.storeData(allTypesData, mockTable, allTypeFields);
+      const storeResult = await arrowService.storeData(allTypesData, allTypesTable);
       expect(storeResult.success).toBe(true);
 
       // Retrieve all types
-      const retrieveResult = await arrowService.retrieveData(storeResult.data as Buffer, mockTable, allTypeFields);
+      const retrieveResult = await arrowService.retrieveData(storeResult.data as Buffer, allTypesTable);
       expect(retrieveResult.success).toBe(true);
       expect(retrieveResult.data).toEqual(allTypesData);
     });
   });
 });
 
-// Mock helper functions
+// Mock helper functions for consolidated field architecture
 function createMockTable(id: number, name: string): DynamicTable {
   return DynamicTable.fromPersistence({
     id,
@@ -476,17 +462,25 @@ function createMockTable(id: number, name: string): DynamicTable {
   });
 }
 
-function createMockField(slug: string, type: FieldType, required = false): Field {
-  return Field.fromPersistence({
-    id: Math.floor(Math.random() * 1000),
-    tableId: 1,
-    name: slug.charAt(0).toUpperCase() + slug.slice(1).replace('_', ' '),
-    slug,
-    type,
-    required,
-    orderIndex: 1,
-    relatedTableId: type === 'relation' ? 2 : null,
-    metadata: undefined,
-    createdAt: new Date('2024-01-01T00:00:00.000Z')
-  });
+function createMockTableWithFields(name: string, fieldDefs: Array<{ name: string; type: FieldType; required: boolean }>): DynamicTable {
+  const table = createMockTable(Math.floor(Math.random() * 1000), name);
+  
+  // Add fields to the table using the consolidated approach
+  for (let i = 0; i < fieldDefs.length; i++) {
+    const fieldDef = fieldDefs[i];
+    const addResult = table.addField({
+      name: fieldDef.name,
+      type: fieldDef.type,
+      orderIndex: i,
+      relatedTableId: fieldDef.type === 'relation' ? undefined : undefined, // Could be set for actual relations
+      required: fieldDef.required,
+      metadata: undefined
+    });
+    
+    if (!addResult.success) {
+      throw new Error(`Failed to add field ${fieldDef.name}: ${addResult.error}`);
+    }
+  }
+  
+  return table;
 }

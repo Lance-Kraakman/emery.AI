@@ -7,20 +7,21 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
-import type { Field } from "@/ddd/domain/fields/entities/field"
+import type { TableField } from "@/ddd/domain/tables/value-objects/table-field"
 import type { FileMetadata } from "@/types/db"
 import { uploadFileAction } from "@/app/actions/files"
 import { PlusCircle } from "lucide-react"
 
 interface EditableCellProps {
-  field: Field;
+  field: TableField;
   value: any;
   organizationId: number;
+  tableId: number;
   onSave?: (value: any) => void;
   onCancel?: (value: any) => void;
 }
 
-export function EditableCell({ field, value, organizationId, onSave, onCancel }: EditableCellProps) {
+export function EditableCell({ field, value, organizationId, tableId, onSave, onCancel }: EditableCellProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(value)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -57,8 +58,8 @@ export function EditableCell({ field, value, organizationId, onSave, onCancel }:
       const formData = new FormData()
       formData.append('file', file)
       formData.append('organizationId', organizationId.toString())
-      formData.append('tableId', field.tableId.toString())
-      formData.append('fieldId', field.id.toString())
+      formData.append('tableId', tableId.toString())
+      formData.append('fieldName', field.name)
 
       const result = await uploadFileAction(formData)
 

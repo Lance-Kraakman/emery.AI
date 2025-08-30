@@ -16,6 +16,7 @@ import type {
   CreateDynamicTableData
 } from '@/ddd/domain/tables/entities/dynamic-table';
 import { TableId, OrganizationId, DatabaseId, UserId } from '@/ddd/domain/shared/value-objects';
+import { TableMetadata } from '../value-objects/table-metadata';
 
 
 export interface CreateTableCommand {
@@ -24,14 +25,14 @@ export interface CreateTableCommand {
   organizationId: OrganizationId;
   createdBy: UserId;
   description?: string;
-  metadata?: Record<string, any>;
+  metadata?: TableMetadata;
 }
 
 export interface UpdateTableCommand {
   id: TableId;
   name?: string;
   description?: string;
-  metadata?: Record<string, any>;
+  metadata?: TableMetadata;
 }
 
 
@@ -54,6 +55,7 @@ export class DynamicTableService {
         name: command.name,
         databaseId: command.databaseId,
         organizationId: command.organizationId,
+        storageLocation: 'temp', // Repository will overwrite with proper S3 path
         createdBy: command.createdBy,
         description: command.description,
         metadata: command.metadata
@@ -113,6 +115,30 @@ export class DynamicTableService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update table'
+      };
+    }
+  }
+
+  /**
+   * Save a table with all its fields
+   * Used when fields have been modified and need to be persisted
+   */
+  async saveTable(table: DynamicTable): Promise<Result<DynamicTable>> {
+    try {
+      const savedTable = await this.tableRepository.update(table.id, {
+        name: table.name,
+        metadata: table.metadata,
+        fields: table.fields // Include fields for synchronization
+      });
+
+      return {
+        success: true,
+        data: savedTable
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save table'
       };
     }
   }

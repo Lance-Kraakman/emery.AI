@@ -30,7 +30,7 @@ export async function uploadFileAction(formData: FormData): Promise<Result> {
     const file = formData.get('file') as File;
     const organizationId = parseInt(formData.get('organizationId') as string);
     const tableId = parseInt(formData.get('tableId') as string);
-    const fieldId = parseInt(formData.get('fieldId') as string);
+    const fieldName = formData.get('fieldName') as string;
 
     if (!file) {
       return {
@@ -39,10 +39,10 @@ export async function uploadFileAction(formData: FormData): Promise<Result> {
       };
     }
 
-    if (!organizationId || !tableId || !fieldId) {
+    if (!organizationId || !tableId || !fieldName) {
       return {
         success: false,
-        error: "organizationId, tableId, and fieldId are required"
+        error: "organizationId, tableId, and fieldName are required"
       };
     }
 
@@ -53,7 +53,7 @@ export async function uploadFileAction(formData: FormData): Promise<Result> {
     const command: UploadFileCommand = {
       organizationId,
       tableId,
-      fieldId,
+      fieldName,
       file: {
         buffer,
         filename: file.name,
@@ -85,7 +85,7 @@ export async function uploadFileAction(formData: FormData): Promise<Result> {
   }
 }
 
-export async function deleteFileAction(fileId: string, fieldId: number, organizationId: number): Promise<Result> {
+export async function deleteFileAction(fileId: string, fieldName: string, tableId: number, organizationId: number): Promise<Result> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -108,7 +108,8 @@ export async function deleteFileAction(fileId: string, fieldId: number, organiza
     
     const command: DeleteFileCommand = {
       fileId,
-      fieldId,
+      fieldName,
+      tableId,
       organizationId,
       deletedBy: session.user.id
     };

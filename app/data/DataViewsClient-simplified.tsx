@@ -12,7 +12,7 @@ import { FieldManagerDialog } from "./components/FieldManagerDialog"
 import { useEmeryData, EmeryTable } from "@/hooks/useEmeryData"
 import { getFields } from "@/app/actions/fields"
 import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
-import type { Field } from "@/ddd/domain/fields/entities/field"
+import type { TableField } from "@/ddd/domain/tables/value-objects/table-field"
 import type { RowData } from "@/types/db"
 
 export function DataViewsClientSimplified() {
@@ -38,7 +38,7 @@ export function DataViewsClientSimplified() {
   const [searchTerm, setSearchTerm] = useState("")
   
   // Table data state
-  const [fields, setFields] = useState<Field[]>([])
+  const [fields, setFields] = useState<TableField[]>([])
   const [rows, setRows] = useState<RowData[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -92,7 +92,7 @@ export function DataViewsClientSimplified() {
       await updateRowData({
         tableId: selectedTableId,
         rowId,
-        data: { [field.slug]: value },
+        data: { [field.name]: value },
       });
       setRows(prevRows =>
         prevRows.map(row =>
@@ -114,16 +114,16 @@ export function DataViewsClientSimplified() {
         if (field.required || field.type === 'text') {
           switch (field.type) {
             case 'number':
-              rowData[field.slug] = 0
+              rowData[field.name] = 0
               break
             case 'boolean':
-              rowData[field.slug] = false
+              rowData[field.name] = false
               break
             case 'date':
-              rowData[field.slug] = new Date().toISOString().split('T')[0]
+              rowData[field.name] = new Date().toISOString().split('T')[0]
               break
             default:
-              rowData[field.slug] = ""
+              rowData[field.name] = ""
           }
         }
       })
@@ -282,6 +282,7 @@ export function DataViewsClientSimplified() {
                   fields={fields}
                   rows={filteredRows}
                   organizationId={selectedTable.organizationId!}
+                  tableId={selectedTable.id}
                   onUpdateRow={handleUpdateRow}
                   onAddRow={handleAddRow}
                   onDeleteRow={handleDeleteRow}
