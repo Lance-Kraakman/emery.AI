@@ -1,63 +1,64 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { getAgentApplicationService, getAgentRepository, getUserRepository, getOrganizationRepository, getContextAwareDb, initializeDI } from '@/ddd/application/di/container';
-import { OrganizationId, UserId, EmailAddress, OrganizationName } from '@/ddd/domain/shared/value-objects';
+import { getAgentApplicationService, getAgentRepository, getContextAwareDb, initializeDI } from '@/ddd/application/di/container';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { CreateAgentCommand } from '@/ddd/application/services/agents/agent-application-service';
-import type { CreateUserData } from '@/ddd/domain/users/entities/user';
-import type { CreateOrganizationData } from '@/ddd/domain/organizations/entities/organization';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';
+import type { TestContext } from '../shared/test-setup';
 
 // AIDEV-NOTE: Clean Agent Application Service integration tests using TestCase pattern
 // Tests core agent operations with minimal, maintainable test cases
 
-interface CreateAgentInput {
+interface CreateAgentTestInput {
   name: string;
-  ownerId: string;
-  organizationId: number;
+  ownerId: UserId;
+  organizationId: OrganizationId;
   role: string;
 }
 
-interface CreateAgentOutput {
+interface CreateAgentTestOutput {
   success: boolean;
   error?: string;
 }
 
-// Test data that will be created in beforeEach
-let testOrgId: number;
-let testUserId: string;
+// Factory function to generate test cases with proper context
+function createAgentTestCases(context: TestContext): TestCase<CreateAgentTestInput, CreateAgentTestOutput>[] {
+  return [
+    {
+      name: 'should create agent with valid input',
+      input: {
+        name: 'Test Data Collector',
+        ownerId: context.ownerUserId,
+        organizationId: context.organizationId,
+        role: 'assistant'
+      },
+      expected: { success: true }
+    },
+    {
+      name: 'should reject empty agent name',
+      input: {
+        name: '',
+        ownerId: context.ownerUserId,
+        organizationId: context.organizationId,
+        role: 'assistant'
+      },
+      expected: { success: false, error: 'Agent name is required' }
+    },
+    {
+      name: 'should reject invalid organization',
+      input: {
+        name: 'Test Agent',
+        ownerId: context.ownerUserId,
+        organizationId: OrganizationId.fromNumber(999),
+        role: 'assistant'
+      },
+      expected: { success: false }
+    }
+  ];
+}
 
-const createAgentTestCases: TestCase<CreateAgentInput, CreateAgentOutput>[] = [
-  {
-    name: 'should create agent with valid input',
-    input: {
-      name: 'Test Data Collector',
-      ownerId: '', // Will be filled in beforeEach
-      organizationId: 0, // Will be filled in beforeEach
-      role: 'assistant'
-    },
-    expected: { success: true }
-  },
-  {
-    name: 'should reject empty agent name',
-    input: {
-      name: '',
-      ownerId: '', // Will be filled in beforeEach
-      organizationId: 0, // Will be filled in beforeEach
-      role: 'assistant'
-    },
-    expected: { success: false, error: 'Agent name is required' }
-  },
-  {
-    name: 'should reject invalid organization',
-    input: {
-      name: 'Test Agent',
-      ownerId: '', // Will be filled in beforeEach
-      organizationId: 999,
-      role: 'assistant'
-    },
-    expected: { success: false }
-  }
-];
+// Test context that will be created in beforeEach
+let testContext: TestContext;
 
 describe('Agent Application Service Integration Tests', () => {
   
@@ -76,24 +77,13 @@ describe('Agent Application Service Integration Tests', () => {
     
     try {
       // Create unique test organization and owner
-      const context = await createTestOrganization('Agent Test Organization');
-      
-      testOrgId = context.organizationId;
-      testUserId = context.ownerUserId;
+      testContext = await createTestOrganization('Agent Test Organization');
       
       // Set context using the enhanced database client for consistent RLS behavior
       const contextDb = getContextAwareDb();
-      contextDb.setContext(testUserId, testOrgId);
+      contextDb.setContext(testContext.ownerUserId, testContext.organizationId);
       
-      // Update test cases with actual IDs from the created context
-      createAgentTestCases.forEach(testCase => {
-        testCase.input.ownerId = testUserId;
-        if (testCase.input.organizationId === 0) {
-          testCase.input.organizationId = testOrgId;
-        }
-      });
-      
-      console.log(`✅ Test context created: org=${testOrgId}, owner=${testUserId}`);
+      console.log(`✅ Test context created: org=${testContext.organizationId.value}, owner=${testContext.ownerUserId.value}`);
       
     } catch (error) {
       console.error('❌ Error creating test context in beforeEach:', error);
@@ -110,7 +100,7 @@ describe('Agent Application Service Integration Tests', () => {
       // Clean test data between tests (superuser bypasses RLS for cleanup)
       await testClient.cleanTestData();
       
-      console.log(`✅ Test cleanup completed for org=${testOrgId}`);
+      console.log(`✅ Test cleanup completed for org=${testContext.organizationId.value}`);
       
     } catch (error) {
       console.warn('⚠️  Error during test cleanup (non-fatal):', error);
@@ -120,15 +110,18 @@ describe('Agent Application Service Integration Tests', () => {
 
   describe('Create Agent Operations', () => {
     
-    createAgentTestCases.forEach((testCase) => {
-      test(testCase.name, async () => {
-        const agentApplicationService = getAgentApplicationService();
+    test('should run all agent creation test cases', async () => {
+      const agentApplicationService = getAgentApplicationService();
+      const testCases = createAgentTestCases(testContext);
+      
+      for (const testCase of testCases) {
+        console.log(`🧪 Running test: ${testCase.name}`);
         
         const command: CreateAgentCommand = {
           name: testCase.input.name,
           description: 'Test agent description',
-          ownerId: UserId.fromString(testCase.input.ownerId),
-          organizationId: OrganizationId.fromNumber(testCase.input.organizationId),
+          ownerId: testCase.input.ownerId,
+          organizationId: testCase.input.organizationId,
           role: testCase.input.role,
           agentType: 'data-collector'
         };
@@ -158,7 +151,7 @@ describe('Agent Application Service Integration Tests', () => {
           expect(result.data).toBeDefined();
           expect(result.data?.name).toBe(testCase.input.name);
         }
-      });
+      }
     });
   });
 
@@ -171,8 +164,8 @@ describe('Agent Application Service Integration Tests', () => {
       const command: CreateAgentCommand = {
         name: 'Retrieval Test Agent',
         description: 'Agent for testing retrieval',
-        ownerId: UserId.fromString(testUserId),
-        organizationId: OrganizationId.fromNumber(testOrgId),
+        ownerId: testContext.ownerUserId,
+        organizationId: testContext.organizationId,
         role: 'assistant',
         agentType: 'process-analyst'
       };
@@ -182,7 +175,7 @@ describe('Agent Application Service Integration Tests', () => {
 
       // Then retrieve agents for organization using repository directly
       const agentRepository = getAgentRepository();
-      const organizationId = OrganizationId.fromNumber(testOrgId);
+      const organizationId = testContext.organizationId;
       const agents = await agentRepository.findByOrganization(organizationId);
       
       expect(Array.isArray(agents)).toBe(true);
@@ -190,7 +183,7 @@ describe('Agent Application Service Integration Tests', () => {
       
       const testAgent = agents.find(agent => agent.name === 'Retrieval Test Agent');
       expect(testAgent).toBeDefined();
-      expect(testAgent?.organizationId.value).toBe(testOrgId);
+      expect(testAgent?.organizationId.value).toBe(testContext.organizationId.value);
     });
   });
 
@@ -210,8 +203,8 @@ describe('Agent Application Service Integration Tests', () => {
       const org1Command: CreateAgentCommand = {
         name: 'Org 1 Agent',
         description: 'Agent in organization 1',
-        ownerId: UserId.fromString(testUserId),
-        organizationId: OrganizationId.fromNumber(testOrgId),
+        ownerId: testContext.ownerUserId,
+        organizationId: testContext.organizationId,
         role: 'assistant',
         agentType: 'data-collector'
       };
@@ -219,8 +212,8 @@ describe('Agent Application Service Integration Tests', () => {
       const org2Command: CreateAgentCommand = {
         name: 'Org 2 Agent',
         description: 'Agent in organization 2',
-        ownerId: UserId.fromString(user2Id),
-        organizationId: OrganizationId.fromNumber(testOrg2Id),
+        ownerId: user2Id,
+        organizationId: testOrg2Id,
         role: 'data-analyst',
         agentType: 'kpi-calculator'
       };
@@ -238,12 +231,12 @@ describe('Agent Application Service Integration Tests', () => {
       const agentRepository = getAgentRepository();
       
       // Set context back to org 1 to check isolation
-      contextDb.setContext(testUserId, testOrgId);
-      const org1Agents = await agentRepository.findByOrganization(OrganizationId.fromNumber(testOrgId));
+      contextDb.setContext(testContext.ownerUserId, testContext.organizationId);
+      const org1Agents = await agentRepository.findByOrganization(testContext.organizationId);
       
       // Set context to org 2 to check isolation
       contextDb.setContext(user2Id, testOrg2Id);
-      const org2Agents = await agentRepository.findByOrganization(OrganizationId.fromNumber(testOrg2Id));
+      const org2Agents = await agentRepository.findByOrganization(testOrg2Id);
       
       // Verify each organization only sees its own agents
       expect(org1Agents.length).toBeGreaterThanOrEqual(1);
@@ -254,8 +247,8 @@ describe('Agent Application Service Integration Tests', () => {
       
       expect(org1Agent).toBeDefined();
       expect(org2Agent).toBeDefined();
-      expect(org1Agent?.organizationId.value).toBe(testOrgId);
-      expect(org2Agent?.organizationId.value).toBe(testOrg2Id);
+      expect(org1Agent?.organizationId.value).toBe(testContext.organizationId.value);
+      expect(org2Agent?.organizationId.value).toBe(testOrg2Id.value);
     });
   });
 });

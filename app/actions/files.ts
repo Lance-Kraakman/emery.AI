@@ -7,7 +7,7 @@ import { auth, hasPermission } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { getFileApplicationService, getTableApplicationService } from "@/ddd/application/di/container";
 import { TableId } from "@/ddd/domain/shared/value-objects";
-import type { UploadFileCommand, DeleteFileCommand } from "@/ddd/application/services/files/file-application-service";
+import type { UploadFileCommand, DeleteFileCommand } from "@/ddd/application/use-cases/table/file-application-service";
 import type { Result } from "./types";
 
 export async function uploadFileAction(formData: FormData): Promise<Result> {
@@ -147,7 +147,6 @@ export async function deleteFileAction(fileId: string, fieldName: string, tableI
       fieldId: field.id,
       tableId,
       organizationId,
-      deletedBy: session.user.id
     };
 
     const result = await fileApplicationService.deleteFile(command);

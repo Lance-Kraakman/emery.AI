@@ -26,7 +26,6 @@ import {
   type ReindexCommand,
   ReindexCommandValidator
 } from '@/ddd/application/services/rag/commands';
-import { any } from 'zod/v4';
 
 export interface IndexingResult {
   indexId: string;
@@ -444,14 +443,61 @@ export class RagIndexingApplicationService {
   }
 
   private async indexFiles(index: RagIndex): Promise<any[]> {
-    // Use RowApplicationService to get files from organization's table data
-    const { getRowApplicationService } = require('@/ddd/application/di/container');
-    const rowService = getRowApplicationService();
-    const files = await rowService.getFilesByOrganization(index.organizationId.value);
-    if (files.length === 0) return [];
+    // Get all tables for this organization
+    const tablesForOrg = await db.query.tables.findMany({
+      where: eq(tables.organizationId, index.organizationId.value)
+    });
+
+    if (tablesForOrg.length === 0) {
+      console.log(`[RAG-INDEXING-APP] No tables found for organization ${index.organizationId.value}`);
+      return [];
+    }
+
+    // Find all file fields across all tables
+    const allFiles = [];
+    for (const table of tablesForOrg) {
+      const tableFields = await db.query.fields.findMany({
+        where: eq(fields.tableId, table.id),
+        orderBy: (fields, { asc }) => [asc(fields.orderIndex)]
+      });
+
+      const fileFields = tableFields.filter(field => field.type === 'file');
+      
+      if (fileFields.length > 0) {
+        // Get file storage repository to retrieve actual files for each field
+        const { getFileStorageRepository } = require('@/ddd/application/di/container');
+        const fileStorageRepo = getFileStorageRepository();
+
+        for (const fileField of fileFields) {
+          try {
+            const files = await fileStorageRepo.getFilesByField(fileField.id);
+            // Add table/field context to files for better RAG indexing
+            const filesWithContext = files.map(file => ({
+              ...file,
+              tableName: table.name,
+              tableId: table.id,
+              fieldName: fileField.name,
+              fieldId: fileField.id,
+              databaseId: table.databaseId,
+              organizationId: table.organizationId
+            }));
+            allFiles.push(...filesWithContext);
+          } catch (error) {
+            console.error(`[RAG-INDEXING-APP] Error getting files for field ${fileField.name}:`, error);
+          }
+        }
+      }
+    }
+
+    if (allFiles.length === 0) {
+      console.log(`[RAG-INDEXING-APP] No files found in organization ${index.organizationId.value} tables`);
+      return [];
+    }
+
+    console.log(`[RAG-INDEXING-APP] Found ${allFiles.length} files across ${tablesForOrg.length} tables for indexing`);
 
     return await this.indexingDomainService.indexFileData(
-      index.id, index.organizationId, files
+      index.id, index.organizationId, allFiles
     );
   }
 

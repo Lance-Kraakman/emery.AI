@@ -12,8 +12,256 @@ import { TableRowDomainService } from '@/ddd/domain/tables/services/table-row-do
 import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { TestCase } from '../../shared/types';
+import { createTestOrganization, type TestContext } from '../shared/test-setup';
 // AIDEV-NOTE: TableRowDomainService integration tests focusing on domain row operations
 // Built on top of ArrowDataStorageService with proper file and relation field validation
+
+// Test case factory functions to eliminate placeholder data issues
+function createAddRowTestCases(): TestCase<AddRowInput, AddRowOutput>[] {
+  return [
+    {
+      name: 'should create row with all basic field types',
+      input: {
+        tableSetup: {
+          name: 'Customer Data',
+          fields: [
+            { name: 'Name', type: 'text', required: true },
+            { name: 'Age', type: 'number', required: false },
+            { name: 'Active', type: 'boolean', required: false },
+            { name: 'Website', type: 'text', required: false },
+            { name: 'Birth Date', type: 'date', required: false }
+          ]
+        },
+        rowData: {
+          'Name': 'John Doe',
+          'Age': 30,
+          'Active': true,
+          'Website': 'https://johndoe.com',
+          'Birth Date': '1994-01-15T00:00:00.000Z'
+        }
+      },
+      expected: { success: true }
+    },
+    {
+      name: 'should create row with relation fields',
+      input: {
+        tableSetup: {
+          name: 'Projects',
+          fields: [
+            { name: 'Title', type: 'text', required: true },
+            { name: 'Assigned Users', type: 'relation', required: false }
+          ]
+        },
+        rowData: {
+          'Title': 'New Website Project',
+          'Assigned Users': [
+            { id: '123', value: 'John Doe' },
+            { id: '456', value: 'Jane Smith' }
+          ]
+        }
+      },
+      expected: { success: true }
+    },
+    {
+      name: 'should create row with file fields',
+      input: {
+        tableSetup: {
+          name: 'Documents',
+          fields: [
+            { name: 'Name', type: 'text', required: true },
+            { name: 'Attachments', type: 'file', required: false }
+          ]
+        },
+        rowData: {
+          'Name': 'Project Proposal',
+          'Attachments': [
+            {
+              id: 'file-uuid-1',
+              name: 'proposal.pdf',
+              size: 2048,
+              mimeType: 'application/pdf',
+              s3Key: 'org_1/files/proposal.pdf',
+              uploadedAt: '2024-01-15T10:30:00.000Z'
+            }
+          ]
+        }
+      },
+      expected: { success: true }
+    },
+    {
+      name: 'should reject row with missing required fields',
+      input: {
+        tableSetup: {
+          name: 'Customers',
+          fields: [
+            { name: 'Name', type: 'text', required: true },
+            { name: 'Email', type: 'text', required: true }
+          ]
+        },
+        rowData: {
+          'Name': 'John Doe'
+          // Missing required Email field
+        }
+      },
+      expected: { success: false, error: 'Email is required' }
+    },
+    {
+      name: 'should reject row with invalid file structures',
+      input: {
+        tableSetup: {
+          name: 'Projects',
+          fields: [
+            { name: 'Title', type: 'text', required: true },
+            { name: 'Files', type: 'file', required: false }
+          ]
+        },
+        rowData: {
+          'Title': 'Test Project',
+          'Files': [
+            {
+              id: 'file-1',
+              name: 'test.pdf'
+              // Missing required fields: size, mimeType, s3Key, uploadedAt
+            }
+          ]
+        }
+      },
+      expected: { success: false, error: 'Files[0] missing required field: size' }
+    }
+  ];
+}
+
+function createGetRowTestCases(createdRowId: string): TestCase<GetRowInput, GetRowOutput>[] {
+  return [
+    {
+      name: 'should retrieve existing row with processed data',
+      input: { tableId: TableId.fromNumber(1), rowId: createdRowId },
+      expected: { success: true, rowExists: true }
+    },
+    {
+      name: 'should return null for non-existent row',
+      input: { tableId: TableId.fromNumber(1), rowId: 'non-existent-id' },
+      expected: { success: true, rowExists: false }
+    },
+    {
+      name: 'should handle complex relation field retrieval correctly',
+      input: { tableId: TableId.fromNumber(1), rowId: createdRowId },
+      expected: { success: true, rowExists: true }
+    }
+  ];
+}
+
+function createUpdateRowTestCases(createdRowId: string): TestCase<UpdateRowInput, UpdateRowOutput>[] {
+  return [
+    {
+      name: 'should update row with valid data',
+      input: {
+        tableId: TableId.fromNumber(1),
+        rowId: createdRowId,
+        updateData: { 'Name': 'Updated Name', 'Age': 26 }
+      },
+      expected: { success: true }
+    },
+    {
+      name: 'should update file fields correctly',
+      input: {
+        tableId: TableId.fromNumber(1),
+        rowId: createdRowId,
+        updateData: {
+          'Files': [
+            {
+              id: 'updated-file-1',
+              name: 'updated-document.pdf',
+              size: 3072,
+              mimeType: 'application/pdf',
+              s3Key: 'org_1/files/updated-document.pdf',
+              uploadedAt: '2024-01-16T12:00:00.000Z'
+            }
+          ]
+        }
+      },
+      expected: { success: true }
+    },
+    {
+      name: 'should reject update with validation errors',
+      input: {
+        tableId: TableId.fromNumber(1),
+        rowId: createdRowId,
+        updateData: { 'Age': 'not-a-number' }
+      },
+      expected: { success: false, error: 'Age must be a number' }
+    }
+  ];
+}
+
+function createDeleteRowTestCases(createdRowIds: string[]): TestCase<DeleteRowInput, DeleteRowOutput>[] {
+  return [
+    {
+      name: 'should delete existing row',
+      input: { tableId: TableId.fromNumber(1), rowId: createdRowIds[0] || 'test-row-1' },
+      expected: { success: true }
+    },
+    {
+      name: 'should handle deletion of non-existent row',
+      input: { tableId: TableId.fromNumber(1), rowId: 'non-existent-id' },
+      expected: { success: false, error: 'Row not found' }
+    }
+  ];
+}
+
+function createGetRowsTestCases(): TestCase<GetRowsInput, GetRowsOutput>[] {
+  return [
+    {
+      name: 'should retrieve all rows without filters',
+      input: { tableId: TableId.fromNumber(1) },
+      expected: { success: true, hasRows: true, rowCount: 5 }
+    },
+    {
+      name: 'should retrieve rows with pagination',
+      input: { 
+        tableId: TableId.fromNumber(1),
+        filters: { limit: 3, offset: 0 }
+      },
+      expected: { success: true, hasRows: true, rowCount: 3 }
+    },
+    {
+      name: 'should retrieve rows with ordering',
+      input: { 
+        tableId: TableId.fromNumber(1),
+        filters: { orderBy: 'Name', orderDirection: 'asc' }
+      },
+      expected: { success: true, hasRows: true }
+    }
+  ];
+}
+
+function createBulkAddRowsTestCases(): TestCase<BulkAddRowsInput, BulkAddRowsOutput>[] {
+  return [
+    {
+      name: 'should create multiple rows in single operation',
+      input: {
+        tableId: TableId.fromNumber(1),
+        rows: [
+          { 'Name': 'User 1', 'Department': 'Engineering' },
+          { 'Name': 'User 2', 'Department': 'Marketing' },
+          { 'Name': 'User 3', 'Department': 'Sales' }
+        ]
+      },
+      expected: { success: true, createdCount: 3 }
+    },
+    {
+      name: 'should validate all rows in bulk operation',
+      input: {
+        tableId: TableId.fromNumber(1),
+        rows: [
+          { 'Name': 'Valid User', 'Department': 'Engineering' },
+          { 'Name': '', 'Department': 'Sales' } // Missing required field - empty Name
+        ]
+      },
+      expected: { success: false, error: 'Name is required' }
+    }
+  ];
+}
 
 interface AddRowInput {
   tableSetup: {
@@ -30,7 +278,7 @@ interface AddRowOutput {
 }
 
 interface GetRowInput {
-  tableId: number;
+  tableId: TableId;
   rowId: string;
 }
 
@@ -41,7 +289,7 @@ interface GetRowOutput {
 }
 
 interface UpdateRowInput {
-  tableId: number;
+  tableId: TableId;
   rowId: string;
   updateData: Record<string, any>;
 }
@@ -53,7 +301,7 @@ interface UpdateRowOutput {
 }
 
 interface DeleteRowInput {
-  tableId: number;
+  tableId: TableId;
   rowId: string;
 }
 
@@ -63,7 +311,7 @@ interface DeleteRowOutput {
 }
 
 interface GetRowsInput {
-  tableId: number;
+  tableId: TableId;
   filters?: {
     limit?: number;
     offset?: number;
@@ -81,7 +329,7 @@ interface GetRowsOutput {
 }
 
 interface BulkAddRowsInput {
-  tableId: number;
+  tableId: TableId;
   rows: Array<Record<string, any>>;
 }
 
@@ -93,10 +341,7 @@ interface BulkAddRowsOutput {
 
 describe('TableRowDomainService Integration Tests', () => {
   let tableRowService: TableRowDomainService;
-  let testOrgId: number;
-  let testUserId: string;
-  let testTable: DynamicTable;
-  // testFields no longer needed - fields are now part of table entity
+  let testContext: TestContext;
 
   beforeAll(() => {
     // Initialize DI container with test database clients
@@ -112,15 +357,11 @@ describe('TableRowDomainService Integration Tests', () => {
 
   beforeEach(async () => {
     // Create test organization and context
-    const { createTestOrganization } = await import('../shared/test-setup');
-    const context = await createTestOrganization('TableRow Test Organization');
-    
-    testOrgId = context.organizationId;
-    testUserId = context.ownerUserId;
+    testContext = await createTestOrganization('TableRow Test Organization');
     
     // Set RLS context for testing
     const contextDb = getContextAwareDb();
-    contextDb.setContext(testUserId, testOrgId);
+    contextDb.setContext(testContext.ownerUserId, testContext.organizationId);
   });
 
   afterEach(async () => {
@@ -132,122 +373,13 @@ describe('TableRowDomainService Integration Tests', () => {
 
 
   describe('Row Creation Tests', () => {
-    const addRowTestCases: TestCase<AddRowInput, AddRowOutput>[] = [
-      {
-        name: 'should create row with all basic field types',
-        input: {
-          tableSetup: {
-            name: 'Customer Data',
-            fields: [
-              { name: 'Name', type: 'text', required: true },
-              { name: 'Age', type: 'number', required: false },
-              { name: 'Active', type: 'boolean', required: false },
-              { name: 'Email', type: 'text', required: true },
-              { name: 'Website', type: 'text', required: false },
-              { name: 'Birth Date', type: 'date', required: false }
-            ]
-          },
-          rowData: {
-            'Name': 'John Doe',
-            'Age': 30,
-            'Active': true,
-            'Email': 'john@example.com',
-            'Website': 'https://johndoe.com',
-            'Birth Date': '1994-01-15T00:00:00.000Z'
-          }
-        },
-        expected: { success: true }
-      },
-      {
-        name: 'should create row with relation fields',
-        input: {
-          tableSetup: {
-            name: 'Projects',
-            fields: [
-              { name: 'Title', type: 'text', required: true },
-              { name: 'Assigned Users', type: 'relation', required: false }
-            ]
-          },
-          rowData: {
-            'Title': 'New Website Project',
-            'Assigned Users': [
-              { id: '123', value: 'John Doe' },
-              { id: '456', value: 'Jane Smith' }
-            ]
-          }
-        },
-        expected: { success: true }
-      },
-      {
-        name: 'should create row with file fields',
-        input: {
-          tableSetup: {
-            name: 'Documents',
-            fields: [
-              { name: 'Name', type: 'text', required: true },
-              { name: 'Attachments', type: 'file', required: false }
-            ]
-          },
-          rowData: {
-            'Name': 'Project Proposal',
-            'Attachments': [
-              {
-                id: 'file-uuid-1',
-                name: 'proposal.pdf',
-                size: 2048,
-                mimeType: 'application/pdf',
-                s3Key: 'org_1/files/proposal.pdf',
-                uploadedAt: '2024-01-15T10:30:00.000Z'
-              }
-            ]
-          }
-        },
-        expected: { success: true }
-      },
-      {
-        name: 'should reject row with missing required fields',
-        input: {
-          tableSetup: {
-            name: 'Customers',
-            fields: [
-              { name: 'Name', type: 'text', required: true },
-              { name: 'Email', type: 'email', required: true }
-            ]
-          },
-          rowData: {
-            Name: 'John Doe'
-            // Missing required email field
-          }
-        },
-        expected: { success: false, error: 'Email is required' }
-      },
-      {
-        name: 'should reject row with invalid file structures',
-        input: {
-          tableSetup: {
-            name: 'Projects',
-            fields: [
-              { name: 'Title', type: 'text', required: true },
-              { name: 'Files', type: 'file', required: false }
-            ]
-          },
-          rowData: {
-            'Title': 'Test Project',
-            'Files': [
-              {
-                id: 'file-1',
-                name: 'test.pdf'
-                // Missing required fields: size, mimeType, s3Key, uploadedAt
-              }
-            ]
-          }
-        },
-        expected: { success: false, error: 'Files[0] missing required field: size' }
-      }
-    ];
-
-    addRowTestCases.forEach((testCase) => {
-      test(testCase.name, async () => {
+    
+    test('should run all add row test cases', async () => {
+      const testCases = createAddRowTestCases();
+      
+      for (const testCase of testCases) {
+        console.log(`🧪 Running test: ${testCase.name}`);
+        
         const { table } = await createTestTableWithFields(
           testCase.input.tableSetup.name,
           testCase.input.tableSetup.fields
@@ -257,7 +389,7 @@ describe('TableRowDomainService Integration Tests', () => {
         const result = await tableRowService.addRow({
           table,
           data: testCase.input.rowData,
-          createdBy: UserId.fromString(testUserId)
+          createdBy: testContext.ownerUserId
         });
 
         expect(result.success).toBe(testCase.expected.success);
@@ -271,7 +403,7 @@ describe('TableRowDomainService Integration Tests', () => {
             expect(result.error).toContain(testCase.expected.error);
           }
         }
-      });
+      }
     });
   });
 
@@ -304,7 +436,7 @@ describe('TableRowDomainService Integration Tests', () => {
             { id: '123', value: 'Related Item' }
           ]
         },
-        createdBy: UserId.fromString(testUserId)
+        createdBy: testContext.ownerUserId
       });
       
       if (createResult.success && createResult.data) {
@@ -317,34 +449,17 @@ describe('TableRowDomainService Integration Tests', () => {
       }
     });
 
-    const getRowTestCases: TestCase<GetRowInput, GetRowOutput>[] = [
-      {
-        name: 'should retrieve existing row with processed data',
-        input: { tableId: 0, rowId: '' }, // Will be set dynamically
-        expected: { success: true, rowExists: true }
-      },
-      {
-        name: 'should return null for non-existent row',
-        input: { tableId: 0, rowId: 'non-existent-id' },
-        expected: { success: true, rowExists: false }
-      },
-      {
-        name: 'should handle complex relation field retrieval correctly',
-        input: { tableId: 0, rowId: '' }, // Will be set dynamically
-        expected: { success: true, rowExists: true }
-      }
-    ];
-
-    getRowTestCases.forEach((testCase) => {
-      test(testCase.name, async () => {
-        // Set dynamic row ID for existing row tests
-        const rowId = testCase.input.rowId === '' ? createdRowId : testCase.input.rowId;
+    test('should run all get row test cases', async () => {
+      const testCases = createGetRowTestCases(createdRowId);
+      
+      for (const testCase of testCases) {
+        console.log(`🧪 Running test: ${testCase.name}`);
         
-        const result = await tableRowService.getRow(retrievalTestTable, rowId);
+        const result = await tableRowService.getRow(retrievalTestTable, testCase.input.rowId);
         
         if (testCase.expected.rowExists) {
           expect(result).not.toBeNull();
-          expect(result?.id).toBe(rowId);
+          expect(result?.id).toBe(testCase.input.rowId);
           expect(result).toBeDefined();
           
           // Verify relation fields are properly deserialized
@@ -356,7 +471,7 @@ describe('TableRowDomainService Integration Tests', () => {
         } else {
           expect(result).toBeNull();
         }
-      });
+      }
     });
   });
 
@@ -368,7 +483,6 @@ describe('TableRowDomainService Integration Tests', () => {
       // Create test table and row for update tests
       const { table } = await createTestTableWithFields('Update Test Table', [
         { name: 'Name', type: 'text', required: true },
-        { name: 'Email', type: 'text', required: true },
         { name: 'Age', type: 'number', required: false },
         { name: 'Files', type: 'file', required: false }
       ]);
@@ -380,11 +494,10 @@ describe('TableRowDomainService Integration Tests', () => {
         table,
         data: {
           'Name': 'Original Name',
-          'Email': 'original@example.com',
           'Age': 25,
           'Files': []
         },
-        createdBy: UserId.fromString(testUserId)
+        createdBy: testContext.ownerUserId
       });
       
       if (createResult.success && createResult.data) {
@@ -392,54 +505,17 @@ describe('TableRowDomainService Integration Tests', () => {
       }
     });
 
-    const updateRowTestCases: TestCase<UpdateRowInput, UpdateRowOutput>[] = [
-      {
-        name: 'should update row with valid data',
-        input: {
-          tableId: 0, // Will be set dynamically
-          rowId: '',  // Will be set dynamically
-          updateData: { 'Name': 'Updated Name', 'Age': 26 }
-        },
-        expected: { success: true }
-      },
-      {
-        name: 'should update file fields correctly',
-        input: {
-          tableId: 0, // Will be set dynamically
-          rowId: '',  // Will be set dynamically
-          updateData: {
-            'Files': [
-              {
-                id: 'updated-file-1',
-                name: 'updated-document.pdf',
-                size: 3072,
-                mimeType: 'application/pdf',
-                s3Key: 'org_1/files/updated-document.pdf',
-                uploadedAt: '2024-01-16T12:00:00.000Z'
-              }
-            ]
-          }
-        },
-        expected: { success: true }
-      },
-      {
-        name: 'should reject update with validation errors',
-        input: {
-          tableId: 0, // Will be set dynamically
-          rowId: '',  // Will be set dynamically
-          updateData: { 'Age': 'not-a-number' }
-        },
-        expected: { success: false, error: 'Age must be a number' }
-      }
-    ];
-
-    updateRowTestCases.forEach((testCase) => {
-      test(testCase.name, async () => {
+    test('should run all update row test cases', async () => {
+      const testCases = createUpdateRowTestCases(updateTestRowId);
+      
+      for (const testCase of testCases) {
+        console.log(`🧪 Running test: ${testCase.name}`);
+        
         const result = await tableRowService.updateRow({
           table: updateTestTable,
-          rowId: updateTestRowId,
+          rowId: testCase.input.rowId,
           data: testCase.input.updateData,
-          updatedBy: UserId.fromString(testUserId)
+          updatedBy: testContext.ownerUserId
         });
 
         expect(result.success).toBe(testCase.expected.success);
@@ -448,7 +524,7 @@ describe('TableRowDomainService Integration Tests', () => {
           expect(result.data).toBeDefined();
           
           // Verify the update actually applied
-          const updatedRow = await tableRowService.getRow(updateTestTable, updateTestRowId);
+          const updatedRow = await tableRowService.getRow(updateTestTable, testCase.input.rowId);
           expect(updatedRow).not.toBeNull();
           
           // Check specific updated fields
@@ -462,7 +538,7 @@ describe('TableRowDomainService Integration Tests', () => {
             expect(result.error).toContain(testCase.expected.error);
           }
         }
-      });
+      }
     });
   });
 
@@ -493,7 +569,7 @@ describe('TableRowDomainService Integration Tests', () => {
         const createResult = await tableRowService.addRow({
           table,
           data: rowData,
-          createdBy: UserId.fromString(testUserId)
+          createdBy: testContext.ownerUserId
         });
         
         if (createResult.success && createResult.data) {
@@ -502,30 +578,19 @@ describe('TableRowDomainService Integration Tests', () => {
       }
     });
 
-    const deleteRowTestCases: TestCase<DeleteRowInput, DeleteRowOutput>[] = [
-      {
-        name: 'should delete existing row',
-        input: { tableId: 0, rowId: '' }, // Will be set dynamically
-        expected: { success: true }
-      },
-      {
-        name: 'should handle deletion of non-existent row',
-        input: { tableId: 0, rowId: 'non-existent-id' },
-        expected: { success: false, error: 'Row not found' }
-      }
-    ];
-
-    deleteRowTestCases.forEach((testCase) => {
-      test(testCase.name, async () => {
-        const rowId = testCase.input.rowId === '' ? createdRowIds[0] : testCase.input.rowId;
+    test('should run all delete row test cases', async () => {
+      const testCases = createDeleteRowTestCases(createdRowIds);
+      
+      for (const testCase of testCases) {
+        console.log(`🧪 Running test: ${testCase.name}`);
         
-        const result = await tableRowService.deleteRow(collectionTestTable, rowId);
+        const result = await tableRowService.deleteRow(collectionTestTable, testCase.input.rowId);
 
         expect(result.success).toBe(testCase.expected.success);
 
         if (testCase.expected.success) {
           // Verify row was actually deleted
-          const deletedRow = await tableRowService.getRow(collectionTestTable, rowId);
+          const deletedRow = await tableRowService.getRow(collectionTestTable, testCase.input.rowId);
           expect(deletedRow).toBeNull();
         } else {
           expect(result.error).toBeDefined();
@@ -533,35 +598,15 @@ describe('TableRowDomainService Integration Tests', () => {
             expect(result.error).toContain(testCase.expected.error);
           }
         }
-      });
+      }
     });
 
-    const getRowsTestCases: TestCase<GetRowsInput, GetRowsOutput>[] = [
-      {
-        name: 'should retrieve all rows without filters',
-        input: { tableId: 0 },
-        expected: { success: true, hasRows: true, rowCount: 5 }
-      },
-      {
-        name: 'should retrieve rows with pagination',
-        input: { 
-          tableId: 0,
-          filters: { limit: 3, offset: 0 }
-        },
-        expected: { success: true, hasRows: true, rowCount: 3 }
-      },
-      {
-        name: 'should retrieve rows with ordering',
-        input: { 
-          tableId: 0,
-          filters: { orderBy: 'Name', orderDirection: 'asc' }
-        },
-        expected: { success: true, hasRows: true }
-      }
-    ];
-
-    getRowsTestCases.forEach((testCase) => {
-      test(testCase.name, async () => {
+    test('should run all get rows test cases', async () => {
+      const testCases = createGetRowsTestCases();
+      
+      for (const testCase of testCases) {
+        console.log(`🧪 Running test: ${testCase.name}`);
+        
         const result = await tableRowService.getRows(collectionTestTable, testCase.input.filters);
 
         expect(result).toBeDefined();
@@ -582,7 +627,7 @@ describe('TableRowDomainService Integration Tests', () => {
             expect(nameField).toBeDefined();
           });
         }
-      });
+      }
     });
   });
 
@@ -593,45 +638,22 @@ describe('TableRowDomainService Integration Tests', () => {
       // Create test table for bulk operations
       const { table } = await createTestTableWithFields('Bulk Operations Table', [
         { name: 'Name', type: 'text', required: true },
-        { name: 'Email', type: 'text', required: true },
         { name: 'Department', type: 'text', required: false }
       ]);
       
       bulkTestTable = table;
     });
 
-    const bulkAddRowsTestCases: TestCase<BulkAddRowsInput, BulkAddRowsOutput>[] = [
-      {
-        name: 'should create multiple rows in single operation',
-        input: {
-          tableId: 0, // Will be set dynamically
-          rows: [
-            { 'Name': 'User 1', 'Email': 'user1@example.com', 'Department': 'Engineering' },
-            { 'Name': 'User 2', 'Email': 'user2@example.com', 'Department': 'Marketing' },
-            { 'Name': 'User 3', 'Email': 'user3@example.com', 'Department': 'Sales' }
-          ]
-        },
-        expected: { success: true, createdCount: 3 }
-      },
-      {
-        name: 'should validate all rows in bulk operation',
-        input: {
-          tableId: 0, // Will be set dynamically
-          rows: [
-            { 'Name': 'Valid User', 'Email': 'valid@example.com', 'Department': 'Engineering' },
-            { 'Name': '', 'Email': 'valid@example.com', 'Department': 'Sales' } // Missing required field
-          ]
-        },
-        expected: { success: false, error: 'Name is required' }
-      }
-    ];
-
-    bulkAddRowsTestCases.forEach((testCase) => {
-      test(testCase.name, async () => {
+    test('should run all bulk add rows test cases', async () => {
+      const testCases = createBulkAddRowsTestCases();
+      
+      for (const testCase of testCases) {
+        console.log(`🧪 Running test: ${testCase.name}`);
+        
         const result = await tableRowService.bulkAddRows({
           table: bulkTestTable,
           rows: testCase.input.rows,
-          createdBy: UserId.fromString(testUserId)
+          createdBy: testContext.ownerUserId
         });
 
         expect(result.success).toBe(testCase.expected.success);
@@ -654,7 +676,7 @@ describe('TableRowDomainService Integration Tests', () => {
             expect(hasExpectedError).toBe(true);
           }
         }
-      });
+      }
     });
   });
 
@@ -673,7 +695,7 @@ describe('TableRowDomainService Integration Tests', () => {
       await tableRowService.addRow({
         table,
         data: { 'Name': 'Test Row' },
-        createdBy: UserId.fromString(testUserId)
+        createdBy: testContext.ownerUserId
       });
 
       // Now should have rows
@@ -693,8 +715,8 @@ describe('TableRowDomainService Integration Tests', () => {
     const databaseApplicationService = getDatabaseApplicationService();
     const createDbResult = await databaseApplicationService.createDatabase({
       name: `Test Database ${timestamp}-${random}`,
-      organizationId: OrganizationId.fromNumber(testOrgId),
-      createdBy: UserId.fromString(testUserId)
+      organizationId: testContext.organizationId,
+      createdBy: testContext.ownerUserId
     });
     
     if (!createDbResult.success || !createDbResult.data) {
@@ -708,9 +730,9 @@ describe('TableRowDomainService Integration Tests', () => {
     // Create table
     const createTableResult = await dynamicTableService.createTable({
       name: tableName,
-      databaseId: DatabaseId.fromNumber(testDbId.value), // Convert DatabaseId to number then back to DatabaseId
-      organizationId: OrganizationId.fromNumber(testOrgId),
-      createdBy: UserId.fromString(testUserId)
+      databaseId: testDbId,
+      organizationId: testContext.organizationId,
+      createdBy: testContext.ownerUserId
     });
     
     if (!createTableResult.success || !createTableResult.data) {

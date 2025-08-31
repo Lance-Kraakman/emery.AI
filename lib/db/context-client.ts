@@ -27,13 +27,14 @@
 
 import { withRLSContext, withOrganizationContext } from './rls-context';
 import type { db } from './client';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 type DrizzleDB = typeof db;
 type DrizzleTransaction = Parameters<Parameters<DrizzleDB['transaction']>[0]>[0];
 
 interface RLSContext {
-  userId?: string;
-  organizationId?: number;
+  userId?: UserId;
+  organizationId?: OrganizationId;
 }
 
 export class ContextAwareDbClient {
@@ -45,14 +46,14 @@ export class ContextAwareDbClient {
    * Set RLS context for subsequent database operations
    * All queries and transactions will automatically use this context
    */
-  setContext(userId: string, organizationId: number): void {
+  setContext(userId: UserId, organizationId: OrganizationId): void {
     this.currentContext = { userId, organizationId };
   }
 
   /**
    * Set organization-only context (for system operations)
    */
-  setOrganizationContext(organizationId: number): void {
+  setOrganizationContext(organizationId: OrganizationId): void {
     this.currentContext = { organizationId };
   }
 
@@ -122,8 +123,8 @@ export class ContextAwareDbClient {
    * Useful for one-off operations without changing the global context
    */
   async withContext<T>(
-    userId: string,
-    organizationId: number,
+    userId: UserId,
+    organizationId: OrganizationId,
     operation: () => Promise<T>
   ): Promise<T> {
     const previousContext = { ...this.currentContext };
@@ -140,7 +141,7 @@ export class ContextAwareDbClient {
    * Execute a single operation with temporary organization context
    */
   async withOrganizationContext<T>(
-    organizationId: number,
+    organizationId: OrganizationId,
     operation: () => Promise<T>
   ): Promise<T> {
     const previousContext = { ...this.currentContext };

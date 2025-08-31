@@ -1,15 +1,3 @@
-/**
- * Simple Test Setup Helpers
- * 
- * AIDEV-NOTE: Simplified test setup using postgres superuser.
- * Superuser bypasses RLS, so we can create test data directly.
- * We still use withRLSContext when we want to test RLS behavior.
- * 
- * Updated: Uses consistent domain repository pattern with proper error handling
- * and unique naming to prevent test conflicts.
- */
-
-import type { IntegrationTestClient } from './integration-helpers';
 import { getUserRepository, getOrganizationRepository } from '@/ddd/application/di/container';
 import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
 import { EmailAddress } from '@/ddd/domain/shared/value-objects/email-address';
@@ -19,11 +7,11 @@ import type { CreateUserData } from '@/ddd/domain/users/entities/user';
 import type { CreateOrganizationData } from '@/ddd/domain/organizations/entities/organization';
 
 export interface TestContext {
-  organizationId: number;
-  organizationName: string;
-  ownerUserId: string;
-  adminUserId?: string;
-  memberUserId?: string;
+  organizationId: OrganizationId;
+  organizationName: OrganizationName;
+  ownerUserId: UserId;
+  adminUserId?: UserId;
+  memberUserId?: UserId;
 }
 
 /**
@@ -71,9 +59,9 @@ export async function createTestOrganization(
     const org = await organizationRepository.createWithOwner(orgData, ownerUserId);
     
     return {
-      organizationId: org.id.value,
-      organizationName: org.name.value,
-      ownerUserId: ownerUserId.value
+      organizationId: org.id,
+      organizationName: org.name,
+      ownerUserId: ownerUserId
     };
     
   } catch (error) {
@@ -164,11 +152,11 @@ export async function createTestOrganizationWithRoles(
     }
     
     return {
-      organizationId: org.id.value,
-      organizationName: org.name.value,
-      ownerUserId: ownerUserId.value,
-      adminUserId: adminUserId.value,
-      memberUserId: memberUserId.value
+      organizationId: org.id,
+      organizationName: org.name,
+      ownerUserId: ownerUserId,
+      adminUserId: adminUserId,
+      memberUserId: memberUserId
     };
     
   } catch (error) {

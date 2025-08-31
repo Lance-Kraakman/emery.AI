@@ -132,29 +132,49 @@ export class IntegrationTestClient {
       const testOrgIds = testOrgs.map(org => org.id);
       console.log(`🧹 Starting cleanup for ${testOrgIds.length} test organizations: [${testOrgIds.join(', ')}]`);
       
-      // Delete in proper cascade order (children first, then parents)
+      // Delete in proper cascade order (deepest children first, then parents)
       // This prevents foreign key constraint violations
       
-      // 1. Delete tasks (no foreign key dependencies to other test entities)
+      // 1. Delete chat messages first (they reference chats and other chat messages)
+      const chatsInOrgs = await this.db.select({ id: schema.chats.id }).from(schema.chats)
+        .where(inArray(schema.chats.organizationId, testOrgIds));
+      if (chatsInOrgs.length > 0) {
+        const chatIds = chatsInOrgs.map(c => c.id);
+        await this.safeDelete(schema.chatMessages, inArray(schema.chatMessages.chatId, chatIds), 'chat_messages');
+      }
+      
+      // 2. Delete chats (they reference organizations)
+      await this.safeDelete(schema.chats, inArray(schema.chats.organizationId, testOrgIds), 'chats');
+      
+      // 3. Delete fields (they reference tables)
+      // Note: fields don't have organizationId, so we need to find them through tables
+      const tablesInOrgs = await this.db.select({ id: schema.tables.id }).from(schema.tables)
+        .where(inArray(schema.tables.organizationId, testOrgIds));
+      if (tablesInOrgs.length > 0) {
+        const tableIds = tablesInOrgs.map(t => t.id);
+        await this.safeDelete(schema.fields, inArray(schema.fields.tableId, tableIds), 'fields');
+      }
+      
+      // 4. Delete tasks (they reference agents, but we delete them before agents)
       await this.safeDelete(schema.tasks, inArray(schema.tasks.organizationId, testOrgIds), 'tasks');
       
-      // 2. Delete agents (may reference tasks)  
+      // 5. Delete agents (may be referenced by tasks, but tasks are already deleted)
       await this.safeDelete(schema.agents, inArray(schema.agents.organizationId, testOrgIds), 'agents');
       
-      // 3. Delete RAG documents and indexes (may reference other entities)
+      // 6. Delete RAG documents and indexes (may reference other entities)
       await this.safeDelete(schema.ragDocuments, inArray(schema.ragDocuments.organizationId, testOrgIds), 'rag_documents');
       await this.safeDelete(schema.ragIndexes, inArray(schema.ragIndexes.organizationId, testOrgIds), 'rag_indexes');
       
-      // 4. Delete tables (reference databases) - fields are now part of table aggregate  
+      // 7. Delete tables (they reference databases)
       await this.safeDelete(schema.tables, inArray(schema.tables.organizationId, testOrgIds), 'tables');
       
-      // 5. Delete databases (top-level entities, referenced by tables)
+      // 8. Delete databases (they reference organizations)
       await this.safeDelete(schema.databases, inArray(schema.databases.organizationId, testOrgIds), 'databases');
       
-      // 6. Clean up user_organizations relationships
+      // 9. Clean up user_organizations relationships (they reference organizations)
       await this.safeDelete(schema.userOrganizations, inArray(schema.userOrganizations.organizationId, testOrgIds), 'user_organizations');
       
-      // 7. Finally delete the test organizations themselves
+      // 10. Finally delete the test organizations themselves
       await this.safeDelete(schema.organizations, inArray(schema.organizations.id, testOrgIds), 'organizations');
       
       console.log(`✅ Test data cleanup completed successfully for organizations [${testOrgIds.join(', ')}]`);
@@ -349,3 +369,4 @@ export class IntegrationTestClient {
 
 // Singleton instance for use across all integration tests
 export const testClient = new IntegrationTestClient();
+

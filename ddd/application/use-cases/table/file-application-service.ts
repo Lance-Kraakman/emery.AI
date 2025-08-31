@@ -8,52 +8,45 @@
  * AIDEV-NOTE: Application service for file management - coordinates between
  * FileFieldService, storage repositories, and business rules for files connected to dynamic tables
  */
-
 import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import type { Result } from '@/ddd/domain/shared/result';
-import { TableId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { FieldId, OrganizationId, TableId } from '@/ddd/domain/shared/value-objects';
 import type { FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
+import { FileKey } from '@/ddd/domain/files/entities/file-storage';
 
 export interface UploadFileCommand {
-  organizationId: number;
-  tableId: number;
-  fieldId: number; // Use fieldId to match repository interface
+  organizationId: OrganizationId;
+  tableId: TableId;
+  fieldId: FieldId; // Use fieldId to match repository interface
   file: {
     buffer: Buffer;
     filename: string;
     mimeType: string;
   };
-  uploadedBy: string;
 }
 
 export interface DownloadFileCommand {
-  fileId: string;
-  fieldId: number; // Use fieldId to match repository interface
-  tableId: number; // Need table context
-  organizationId: number;
-  requestedBy: string;
+  fileId: FileKey;
+  fieldId: FieldId; // Use fieldId to match repository interface
+  tableId: TableId; // Need table context
+  organizationId: OrganizationId;
 }
 
 export interface DeleteFileCommand {
-  fileId: string;
-  fieldId: number; // Use fieldId to match repository interface  
-  tableId: number; // Need table context
+  fileId: FileKey;
+  fieldId: FieldId; // Use fieldId to match repository interface  
+  tableId: TableId; // Need table context
   organizationId: number;
-  deletedBy: string;
 }
 
 export interface GetFilesCommand {
-  fieldId?: number;
-  tableId?: number;
-  organizationId: number;
-  requestedBy: string;
+  fieldId?: FieldId;
+  tableId?: TableId;
+  organizationId: OrganizationId;
 }
 
-// Use unified Result interface from domain shared types
-export type FileApplicationServiceResult<T = any> = Result<T>;
-
-export class FileApplicationService {
+export class FileUseCases {
   constructor(
     private readonly fileStorageRepository: IFileStorageRepository,
     private readonly dynamicTableService: DynamicTableService
@@ -62,10 +55,10 @@ export class FileApplicationService {
   /**
    * Upload a file to a specific field in a dynamic table
    */
-  async uploadFile(command: UploadFileCommand): Promise<FileApplicationServiceResult<any>> {
+  async uploadFile(command: UploadFileCommand): Promise<Result<any>> {
     try {
       // 1. Validate organization and table exist
-      const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
+      const table = await this.dynamicTableService.getTable(command.tableId);
       if (!table) {
         return {
           success: false,
@@ -73,7 +66,7 @@ export class FileApplicationService {
         };
       }
 
-      if (table.organizationId.value !== command.organizationId) {
+      if (table.organizationId !== command.organizationId) {
         return {
           success: false,
           error: 'Access denied: table not in your organization'
@@ -105,7 +98,6 @@ export class FileApplicationService {
         filename: command.file.filename,
         mimeType: command.file.mimeType,
         metadata: {
-          uploadedBy: command.uploadedBy,
           uploadedAt: new Date().toISOString()
         },
         organizationId: command.organizationId,
@@ -144,10 +136,10 @@ export class FileApplicationService {
   /**
    * Generate a download URL for a file
    */
-  async generateDownloadUrl(command: DownloadFileCommand): Promise<FileApplicationServiceResult<{ url: string; filename: string }>> {
+  async generateDownloadUrl(command: DownloadFileCommand): Promise<Result<{ url: string; filename: string }>> {
     try {
       // 1. Get table and validate field exists and is a file field
-      const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
+      const table = await this.dynamicTableService.getTable(command.tableId);
       if (!table) {
         return {
           success: false,
@@ -156,7 +148,7 @@ export class FileApplicationService {
       }
 
       // Verify table belongs to organization
-      if (table.organizationId.value !== command.organizationId) {
+      if (table.organizationId !== command.organizationId) {
         return {
           success: false,
           error: 'Access denied: table not in your organization'
@@ -207,10 +199,10 @@ export class FileApplicationService {
   /**
    * Delete a file from a field
    */
-  async deleteFile(command: DeleteFileCommand): Promise<FileApplicationServiceResult<void>> {
+  async deleteFile(command: DeleteFileCommand): Promise<Result<void>> {
     try {
       // 1. Get table and validate field exists and is a file field
-      const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
+      const table = await this.dynamicTableService.getTable(command.tableId);
       if (!table) {
         return {
           success: false,
@@ -265,7 +257,7 @@ export class FileApplicationService {
   /**
    * Get files for a field or table with organization scoping
    */
-  async getFiles(command: GetFilesCommand): Promise<FileApplicationServiceResult<FileFieldValue[]>> {
+  async getFiles(command: GetFilesCommand): Promise<Result<FileFieldValue[]>> {
     try {
       // 1. Get table and validate access
       if (!command.tableId) {
@@ -275,7 +267,7 @@ export class FileApplicationService {
         };
       }
 
-      const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
+      const table = await this.dynamicTableService.getTable(command.tableId);
       if (!table) {
         return {
           success: false,
@@ -284,7 +276,7 @@ export class FileApplicationService {
       }
 
       // Verify table belongs to organization
-      if (table.organizationId.value !== command.organizationId) {
+      if (table.organizationId !== command.organizationId) {
         return {
           success: false,
           error: 'Access denied: table not in your organization'
@@ -338,7 +330,7 @@ export class FileApplicationService {
   /**
    * Get storage statistics for an organization
    */
-  async getStorageStats(organizationId: number): Promise<FileApplicationServiceResult<{
+  async getStorageStats(organizationId: number): Promise<Result<{
     totalFiles: number;
     totalSize: number;
     filesByField: Array<{
@@ -379,7 +371,7 @@ export class FileApplicationService {
   /**
    * Cleanup orphaned files for an organization
    */
-  async cleanupOrphanedFiles(organizationId: number): Promise<FileApplicationServiceResult<{
+  async cleanupOrphanedFiles(organizationId: number): Promise<Result<{
     deletedFiles: number;
     freedBytes: number;
   }>> {

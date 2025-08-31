@@ -9,7 +9,6 @@ import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-re
 import { workerRegistry } from '@/lib/grpc/client';
 import type { TaskProgress } from '@/lib/grpc/client';
 import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/lib/grpc/proto-mappers';
-import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { getAgentDisplayName, getCapabilitiesCount } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, UserId, OrganizationId, TaskStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
 
@@ -236,47 +235,5 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       console.error(`[GRPC-EXECUTION-REPO] Error checking execution availability for org ${organizationId}:`, error);
       return false;
     }
-  }
-
-  /**
-   * Map domain Agent entity to gRPC AgentData interface
-   * AIDEV-NOTE: Adapter pattern for external service integration
-   */
-  private mapAgentToAgentData(agent: Agent): AgentData {
-    // Convert Record<string, any> to arrays for proto compatibility
-    const tools = agent.tools ? Object.entries(agent.tools).map(([name, config]) => ({
-      name,
-      config: typeof config === 'object' ? config : {}
-    })) : undefined;
-    
-    const servers = agent.servers ? Object.entries(agent.servers).map(([name, config]) => ({
-      name,
-      config: typeof config === 'object' ? config : {}
-    })) : undefined;
-    
-    const capabilities = agent.capabilities ? Object.entries(agent.capabilities).map(([name, config]) => ({
-      name,
-      description: config.description || '',
-      steps: config.steps || []
-    })) : undefined;
-
-    return {
-      id: agent.id.value,
-      name: agent.name,
-      description: agent.description || undefined,
-      persona: agent.persona || undefined,
-      ownerId: agent.ownerId.value,
-      tools,
-      servers,
-      trigger: agent.trigger ? {
-        ...agent.trigger,
-        type: agent.trigger.type || 'MANUAL'
-      } as any : undefined,
-      capabilities,
-      status: agent.status || undefined,
-      organizationId: agent.organizationId.value,
-      role: agent.role || 'assistant',
-      apiKey: agent.apiKey?.value || undefined,
-    };
   }
 }

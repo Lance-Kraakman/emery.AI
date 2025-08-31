@@ -8,7 +8,6 @@
  * AIDEV-NOTE: Application service for chat management - coordinates between
  * chat repositories, RAG services, and dynamic table context for table-connected chats
  */
-
 import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
 import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
@@ -20,37 +19,37 @@ import type { Result } from '@/ddd/domain/shared/result';
 import { ChatMessageEntity } from '@/ddd/domain/chat/entities/chat-message';
 
 export interface CreateChatCommand {
-  organizationId: number;
-  createdBy: string;
+  organizationId: OrganizationId;
+  createdBy: UserId;
   title?: string; // Auto-generated if not provided
   description?: string;
   
   // Domain connections
   domainType?: DomainType;
-  domainId?: number;
+  domainId?: number; // Keep as number since it's generic across domains
 }
 
 export interface SendMessageCommand {
-  chatId: string;
-  userId: string;
-  organizationId: number;
+  chatId: ChatId;
+  userId: UserId;
+  organizationId: OrganizationId;
   content: string;
   role: 'user' | 'assistant' | 'system';
   metadata?: ChatMessageMetadata;
 }
 
 export interface GetChatHistoryQuery {
-  chatId: string;
-  userId: string;
-  organizationId: number;
+  chatId: ChatId;
+  userId: UserId;
+  organizationId: OrganizationId;
   limit?: number;
   offset?: number;
 }
 
 export interface GetChatsQuery {
-  userId?: string;
-  organizationId: number;
-  tableId?: number;
+  userId?: UserId;
+  organizationId: OrganizationId;
+  tableId?: TableId;
   status?: 'active' | 'archived';
   limit?: number;
   offset?: number;
@@ -76,7 +75,7 @@ export class ChatApplicationService {
       let contextMetadata: ChatContextMetadata;
       
       if (command.domainType && command.domainId) {
-        const validation = await this.validateDomainConnection(command.domainType, command.domainId, command.organizationId);
+        const validation = await this.validateDomainConnection(command.domainType, command.domainId, command.organizationId.value);
         if (!validation.valid) {
           return { success: false, error: validation.error };
         }
@@ -98,8 +97,8 @@ export class ChatApplicationService {
 
       // 3. Validate chat data
       const chatData: CreateChatData = {
-        organizationId: OrganizationId.fromNumber(command.organizationId),
-        createdBy: UserId.fromString(command.createdBy),
+        organizationId: command.organizationId,
+        createdBy: command.createdBy,
         title,
         description: command.description,
         contextMetadata
@@ -117,7 +116,7 @@ export class ChatApplicationService {
       const chat = await this.chatRepository.create(chatData);
 
       // 4. Create welcome message
-      const welcomeMessageData = this.createWelcomeMessage(chat.id.value, contextMetadata);
+      const welcomeMessageData = this.createWelcomeMessage(chat.id, contextMetadata);
       await this.messageRepository.create(welcomeMessageData);
 
       // 5. Update chat message count
@@ -213,7 +212,7 @@ export class ChatApplicationService {
   /**
    * Create appropriate welcome message based on context metadata
    */
-  private createWelcomeMessage(chatId: string, contextMetadata: ChatContextMetadata): CreateChatMessageData {
+  private createWelcomeMessage(chatId: ChatId, contextMetadata: ChatContextMetadata): CreateChatMessageData {
     if (contextMetadata.contextType !== 'organization' && contextMetadata.domainSchema?.name) {
       const domainType = contextMetadata.contextType;
       const domainName = contextMetadata.domainSchema.name;
@@ -241,7 +240,7 @@ export class ChatApplicationService {
   async sendMessage(command: SendMessageCommand): Promise<ChatApplicationServiceResult<ChatMessage>> {
     try {
       // 1. Verify chat exists and user has access
-      const chat = await this.chatRepository.findById(ChatId.fromString(command.chatId), OrganizationId.fromNumber(command.organizationId));
+      const chat = await this.chatRepository.findById(command.chatId, command.organizationId);
       if (!chat) {
         return {
           success: false,
@@ -249,7 +248,7 @@ export class ChatApplicationService {
         };
       }
 
-      if (!chat.canUserMessage(UserId.fromString(command.userId), OrganizationId.fromNumber(command.organizationId))) {
+      if (!chat.canUserMessage(command.userId, command.organizationId)) {
         return {
           success: false,
           error: 'Access denied: cannot send messages to this chat'
@@ -281,7 +280,7 @@ export class ChatApplicationService {
 
       // 5. Update chat statistics
       const newMessageCount = await this.messageRepository.getMessageCount(command.chatId);
-      await this.chatRepository.updateMessageStats(ChatId.fromString(command.chatId), newMessageCount, new Date());
+      await this.chatRepository.updateMessageStats(command.chatId, newMessageCount, new Date());
 
       console.log(`[CHAT-APP-SERVICE] Added ${command.role} message to chat ${chat.title}`);
 
@@ -309,7 +308,7 @@ export class ChatApplicationService {
   }>> {
     try {
       // 1. Verify chat exists and user has access
-      const chat = await this.chatRepository.findById(ChatId.fromString(query.chatId), OrganizationId.fromNumber(query.organizationId));
+      const chat = await this.chatRepository.findById(query.chatId, query.organizationId);
       if (!chat) {
         return {
           success: false,
@@ -317,7 +316,7 @@ export class ChatApplicationService {
         };
       }
 
-      if (!chat.canUserAccess(UserId.fromString(query.userId), OrganizationId.fromNumber(query.organizationId))) {
+      if (!chat.canUserAccess(query.userId, query.organizationId)) {
         return {
           success: false,
           error: 'Access denied: cannot view this chat'
@@ -363,15 +362,15 @@ export class ChatApplicationService {
         // Get chats for specific table
         chats = await this.chatRepository.findByTable(
           query.tableId,
-          OrganizationId.fromNumber(query.organizationId),
+          query.organizationId,
           query.limit || 20,
           query.offset || 0
         );
       } else if (query.userId) {
         // Get chats for specific user
         chats = await this.chatRepository.findByUser(
-          UserId.fromString(query.userId),
-          OrganizationId.fromNumber(query.organizationId),
+          query.userId,
+          query.organizationId,
           query.limit || 20,
           query.offset || 0
         );
@@ -379,13 +378,13 @@ export class ChatApplicationService {
         // Get all chats for organization
         if (query.status === 'active') {
           chats = await this.chatRepository.findActiveByOrganization(
-            OrganizationId.fromNumber(query.organizationId),
+            query.organizationId,
             query.limit || 20,
             query.offset || 0
           );
         } else {
           chats = await this.chatRepository.findByOrganization(
-            OrganizationId.fromNumber(query.organizationId),
+            query.organizationId,
             query.limit || 20,
             query.offset || 0
           );
@@ -409,11 +408,10 @@ export class ChatApplicationService {
   /**
    * Get conversation context for AI processing
    */
-  async getConversationContext(chatId: string, organizationId: number, contextSize: number = 10): Promise<ChatApplicationServiceResult<ChatMessage[]>> {
+  async getConversationContext(chatId: ChatId, organizationId: OrganizationId, contextSize: number = 10): Promise<ChatApplicationServiceResult<ChatMessage[]>> {
     try {
       // 1. Verify chat exists
-      const chat = await this.chatRepository.findById(ChatId.fromString(chatId), OrganizationId.fromNumber(organizationId));
-      if (!chat) {
+      const chat = await this.chatRepository.findById(chatId, organizationId);      if (!chat) {
         return {
           success: false,
           error: 'Chat not found or access denied'
@@ -440,10 +438,10 @@ export class ChatApplicationService {
   /**
    * Archive a chat
    */
-  async archiveChat(chatId: string, userId: string, organizationId: number): Promise<ChatApplicationServiceResult<void>> {
+  async archiveChat(chatId: ChatId, userId: UserId, organizationId: OrganizationId): Promise<ChatApplicationServiceResult<void>> {
     try {
       // 1. Verify chat exists and user can edit
-      const chat = await this.chatRepository.findById(ChatId.fromString(chatId), OrganizationId.fromNumber(organizationId));
+      const chat = await this.chatRepository.findById(chatId, organizationId);   
       if (!chat) {
         return {
           success: false,
@@ -451,16 +449,15 @@ export class ChatApplicationService {
         };
       }
 
-      if (!chat.canUserEdit(UserId.fromString(userId))) {
-        return {
+      if (!chat.canUserEdit(userId)) {
+       return {
           success: false,
           error: 'Access denied: only chat creator can archive chat'
         };
       }
 
       // 2. Archive chat
-      const success = await this.chatRepository.archive(ChatId.fromString(chatId), OrganizationId.fromNumber(organizationId));
-      if (!success) {
+      const success = await this.chatRepository.archive(chatId, organizationId);      if (!success) {
         return {
           success: false,
           error: 'Failed to archive chat'
@@ -485,19 +482,18 @@ export class ChatApplicationService {
   /**
    * Delete a chat permanently
    */
-  async deleteChat(chatId: string, userId: string, organizationId: number): Promise<ChatApplicationServiceResult<void>> {
+  async deleteChat(chatId: ChatId, userId: UserId, organizationId: OrganizationId): Promise<ChatApplicationServiceResult<void>> {
     try {
       // 1. Verify chat exists and user can edit
-      const chat = await this.chatRepository.findById(ChatId.fromString(chatId), OrganizationId.fromNumber(organizationId));
-      if (!chat) {
+      const chat = await this.chatRepository.findById(chatId, organizationId);      if (!chat) {
         return {
           success: false,
           error: 'Chat not found or access denied'
         };
       }
 
-      if (!chat.canUserEdit(UserId.fromString(userId))) {
-        return {
+      if (!chat.canUserEdit(userId)) {
+       return {
           success: false,
           error: 'Access denied: only chat creator can delete chat'
         };
@@ -507,8 +503,7 @@ export class ChatApplicationService {
       await this.messageRepository.deleteByChatId(chatId);
 
       // 3. Delete chat
-      const success = await this.chatRepository.delete(ChatId.fromString(chatId), OrganizationId.fromNumber(organizationId));
-      if (!success) {
+      const success = await this.chatRepository.delete(chatId, organizationId);      if (!success) {
         return {
           success: false,
           error: 'Failed to delete chat'
@@ -533,7 +528,7 @@ export class ChatApplicationService {
   /**
    * Get chat statistics for an organization
    */
-  async getChatStats(organizationId: number): Promise<ChatApplicationServiceResult<{
+  async getChatStats(organizationId: OrganizationId): Promise<ChatApplicationServiceResult<{
     totalChats: number;
     activeChats: number;
     archivedChats: number;
@@ -541,8 +536,7 @@ export class ChatApplicationService {
     totalMessages: number;
   }>> {
     try {
-      const stats = await this.chatRepository.getOrganizationStats(OrganizationId.fromNumber(organizationId));
-
+      const stats = await this.chatRepository.getOrganizationStats(organizationId);
       return {
         success: true,
         data: stats

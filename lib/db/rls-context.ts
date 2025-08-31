@@ -23,6 +23,7 @@
 import { sql } from 'drizzle-orm';
 import type { db } from './client';
 import type { PgDatabase, PgTransaction } from 'drizzle-orm/pg-core';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 type DrizzleDB = typeof db;
 type DrizzleTransaction = Parameters<Parameters<DrizzleDB['transaction']>[0]>[0];
@@ -44,15 +45,15 @@ type DrizzleTransaction = Parameters<Parameters<DrizzleDB['transaction']>[0]>[0]
  */
 export async function withRLSContext<T>(
   db: DrizzleDB,
-  userId: string,
-  organizationId: number,
+  userId: UserId,
+  organizationId: OrganizationId,
   operation: (tx: DrizzleTransaction) => Promise<T>
 ): Promise<T> {
   return await db.transaction(async (tx) => {
     try {
       // Set RLS context variables for this transaction
-      await tx.execute(sql`SELECT set_config('app.current_user_id', ${userId}, true)`);
-      await tx.execute(sql`SELECT set_config('app.current_organization_id', ${organizationId.toString()}, true)`);
+      await tx.execute(sql`SELECT set_config('app.current_user_id', ${userId.value}, true)`);
+      await tx.execute(sql`SELECT set_config('app.current_organization_id', ${organizationId.value.toString()}, true)`);
       
       // Execute the operation with proper RLS context
       return await operation(tx);
@@ -77,13 +78,13 @@ export async function withRLSContext<T>(
  */
 export async function withOrganizationContext<T>(
   db: DrizzleDB,
-  organizationId: number,
+  organizationId: OrganizationId,
   operation: (tx: DrizzleTransaction) => Promise<T>
 ): Promise<T> {
   return await db.transaction(async (tx) => {
     try {
       // Set only organization context for system operations
-      await tx.execute(sql`SELECT set_config('app.current_organization_id', ${organizationId.toString()}, true)`);
+      await tx.execute(sql`SELECT set_config('app.current_organization_id', ${organizationId.value.toString()}, true)`);
       
       return await operation(tx);
       

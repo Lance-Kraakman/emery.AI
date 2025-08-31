@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth, hasPermission } from "@/lib/auth";
 import { getFileApplicationService, getTableApplicationService } from "@/ddd/application/di/container";
 import { TableId } from "@/ddd/domain/shared/value-objects";
-import type { UploadFileCommand } from "@/ddd/application/services/files/file-application-service";
+import type { UploadFileCommand } from "@/ddd/application/use-cases/table/file-application-service";
 
 export async function POST(request: NextRequest) {
   try {

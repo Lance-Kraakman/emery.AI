@@ -1,6 +1,8 @@
 // AIDEV-NOTE: File storage domain entities - abstracts file storage operations from specific providers
 // Defines contracts for file storage that can be implemented by S3, Azure Blob, local filesystem, etc.
 
+import { FieldId, OrganizationId, TableId } from "../../shared/value-objects";
+
 export interface StoredFile {
   id: string;                            // Unique file identifier
   key: string;                          // Storage key/path for retrieval
@@ -20,9 +22,9 @@ export interface FileUploadRequest {
   filename: string;                     // Original filename
   mimeType: string;                     // MIME type
   metadata?: Record<string, any>;       // Additional metadata to store
-  organizationId?: number;              // Organization context
-  tableId?: number;                     // Table context  
-  fieldId?: number;                     // Field context
+  organizationId?: OrganizationId;              // Organization context
+  tableId?: TableId;                     // Table context  
+  fieldId?: FieldId;                     // Field context
 }
 
 export interface FileUrlOptions {

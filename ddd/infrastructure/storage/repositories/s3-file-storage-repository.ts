@@ -1,9 +1,7 @@
 import { 
   PutObjectCommand, 
   GetObjectCommand, 
-  DeleteObjectCommand, 
-  HeadObjectCommand,
-  ListObjectsV2Command
+  DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
@@ -11,6 +9,7 @@ import crypto from 'crypto';
 import { FileUploadRequest, StoredFile, FileStorageError, FileKey, FileUrlOptions, FileValidationRule, FileValidationResult } from '@/ddd/domain/files/entities/file-storage';
 import { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
+import { FieldId } from '@/ddd/domain/shared/value-objects';
 
 export class S3FileStorageRepository implements IFileStorageRepository {
   private readonly bucketName: string;
