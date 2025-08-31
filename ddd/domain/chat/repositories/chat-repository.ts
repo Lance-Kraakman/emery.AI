@@ -9,7 +9,7 @@
  */
 
 import type { Chat, CreateChatData, UpdateChatData } from '../entities/chat';
-import type { ChatId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import type { ChatId, OrganizationId, TableId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export interface IChatRepository {
   /**
@@ -35,7 +35,7 @@ export interface IChatRepository {
   /**
    * Find chats connected to a specific table
    */
-  findByTable(tableId: number, organizationId: OrganizationId, limit?: number, offset?: number): Promise<Chat[]>;
+  findByTable(tableId: TableId, organizationId: OrganizationId, limit?: number, offset?: number): Promise<Chat[]>;
 
   /**
    * Find active chats for an organization

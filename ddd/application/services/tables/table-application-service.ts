@@ -19,15 +19,15 @@ import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/ta
 
 export interface CreateTableCommand {
   name: string;
-  databaseId: number;
-  organizationId: number;
-  createdBy: string;
+  databaseId: DatabaseId;
+  organizationId: OrganizationId;
+  createdBy: UserId;
   description?: string;
   metadata?: Record<string, any>;
 }
 
 export interface UpdateTableCommand {
-  id: number;
+  id: TableId;
   name?: string;
   description?: string;
   metadata?: Record<string, any>;
@@ -47,16 +47,16 @@ export interface CreateDynamicTableData {
 
 // Field operation interfaces
 export interface CreateFieldCommand {
-  tableId: number;
+  tableId: TableId;
   name: string;
   type: FieldType;
   required?: boolean;
-  relatedTableId?: number;
+  relatedTableId?: TableId;
   metadata?: Record<string, any>;
 }
 
 export interface UpdateFieldCommand {
-  tableId: number;
+  tableId: TableId;
   fieldName: string;
   name?: string;
   required?: boolean;
@@ -65,7 +65,7 @@ export interface UpdateFieldCommand {
 }
 
 export interface ReorderFieldsCommand {
-  tableId: number;
+  tableId: TableId;
   fieldOrders: Array<{ fieldName: string; orderIndex: number }>;
 }
 
@@ -85,24 +85,24 @@ export class TableApplicationService {
   async createTable(command: CreateTableCommand): Promise<TableApplicationServiceResult<DynamicTable>> {
     try {
       // 1. Validate organization exists
-      const organization = await this.organizationRepository.findById(OrganizationId.fromNumber(command.organizationId));
+      const organization = await this.organizationRepository.findById(command.organizationId);
       if (!organization) {
         return {
           success: false,
-          error: `Organization ${command.organizationId} not found`
+          error: `Organization ${command.organizationId.value} not found`
         };
       }
 
       // 2. Validate database exists and belongs to organization
-      const database = await this.databaseRepository.findById(DatabaseId.fromNumber(command.databaseId));
+      const database = await this.databaseRepository.findById(command.databaseId);
       if (!database) {
         return {
           success: false,
-          error: `Database ${command.databaseId} not found`
+          error: `Database ${command.databaseId.value} not found`
         };
       }
 
-      if (database.organizationId.value !== command.organizationId) {
+      if (!database.organizationId.equals(command.organizationId)) {
         return {
           success: false,
           error: 'Database does not belong to the specified organization'
@@ -126,9 +126,9 @@ export class TableApplicationService {
       // 4. Create table using DynamicTableService
       const createTableCommand = {
         name: command.name,
-        databaseId: DatabaseId.fromNumber(command.databaseId),
-        organizationId: OrganizationId.fromNumber(command.organizationId),
-        createdBy: UserId.fromString(command.createdBy),
+        databaseId: command.databaseId,
+        organizationId: command.organizationId,
+        createdBy: command.createdBy,
         description: command.description,
         metadata: tableMetadata
       };
@@ -169,11 +169,11 @@ export class TableApplicationService {
   async updateTable(command: UpdateTableCommand): Promise<TableApplicationServiceResult<DynamicTable>> {
     try {
       // 1. Get existing table
-      const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.id));
+      const table = await this.dynamicTableService.getTable(command.id);
       if (!table) {
         return {
           success: false,
-          error: `Table ${command.id} not found`
+          error: `Table ${command.id.value} not found`
         };
       }
 
@@ -305,16 +305,16 @@ export class TableApplicationService {
   async createField(command: CreateFieldCommand): Promise<TableApplicationServiceResult<TableField>> {
     try {
       // 1. Get table and verify it exists
-      const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
+      const table = await this.dynamicTableService.getTable(command.tableId);
       if (!table) {
-        return ResultHelpers.failure(`Table ${command.tableId} not found`);
+        return ResultHelpers.failure(`Table ${command.tableId.value} not found`);
       }
 
       // 2. Validate related table if it's a relation field
       if (command.type === 'relation' && command.relatedTableId) {
-        const relatedTable = await this.dynamicTableService.getTable(TableId.fromNumber(command.relatedTableId));
+        const relatedTable = await this.dynamicTableService.getTable(command.relatedTableId);
         if (!relatedTable) {
-          return ResultHelpers.failure(`Related table ${command.relatedTableId} not found`);
+          return ResultHelpers.failure(`Related table ${command.relatedTableId.value} not found`);
         }
 
         // Ensure related table is in the same organization
@@ -336,7 +336,7 @@ export class TableApplicationService {
         name: command.name,
         type: command.type,
         orderIndex,
-        relatedTableId: command.relatedTableId ? TableId.fromNumber(command.relatedTableId) : undefined,
+        relatedTableId: command.relatedTableId,
         required: command.required || false,
         metadata: command.metadata
       });
@@ -372,9 +372,9 @@ export class TableApplicationService {
   async updateField(command: UpdateFieldCommand): Promise<TableApplicationServiceResult<TableField>> {
     try {
       // 1. Get table and verify it exists
-      const table = await this.dynamicTableService.getTable(TableId.fromNumber(command.tableId));
+      const table = await this.dynamicTableService.getTable(command.tableId);
       if (!table) {
-        return ResultHelpers.failure(`Table ${command.tableId} not found`);
+        return ResultHelpers.failure(`Table ${command.tableId.value} not found`);
       }
 
       // 2. Check if field exists
@@ -434,12 +434,12 @@ export class TableApplicationService {
   /**
    * Delete a field from a table using table aggregate
    */
-  async deleteField(tableId: number, fieldName: string): Promise<TableApplicationServiceResult<void>> {
+  async deleteField(tableId: TableId, fieldName: string): Promise<TableApplicationServiceResult<void>> {
     try {
       // 1. Get table and verify it exists
-      const table = await this.dynamicTableService.getTable(TableId.fromNumber(tableId));
+      const table = await this.dynamicTableService.getTable(tableId);
       if (!table) {
-        return ResultHelpers.failure(`Table ${tableId} not found`);
+        return ResultHelpers.failure(`Table ${tableId.value} not found`);
       }
 
       // 2. Verify field exists
@@ -475,9 +475,9 @@ export class TableApplicationService {
   /**
    * Get fields for a table using table aggregate
    */
-  async getFieldsForTable(tableId: number): Promise<TableField[]> {
+  async getFieldsForTable(tableId: TableId): Promise<TableField[]> {
     try {
-      const table = await this.dynamicTableService.getTable(TableId.fromNumber(tableId));
+      const table = await this.dynamicTableService.getTable(tableId);
       if (!table) {
         return [];
       }

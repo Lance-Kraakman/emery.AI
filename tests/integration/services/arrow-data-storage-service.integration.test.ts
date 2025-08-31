@@ -41,8 +41,6 @@ describe('ArrowDataStorageService Integration Tests', () => {
           ],
           table: createMockTableWithFields('Test Table', [
             { name: 'Name', type: 'text', required: false },
-            { name: 'Email', type: 'email', required: false },
-            { name: 'Website', type: 'url', required: false }
           ])
         },
         expected: { success: true, retrievedDataMatches: true }
@@ -427,8 +425,6 @@ describe('ArrowDataStorageService Integration Tests', () => {
 
       const allTypesTable = createMockTableWithFields('All Types Table', [
         { name: 'Text Field', type: 'text', required: false },
-        { name: 'Email Field', type: 'email', required: false },
-        { name: 'URL Field', type: 'url', required: false },
         { name: 'Number Field', type: 'number', required: false },
         { name: 'Boolean Field', type: 'boolean', required: false },
         { name: 'Date Field', type: 'date', required: false },

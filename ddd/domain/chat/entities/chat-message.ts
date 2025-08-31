@@ -8,6 +8,8 @@
  * message validation, RAG source tracking, and conversation flow management
  */
 
+import { ChatId, ChatMessageId } from "../../shared/value-objects";
+
 export interface ChatMessageMetadata {
   ragSources?: Array<{
     documentId: string;
@@ -22,8 +24,8 @@ export interface ChatMessageMetadata {
 }
 
 export interface ChatMessage {
-  id: string;
-  chatId: string;
+  id: ChatMessageId;
+  chatId: ChatId;
   
   // Message content
   role: 'user' | 'assistant' | 'system';
@@ -40,7 +42,7 @@ export interface ChatMessage {
 }
 
 export interface CreateChatMessageData {
-  chatId: string;
+  chatId: ChatId;
   role: 'user' | 'assistant' | 'system';
   content: string;
   metadata?: ChatMessageMetadata;
@@ -59,11 +61,11 @@ export interface UpdateChatMessageData {
 export class ChatMessageEntity {
   constructor(private readonly message: ChatMessage) {}
 
-  get id(): string {
+  get id(): ChatMessageId {
     return this.message.id;
   }
 
-  get chatId(): string {
+  get chatId(): ChatId {
     return this.message.chatId;
   }
 
@@ -224,7 +226,7 @@ export class ChatMessageEntity {
   /**
    * Create a system message for chat initialization
    */
-  static createSystemMessage(chatId: string, messageIndex: number, content: string): CreateChatMessageData {
+  static createSystemMessage(chatId: ChatId, messageIndex: number, content: string): CreateChatMessageData {
     return {
       chatId,
       role: 'system',
@@ -237,7 +239,7 @@ export class ChatMessageEntity {
   /**
    * Create a welcome message for table-connected chats
    */
-  static createTableWelcomeMessage(chatId: string, messageIndex: number, tableName: string): CreateChatMessageData {
+  static createTableWelcomeMessage(chatId: ChatId, messageIndex: number, tableName: string): CreateChatMessageData {
     const content = `Welcome to your chat about the "${tableName}" table! I can help you understand your data, create queries, and provide insights. What would you like to know?`;
     
     return this.createSystemMessage(chatId, messageIndex, content);
@@ -246,7 +248,7 @@ export class ChatMessageEntity {
   /**
    * Create a welcome message for domain-specific chats
    */
-  static createDomainWelcomeMessage(chatId: string, messageIndex: number, domainType: string, domainName: string): CreateChatMessageData {
+  static createDomainWelcomeMessage(chatId: ChatId, messageIndex: number, domainType: string, domainName: string): CreateChatMessageData {
     let content: string;
     
     switch (domainType) {
@@ -272,7 +274,7 @@ export class ChatMessageEntity {
   /**
    * Create a welcome message for organization-wide chats
    */
-  static createOrganizationWelcomeMessage(chatId: string, messageIndex: number, organizationName?: string): CreateChatMessageData {
+  static createOrganizationWelcomeMessage(chatId: ChatId, messageIndex: number, organizationName?: string): CreateChatMessageData {
     const orgText = organizationName ? ` for ${organizationName}` : '';
     const content = `Welcome to your organizational chat${orgText}! I can help you with your tables, data, workflows, and answer questions about your organization. How can I assist you today?`;
     

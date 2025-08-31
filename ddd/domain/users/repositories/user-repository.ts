@@ -53,9 +53,6 @@ export interface IUserRepository {
   
   // Business logic operations
   verifyEmail(userId: UserId, tx?: TransactionContext): Promise<User>;
-  updateLastLogin(userId: UserId, tx?: TransactionContext): Promise<void>;
   getUserWithOrganizations(userId: UserId, tx?: TransactionContext): Promise<(User & { organizations: Organization[] }) | null>;
   
-  // Bootstrap methods for system-level operations
-  createWithinTransaction(data: CreateUserData, tx: TransactionContext): Promise<User>;
 }

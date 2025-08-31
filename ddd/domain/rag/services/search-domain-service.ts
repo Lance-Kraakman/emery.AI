@@ -4,13 +4,6 @@
 import { RagDocument } from '../entities';
 import { RagIndexId, SearchQuery, type SimilarityMetric } from '../value-objects';
 
-export interface SearchResult {
-  documents: RagDocument[];
-  totalCount: number;
-  query: SearchQuery;
-  searchTime: number;
-}
-
 export interface SearchFilters {
   sourceTypes?: string[];
   minSimilarity?: number;

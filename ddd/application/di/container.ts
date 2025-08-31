@@ -42,7 +42,7 @@ import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/
 
 // New application services for tables, fields, rows, files, and chat
 import { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
-import { FileApplicationService } from '@/ddd/application/services/files/file-application-service';
+import { FileUseCases } from '@/ddd/application/use-cases/table/file-application-service';
 import { ChatApplicationService } from '@/ddd/application/services/chat/chat-application-service';
 
 // Domain services
@@ -104,7 +104,7 @@ interface RepositoryRegistry {
   
   // New application services for data management
   TableApplicationService: TableApplicationService;
-  FileApplicationService: FileApplicationService;
+  FileApplicationService: FileUseCases;
   
   // Domain services
   DynamicTableService: DynamicTableService;
@@ -296,7 +296,7 @@ export class DIContainer {
     
     
     // Initialize FileApplicationService with proper dependencies  
-    const fileApplicationService = new FileApplicationService(
+    const fileApplicationService = new FileUseCases(
       fileStorageRepository,
       dynamicTableService
     );
@@ -442,7 +442,7 @@ type ServiceMap = {
   UserRoleApplicationService: UserRoleApplicationService;
   InvitationApplicationService: InvitationApplicationService;
   TableApplicationService: TableApplicationService;
-  FileApplicationService: FileApplicationService;
+  FileApplicationService: FileUseCases;
   ChatApplicationService: ChatApplicationService;
   
 

@@ -8,6 +8,7 @@
  * for conversation flow management and RAG source tracking
  */
 
+import { ChatId, ChatMessageId } from '../../shared/value-objects';
 import type { ChatMessage, CreateChatMessageData, UpdateChatMessageData } from '../entities/chat-message';
 
 export interface IChatMessageRepository {
@@ -19,17 +20,17 @@ export interface IChatMessageRepository {
   /**
    * Find a message by ID
    */
-  findById(id: string): Promise<ChatMessage | null>;
+  findById(id: ChatMessageId): Promise<ChatMessage | null>;
 
   /**
    * Find all messages for a chat, ordered by message index
    */
-  findByChatId(chatId: string, limit?: number, offset?: number): Promise<ChatMessage[]>;
+  findByChatId(chatId: ChatId, limit?: number, offset?: number): Promise<ChatMessage[]>;
 
   /**
    * Find messages by chat with role filtering
    */
-  findByChatIdAndRole(chatId: string, role: 'user' | 'assistant' | 'system', limit?: number, offset?: number): Promise<ChatMessage[]>;
+  findByChatIdAndRole(chatId: ChatId, role: 'user' | 'assistant' | 'system', limit?: number, offset?: number): Promise<ChatMessage[]>;
 
   /**
    * Find the latest message in a chat
@@ -39,47 +40,47 @@ export interface IChatMessageRepository {
   /**
    * Find messages that are replies to a specific message
    */
-  findReplies(parentMessageId: string): Promise<ChatMessage[]>;
+  findReplies(parentMessageId: ChatMessageId): Promise<ChatMessage[]>;
 
   /**
    * Update a message
    */
-  update(id: string, data: UpdateChatMessageData): Promise<ChatMessage | null>;
+  update(id: ChatMessageId, data: UpdateChatMessageData): Promise<ChatMessage | null>;
 
   /**
    * Delete a message
    */
-  delete(id: string): Promise<boolean>;
+  delete(id: ChatMessageId): Promise<boolean>;
 
   /**
    * Get the next message index for a chat
    */
-  getNextMessageIndex(chatId: string): Promise<number>;
+  getNextMessageIndex(chatId: ChatId): Promise<number>;
 
   /**
    * Get message count for a chat
    */
-  getMessageCount(chatId: string): Promise<number>;
+  getMessageCount(chatId: ChatId): Promise<number>;
 
   /**
    * Find messages with RAG sources
    */
-  findMessagesWithRagSources(chatId: string, limit?: number, offset?: number): Promise<ChatMessage[]>;
+  findMessagesWithRagSources(chatId: ChatId, limit?: number, offset?: number): Promise<ChatMessage[]>;
 
   /**
    * Find messages by content search
    */
-  searchMessageContent(chatId: string, query: string, limit?: number, offset?: number): Promise<ChatMessage[]>;
+  searchMessageContent(chatId: ChatId, query: string, limit?: number, offset?: number): Promise<ChatMessage[]>;
 
   /**
    * Get conversation context (recent messages) for AI processing
    */
-  getConversationContext(chatId: string, contextSize: number): Promise<ChatMessage[]>;
+  getConversationContext(chatId: ChatId, contextSize: number): Promise<ChatMessage[]>;
 
   /**
    * Find assistant messages with errors
    */
-  findErrorMessages(chatId: string, limit?: number, offset?: number): Promise<ChatMessage[]>;
+  findErrorMessages(chatId: ChatId, limit?: number, offset?: number): Promise<ChatMessage[]>;
 
   /**
    * Get message statistics for a chat
@@ -101,5 +102,5 @@ export interface IChatMessageRepository {
   /**
    * Delete all messages for a chat (cascade delete)
    */
-  deleteByChatId(chatId: string): Promise<number>; // Returns count of deleted messages
+  deleteByChatId(chatId: ChatId): Promise<number>; // Returns count of deleted messages
 }

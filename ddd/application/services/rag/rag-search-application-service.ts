@@ -22,6 +22,7 @@ import {
   type SearchRagQuery, 
   SearchRagQueryValidator 
 } from '@/ddd/application/services/rag/queries';
+import { Result, ResultHelpers } from '@/ddd/domain/shared';
 
 export interface SearchResult {
   documents: Array<{
@@ -53,7 +54,7 @@ export class RagSearchApplicationService {
   /**
    * Perform vector similarity search
    */
-  async search(query: SearchRagQuery): Promise<SearchResult> {
+  async search(query: SearchRagQuery): Promise<Result<SearchResult>> {
     SearchRagQueryValidator.validate(query);
 
     const { indexId, searchQuery, sourceTypes, context } = SearchRagQueryValidator.toDomainParams(query);
@@ -107,62 +108,21 @@ export class RagSearchApplicationService {
           context
         );
       }
-
       console.log(`[RAG-SEARCH-APP] Search completed in ${searchTime}ms: "${searchQuery.text.substring(0, 50)}..." → ${filteredDocuments.length} results`);
 
-      return {
+      return ResultHelpers.success({
         documents: filteredDocuments.map(doc => doc.toSearchResult()),
         totalCount: filteredDocuments.length,
         query: searchQuery.text,
         searchTime,
         indexName: index.name
-      };
+      });
 
     } catch (error) {
       const searchTime = Date.now() - startTime;
       console.error(`[RAG-SEARCH-APP] Search failed after ${searchTime}ms:`, error);
 
-      // Try fallback text search if vector search fails
-      try {
-        return await this.fallbackTextSearch(indexId, searchQuery, sourceTypes, startTime);
-      } catch (fallbackError) {
-        console.error(`[RAG-SEARCH-APP] Fallback search also failed:`, fallbackError);
-        throw error; // Throw original error
-      }
+      return ResultHelpers.failure("failed to search ${error}")
     }
-  }
-
-  // Private helper methods
-  private async fallbackTextSearch(
-    indexId: RagIndexId,
-    searchQuery: any,
-    sourceTypes?: string[],
-    startTime: number = Date.now()
-  ): Promise<SearchResult> {
-    console.log(`[RAG-SEARCH-APP] Attempting fallback text search for: "${searchQuery.text}"`);
-
-    // Get all documents for the index
-    const allDocuments = await this.documentRepository.findByIndexId(indexId);
-
-    // Apply source type filter if specified
-    let filteredDocuments = allDocuments;
-    if (sourceTypes && sourceTypes.length > 0) {
-      filteredDocuments = allDocuments.filter(doc => sourceTypes.includes(doc.domainType));
-    }
-
-    // Perform text-based search
-    const textResults = this.searchDomainService.performTextSearch(filteredDocuments, searchQuery);
-
-    const searchTime = Date.now() - startTime;
-
-    console.log(`[RAG-SEARCH-APP] Fallback text search completed in ${searchTime}ms: ${textResults.length} results`);
-
-    return {
-      documents: textResults.map(doc => doc.toSearchResult()),
-      totalCount: textResults.length,
-      query: searchQuery.text,
-      searchTime,
-      indexName: 'Text Search Fallback'
-    };
   }
 }

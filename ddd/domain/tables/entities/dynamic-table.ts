@@ -4,7 +4,7 @@
 import type { TableMetadata } from '../value-objects/table-metadata';
 import { TableField } from '../value-objects/table-field';
 import type { RowData, FieldValidationResult, FieldValidationError } from '../value-objects/field-values';
-import { TableId, DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { TableId, DatabaseId, OrganizationId, UserId, FieldId } from '@/ddd/domain/shared/value-objects';
 
 export class DynamicTable {
   private constructor(
@@ -97,8 +97,8 @@ export class DynamicTable {
   /**
    * Get field by ID
    */
-  getFieldById(fieldId: number): TableField | undefined {
-    return this._fields.find(field => field.id === fieldId);
+  getFieldById(fieldId: FieldId): TableField | undefined {
+    return this._fields.find(field => field.id === fieldId.value);
   }
 
   // ===== FIELD MUTATION METHODS (for aggregate consistency) =====

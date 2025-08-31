@@ -73,12 +73,6 @@ export class DrizzleUserRepository implements IUserRepository {
 
     return this.mapToEntity(newUser);
   }
-  
-  // Bootstrap method for RLS-aware user creation
-  async createWithinTransaction(data: CreateUserData, tx: TransactionContext): Promise<User> {
-    return this.create(data, tx);
-  }
-
 
   async update(id: UserId, data: UpdateUserData): Promise<User> {
     // Convert Value Objects to primitives for database
@@ -339,13 +333,7 @@ export class DrizzleUserRepository implements IUserRepository {
     return this.mapToEntity(verifiedUser);
   }
 
-  async updateLastLogin(userId: UserId): Promise<void> {
-    // Note: If we add a lastLoginAt field to schema in the future, implement here
-    // For now, this is a placeholder for business logic consistency
-    
-    // Could potentially update a separate user activity table or add timestamp
-    // await this.db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, userId.value));
-  }
+
 
   async getUserWithOrganizations(userId: UserId): Promise<(User & { organizations: Organization[] }) | null> {
     return await this.db.transaction(async (tx) => {
