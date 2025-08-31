@@ -7,18 +7,15 @@
  * AIDEV-NOTE: Application service for table management - handles business
  * rules, validation, and coordination between repositories
  */
-
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import type { Result } from '@/ddd/domain/shared/result';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
-import { generateTableName } from '@/utils/slugify';
 import { OrganizationId, DatabaseId, UserId, TableId } from '@/ddd/domain/shared/value-objects';
 import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
-import type { RowData, FieldValidationResult } from '@/ddd/domain/tables/value-objects/field-values';
 
 export interface CreateTableCommand {
   name: string;
@@ -46,20 +43,6 @@ export interface CreateDynamicTableData {
   storageLocation: string;             // Generated storage location (S3 path, table name, etc.)
   metadata?: TableMetadata;
   createdBy: UserId;
-}
-
-export interface UpdateDynamicTableData {
-  databaseId?: DatabaseId;
-  name?: string;
-  description?: string;
-  metadata?: TableMetadata;
-  // Note: dbName and organizationId typically not changed after creation
-}
-
-export interface TableFilters {
-  organizationId?: number;
-  databaseId?: number;
-  createdBy?: string;
 }
 
 // Field operation interfaces
@@ -282,8 +265,6 @@ export class TableApplicationService {
         console.warn(`[TABLE-APP-SERVICE] Deleting table ${table.name} with existing data`);
       }
 
-      // 3. Fields are now part of table aggregate - deletion handled by table service
-      // 4. Delete the table (handles both metadata, fields, and physical table)
       const deleteResult = await this.dynamicTableService.deleteTable(tableId);
       if (!deleteResult.success) {
         return deleteResult;
@@ -317,10 +298,6 @@ export class TableApplicationService {
   async getTablesForOrganization(organizationId: OrganizationId): Promise<DynamicTable[]> {
     return await this.dynamicTableService.getTablesByOrganization(organizationId);
   }
-
-  // =====================================
-  // FIELD OPERATIONS (consolidated)
-  // =====================================
 
   /**
    * Create a new field for a table using table aggregate
@@ -512,126 +489,4 @@ export class TableApplicationService {
       return [];
     }
   }
-
-  /**
-   * Validate field value based on field type using TableField value object
-   */
-  validateFieldValue(field: TableField, value: any): { valid: boolean; error?: string } {
-    // Handle null/undefined
-    if (value === null || value === undefined) {
-      if (field.required) {
-        return { valid: false, error: `Field "${field.name}" is required` };
-      }
-      return { valid: true };
-    }
-
-    // Type-specific validation
-    switch (field.type) {
-      case 'text':
-      case 'email':
-      case 'url':
-        if (typeof value !== 'string') {
-          return { valid: false, error: `Field "${field.name}" must be a string` };
-        }
-        
-        if (field.type === 'email' && value) {
-          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-          if (!emailRegex.test(value)) {
-            return { valid: false, error: `Field "${field.name}" must be a valid email` };
-          }
-        }
-        
-        if (field.type === 'url' && value) {
-          try {
-            new URL(value);
-          } catch {
-            return { valid: false, error: `Field "${field.name}" must be a valid URL` };
-          }
-        }
-        break;
-
-      case 'number':
-        if (typeof value !== 'number' || isNaN(value)) {
-          return { valid: false, error: `Field "${field.name}" must be a number` };
-        }
-        break;
-
-      case 'boolean':
-        if (typeof value !== 'boolean') {
-          return { valid: false, error: `Field "${field.name}" must be a boolean` };
-        }
-        break;
-
-      case 'date':
-        if (!(value instanceof Date) && isNaN(Date.parse(value))) {
-          return { valid: false, error: `Field "${field.name}" must be a valid date` };
-        }
-        break;
-
-      case 'relation':
-        // Relation fields store structured data
-        if (typeof value !== 'object') {
-          return { valid: false, error: `Field "${field.name}" must be an object` };
-        }
-        break;
-
-      case 'file':
-        // File fields store file metadata as structured data
-        if (typeof value !== 'object') {
-          return { valid: false, error: `Field "${field.name}" must be a file object` };
-        }
-        break;
-
-      default:
-        return { valid: false, error: `Unknown field type: ${field.type}` };
-    }
-
-    return { valid: true };
-  }
-
-  /**
-   * Batch validate multiple field values using table aggregate
-   */
-  async validateRowData(tableId: number, data: RowData): Promise<FieldValidationResult> {
-    try {
-      const table = await this.dynamicTableService.getTable(TableId.fromNumber(tableId));
-      if (!table) {
-        return {
-          valid: false,
-          errors: [{ field: 'table', error: `Table ${tableId} not found` }]
-        };
-      }
-
-      const errors: Array<{ field: string; error: string }> = [];
-
-      // Validate each field value
-      for (const field of table.fields) {
-        const value = data[field.name]; // Use field name instead of slug
-        const validation = this.validateFieldValue(field, value);
-        
-        if (!validation.valid && validation.error) {
-          errors.push({ field: field.name, error: validation.error });
-        }
-      }
-
-      // Check for required fields that are missing
-      for (const field of table.fields) {
-        if (field.required && !(field.name in data)) {
-          errors.push({ field: field.name, error: `Field "${field.name}" is required` });
-        }
-      }
-
-      return {
-        valid: errors.length === 0,
-        errors
-      };
-    } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error validating row data:', error);
-      return {
-        valid: false,
-        errors: [{ field: 'system', error: error instanceof Error ? error.message : 'Validation failed' }]
-      };
-    }
-  }
-  
 }

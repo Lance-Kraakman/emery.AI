@@ -3,7 +3,7 @@
 
 import type { TableMetadata } from '../value-objects/table-metadata';
 import { TableField } from '../value-objects/table-field';
-import type { RowData, ColumnData, FieldValidationResult, FieldValidationError } from '../value-objects/field-values';
+import type { RowData, FieldValidationResult, FieldValidationError } from '../value-objects/field-values';
 import { TableId, DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export class DynamicTable {
@@ -166,81 +166,6 @@ export class DynamicTable {
       valid: errors.length === 0,
       errors
     };
-  }
-
-  /**
-   * Process row data for storage (convert field names to database column names)
-   */
-  processRowForStorage(data: RowData): ColumnData {
-    const processed: ColumnData = {};
-    
-    for (const field of this._fields) {
-      const value = data[field.name];
-      const columnName = field.getColumnName();
-      // Debug: console.log(`[DynamicTable] DEBUG processRowForStorage: field '${field.name}' -> column '${columnName}', value:`, value, 'type:', typeof value, 'isArray:', Array.isArray(value));
-      processed[columnName] = this.processFieldValueForStorage(field, value);
-    }
-    
-    return processed;
-  }
-
-  /**
-   * Process row data from storage (convert database column names to field names)
-   */
-  processRowFromStorage(data: ColumnData): RowData {
-    const processed: RowData = {};
-    
-    for (const field of this._fields) {
-      const columnName = field.getColumnName();
-      const value = data[columnName];
-      processed[field.name] = this.processFieldValueFromStorage(field, value);
-    }
-    
-    return processed;
-  }
-
-  // ===== PRIVATE FIELD PROCESSING HELPERS =====
-
-  private processFieldValueForStorage(field: TableField, value: unknown): any {
-    if (value === null || value === undefined) {
-      return null;
-    }
-
-    switch (field.type) {
-      case 'date':
-        // Convert Date objects to ISO strings for storage
-        if (value instanceof Date) {
-          return value.toISOString();
-        }
-        return value;
-      case 'relation':
-      case 'file':
-        // These are stored as JSONB - already in correct format
-        return typeof value === 'object' ? value : value;
-      default:
-        return value;
-    }
-  }
-
-  private processFieldValueFromStorage(field: TableField, value: unknown): any {
-    if (value === null || value === undefined) {
-      return null;
-    }
-
-    switch (field.type) {
-      case 'date':
-        // Convert ISO strings back to Date objects
-        if (typeof value === 'string') {
-          return new Date(value);
-        }
-        return value;
-      case 'number':
-        return Number(value);
-      case 'boolean':
-        return Boolean(value);
-      default:
-        return value;
-    }
   }
 
   // Factory methods - entity only created from persistence with real ID

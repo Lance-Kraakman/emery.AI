@@ -11,7 +11,7 @@
 import { Task, TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 import { TaskId } from '@/ddd/domain/tasks/value-objects/task-id';
 import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
-import type { ITaskQueueService, TaskQueueConfig } from '@/ddd/domain/tasks/services/task-queue-service';
+import type { ITaskQueueService } from '@/ddd/domain/tasks/services/task-queue-service';
 import type { ISchedulerService } from '@/ddd/domain/tasks/services/scheduler-service';
 import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import type { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
