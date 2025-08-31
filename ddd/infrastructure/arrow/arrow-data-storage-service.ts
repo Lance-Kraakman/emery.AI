@@ -43,17 +43,18 @@ const FIELD_TYPE_TO_ARROW_TYPE: Record<string, () => DataType> = {
 export class ArrowDataStorageService implements DataStorageService {
   
   /**
-   * Convert JSON data to Arrow IPC buffer for S3 storage using domain entities
+   * Convert StorageData to Arrow IPC buffer for S3 storage
+   * Data format: { id, created_at, updated_at, [fieldName]: value }
    */
   async storeData(
     data: Array<Record<string, any>>,
     table: DynamicTable
   ): Promise<Result<Buffer>> {
     try {
-      // 1. Build Arrow schema from table's fields (now includes system fields)
+      // 1. Build Arrow schema including system fields + table fields
       const arrowSchema = this.buildArrowSchema(table.fields);
       
-      // 2. Process data to match Arrow schema requirements
+      // 2. Process StorageData to match Arrow schema requirements
       const processedData = await this.processDataForArrow(data, table.fields);
       
       // 3. Create Arrow Table using tableFromArrays
@@ -74,7 +75,8 @@ export class ArrowDataStorageService implements DataStorageService {
   }
 
   /**
-   * Convert Arrow IPC buffer back to JSON data using domain entities
+   * Convert Arrow IPC buffer back to StorageData format
+   * Returns: { id, created_at, updated_at, [fieldName]: value }
    */
   async retrieveData(
     buffer: Buffer,
@@ -87,10 +89,10 @@ export class ArrowDataStorageService implements DataStorageService {
       // Read Arrow Table from IPC buffer
       const arrowTable = tableFromIPC(uint8Array);
       
-      // Convert Arrow Table back to JavaScript objects (now includes system fields)
-      const rows = await this.processRowsFromArrow(arrowTable, table.fields);
+      // Convert Arrow Table back to StorageData format
+      const storageRows = await this.processRowsFromArrow(arrowTable, table.fields);
       
-      return { success: true, data: rows };
+      return { success: true, data: storageRows };
       
     } catch (error) {
       console.error('[ArrowDataStorageService] Error converting from Arrow IPC:', error);
@@ -154,12 +156,12 @@ export class ArrowDataStorageService implements DataStorageService {
   }
 
   private async processDataForArrow(
-    data: Array<Record<string, any>>,
+    storageData: Array<Record<string, any>>,
     fields: readonly TableField[]
   ): Promise<Record<string, any[]>> {
     const columns: Record<string, any[]> = {};
     
-    // Initialize system field columns
+    // Initialize system field columns (always present in StorageData)
     columns['id'] = [];
     columns['created_at'] = [];
     columns['updated_at'] = [];
@@ -169,18 +171,16 @@ export class ArrowDataStorageService implements DataStorageService {
       columns[field.name] = [];
     });
     
-    // Process each row
-    for (const row of data) {
-      // Process system fields first
-      columns['id'].push(row.id || null);
-      columns['created_at'].push(row.created_at ? new Date(row.created_at).getTime() : null);
-      columns['updated_at'].push(row.updated_at ? new Date(row.updated_at).getTime() : null);
+    // Process each StorageData row
+    for (const storageRow of storageData) {
+      // Process system fields (directly available in StorageData)
+      columns['id'].push(storageRow.id || null);
+      columns['created_at'].push(storageRow.created_at ? new Date(storageRow.created_at).getTime() : null);
+      columns['updated_at'].push(storageRow.updated_at ? new Date(storageRow.updated_at).getTime() : null);
       
-      // Process table fields
+      // Process table fields (available by field name in StorageData)
       for (const field of fields) {
-        let value = row[field.name];
-        
-        // Debug: console.log(`[ArrowDataStorageService] STORAGE DEBUG: ${field.type} field '${field.name}' input value:`, value, 'type:', typeof value, 'isArray:', Array.isArray(value));
+        let value = storageRow[field.name];
         
         // Handle null/undefined values
         if (value === undefined || value === null) {
@@ -196,13 +196,12 @@ export class ArrowDataStorageService implements DataStorageService {
               value = Boolean(value);
               break;
             case 'date':
-              // FieldProcessor converts dates to ISO strings
-              // Convert ISO string to timestamp for Arrow storage
-              value = new Date(value).getTime();
+              // Convert Date objects or ISO strings to timestamp for Arrow storage
+              value = value instanceof Date ? value.getTime() : new Date(value).getTime();
               break;
             case 'relation':
             case 'file':
-              // Serialize complex types to JSON
+              // Serialize complex types to JSON for Arrow storage
               value = typeof value === 'object' ? JSON.stringify(value) : String(value);
               break;
             default:
@@ -218,74 +217,68 @@ export class ArrowDataStorageService implements DataStorageService {
   }
 
   private async processRowsFromArrow(
-    table: Table,
+    arrowTable: Table,
     fields: readonly TableField[]
   ): Promise<Array<Record<string, any>>> {
-    const rows: Array<Record<string, any>> = [];
+    const storageRows: Array<Record<string, any>> = [];
     
-    // Get columns directly from table
-    for (let i = 0; i < table.numRows; i++) {
-      const row: Record<string, any> = {};
+    // Convert Arrow Table back to StorageData format
+    for (let i = 0; i < arrowTable.numRows; i++) {
+      const storageRow: Record<string, any> = {};
       
-      // Process system fields first
-      const idColumn = table.getChild('id');
-      const createdAtColumn = table.getChild('created_at');
-      const updatedAtColumn = table.getChild('updated_at');
+      // Process system fields (always present)
+      const idColumn = arrowTable.getChild('id');
+      const createdAtColumn = arrowTable.getChild('created_at');
+      const updatedAtColumn = arrowTable.getChild('updated_at');
       
       if (idColumn) {
-        row.id = idColumn.get(i);
+        storageRow.id = idColumn.get(i);
       }
       
       if (createdAtColumn) {
         const timestamp = createdAtColumn.get(i);
-        row.created_at = timestamp ? new Date(timestamp) : null;
+        storageRow.created_at = timestamp ? new Date(timestamp) : null;
       }
       
       if (updatedAtColumn) {
         const timestamp = updatedAtColumn.get(i);
-        row.updated_at = timestamp ? new Date(timestamp) : null;
+        storageRow.updated_at = timestamp ? new Date(timestamp) : null;
       }
       
-      // Process table fields
+      // Process table fields (available by field name)
       for (const field of fields) {
-        const column = table.getChild(field.name);
+        const column = arrowTable.getChild(field.name);
         if (column) {
           let value = column.get(i);
           
-          // Type conversions back from Arrow
+          // Type conversions back from Arrow to StorageData format
           switch (field.type) {
             case 'date':
-              // Convert timestamp back to ISO string for domain processing
-              value = value ? new Date(value).toISOString() : value;
+              // Convert timestamp back to Date object for StorageData
+              value = value ? new Date(value) : value;
               break;
             case 'relation':
             case 'file':
-              // Relation and file fields should already be proper structured data
-              // No string parsing needed - they are stored as serialized JSON objects
-              // and retrieved as structured data by Arrow
-              // Debug: console.log(`[ArrowDataStorageService] DEBUG: ${field.type} field '${field.name}' raw value:`, value, 'type:', typeof value);
+              // Deserialize JSON back to structured data for StorageData
               if (value !== null && value !== undefined && typeof value === 'string') {
                 try {
                   value = JSON.parse(value);
-                  // Debug: console.log(`[ArrowDataStorageService] DEBUG: ${field.type} field '${field.name}' after JSON.parse:`, value, 'isArray:', Array.isArray(value));
                 } catch {
-                  // If parsing fails, this indicates malformed data
                   console.warn(`[ArrowDataStorageService] Malformed ${field.type} field data:`, value);
                   value = null;
                 }
-              } else {
-                // Debug: console.log(`[ArrowDataStorageService] DEBUG: ${field.type} field '${field.name}' not a string, value:`, value, 'isArray:', Array.isArray(value));
               }
               break;
+            // Other types (text, number, boolean) are stored as-is
           }
           
-          row[field.name] = value;
+          storageRow[field.name] = value;
         }
       }
       
-      rows.push(row);
+      storageRows.push(storageRow);
     }
     
-    return rows;
+    return storageRows;
   }
 }

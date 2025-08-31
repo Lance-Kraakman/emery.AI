@@ -56,24 +56,19 @@ export class TableRowDomainService {
     try {
       const { table, data } = command;
 
-      // 1. Validate row data using table's domain methods
+      // 1. Validate row data using table's validation methods
       const validation = table.validateRowData(data);
       if (!validation.valid) {
-        // Return consistent error message for validation failures
         return {
           success: false,
-          error: 'Validation failed',
+          error: validation.errors.map(e => e.error).join(', '),
           validationErrors: validation.errors
         };
       }
 
-      // 2. Process data for storage using table's domain methods
-      const columnData = table.processRowForStorage(data);
+      // 2. Pass RowData directly to repository - it handles all data mapping via TableDataMapper
+      const rowData = await this.tableRepository.insertRow(table.id, data);
 
-      // 3. Create row through repository
-      const rowData = await this.tableRepository.insertRow(table.id, columnData);
-
-      // 4. Repository returns RowData directly
       return {
         success: true,
         data: rowData
@@ -124,28 +119,32 @@ export class TableRowDomainService {
       if (!existingRow) {
         return {
           success: false,
-          error: `Row ${rowId} not found`
+          error: 'Row not found'
         };
       }
 
-      // 2. Validate update data using table's domain methods
-      const validation = table.validateRowData(data);
-      if (!validation.valid) {
-        // Return consistent error message for validation failures
-        return {
-          success: false,
-          error: 'Validation failed',
-          validationErrors: validation.errors
-        };
+      // 2. For updates, validate only the fields that are provided (partial validation)
+      for (const fieldName of Object.keys(data)) {
+        const fieldValue = data[fieldName];
+        if (fieldValue !== undefined && fieldValue !== null) {
+          // Find the field definition to validate against
+          const field = table.fields.find(f => f.name === fieldName);
+          if (field) {
+            const fieldValidation = field.validateValue(fieldValue);
+            if (!fieldValidation.valid) {
+              return {
+                success: false,
+                error: fieldValidation.error || `Invalid value for ${fieldName}`,
+                validationErrors: [{ field: fieldName, error: fieldValidation.error || `Invalid value for ${fieldName}` }]
+              };
+            }
+          }
+        }
       }
 
-      // 3. Process data for storage using table's domain methods
-      const columnData = table.processRowForStorage(data);
+      // 3. Pass RowData directly to repository - it handles all data mapping via TableDataMapper
+      const updatedRowData = await this.tableRepository.updateRow(table.id, rowId, data);
 
-      // 4. Update row through repository
-      const updatedRowData = await this.tableRepository.updateRow(table.id, rowId, columnData);
-
-      // 5. Repository returns RowData directly
       return {
         success: true,
         data: updatedRowData
@@ -195,7 +194,7 @@ export class TableRowDomainService {
     try {
       const { table, rows } = command;
 
-      // 1. Validate all rows using table's domain methods
+      // 1. Validate all rows using table's validation methods
       const validationErrors: Array<{ row: number; errors: Array<{ field: string; error: string }> }> = [];
       
       for (let i = 0; i < rows.length; i++) {
@@ -208,22 +207,22 @@ export class TableRowDomainService {
       if (validationErrors.length > 0) {
         return {
           success: false,
-          error: `Validation failed for ${validationErrors.length} rows`,
+          error: validationErrors.flatMap(ve => 
+            ve.errors.map(e => `Row ${ve.row}: ${e.error}`)
+          ).join(', '),
           validationErrors: validationErrors.flatMap(ve => 
             ve.errors.map(e => ({ field: `Row ${ve.row}: ${e.field}`, error: e.error }))
           )
         };
       }
 
-      // 2. Create all rows using table's domain methods
+      // 2. Create all rows using repository methods
       const createdRowsData = [];
       for (const rowData of rows) {
-        const columnData = table.processRowForStorage(rowData);
-        const newRowData = await this.tableRepository.insertRow(table.id, columnData);
+        const newRowData = await this.tableRepository.insertRow(table.id, rowData);
         createdRowsData.push(newRowData);
       }
 
-      // 3. Repository returns RowData directly
       return {
         success: true,
         data: createdRowsData

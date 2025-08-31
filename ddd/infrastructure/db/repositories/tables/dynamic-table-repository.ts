@@ -26,7 +26,7 @@ import type { CreateDynamicTableData } from '@/ddd/application/services/tables/t
 import {
   DynamicTable
 } from '@/ddd/domain/tables/entities/dynamic-table';
-import type { ColumnData, RowData } from '@/ddd/domain/tables/value-objects/field-values';
+import type { RowData } from '@/ddd/domain/tables/value-objects/field-values';
 import type { DynamicTableRow, RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
@@ -34,6 +34,7 @@ import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata'
 import { ResultHelpers } from '@/ddd/domain/shared/result';
 import type { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
 import type { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
+import { TableDataMapper } from './table-data-mapper';
 
 export class DynamicTableRepository implements IDynamicTableRepository {
   constructor(
@@ -318,8 +319,8 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
-  async insertRow(tableId: TableId, data: ColumnData): Promise<RowData> {
-    // AIDEV-NOTE: Simple atomic approach - load all data, add row, save all data
+  async insertRow(tableId: TableId, data: RowData): Promise<RowData> {
+    // AIDEV-NOTE: Using TableDataMapper for centralized data transformations
     try {
       // 1. Get table metadata
       const table = await this.findById(tableId);
@@ -327,35 +328,17 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         throw new Error('Table not found');
       }
 
-      // 2. Data has already been validated by the domain service layer
-      // The 'data' parameter is already in column format (field_1, field_2, etc.)
-      // No need to validate or process again
+      // 2. Convert to storage format using centralized mapper (validation handled by domain service)
+      const storageData = TableDataMapper.toStorageFormat(data, table);
 
-      const columnData = data; // Already processed by domain service
-
-      // 4. Add system fields
-      const rowWithId: DynamicTableRow = {
-        id: nanoid(),
-        ...columnData,
-        created_at: new Date(),
-        updated_at: new Date()
-      };
-
-      // 5. Get existing data from S3
+      // 4. Get existing data and add new row
       const s3Path = S3TablePath.fromPath(table.storageLocation);
       const existingData = await this.loadTableData(s3Path);
-
-      // 6. Add new row
-      existingData.push(rowWithId);
-
-      // 7. Save back to S3
+      existingData.push(storageData);
       await this.saveTableData(s3Path, existingData, table);
 
-      // 8. Convert DynamicTableRow to RowData using entity's method
-      const rowData = table.processRowFromStorage(rowWithId);
-      
-      // Add row ID to RowData for tests and consumer code
-      return { id: rowWithId.id, ...rowData };
+      // 5. Return RowData using centralized mapper
+      return TableDataMapper.fromStorageFormat(storageData);
 
     } catch (error) {
       console.error('[TableService] Error inserting row:', error);
@@ -376,15 +359,14 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
       const s3Path = S3TablePath.fromPath(table.storageLocation);
       
-      // Simple atomic approach - load all data from Arrow file
-      const allData = await this.loadTableData(s3Path);
+      // Load all data from Arrow file (returns StorageData format)
+      const allStorageData = await this.loadTableData(s3Path);
       
-      // Apply query options (filters, sorting, pagination)
-      const filteredData = this.applyQueryOptions(allData, options);
+      // Apply query options to storage data
+      const filteredData = this.applyQueryOptions(allStorageData, options);
       
-      // Data from Arrow storage is already in field name format (Relations, Name, etc.)
-      // No need to process through processRowFromStorage since we converted to field format before storage
-      return filteredData;
+      // Convert storage format to RowData using centralized mapper
+      return TableDataMapper.fromStorageFormatBulk(filteredData);
 
     } catch (error) {
       console.error('[TableService] Error finding rows:', error);
@@ -401,17 +383,16 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
       const s3Path = S3TablePath.fromPath(table.storageLocation);
       
-      // Simple atomic approach - load all data and find row
-      const allData = await this.loadTableData(s3Path);
+      // Load all data and find specific row
+      const allStorageData = await this.loadTableData(s3Path);
       
-      const foundRow = allData.find(row => row.id === rowId);
-      if (!foundRow) {
+      const foundStorageRow = allStorageData.find(row => row.id === rowId);
+      if (!foundStorageRow) {
         return null;
       }
       
-      // Data from Arrow storage is already in field name format (Relations, Name, etc.)
-      // No need to process through processRowFromStorage since we converted to field format before storage
-      return foundRow;
+      // Convert storage format to RowData using centralized mapper
+      return TableDataMapper.fromStorageFormat(foundStorageRow);
 
     } catch (error) {
       console.error('[TableService] Error getting row:', error);
@@ -419,49 +400,36 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
-  async updateRow(tableId: TableId, rowId: string, data: ColumnData): Promise<RowData> {
-    // AIDEV-NOTE: Simple atomic approach - load all data, update row, save all data
+  async updateRow(tableId: TableId, rowId: string, data: Partial<RowData>): Promise<RowData> {
+    // AIDEV-NOTE: Using TableDataMapper for centralized data transformations
     try {
-      // 1. Get table metadata and schema
+      // 1. Get table metadata
       const table = await this.findById(tableId);
       if (!table) {
         throw new Error('Table not found');
       }
 
-      // 2. Data has already been validated by the domain service layer  
-      // The 'data' parameter is already in column format (field_1, field_2, etc.)
-      // No need to validate or process again
-      
-      const columnData = data; // Already processed by domain service
-
-      // 3. Load all existing data
+      // 2. Load all existing data
       const s3Path = S3TablePath.fromPath(table.storageLocation);
-      const allData = await this.loadTableData(s3Path);
+      const allStorageData = await this.loadTableData(s3Path);
 
-      // 4. Find and update the row
-      const rowIndex = allData.findIndex(row => row.id === rowId);
+      // 3. Find the row to update
+      const rowIndex = allStorageData.findIndex(row => row.id === rowId);
       if (rowIndex === -1) {
-        throw new Error(`Row ${rowId} not found`);
+        throw new Error('Row not found');
       }
 
-      const updatedRow: DynamicTableRow = {
-        ...allData[rowIndex],
-        ...columnData,
-        updated_at: new Date()
-      };
-      
-      allData[rowIndex] = updatedRow;
+      // 4. Update using centralized mapper
+      const updatedStorageData = TableDataMapper.updateStorageData(allStorageData[rowIndex], data);
+      allStorageData[rowIndex] = updatedStorageData;
 
-      // 5. Save all data back to S3
-      await this.saveTableData(s3Path, allData, table);
+      // 5. Save back to S3
+      await this.saveTableData(s3Path, allStorageData, table);
 
-      console.log(`[TableService] Updated row ${rowId} in table ${table.name} using atomic approach`);
+      console.log(`[TableService] Updated row ${rowId} in table ${table.name} using TableDataMapper`);
 
-      // 6. Convert DynamicTableRow to RowData using entity's method
-      const rowData = table.processRowFromStorage(updatedRow);
-      
-      // Add row ID to RowData
-      return { id: updatedRow.id, ...rowData };
+      // 6. Return RowData using centralized mapper
+      return TableDataMapper.fromStorageFormat(updatedStorageData);
 
     } catch (error) {
       console.error('[TableService] Error updating row:', error);
@@ -594,6 +562,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       throw error;
     }
   }
+
 
 
   // Helper method to get S3 path (used internally)
@@ -751,12 +720,9 @@ export class DynamicTableRepository implements IDynamicTableRepository {
   private async saveTableData(s3Path: S3TablePath, data: any[], table: DynamicTable): Promise<void> {
     const s3Key = s3Path.getDataPath();
     
-    // Convert data from column format (field_1, field_2, etc.) back to field name format (Relations, Name, etc.)
-    // for Arrow storage service which expects field names to match table.fields
-    const fieldNameData = data.map(row => table.processRowFromStorage(row));
-    // Debug: console.log('[DynamicTableRepository] DEBUG: Converting column data to field name data for Arrow storage');
-    
-    const storageBuffer = await this.dataStorageService.storeData(fieldNameData, table);
+    // Data is already in StorageData format from TableDataMapper
+    // Arrow storage service expects this format with field names
+    const storageBuffer = await this.dataStorageService.storeData(data, table);
     
     if (!storageBuffer.success) {
       throw new Error(`Failed to store data: ${storageBuffer.error}`);
