@@ -16,4 +16,7 @@ export interface IFileStorageRepository {
   deleteFile(key: FileKey): Promise<void>;
   generateDownloadUrl(key: FileKey, options?: FileUrlOptions): Promise<string>;
   validateFile(request: FileUploadRequest, rules: FileValidationRule): Promise<FileValidationResult>;
+  
+  // File content retrieval for processing (e.g., RAG indexing)
+  downloadFile(key: FileKey): Promise<Buffer>;
 }

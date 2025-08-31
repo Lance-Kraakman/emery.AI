@@ -5,12 +5,11 @@ import type { RagIndexRepository } from '@/ddd/domain/rag/repositories/rag-index
 import type { RagDocumentRepository } from '@/ddd/domain/rag/repositories/rag-document-repository';
 import { IndexingDomainService, type ContentProcessor } from '@/ddd/domain/rag/services';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
-import { db } from '@/lib/db/client';
-import { tables, fields } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
+import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
+import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
 import { RagIndex } from '@/ddd/domain/rag/entities';
 import { RagIndexId, OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
 import { BaseDomainEvent } from '@/ddd/domain/shared/events/base-domain-event';
@@ -50,6 +49,8 @@ export class RagIndexingApplicationService {
     private readonly agentRepository: IAgentRepository,
     private readonly databaseRepository: IDatabaseRepository,
     private readonly teamRepository: ITeamRepository,
+    private readonly fileStorageRepository: IFileStorageRepository,
+    private readonly tableApplicationService: TableApplicationService,
     private readonly eventPublisher?: EventPublisher
   ) {}
 
@@ -379,40 +380,30 @@ export class RagIndexingApplicationService {
   }
 
   private async indexTables(index: RagIndex): Promise<any[]> {
-    // AIDEV-NOTE: Fixed implementation - properly index table/field metadata from PostgreSQL
-    // This enables RAG discovery while keeping actual data queries separate via DuckDB
-    
-    console.log(`[RAG-INDEXING-APP] Indexing table metadata (schemas only) for organization ${index.organizationId.value}`);
-    
-    // Query PostgreSQL metadata tables directly for this organization
-    const tablesForOrg = await db.query.tables.findMany({
-      where: eq(tables.organizationId, index.organizationId.value)
-    });
-    
-    if (tablesForOrg.length === 0) {
-      console.log(`[RAG-INDEXING-APP] No tables found for organization ${index.organizationId.value}`);
+    try {
+      console.log(`[RAG-INDEXING-APP] Indexing table metadata (schemas only) for organization ${index.organizationId.value}`);
+      
+      // Get all tables with their fields using table service (follows DDD pattern)
+      const tablesWithFields = await this.tableApplicationService.getTablesWithFieldsForOrganization(index.organizationId);
+      
+      if (tablesWithFields.length === 0) {
+        console.log(`[RAG-INDEXING-APP] No tables found for organization ${index.organizationId.value}`);
+        return [];
+      }
+      
+      console.log(`[RAG-INDEXING-APP] Found ${tablesWithFields.length} tables with metadata for indexing`);
+      
+      // Use existing domain service that already only indexes metadata (not row data)
+      return await this.indexingDomainService.indexTableData(
+        index.id, 
+        index.organizationId, 
+        tablesWithFields
+      );
+      
+    } catch (error) {
+      console.error(`[RAG-INDEXING-APP] Error indexing tables for organization ${index.organizationId.value}:`, error);
       return [];
     }
-    
-    // Get fields for all tables efficiently
-    const fieldsMap = new Map();
-    for (const table of tablesForOrg) {
-      const tableFields = await db.query.fields.findMany({
-        where: eq(fields.tableId, table.id),
-        orderBy: (fields, { asc }) => [asc(fields.orderIndex)]
-      });
-      fieldsMap.set(table.id, tableFields);
-    }
-    
-    console.log(`[RAG-INDEXING-APP] Found ${tablesForOrg.length} tables with metadata for indexing`);
-    
-    // Use existing domain service that already only indexes metadata (not row data)
-    return await this.indexingDomainService.indexTableData(
-      index.id, 
-      index.organizationId, 
-      tablesForOrg as any[], // Convert to domain entities
-      fieldsMap
-    );
   }
 
   private async indexDatabases(index: RagIndex): Promise<any[]> {
@@ -443,62 +434,70 @@ export class RagIndexingApplicationService {
   }
 
   private async indexFiles(index: RagIndex): Promise<any[]> {
-    // Get all tables for this organization
-    const tablesForOrg = await db.query.tables.findMany({
-      where: eq(tables.organizationId, index.organizationId.value)
-    });
+    try {
+      // Get all files from organization tables using table service
+      console.log(`[RAG-INDEXING-APP] Getting files for organization ${index.organizationId.value}`);
+      const filesWithContext = await this.tableApplicationService.getFilesForOrganization(index.organizationId);
 
-    if (tablesForOrg.length === 0) {
-      console.log(`[RAG-INDEXING-APP] No tables found for organization ${index.organizationId.value}`);
-      return [];
-    }
+      if (filesWithContext.length === 0) {
+        console.log(`[RAG-INDEXING-APP] No files found in organization ${index.organizationId.value}`);
+        return [];
+      }
 
-    // Find all file fields across all tables
-    const allFiles = [];
-    for (const table of tablesForOrg) {
-      const tableFields = await db.query.fields.findMany({
-        where: eq(fields.tableId, table.id),
-        orderBy: (fields, { asc }) => [asc(fields.orderIndex)]
-      });
+      console.log(`[RAG-INDEXING-APP] Found ${filesWithContext.length} files for indexing`);
 
-      const fileFields = tableFields.filter(field => field.type === 'file');
+      // Process each file for content indexing
+      const allDocuments = [];
       
-      if (fileFields.length > 0) {
-        // Get file storage repository to retrieve actual files for each field
-        const { getFileStorageRepository } = require('@/ddd/application/di/container');
-        const fileStorageRepo = getFileStorageRepository();
+      for (const item of filesWithContext) {
+        const file = item.file; // Extract the pure domain FileFieldValue
+        
+        try {
+          
+          // Create file processing context with additional metadata
+          const fileProcessingContext = {
+            id: file.id,
+            key: file.s3Key,
+            name: file.name,
+            size: file.size,
+            mimeType: file.mimeType,
+            uploadedAt: new Date(file.uploadedAt),
+            metadata: {},
+            checksums: {},
+            
+            // Add context from table service using domain types
+            tableName: item.tableName,
+            tableId: item.tableId.value,           // Extract value from domain object
+            fieldName: item.fieldName,
+            fieldId: item.fieldId,
+            databaseId: item.databaseId.value,     // Extract value from domain object
+            organizationId: item.organizationId.value // Extract value from domain object
+          };
 
-        for (const fileField of fileFields) {
-          try {
-            const files = await fileStorageRepo.getFilesByField(fileField.id);
-            // Add table/field context to files for better RAG indexing
-            const filesWithContext = files.map(file => ({
-              ...file,
-              tableName: table.name,
-              tableId: table.id,
-              fieldName: fileField.name,
-              fieldId: fileField.id,
-              databaseId: table.databaseId,
-              organizationId: table.organizationId
-            }));
-            allFiles.push(...filesWithContext);
-          } catch (error) {
-            console.error(`[RAG-INDEXING-APP] Error getting files for field ${fileField.name}:`, error);
-          }
+          // Process file content using domain service
+          const processedDocuments = await this.indexingDomainService.indexFileData(
+            index.id, 
+            index.organizationId, 
+            [fileProcessingContext]
+          );
+          
+          allDocuments.push(...processedDocuments);
+          
+          console.log(`[RAG-INDEXING-APP] Processed file ${file.name} (${file.size} bytes)`);
+          
+        } catch (error) {
+          console.error(`[RAG-INDEXING-APP] Error processing file ${file.name}:`, error);
+          // Continue with other files
         }
       }
-    }
 
-    if (allFiles.length === 0) {
-      console.log(`[RAG-INDEXING-APP] No files found in organization ${index.organizationId.value} tables`);
+      console.log(`[RAG-INDEXING-APP] Successfully indexed ${allDocuments.length} documents from ${filesWithContext.length} files`);
+      return allDocuments;
+
+    } catch (error) {
+      console.error(`[RAG-INDEXING-APP] Error indexing files for organization ${index.organizationId.value}:`, error);
       return [];
     }
-
-    console.log(`[RAG-INDEXING-APP] Found ${allFiles.length} files across ${tablesForOrg.length} tables for indexing`);
-
-    return await this.indexingDomainService.indexFileData(
-      index.id, index.organizationId, allFiles
-    );
   }
 
   private async performInitialIndexing(index: RagIndex): Promise<void> {

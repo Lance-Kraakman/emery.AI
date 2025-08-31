@@ -168,6 +168,35 @@ export class S3FileStorageRepository implements IFileStorageRepository {
     };
   }
 
+  // Download file content as Buffer for processing (e.g., RAG indexing)
+  async downloadFile(key: FileKey): Promise<Buffer> {
+    try {
+      const command = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      });
+      
+      const response = await this.s3.send(command);
+      
+      if (!response.Body) {
+        throw new FileStorageError(
+          `File content not found for key: ${key}`,
+          'NOT_FOUND',
+          { key }
+        );
+      }
+      
+      // Convert the stream to Buffer
+      return Buffer.from(await response.Body.transformToByteArray());
+      
+    } catch (error: any) {
+      throw new FileStorageError(
+        `Failed to download file: ${error.message}`,
+        'NETWORK_ERROR',
+        { key }
+      );
+    }
+  }
 
   // Helper method to generate S3 key
   private generateS3Key(request: FileUploadRequest, fileId: string): string {

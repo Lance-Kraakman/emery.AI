@@ -9,6 +9,7 @@ import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateFieldData } from "./types";
 import type { TableField, FieldType } from "@/ddd/domain/tables/value-objects/table-field";
 import type { CreateFieldCommand } from "@/ddd/application/services/tables/table-application-service";
+import { TableId } from "@/ddd/domain/shared/value-objects";
 
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<Result> {
   try {
@@ -25,11 +26,11 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
     const tableApplicationService = getTableApplicationService();
 
     const command: CreateFieldCommand = {
-      tableId,
+      tableId: TableId.fromNumber(tableId),
       name,
       type: type as FieldType,
       required,
-      relatedTableId,
+      relatedTableId: relatedTableId ? TableId.fromNumber(relatedTableId) : undefined,
       metadata: {}
     };
 
@@ -88,7 +89,7 @@ export async function getFields(tableId: number): Promise<TableField[]> {
     }
 
     const tableApplicationService = getTableApplicationService();
-    const fieldList = await tableApplicationService.getFieldsForTable(tableId);
+    const fieldList = await tableApplicationService.getFieldsForTable(TableId.fromNumber(tableId));
 
     return fieldList;
   } catch (error) {
@@ -110,7 +111,7 @@ export async function deleteField(tableId: number, fieldName: string, revalidate
 
     const tableApplicationService = getTableApplicationService();
 
-    const result = await tableApplicationService.deleteField(tableId, fieldName);
+    const result = await tableApplicationService.deleteField(TableId.fromNumber(tableId), fieldName);
 
     if (!result.success) {
       return {

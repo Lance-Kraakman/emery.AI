@@ -13,6 +13,7 @@ import { chatMessages } from '@/lib/db/schema';
 import { eq, and, desc, asc, ilike, sql, max, count } from 'drizzle-orm';
 import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
 import type { ChatMessage, CreateChatMessageData, UpdateChatMessageData } from '@/ddd/domain/chat/entities/chat-message';
+import { ChatId, ChatMessageId } from '@/ddd/domain/shared/value-objects';
 
 export class DrizzleChatMessageRepository implements IChatMessageRepository {
   constructor(private readonly db: DbClient) {}
@@ -36,11 +37,11 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Find a message by ID
    */
-  async findById(id: string): Promise<ChatMessage | null> {
+  async findById(id: ChatMessageId): Promise<ChatMessage | null> {
     const [message] = await this.db
       .select()
       .from(chatMessages)
-      .where(eq(chatMessages.id, id));
+      .where(eq(chatMessages.id, id.value));
 
     return message ? this.mapToChatMessage(message) : null;
   }
@@ -48,11 +49,11 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Find all messages for a chat, ordered by message index
    */
-  async findByChatId(chatId: string, limit = 50, offset = 0): Promise<ChatMessage[]> {
+  async findByChatId(chatId: ChatId, limit = 50, offset = 0): Promise<ChatMessage[]> {
     const results = await this.db
       .select()
       .from(chatMessages)
-      .where(eq(chatMessages.chatId, chatId))
+      .where(eq(chatMessages.chatId, chatId.value))
       .orderBy(asc(chatMessages.messageIndex))
       .limit(limit)
       .offset(offset);
@@ -63,12 +64,12 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Find messages by chat with role filtering
    */
-  async findByChatIdAndRole(chatId: string, role: 'user' | 'assistant' | 'system', limit = 50, offset = 0): Promise<ChatMessage[]> {
+  async findByChatIdAndRole(chatId: ChatId, role: 'user' | 'assistant' | 'system', limit = 50, offset = 0): Promise<ChatMessage[]> {
     const results = await this.db
       .select()
       .from(chatMessages)
       .where(and(
-        eq(chatMessages.chatId, chatId),
+        eq(chatMessages.chatId, chatId.value),
         eq(chatMessages.role, role)
       ))
       .orderBy(asc(chatMessages.messageIndex))
@@ -81,11 +82,11 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Find the latest message in a chat
    */
-  async findLatestByChatId(chatId: string): Promise<ChatMessage | null> {
+  async findLatestByChatId(chatId: ChatId): Promise<ChatMessage | null> {
     const [message] = await this.db
       .select()
       .from(chatMessages)
-      .where(eq(chatMessages.chatId, chatId))
+      .where(eq(chatMessages.chatId, chatId.value))
       .orderBy(desc(chatMessages.messageIndex))
       .limit(1);
 
@@ -95,11 +96,11 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Find messages that are replies to a specific message
    */
-  async findReplies(parentMessageId: string): Promise<ChatMessage[]> {
+  async findReplies(parentMessageId: ChatMessageId): Promise<ChatMessage[]> {
     const results = await this.db
       .select()
       .from(chatMessages)
-      .where(eq(chatMessages.parentMessageId, parentMessageId))
+      .where(eq(chatMessages.parentMessageId, parentMessageId.value))
       .orderBy(asc(chatMessages.messageIndex));
 
     return results.map(message => this.mapToChatMessage(message));
@@ -108,7 +109,7 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Update a message
    */
-  async update(id: string, data: UpdateChatMessageData): Promise<ChatMessage | null> {
+  async update(id: ChatMessageId, data: UpdateChatMessageData): Promise<ChatMessage | null> {
     const updateData: any = {};
 
     if (data.content !== undefined) updateData.content = data.content;
@@ -117,7 +118,7 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
     const [updatedMessage] = await this.db
       .update(chatMessages)
       .set(updateData)
-      .where(eq(chatMessages.id, id))
+      .where(eq(chatMessages.id, id.value))
       .returning();
 
     return updatedMessage ? this.mapToChatMessage(updatedMessage) : null;
@@ -126,10 +127,10 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Delete a message
    */
-  async delete(id: string): Promise<boolean> {
+  async delete(id: ChatMessageId): Promise<boolean> {
     const result = await this.db
       .delete(chatMessages)
-      .where(eq(chatMessages.id, id))
+      .where(eq(chatMessages.id, id.value))
       .returning({ id: chatMessages.id });
 
     return result.length > 0;
@@ -138,13 +139,13 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Get the next message index for a chat
    */
-  async getNextMessageIndex(chatId: string): Promise<number> {
+  async getNextMessageIndex(chatId: ChatId): Promise<number> {
     const [result] = await this.db
       .select({
         maxIndex: max(chatMessages.messageIndex)
       })
       .from(chatMessages)
-      .where(eq(chatMessages.chatId, chatId));
+      .where(eq(chatMessages.chatId, chatId.value));
 
     return (result?.maxIndex ?? -1) + 1;
   }
@@ -152,13 +153,13 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Get message count for a chat
    */
-  async getMessageCount(chatId: string): Promise<number> {
+  async getMessageCount(chatId: ChatId): Promise<number> {
     const [result] = await this.db
       .select({
         count: count()
       })
       .from(chatMessages)
-      .where(eq(chatMessages.chatId, chatId));
+      .where(eq(chatMessages.chatId, chatId.value));
 
     return result?.count || 0;
   }
@@ -166,12 +167,12 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Find messages with RAG sources
    */
-  async findMessagesWithRagSources(chatId: string, limit = 20, offset = 0): Promise<ChatMessage[]> {
+  async findMessagesWithRagSources(chatId: ChatId, limit = 20, offset = 0): Promise<ChatMessage[]> {
     const results = await this.db
       .select()
       .from(chatMessages)
       .where(and(
-        eq(chatMessages.chatId, chatId),
+        eq(chatMessages.chatId, chatId.value),
         sql`${chatMessages.metadata}->>'ragSources' is not null`
       ))
       .orderBy(desc(chatMessages.messageIndex))
@@ -184,14 +185,14 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Find messages by content search
    */
-  async searchMessageContent(chatId: string, query: string, limit = 20, offset = 0): Promise<ChatMessage[]> {
+  async searchMessageContent(chatId: ChatId, query: string, limit = 20, offset = 0): Promise<ChatMessage[]> {
     const searchTerm = `%${query}%`;
     
     const results = await this.db
       .select()
       .from(chatMessages)
       .where(and(
-        eq(chatMessages.chatId, chatId),
+        eq(chatMessages.chatId, chatId.value),
         ilike(chatMessages.content, searchTerm)
       ))
       .orderBy(desc(chatMessages.messageIndex))
@@ -204,11 +205,11 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Get conversation context (recent messages) for AI processing
    */
-  async getConversationContext(chatId: string, contextSize: number): Promise<ChatMessage[]> {
+  async getConversationContext(chatId: ChatId, contextSize: number): Promise<ChatMessage[]> {
     const results = await this.db
       .select()
       .from(chatMessages)
-      .where(eq(chatMessages.chatId, chatId))
+      .where(eq(chatMessages.chatId, chatId.value))
       .orderBy(desc(chatMessages.messageIndex))
       .limit(contextSize);
 
@@ -219,12 +220,12 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Find assistant messages with errors
    */
-  async findErrorMessages(chatId: string, limit = 10, offset = 0): Promise<ChatMessage[]> {
+  async findErrorMessages(chatId: ChatId, limit = 10, offset = 0): Promise<ChatMessage[]> {
     const results = await this.db
       .select()
       .from(chatMessages)
       .where(and(
-        eq(chatMessages.chatId, chatId),
+        eq(chatMessages.chatId, chatId.value),
         eq(chatMessages.role, 'assistant'),
         sql`${chatMessages.metadata}->>'error' is not null`
       ))
@@ -238,7 +239,7 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Get message statistics for a chat
    */
-  async getChatMessageStats(chatId: string): Promise<{
+  async getChatMessageStats(chatId: ChatId): Promise<{
     totalMessages: number;
     userMessages: number;
     assistantMessages: number;
@@ -256,7 +257,7 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
         averageProcessingTime: sql<number>`avg((metadata->>'processingTime')::numeric) filter (where metadata->>'processingTime' is not null)`
       })
       .from(chatMessages)
-      .where(eq(chatMessages.chatId, chatId));
+      .where(eq(chatMessages.chatId, chatId.value));
 
     return {
       totalMessages: stats?.totalMessages || 0,
@@ -292,10 +293,10 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Delete all messages for a chat (cascade delete)
    */
-  async deleteByChatId(chatId: string): Promise<number> {
+  async deleteByChatId(chatId: ChatId): Promise<number> {
     const result = await this.db
       .delete(chatMessages)
-      .where(eq(chatMessages.chatId, chatId))
+      .where(eq(chatMessages.chatId, chatId.value))
       .returning({ id: chatMessages.id });
 
     return result.length;

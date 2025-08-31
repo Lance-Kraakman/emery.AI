@@ -17,30 +17,35 @@ export default function CellRenderer({ field, value }: CellRendererProps) {
     case 'date':
       return <span>{value ? new Date(value).toLocaleDateString() : '-'}</span>;
       
-    case 'url':
-      return value ? (
-        <a 
-          href={value} 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className="text-blue-600 hover:underline break-all"
-        >
-          {value.length > 30 ? `${value.substring(0, 30)}...` : value}
-        </a>
-      ) : (
-        <span className="text-gray-500">-</span>
-      );
-      
-    case 'email':
-      return value ? (
-        <a 
-          href={`mailto:${value}`} 
-          className="text-blue-600 hover:underline"
-        >
-          {value}
-        </a>
-      ) : (
-        <span className="text-gray-500">-</span>
+    case 'text':
+      const textValue = String(value);
+      // Handle text that looks like URLs or emails with basic styling
+      if (textValue.includes('@') && textValue.includes('.')) {
+        return (
+          <a 
+            href={`mailto:${textValue}`} 
+            className="text-blue-600 hover:underline"
+          >
+            {textValue}
+          </a>
+        );
+      }
+      if (textValue.startsWith('http://') || textValue.startsWith('https://')) {
+        return (
+          <a 
+            href={textValue} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="text-blue-600 hover:underline break-all"
+          >
+            {textValue.length > 30 ? `${textValue.substring(0, 30)}...` : textValue}
+          </a>
+        );
+      }
+      return (
+        <span title={textValue.length > 50 ? textValue : undefined}>
+          {textValue.length > 50 ? `${textValue.substring(0, 50)}...` : textValue}
+        </span>
       );
       
     case 'relation':
@@ -87,11 +92,6 @@ export default function CellRenderer({ field, value }: CellRendererProps) {
       return <span>{typeof value === 'number' ? value.toLocaleString() : value}</span>;
       
     default:
-      const stringValue = String(value);
-      return (
-        <span title={stringValue.length > 50 ? stringValue : undefined}>
-          {stringValue.length > 50 ? `${stringValue.substring(0, 50)}...` : stringValue}
-        </span>
-      );
+      return <span>{String(value)}</span>;
   }
 }

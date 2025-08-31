@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { getTableApplicationService } from "@/ddd/application/di/container";
-import { OrganizationId, TableId } from "@/ddd/domain/shared/value-objects";
+import { OrganizationId, TableId, DatabaseId, UserId } from "@/ddd/domain/shared/value-objects";
 import type { Result, CreateTableData } from "./types";
 import type { CreateTableCommand } from "@/ddd/application/services/tables/table-application-service";
 
@@ -39,9 +39,9 @@ export async function createTable(data: CreateTableData & { databaseId: number; 
     
     const command: CreateTableCommand = {
       name,
-      databaseId,
-      organizationId: currentOrg.id.value,
-      createdBy: session.user.id,
+      databaseId: DatabaseId.fromNumber(databaseId),
+      organizationId: OrganizationId.fromNumber(currentOrg.id.value),
+      createdBy: UserId.fromString(session.user.id),
       description,
       metadata: {}
     };

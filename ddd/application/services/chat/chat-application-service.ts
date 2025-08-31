@@ -55,9 +55,6 @@ export interface GetChatsQuery {
   offset?: number;
 }
 
-// Use unified Result interface from domain shared types
-export type ChatApplicationServiceResult<T = any> = Result<T>;
-
 export class ChatApplicationService {
   constructor(
     private readonly chatRepository: IChatRepository,
@@ -69,7 +66,7 @@ export class ChatApplicationService {
   /**
    * Create a new chat session, optionally connected to any domain type
    */
-  async createChat(command: CreateChatCommand): Promise<ChatApplicationServiceResult<Chat>> {
+  async createChat(command: CreateChatCommand): Promise<Result<Chat>> {
     try {
       // 1. Validate domain connection and get domain info
       let contextMetadata: ChatContextMetadata;
@@ -237,7 +234,7 @@ export class ChatApplicationService {
   /**
    * Send a message to a chat
    */
-  async sendMessage(command: SendMessageCommand): Promise<ChatApplicationServiceResult<ChatMessage>> {
+  async sendMessage(command: SendMessageCommand): Promise<Result<ChatMessage>> {
     try {
       // 1. Verify chat exists and user has access
       const chat = await this.chatRepository.findById(command.chatId, command.organizationId);
@@ -301,7 +298,7 @@ export class ChatApplicationService {
   /**
    * Get chat history with messages
    */
-  async getChatHistory(query: GetChatHistoryQuery): Promise<ChatApplicationServiceResult<{
+  async getChatHistory(query: GetChatHistoryQuery): Promise<Result<{
     chat: Chat;
     messages: ChatMessage[];
     totalMessages: number;
@@ -354,7 +351,7 @@ export class ChatApplicationService {
   /**
    * Get chats for a user or organization, with optional table filtering
    */
-  async getChats(query: GetChatsQuery): Promise<ChatApplicationServiceResult<Chat[]>> {
+  async getChats(query: GetChatsQuery): Promise<Result<Chat[]>> {
     try {
       let chats: Chat[];
 
@@ -408,7 +405,7 @@ export class ChatApplicationService {
   /**
    * Get conversation context for AI processing
    */
-  async getConversationContext(chatId: ChatId, organizationId: OrganizationId, contextSize: number = 10): Promise<ChatApplicationServiceResult<ChatMessage[]>> {
+  async getConversationContext(chatId: ChatId, organizationId: OrganizationId, contextSize: number = 10): Promise<Result<ChatMessage[]>> {
     try {
       // 1. Verify chat exists
       const chat = await this.chatRepository.findById(chatId, organizationId);      if (!chat) {
@@ -438,7 +435,7 @@ export class ChatApplicationService {
   /**
    * Archive a chat
    */
-  async archiveChat(chatId: ChatId, userId: UserId, organizationId: OrganizationId): Promise<ChatApplicationServiceResult<void>> {
+  async archiveChat(chatId: ChatId, userId: UserId, organizationId: OrganizationId): Promise<Result<void>> {
     try {
       // 1. Verify chat exists and user can edit
       const chat = await this.chatRepository.findById(chatId, organizationId);   
@@ -482,7 +479,7 @@ export class ChatApplicationService {
   /**
    * Delete a chat permanently
    */
-  async deleteChat(chatId: ChatId, userId: UserId, organizationId: OrganizationId): Promise<ChatApplicationServiceResult<void>> {
+  async deleteChat(chatId: ChatId, userId: UserId, organizationId: OrganizationId): Promise<Result<void>> {
     try {
       // 1. Verify chat exists and user can edit
       const chat = await this.chatRepository.findById(chatId, organizationId);      if (!chat) {
@@ -528,7 +525,7 @@ export class ChatApplicationService {
   /**
    * Get chat statistics for an organization
    */
-  async getChatStats(organizationId: OrganizationId): Promise<ChatApplicationServiceResult<{
+  async getChatStats(organizationId: OrganizationId): Promise<Result<{
     totalChats: number;
     activeChats: number;
     archivedChats: number;
