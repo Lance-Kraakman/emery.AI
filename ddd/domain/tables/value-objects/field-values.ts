@@ -101,17 +101,6 @@ export function isRelationArray(value: unknown): value is RelationArrayFieldValu
     ));
 }
 
-// ========================================
-// Storage Layer Interfaces (Internal)
-// ========================================
-
-/**
- * Column data represents the database storage format (field_1, field_2, etc.)
- * This is an internal interface for repository layer - not exposed to domain
- */
-export interface ColumnData {
-  [columnName: string]: any;  // Database column format: field_1, field_2, etc.
-}
 
 // ========================================
 // Validation Result Types  
