@@ -13,8 +13,6 @@ import type { FileArrayFieldValue, RelationArrayFieldValue } from './field-value
 
 export type FieldType = 
   | 'text' 
-  | 'email' 
-  | 'url' 
   | 'number' 
   | 'boolean' 
   | 'date' 
@@ -150,8 +148,6 @@ export class TableField {
   getPostgresType(): string {
     const typeMapping: Record<FieldType, string> = {
       'text': 'TEXT',
-      'email': 'VARCHAR(255)',
-      'url': 'TEXT',
       'number': 'DOUBLE PRECISION',
       'boolean': 'BOOLEAN',
       'date': 'TIMESTAMP WITH TIME ZONE',
@@ -276,27 +272,6 @@ export class TableField {
         }
         if (value.length > 1000) {
           return { valid: false, error: `${this._name} cannot exceed 1000 characters` };
-        }
-        break;
-
-      case 'email':
-        if (typeof value !== 'string') {
-          return { valid: false, error: `${this._name} must be a valid email` };
-        }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(value)) {
-          return { valid: false, error: `${this._name} must be a valid email address` };
-        }
-        break;
-
-      case 'url':
-        if (typeof value !== 'string') {
-          return { valid: false, error: `${this._name} must be a valid URL` };
-        }
-        try {
-          new URL(value);
-        } catch {
-          return { valid: false, error: `${this._name} must be a valid URL` };
         }
         break;
 

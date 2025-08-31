@@ -36,8 +36,6 @@ export interface RelationFieldValue {
 // ========================================
 
 export type TextFieldValue = string;
-export type EmailFieldValue = string;        // Must pass email validation
-export type UrlFieldValue = string;          // Must pass URL validation  
 export type NumberFieldValue = number;
 export type BooleanFieldValue = boolean;
 export type DateFieldValue = Date | string;  // Can be Date object or ISO string
@@ -55,8 +53,6 @@ export type RelationArrayFieldValue = RelationFieldValue[];
 
 export type FieldValue = 
   | TextFieldValue
-  | EmailFieldValue  
-  | UrlFieldValue
   | NumberFieldValue
   | BooleanFieldValue
   | DateFieldValue
@@ -141,8 +137,6 @@ export interface FieldValidationResult {
  */
 export const FIELD_TYPE_MAPPING = {
   'text': 'string',
-  'email': 'string', 
-  'url': 'string',
   'number': 'number',
   'boolean': 'boolean',
   'date': 'Date | string',
