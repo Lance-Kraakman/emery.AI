@@ -10,12 +10,27 @@
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import type { Result } from '@/ddd/domain/shared/result';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
 import { OrganizationId, DatabaseId, UserId, TableId } from '@/ddd/domain/shared/value-objects';
 import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import { type FileFieldValue, isFileArray } from '@/ddd/domain/tables/value-objects/field-values';
+
+// Application-layer context type for files with table information
+interface FileWithTableContext {
+  file: FileFieldValue;           // Pure domain type
+  tableId: TableId;               // Domain value object
+  tableName: string;
+  fieldId: number;                // Field ID (primitive as per current pattern)
+  fieldName: string;
+  databaseId: DatabaseId;         // Domain value object  
+  organizationId: OrganizationId; // Domain value object
+}
+
+// No need for TableWithFieldsContext - DynamicTable already has fields getter
 
 export interface CreateTableCommand {
   name: string;
@@ -76,7 +91,8 @@ export class TableApplicationService {
   constructor(
     private readonly dynamicTableService: DynamicTableService,
     private readonly databaseRepository: IDatabaseRepository,
-    private readonly organizationRepository: IOrganizationRepository
+    private readonly organizationRepository: IOrganizationRepository,
+    private readonly dynamicTableRepository: IDynamicTableRepository
   ) {}
 
   /**
@@ -486,6 +502,94 @@ export class TableApplicationService {
       return [...table.fields].sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
     } catch (error) {
       console.error('[TABLE-APP-SERVICE] Error getting fields for table:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get all files stored in organization tables
+   * Used by RAG indexing to discover files for content processing
+   */
+  async getFilesForOrganization(organizationId: OrganizationId): Promise<FileWithTableContext[]> {
+    try {
+      // 1. Get all tables for the organization
+      const tables = await this.dynamicTableRepository.findByOrganization(organizationId);
+      
+      if (tables.length === 0) {
+        console.log(`[TABLE-APP-SERVICE] No tables found for organization ${organizationId.value}`);
+        return [];
+      }
+
+      console.log(`[TABLE-APP-SERVICE] Found ${tables.length} tables for organization ${organizationId.value}`);
+
+      const allFiles: FileWithTableContext[] = [];
+
+      // 2. Process each table
+      for (const table of tables) {
+        try {
+          // Find file fields in this table
+          const fileFields = table.fields.filter(field => field.type === 'file');
+          
+          if (fileFields.length === 0) {
+            continue;
+          }
+
+          console.log(`[TABLE-APP-SERVICE] Found ${fileFields.length} file fields in table ${table.name}`);
+
+          // Get all rows from the table
+          const rows = await this.dynamicTableRepository.findRows(table.id);
+          
+          // Extract file values from each row
+          for (const row of rows) {
+            for (const field of fileFields) {
+              const fieldValue = row[field.name];
+              
+              // Check if the field contains files
+              if (isFileArray(fieldValue)) {
+                for (const file of fieldValue) {
+                  // Create context object with domain value objects
+                  allFiles.push({
+                    file: file,                    // Pure domain type
+                    tableId: table.id,            // Domain value object
+                    tableName: table.name,
+                    fieldId: field.id,            // Primitive as per current pattern
+                    fieldName: field.name,
+                    databaseId: table.databaseId, // Domain value object
+                    organizationId: table.organizationId // Domain value object
+                  });
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`[TABLE-APP-SERVICE] Error processing table ${table.name}:`, error);
+          // Continue with other tables
+        }
+      }
+
+      console.log(`[TABLE-APP-SERVICE] Found ${allFiles.length} files across ${tables.length} tables`);
+      return allFiles;
+
+    } catch (error) {
+      console.error('[TABLE-APP-SERVICE] Error getting files for organization:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get all tables with their fields for an organization
+   * Used by RAG indexing to get table metadata (not row data)
+   */
+  async getTablesWithFieldsForOrganization(organizationId: OrganizationId): Promise<DynamicTable[]> {
+    try {
+      // Get all tables for organization - tables already contain their fields
+      const tables = await this.dynamicTableRepository.findByOrganization(organizationId);
+      
+      console.log(`[TABLE-APP-SERVICE] Found ${tables.length} tables with fields for organization ${organizationId.value}`);
+      
+      return tables;
+    } catch (error) {
+      console.error('[TABLE-APP-SERVICE] Error getting tables with fields for organization:', error);
       return [];
     }
   }

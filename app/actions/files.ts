@@ -6,8 +6,8 @@
 import { auth, hasPermission } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { getFileApplicationService, getTableApplicationService } from "@/ddd/application/di/container";
-import { TableId } from "@/ddd/domain/shared/value-objects";
-import type { UploadFileCommand, DeleteFileCommand } from "@/ddd/application/use-cases/table/file-application-service";
+import { FieldId, OrganizationId, TableId } from "@/ddd/domain/shared/value-objects";
+import type { UploadFileCommand, DeleteFileCommand } from "@/ddd/application/services/tables/file-application-service";
 import type { Result } from "./types";
 
 export async function uploadFileAction(formData: FormData): Promise<Result> {
@@ -69,15 +69,14 @@ export async function uploadFileAction(formData: FormData): Promise<Result> {
     
     const buffer = Buffer.from(await file.arrayBuffer());
     const command: UploadFileCommand = {
-      organizationId,
-      tableId,
-      fieldId: field.id,
+      organizationId: OrganizationId.fromNumber(organizationId),
+      tableId: TableId.fromNumber(tableId),
+      fieldId: FieldId.fromNumber(field.id),
       file: {
         buffer,
         filename: file.name,
         mimeType: file.type
       },
-      uploadedBy: session.user.id
     };
 
     const result = await fileApplicationService.uploadFile(command);
@@ -144,8 +143,8 @@ export async function deleteFileAction(fileId: string, fieldName: string, tableI
     
     const command: DeleteFileCommand = {
       fileId,
-      fieldId: field.id,
-      tableId,
+      fieldId: FieldId.fromNumber(field.id),
+      tableId: TableId.fromNumber(tableId),
       organizationId,
     };
 

@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import { TableId } from '@/ddd/domain/shared/value-objects';
 
-// AIDEV-NOTE: Field types support text, email, url, number, boolean, date, file, relation
+// AIDEV-NOTE: Field types support text, number, boolean, date, file, relation (no email/url)
 import type { CreateFieldCommand } from '@/ddd/application/services/tables/table-application-service';
 
 export async function POST(request: NextRequest) {
@@ -31,11 +32,11 @@ export async function POST(request: NextRequest) {
     const tableApplicationService = getTableApplicationService();
 
     const command: CreateFieldCommand = {
-      tableId: parseInt(tableId),
+      tableId: TableId.fromNumber(parseInt(tableId)),
       name,
       type: type as FieldType,
       required,
-      relatedTableId: relatedTableId ? parseInt(relatedTableId) : undefined,
+      relatedTableId: relatedTableId ? TableId.fromNumber(parseInt(relatedTableId)) : undefined,
       metadata: {}
     };
 
@@ -72,7 +73,7 @@ export async function GET(request: NextRequest) {
 
     // Use TableApplicationService for field listing
     const tableApplicationService = getTableApplicationService();
-    const fieldList = await tableApplicationService.getFieldsForTable(parseInt(tableId));
+    const fieldList = await tableApplicationService.getFieldsForTable(TableId.fromNumber(parseInt(tableId)));
 
     return NextResponse.json(fieldList);
   } catch (error) {
@@ -100,7 +101,7 @@ export async function DELETE(request: NextRequest) {
     // Use TableApplicationService for field deletion
     const tableApplicationService = getTableApplicationService();
     
-    const result = await tableApplicationService.deleteField(parseInt(tableId), fieldName);
+    const result = await tableApplicationService.deleteField(TableId.fromNumber(parseInt(tableId)), fieldName);
 
     if (!result.success) {
       return NextResponse.json(

@@ -35,7 +35,7 @@ export interface IChatMessageRepository {
   /**
    * Find the latest message in a chat
    */
-  findLatestByChatId(chatId: string): Promise<ChatMessage | null>;
+  findLatestByChatId(chatId: ChatId): Promise<ChatMessage | null>;
 
   /**
    * Find messages that are replies to a specific message
@@ -85,7 +85,7 @@ export interface IChatMessageRepository {
   /**
    * Get message statistics for a chat
    */
-  getChatMessageStats(chatId: string): Promise<{
+  getChatMessageStats(chatId: ChatId): Promise<{
     totalMessages: number;
     userMessages: number;
     assistantMessages: number;

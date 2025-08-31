@@ -42,7 +42,7 @@ import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/
 
 // New application services for tables, fields, rows, files, and chat
 import { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
-import { FileUseCases } from '@/ddd/application/use-cases/table/file-application-service';
+import { FileUseCases } from '@/ddd/application/services/tables/file-application-service';
 import { ChatApplicationService } from '@/ddd/application/services/chat/chat-application-service';
 
 // Domain services
@@ -290,7 +290,8 @@ export class DIContainer {
     const tableApplicationService = new TableApplicationService(
       dynamicTableService,
       databaseRepository,
-      this.repositories.get('IOrganizationRepository')
+      this.repositories.get('IOrganizationRepository'),
+      tableRepository,
     );
     
     

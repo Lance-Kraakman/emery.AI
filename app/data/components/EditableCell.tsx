@@ -95,28 +95,34 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         }
       case "number":
         return typeof value === "number" ? value.toLocaleString() : value
-      case "email":
-        return (
-          <a 
-            href={`mailto:${value}`} 
-            className="text-blue-600 hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {String(value)}
-          </a>
-        )
-      case "url":
-        return (
-          <a 
-            href={value} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {String(value)}
-          </a>
-        )
+      case "text":
+        const textValue = String(value);
+        // Handle text that looks like URLs or emails
+        if (textValue.includes('@') && textValue.includes('.')) {
+          return (
+            <a 
+              href={`mailto:${textValue}`} 
+              className="text-blue-600 hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {textValue}
+            </a>
+          );
+        }
+        if (textValue.startsWith('http://') || textValue.startsWith('https://')) {
+          return (
+            <a 
+              href={textValue} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {textValue}
+            </a>
+          );
+        }
+        return <span>{textValue}</span>
       case "relation":
         // Handle relation data
         if (typeof value === 'object' && value !== null) {
@@ -237,37 +243,6 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         </div>
       )
 
-    case "email":
-      return (
-        <div className="p-1">
-          <Input
-            type="email"
-            value={editValue || ""}
-            onChange={(e) => setEditValue(e.target.value)}
-            onBlur={handleSave}
-            onKeyDown={handleKeyDown}
-            className="h-7 text-xs"
-            autoFocus
-            placeholder="email@example.com"
-          />
-        </div>
-      )
-
-    case "url":
-      return (
-        <div className="p-1">
-          <Input
-            type="url"
-            value={editValue || ""}
-            onChange={(e) => setEditValue(e.target.value)}
-            onBlur={handleSave}
-            onKeyDown={handleKeyDown}
-            className="h-7 text-xs"
-            autoFocus
-            placeholder="https://example.com"
-          />
-        </div>
-      )
 
     case "relation":
       return (

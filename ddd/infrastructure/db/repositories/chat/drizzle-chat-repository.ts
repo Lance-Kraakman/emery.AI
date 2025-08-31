@@ -13,7 +13,7 @@ import { chats } from '@/lib/db/schema';
 import { eq, and, desc, asc, ilike, isNull, isNotNull, sql } from 'drizzle-orm';
 import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
 import { Chat, type CreateChatData, type UpdateChatData } from '@/ddd/domain/chat/entities/chat';
-import type { ChatId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import type { ChatId, OrganizationId, TableId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export class DrizzleChatRepository implements IChatRepository {
   constructor(private readonly db: DbClient) {}
@@ -87,18 +87,17 @@ export class DrizzleChatRepository implements IChatRepository {
   /**
    * Find chats connected to a specific table
    */
-  async findByTable(tableId: number, organizationId: OrganizationId, limit = 20, offset = 0): Promise<Chat[]> {
+  async findByTable(tableId: TableId, organizationId: OrganizationId, limit = 20, offset = 0): Promise<Chat[]> {
     const results = await this.db
       .select()
       .from(chats)
       .where(and(
         eq(chats.organizationId, organizationId.value),
-        sql`${chats.contextMetadata}->>'contextType' = 'table' AND (${chats.contextMetadata}->'domainSchema'->>'id')::integer = ${tableId}`
+        sql`${chats.contextMetadata}->>'contextType' = 'table' AND (${chats.contextMetadata}->'domainSchema'->>'id')::integer = ${tableId.value}`
       ))
       .orderBy(desc(chats.updatedAt))
       .limit(limit)
       .offset(offset);
-
     return results.map(chat => this.mapToChat(chat));
   }
 

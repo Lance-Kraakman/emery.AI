@@ -55,26 +55,6 @@ export default function FieldInput({
           disabled={disabled}
         />
       );
-    case 'email':
-      return (
-        <Input
-          type="email"
-          name={field.name}
-          value={value || ''}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-        />
-      );
-    case 'url':
-      return (
-        <Input
-          type="url"
-          name={field.name}
-          value={value || ''}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-        />
-      );
     case 'file':
       if (!organizationId || !tableId) {
         console.warn('FileUpload requires organizationId and tableId');
