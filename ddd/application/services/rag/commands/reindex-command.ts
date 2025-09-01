@@ -1,11 +1,11 @@
 // AIDEV-NOTE: Command for reindexing RAG data
-// Supports both full and partial reindexing
+// Updated to use value objects instead of primitives for type safety
 
 import { RagIndexId, OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
 
 export interface ReindexCommand {
-  indexId?: string;
-  organizationId?: number;
+  indexId?: RagIndexId;
+  organizationId?: OrganizationId;
   domainType?: DomainType;
   force?: boolean; // Force reindex even if recently indexed
 }
@@ -17,19 +17,7 @@ export class ReindexCommandValidator {
       throw new Error('Either index ID or organization ID must be specified');
     }
 
-    if (command.indexId) {
-      try {
-        RagIndexId.fromString(command.indexId);
-      } catch (error) {
-        throw new Error('Invalid index ID format');
-      }
-    }
-
-    if (command.organizationId !== undefined) {
-      if (!Number.isInteger(command.organizationId) || command.organizationId <= 0) {
-        throw new Error('Organization ID must be a positive integer');
-      }
-    }
+    // Value objects already validated on construction, no need for additional validation
 
     if (command.domainType !== undefined) {
       const validDomainTypes: DomainType[] = [
@@ -44,8 +32,8 @@ export class ReindexCommandValidator {
 
   static toDomainParams(command: ReindexCommand) {
     return {
-      indexId: command.indexId ? RagIndexId.fromString(command.indexId) : undefined,
-      organizationId: command.organizationId ? OrganizationId.fromNumber(command.organizationId) : undefined,
+      indexId: command.indexId, // Already a value object
+      organizationId: command.organizationId, // Already a value object
       domainType: command.domainType,
       force: command.force ?? false
     };

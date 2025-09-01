@@ -3,6 +3,10 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql, inArray, or, like } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
+import { withRLSContext } from '@/lib/db/rls-context';
+import { contextAwareDb, type ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
+import { db as rawDb, type DbClient } from '@/lib/db/client';
+import type { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 // AIDEV-NOTE: Integration test client for HTTP API, gRPC, and direct database operations
 // Provides a unified interface for testing across all system boundaries
@@ -11,16 +15,19 @@ import * as schema from '@/lib/db/schema';
 export class IntegrationTestClient {
   private dbClient: Client | null = null;
   private pgClient: ReturnType<typeof postgres> | null = null;
-  private _db: ReturnType<typeof drizzle> | null = null;
+  private _db: ContextAwareDbClient;
+  private _cleanupDb: DbClient;
   
   constructor(
     private dbUrl = process.env.TEST_DATABASE_URL!,
     private appUrl = process.env.TEST_APP_URL!,
     private grpcUrl = process.env.TEST_GRPC_URL!
   ) {
-    // AIDEV-NOTE: Connections are now lazy-initialized to avoid creating them
-    // before migrations run. This prevents "unrecognized configuration parameter" 
-    // errors when RLS functions don't exist yet.
+    // AIDEV-NOTE: Dual database client approach:
+    // - Context-aware client for normal test operations (with RLS)
+    // - Raw superuser client for cleanup operations (bypasses RLS)
+    this._db = contextAwareDb;
+    this._cleanupDb = rawDb;
   }
 
   // Lazy getter for database client
@@ -50,12 +57,14 @@ export class IntegrationTestClient {
     return this.pgClient;
   }
 
-  // Lazy getter for Drizzle database
-  public get db(): ReturnType<typeof drizzle> {
-    if (!this._db) {
-      this._db = drizzle(this.getPgClient(), { schema });
-    }
+  // Context-aware database client (same as application services)
+  public get db(): ContextAwareDbClient {
     return this._db;
+  }
+
+  // Raw superuser database client for cleanup (bypasses RLS)
+  private get cleanupDb(): DbClient {
+    return this._cleanupDb;
   }
 
   // Database operations
@@ -104,10 +113,10 @@ export class IntegrationTestClient {
   }
   
   async cleanTestData(): Promise<void> {
-    // Clean up test data created during individual tests using type-safe Drizzle operations
-    // Find and clean up ALL test organizations (not just hardcoded IDs 1,2)
+    // Clean up test data created during individual tests using superuser Drizzle client
+    // Uses raw database client to bypass RLS and see all test organizations
     try {
-      const db = this.db;
+      const db = this.cleanupDb;
       
       // Find all test organizations (they have distinctive naming patterns)
       const testOrgs = await db
@@ -135,46 +144,46 @@ export class IntegrationTestClient {
       // This prevents foreign key constraint violations
       
       // 1. Delete chat messages first (they reference chats and other chat messages)
-      const chatsInOrgs = await this.db.select({ id: schema.chats.id }).from(schema.chats)
+      const chatsInOrgs = await db.select({ id: schema.chats.id }).from(schema.chats)
         .where(inArray(schema.chats.organizationId, testOrgIds));
       if (chatsInOrgs.length > 0) {
         const chatIds = chatsInOrgs.map(c => c.id);
-        await this.safeDelete(schema.chatMessages, inArray(schema.chatMessages.chatId, chatIds), 'chat_messages');
+        await this.safeDelete(db, schema.chatMessages, inArray(schema.chatMessages.chatId, chatIds), 'chat_messages');
       }
       
       // 2. Delete chats (they reference organizations)
-      await this.safeDelete(schema.chats, inArray(schema.chats.organizationId, testOrgIds), 'chats');
+      await this.safeDelete(db, schema.chats, inArray(schema.chats.organizationId, testOrgIds), 'chats');
       
       // 3. Delete fields (they reference tables)
       // Note: fields don't have organizationId, so we need to find them through tables
-      const tablesInOrgs = await this.db.select({ id: schema.tables.id }).from(schema.tables)
+      const tablesInOrgs = await db.select({ id: schema.tables.id }).from(schema.tables)
         .where(inArray(schema.tables.organizationId, testOrgIds));
       if (tablesInOrgs.length > 0) {
         const tableIds = tablesInOrgs.map(t => t.id);
-        await this.safeDelete(schema.fields, inArray(schema.fields.tableId, tableIds), 'fields');
+        await this.safeDelete(db, schema.fields, inArray(schema.fields.tableId, tableIds), 'fields');
       }
       
       // 4. Delete tasks (they reference agents, but we delete them before agents)
-      await this.safeDelete(schema.tasks, inArray(schema.tasks.organizationId, testOrgIds), 'tasks');
+      await this.safeDelete(db, schema.tasks, inArray(schema.tasks.organizationId, testOrgIds), 'tasks');
       
       // 5. Delete agents (may be referenced by tasks, but tasks are already deleted)
-      await this.safeDelete(schema.agents, inArray(schema.agents.organizationId, testOrgIds), 'agents');
+      await this.safeDelete(db, schema.agents, inArray(schema.agents.organizationId, testOrgIds), 'agents');
       
       // 6. Delete RAG documents and indexes (may reference other entities)
-      await this.safeDelete(schema.ragDocuments, inArray(schema.ragDocuments.organizationId, testOrgIds), 'rag_documents');
-      await this.safeDelete(schema.ragIndexes, inArray(schema.ragIndexes.organizationId, testOrgIds), 'rag_indexes');
+      await this.safeDelete(db, schema.ragDocuments, inArray(schema.ragDocuments.organizationId, testOrgIds), 'rag_documents');
+      await this.safeDelete(db, schema.ragIndexes, inArray(schema.ragIndexes.organizationId, testOrgIds), 'rag_indexes');
       
       // 7. Delete tables (they reference databases)
-      await this.safeDelete(schema.tables, inArray(schema.tables.organizationId, testOrgIds), 'tables');
+      await this.safeDelete(db, schema.tables, inArray(schema.tables.organizationId, testOrgIds), 'tables');
       
       // 8. Delete databases (they reference organizations)
-      await this.safeDelete(schema.databases, inArray(schema.databases.organizationId, testOrgIds), 'databases');
+      await this.safeDelete(db, schema.databases, inArray(schema.databases.organizationId, testOrgIds), 'databases');
       
       // 9. Clean up user_organizations relationships (they reference organizations)
-      await this.safeDelete(schema.userOrganizations, inArray(schema.userOrganizations.organizationId, testOrgIds), 'user_organizations');
+      await this.safeDelete(db, schema.userOrganizations, inArray(schema.userOrganizations.organizationId, testOrgIds), 'user_organizations');
       
       // 10. Finally delete the test organizations themselves
-      await this.safeDelete(schema.organizations, inArray(schema.organizations.id, testOrgIds), 'organizations');
+      await this.safeDelete(db, schema.organizations, inArray(schema.organizations.id, testOrgIds), 'organizations');
       
       console.log(`✅ Test data cleanup completed successfully for organizations [${testOrgIds.join(', ')}]`);
       
@@ -186,12 +195,13 @@ export class IntegrationTestClient {
 
   // Helper method to safely delete from table with proper error handling
   private async safeDelete<T>(
+    db: DbClient,
     table: T, 
     condition: any,
     tableName: string
   ): Promise<void> {
     try {
-      const result = await this.db.delete(table as any).where(condition);
+      const result = await db.delete(table as any).where(condition);
       console.log(`  🗑️  Cleaned ${tableName}: ${result.rowCount || 0} rows deleted`);
     } catch (error: any) {
       // Skip if table doesn't exist (42P01 = undefined_table)
@@ -219,42 +229,12 @@ export class IntegrationTestClient {
     }
   }
 
-  // RLS Context Management - all operations must use the same transaction/connection
-  async setOrganizationContext(orgId: number): Promise<void> {
-    // Use a single transaction to set and verify context
-    await this.db.transaction(async (tx) => {
-      await tx.execute(sql`SELECT set_config('app.current_organization_id', ${orgId.toString()}, true)`);
-      
-      // Verify context was set within same transaction
-      const check = await tx.execute(sql`SELECT current_setting('app.current_organization_id') as current_org`);
-      console.log(`🔍 Set organization context to ${orgId}, verified: ${check[0]?.current_org}`);
-      
-      // Also verify the helper function works
-      const helperCheck = await tx.execute(sql`SELECT get_current_organization_id() as org_id`);
-      console.log(`🔍 Helper function returns: ${helperCheck[0]?.org_id}`);
-    });
-  }
-  
-  async setUserContext(userId: string): Promise<void> {
-    await this.db.execute(sql`SELECT set_config('app.current_user_id', ${userId}, true)`);
-  }
-  
-  async clearRLSContext(): Promise<void> {
-    await this.db.execute(sql`SELECT set_config('app.current_organization_id', '', true)`);
-    await this.db.execute(sql`SELECT set_config('app.current_user_id', '', true)`);
-  }
-
-  
-  // Execute a query with RLS context in the same transaction
-  async queryWithContext<T>(orgId: number, query: () => Promise<T>): Promise<T> {
-    return await this.db.transaction(async (tx) => {
-      // Set context within transaction
-      await tx.execute(sql`SELECT set_config('app.current_organization_id', ${orgId.toString()}, true)`);
-      
-      // Execute the query - but this won't work because we need to pass the tx to the query
-      // This approach won't work cleanly with Drizzle
-      return await query();
-    });
+  // Context Management using RLS utility function
+  async withTestContext<T>(orgId: OrganizationId, operation: () => Promise<T>, userId?: UserId): Promise<T> {
+    return withRLSContext(this.db, orgId, async (tx) => {
+      // Operation will use the transaction with proper RLS context set
+      return await operation();
+    }, userId);
   }
 
   // HTTP API operations

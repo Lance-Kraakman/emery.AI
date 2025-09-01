@@ -3,7 +3,8 @@ import {
   getRagIndexingApplicationService,
   getTableApplicationService,
   getDatabaseApplicationService,
-  initializeDI 
+  initializeDI,
+  contextManager
 } from '@/ddd/application/di/container';
 import { testClient } from '../shared/integration-helpers';
 import { createTestOrganization, type TestContext } from '../shared/test-setup';
@@ -178,21 +179,25 @@ async function setupTestFiles(
 describe('RAG Indexing Application Service Integration Tests', () => {
   let testContext: TestContext;
   
-  beforeAll(() => {
-    // Initialize DI container with test database clients
-    initializeDI(testClient.db as any, testClient.db as any);
+  beforeAll(async () => {
+    // Initialize DI container with simplified context proxy (avoids Drizzle proxy array issues)
+    const { contextAwareDb } = await import('@/lib/db/simple-context-proxy');
+    const { rawClient } = await import('@/lib/db/client');
+    initializeDI(contextAwareDb, rawClient);
   });
 
   beforeEach(async () => {
-    // Create fresh test organization for each test
+    // Create fresh test organization for each test  
     testContext = await createTestOrganization(`RAG Test Org ${Date.now()}`);
     
-    // RLS policies work automatically with database defaults - no setup needed
+    // Set context ONCE - all subsequent DB operations get RLS automatically
+    contextManager.setContext(testContext.organizationId, testContext.ownerUserId);
   });
 
   afterEach(async () => {
-    // Clean up test data
+    // Clean up test data and clear context
     await testClient.cleanTestData();
+    contextManager.clearContext();
   });
   
   // ==========================================================================
@@ -206,9 +211,9 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       const command: CreateIndexCommand = {
         name: 'Multi-Domain RAG Index',
         description: 'Test index with multiple domains',
-        organizationId: testContext.organizationId.value,
+        organizationId: testContext.organizationId,
         domainTypes: ['file', 'table', 'agent'] as DomainType[],
-        createdBy: testContext.ownerUserId.value
+        createdBy: testContext.ownerUserId
       };
       
       const indexId = await ragService.createIndex(command);
@@ -226,9 +231,9 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       const command: CreateIndexCommand = {
         name: 'File-Only RAG Index',
-        organizationId: testContext.organizationId.value,
+        organizationId: testContext.organizationId,
         domainTypes: ['file'] as DomainType[],
-        createdBy: testContext.ownerUserId.value
+        createdBy: testContext.ownerUserId
       };
       
       const indexId = await ragService.createIndex(command);
@@ -242,9 +247,9 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       const command: CreateIndexCommand = {
         name: '',
-        organizationId: testContext.organizationId.value,
+        organizationId: testContext.organizationId,
         domainTypes: ['table'] as DomainType[],
-        createdBy: testContext.ownerUserId.value
+        createdBy: testContext.ownerUserId
       };
       
       await expect(ragService.createIndex(command)).rejects.toThrow(
@@ -257,9 +262,9 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       const command: CreateIndexCommand = {
         name: 'a'.repeat(101),
-        organizationId: testContext.organizationId.value,
+        organizationId: testContext.organizationId,
         domainTypes: ['table'] as DomainType[],
-        createdBy: testContext.ownerUserId.value
+        createdBy: testContext.ownerUserId
       };
       
       await expect(ragService.createIndex(command)).rejects.toThrow(
@@ -272,9 +277,9 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       const command: CreateIndexCommand = {
         name: 'Invalid Domain Index',
-        organizationId: testContext.organizationId.value,
+        organizationId: testContext.organizationId,
         domainTypes: ['invalid_type' as DomainType],
-        createdBy: testContext.ownerUserId.value
+        createdBy: testContext.ownerUserId
       };
       
       await expect(ragService.createIndex(command)).rejects.toThrow(
@@ -287,9 +292,9 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       const command: CreateIndexCommand = {
         name: 'No Domain Index',
-        organizationId: testContext.organizationId.value,
+        organizationId: testContext.organizationId,
         domainTypes: [],
-        createdBy: testContext.ownerUserId.value
+        createdBy: testContext.ownerUserId
       };
       
       await expect(ragService.createIndex(command)).rejects.toThrow(
@@ -302,9 +307,9 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       const command: CreateIndexCommand = {
         name: 'Duplicate Test Index',
-        organizationId: testContext.organizationId.value,
+        organizationId: testContext.organizationId,
         domainTypes: ['file'],
-        createdBy: testContext.ownerUserId.value
+        createdBy: testContext.ownerUserId
       };
       
       // Create first index
@@ -322,9 +327,9 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       const command: CreateIndexCommand = {
         name: 'Async Indexing Test',
-        organizationId: testContext.organizationId.value,
+        organizationId: testContext.organizationId,
         domainTypes: ['table'],
-        createdBy: testContext.ownerUserId.value
+        createdBy: testContext.ownerUserId
       };
       
       const indexId = await ragService.createIndex(command);
@@ -363,7 +368,7 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       // Perform reindexing
       const command: ReindexCommand = {
-        indexId,
+        indexId: RagIndexId.fromString(indexId),
         domainType: 'table'
       };
       
@@ -400,7 +405,7 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       // Perform reindexing
       const command: ReindexCommand = {
-        indexId,
+        indexId: RagIndexId.fromString(indexId),
         domainType: 'file'
       };
       
@@ -435,7 +440,7 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       // Reindex all indexes for the organization
       const command: ReindexCommand = {
-        organizationId: testContext.organizationId.value
+        organizationId: testContext.organizationId
       };
       
       const result = await ragService.reindexData(command);
@@ -454,7 +459,7 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       // Reindex with specific domain type filter
       const command: ReindexCommand = {
-        organizationId: testContext.organizationId.value,
+        organizationId: testContext.organizationId,
         domainType: 'table'
       };
       
@@ -472,7 +477,7 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       const indexId = await createTestRagIndex(testContext, 'Empty Index', ['table']);
       
       const command: ReindexCommand = {
-        indexId
+        indexId: RagIndexId.fromString(indexId)
       };
       
       const result = await ragService.reindexData(command);
@@ -499,13 +504,8 @@ describe('RAG Indexing Application Service Integration Tests', () => {
     test('should validate index ID format', async () => {
       const ragService = getRagIndexingApplicationService();
       
-      const command: ReindexCommand = {
-        indexId: 'invalid-uuid-format'
-      };
-      
-      await expect(ragService.reindexData(command)).rejects.toThrow(
-        'Invalid index ID format'
-      );
+      // Test that invalid UUID format throws during value object creation
+      expect(() => RagIndexId.fromString('invalid-uuid-format')).toThrow();
     });
   });
 
@@ -638,7 +638,7 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       // Step 3: Perform manual reindexing
       const reindexResult = await ragService.reindexData({
-        indexId,
+        indexId: RagIndexId.fromString(indexId),
         domainType: 'table'
       });
       
@@ -663,7 +663,7 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       // Test reindexing non-existent index
       const invalidCommand: ReindexCommand = {
-        indexId: '99999999-9999-9999-9999-999999999999'
+        indexId: RagIndexId.fromString('99999999-9999-9999-9999-999999999999')
       };
       
       // Should handle gracefully (may return empty result or throw specific error)
@@ -688,7 +688,7 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       // Start multiple reindex operations concurrently
       const reindexPromises = Array.from({ length: 3 }, (_, i) => 
         ragService.reindexData({
-          indexId,
+          indexId: RagIndexId.fromString(indexId),
           domainType: 'table'
         })
       );

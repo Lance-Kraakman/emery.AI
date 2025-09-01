@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { getRagIndexingApplicationService } from '@/ddd/application/di/container'
 import type { ReindexCommand } from '@/ddd/application/services/rag/commands/reindex-command'
+import { RagIndexId } from '@/ddd/domain/rag/value-objects'
 
 // POST /api/rag/[indexId]/reindex - Trigger reindexing
 export async function POST(
@@ -18,7 +19,7 @@ export async function POST(
 
     // AIDEV-NOTE: Using DDD indexing application service instead of legacy ragService
     const reindexCommand: ReindexCommand = {
-      indexId,
+      indexId: RagIndexId.fromString(indexId),
       force: false // Default to incremental reindex
     };
 

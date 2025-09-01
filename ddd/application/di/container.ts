@@ -1,4 +1,6 @@
 import type { DbClient } from '@/lib/db/client';
+import { contextAwareDb, type ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
+import { rawClient } from '@/lib/db/client';
 import type postgres from 'postgres';
 
 import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
@@ -148,10 +150,9 @@ export class DIContainer {
   private autoInitialize(): void {
     this.initializationAttempted = true;
     try {
-      // Import db clients dynamically to avoid circular dependencies
-      const { db, rawClient } = require('@/lib/db/client');
-      this.initialize(db, rawClient);
-      console.log('✅ DIContainer auto-initialized successfully');
+      // Use context-aware db client for automatic RLS context
+      this.initialize(contextAwareDb, rawClient);
+      console.log('✅ DIContainer auto-initialized with context-aware database');
     } catch (error) {
       console.warn('⚠️ DIContainer auto-initialization failed, will require manual initialization:', error);
     }
@@ -168,7 +169,7 @@ export class DIContainer {
    * Initialize the container with database clients
    * This should be called once at application startup
    */
-  initialize(db: DbClient, rawClient: postgres.Sql): void {
+  initialize(db: DbClient | ContextAwareDbClient, rawClient: postgres.Sql): void {
     if (this.isInitialized) {
       console.warn('DIContainer is already initialized');
       return;
@@ -505,9 +506,12 @@ export const getRagSearchApplicationService = createGetter('RagSearchApplication
 // RLS context management removed - RLS policies work automatically
 
 // Helper to initialize container from existing clients
-export function initializeDI(db: DbClient, rawClient: postgres.Sql): void {
+export function initializeDI(db: DbClient | ContextAwareDbClient, rawClient: postgres.Sql): void {
   DIContainer.getInstance().initialize(db, rawClient);
 }
+
+// Export context manager for API routes and tests
+export { contextManager } from '@/lib/db/context-manager';
 
 // Export container instance for direct access if needed
 export const container = DIContainer.getInstance();

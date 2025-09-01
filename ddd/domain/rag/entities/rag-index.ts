@@ -62,9 +62,6 @@ export class RagIndex {
     return this._agentId;
   }
 
-  get roleId(): number | undefined {
-    return this._roleId;
-  }
 
   get domainTypes(): DomainType[] {
     return [...this._domainTypes]; // Return copy to prevent mutation
