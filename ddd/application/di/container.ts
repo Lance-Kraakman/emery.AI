@@ -237,9 +237,9 @@ export class DIContainer {
     // Create simplified Arrow data storage service
     const arrowDataStorageService = new ArrowDataStorageService();
         
-    // Create table repository with data storage service
+    // Create table repository with data storage service using context-aware DB client
     const tableRepository = new DynamicTableRepository(
-      db,
+      this.contextAwareDb,
       arrowDataStorageService,
       tableQueryService
     );
@@ -335,6 +335,7 @@ export class DIContainer {
     
     this.repositories.set('EmbeddingService', embeddingService);
     this.repositories.set('SearchAnalyticsService', searchAnalyticsService);
+    this.repositories.set('LlamaIndexContentProcessor', contentProcessor);
 
     // Initialize RAG domain services
     const indexingDomainService = new IndexingDomainService(contentProcessor);
@@ -352,6 +353,8 @@ export class DIContainer {
       agentRepository,
       databaseRepository,
       teamRepository,
+      fileStorageRepository,
+      tableApplicationService,
     );
     
     const ragSearchApplicationService = new RagSearchApplicationService(

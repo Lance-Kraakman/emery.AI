@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, serial, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, serial, bigserial, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
@@ -70,7 +70,7 @@ export const databases = pgTable("databases", {
 ]);
 
 export const tables = pgTable("tables", {
-  id: serial("id").primaryKey(),
+  id: bigserial("id", { mode: "number" }).primaryKey(),
   databaseId: integer("database_id").notNull().references(() => databases.id),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),

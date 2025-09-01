@@ -13,7 +13,7 @@ import { useEmeryData, EmeryTable } from "@/hooks/useEmeryData"
 import { getFields } from "@/app/actions/fields"
 import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
 import type { TableField } from "@/ddd/domain/tables/value-objects/table-field"
-import type { RowData } from "@/types/db"
+import type { Row } from "@/ddd/domain/tables/value-objects/row"
 
 export function DataViewsClientSimplified() {
   const searchParams = useSearchParams()
@@ -39,7 +39,7 @@ export function DataViewsClientSimplified() {
   
   // Table data state
   const [fields, setFields] = useState<TableField[]>([])
-  const [rows, setRows] = useState<RowData[]>([])
+  const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -158,9 +158,10 @@ export function DataViewsClientSimplified() {
   }
 
   // Filter rows based on search
-  const filteredRows = rows.filter((row: RowData) => {
+  const filteredRows = rows.filter((row: Row) => {
     if (!searchTerm) return true
-    return Object.values(row).some(value => 
+    const rowData = row.toPlainObject();
+    return Object.values(rowData).some(value => 
       String(value).toLowerCase().includes(searchTerm.toLowerCase())
     )
   })

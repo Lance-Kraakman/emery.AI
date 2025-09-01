@@ -5,7 +5,7 @@
 
 import { Plus } from 'lucide-react';
 import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
-import type { Row } from '@/app/actions/types';
+import type { Row } from '@/ddd/domain/tables/value-objects/row';
 import { useRowManager } from '@/hooks/useRowManager';
 import { Button } from '@/components/ui/button';
 import RowForm from './RowForm';

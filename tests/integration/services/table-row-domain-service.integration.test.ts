@@ -13,6 +13,7 @@ import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { TestCase } from '../../shared/types';
 import { createTestOrganization, type TestContext } from '../shared/test-setup';
+import { Row, RowId } from '@/ddd/domain/tables/value-objects/row';
 // AIDEV-NOTE: TableRowDomainService integration tests focusing on domain row operations
 // Built on top of ArrowDataStorageService with proper file and relation field validation
 
@@ -385,18 +386,31 @@ describe('TableRowDomainService Integration Tests', () => {
           testCase.input.tableSetup.fields
         );
 
-        // Test row creation
-        const result = await tableRowService.addRow({
-          table,
-          data: testCase.input.rowData,
-          createdBy: testContext.ownerUserId
-        });
+        // Test row creation with validation
+        let result: any;
+        try {
+          // Convert plain data to Row entity with validation
+          const rowEntity = Row.fromPlainObject(testCase.input.rowData, table.id.value, table.fields);
+
+          // Test row creation
+          result = await tableRowService.addRow({
+            table,
+            data: rowEntity,
+            createdBy: testContext.ownerUserId
+          });
+        } catch (validationError: any) {
+          // Convert validation errors to domain service result format
+          result = {
+            success: false,
+            error: validationError.message || 'Validation failed'
+          };
+        }
 
         expect(result.success).toBe(testCase.expected.success);
         
         if (testCase.expected.success) {
           expect(result.data).toBeDefined();
-          expect(result.data?.id).toBeDefined();
+          expect(result.data?.id.value).toBeDefined();
         } else {
           expect(result.error).toBeDefined();
           if (testCase.expected.error) {
@@ -408,7 +422,7 @@ describe('TableRowDomainService Integration Tests', () => {
   });
 
   describe('Row Retrieval Tests', () => {
-    let createdRowId: string;
+    let createdRowId: RowId;
     let retrievalTestTable: DynamicTable;
     // retrievalTestFields no longer needed - fields are now part of table entity
 
@@ -427,30 +441,35 @@ describe('TableRowDomainService Integration Tests', () => {
       expect(table.fields.length).toBeGreaterThan(0);
       
       // Create a test row
+      const testRowData = {
+        Name: 'Test Row',
+        Description: 'A row for retrieval testing',
+        'Relations': [
+          { id: '123', value: 'Related Item' }
+        ]
+      };
+      
+      const testRowEntity = Row.fromPlainObject(testRowData, table.id.value, table.fields);
+      
       const createResult = await tableRowService.addRow({
         table,
-        data: {
-          Name: 'Test Row',
-          Description: 'A row for retrieval testing',
-          'Relations': [
-            { id: '123', value: 'Related Item' }
-          ]
-        },
+        data: testRowEntity,
         createdBy: testContext.ownerUserId
       });
       
       if (createResult.success && createResult.data) {
         createdRowId = createResult.data.id!;
-        // Verify the row was created with an ID
+        // Verify the row was created with an ID (RowId object)
         expect(createdRowId).toBeDefined();
-        expect(typeof createdRowId).toBe('string');
+        expect(typeof createdRowId).toBe('object');
+        expect(typeof createdRowId.value).toBe('string');
       } else {
         throw new Error(`Failed to create test row: ${createResult.error}`);
       }
     });
 
     test('should run all get row test cases', async () => {
-      const testCases = createGetRowTestCases(createdRowId);
+      const testCases = createGetRowTestCases(createdRowId.value);
       
       for (const testCase of testCases) {
         console.log(`🧪 Running test: ${testCase.name}`);
@@ -459,12 +478,12 @@ describe('TableRowDomainService Integration Tests', () => {
         
         if (testCase.expected.rowExists) {
           expect(result).not.toBeNull();
-          expect(result?.id).toBe(testCase.input.rowId);
+          expect(result?.id.value).toBe(testCase.input.rowId);
           expect(result).toBeDefined();
           
           // Verify relation fields are properly deserialized
           if (testCase.name.includes('complex relation')) {
-            const relationField = result?.Relations;
+            const relationField = result?.getFieldValue('Relations')?.value;
             expect(relationField).toBeDefined();
             expect(Array.isArray(relationField)).toBe(true);
           }
@@ -477,7 +496,7 @@ describe('TableRowDomainService Integration Tests', () => {
 
   describe('Row Update Tests', () => {
     let updateTestTable: DynamicTable;
-    let updateTestRowId: string;
+    let updateTestRowId: RowId;
 
     beforeEach(async () => {
       // Create test table and row for update tests
@@ -490,13 +509,17 @@ describe('TableRowDomainService Integration Tests', () => {
       updateTestTable = table;
 
       // Create initial row
+      const initialRowData = {
+        'Name': 'Original Name',
+        'Age': 25,
+        'Files': []
+      };
+      
+      const initialRowEntity = Row.fromPlainObject(initialRowData, table.id.value, table.fields);
+      
       const createResult = await tableRowService.addRow({
         table,
-        data: {
-          'Name': 'Original Name',
-          'Age': 25,
-          'Files': []
-        },
+        data: initialRowEntity,
         createdBy: testContext.ownerUserId
       });
       
@@ -506,18 +529,58 @@ describe('TableRowDomainService Integration Tests', () => {
     });
 
     test('should run all update row test cases', async () => {
-      const testCases = createUpdateRowTestCases(updateTestRowId);
+      const testCases = createUpdateRowTestCases(updateTestRowId.value);
       
       for (const testCase of testCases) {
         console.log(`🧪 Running test: ${testCase.name}`);
         
-        const result = await tableRowService.updateRow({
-          table: updateTestTable,
-          rowId: testCase.input.rowId,
-          data: testCase.input.updateData,
-          updatedBy: testContext.ownerUserId
-        });
+        // Test row update with validation
+        let result: any;
+        try {
+          // Get existing row data to merge with update data
+          const existingRow = await tableRowService.getRow(updateTestTable, testCase.input.rowId);
+          if (!existingRow) {
+            throw new Error(`Row ${testCase.input.rowId} not found for update`);
+          }
 
+          // Merge existing data with update data
+          const existingData = existingRow.toPlainObject();
+          const mergedData = {
+            ...existingData,
+            ...testCase.input.updateData,
+            id: testCase.input.rowId
+          };
+
+          // Convert merged data to Row entity
+          const updateRowEntity = Row.fromPlainObject(
+            mergedData,
+            updateTestTable.id.value, 
+            updateTestTable.fields
+          );
+          
+          result = await tableRowService.updateRow({
+            table: updateTestTable,
+            rowId: testCase.input.rowId,
+            data: updateRowEntity,
+            updatedBy: testContext.ownerUserId
+          });
+        } catch (validationError: any) {
+          // Convert validation errors to domain service result format
+          result = {
+            success: false,
+            error: validationError.message || 'Validation failed'
+          };
+        }
+
+        if (result.success !== testCase.expected.success) {
+          console.error(`❌ Test "${testCase.name}" failed:`);
+          console.error(`  Expected success: ${testCase.expected.success}`);
+          console.error(`  Actual success: ${result.success}`);
+          if (!result.success && result.error) {
+            console.error(`  Error: ${result.error}`);
+          }
+        }
+        
         expect(result.success).toBe(testCase.expected.success);
 
         if (testCase.expected.success) {
@@ -529,7 +592,7 @@ describe('TableRowDomainService Integration Tests', () => {
           
           // Check specific updated fields
           Object.keys(testCase.input.updateData).forEach(key => {
-            const fieldValue = updatedRow?.[key];
+            const fieldValue = updatedRow?.getFieldValue(key)?.value;
             expect(fieldValue).toEqual(testCase.input.updateData[key]);
           });
         } else {
@@ -566,14 +629,21 @@ describe('TableRowDomainService Integration Tests', () => {
       ];
 
       for (const rowData of testRows) {
-        const createResult = await tableRowService.addRow({
-          table,
-          data: rowData,
-          createdBy: testContext.ownerUserId
-        });
-        
-        if (createResult.success && createResult.data) {
-          createdRowIds.push(createResult.data.id!);
+        try {
+          // Convert plain data to Row entity
+          const rowEntity = Row.fromPlainObject(rowData, table.id.value, table.fields);
+          
+          const createResult = await tableRowService.addRow({
+            table,
+            data: rowEntity,
+            createdBy: testContext.ownerUserId
+          });
+          
+          if (createResult.success && createResult.data) {
+            createdRowIds.push(createResult.data.id!.value);
+          }
+        } catch (error) {
+          console.error('Error creating test row:', error);
         }
       }
     });
@@ -621,9 +691,9 @@ describe('TableRowDomainService Integration Tests', () => {
           
           // Verify each row has proper structure
           result.forEach(row => {
-            expect(row.id).toBeDefined();
+            expect(row.id.value).toBeDefined();
             expect(row).toBeDefined();
-            const nameField = row['Name'];
+            const nameField = row.getFieldValue('Name')?.value;
             expect(nameField).toBeDefined();
           });
         }
@@ -650,11 +720,26 @@ describe('TableRowDomainService Integration Tests', () => {
       for (const testCase of testCases) {
         console.log(`🧪 Running test: ${testCase.name}`);
         
-        const result = await tableRowService.bulkAddRows({
-          table: bulkTestTable,
-          rows: testCase.input.rows,
-          createdBy: testContext.ownerUserId
-        });
+        // Test bulk row creation with validation
+        let result: any;
+        try {
+          // Convert bulk rows to Row entities
+          const rowEntities = testCase.input.rows.map(rowData => 
+            Row.fromPlainObject(rowData, bulkTestTable.id.value, bulkTestTable.fields)
+          );
+          
+          result = await tableRowService.bulkAddRows({
+            table: bulkTestTable,
+            rows: rowEntities,
+            createdBy: testContext.ownerUserId
+          });
+        } catch (validationError: any) {
+          // Convert validation errors to domain service result format
+          result = {
+            success: false,
+            error: validationError.message || 'Validation failed'
+          };
+        }
 
         expect(result.success).toBe(testCase.expected.success);
 
@@ -692,9 +777,11 @@ describe('TableRowDomainService Integration Tests', () => {
       expect(hasRowsInitially).toBe(false);
 
       // Add a row
+      const testRowEntity = Row.fromPlainObject({ 'Name': 'Test Row' }, table.id.value, table.fields);
+      
       await tableRowService.addRow({
         table,
-        data: { 'Name': 'Test Row' },
+        data: testRowEntity,
         createdBy: testContext.ownerUserId
       });
 

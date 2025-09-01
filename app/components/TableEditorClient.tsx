@@ -9,7 +9,7 @@ import { getFields } from '@/app/actions/fields';
 import { getRowsData } from '@/app/actions/rows';
 import { getTables } from '@/app/actions/tables';
 import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
-import type { Row } from '@/app/actions/types';
+import type { Row } from '@/ddd/domain/tables/value-objects/row';
 import FieldManager from './FieldManager';
 import RowManager from './RowManager';
 

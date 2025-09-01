@@ -2,6 +2,8 @@
 // Provides type safety and domain validation for user IDs
 // Note: Uses UUID string format as per schema
 
+import crypto from 'crypto';
+
 export class UserId {
   private readonly _value: string;
 

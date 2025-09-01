@@ -10,4 +10,8 @@ export class FieldId extends BaseId<'FieldId'> {
     return new FieldId(value);
   }
 
+  static newEntity(): FieldId {
+    return this.createNew('FieldId', 0) as FieldId;
+  }
+
 }

@@ -7,11 +7,11 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Trash2 } from "lucide-react"
 import { EditableCell } from "./EditableCell"
 import type { TableField } from "@/ddd/domain/tables/value-objects/table-field"
-import type { RowData } from "@/types/db"
+import type { Row } from "@/ddd/domain/tables/value-objects/row"
 
 interface DynamicDataTableProps {
   fields: TableField[];
-  rows: RowData[];
+  rows: Row[];
   organizationId: number;
   tableId: number;
   onUpdateRow: (rowId: string, fieldId: number, value: any) => void;
@@ -34,7 +34,7 @@ export function DynamicDataTable({ fields, rows, organizationId, tableId, onUpda
 
   const handleSelectAll = (selected: boolean) => {
     if (selected) {
-      setSelectedRows(new Set(rows.map((row) => row.id)))
+      setSelectedRows(new Set(rows.map((row) => row.id.value)))
     } else {
       setSelectedRows(new Set())
     }

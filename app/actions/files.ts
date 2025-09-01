@@ -143,7 +143,7 @@ export async function deleteFileAction(fileId: string, fieldName: string, tableI
     
     const command: DeleteFileCommand = {
       fileId,
-      fieldId: FieldId.fromNumber(field.id),
+      fieldId: field.id,
       tableId: TableId.fromNumber(tableId),
       organizationId,
     };

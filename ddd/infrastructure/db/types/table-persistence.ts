@@ -8,6 +8,8 @@
  * concerns from domain logic. These are storage implementation details.
  */
 
+import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
+
 // ========================================
 // Database Row Format (S3 + PostgreSQL)
 // ========================================
@@ -74,5 +76,6 @@ export interface UpdateDynamicTableData {
   name?: string;
   description?: string;
   metadata?: Record<string, any>;
+  fields?: TableField[];  // Allow field synchronization for saveTable operations
   // Note: organizationId typically not changed after creation
 }

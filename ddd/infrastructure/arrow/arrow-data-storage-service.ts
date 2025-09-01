@@ -11,6 +11,7 @@ import type { DataStorageService, StorageMetadata } from '@/ddd/domain/tables/se
 import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import type { Result } from '@/ddd/domain/shared/result';
+import { Row } from '@/ddd/domain/tables/value-objects/row';
 
 // Apache Arrow imports for direct conversion
 import { 
@@ -43,19 +44,19 @@ const FIELD_TYPE_TO_ARROW_TYPE: Record<string, () => DataType> = {
 export class ArrowDataStorageService implements DataStorageService {
   
   /**
-   * Convert StorageData to Arrow IPC buffer for S3 storage
-   * Data format: { id, created_at, updated_at, [fieldName]: value }
+   * Convert Row objects to Arrow IPC buffer for S3 storage
+   * Stores both field data and system metadata (id, timestamps)
    */
   async storeData(
-    data: Array<Record<string, any>>,
+    rows: Row[],
     table: DynamicTable
   ): Promise<Result<Buffer>> {
     try {
       // 1. Build Arrow schema including system fields + table fields
       const arrowSchema = this.buildArrowSchema(table.fields);
       
-      // 2. Process StorageData to match Arrow schema requirements
-      const processedData = await this.processDataForArrow(data, table.fields);
+      // 2. Process Row objects to match Arrow schema requirements
+      const processedData = await this.processRowsForArrow(rows, table.fields);
       
       // 3. Create Arrow Table using tableFromArrays
       const arrowTable = tableFromArrays(processedData);
@@ -75,13 +76,13 @@ export class ArrowDataStorageService implements DataStorageService {
   }
 
   /**
-   * Convert Arrow IPC buffer back to StorageData format
-   * Returns: { id, created_at, updated_at, [fieldName]: value }
+   * Convert Arrow IPC buffer back to Row objects
+   * Uses table.fields to reconstruct Row objects with proper field metadata
    */
   async retrieveData(
     buffer: Buffer,
     table: DynamicTable
-  ): Promise<Result<Array<Record<string, any>>>> {
+  ): Promise<Result<Row[]>> {
     try {
       // Convert Buffer to Uint8Array for Arrow
       const uint8Array = new Uint8Array(buffer);
@@ -89,10 +90,10 @@ export class ArrowDataStorageService implements DataStorageService {
       // Read Arrow Table from IPC buffer
       const arrowTable = tableFromIPC(uint8Array);
       
-      // Convert Arrow Table back to StorageData format
-      const storageRows = await this.processRowsFromArrow(arrowTable, table.fields);
+      // Convert Arrow Table back to Row objects
+      const rows = await this.processArrowToRows(arrowTable, table);
       
-      return { success: true, data: storageRows };
+      return { success: true, data: rows };
       
     } catch (error) {
       console.error('[ArrowDataStorageService] Error converting from Arrow IPC:', error);
@@ -155,8 +156,8 @@ export class ArrowDataStorageService implements DataStorageService {
     return new Schema([...systemFields, ...tableFields]);
   }
 
-  private async processDataForArrow(
-    storageData: Array<Record<string, any>>,
+  private async processRowsForArrow(
+    rows: Row[],
     fields: readonly TableField[]
   ): Promise<Record<string, any[]>> {
     const columns: Record<string, any[]> = {};
@@ -171,16 +172,24 @@ export class ArrowDataStorageService implements DataStorageService {
       columns[field.name] = [];
     });
     
-    // Process each StorageData row
-    for (const storageRow of storageData) {
-      // Process system fields (directly available in StorageData)
-      columns['id'].push(storageRow.id || null);
-      columns['created_at'].push(storageRow.created_at ? new Date(storageRow.created_at).getTime() : null);
-      columns['updated_at'].push(storageRow.updated_at ? new Date(storageRow.updated_at).getTime() : null);
+    // Process each Row object
+    const now = new Date().getTime();
+    for (const row of rows) {
+      // Validate row object
+      if (!row || !row.id) {
+        console.error('[ArrowDataStorageService] Invalid row object:', row);
+        throw new Error('Invalid row object - missing id');
+      }
       
-      // Process table fields (available by field name in StorageData)
+      // Process system fields
+      columns['id'].push(row.id.value);
+      columns['created_at'].push(now); // Set creation time
+      columns['updated_at'].push(now); // Set update time
+      
+      // Process table fields from Row's field values
+      const plainObject = row.toPlainObject();
       for (const field of fields) {
-        let value = storageRow[field.name];
+        let value = plainObject[field.name];
         
         // Handle null/undefined values
         if (value === undefined || value === null) {
@@ -216,33 +225,21 @@ export class ArrowDataStorageService implements DataStorageService {
     return columns;
   }
 
-  private async processRowsFromArrow(
+  private async processArrowToRows(
     arrowTable: Table,
-    fields: readonly TableField[]
-  ): Promise<Array<Record<string, any>>> {
-    const storageRows: Array<Record<string, any>> = [];
+    table: DynamicTable
+  ): Promise<Row[]> {
+    const rows: Row[] = [];
+    const fields = table.fields;
     
-    // Convert Arrow Table back to StorageData format
+    // Convert Arrow Table back to Row objects
     for (let i = 0; i < arrowTable.numRows; i++) {
-      const storageRow: Record<string, any> = {};
+      const rowData: Record<string, any> = {};
       
-      // Process system fields (always present)
+      // Get row ID from system fields
       const idColumn = arrowTable.getChild('id');
-      const createdAtColumn = arrowTable.getChild('created_at');
-      const updatedAtColumn = arrowTable.getChild('updated_at');
-      
       if (idColumn) {
-        storageRow.id = idColumn.get(i);
-      }
-      
-      if (createdAtColumn) {
-        const timestamp = createdAtColumn.get(i);
-        storageRow.created_at = timestamp ? new Date(timestamp) : null;
-      }
-      
-      if (updatedAtColumn) {
-        const timestamp = updatedAtColumn.get(i);
-        storageRow.updated_at = timestamp ? new Date(timestamp) : null;
+        rowData.id = idColumn.get(i);
       }
       
       // Process table fields (available by field name)
@@ -272,13 +269,15 @@ export class ArrowDataStorageService implements DataStorageService {
             // Other types (text, number, boolean) are stored as-is
           }
           
-          storageRow[field.name] = value;
+          rowData[field.name] = value;
         }
       }
       
-      storageRows.push(storageRow);
+      // Create Row object from the data using new signature with table fields
+      const row = Row.fromPlainObject(rowData, table.id.value, fields);
+      rows.push(row);
     }
     
-    return storageRows;
+    return rows;
   }
 }

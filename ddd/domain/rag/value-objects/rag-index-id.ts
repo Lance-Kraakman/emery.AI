@@ -1,6 +1,8 @@
 // AIDEV-NOTE: Value object for RAG index identity
 // Provides type safety and domain validation for index IDs
 
+import crypto from 'crypto';
+
 export class RagIndexId {
   private readonly _value: string;
 

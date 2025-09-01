@@ -1,6 +1,8 @@
 // AIDEV-NOTE: Value object for RAG document identity
 // Provides type safety and domain validation for document IDs
 
+import crypto from 'crypto';
+
 export class DocumentId {
   private readonly _value: string;
 

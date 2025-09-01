@@ -2,7 +2,7 @@
 
 import { Edit, Trash2, Save, X } from 'lucide-react';
 import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
-import type { Row } from '@/app/actions/types';
+import type { Row } from '@/ddd/domain/tables/value-objects/row';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import CellRenderer from './CellRenderer';
@@ -68,33 +68,35 @@ export default function RowTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.id}>
-              {fields.map((field) => (
-                <TableCell key={field.id} className="max-w-xs">
-                  {editingRow === row.id ? (
-                    <FieldInput
-                      field={field}
-                      value={editRowData[field.name]}
-                      onChange={(value) => onFieldChange(field.name, value)}
-                      disabled={isPending}
-                      organizationId={organizationId}
-                      tableId={tableId}
-                    />
-                  ) : (
-                    <CellRenderer 
-                      field={field} 
-                      value={row[`field_${field.id}`]} 
-                    />
-                  )}
-                </TableCell>
-              ))}
-              <TableCell>
-                <div className="flex gap-1">
-                  {editingRow === row.id ? (
+          {rows.map((row) => {
+            const rowData = row.toPlainObject(); // Convert Row to RowData for UI binding
+            return (
+              <TableRow key={row.id.value}>
+                {fields.map((field) => (
+                  <TableCell key={field.id} className="max-w-xs">
+                    {editingRow === row.id.value ? (
+                      <FieldInput
+                        field={field}
+                        value={editRowData[field.name]}
+                        onChange={(value) => onFieldChange(field.name, value)}
+                        disabled={isPending}
+                        organizationId={organizationId}
+                        tableId={tableId}
+                      />
+                    ) : (
+                      <CellRenderer 
+                        field={field} 
+                        value={rowData[`field_${field.id}`]} 
+                      />
+                    )}
+                  </TableCell>
+                ))}
+                <TableCell>
+                  <div className="flex gap-1">
+                    {editingRow === row.id.value ? (
                     <>
                       <Button
-                        onClick={() => onUpdateRow(row.id)}
+                        onClick={() => onUpdateRow(row.id.value)}
                         disabled={isPending}
                         variant="ghost"
                         size="icon"
@@ -124,7 +126,7 @@ export default function RowTable({
                         <Edit size={16} />
                       </Button>
                       <Button
-                        onClick={() => onDeleteRow(row.id)}
+                        onClick={() => onDeleteRow(row.id.value)}
                         disabled={isPending}
                         variant="ghost"
                         size="icon"
@@ -137,7 +139,8 @@ export default function RowTable({
                 </div>
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </Table>
     </div>

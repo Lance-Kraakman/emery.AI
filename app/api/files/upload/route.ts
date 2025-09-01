@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, hasPermission } from "@/lib/auth";
 import { getFileApplicationService, getTableApplicationService } from "@/ddd/application/di/container";
-import { TableId } from "@/ddd/domain/shared/value-objects";
+import { FieldId, OrganizationId, TableId } from "@/ddd/domain/shared/value-objects";
 import type { UploadFileCommand } from "@/ddd/application/services/tables/file-application-service";
 
 export async function POST(request: NextRequest) {
@@ -66,15 +66,14 @@ export async function POST(request: NextRequest) {
     
     const buffer = Buffer.from(await file.arrayBuffer());
     const command: UploadFileCommand = {
-      organizationId,
-      tableId,
+      organizationId: OrganizationId.fromNumber(organizationId),
+      tableId: TableId.fromNumber(tableId),
       fieldId: field.id,
       file: {
         buffer,
         filename: file.name,
         mimeType: file.type
       },
-      uploadedBy: session.user.id
     };
 
     const result = await fileApplicationService.uploadFile(command);
