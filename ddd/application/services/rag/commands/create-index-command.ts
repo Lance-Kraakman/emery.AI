@@ -1,19 +1,19 @@
 // AIDEV-NOTE: Command for creating RAG indexes
-// Encapsulates input validation and command data
+// Updated to use value objects instead of primitives for type safety
 
 import { OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
+import { UserId, AgentId } from '@/ddd/domain/shared/value-objects';
 
 export interface CreateIndexCommand {
   name: string;
   description?: string;
-  organizationId: number;
-  agentId?: number;
-  roleId?: number;
+  organizationId: OrganizationId;
+  agentId?: AgentId;
   domainTypes: DomainType[];
   domainFilters?: Record<string, any>;
   embeddingModel?: string;
   embeddingDimensions?: number;
-  createdBy: string;
+  createdBy: UserId;
 }
 
 export class CreateIndexCommandValidator {
@@ -26,7 +26,7 @@ export class CreateIndexCommandValidator {
       throw new Error('Index name cannot exceed 100 characters');
     }
 
-    if (!Number.isInteger(command.organizationId) || command.organizationId <= 0) {
+    if (!command.organizationId) {
       throw new Error('Valid organization ID is required');
     }
 
@@ -44,17 +44,11 @@ export class CreateIndexCommandValidator {
       }
     }
 
-    if (!command.createdBy || command.createdBy.trim().length === 0) {
+    if (!command.createdBy) {
       throw new Error('Creator ID is required');
     }
 
-    if (command.agentId !== undefined && (!Number.isInteger(command.agentId) || command.agentId <= 0)) {
-      throw new Error('Agent ID must be a positive integer');
-    }
-
-    if (command.roleId !== undefined && (!Number.isInteger(command.roleId) || command.roleId <= 0)) {
-      throw new Error('Role ID must be a positive integer');
-    }
+    // Value objects already validated on construction, no need for additional validation
 
     if (command.embeddingDimensions !== undefined && (!Number.isInteger(command.embeddingDimensions) || command.embeddingDimensions <= 0)) {
       throw new Error('Embedding dimensions must be a positive integer');
@@ -65,14 +59,13 @@ export class CreateIndexCommandValidator {
     return {
       name: command.name.trim(),
       description: command.description?.trim(),
-      organizationId: OrganizationId.fromNumber(command.organizationId),
-      agentId: command.agentId,
-      roleId: command.roleId,
+      organizationId: command.organizationId, // Already a value object
+      agentId: command.agentId?.value, // Extract primitive for domain params
       domainTypes: [...command.domainTypes],
       domainFilters: command.domainFilters ? { ...command.domainFilters } : undefined,
       embeddingModel: command.embeddingModel,
       embeddingDimensions: command.embeddingDimensions,
-      createdBy: command.createdBy.trim()
+      createdBy: command.createdBy.value // Extract primitive for domain params
     };
   }
 }
