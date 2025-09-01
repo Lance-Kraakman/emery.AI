@@ -146,7 +146,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
                 </TableHeader>
                 <TableBody>
                   {sortedFields.map((field) => (
-                    <TableRow key={field.id}>
+                    <TableRow key={field.id.value}>
                       <TableCell className="font-medium">{field.name}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="capitalize">

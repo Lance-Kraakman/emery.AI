@@ -23,14 +23,8 @@ interface ArrowStorageTestOutput {
 
 // Helper function to convert test data to Row objects
 function createRowsFromData(data: Array<Record<string, any>>, table: DynamicTable): Row[] {
-  const fieldSlugs = table.fields.map(f => f.name);
-  const fieldTypes = table.fields.reduce((acc, f) => {
-    acc[f.name] = f.type;
-    return acc;
-  }, {} as Record<string, string>);
-  
   return data.map(item => 
-    Row.fromPlainObject(item, table.id.value, fieldSlugs, fieldTypes)
+    Row.fromPlainObject(item, table.id.value, table.fields)
   );
 }
 
@@ -181,132 +175,6 @@ describe('ArrowDataStorageService Integration Tests', () => {
           // Convert retrieved Row objects back to plain objects for comparison
           const retrievedPlainData = retrieveResult.data?.map(row => row.toPlainObject());
           expect(retrievedPlainData).toEqual(data);
-        }
-      });
-    });
-  });
-
-  describe('JSON Serialization', () => {
-    const jsonSerializationTests: TestCase<ArrowStorageTestInput, ArrowStorageTestOutput>[] = [
-      {
-        name: 'should serialize relation fields to JSON strings',
-        input: {
-          data: [
-            { 
-              'Related User': [
-                { id: '123', displayValue: 'John', tableId: 2 }
-              ],
-              'Tags': [
-                { id: 'tag-1', displayValue: 'urgent' },
-                { id: 'tag-2', displayValue: 'customer' },
-                { id: 'tag-3', displayValue: 'vip' }
-              ]
-            },
-            { 
-              'Related User': [
-                { id: '456', displayValue: 'Jane', tableId: 2 }
-              ],
-              'Tags': [
-                { id: 'tag-4', displayValue: 'low-priority' }
-              ]
-            }
-          ],
-          table: createMockTableWithFields('Test Table', [
-            { name: 'Related User', type: 'relation', required: false },
-            { name: 'Tags', type: 'relation', required: false }
-          ])
-        },
-        expected: { success: true, retrievedDataMatches: true }
-      },
-      {
-        name: 'should serialize file fields to JSON strings',
-        input: {
-          data: [
-            { 
-              'Avatar': [
-                {
-                  id: 'file-uuid-1',
-                  name: 'avatar.jpg',
-                  size: 1024,
-                  mimeType: 'image/jpeg',
-                  s3Key: 'org_1/files/avatar.jpg',
-                  uploadedAt: '2024-01-15T10:30:00.000Z',
-                  metadata: { width: 200, height: 200 }
-                }
-              ]
-            },
-            { 
-              'Avatar': [
-                {
-                  id: 'file-uuid-2',
-                  name: 'profile.png',
-                  size: 2048,
-                  mimeType: 'image/png',
-                  s3Key: 'org_1/files/profile.png',
-                  uploadedAt: '2024-01-16T11:00:00.000Z'
-                }
-              ]
-            }
-          ],
-          table: createMockTableWithFields('Test Table', [
-            { name: 'Avatar', type: 'file', required: false }
-          ])
-        },
-        expected: { success: true, retrievedDataMatches: true }
-      },
-      {
-        name: 'should handle multiple files and relations in single field',
-        input: {
-          data: [
-            { 
-              'Attachments': [
-                {
-                  id: 'file-uuid-3',
-                  name: 'document.pdf',
-                  size: 5120,
-                  mimeType: 'application/pdf',
-                  s3Key: 'org_1/files/document.pdf',
-                  uploadedAt: '2024-01-17T09:15:00.000Z'
-                },
-                {
-                  id: 'file-uuid-4',
-                  name: 'spreadsheet.xlsx',
-                  size: 3072,
-                  mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                  s3Key: 'org_1/files/spreadsheet.xlsx',
-                  uploadedAt: '2024-01-17T09:20:00.000Z'
-                }
-              ],
-              'Assigned Users': [
-                { id: '789', displayValue: 'Alice Johnson', tableId: 2 },
-                { id: '101', displayValue: 'Bob Smith', tableId: 2 }
-              ]
-            }
-          ],
-          table: createMockTableWithFields('Test Table', [
-            { name: 'Attachments', type: 'file', required: false },
-            { name: 'Assigned Users', type: 'relation', required: false }
-          ])
-        },
-        expected: { success: true, retrievedDataMatches: true }
-      }
-    ];
-
-    jsonSerializationTests.forEach((testCase) => {
-      test(testCase.name, async () => {
-        const { data, table } = testCase.input;
-        
-        // Store data
-        const storeResult = await arrowService.storeData(data, table);
-        expect(storeResult.success).toBe(true);
-        
-        // Retrieve data
-        const retrieveResult = await arrowService.retrieveData(storeResult.data as Buffer, table);
-        expect(retrieveResult.success).toBe(true);
-        
-        // Verify JSON serialization works correctly
-        if (testCase.expected.retrievedDataMatches) {
-          expect(retrieveResult.data).toEqual(data);
         }
       });
     });

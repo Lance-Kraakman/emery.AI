@@ -66,7 +66,7 @@ export default function FieldInput({
           onChange={onChange}
           organizationId={organizationId}
           tableId={tableId}
-          fieldId={field.id}
+          fieldId={field.id.value}
         />
       );
     case 'relation':

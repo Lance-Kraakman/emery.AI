@@ -83,7 +83,7 @@ export function DataViewsClientSimplified() {
 
     try {
       // Find the field to get its slug
-      const field = fields.find(f => f.id === fieldId)
+      const field = fields.find(f => f.id.value === fieldId)
       if (!field) {
         console.error('Field not found for fieldId:', fieldId)
         return
@@ -96,7 +96,7 @@ export function DataViewsClientSimplified() {
       });
       setRows(prevRows =>
         prevRows.map(row =>
-          row.id === rowId ? { ...row, [`field_${field.id}`]: value } : row
+          row.id.value === rowId ? { ...row, [`field_${field.id.value}`]: value } : row
         )
       );
     } catch (err) {

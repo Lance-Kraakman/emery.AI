@@ -6,7 +6,6 @@ import { randomBytes } from 'crypto';
 import type postgres from 'postgres';
 
 import { users, userOrganizations, organizations } from '@/lib/db/schema';
-import type { DbClient } from '@/lib/db/client';
 import type { IUserRepository, TransactionContext } from '@/ddd/domain/users/repositories/user-repository';
 import type { 
   User, 
@@ -17,10 +16,11 @@ import type {
 } from '@/ddd/domain/users/entities/user';
 import type { Organization } from '@/ddd/domain/organizations/entities/organization';
 import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationName, OrganizationRole } from '@/ddd/domain/shared/value-objects';
+import { ContextAwareDbClient } from '@/lib/db/context-client';
 
 export class DrizzleUserRepository implements IUserRepository {
   constructor(
-    private db: DbClient,
+    private db: ContextAwareDbClient,
     private rawClient: postgres.Sql
   ) {}
 

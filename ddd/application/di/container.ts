@@ -47,7 +47,6 @@ import { ChatApplicationService } from '@/ddd/application/services/chat/chat-app
 
 // Domain services
 import { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
-import { TableRowDomainService } from '@/ddd/domain/tables/services/table-row-domain-service';
 
 // Field and table services
 import { ArrowDataStorageService } from '@/ddd/infrastructure/arrow/arrow-data-storage-service';
@@ -108,7 +107,6 @@ interface RepositoryRegistry {
   
   // Domain services
   DynamicTableService: DynamicTableService;
-  TableRowDomainService: TableRowDomainService;
   
   // Chat domain services
   IChatRepository: IChatRepository;
@@ -249,11 +247,6 @@ export class DIContainer {
       tableRepository
     );
 
-    // Create TableRowDomainService for row operations
-    const tableRowDomainService = new TableRowDomainService(
-      tableRepository
-    );
-
     // Initialize DatabaseApplicationService with proper dependencies
     const databaseApplicationService = new DatabaseApplicationService(
       tableRepository,
@@ -281,7 +274,6 @@ export class DIContainer {
     this.repositories.set('InvitationApplicationService', invitationApplicationService);
     this.repositories.set('IDynamicTableRepository', tableRepository);
     this.repositories.set('DynamicTableService', dynamicTableService);
-    this.repositories.set('TableRowDomainService', tableRowDomainService);
     
     // Register simplified data storage service
     this.repositories.set('DataStorageService', arrowDataStorageService);
@@ -436,7 +428,6 @@ type ServiceMap = {
   DataStorageService: DataStorageService;
   TableQueryService: TableQueryService;
   DynamicTableService: DynamicTableService;
-  TableRowDomainService: TableRowDomainService;
   
   // Services
   AgentTaskApplicationService: AgentTaskApplicationService;
@@ -492,7 +483,6 @@ export const getOrganizationRepository = createGetter('OrganizationRepository');
 export const getUserRepository = createGetter('UserRepository');
 export const getDynamicTableRepository = createGetter('DynamicTableRepository');
 export const getDynamicTableService = createGetter('DynamicTableService');
-export const getTableRowDomainService = createGetter('TableRowDomainService');
 export const getDataStorageService = createGetter('DataStorageService');
 export const getTableQueryService = createGetter('TableQueryService');
 export const getFileStorageRepository = createGetter('FileStorageRepository');

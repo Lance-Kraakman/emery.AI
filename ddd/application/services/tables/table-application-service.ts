@@ -18,6 +18,8 @@ import { OrganizationId, DatabaseId, UserId, TableId } from '@/ddd/domain/shared
 import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import { type FileFieldValue, isFileArray } from '@/ddd/domain/tables/value-objects/field-values';
+import { Row, RowId } from '@/ddd/domain/tables/value-objects/row';
+import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
 
 // Application-layer context type for files with table information
 interface FileWithTableContext {
@@ -82,6 +84,26 @@ export interface UpdateFieldCommand {
 export interface ReorderFieldsCommand {
   tableId: TableId;
   fieldOrders: Array<{ fieldName: string; orderIndex: number }>;
+}
+
+// Row operation commands
+export interface CreateRowCommand {
+  tableId: TableId;
+  data: Row;
+  createdBy?: UserId;
+}
+
+export interface UpdateRowCommand {
+  tableId: TableId;
+  rowId: RowId;
+  data: Row;
+  updatedBy?: UserId;
+}
+
+export interface BulkCreateRowsCommand {
+  tableId: TableId;
+  rows: Row[];
+  createdBy?: UserId;
 }
 
 // Use unified Result interface from domain shared types
@@ -542,7 +564,7 @@ export class TableApplicationService {
           // Extract file values from each row
           for (const row of rows) {
             for (const field of fileFields) {
-              const fieldValue = row[field.name];
+              const fieldValue = row.getFieldValue(field.name);
               
               // Check if the field contains files
               if (isFileArray(fieldValue)) {
@@ -552,7 +574,7 @@ export class TableApplicationService {
                     file: file,                    // Pure domain type
                     tableId: table.id,            // Domain value object
                     tableName: table.name,
-                    fieldId: field.id,            // Primitive as per current pattern
+                    fieldId: field.id.value,            // Primitive as per current pattern
                     fieldName: field.name,
                     databaseId: table.databaseId, // Domain value object
                     organizationId: table.organizationId // Domain value object
@@ -591,6 +613,144 @@ export class TableApplicationService {
     } catch (error) {
       console.error('[TABLE-APP-SERVICE] Error getting tables with fields for organization:', error);
       return [];
+    }
+  }
+
+  // ========================================
+  // Row Operations (replacing TableRowDomainService)
+  // ========================================
+
+  /**
+   * Create a new row in a table
+   */
+  async createRow(command: CreateRowCommand): Promise<TableApplicationServiceResult<Row>> {
+    try {
+      const { tableId, data } = command;
+
+      // Verify table exists
+      const table = await this.dynamicTableService.getTable(tableId);
+      if (!table) {
+        return ResultHelpers.failure(`Table ${tableId.value} not found`);
+      }
+
+      // Insert row using repository
+      const row = await this.dynamicTableRepository.insertRow(tableId, data);
+
+      return ResultHelpers.success(row);
+
+    } catch (error) {
+      console.error('[TABLE-APP-SERVICE] Error creating row:', error);
+      return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to create row');
+    }
+  }
+
+  /**
+   * Update an existing row in a table
+   */
+  async updateRow(command: UpdateRowCommand): Promise<TableApplicationServiceResult<Row>> {
+    try {
+      const { tableId, rowId, data } = command;
+
+      // Verify table exists
+      const table = await this.dynamicTableService.getTable(tableId);
+      if (!table) {
+        return ResultHelpers.failure(`Table ${tableId.value} not found`);
+      }
+
+      // Update row using repository
+      const updatedRow = await this.dynamicTableRepository.updateRow(tableId, rowId.value, data);
+
+      return ResultHelpers.success(updatedRow);
+
+    } catch (error) {
+      console.error('[TABLE-APP-SERVICE] Error updating row:', error);
+      return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to update row');
+    }
+  }
+
+  /**
+   * Delete a row from a table
+   */
+  async deleteRow(tableId: TableId, rowId: RowId): Promise<TableApplicationServiceResult<void>> {
+    try {
+      // Verify table exists
+      const table = await this.dynamicTableService.getTable(tableId);
+      if (!table) {
+        return ResultHelpers.failure(`Table ${tableId.value} not found`);
+      }
+
+      // Delete row using repository
+      await this.dynamicTableRepository.deleteRow(tableId, rowId.value);
+
+      return ResultHelpers.success(undefined);
+
+    } catch (error) {
+      console.error('[TABLE-APP-SERVICE] Error deleting row:', error);
+      return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to delete row');
+    }
+  }
+
+  /**
+   * Get a single row from a table
+   */
+  async getRow(tableId: TableId, rowId: RowId): Promise<Row | null> {
+    try {
+      return await this.dynamicTableRepository.getRow(tableId, rowId.value);
+    } catch (error) {
+      console.error('[TABLE-APP-SERVICE] Error getting row:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get rows from a table with optional filters
+   */
+  async getRows(tableId: TableId, options?: RowQueryOptions): Promise<Row[]> {
+    try {
+      return await this.dynamicTableRepository.findRows(tableId, options);
+    } catch (error) {
+      console.error('[TABLE-APP-SERVICE] Error getting rows:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Bulk create multiple rows in a table
+   */
+  async bulkCreateRows(command: BulkCreateRowsCommand): Promise<TableApplicationServiceResult<Row[]>> {
+    try {
+      const { tableId, rows } = command;
+
+      // Verify table exists
+      const table = await this.dynamicTableService.getTable(tableId);
+      if (!table) {
+        return ResultHelpers.failure(`Table ${tableId.value} not found`);
+      }
+
+      // Insert all rows using repository
+      const createdRows = [];
+      for (const row of rows) {
+        const newRow = await this.dynamicTableRepository.insertRow(tableId, row);
+        createdRows.push(newRow);
+      }
+
+      return ResultHelpers.success(createdRows);
+
+    } catch (error) {
+      console.error('[TABLE-APP-SERVICE] Error bulk creating rows:', error);
+      return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to bulk create rows');
+    }
+  }
+
+  /**
+   * Check if a table has any rows
+   */
+  async tableHasRows(tableId: TableId): Promise<boolean> {
+    try {
+      return await this.dynamicTableRepository.hasRows(tableId);
+    } catch (error) {
+      console.error('[TABLE-APP-SERVICE] Error checking if table has rows:', error);
+      return false;
     }
   }
 }

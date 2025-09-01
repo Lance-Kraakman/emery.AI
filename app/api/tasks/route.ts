@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAgentTaskApplicationService, getContextAwareDb } from '@/ddd/application/di/container';
 import type { CreateTaskRequest } from '@/ddd/application/services/agents/agent-task-application-service';
+import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 /**
  * Get tasks list using AgentTaskApplicationService
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // Set RLS context once - all subsequent service calls will automatically use it
     const db = getContextAwareDb();
-    db.setContext(authResult.user.id, authResult.user.organizationId || 1);
+    db.setContext(UserId.fromString(authResult.user.id), OrganizationId.fromNumber(authResult.user.organizationId || 1));
 
     try {
       // Use AgentTaskApplicationService for task listing (RLS applied automatically)
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     // Set RLS context once - all subsequent service calls will automatically use it
     const db = getContextAwareDb();
-    db.setContext(authResult.user.id, authResult.user.organizationId || 1);
+    db.setContext(UserId.fromString(authResult.user.id), OrganizationId.fromNumber(authResult.user.organizationId || 1));
 
     try {
       // Use AgentTaskApplicationService for task creation (RLS applied automatically)
