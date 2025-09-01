@@ -43,14 +43,9 @@ export interface RagIndexRepository {
   isNameUnique(organizationId: OrganizationId, name: string, excludeId?: RagIndexId): Promise<boolean>;
 
   /**
-   * Save a new RAG index
+   * Save a RAG index (create or update)
    */
   save(index: RagIndex): Promise<void>;
-
-  /**
-   * Update an existing RAG index
-   */
-  update(index: RagIndex): Promise<void>;
 
   /**
    * Delete a RAG index

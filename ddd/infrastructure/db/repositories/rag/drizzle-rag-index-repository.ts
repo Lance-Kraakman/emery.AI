@@ -113,6 +113,7 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
   async save(index: RagIndex): Promise<void> {
     const persistence = index.toPersistence();
     
+    // Use PostgreSQL UPSERT (ON CONFLICT) to handle both create and update
     await this.db.insert(ragIndexes).values({
       id: persistence.id,
       name: persistence.name,
@@ -129,15 +130,9 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
       createdAt: persistence.createdAt,
       lastIndexedAt: persistence.lastIndexedAt,
       updatedAt: new Date()
-    });
-  }
-
-  async update(index: RagIndex): Promise<void> {
-    const persistence = index.toPersistence();
-    
-    await this.db
-      .update(ragIndexes)
-      .set({
+    }).onConflictDoUpdate({
+      target: ragIndexes.id,
+      set: {
         name: persistence.name,
         description: persistence.description,
         domainTypes: persistence.domainTypes,
@@ -146,8 +141,8 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
         documentCount: persistence.documentCount,
         lastIndexedAt: persistence.lastIndexedAt,
         updatedAt: new Date()
-      })
-      .where(eq(ragIndexes.id, persistence.id));
+      }
+    });
   }
 
   async delete(id: RagIndexId): Promise<void> {

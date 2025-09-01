@@ -90,10 +90,8 @@ export class RagIndexingApplicationService {
 
     console.log(`[RAG-INDEXING-APP] Created RAG index: ${index.name} (${index.id.value.substring(0, 8)})`);
 
-    // Start initial indexing asynchronously
-    this.performInitialIndexing(index).catch(error => {
-      console.error(`[RAG-INDEXING-APP] Failed initial indexing for ${index.id.value}:`, error);
-    });
+    // Perform initial indexing synchronously
+    await this.performInitialIndexing(index);
 
     return index.id.value;
   }
@@ -505,7 +503,14 @@ export class RagIndexingApplicationService {
       await this.reindexSingleIndex(index.id);
       console.log(`[RAG-INDEXING-APP] Initial indexing completed for ${index.name}`);
     } catch (error) {
+      // Fetch fresh index to avoid stale state issues
+      const freshIndex = await this.indexRepository.findById(index.id);
+      if (freshIndex && freshIndex.status === 'building') {
+        freshIndex.failIndexing();
+        await this.indexRepository.save(freshIndex);
+      }
       console.error(`[RAG-INDEXING-APP] Initial indexing failed for ${index.name}:`, error);
+      throw error; // Let caller handle the error
     }
   }
 }
