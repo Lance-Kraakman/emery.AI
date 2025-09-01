@@ -1,7 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { 
   getChatApplicationService, 
-  getContextAwareDb, 
   initializeDI 
 } from '@/ddd/application/di/container';
 import { testClient } from '../shared/integration-helpers';
@@ -122,15 +121,11 @@ describe('Chat Application Service Integration Tests', () => {
     const { createTestOrganization } = await import('../shared/test-setup');
     testContext = await createTestOrganization('Chat Test Organization');
     
-    // Set RLS context for testing
-    const contextDb = getContextAwareDb();
-    contextDb.setContext(testContext.ownerUserId, testContext.organizationId);
+    // RLS policies work automatically with database defaults - no context setting needed
   });
 
   afterEach(async () => {
-    // Clean test data and clear context
-    const contextDb = getContextAwareDb();
-    contextDb.clearContext();
+    // Clean test data
     await testClient.cleanTestData();
   });
 

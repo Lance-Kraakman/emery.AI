@@ -6,10 +6,10 @@ import { Database } from '@/ddd/domain/databases/entities/database';
 import type { DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { databases } from '@/lib/db/schema';
 import { eq, and, ne } from 'drizzle-orm';
-import { ContextAwareDbClient } from '@/lib/db/context-client';
+import type { DbClient } from '@/lib/db/client';
 
 export class DrizzleDatabaseRepository implements IDatabaseRepository {
-  constructor(private readonly db: ContextAwareDbClient) {}
+  constructor(private readonly db: DbClient) {}
 
   async findByOrganization(organizationId: OrganizationId): Promise<Database[]> {
     const results = await this.db

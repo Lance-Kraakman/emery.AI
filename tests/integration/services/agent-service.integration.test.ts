@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { getAgentApplicationService, getAgentRepository, getContextAwareDb, initializeDI } from '@/ddd/application/di/container';
+import { getAgentApplicationService, getAgentRepository, initializeDI } from '@/ddd/application/di/container';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { CreateAgentCommand } from '@/ddd/application/services/agents/agent-application-service';
 import { testClient } from '../shared/integration-helpers';
@@ -79,9 +79,7 @@ describe('Agent Application Service Integration Tests', () => {
       // Create unique test organization and owner
       testContext = await createTestOrganization('Agent Test Organization');
       
-      // Set context using the enhanced database client for consistent RLS behavior
-      const contextDb = getContextAwareDb();
-      contextDb.setContext(testContext.ownerUserId, testContext.organizationId);
+      // RLS policies work automatically with database defaults - no context setting needed
       
       console.log(`✅ Test context created: org=${testContext.organizationId.value}, owner=${testContext.ownerUserId.value}`);
       
@@ -93,9 +91,7 @@ describe('Agent Application Service Integration Tests', () => {
 
   afterEach(async () => {
     try {
-      // Clear RLS context first to ensure clean state
-      const contextDb = getContextAwareDb();
-      contextDb.clearContext();
+      // No context cleanup needed - RLS policies work automatically
       
       // Clean test data between tests (superuser bypasses RLS for cleanup)
       await testClient.cleanTestData();
@@ -190,8 +186,7 @@ describe('Agent Application Service Integration Tests', () => {
   describe('Organization Isolation', () => {
     
     test('should enforce organization boundaries', async () => {
-      const agentApplicationService = getAgentApplicationService();
-      const contextDb = getContextAwareDb();
+        const agentApplicationService = getAgentApplicationService();
       
       // Create a second organization using the test setup for consistency
       const { createTestOrganization } = await import('../shared/test-setup');
@@ -199,7 +194,7 @@ describe('Agent Application Service Integration Tests', () => {
       const testOrg2Id = org2Context.organizationId;
       const user2Id = org2Context.ownerUserId;
       
-      // Create agents in different organizations with proper context switching
+      // Create agents in different organizations
       const org1Command: CreateAgentCommand = {
         name: 'Org 1 Agent',
         description: 'Agent in organization 1',
@@ -218,24 +213,19 @@ describe('Agent Application Service Integration Tests', () => {
         agentType: 'kpi-calculator'
       };
 
-      // Create agent in org 1 (context already set in beforeEach)
+      // Create agent in org 1
       const org1Result = await agentApplicationService.createAgent(org1Command);
       expect(org1Result.success).toBe(true);
       
-      // Switch context to org 2 for creating agent there
-      contextDb.setContext(user2Id, testOrg2Id);
+      // Create agent in org 2  
       const org2Result = await agentApplicationService.createAgent(org2Command);
       expect(org2Result.success).toBe(true);
 
       // Verify isolation using repository directly
       const agentRepository = getAgentRepository();
       
-      // Set context back to org 1 to check isolation
-      contextDb.setContext(testContext.ownerUserId, testContext.organizationId);
+      // Check organization isolation - RLS policies ensure proper filtering
       const org1Agents = await agentRepository.findByOrganization(testContext.organizationId);
-      
-      // Set context to org 2 to check isolation
-      contextDb.setContext(user2Id, testOrg2Id);
       const org2Agents = await agentRepository.findByOrganization(testOrg2Id);
       
       // Verify each organization only sees its own agents

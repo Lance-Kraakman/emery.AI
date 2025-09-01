@@ -99,8 +99,7 @@ export class IntegrationTestClient {
   
   async seedBasicTestData(): Promise<void> {
     // AIDEV-NOTE: No longer doing manual SQL inserts here. 
-    // Test data will be seeded in individual tests using proper domain services
-    // with withRLSContext, exactly as the application does.
+    // Test data will be seeded in individual tests using proper domain services.
     console.log('✅ Basic test data seeding skipped - will use domain services in tests');
   }
   

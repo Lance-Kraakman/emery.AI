@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
-import { getAgentTaskApplicationService, getContextAwareDb } from '@/ddd/application/di/container';
+import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import type { CreateTaskRequest } from '@/ddd/application/services/agents/agent-task-application-service';
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
@@ -18,25 +18,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
     }
 
-    // Set RLS context once - all subsequent service calls will automatically use it
-    const db = getContextAwareDb();
-    db.setContext(UserId.fromString(authResult.user.id), OrganizationId.fromNumber(authResult.user.organizationId || 1));
+    // Use AgentTaskApplicationService for task listing (RLS policies handle isolation automatically)
+    const agentTaskApplicationService = getAgentTaskApplicationService();
+    const organizationId = authResult.user.organizationId || 1;
+    const allTasks = await agentTaskApplicationService.getTasksForOrganization(organizationId);
 
-    try {
-      // Use AgentTaskApplicationService for task listing (RLS applied automatically)
-      const agentTaskApplicationService = getAgentTaskApplicationService();
-      const organizationId = authResult.user.organizationId || 1;
-      const allTasks = await agentTaskApplicationService.getTasksForOrganization(organizationId);
-
-      return NextResponse.json({
-        success: true,
-        tasks: allTasks,
-      });
-
-    } finally {
-      // Clean up context
-      db.clearContext();
-    }
+    return NextResponse.json({
+      success: true,
+      tasks: allTasks,
+    });
 
   } catch (error) {
     console.error('Error fetching tasks:', error);
@@ -66,33 +56,23 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Set RLS context once - all subsequent service calls will automatically use it
-    const db = getContextAwareDb();
-    db.setContext(UserId.fromString(authResult.user.id), OrganizationId.fromNumber(authResult.user.organizationId || 1));
+    // Use AgentTaskApplicationService for task creation (RLS policies handle isolation automatically)
+    const agentTaskApplicationService = getAgentTaskApplicationService();
 
-    try {
-      // Use AgentTaskApplicationService for task creation (RLS applied automatically)
-      const agentTaskApplicationService = getAgentTaskApplicationService();
+    const command: CreateTaskRequest = {
+      agentId: parseInt(agentId),
+      name,
+      capabilityName,
+      instructions: instructions || {},
+      createdBy: authResult.user.id
+    };
 
-      const command: CreateTaskRequest = {
-        agentId: parseInt(agentId),
-        name,
-        capabilityName,
-        instructions: instructions || {},
-        createdBy: authResult.user.id
-      };
-
-      const task = await agentTaskApplicationService.createTask(command);
-      
-      return NextResponse.json({
-        success: true,
-        task
-      }, { status: 201 });
-
-    } finally {
-      // Clean up context
-      db.clearContext();
-    }
+    const task = await agentTaskApplicationService.createTask(command);
+    
+    return NextResponse.json({
+      success: true,
+      task
+    }, { status: 201 });
 
   } catch (error) {
     console.error('API Error creating task:', error);
