@@ -6,7 +6,7 @@ import { randomBytes } from 'crypto';
 import type postgres from 'postgres';
 
 import { users, userOrganizations, organizations } from '@/lib/db/schema';
-import type { IUserRepository, TransactionContext } from '@/ddd/domain/users/repositories/user-repository';
+import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import type { 
   User, 
   CreateUserData, 
@@ -16,19 +16,18 @@ import type {
 } from '@/ddd/domain/users/entities/user';
 import type { Organization } from '@/ddd/domain/organizations/entities/organization';
 import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationName, OrganizationRole } from '@/ddd/domain/shared/value-objects';
-import { ContextAwareDbClient } from '@/lib/db/context-client';
+import type { DbClient } from '@/lib/db/client';
 
 export class DrizzleUserRepository implements IUserRepository {
   constructor(
-    private db: ContextAwareDbClient,
+    private db: DbClient,
     private rawClient: postgres.Sql
   ) {}
 
 
   // Basic CRUD operations
-  async findById(id: UserId, tx?: TransactionContext): Promise<User | null> {
-    const dbClient = tx || this.db;
-    const result = await dbClient
+  async findById(id: UserId): Promise<User | null> {
+    const result = await this.db
       .select()
       .from(users)
       .where(eq(users.id, id.value))
@@ -37,9 +36,8 @@ export class DrizzleUserRepository implements IUserRepository {
     return result[0] ? this.mapToEntity(result[0]) : null;
   }
 
-  async findByEmail(email: EmailAddress, tx?: TransactionContext): Promise<User | null> {
-    const dbClient = tx || this.db;
-    const result = await dbClient
+  async findByEmail(email: EmailAddress): Promise<User | null> {
+    const result = await this.db
       .select()
       .from(users)
       .where(eq(users.email, email.value))
@@ -48,7 +46,7 @@ export class DrizzleUserRepository implements IUserRepository {
     return result[0] ? this.mapToEntity(result[0]) : null;
   }
 
-  async create(data: CreateUserData, tx?: TransactionContext): Promise<User> {
+  async create(data: CreateUserData): Promise<User> {
     // Convert Value Objects to primitives for database
     const userData = {
       id: data.id?.value || crypto.randomUUID(),
@@ -61,8 +59,7 @@ export class DrizzleUserRepository implements IUserRepository {
       apiKey: data.apiKey?.value || null
     };
 
-    const dbClient = tx || this.db;
-    const [newUser] = await dbClient
+    const [newUser] = await this.db
       .insert(users)
       .values(userData)
       .returning();
@@ -113,10 +110,8 @@ export class DrizzleUserRepository implements IUserRepository {
   }
 
   // Simplified role management - just update the user's organizationRole
-  async updateUserRole(userId: UserId, role: string, tx?: TransactionContext): Promise<User> {
-    const dbClient = tx || this.db;
-    
-    const [updatedUser] = await dbClient
+  async updateUserRole(userId: UserId, role: string): Promise<User> {
+    const [updatedUser] = await this.db
       .update(users)
       .set({ organizationRole: role })
       .where(eq(users.id, userId.value))
@@ -299,10 +294,8 @@ export class DrizzleUserRepository implements IUserRepository {
     return result.map(r => this.mapToEntity(r.user));
   }
 
-  async findByRole(organizationId: OrganizationId, role: string, tx?: TransactionContext): Promise<User[]> {
-    const dbClient = tx || this.db;
-    
-    const result = await dbClient
+  async findByRole(organizationId: OrganizationId, role: string): Promise<User[]> {
+    const result = await this.db
       .select({
         user: users
       })

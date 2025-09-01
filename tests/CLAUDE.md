@@ -69,19 +69,11 @@ describe('Agent Application Service Integration Tests', () => {
     // Create test organization using domain services
     const { createTestOrganization } = await import('../shared/test-setup');
     const context = await createTestOrganization('Test Organization');
-    
-    testOrgId = context.organizationId;
-    testUserId = context.ownerUserId;
-    
-    // Set RLS context for testing
-    const contextDb = getContextAwareDb();
-    contextDb.setContext(testUserId, testOrgId);
+
   });
 
   afterEach(async () => {
     // Clean test data and clear context
-    const contextDb = getContextAwareDb();
-    contextDb.clearContext();
     await testClient.cleanTestData();
   });
 });

@@ -1,6 +1,5 @@
 import type { DbClient } from '@/lib/db/client';
 import type postgres from 'postgres';
-import { initializeContextAwareDb, type ContextAwareDbClient } from '@/lib/db/context-client';
 
 import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { DrizzleOrganizationRepository } from '@/ddd/infrastructure/db/repositories/organizations/drizzle-organization-repository';
@@ -136,7 +135,6 @@ interface RepositoryRegistry {
 export class DIContainer {
   private static instance: DIContainer;
   private repositories = new Map<string, any>();
-  private contextAwareDb: ContextAwareDbClient | null = null;
   private isInitialized = false;
   private initializationAttempted = false;
 
@@ -167,16 +165,6 @@ export class DIContainer {
   }
 
   /**
-   * Get the context-aware database client (public accessor)
-   */
-  getContextAwareDbClient(): ContextAwareDbClient {
-    if (!this.contextAwareDb) {
-      throw new Error('Context-aware DB client not initialized. Call initialize() first.');
-    }
-    return this.contextAwareDb;
-  }
-
-  /**
    * Initialize the container with database clients
    * This should be called once at application startup
    */
@@ -186,8 +174,7 @@ export class DIContainer {
       return;
     }
 
-    // Initialize context-aware database client for hidden RLS
-    this.contextAwareDb = initializeContextAwareDb(db);
+    // Use raw Drizzle database client - RLS policies handle isolation automatically
 
     // Register storage repository
     const fileStorageRepository = new S3FileStorageRepository();
@@ -235,9 +222,9 @@ export class DIContainer {
     // Create simplified Arrow data storage service
     const arrowDataStorageService = new ArrowDataStorageService();
         
-    // Create table repository with data storage service using context-aware DB client
+    // Create table repository with data storage service using raw DB client
     const tableRepository = new DynamicTableRepository(
-      this.contextAwareDb,
+      db,
       arrowDataStorageService,
       tableQueryService
     );
@@ -515,13 +502,7 @@ export const getSearchDomainService = createGetter('SearchDomainService');
 export const getRagIndexingApplicationService = createGetter('RagIndexingApplicationService');
 export const getRagSearchApplicationService = createGetter('RagSearchApplicationService');
 
-/**
- * Get the context-aware database client for RLS context management
- */
-export const getContextAwareDb = (): ContextAwareDbClient => {
-  const container = DIContainer.getInstance();
-  return container.getContextAwareDbClient();
-};
+// RLS context management removed - RLS policies work automatically
 
 // Helper to initialize container from existing clients
 export function initializeDI(db: DbClient, rawClient: postgres.Sql): void {

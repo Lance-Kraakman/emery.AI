@@ -13,10 +13,10 @@ import { eq, and, desc, asc, ilike, isNull, isNotNull, sql } from 'drizzle-orm';
 import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
 import { Chat, type CreateChatData, type UpdateChatData } from '@/ddd/domain/chat/entities/chat';
 import type { ChatId, OrganizationId, TableId, UserId } from '@/ddd/domain/shared/value-objects';
-import { ContextAwareDbClient } from '@/lib/db/context-client';
+import type { DbClient } from '@/lib/db/client';
 
 export class DrizzleChatRepository implements IChatRepository {
-  constructor(private readonly db: ContextAwareDbClient) {}
+  constructor(private readonly db: DbClient) {}
 
   /**
    * Create a new chat

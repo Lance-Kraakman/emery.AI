@@ -9,10 +9,10 @@ import { RagIndex } from '@/ddd/domain/rag/entities';
 import { RagIndexId, OrganizationId, type DomainType, type IndexStatus } from '@/ddd/domain/rag/value-objects';
 import { RagIndexRepository } from '@/ddd/domain/rag';
 import { RagIndexFilters } from '@/ddd/domain/rag/repositories/rag-index-repository';
-import { ContextAwareDbClient } from '@/lib/db/context-client';
+import type { DbClient } from '@/lib/db/client';
 
 export class DrizzleRagIndexRepository implements RagIndexRepository {
-  constructor(private readonly db: ContextAwareDbClient) {}
+  constructor(private readonly db: DbClient) {}
 
   async findById(id: RagIndexId): Promise<RagIndex | null> {
     const [record] = await this.db

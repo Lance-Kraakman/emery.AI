@@ -17,42 +17,39 @@ import {
   OrganizationRole 
 } from '@/ddd/domain/shared/value-objects';
 
-// Transaction context type for RLS support
-export type TransactionContext = any; // Will be the Drizzle transaction type
-
 export interface IUserRepository {
   // Basic CRUD operations
-  findById(id: UserId, tx?: TransactionContext): Promise<User | null>;
-  findByEmail(email: EmailAddress, tx?: TransactionContext): Promise<User | null>;
-  create(data: CreateUserData, tx?: TransactionContext): Promise<User>;
-  update(id: UserId, data: UpdateUserData, tx?: TransactionContext): Promise<User>;
-  delete(id: UserId, tx?: TransactionContext): Promise<void>;
+  findById(id: UserId): Promise<User | null>;
+  findByEmail(email: EmailAddress): Promise<User | null>;
+  create(data: CreateUserData): Promise<User>;
+  update(id: UserId, data: UpdateUserData): Promise<User>;
+  delete(id: UserId): Promise<void>;
   
   // API Key management
-  generateApiKey(userId: UserId, tx?: TransactionContext): Promise<ApiKey>;
-  findByApiKey(apiKey: ApiKey, tx?: TransactionContext): Promise<User | null>;
-  revokeApiKey(userId: UserId, tx?: TransactionContext): Promise<void>;
+  generateApiKey(userId: UserId): Promise<ApiKey>;
+  findByApiKey(apiKey: ApiKey): Promise<User | null>;
+  revokeApiKey(userId: UserId): Promise<void>;
   
   // Organization management
-  switchOrganization(userId: UserId, organizationId: OrganizationId, tx?: TransactionContext): Promise<void>;
-  getUserOrganizations(userId: UserId, tx?: TransactionContext): Promise<Organization[]>;
+  switchOrganization(userId: UserId, organizationId: OrganizationId): Promise<void>;
+  getUserOrganizations(userId: UserId): Promise<Organization[]>;
   
   // User-Organization relationship management  
-  addUserToOrganization(data: CreateUserOrganizationData, tx?: TransactionContext): Promise<UserOrganization>;
-  removeUserFromOrganization(userId: UserId, organizationId: OrganizationId, tx?: TransactionContext): Promise<void>;
+  addUserToOrganization(data: CreateUserOrganizationData): Promise<UserOrganization>;
+  removeUserFromOrganization(userId: UserId, organizationId: OrganizationId): Promise<void>;
   
   // Simplified role management - just update the user's organizationRole
-  updateUserRole(userId: UserId, role: string, tx?: TransactionContext): Promise<User>;
+  updateUserRole(userId: UserId, role: string): Promise<User>;
   
   // User queries for admin operations
-  findByOrganizationId(organizationId: OrganizationId, tx?: TransactionContext): Promise<User[]>;
-  findByRole(organizationId: OrganizationId, role: string, tx?: TransactionContext): Promise<User[]>;
+  findByOrganizationId(organizationId: OrganizationId): Promise<User[]>;
+  findByRole(organizationId: OrganizationId, role: string): Promise<User[]>;
   
   // Role checking
-  getUserOrganizationRole(userId: UserId, organizationId: OrganizationId, tx?: TransactionContext): Promise<string | null>;
+  getUserOrganizationRole(userId: UserId, organizationId: OrganizationId): Promise<string | null>;
   
   // Business logic operations
-  verifyEmail(userId: UserId, tx?: TransactionContext): Promise<User>;
-  getUserWithOrganizations(userId: UserId, tx?: TransactionContext): Promise<(User & { organizations: Organization[] }) | null>;
+  verifyEmail(userId: UserId): Promise<User>;
+  getUserWithOrganizations(userId: UserId): Promise<(User & { organizations: Organization[] }) | null>;
   
 }

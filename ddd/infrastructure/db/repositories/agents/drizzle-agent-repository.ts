@@ -6,10 +6,10 @@ import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { agents } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
-import { ContextAwareDbClient } from '@/lib/db/context-client';
+import type { DbClient } from '@/lib/db/client';
 
 export class DrizzleAgentRepository implements IAgentRepository {
-  constructor(private readonly db: ContextAwareDbClient) {}
+  constructor(private readonly db: DbClient) {}
 
   async findByOrganization(organizationId: OrganizationId): Promise<Agent[]> {
     const results = await this.db

@@ -10,8 +10,7 @@
  * focused on data access only. Business logic handled by DynamicTableService.
  */
 
-import type { ContextAwareDbClient } from '@/lib/db/context-client';
-import { withOrganizationContext } from '@/lib/db/rls-context';
+import type { DbClient } from '@/lib/db/client';
 import { tables, fields } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
@@ -38,7 +37,7 @@ import type { TableQueryService } from '@/ddd/domain/tables/services/table-query
 
 export class DynamicTableRepository implements IDynamicTableRepository {
   constructor(
-    private readonly db: ContextAwareDbClient,
+    private readonly db: DbClient,
     private readonly dataStorageService: DataStorageService,
     private readonly queryService: TableQueryService
   ) {}
@@ -49,21 +48,16 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       const tableId = Date.now(); // Temporary - will get real ID after DB insert
       const s3Path = new S3TablePath(data.organizationId.value, data.databaseId.value, tableId);
 
-      // 2. Create table record in PostgreSQL metadata
-      // Use withOrganizationContext to ensure RLS while preserving types
-      const [tableRecord] = await withOrganizationContext(
-        this.db.raw,
-        data.organizationId,
-        async (tx) => 
-          tx.insert(tables).values({
-            name: data.name,
-            databaseId: data.databaseId.value,
-            organizationId: data.organizationId.value,
-            s3Path: s3Path.path,
-            metadata: data.metadata || null,
-            createdBy: data.createdBy.value
-          }).returning()
-      );
+      // 2. Create table record in PostgreSQL metadata  
+      // RLS policies handle organization isolation automatically
+      const [tableRecord] = await this.db.insert(tables).values({
+        name: data.name,
+        databaseId: data.databaseId.value,
+        organizationId: data.organizationId.value,
+        s3Path: s3Path.path,
+        metadata: data.metadata || null,
+        createdBy: data.createdBy.value
+      }).returning();
       
       // Update S3 path with real table ID
       const realS3Path = new S3TablePath(data.organizationId.value, data.databaseId.value, tableRecord.id);

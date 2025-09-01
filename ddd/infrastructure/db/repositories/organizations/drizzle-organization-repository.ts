@@ -1,7 +1,7 @@
 import { eq, ilike, and, count } from 'drizzle-orm';
 import type postgres from 'postgres';
 
-import { IOrganizationRepository, TransactionContext } from '@/ddd/domain/organizations/repositories/organization-repository';
+import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
 import type { DbClient } from '@/lib/db/client';
 import { organizations, users, userOrganizations } from '@/lib/db/schema';
@@ -25,9 +25,8 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
       .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
   }
 
-  async findById(id: OrganizationId, tx?: TransactionContext): Promise<Organization | null> {
-    const dbClient = tx || this.db;
-    const result = await dbClient.query.organizations.findFirst({
+  async findById(id: OrganizationId): Promise<Organization | null> {
+    const result = await this.db.query.organizations.findFirst({
       where: eq(organizations.id, id.value)
     });
 
@@ -111,20 +110,15 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
     return this.mapToEntity(result);
   }
 
-  async createWithOwner(data: CreateOrganizationData, ownerId: UserId, tx?: TransactionContext): Promise<Organization> {
-    if (tx) {
-      // Use existing transaction (e.g., from withRLSContext)
+  async createWithOwner(data: CreateOrganizationData, ownerId: UserId): Promise<Organization> {
+    // Always use transaction for data consistency
+    return await this.db.transaction(async (tx) => {
       return this.createWithOwnerBootstrap(data, ownerId, tx);
-    }
-    
-    // Create new transaction
-    return await this.db.transaction(async (newTx) => {
-      return this.createWithOwnerBootstrap(data, ownerId, newTx);
     });
   }
   
-  // Bootstrap method that works within an RLS context transaction
-  async createWithOwnerBootstrap(data: CreateOrganizationData, ownerId: UserId, tx: TransactionContext): Promise<Organization> {
+  // Bootstrap method that works within a transaction
+  async createWithOwnerBootstrap(data: CreateOrganizationData, ownerId: UserId, tx: any): Promise<Organization> {
     // Convert Value Objects to database primitives and generate slug
     const dbData = {
       ...data,
@@ -248,9 +242,8 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
     return !!result;
   }
 
-  async getUserRole(organizationId: OrganizationId, userId: UserId, tx?: TransactionContext): Promise<OrganizationRole | null> {
-    const dbClient = tx || this.db;
-    const result = await dbClient.query.userOrganizations.findFirst({
+  async getUserRole(organizationId: OrganizationId, userId: UserId): Promise<OrganizationRole | null> {
+    const result = await this.db.query.userOrganizations.findFirst({
       where: and(
         eq(userOrganizations.organizationId, organizationId.value),
         eq(userOrganizations.userId, userId.value)

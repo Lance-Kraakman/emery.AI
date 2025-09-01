@@ -1,7 +1,6 @@
 import { 
   getOrganizationRepository, 
   getUserRepository, 
-  getContextAwareDb,
   initializeDI
 } from '@/ddd/application/di/container';
 import { 
@@ -25,34 +24,23 @@ export async function seedTestOrganizations() {
   }
   
   const orgRepo = getOrganizationRepository();
-  const contextDb = getContextAwareDb();
-  const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
   
-  try {
-    // Set context for org 1
-    contextDb.setContext(SYSTEM_USER_ID, 1);
-    
-    await orgRepo.createWithOwner(
-      {
-        name: new OrganizationName('Test Organization 1'),
-        slug: 'test-organization-1'
-      },
-      UserId.fromString('550e8400-e29b-41d4-a716-446655440001')
-    );
-    
-    // Set context for org 2
-    contextDb.setContext(SYSTEM_USER_ID, 2);
-    
-    await orgRepo.createWithOwner(
-      {
-        name: new OrganizationName('Test Organization 2'),
-        slug: 'test-organization-2'
-      },
-      UserId.fromString('550e8400-e29b-41d4-a716-446655440002')
-    );
-  } finally {
-    contextDb.clearContext();
-  }
+  // RLS policies work automatically with database defaults - create organizations directly
+  await orgRepo.createWithOwner(
+    {
+      name: new OrganizationName('Test Organization 1'),
+      slug: 'test-organization-1'
+    },
+    UserId.fromString('550e8400-e29b-41d4-a716-446655440001')
+  );
+  
+  await orgRepo.createWithOwner(
+    {
+      name: new OrganizationName('Test Organization 2'),
+      slug: 'test-organization-2'
+    },
+    UserId.fromString('550e8400-e29b-41d4-a716-446655440002')
+  );
 }
 
 export async function seedTestUsers() {
@@ -64,32 +52,23 @@ export async function seedTestUsers() {
   }
   
   const userRepo = getUserRepository();
-  const contextDb = getContextAwareDb();
-  const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
   
-  try {
-    contextDb.setContext(SYSTEM_USER_ID, 1);
-    
-    await userRepo.create({
-      id: UserId.fromString('550e8400-e29b-41d4-a716-446655440001'),
-      email: EmailAddress.fromString('test1@example.com'),
-      name: 'Test User 1',
-      organizationRole: 'owner',
-      currentOrganizationId: OrganizationId.fromNumber(1)
-    });
-    
-    contextDb.setContext(SYSTEM_USER_ID, 2);
-    
-    await userRepo.create({
-      id: UserId.fromString('550e8400-e29b-41d4-a716-446655440002'),
-      email: EmailAddress.fromString('test2@example.com'),
-      name: 'Test User 2',
-      organizationRole: 'owner',
-      currentOrganizationId: OrganizationId.fromNumber(2)
-    });
-  } finally {
-    contextDb.clearContext();
-  }
+  // RLS policies work automatically with database defaults - create users directly
+  await userRepo.create({
+    id: UserId.fromString('550e8400-e29b-41d4-a716-446655440001'),
+    email: EmailAddress.fromString('test1@example.com'),
+    name: 'Test User 1',
+    organizationRole: 'owner',
+    currentOrganizationId: OrganizationId.fromNumber(1)
+  });
+  
+  await userRepo.create({
+    id: UserId.fromString('550e8400-e29b-41d4-a716-446655440002'),
+    email: EmailAddress.fromString('test2@example.com'),
+    name: 'Test User 2',
+    organizationRole: 'owner',
+    currentOrganizationId: OrganizationId.fromNumber(2)
+  });
 }
 
 export async function seedTestUserOrganizations() {
