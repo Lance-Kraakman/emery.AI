@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
-import type { Row } from '@/app/actions/types';
+import type { Row } from '@/ddd/domain/tables/value-objects/row';
 import { createRowAction, updateRowAction, deleteRowAction } from '@/app/actions/rows';
 
 interface UseRowManagerProps {
@@ -73,7 +73,7 @@ export function useRowManager({ tableId, fields, onRowUpdate }: UseRowManagerPro
   }
 
   const startEditRow = (row: Row) => {
-    setEditingRow(row.id);
+    setEditingRow(row.id.value);
     const rowData: Record<string, any> = {};
     fields.forEach(field => {
       const fieldKey = `field_${field.id.value}`;

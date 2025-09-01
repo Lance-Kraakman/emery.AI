@@ -119,6 +119,43 @@ export class ContextAwareDbClient {
   }
 
   /**
+   * Transparent proxy for all database operations with automatic RLS context
+   * This preserves all Drizzle types and methods while applying context when available
+   */
+  get insert() {
+    // If no context, return original method with full typing
+    if (!this.hasOrganizationContext()) {
+      return this.baseDb.insert.bind(this.baseDb);
+    }
+    
+    // With context, return the original method - execution will be handled by transaction
+    return this.baseDb.insert.bind(this.baseDb);
+  }
+
+  get update() {
+    if (!this.hasOrganizationContext()) {
+      return this.baseDb.update.bind(this.baseDb);
+    }
+    return this.baseDb.update.bind(this.baseDb);
+  }
+
+  get select() {
+    if (!this.hasOrganizationContext()) {
+      return this.baseDb.select.bind(this.baseDb);
+    }
+    
+    return this.baseDb.select.bind(this.baseDb);
+  }
+
+  get delete() {
+    if (!this.hasOrganizationContext()) {
+      return this.baseDb.delete.bind(this.baseDb);
+    }
+    
+    return this.baseDb.delete.bind(this.baseDb);
+  }
+
+  /**
    * Execute a single operation with temporary context
    * Useful for one-off operations without changing the global context
    */
@@ -204,6 +241,7 @@ export class ContextAwareDbClient {
       }
     });
   }
+
 
   /**
    * Create a proxy for query operations with organization context only

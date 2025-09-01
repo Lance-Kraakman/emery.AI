@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { getDynamicTableRepository, getTableRowDomainService } from "@/ddd/application/di/container";
 import type { Result, CreateRowCommand, UpdateRowCommand } from "./types";
-import type { RowData } from "@/ddd/domain/tables/value-objects/field-values";
+import { Row } from "@/ddd/domain/tables/value-objects/row";
 import { TableId, UserId } from "@/ddd/domain/shared/value-objects";
 
 
@@ -36,9 +36,18 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
       };
     }
 
+    // Convert plain data to Row entity using table field information
+    const fieldSlugs = table.fields.map(f => f.name);
+    const fieldTypes = table.fields.reduce((acc, f) => {
+      acc[f.name] = f.type;
+      return acc;
+    }, {} as Record<string, string>);
+    
+    const row = Row.fromPlainObject(rowData || {}, tableId, fieldSlugs, fieldTypes);
+
     const result = await tableRowService.addRow({
       table,
-      data: rowData || {},
+      data: row,
       createdBy: UserId.fromString(session.userId)
     });
 
@@ -140,10 +149,19 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       };
     }
 
+    // Convert plain data to Row entity using table field information
+    const fieldSlugs = table.fields.map(f => f.name);
+    const fieldTypes = table.fields.reduce((acc, f) => {
+      acc[f.name] = f.type;
+      return acc;
+    }, {} as Record<string, string>);
+    
+    const row = Row.fromPlainObject({ ...rowData, id: rowId }, tableId, fieldSlugs, fieldTypes);
+
     const result = await tableRowService.updateRow({
       table,
       rowId,
-      data: rowData || {},
+      data: row,
       updatedBy: UserId.fromString(session.userId)
     });
 

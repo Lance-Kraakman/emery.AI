@@ -3,7 +3,7 @@
 
 import type { TableMetadata } from '../value-objects/table-metadata';
 import { TableField } from '../value-objects/table-field';
-import type { RowData, FieldValidationResult, FieldValidationError } from '../value-objects/field-values';
+import type { FieldValidationResult, FieldValidationError } from '../value-objects/field-values';
 import { TableId, DatabaseId, OrganizationId, UserId, FieldId } from '@/ddd/domain/shared/value-objects';
 
 export class DynamicTable {
@@ -98,7 +98,7 @@ export class DynamicTable {
    * Get field by ID
    */
   getFieldById(fieldId: FieldId): TableField | undefined {
-    return this._fields.find(field => field.id === fieldId.value);
+    return this._fields.find(field => field.id.value === fieldId.value);
   }
 
   // ===== FIELD MUTATION METHODS (for aggregate consistency) =====
@@ -120,7 +120,7 @@ export class DynamicTable {
    * Update a field in the table
    */
   updateField(fieldId: number, updatedField: TableField): void {
-    const index = this._fields.findIndex(f => f.id === fieldId);
+    const index = this._fields.findIndex(f => f.id.value === fieldId);
     if (index === -1) {
       throw new Error(`Field with ID ${fieldId} not found`);
     }
@@ -133,7 +133,7 @@ export class DynamicTable {
    * Remove a field from the table
    */
   removeField(fieldId: number): void {
-    const index = this._fields.findIndex(f => f.id === fieldId);
+    const index = this._fields.findIndex(f => f.id.value === fieldId);
     if (index === -1) {
       throw new Error(`Field with ID ${fieldId} not found`);
     }
@@ -143,30 +143,6 @@ export class DynamicTable {
   }
 
   // ===== TABLE-OWNS-FIELDS METHODS =====
-
-  /**
-   * Validate row data against this table's field definitions
-   */
-  validateRowData(data: RowData): FieldValidationResult {
-    const errors: FieldValidationError[] = [];
-
-    for (const field of this._fields) {
-      const value = data[field.name];
-      const validation = field.validateValue(value);
-      
-      if (!validation.valid && validation.error) {
-        errors.push({
-          field: field.name,
-          error: validation.error
-        });
-      }
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors
-    };
-  }
 
   // Factory methods - entity only created from persistence with real ID
   static fromPersistence(data: {

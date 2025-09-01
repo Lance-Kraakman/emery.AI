@@ -8,7 +8,9 @@
  * Works with new field-values.ts type definitions for better type safety.
  */
 
-import type { FieldValue as TypedFieldValue, RowData } from './field-values';
+import crypto from 'crypto';
+import type { FieldValue as TypedFieldValue } from './field-values';
+import type { TableField } from './table-field';
 
 export class RowId {
   constructor(private readonly _value: string) {
@@ -83,8 +85,10 @@ export class Row {
   }
 
 
-  toPlainObject(): RowData {
-    const obj: RowData = {};
+  toPlainObject(): Record<string, any> {
+    const obj: Record<string, any> = {
+      id: this.id.value  // Include row ID in the returned data
+    };
 
     for (const fieldValue of this.fieldValues) {
       obj[fieldValue.fieldSlug] = fieldValue.value;
@@ -94,18 +98,33 @@ export class Row {
   }
 
   static fromPlainObject(
-    data: RowData & { id?: string }, 
+    data: Record<string, any> & { id?: string }, 
     tableId: number,
-    fieldSlugs: string[],
-    fieldTypes: Record<string, string> = {}
+    tableFields: TableField[]
   ): Row {
+    // Validate required fields
+    for (const field of tableFields) {
+      if (field.required && (!data[field.name] || data[field.name] === '')) {
+        throw new Error(`${field.name} is required`);
+      }
+    }
+
     const fieldValues: FieldValue[] = [];
     
-    for (const slug of fieldSlugs) {
-      if (slug in data && slug !== 'id') {
-        const fieldType = fieldTypes[slug] || 'text';
-        fieldValues.push(new FieldValue(slug, data[slug], fieldType));
+    for (const field of tableFields) {
+      const value = data[field.name];
+      
+      // Skip undefined/null optional fields
+      if ((value === undefined || value === null) && !field.required) {
+        continue;
       }
+
+      // Validate data type for non-null values
+      if (value !== undefined && value !== null) {
+        Row.validateFieldValue(field, value);
+      }
+
+      fieldValues.push(new FieldValue(field.name, value, field.type));
     }
 
     return new Row(
@@ -113,6 +132,35 @@ export class Row {
       tableId,
       fieldValues
     );
+  }
+
+  private static validateFieldValue(field: TableField, value: any): void {
+    switch (field.type) {
+      case 'number':
+        if (typeof value !== 'number' && (typeof value !== 'string' || isNaN(Number(value)))) {
+          throw new Error(`${field.name} must be a number`);
+        }
+        break;
+
+      case 'file':
+        if (Array.isArray(value)) {
+          for (let i = 0; i < value.length; i++) {
+            const file = value[i];
+            if (!file || typeof file !== 'object') {
+              throw new Error(`${field.name}[${i}] must be an object`);
+            }
+            
+            // Validate required file properties
+            const requiredFileProps = ['id', 'name', 'size', 'mimeType', 's3Key', 'uploadedAt'];
+            for (const prop of requiredFileProps) {
+              if (!file[prop]) {
+                throw new Error(`${field.name}[${i}] missing required field: ${prop}`);
+              }
+            }
+          }
+        }
+        break;
+    }
   }
 }
 

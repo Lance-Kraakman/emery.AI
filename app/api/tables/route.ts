@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getTableApplicationService } from "@/ddd/application/di/container";
-import { OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { CreateTableCommand } from '@/ddd/application/services/tables/table-application-service';
 
 /**
@@ -44,9 +44,9 @@ export async function POST(request: NextRequest): Promise<Response> {
     
     const command: CreateTableCommand = {
       name,
-      databaseId: parseInt(databaseId),
-      organizationId: organizationId ? parseInt(organizationId) : 1,
-      createdBy: userId,
+      databaseId: DatabaseId.fromNumber(databaseId),
+      organizationId: OrganizationId.fromNumber(organizationId ? parseInt(organizationId) : 1),
+      createdBy: UserId.fromString(userId),
       description,
       metadata: {}
     };

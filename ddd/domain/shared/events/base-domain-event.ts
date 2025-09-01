@@ -8,6 +8,8 @@
  * event structure across all domain boundaries
  */
 
+import crypto from 'crypto';
+
 export interface BaseDomainEvent {
   readonly eventType: string;
   readonly eventId: string;

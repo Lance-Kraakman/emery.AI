@@ -12,9 +12,6 @@ export class AgentId extends BaseId<'AgentId'> {
     return new AgentId(value);
   }
 
-  /**
-   * Create an AgentId for a new entity (allows 0 as placeholder before persistence)
-   */
   static newEntity(): AgentId {
     return this.createNew('AgentId', 0) as AgentId;
   }

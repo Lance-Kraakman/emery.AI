@@ -60,20 +60,6 @@ export type FieldValue =
   | RelationArrayFieldValue;
 
 // ========================================
-// Row Data Interface (Domain-Focused)
-// ========================================
-
-/**
- * Row data using field names as keys (not database column names)
- * This is the user-facing interface that domain services work with
- */
-export interface RowData {
-  id?: string;  // Row identifier (present in repository results, optional for input)
-  [fieldName: string]: FieldValue | null | undefined;
-}
-
-
-// ========================================
 // Type Guard Functions
 // ========================================
 
@@ -91,15 +77,6 @@ export function isFileArray(value: unknown): value is FileArrayFieldValue {
     ));
 }
 
-export function isRelationArray(value: unknown): value is RelationArrayFieldValue {
-  return Array.isArray(value) && 
-    (value.length === 0 || (
-      typeof value[0] === 'object' && 
-      value[0] !== null &&
-      'id' in value[0] && 
-      'value' in value[0]
-    ));
-}
 
 
 // ========================================

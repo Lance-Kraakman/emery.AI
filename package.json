@@ -17,6 +17,7 @@
     "test:integration": "vitest --config vitest.config.integration.ts tests/integration/",
     "test:integration:server": "npx tsx scripts/test-server-wrapper.ts start",
     "test:integration:dev": "vitest --config vitest.config.persistent.ts tests/integration/",
+    "test:integration:file": "vitest --config vitest.config.persistent.ts --run",
     "test:integration:stop": "npx tsx scripts/test-server-wrapper.ts stop",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

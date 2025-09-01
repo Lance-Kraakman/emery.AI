@@ -9,18 +9,6 @@ export type User = InferSelectModel<typeof users>;
 export type InvitationRow = InferSelectModel<typeof invitations>;
 
 
-export interface RowData {
-  id: string;
-  [key: string]: any;
-}
-
-export interface DynamicRow {
-  id: string;
-  created_at: Date;
-  updated_at: Date;
-  [key: string]: any;
-}
-
 export interface FileMetadata {
   id: string;
   name: string;

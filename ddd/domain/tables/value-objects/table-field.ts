@@ -8,8 +8,7 @@
  * Combines validation, processing, and mapping concerns into single cohesive value object.
  */
 
-import { TableId } from '@/ddd/domain/shared/value-objects';
-import type { FileArrayFieldValue, RelationArrayFieldValue } from './field-values';
+import { FieldId, TableId } from '@/ddd/domain/shared/value-objects';
 
 export type FieldType = 
   | 'text' 
@@ -51,7 +50,7 @@ export interface TableFieldPersistence {
 
 export class TableField {
   private constructor(
-    private readonly _id: number,                     // Database ID for persistence
+    private readonly _id: FieldId,                     // Database ID for persistence
     private readonly _name: string,
     private readonly _type: FieldType,
     private readonly _orderIndex: number | null,
@@ -62,7 +61,7 @@ export class TableField {
   ) {}
 
   // Getters
-  get id(): number { return this._id; }
+  get id(): FieldId { return this._id; }
   get name(): string { return this._name; }
   get type(): FieldType { return this._type; }
   get orderIndex(): number | null { return this._orderIndex; }
@@ -81,7 +80,7 @@ export class TableField {
     TableField.validateFieldData(data);
     
     return new TableField(
-      0, // Temporary ID - will be set on persistence
+      FieldId.newEntity(), // Temporary ID - will be set on persistence
       data.name,
       data.type,
       data.orderIndex || 0,
@@ -94,7 +93,7 @@ export class TableField {
 
   static fromPersistence(data: TableFieldPersistence): TableField {
     return new TableField(
-      data.id,
+      FieldId.fromNumber(data.id),
       data.name,
       data.type,
       data.orderIndex,
@@ -315,7 +314,7 @@ export class TableField {
   // Persistence conversion
   toPersistence(tableId: number): Omit<TableFieldPersistence, 'createdAt'> {
     return {
-      id: this._id,
+      id: this._id.value,
       tableId,
       name: this._name,
       type: this._type,

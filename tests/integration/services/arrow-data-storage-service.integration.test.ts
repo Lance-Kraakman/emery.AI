@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } fr
 import { ArrowDataStorageService } from '@/ddd/infrastructure/arrow/arrow-data-storage-service';
 import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import { Row } from '@/ddd/domain/tables/value-objects/row';
 import type { TestCase } from '../../shared/types';
 
 // AIDEV-NOTE: ArrowDataStorageService integration tests focusing on lowest-level
@@ -18,6 +19,19 @@ interface ArrowStorageTestOutput {
   error?: string;
   bufferSize?: number;
   retrievedDataMatches?: boolean;
+}
+
+// Helper function to convert test data to Row objects
+function createRowsFromData(data: Array<Record<string, any>>, table: DynamicTable): Row[] {
+  const fieldSlugs = table.fields.map(f => f.name);
+  const fieldTypes = table.fields.reduce((acc, f) => {
+    acc[f.name] = f.type;
+    return acc;
+  }, {} as Record<string, string>);
+  
+  return data.map(item => 
+    Row.fromPlainObject(item, table.id.value, fieldSlugs, fieldTypes)
+  );
 }
 
 describe('ArrowDataStorageService Integration Tests', () => {
@@ -80,8 +94,11 @@ describe('ArrowDataStorageService Integration Tests', () => {
       test(testCase.name, async () => {
         const { data, table } = testCase.input;
         
-        // Store data using Arrow service (new interface with table.fields)
-        const storeResult = await arrowService.storeData(data, table);
+        // Convert test data to Row objects
+        const rows = createRowsFromData(data, table);
+        
+        // Store data using Arrow service (now expects Row objects)
+        const storeResult = await arrowService.storeData(rows, table);
         expect(storeResult.success).toBe(true);
         expect(storeResult.data).toBeDefined();
         expect(Buffer.isBuffer(storeResult.data)).toBe(true);
@@ -90,13 +107,15 @@ describe('ArrowDataStorageService Integration Tests', () => {
           expect((storeResult.data as Buffer).length).toBeGreaterThan(0);
         }
         
-        // Retrieve data using Arrow service (new interface with table.fields)
+        // Retrieve data using Arrow service (returns Row objects)
         const retrieveResult = await arrowService.retrieveData(storeResult.data as Buffer, table);
         expect(retrieveResult.success).toBe(true);
         expect(retrieveResult.data).toBeDefined();
         
         if (testCase.expected.retrievedDataMatches) {
-          expect(retrieveResult.data).toEqual(data);
+          // Convert retrieved Row objects back to plain objects for comparison
+          const retrievedPlainData = retrieveResult.data?.map(row => row.toPlainObject());
+          expect(retrievedPlainData).toEqual(data);
         }
         
         expect(testCase.expected.success).toBe(true);
@@ -146,8 +165,11 @@ describe('ArrowDataStorageService Integration Tests', () => {
       test(testCase.name, async () => {
         const { data, table } = testCase.input;
         
+        // Convert test data to Row objects
+        const rows = createRowsFromData(data, table);
+        
         // Store data
-        const storeResult = await arrowService.storeData(data, table);
+        const storeResult = await arrowService.storeData(rows, table);
         expect(storeResult.success).toBe(true);
         
         // Retrieve data
@@ -156,7 +178,9 @@ describe('ArrowDataStorageService Integration Tests', () => {
         
         // Verify date conversion pipeline works correctly
         if (testCase.expected.retrievedDataMatches) {
-          expect(retrieveResult.data).toEqual(data);
+          // Convert retrieved Row objects back to plain objects for comparison
+          const retrievedPlainData = retrieveResult.data?.map(row => row.toPlainObject());
+          expect(retrievedPlainData).toEqual(data);
         }
       });
     });
@@ -460,7 +484,7 @@ function createMockTable(id: number, name: string): DynamicTable {
 }
 
 function createMockTableWithFields(name: string, fieldDefs: Array<{ name: string; type: FieldType; required: boolean }>): DynamicTable {
-  const table = createMockTable(Math.floor(Math.random() * 1000), name);
+  const table = createMockTable(Math.floor(Math.random() * 1000) + 1, name); // Ensure positive integer (1-1000)
   
   // Add fields to the table using the consolidated approach
   for (let i = 0; i < fieldDefs.length; i++) {

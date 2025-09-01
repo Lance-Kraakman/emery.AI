@@ -2,18 +2,12 @@
 // Re-exports domain types and defines application-specific command interfaces
 import { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { Result } from '@/ddd/domain/shared/result';
-import type { RowData } from '@/ddd/domain/tables/value-objects/field-values';
+import type { Row } from '@/ddd/domain/tables/value-objects/row';
 
 // Export the unified Result interface for use in Server Actions
 export type { Result } from '@/ddd/domain/shared/result';
 
 
-export interface Row {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  [key: string]: any;
-}
 
 export interface CreateTableData {
   name: string;
@@ -31,14 +25,14 @@ export interface CreateFieldData {
 
 // Application-specific command DTOs (not domain types)
 export interface CreateRowCommand {
-  tableId: number;    // Infrastructure concern
-  data: RowData;      // Domain data
+  tableId: number;                    // Infrastructure concern
+  data: Record<string, any>;          // Plain data from client (converted to Row entity in action)
 }
 
 export interface UpdateRowCommand {
-  rowId: string;      // Infrastructure concern
-  tableId: number;    // Infrastructure concern
-  data: Partial<RowData>;  // Domain data (partial update)
+  rowId: string;                      // Infrastructure concern
+  tableId: number;                    // Infrastructure concern
+  data: Record<string, any>;          // Plain data from client (converted to Row entity in action)
 }
 
 export interface CreateOrganizationData {

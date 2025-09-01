@@ -12,7 +12,7 @@ import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/d
 import type { Result } from '@/ddd/domain/shared/result';
 import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import { TableId, UserId } from '@/ddd/domain/shared/value-objects';
-import type { RowData } from '@/ddd/domain/tables/value-objects/field-values';
+import type { Row } from '@/ddd/domain/tables/value-objects/row';
 
 export interface RowFilters {
   limit?: number;
@@ -24,20 +24,20 @@ export interface RowFilters {
 
 export interface AddRowCommand {
   table: DynamicTable;
-  data: RowData;
+  data: Row;
   createdBy?: UserId;
 }
 
 export interface UpdateRowCommand {
   table: DynamicTable;
   rowId: string;
-  data: Partial<RowData>;
+  data: Row;
   updatedBy?: UserId;
 }
 
 export interface BulkAddRowsCommand {
   table: DynamicTable;
-  rows: Array<RowData>;
+  rows: Array<Row>;
   createdBy?: UserId;
 }
 
@@ -52,26 +52,19 @@ export class TableRowDomainService {
   /**
    * Add a new row to a table
    */
-  async addRow(command: AddRowCommand): Promise<Result<RowData>> {
+  async addRow(command: AddRowCommand): Promise<Result<Row>> {
     try {
       const { table, data } = command;
 
-      // 1. Validate row data using table's validation methods
-      const validation = table.validateRowData(data);
-      if (!validation.valid) {
-        return {
-          success: false,
-          error: validation.errors.map(e => e.error).join(', '),
-          validationErrors: validation.errors
-        };
-      }
-
-      // 2. Pass RowData directly to repository - it handles all data mapping via TableDataMapper
-      const rowData = await this.tableRepository.insertRow(table.id, data);
+      // 1. Row entity should already be validated during construction
+      // If we need validation, we should validate the Row entity directly
+      
+      // 2. Insert row entity directly
+      const row = await this.tableRepository.insertRow(table.id, data);
 
       return {
         success: true,
-        data: rowData
+        data: row
       };
 
     } catch (error) {
@@ -85,20 +78,20 @@ export class TableRowDomainService {
   /**
    * Get a single row from a table
    */
-  async getRow(table: DynamicTable, rowId: string): Promise<RowData | null> {
-    const rowData = await this.tableRepository.getRow(table.id, rowId);
-    return rowData; // Repository returns RowData directly
+  async getRow(table: DynamicTable, rowId: string): Promise<Row | null> {
+    const row = await this.tableRepository.getRow(table.id, rowId);
+    return row; // Repository returns Row entity directly
   }
 
   /**
    * Get rows from a table with optional filters
    */
-  async getRows(table: DynamicTable, filters?: RowFilters): Promise<RowData[]> {
+  async getRows(table: DynamicTable, filters?: RowFilters): Promise<Row[]> {
     try {
       // Convert filters to repository format
       const options = this.convertFiltersToQueryOptions(filters);
       
-      // Get rows from repository (returns RowData directly)
+      // Get rows from repository (returns Row entities directly)
       return await this.tableRepository.findRows(table.id, options);
 
     } catch (error) {
@@ -110,7 +103,7 @@ export class TableRowDomainService {
   /**
    * Update a row in a table
    */
-  async updateRow(command: UpdateRowCommand): Promise<Result<RowData>> {
+  async updateRow(command: UpdateRowCommand): Promise<Result<Row>> {
     try {
       const { table, rowId, data } = command;
 
@@ -123,31 +116,15 @@ export class TableRowDomainService {
         };
       }
 
-      // 2. For updates, validate only the fields that are provided (partial validation)
-      for (const fieldName of Object.keys(data)) {
-        const fieldValue = data[fieldName];
-        if (fieldValue !== undefined && fieldValue !== null) {
-          // Find the field definition to validate against
-          const field = table.fields.find(f => f.name === fieldName);
-          if (field) {
-            const fieldValidation = field.validateValue(fieldValue);
-            if (!fieldValidation.valid) {
-              return {
-                success: false,
-                error: fieldValidation.error || `Invalid value for ${fieldName}`,
-                validationErrors: [{ field: fieldName, error: fieldValidation.error || `Invalid value for ${fieldName}` }]
-              };
-            }
-          }
-        }
-      }
+      // 2. Row entity should already be validated during construction
+      // If we need validation, we should validate the Row entity directly
 
-      // 3. Pass RowData directly to repository - it handles all data mapping via TableDataMapper
-      const updatedRowData = await this.tableRepository.updateRow(table.id, rowId, data);
+      // 3. Update row entity directly
+      const updatedRow = await this.tableRepository.updateRow(table.id, rowId, data);
 
       return {
         success: true,
-        data: updatedRowData
+        data: updatedRow
       };
 
     } catch (error) {
@@ -190,42 +167,22 @@ export class TableRowDomainService {
   /**
    * Bulk add multiple rows to a table
    */
-  async bulkAddRows(command: BulkAddRowsCommand): Promise<Result<RowData[]>> {
+  async bulkAddRows(command: BulkAddRowsCommand): Promise<Result<Row[]>> {
     try {
       const { table, rows } = command;
 
-      // 1. Validate all rows using table's validation methods
-      const validationErrors: Array<{ row: number; errors: Array<{ field: string; error: string }> }> = [];
+      // 1. Row entities should already be validated during construction
       
-      for (let i = 0; i < rows.length; i++) {
-        const validation = table.validateRowData(rows[i]);
-        if (!validation.valid) {
-          validationErrors.push({ row: i, errors: validation.errors });
-        }
-      }
-
-      if (validationErrors.length > 0) {
-        return {
-          success: false,
-          error: validationErrors.flatMap(ve => 
-            ve.errors.map(e => `Row ${ve.row}: ${e.error}`)
-          ).join(', '),
-          validationErrors: validationErrors.flatMap(ve => 
-            ve.errors.map(e => ({ field: `Row ${ve.row}: ${e.field}`, error: e.error }))
-          )
-        };
-      }
-
       // 2. Create all rows using repository methods
-      const createdRowsData = [];
-      for (const rowData of rows) {
-        const newRowData = await this.tableRepository.insertRow(table.id, rowData);
-        createdRowsData.push(newRowData);
+      const createdRows = [];
+      for (const row of rows) {
+        const newRow = await this.tableRepository.insertRow(table.id, row);
+        createdRows.push(newRow);
       }
 
       return {
         success: true,
-        data: createdRowsData
+        data: createdRows
       };
 
     } catch (error) {
@@ -261,4 +218,5 @@ export class TableRowDomainService {
       filters: filters.filters
     };
   }
+
 }
