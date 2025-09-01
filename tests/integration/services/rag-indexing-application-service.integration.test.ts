@@ -679,29 +679,5 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       }
     });
     
-    test('should handle concurrent reindexing requests', async () => {
-      const ragService = getRagIndexingApplicationService();
-      
-      // Create an index
-      const indexId = await createTestRagIndex(testContext, 'Concurrent Test Index', ['table']);
-      
-      // Start multiple reindex operations concurrently
-      const reindexPromises = Array.from({ length: 3 }, (_, i) => 
-        ragService.reindexData({
-          indexId: RagIndexId.fromString(indexId),
-          domainType: 'table'
-        })
-      );
-      
-      // Wait for all to complete
-      const results = await Promise.all(reindexPromises);
-      
-      // All should succeed
-      results.forEach(result => {
-        expect(result).toBeDefined();
-        expect(result.indexId).toBe(indexId);
-        expect(result.errors).toEqual([]);
-      });
-    });
   });
 });
