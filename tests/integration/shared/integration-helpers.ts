@@ -169,20 +169,33 @@ export class IntegrationTestClient {
       // 5. Delete agents (may be referenced by tasks, but tasks are already deleted)
       await this.safeDelete(db, schema.agents, inArray(schema.agents.organizationId, testOrgIds), 'agents');
       
-      // 6. Delete RAG documents and indexes (may reference other entities)
+      // 6. Delete RAG-related data (documents, indexes, query logs)
+      await this.safeDelete(db, schema.ragQueryLogs, inArray(schema.ragQueryLogs.organizationId, testOrgIds), 'rag_query_logs');
       await this.safeDelete(db, schema.ragDocuments, inArray(schema.ragDocuments.organizationId, testOrgIds), 'rag_documents');
       await this.safeDelete(db, schema.ragIndexes, inArray(schema.ragIndexes.organizationId, testOrgIds), 'rag_indexes');
       
-      // 7. Delete tables (they reference databases)
+      // 7. Delete teams (they reference organizations)
+      await this.safeDelete(db, schema.teams, inArray(schema.teams.organizationId, testOrgIds), 'teams');
+      
+      // 8. Delete invitations (they reference organizations)
+      await this.safeDelete(db, schema.invitations, inArray(schema.invitations.organizationId, testOrgIds), 'invitations');
+      
+      // 9. Delete tables (they reference databases)
       await this.safeDelete(db, schema.tables, inArray(schema.tables.organizationId, testOrgIds), 'tables');
       
-      // 8. Delete databases (they reference organizations)
+      // 10. Delete databases (they reference organizations)
       await this.safeDelete(db, schema.databases, inArray(schema.databases.organizationId, testOrgIds), 'databases');
       
-      // 9. Clean up user_organizations relationships (they reference organizations)
+      // 11. Clean up user_organizations relationships (they reference organizations)
       await this.safeDelete(db, schema.userOrganizations, inArray(schema.userOrganizations.organizationId, testOrgIds), 'user_organizations');
       
-      // 10. Finally delete the test organizations themselves
+      // 12. Nullify user references to test organizations (soft reference)
+      await db.update(schema.users)
+        .set({ currentOrganizationId: null })
+        .where(inArray(schema.users.currentOrganizationId, testOrgIds));
+      console.log(`  🔄 Nullified user.current_organization_id references to test orgs`);
+      
+      // 13. Finally delete the test organizations themselves
       await this.safeDelete(db, schema.organizations, inArray(schema.organizations.id, testOrgIds), 'organizations');
       
       console.log(`✅ Test data cleanup completed successfully for organizations [${testOrgIds.join(', ')}]`);
