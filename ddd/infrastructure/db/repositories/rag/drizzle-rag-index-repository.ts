@@ -2,7 +2,6 @@
 // Provides concrete database operations using existing schema
 
 import { eq, and, inArray, sql, desc } from 'drizzle-orm';
-import type { DbClient } from '@/lib/db/client';
 import { ragIndexes } from '@/lib/db/schema';
 
 
@@ -10,9 +9,10 @@ import { RagIndex } from '@/ddd/domain/rag/entities';
 import { RagIndexId, OrganizationId, type DomainType, type IndexStatus } from '@/ddd/domain/rag/value-objects';
 import { RagIndexRepository } from '@/ddd/domain/rag';
 import { RagIndexFilters } from '@/ddd/domain/rag/repositories/rag-index-repository';
+import { ContextAwareDbClient } from '@/lib/db/context-client';
 
 export class DrizzleRagIndexRepository implements RagIndexRepository {
-  constructor(private readonly db: DbClient) {}
+  constructor(private readonly db: ContextAwareDbClient) {}
 
   async findById(id: RagIndexId): Promise<RagIndex | null> {
     const [record] = await this.db
@@ -46,16 +46,6 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
     return records.map(record => this.mapToDomainEntity(record));
   }
 
-  async findByRole(roleId: number): Promise<RagIndex[]> {
-    const records = await this.db
-      .select()
-      .from(ragIndexes)
-      .where(eq(ragIndexes.roleId, roleId))
-      .orderBy(desc(ragIndexes.createdAt));
-
-    return records.map(record => this.mapToDomainEntity(record));
-  }
-
   async findByFilters(filters: RagIndexFilters): Promise<RagIndex[]> {
     const conditions = [];
 
@@ -65,10 +55,6 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
 
     if (filters.agentId) {
       conditions.push(eq(ragIndexes.agentId, filters.agentId));
-    }
-
-    if (filters.roleId) {
-      conditions.push(eq(ragIndexes.roleId, filters.roleId));
     }
 
     if (filters.status && filters.status.length > 0) {
@@ -133,7 +119,6 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
       description: persistence.description,
       organizationId: persistence.organizationId,
       agentId: persistence.agentId,
-      roleId: persistence.roleId,
       domainTypes: persistence.domainTypes,
       domainFilters: persistence.domainFilters,
       embeddingModel: persistence.embeddingModel,
@@ -198,7 +183,6 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
       name: record.name,
       description: record.description,
       agentId: record.agentId,
-      roleId: record.roleId,
       domainTypes: record.domainTypes as DomainType[],
       domainFilters: record.domainFilters,
       embeddingModel: record.embeddingModel || 'sentence-transformers/all-mpnet-base-v2',

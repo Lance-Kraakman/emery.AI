@@ -5,9 +5,9 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
-import { getDynamicTableRepository, getTableRowDomainService } from "@/ddd/application/di/container";
+import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateRowCommand, UpdateRowCommand } from "./types";
-import { Row } from "@/ddd/domain/tables/value-objects/row";
+import { Row, RowId } from "@/ddd/domain/tables/value-objects/row";
 import { TableId, UserId } from "@/ddd/domain/shared/value-objects";
 
 
@@ -23,11 +23,11 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
       };
     }
 
-    // Use table row domain service for row creation
-    const tableRepository = getDynamicTableRepository();
-    const tableRowService = getTableRowDomainService();
+    // Use table application service for row creation
+    const tableAppService = getTableApplicationService();
     
-    const table = await tableRepository.findById(TableId.fromNumber(tableId));
+    // Get table to retrieve field information
+    const table = await tableAppService.getTable(TableId.fromNumber(tableId));
     
     if (!table) {
       return {
@@ -37,16 +37,10 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
     }
 
     // Convert plain data to Row entity using table field information
-    const fieldSlugs = table.fields.map(f => f.name);
-    const fieldTypes = table.fields.reduce((acc, f) => {
-      acc[f.name] = f.type;
-      return acc;
-    }, {} as Record<string, string>);
-    
-    const row = Row.fromPlainObject(rowData || {}, tableId, fieldSlugs, fieldTypes);
+    const row = Row.fromPlainObject(rowData || {}, tableId, table.fields);
 
-    const result = await tableRowService.addRow({
-      table,
+    const result = await tableAppService.createRow({
+      tableId: TableId.fromNumber(tableId),
       data: row,
       createdBy: UserId.fromString(session.userId)
     });
@@ -106,18 +100,14 @@ export async function getRowsData(tableId: number, limit = 100, offset = 0): Pro
       throw new Error("tableId is required");
     }
 
-    // Use table row domain service for row fetching
-    const tableRepository = getDynamicTableRepository();
-    const tableRowService = getTableRowDomainService();
+    // Use table application service for row fetching
+    const tableAppService = getTableApplicationService();
     
-    const table = await tableRepository.findById(TableId.fromNumber(tableId));
-    
-    if (!table) {
-      throw new Error("Table not found");
-    }
-    
-    const rowsData = await tableRowService.getRows(table, { limit, offset });
-    return rowsData; // RowData[] is already in the correct format
+    const rowsData = await tableAppService.getRows(
+      TableId.fromNumber(tableId), 
+      { limit, offset }
+    );
+    return rowsData; // Row[] is already in the correct format
   } catch (error) {
     console.error("Error fetching rows:", error);
     throw new Error(error instanceof Error ? error.message : "Failed to fetch rows");
@@ -136,11 +126,11 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       };
     }
 
-    // Use table row domain service for row updates
-    const tableRepository = getDynamicTableRepository();
-    const tableRowService = getTableRowDomainService();
+    // Use table application service for row updates
+    const tableAppService = getTableApplicationService();
     
-    const table = await tableRepository.findById(TableId.fromNumber(tableId));
+    // Get table to retrieve field information
+    const table = await tableAppService.getTable(TableId.fromNumber(tableId));
     
     if (!table) {
       return {
@@ -150,17 +140,11 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
     }
 
     // Convert plain data to Row entity using table field information
-    const fieldSlugs = table.fields.map(f => f.name);
-    const fieldTypes = table.fields.reduce((acc, f) => {
-      acc[f.name] = f.type;
-      return acc;
-    }, {} as Record<string, string>);
-    
-    const row = Row.fromPlainObject({ ...rowData, id: rowId }, tableId, fieldSlugs, fieldTypes);
+    const row = Row.fromPlainObject({ ...rowData, id: rowId }, tableId, table.fields);
 
-    const result = await tableRowService.updateRow({
-      table,
-      rowId,
+    const result = await tableAppService.updateRow({
+      tableId: TableId.fromNumber(tableId),
+      rowId: RowId.fromString(rowId),
       data: row,
       updatedBy: UserId.fromString(session.userId)
     });
@@ -223,20 +207,13 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
       };
     }
 
-    // Use table row domain service for row deletion
-    const tableRepository = getDynamicTableRepository();
-    const tableRowService = getTableRowDomainService();
+    // Use table application service for row deletion
+    const tableAppService = getTableApplicationService();
     
-    const table = await tableRepository.findById(TableId.fromNumber(tableId));
-    
-    if (!table) {
-      return {
-        success: false,
-        error: "Table not found"
-      };
-    }
-    
-    const result = await tableRowService.deleteRow(table, rowId);
+    const result = await tableAppService.deleteRow(
+      TableId.fromNumber(tableId),
+      RowId.fromString(rowId)
+    );
 
     if (!result.success) {
       return {

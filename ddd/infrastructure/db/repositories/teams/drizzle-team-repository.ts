@@ -4,12 +4,12 @@
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
 import { Team } from '@/ddd/domain/teams/entities/team';
 import { OrganizationId, TeamId, AgentId } from '@/ddd/domain/shared/value-objects';
-import type { DbClient } from '@/lib/db/client';
 import { teams } from '@/lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
+import { ContextAwareDbClient } from '@/lib/db/context-client';
 
 export class DrizzleTeamRepository implements ITeamRepository {
-  constructor(private readonly db: DbClient) {}
+  constructor(private readonly db: ContextAwareDbClient) {}
 
   async findByOrganization(organizationId: OrganizationId): Promise<Team[]> {
     const results = await this.db

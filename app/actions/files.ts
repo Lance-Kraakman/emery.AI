@@ -71,7 +71,7 @@ export async function uploadFileAction(formData: FormData): Promise<Result> {
     const command: UploadFileCommand = {
       organizationId: OrganizationId.fromNumber(organizationId),
       tableId: TableId.fromNumber(tableId),
-      fieldId: FieldId.fromNumber(field.id),
+      fieldId: FieldId.fromNumber(field.id.value),
       file: {
         buffer,
         filename: file.name,

@@ -136,6 +136,7 @@ export class ContextAwareDbClient {
     if (!this.hasOrganizationContext()) {
       return this.baseDb.update.bind(this.baseDb);
     }
+
     return this.baseDb.update.bind(this.baseDb);
   }
 

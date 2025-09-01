@@ -8,7 +8,6 @@ export interface RagIndexCreationParams {
   description?: string;
   organizationId: OrganizationId;
   agentId?: number;
-  roleId?: number;
   domainTypes: DomainType[];
   domainFilters?: Record<string, any>;
   embeddingModel?: string;
@@ -31,7 +30,6 @@ export class RagIndex {
     private _name: string,
     private _description: string | undefined,
     private readonly _agentId: number | undefined,
-    private readonly _roleId: number | undefined,
     private _domainTypes: DomainType[],
     private _domainFilters: Record<string, any> | undefined,
     private readonly _embeddingModel: string,
@@ -182,10 +180,6 @@ export class RagIndex {
     return this._agentId === agentId;
   }
 
-  isAssignedToRole(roleId: number): boolean {
-    return this._roleId === roleId;
-  }
-
   // Factory methods
   static create(params: RagIndexCreationParams): RagIndex {
     // Validate input parameters
@@ -202,7 +196,6 @@ export class RagIndex {
       params.name,
       params.description,
       params.agentId,
-      params.roleId,
       [...params.domainTypes],
       params.domainFilters ? { ...params.domainFilters } : undefined,
       embeddingModel,
@@ -221,7 +214,6 @@ export class RagIndex {
     name: string;
     description?: string;
     agentId?: number;
-    roleId?: number;
     domainTypes: DomainType[];
     domainFilters?: Record<string, any>;
     embeddingModel: string;
@@ -238,7 +230,6 @@ export class RagIndex {
       data.name,
       data.description,
       data.agentId,
-      data.roleId,
       [...data.domainTypes],
       data.domainFilters ? { ...data.domainFilters } : undefined,
       data.embeddingModel,
@@ -292,7 +283,6 @@ export class RagIndex {
     name: string;
     description?: string;
     agentId?: number;
-    roleId?: number;
     domainTypes: DomainType[];
     domainFilters?: Record<string, any>;
     embeddingModel: string;
@@ -309,7 +299,6 @@ export class RagIndex {
       name: this._name,
       description: this._description,
       agentId: this._agentId,
-      roleId: this._roleId,
       domainTypes: [...this._domainTypes],
       domainFilters: this._domainFilters ? { ...this._domainFilters } : undefined,
       embeddingModel: this._embeddingModel,

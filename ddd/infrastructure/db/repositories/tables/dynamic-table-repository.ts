@@ -330,7 +330,6 @@ export class DynamicTableRepository implements IDynamicTableRepository {
   }
 
   async insertRow(tableId: TableId, row: Row): Promise<Row> {
-    // AIDEV-NOTE: Convert RowData to Row object for storage, then back to RowData
     try {
       // 1. Get table metadata
       const table = await this.findById(tableId);

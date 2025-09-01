@@ -59,7 +59,7 @@ export default function RowTable({
         <TableHeader>
           <TableRow>
             {fields.map((field) => (
-              <TableHead key={field.id}>
+              <TableHead key={field.id.value}>
                 {field.name}
                 {field.required && <span className="text-destructive ml-1">*</span>}
               </TableHead>
@@ -73,7 +73,7 @@ export default function RowTable({
             return (
               <TableRow key={row.id.value}>
                 {fields.map((field) => (
-                  <TableCell key={field.id} className="max-w-xs">
+                  <TableCell key={field.id.value} className="max-w-xs">
                     {editingRow === row.id.value ? (
                       <FieldInput
                         field={field}

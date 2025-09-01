@@ -2,7 +2,6 @@
 // Provides vector search capabilities using pgvector and raw SQL
 
 import { eq, and, inArray, sql, desc } from 'drizzle-orm';
-import type { DbClient } from '@/lib/db/client';
 import { ragDocuments } from '@/lib/db/schema';
 import { 
   RagSqlTemplates, 
@@ -21,12 +20,13 @@ import {
 } from '@/ddd/domain/rag/repositories/rag-document-repository';
 import { RagDocument, type DocumentMetadata } from '@/ddd/domain/rag/entities';
 import { DocumentId, RagIndexId, type DomainType } from '@/ddd/domain/rag/value-objects';
+import { ContextAwareDbClient } from '@/lib/db/context-client';
 
 export class DrizzleRagDocumentRepository implements RagDocumentRepository {
   private readonly sqlExecutor: SqlExecutor;
 
   constructor(
-    private readonly db: DbClient
+    private readonly db: ContextAwareDbClient
   ) {
     this.sqlExecutor = new SqlExecutor(db);
   }

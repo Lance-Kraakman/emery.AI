@@ -119,8 +119,8 @@ export class DynamicTable {
   /**
    * Update a field in the table
    */
-  updateField(fieldId: number, updatedField: TableField): void {
-    const index = this._fields.findIndex(f => f.id.value === fieldId);
+  updateField(fieldId: FieldId, updatedField: TableField): void {
+    const index = this._fields.findIndex(f => f.id.value === fieldId.value);
     if (index === -1) {
       throw new Error(`Field with ID ${fieldId} not found`);
     }
@@ -132,8 +132,8 @@ export class DynamicTable {
   /**
    * Remove a field from the table
    */
-  removeField(fieldId: number): void {
-    const index = this._fields.findIndex(f => f.id.value === fieldId);
+  removeField(fieldId: FieldId): void {
+    const index = this._fields.findIndex(f => f.id.value === fieldId.value);
     if (index === -1) {
       throw new Error(`Field with ID ${fieldId} not found`);
     }

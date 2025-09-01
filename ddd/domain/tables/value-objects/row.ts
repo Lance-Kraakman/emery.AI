@@ -11,6 +11,7 @@
 import crypto from 'crypto';
 import type { FieldValue as TypedFieldValue } from './field-values';
 import type { TableField } from './table-field';
+import { TableId } from '../../shared/value-objects';
 
 export class RowId {
   constructor(private readonly _value: string) {
@@ -20,6 +21,10 @@ export class RowId {
     if (_value.length > 255) {
       throw new Error('RowId cannot exceed 255 characters');
     }
+  }
+
+  static fromString(value: string): RowId {
+    return new RowId(value);
   }
 
   get value(): string {
@@ -198,16 +203,4 @@ export class RowCollection {
     return this.rows.map(row => row.toPlainObject());
   }
 
-  static fromPlainObjects(
-    data: Record<string, any>[],
-    tableId: number,
-    fieldSlugs: string[],
-    fieldTypes: Record<string, string> = {},
-    totalCount?: number
-  ): RowCollection {
-    const rows = data.map(item => 
-      Row.fromPlainObject(item, tableId, fieldSlugs, fieldTypes)
-    );
-    return new RowCollection(rows, totalCount);
-  }
 }

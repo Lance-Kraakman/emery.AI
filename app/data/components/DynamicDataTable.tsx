@@ -85,7 +85,7 @@ export function DynamicDataTable({ fields, rows, organizationId, tableId, onUpda
                 />
               </TableHead>
               {sortedFields.map((field) => (
-                <TableHead key={field.id} className="min-w-[120px] p-2">
+                <TableHead key={field.id.value} className="min-w-[120px] p-2">
                   <div className="flex items-center gap-1.5">
                     <span className="font-semibold">{field.name}</span>
                     {field.required && <span className="text-red-500">*</span>}
@@ -100,21 +100,21 @@ export function DynamicDataTable({ fields, rows, organizationId, tableId, onUpda
           </TableHeader>
           <TableBody>
             {rows.map((row) => (
-              <TableRow key={row.id} className={`hover:bg-muted/30 ${selectedRows.has(row.id) ? "bg-blue-50 dark:bg-blue-950/20" : ""}`}>
+              <TableRow key={row.id.value} className={`hover:bg-muted/30 ${selectedRows.has(row.id.value) ? "bg-blue-50 dark:bg-blue-950/20" : ""}`}>
                 <TableCell className="px-2">
                   <Checkbox
-                    checked={selectedRows.has(row.id)}
-                    onCheckedChange={(checked) => handleSelectRow(row.id, !!checked)}
+                    checked={selectedRows.has(row.id.value)}
+                    onCheckedChange={(checked) => handleSelectRow(row.id.value, !!checked)}
                   />
                 </TableCell>
                 {sortedFields.map((field) => (
-                  <TableCell key={field.id} className="p-1">
+                  <TableCell key={field.id.value} className="p-1">
                     <EditableCell
                       field={field}
-                      value={row[field.name]}
+                      value={row.getFieldValue(field.name)?.value}
                       organizationId={organizationId}
                       tableId={tableId}
-                      onSave={(value) => onUpdateRow(row.id, field.id, value)}
+                      onSave={(value) => onUpdateRow(row.id.value, field.id.value, value)}
                     />
                   </TableCell>
                 ))}
@@ -122,7 +122,7 @@ export function DynamicDataTable({ fields, rows, organizationId, tableId, onUpda
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => onDeleteRow(row.id)}
+                    onClick={() => onDeleteRow(row.id.value)}
                     className="text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 w-7 h-7"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

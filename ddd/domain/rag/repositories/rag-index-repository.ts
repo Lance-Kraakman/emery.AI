@@ -7,7 +7,6 @@ import { RagIndexId, OrganizationId } from '../value-objects';
 export interface RagIndexFilters {
   organizationId?: OrganizationId;
   agentId?: number;
-  roleId?: number;
   status?: string[];
   domainTypes?: string[];
 }
@@ -27,11 +26,6 @@ export interface RagIndexRepository {
    * Find RAG indexes by agent
    */
   findByAgent(agentId: number): Promise<RagIndex[]>;
-
-  /**
-   * Find RAG indexes by role
-   */
-  findByRole(roleId: number): Promise<RagIndex[]>;
 
   /**
    * Find RAG indexes with complex filters

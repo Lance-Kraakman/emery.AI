@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach, vi 
 import { 
   getRagIndexingApplicationService,
   getTableApplicationService,
+  getDatabaseApplicationService,
   getContextAwareDb, 
   initializeDI 
 } from '@/ddd/application/di/container';
@@ -258,6 +259,8 @@ async function createTestTable(
   tableDef: { name: string; fields: { name: string; type: FieldType; }[] }
 ): Promise<{ id: TableId; name: string }> {
   // Create a test database first
+  const databaseApplicationService = getDatabaseApplicationService();
+  
   const createDatabaseCommand = {
     name: `Test Database ${Date.now()}`,
     organizationId: context.organizationId,
@@ -265,9 +268,13 @@ async function createTestTable(
     slug: `test-db-${Date.now()}`
   };
   
-  // Note: This would require implementing database creation in test helpers
-  // For now, we'll assume a test database exists
-  const testDatabaseId = DatabaseId.fromNumber(1);
+  const dbResult = await databaseApplicationService.createDatabase(createDatabaseCommand);
+  
+  if (!dbResult.success || !dbResult.data) {
+    throw new Error(`Failed to create test database: ${dbResult.error}`);
+  }
+  
+  const testDatabaseId = dbResult.data.id;
   
   const createTableCommand = {
     name: tableDef.name,
@@ -651,7 +658,9 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       });
       
       // Trigger full reindex
-      const result = await ragIndexingService.reindexAll();
+      const result = await ragIndexingService.reindexData({
+        organizationId: testContext.organizationId.value
+      });
       
       expect(result.success).toBe(true);
       expect(result.documentsProcessed).toBeGreaterThanOrEqual(0);
@@ -790,11 +799,11 @@ describe('RAG Indexing Application Service Integration Tests', () => {
   describe('Error Handling', () => {
     
     test('should handle non-existent index gracefully', async () => {
-      const fakeIndexId = RagIndexId.fromString('fake-index-id');
+      const fakeIndexId = RagIndexId.fromString('12345678-1234-1234-1234-123456789abc');
       
       await expect(async () => {
         await ragIndexingService.reindexSingleIndex(fakeIndexId);
-      }).rejects.toThrow('Index not found');
+      }).rejects.toThrow(/Index.*not found/);
     });
 
     test('should continue processing when individual items fail', async () => {
