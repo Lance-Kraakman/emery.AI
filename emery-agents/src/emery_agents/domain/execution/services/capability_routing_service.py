@@ -12,7 +12,6 @@ from ....core.entities import TaskRequest, StepConfig
 from ....core.types import StepType
 from ...shared.value_objects.ids import AgentId, OrganizationId
 
-
 class CapabilityRoutingService:
     """Domain service for capability-based routing decisions."""
     
