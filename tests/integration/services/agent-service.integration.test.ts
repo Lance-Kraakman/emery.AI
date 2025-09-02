@@ -161,7 +161,8 @@ describe('Agent Application Service Integration Tests', () => {
         } catch (error) {
           // For invalid organization case, we expect a database constraint error
           if (testCase.name === 'should reject invalid organization') {
-            console.log(`🔍 Expected database constraint error for invalid organization: ${error.message}`);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            console.log(`🔍 Expected database constraint error for invalid organization: ${errorMessage}`);
             expect(testCase.expected.success).toBe(false);
           } else {
             // Re-throw for other cases as they shouldn't throw

@@ -215,14 +215,8 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
     
     def _create_capability_from_context(self, context: ExecutionContext) -> CapabilityConfig:
         """Create capability configuration from execution context."""
-        # Create tool configs from tool names
-        tool_configs = []
-        for tool_name in context.available_tools:
-            tool_configs.append(ToolConfig(
-                name=tool_name,
-                version="1.0",
-                config={}
-            ))
+        # Create tool configs with enhanced context for Pipedream tools
+        tool_configs = self._create_tool_configs_with_context(context.available_tools, context)
         
         # Create single step capability
         step = StepConfig(
@@ -245,11 +239,12 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
         Create agent for direct tool execution.
         
         AIDEV-NOTE: Updated to use centralized model provider instead of hardcoded model creation.
+        Updated to pass agent API key and environment context to Pipedream tools.
         """
-        # Load tools from context
+        # Load tools from context with enhanced configuration for Pipedream tools
         tools = []
         if context.available_tools:
-            tool_configs = [ToolConfig(name=name, version="1.0", config={}) for name in context.available_tools]
+            tool_configs = self._create_tool_configs_with_context(context.available_tools, context)
             tools = self.tool_registry_repository.load_tools(tool_configs)
         
         # Get appropriate model from centralized provider
@@ -299,6 +294,46 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
         self.agent_cache[context_id] = capability_agent
         return capability_agent
     
+    def _create_tool_configs_with_context(self, tool_names: List[str], context: ExecutionContext) -> List[ToolConfig]:
+        """
+        Create tool configurations with enhanced context for Pipedream tools.
+        
+        AIDEV-NOTE: Passes agent API key and environment context to tools that require it.
+        Uses Value Objects from execution context for type safety.
+        """
+        tool_configs = []
+        
+        for tool_name in tool_names:
+            config = {}
+            
+            # Check if this is a Pipedream tool (they use underscores in registry)
+            is_pipedream_tool = any(tool_name.startswith(prefix) for prefix in [
+                "gmail_", "slack_", "github_", "google_", "notion_", "trello_", 
+                "discord_", "linear_", "dropbox_", "airtable_", "hubspot_"
+            ])
+            
+            if is_pipedream_tool:
+                # Extract agent API key from context environment
+                agent_api_key = context.environment.get("agent_api_key")
+                base_url = context.environment.get("base_url", os.getenv("NEXTJS_BASE_URL", "http://localhost:3000"))
+                
+                if agent_api_key:
+                    config = {
+                        "agent_api_key": agent_api_key,  # Already a Value Object from context
+                        "base_url": base_url
+                    }
+                    logger.info(f"[EXECUTION] Configured Pipedream tool {tool_name} with API key context")
+                else:
+                    logger.warning(f"[EXECUTION] Pipedream tool {tool_name} missing agent_api_key in context")
+            
+            tool_configs.append(ToolConfig(
+                name=tool_name,
+                version="1.0",
+                config=config
+            ))
+        
+        return tool_configs
+    
     async def _create_step_agent(self, step: StepConfig) -> Union[CodeAgent, ToolCallingAgent]:
         """
         Create step-level agent based on step type.
@@ -308,7 +343,7 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
         # Get appropriate model for this step type using centralized provider
         model = self.model_provider.get_model_for_step_type(step.type, model_override=step.model)
         
-        # Load tools for this step
+        # Load tools for this step - tools already have enhanced config from capability creation
         step_tools = []
         if step.tools:
             try:

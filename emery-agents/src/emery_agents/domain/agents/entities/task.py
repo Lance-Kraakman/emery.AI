@@ -9,7 +9,8 @@ import uuid
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
-from ...shared.value_objects.ids import AgentId, OrganizationId, TaskId
+from ...shared.value_objects.ids import AgentId, OrganizationId, TaskId, OwnerId
+from ...execution.value_objects.execution_value_objects import CapabilityName
 
 
 TaskStatus = Union[str, Any]  # 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout'
@@ -32,13 +33,13 @@ class TaskConfig:
     name: str
     instructions: TaskInstructions
     id: Optional[TaskId] = None
-    capability_name: Optional[str] = None
+    capability_name: Optional[CapabilityName] = None
     status: Optional[str] = None
     result: Optional[Any] = None
     error: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    created_by: Optional[str] = None
+    created_by: Optional[OwnerId] = None
     created_at: Optional[datetime] = None
 
 
@@ -51,14 +52,14 @@ class Task:
         agent_id: AgentId,
         organization_id: OrganizationId,
         name: str,
-        capability_name: Optional[str],
+        capability_name: Optional[CapabilityName],
         instructions: TaskInstructions,
         status: str,
         result: Optional[Any],
         error: Optional[str],
         started_at: Optional[datetime],
         completed_at: Optional[datetime],
-        created_by: Optional[str],
+        created_by: Optional[OwnerId],
         created_at: datetime
     ):
         self.id = id
@@ -110,14 +111,14 @@ class Task:
             agent_id=AgentId(data["agent_id"]),
             organization_id=OrganizationId(data["organization_id"]),
             name=data["name"],
-            capability_name=data.get("capability_name"),
+            capability_name=CapabilityName(data["capability_name"]) if data.get("capability_name") else None,
             instructions=instructions,
             status=data["status"],
             result=data.get("result"),
             error=data.get("error"),
             started_at=data.get("started_at"),
             completed_at=data.get("completed_at"),
-            created_by=data.get("created_by"),
+            created_by=OwnerId(data["created_by"]) if data.get("created_by") else None,
             created_at=data["created_at"]
         )
     

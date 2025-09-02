@@ -3,8 +3,10 @@ Tool Registry Module
 
 AIDEV-NOTE: Central tool registration and loading for all emery-agents tools.
 Replaces the massive tool_loader.py with a clean, modular approach.
+Now includes Pipedream tools for OAuth-backed integrations.
 """
 
+import os
 from typing import Any, Dict, List
 from ...core.entities import ToolConfig
 from .base_tools import BASE_TOOLS
@@ -13,6 +15,19 @@ from .mock_data_tools import DATA_TOOLS
 from .organizational_tools import ORGANIZATIONAL_TOOLS
 from .api_tools import API_TOOLS
 
+# Conditionally import Pipedream tools based on environment
+USE_PIPEDREAM_TOOLS = os.getenv("USE_PIPEDREAM_TOOLS", "false").lower() == "true"
+if USE_PIPEDREAM_TOOLS:
+    try:
+        from .pipedream_tools import PIPEDREAM_TOOLS
+        print("[TOOL-REGISTRY] Pipedream tools enabled")
+    except ImportError as e:
+        print(f"[TOOL-REGISTRY] Warning: Failed to import Pipedream tools: {e}")
+        PIPEDREAM_TOOLS = {}
+else:
+    PIPEDREAM_TOOLS = {}
+    print("[TOOL-REGISTRY] Pipedream tools disabled (set USE_PIPEDREAM_TOOLS=true to enable)")
+
 
 class ToolRegistry:
     """Central registry for all emery-agents tools."""
@@ -20,13 +35,29 @@ class ToolRegistry:
     def __init__(self):
         """Initialize tool registry with all tool modules."""
         # AIDEV-NOTE: Combine all tool registries into single mapping
+        # Pipedream tools are added when USE_PIPEDREAM_TOOLS=true
         self._tool_registry = {
             **BASE_TOOLS,
             **EMAIL_TOOLS,
             **DATA_TOOLS,
             **ORGANIZATIONAL_TOOLS,
-            **API_TOOLS
+            **API_TOOLS,
+            **PIPEDREAM_TOOLS  # OAuth-backed integrations (Gmail, Slack, etc.)
         }
+        
+        # Log registry statistics
+        tool_counts = {
+            "base": len(BASE_TOOLS),
+            "email": len(EMAIL_TOOLS),
+            "data": len(DATA_TOOLS),
+            "organizational": len(ORGANIZATIONAL_TOOLS),
+            "api": len(API_TOOLS),
+            "pipedream": len(PIPEDREAM_TOOLS)
+        }
+        total_tools = sum(tool_counts.values())
+        print(f"[TOOL-REGISTRY] Initialized with {total_tools} tools")
+        if PIPEDREAM_TOOLS:
+            print(f"[TOOL-REGISTRY] Including {len(PIPEDREAM_TOOLS)} Pipedream OAuth tools")
     
     def load_tool(self, tool_config: ToolConfig) -> Any:
         """
