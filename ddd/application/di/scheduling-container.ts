@@ -18,14 +18,11 @@ import { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository
 import { DrizzleTaskRepository } from '@/ddd/infrastructure/db/repositories/tasks/drizzle-task-repository';
 import { ITaskQueueService, TaskQueueService } from '@/ddd/domain/tasks/services/task-queue-service';
 import { ISchedulerService, SchedulerService } from '@/ddd/domain/tasks/services/scheduler-service';
-import { TaskSchedulingApplicationService } from '@/ddd/application/services/tasks/task-scheduling-application-service';
 
 // Agent repository for scheduler service
 import { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import { DrizzleAgentRepository } from '@/ddd/infrastructure/db/repositories/agents/drizzle-agent-repository';
 
-// RAG indexing service
-import { RagIndexingApplicationService } from '@/ddd/application/services/rag/rag-indexing-application-service';
 
 /**
  * Container interface for task scheduling services
@@ -38,12 +35,6 @@ export interface TaskSchedulingServices {
   // Domain services
   ITaskQueueService: ITaskQueueService;
   ISchedulerService: ISchedulerService;
-  
-  // Application services
-  TaskSchedulingApplicationService: TaskSchedulingApplicationService;
-  
-  // Optional RAG service
-  RagIndexingApplicationService?: RagIndexingApplicationService;
 }
 
 export class TaskSchedulingContainer {
@@ -78,7 +69,7 @@ export class TaskSchedulingContainer {
   /**
    * Initialize the container with database clients
    */
-  initialize(db: DbClient | ContextAwareDbClient, rawClient: postgres.Sql, ragIndexingService?: RagIndexingApplicationService): void {
+  initialize(db: DbClient | ContextAwareDbClient, rawClient: postgres.Sql): void {
     if (this.isInitialized) {
       console.warn('TaskSchedulingContainer is already initialized');
       return;
@@ -104,20 +95,7 @@ export class TaskSchedulingContainer {
     this.services.set('ITaskQueueService', taskQueueService);
     this.services.set('ISchedulerService', schedulerService);
 
-    // Register application service
-    const taskSchedulingApplicationService = new TaskSchedulingApplicationService(
-      taskRepository,
-      taskQueueService,
-      schedulerService,
-      ragIndexingService
-    );
-    
-    this.services.set('TaskSchedulingApplicationService', taskSchedulingApplicationService);
-    
-    // Optional RAG service
-    if (ragIndexingService) {
-      this.services.set('RagIndexingApplicationService', ragIndexingService);
-    }
+    // No application service needed - EventDrivenScheduler uses individual services directly
 
     this.isInitialized = true;
   }
@@ -134,22 +112,11 @@ export class TaskSchedulingContainer {
       ITaskRepository: this.services.get('ITaskRepository'),
       IAgentRepository: this.services.get('IAgentRepository'),
       ITaskQueueService: this.services.get('ITaskQueueService'),
-      ISchedulerService: this.services.get('ISchedulerService'),
-      TaskSchedulingApplicationService: this.services.get('TaskSchedulingApplicationService'),
-      RagIndexingApplicationService: this.services.get('RagIndexingApplicationService')
+      ISchedulerService: this.services.get('ISchedulerService')
     };
   }
 
-  /**
-   * Get task scheduling application service (main entry point)
-   */
-  getTaskSchedulingApplicationService(): TaskSchedulingApplicationService {
-    if (!this.isInitialized) {
-      throw new Error('TaskSchedulingContainer not initialized. Call initialize() first.');
-    }
-    
-    return this.services.get('TaskSchedulingApplicationService');
-  }
+  // TaskSchedulingApplicationService removed - use individual services or AgentTaskApplicationService directly
 
   /**
    * Get task repository
@@ -204,10 +171,7 @@ export class TaskSchedulingContainer {
 // Export singleton instance and convenience functions
 export const taskSchedulingContainer = TaskSchedulingContainer.getInstance();
 
-// Convenience getters that match the original API
-export const getTaskSchedulingApplicationService = (): TaskSchedulingApplicationService => {
-  return taskSchedulingContainer.getTaskSchedulingApplicationService();
-};
+// TaskSchedulingApplicationService removed - use AgentTaskApplicationService from main container instead
 
 export const getTaskRepository = (): ITaskRepository => {
   return taskSchedulingContainer.getTaskRepository();

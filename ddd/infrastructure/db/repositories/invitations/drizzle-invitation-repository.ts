@@ -113,15 +113,6 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     return results.map(result => this.mapToEntity(result));
   }
 
-  async findByInviter(invitedBy: UserId): Promise<Invitation[]> {
-    const results = await this.db
-      .select()
-      .from(invitations)
-      .where(eq(invitations.invitedBy, invitedBy.value))
-      .orderBy(desc(invitations.createdAt));
-
-    return results.map(result => this.mapToEntity(result));
-  }
 
   async findByQuery(query: InvitationQuery): Promise<Invitation[]> {
     let whereConditions: any[] = [];
@@ -179,12 +170,6 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     return { valid: true, invitation };
   }
 
-  async isTokenExpired(token: InvitationToken): Promise<boolean> {
-    const invitation = await this.findByToken(token);
-    if (!invitation) return true;
-    return invitation.expiresAt < new Date();
-  }
-
   async generateUniqueToken(): Promise<InvitationToken> {
     let token: InvitationToken;
     let attempts = 0;
@@ -212,19 +197,6 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     }
   }
 
-  async resendInvitation(id: InvitationId): Promise<Invitation> {
-    // Generate new token and extend expiry
-    const newToken = await this.generateUniqueToken();
-    const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-
-    return await this.update(id, {
-      expiresAt: newExpiresAt
-    });
-  }
-
-  async revokeInvitation(id: InvitationId): Promise<void> {
-    await this.delete(id);
-  }
 
   // Bulk operations
   async createBulkInvitations(data: BulkInvitationData): Promise<BulkInvitationResult> {
@@ -232,10 +204,11 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     const failed: Array<{ email: EmailAddress; error: string }> = [];
 
     for (const invitationData of data.invitations) {
+      // Value Objects are already validated
+      const organizationIdVO = data.organizationId;
+      const emailVO = invitationData.email;
+
       try {
-        // Convert to Value Objects
-        const organizationIdVO = typeof data.organizationId === 'number' ? OrganizationId.fromNumber(data.organizationId) : data.organizationId;
-        const emailVO = typeof invitationData.email === 'string' ? EmailAddress.fromString(invitationData.email) : invitationData.email;
 
         // Check if user is already a member
         const isAlreadyMember = await this.isUserAlreadyMember(organizationIdVO, emailVO);
@@ -259,19 +232,14 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
 
         const invitation = await this.create({
           organizationId: organizationIdVO,
-          invitedBy: typeof data.invitedBy === 'string' ? UserId.fromString(data.invitedBy) : data.invitedBy,
+          invitedBy: data.invitedBy,
           email: emailVO,
-          role: invitationData.role 
-            ? (typeof invitationData.role === 'string' ? OrganizationRole.fromString(invitationData.role) : invitationData.role)
-            : (data.defaultRole 
-                ? (typeof data.defaultRole === 'string' ? OrganizationRole.fromString(data.defaultRole) : data.defaultRole)
-                : OrganizationRole.fromString('member')),
+          role: invitationData.role || data.defaultRole,
           expiresAt: data.expiresAt
         });
 
         successful.push(invitation);
       } catch (error) {
-        const emailVO = typeof invitationData.email === 'string' ? EmailAddress.fromString(invitationData.email) : invitationData.email;
         failed.push({
           email: emailVO,
           error: error instanceof Error ? error.message : 'Unknown error'
@@ -303,7 +271,7 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
       .from(invitations)
       .where(whereCondition);
     
-    const count = countResults[0]?.count || 0;
+    const count = Number(countResults[0]?.count || 0);
 
     // Then delete them
     await this.db
@@ -325,7 +293,7 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
       .from(invitations)
       .where(whereCondition);
     
-    const count = countResults[0]?.count || 0;
+    const count = Number(countResults[0]?.count || 0);
 
     // Then delete them
     await this.db
@@ -365,33 +333,11 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
   }
 
   async getPendingInvitations(organizationId: OrganizationId): Promise<Invitation[]> {
-    const now = new Date();
-    
-    const results = await this.db
-      .select()
-      .from(invitations)
-      .where(and(
-        eq(invitations.organizationId, organizationId.value),
-        gte(invitations.expiresAt, now)
-      ))
-      .orderBy(desc(invitations.createdAt));
-
-    return results.map(result => this.mapToEntity(result));
-  }
-
-  async getExpiredInvitations(organizationId: OrganizationId): Promise<Invitation[]> {
-    const now = new Date();
-    
-    const results = await this.db
-      .select()
-      .from(invitations)
-      .where(and(
-        eq(invitations.organizationId, organizationId.value),
-        lt(invitations.expiresAt, now)
-      ))
-      .orderBy(desc(invitations.createdAt));
-
-    return results.map(result => this.mapToEntity(result));
+    // Use findByQuery for consistency
+    return await this.findByQuery({
+      organizationId,
+      isExpired: false
+    });
   }
 
   // Business logic validations

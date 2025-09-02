@@ -123,10 +123,13 @@ export function useEmeryData() {
         agentIds: team.agentIds ? team.agentIds.map(agentId => agentId.value.toString()) : []
       }));
 
-      // Group tables by database
-      const databasesWithTables = databasesResult.map(db => ({
-        ...db,
-        tables: tables.filter(table => table.databaseId === db.id)
+      // Group tables by database and convert to interface format
+      const databasesWithTables: EmeryDatabase[] = databasesResult.map(db => ({
+        id: db.id.value, // Convert DatabaseId to number
+        name: db.name,
+        slug: db.slug,
+        metadata: db.metadata,
+        tables: tables.filter(table => table.databaseId === db.id.value)
       }));
 
       setData({

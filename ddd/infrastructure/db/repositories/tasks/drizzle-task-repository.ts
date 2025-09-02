@@ -49,19 +49,31 @@ export class DrizzleTaskRepository implements ITaskRepository {
   async save(task: Task): Promise<void> {
     const data = this.mapToDb(task);
     
-    await this.db
-      .insert(tasks)
-      .values(data)
-      .onConflictDoUpdate({
-        target: tasks.id,
-        set: {
+    // Check if task already exists by trying to find it
+    const existing = await this.db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(eq(tasks.id, task.id.value))
+      .limit(1);
+    
+    if (existing.length === 0) {
+      // New task - do a straight INSERT (should trigger database triggers)
+      await this.db
+        .insert(tasks)
+        .values(data);
+    } else {
+      // Existing task - do an UPDATE
+      await this.db
+        .update(tasks)
+        .set({
           status: data.status,
           result: data.result,
           error: data.error,
           startedAt: data.startedAt,
           completedAt: data.completedAt
-        }
-      });
+        })
+        .where(eq(tasks.id, task.id.value));
+    }
   }
 
   async delete(id: TaskId): Promise<void> {

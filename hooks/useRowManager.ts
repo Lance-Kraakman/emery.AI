@@ -76,8 +76,8 @@ export function useRowManager({ tableId, fields, onRowUpdate }: UseRowManagerPro
     setEditingRow(row.id.value);
     const rowData: Record<string, any> = {};
     fields.forEach(field => {
-      const fieldKey = `field_${field.id.value}`;
-      rowData[field.slug] = row[fieldKey];
+      const fieldValue = row.getFieldValue(field.name);
+      rowData[field.name] = fieldValue?.value;
     });
     setEditRowData(rowData);
   };

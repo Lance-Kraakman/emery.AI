@@ -17,22 +17,23 @@ export async function POST(req: Request) {
 
     console.log(`[TEST-MANUAL-TRIGGER] Triggering manual task for agent ${agentId}`);
 
-    // Create manual task request
-    const manualTaskRequest = {
+    // Create task event request
+    const taskEventRequest = {
+      event_type: 'task_created',
       agentId: parseInt(agentId),
       instructions,
       userId: 'test-user-123'
     };
 
-    // Trigger via LISTEN/NOTIFY (same as ManualDispatcher.triggerManualTask)
-    await rawClient`SELECT pg_notify(${'manual_task_created'}, ${JSON.stringify(manualTaskRequest)})`;
+    // Trigger via LISTEN/NOTIFY (aligned with scheduler's task_event channel)
+    await rawClient`SELECT pg_notify(${'task_event'}, ${JSON.stringify(taskEventRequest)})`;
 
     console.log(`[TEST-MANUAL-TRIGGER] ✅ Manual task notification sent`);
 
     return NextResponse.json({ 
       success: true, 
-      message: 'Manual task triggered via LISTEN/NOTIFY',
-      request: manualTaskRequest
+      message: 'Task event triggered via LISTEN/NOTIFY',
+      request: taskEventRequest
     });
 
   } catch (error) {

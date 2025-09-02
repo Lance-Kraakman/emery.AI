@@ -8,7 +8,7 @@
 import type { IInvitationRepository } from '@/ddd/domain/invitations/repositories/invitation-repository';
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
-import { OrganizationId, UserId, EmailAddress, OrganizationRole, InvitationId } from '@/ddd/domain/shared/value-objects';
+import { OrganizationId, UserId, EmailAddress, OrganizationRole, InvitationId, InvitationToken } from '@/ddd/domain/shared/value-objects';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { 
   Invitation, 
@@ -40,10 +40,10 @@ export interface BulkInvitationCommand {
   organizationId: number;
   invitedBy: string;
   invitations: Array<{
-    email: string;
-    role?: string;
+    email: EmailAddress;
+    role?: OrganizationRole;
   }>;
-  defaultRole?: string;
+  defaultRole?: OrganizationRole;
   expiryDays?: number;
   sendEmail?: boolean;
 }
@@ -205,27 +205,17 @@ export class InvitationApplicationService {
         };
       }
 
-      // Prepare bulk invitation data
+      // Prepare bulk invitation data - VOs are already validated
       const bulkData: BulkInvitationData = {
         organizationId: OrganizationId.fromNumber(command.organizationId),
         invitedBy: UserId.fromString(command.invitedBy),
-        invitations: command.invitations.map((inv: any) => ({
-          email: EmailAddress.fromString(inv.email.toLowerCase().trim()),
-          role: OrganizationRole.fromString(inv.role || command.defaultRole || 'member')
+        invitations: command.invitations.map(inv => ({
+          email: inv.email,
+          role: inv.role || command.defaultRole || OrganizationRole.fromString('member')
         })),
-        defaultRole: OrganizationRole.fromString(command.defaultRole || 'member'),
+        defaultRole: command.defaultRole || OrganizationRole.fromString('member'),
         expiresAt: createInvitationExpiry(command.expiryDays)
       };
-
-      // Validate all roles
-      for (const inv of bulkData.invitations) {
-        if (!isValidInvitationRole(inv.role!.value)) {
-          return {
-            success: false,
-            error: `Invalid role: ${inv.role!.value} for email ${inv.email.value}`
-          };
-        }
-      }
 
       // Send bulk invitations
       const result = await this.invitationRepository.createBulkInvitations(bulkData);
@@ -273,7 +263,7 @@ export class InvitationApplicationService {
   async acceptInvitation(command: AcceptInvitationCommand): Promise<InvitationApplicationResult<InvitationAcceptanceResult>> {
     try {
       // Validate token and get invitation
-      const tokenValidation = await this.invitationRepository.validateToken(command.token as any);
+      const tokenValidation = await this.invitationRepository.validateToken(InvitationToken.fromString(command.token));
       if (!tokenValidation.valid || !tokenValidation.invitation) {
         return {
           success: false,
@@ -347,7 +337,7 @@ export class InvitationApplicationService {
       }
 
       // Accept the invitation (marks as used)
-      await this.invitationRepository.acceptInvitation(command.token as any, user.id);
+      await this.invitationRepository.acceptInvitation(InvitationToken.fromString(command.token), user.id);
 
       const result: InvitationAcceptanceResult = {
         success: true,
@@ -392,8 +382,8 @@ export class InvitationApplicationService {
         };
       }
 
-      // Revoke invitation
-      await this.invitationRepository.revokeInvitation(InvitationId.fromNumber(invitationId));
+      // Revoke invitation (delete it)
+      await this.invitationRepository.delete(InvitationId.fromNumber(invitationId));
 
       return {
         success: true,
@@ -438,8 +428,10 @@ export class InvitationApplicationService {
         });
       }
 
-      // Resend invitation
-      const updatedInvitation = await this.invitationRepository.resendInvitation(InvitationId.fromNumber(invitationId));
+      // Extend expiry and update invitation
+      const updatedInvitation = await this.invitationRepository.update(InvitationId.fromNumber(invitationId), {
+        expiresAt: createInvitationExpiry()
+      });
 
       // Send email notification
       try {
@@ -467,58 +459,6 @@ export class InvitationApplicationService {
     }
   }
 
-  /**
-   * Get invitations with filtering
-   */
-  async getInvitations(filters: InvitationFilters): Promise<Invitation[]> {
-    try {
-      let invitations = await this.invitationRepository.findByOrganization(OrganizationId.fromNumber(filters.organizationId));
-
-      // Apply inviter filter
-      if (filters.invitedBy) {
-        invitations = invitations.filter(inv => inv.invitedBy.value === filters.invitedBy);
-      }
-
-      // Apply role filter
-      if (filters.role) {
-        invitations = invitations.filter(inv => inv.role.value === filters.role);
-      }
-
-      // Apply status filter
-      if (filters.status) {
-        const now = new Date();
-        switch (filters.status) {
-          case 'pending':
-            invitations = invitations.filter(inv => inv.expiresAt > now);
-            break;
-          case 'expired':
-            invitations = invitations.filter(inv => inv.expiresAt <= now);
-            break;
-          // 'all' - no additional filtering
-        }
-      }
-
-      // Apply search filter
-      if (filters.searchQuery) {
-        const searchLower = filters.searchQuery.toLowerCase();
-        invitations = invitations.filter(inv => 
-          inv.email.value.toLowerCase().includes(searchLower)
-        );
-      }
-
-      // Sort by creation date (newest first)
-      invitations.sort((a, b) => {
-        const aTime = a.createdAt?.getTime() || 0;
-        const bTime = b.createdAt?.getTime() || 0;
-        return bTime - aTime;
-      });
-
-      return invitations;
-    } catch (error) {
-      console.error("Error fetching invitations:", error);
-      throw new Error("Failed to fetch invitations");
-    }
-  }
 
   /**
    * Get invitation statistics for an organization
@@ -559,7 +499,8 @@ export class InvitationApplicationService {
       console.error("Error cleaning up expired invitations:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to cleanup expired invitations"
+        error: error instanceof Error ? error.message : "Failed to cleanup expired invitations",
+        data: 0
       };
     }
   }
@@ -569,7 +510,7 @@ export class InvitationApplicationService {
    */
   async getInvitationByToken(token: string): Promise<InvitationApplicationResult<Invitation>> {
     try {
-      const invitation = await this.invitationRepository.findByToken(token as any);
+      const invitation = await this.invitationRepository.findByToken(InvitationToken.fromString(token));
       if (!invitation) {
         return {
           success: false,

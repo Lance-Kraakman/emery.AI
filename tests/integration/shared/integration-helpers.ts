@@ -45,7 +45,6 @@ export class IntegrationTestClient {
       // Use single connection to ensure RLS context is shared across all queries
       this.pgClient = postgres(this.dbUrl, {
         max: 1,         // Single connection for RLS context
-        min: 1,         // Keep connection alive
         prepare: false, // Disable prepared statements for easier debugging
         onnotice: () => {}, // Suppress notices
         connection: {
@@ -215,7 +214,7 @@ export class IntegrationTestClient {
   ): Promise<void> {
     try {
       const result = await db.delete(table as any).where(condition);
-      console.log(`  🗑️  Cleaned ${tableName}: ${result.rowCount || 0} rows deleted`);
+      console.log(`  🗑️  Cleaned ${tableName}: ${result.count || 0} rows deleted`);
     } catch (error: any) {
       // Skip if table doesn't exist (42P01 = undefined_table)
       if (error.code === '42P01') {
@@ -351,7 +350,6 @@ export class IntegrationTestClient {
       if (this.pgClient) {
         await this.pgClient.end();
         this.pgClient = null;
-        this._db = null;
       }
     } catch (error) {
       console.warn('Error disconnecting from database:', error);

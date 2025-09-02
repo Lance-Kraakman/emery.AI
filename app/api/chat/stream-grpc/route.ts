@@ -262,8 +262,8 @@ export async function POST(req: NextRequest) {
         organizationId,
         query: latestMessage,
         primaryWeight: processingOptions.primaryRagWeight || 0.7,
-        maxPrimaryDocs: 3,
-        maxSecondaryDocs: 2,
+        maxPrimaryDocs: 10,
+        maxSecondaryDocs: 20,
         similarityThreshold: processingOptions.ragThreshold || 0.3
       };
 

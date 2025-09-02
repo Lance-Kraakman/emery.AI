@@ -3,7 +3,7 @@
 
 export type { IndexingDomainService as IIndexingDomainService } from './indexing-domain-service';
 export type { SearchDomainService as ISearchDomainService } from './search-domain-service';
-export type { ContentProcessor } from './content-processor';
+export type { EmbeddingGeneratorService as ContentProcessor } from './embedding-generator-service';
 
 // These might be used by other services
 export type { EmbeddingGenerator, SearchLogger } from './search-domain-service';

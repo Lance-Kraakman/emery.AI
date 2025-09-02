@@ -5,7 +5,7 @@ import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-re
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { agents } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
 import type { DbClient } from '@/lib/db/client';
 
 export class DrizzleAgentRepository implements IAgentRepository {
@@ -130,7 +130,7 @@ export class DrizzleAgentRepository implements IAgentRepository {
       trigger: data.trigger || {},
       capabilities: data.capabilities || {},
       databaseId: data.databaseId,
-      status: data.status || 'active',
+      status: AgentStatus.fromString(data.status || 'active'),
       organizationId: OrganizationId.fromNumber(data.organizationId),
       ownerId: UserId.fromString(data.ownerId),
       apiKey: data.apiKey,

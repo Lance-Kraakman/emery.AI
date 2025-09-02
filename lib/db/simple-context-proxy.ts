@@ -20,9 +20,9 @@ import { db } from './client';
  * Simple approach: Store query info and rebuild on transaction client
  * This captures the query-building chain and replays it on the transaction
  */
-function createQueryBuilderProxy(queryBuilder: any, originalDb: DbClient, context: { organizationId: any; userId?: any }): any {
-  // Store the query building steps
-  const querySteps: Array<{ method: string; args: any[] }> = [];
+function createQueryBuilderProxy(queryBuilder: any, originalDb: DbClient, context: { organizationId: any; userId?: any }, initialSteps: Array<{ method: string; args: any[] }> = []): any {
+  // Store the query building steps - start with any initial steps
+  const querySteps: Array<{ method: string; args: any[] }> = [...initialSteps];
   
   return new Proxy(queryBuilder, {
     get(target, prop, receiver) {
@@ -36,9 +36,27 @@ function createQueryBuilderProxy(queryBuilder: any, originalDb: DbClient, contex
             originalDb,
             context.organizationId,
             async (tx) => {
-              // For now, let's just execute the original query and trust RLS policies
-              // This is a simplified approach while we debug
-              return await target;
+              // CRITICAL FIX: Execute the query using the transaction client with RLS context
+              // Rebuild the query chain on the transaction client using stored querySteps
+              try {
+                if (querySteps.length === 0) {
+                  console.warn('⚠️ RLS Context Warning: No query steps recorded, executing original query');
+                  return await target;
+                }
+                
+                // Rebuild the query chain on the transaction client
+                let query = tx;
+                for (const step of querySteps) {
+                  query = (query as any)[step.method](...step.args);
+                }
+                
+                return await query;
+              } catch (error) {
+                // Fallback: if rebuilding fails, execute original query with warning
+                console.warn('⚠️ RLS Context Error: Query rebuilding failed, falling back to original query:', error);
+                console.warn('Query steps were:', querySteps);
+                return await target;
+              }
             },
             context.userId
           ).then(resolve, reject);
@@ -51,7 +69,25 @@ function createQueryBuilderProxy(queryBuilder: any, originalDb: DbClient, contex
             originalDb,
             context.organizationId,
             async (tx) => {
-              return await target;
+              // CRITICAL FIX: Same query rebuilding logic as 'then' method
+              try {
+                if (querySteps.length === 0) {
+                  console.warn('⚠️ RLS Context Warning: No query steps recorded in catch, executing original query');
+                  return await target;
+                }
+                
+                // Rebuild the query chain on the transaction client
+                let query = tx;
+                for (const step of querySteps) {
+                  query = (query as any)[step.method](...step.args);
+                }
+                
+                return await query;
+              } catch (error) {
+                console.warn('⚠️ RLS Context Error: Query rebuilding failed in catch, falling back to original query:', error);
+                console.warn('Query steps were:', querySteps);
+                return await target;
+              }
             },
             context.userId
           ).catch(reject);
@@ -62,11 +98,12 @@ function createQueryBuilderProxy(queryBuilder: any, originalDb: DbClient, contex
       if (typeof originalMethod === 'function') {
         return function(...args: any[]) {
           querySteps.push({ method: prop as string, args });
+          // console.log(`🔍 RLS Proxy: Recording query step: ${prop as string}`, args.length > 0 ? `with ${args.length} args` : '');
           const result = originalMethod.apply(target, args);
           
-          // Return proxy for continued chaining
+          // Return proxy for continued chaining, passing along accumulated steps
           if (result && typeof result === 'object' && result !== target) {
-            return createQueryBuilderProxy(result, originalDb, context);
+            return createQueryBuilderProxy(result, originalDb, context, querySteps);
           }
           
           return result;
@@ -115,11 +152,13 @@ function createSimpleContextProxy(baseDb: DbClient): DbClient {
       if (prop === 'select' || prop === 'insert' || prop === 'update' || prop === 'delete') {
         return function(...args: any[]) {
           const context = contextManager.getContext();
+          // console.log(`🔍 RLS Proxy: Intercepted ${prop as string} method, context:`, context ? `org=${context.organizationId.value}` : 'NONE');
           
           if (context) {
-            // Create the query builder first, then proxy it
+            // Create the query builder first, then proxy it with the initial step
             const queryBuilder = originalValue.apply(target, args);
-            return createQueryBuilderProxy(queryBuilder, target, context);
+            const initialStep = { method: prop as string, args };
+            return createQueryBuilderProxy(queryBuilder, target, context, [initialStep]);
           } else {
             // No context - call original method
             return originalValue.apply(target, args);

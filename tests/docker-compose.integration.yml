@@ -85,7 +85,7 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
       PYTHONPATH: /usr/src/app/src
-      WORKER_PORT: 50051
+      WORKER_ADDRESS: 50051
       ORGANIZATION_ID: default
     depends_on:
       postgres-integration:

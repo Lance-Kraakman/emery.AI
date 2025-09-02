@@ -12,23 +12,7 @@ import { Task, TaskInstructions } from '../entities/task';
 import { TaskId } from '../value-objects/task-id';
 import { TaskStatus } from '../value-objects/task-status';
 import type { AgentId, OrganizationId } from '@/ddd/domain/shared/value-objects';
-import type { TriggerConfig, TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
-
-export interface ScheduledTask {
-  agentId: AgentId;
-  organizationId: OrganizationId;
-  name: string;
-  capabilityName?: string;
-  instructions: TaskInstructions;
-  trigger: TriggerConfig;
-  isActive: boolean;
-  nextExecution?: Date;
-  lastExecution?: Date;
-  executionCount: number;
-  failureCount: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import type { TriggerConfig, TriggerType, ScheduledTask, ScheduleTaskRequest } from '@/ddd/domain/scheduling';
 
 /**
  * Domain service for managing task scheduling
@@ -37,14 +21,7 @@ export interface ISchedulerService {
   /**
    * Schedule a recurring task for an agent
    */
-  scheduleTask(config: {
-    agentId: AgentId;
-    organizationId: OrganizationId;
-    name: string;
-    capabilityName?: string;
-    instructions: TaskInstructions;
-    trigger: TriggerConfig;
-  }): Promise<void>;
+  scheduleTask(request: ScheduleTaskRequest): Promise<void>;
 
   /**
    * Get tasks due for execution
@@ -87,19 +64,12 @@ export class SchedulerService implements ISchedulerService {
     private agentRepository: any // Will be injected from container
   ) {}
 
-  async scheduleTask(config: {
-    agentId: AgentId;
-    organizationId: OrganizationId;
-    name: string;
-    capabilityName?: string;
-    instructions: TaskInstructions;
-    trigger: TriggerConfig;
-  }): Promise<void> {
+  async scheduleTask(request: ScheduleTaskRequest): Promise<void> {
     // Update agent's trigger configuration
     // This will be handled by the agent repository in the infrastructure layer
-    const agent = await this.agentRepository.findById(config.agentId);
+    const agent = await this.agentRepository.findById(request.agentId);
     if (agent) {
-      agent.updateTrigger(config.trigger);
+      agent.updateTrigger(request.trigger);
       await this.agentRepository.save(agent);
     }
   }

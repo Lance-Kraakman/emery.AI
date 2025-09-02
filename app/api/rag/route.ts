@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { getRagIndexingApplicationService, getRagSearchApplicationService, getRagIndexRepository } from '@/ddd/application/di/container'
 import type { CreateIndexCommand } from '@/ddd/application/services/rag/commands/create-index-command'
-import { OrganizationId } from '@/ddd/domain/rag/value-objects'
+import { OrganizationId } from '@/ddd/domain/shared/value-objects'
 
 // GET /api/rag - List RAG indexes for organization
 export async function GET(request: NextRequest) {
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { name, description, domainTypes, domainFilters } = body
 
-    const organizationId = 1 // AIDEV-TODO: Get from session
+    const organizationId = OrganizationId.fromNumber(1) // AIDEV-TODO: Get from session
 
     // AIDEV-NOTE: Using DDD indexing application service instead of legacy ragService
     const createIndexCommand: CreateIndexCommand = {

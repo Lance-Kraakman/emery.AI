@@ -11,14 +11,14 @@ import { SentenceSplitter } from 'llamaindex';
 import { SimpleDirectoryReader } from "@llamaindex/readers/directory";
 
 import { 
-  type ContentProcessor, 
+  type EmbeddingGeneratorService, 
   type ProcessedContent,
-  type ContentProcessingConfig,
+  type EmbeddingGeneratorConfig,
   type FileProcessingContext
-} from '@/ddd/domain/rag/services/content-processor';
+} from '@/ddd/domain/rag/services/embedding-generator-service';
 import { type EmbeddingGenerator } from '@/ddd/domain/rag/services';
 
-export class LlamaIndexContentProcessor implements ContentProcessor {
+export class LlamaIndexContentProcessor implements EmbeddingGeneratorService {
   constructor(private readonly embeddingGenerator: EmbeddingGenerator) {}
 
   async generateEmbedding(content: string): Promise<number[]> {
@@ -173,7 +173,7 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${textChunks.length} from ${fileD
   /**
    * Get processing configuration
    */
-  getProcessingConfig(): ContentProcessingConfig {
+  getProcessingConfig(): EmbeddingGeneratorConfig {
     return {
       chunkSize: 1024,
       chunkOverlap: 50,
