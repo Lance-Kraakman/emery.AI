@@ -24,13 +24,12 @@ import type { StoredFile } from '@/ddd/domain/files/entities/file-storage';
 
 // Import content processing interfaces
 import { 
-  type ContentProcessor, 
-  type ProcessedContent 
-} from './content-processor';
+  type EmbeddingGeneratorService, 
+} from './embedding-generator-service';
 
 export class IndexingDomainService {
   constructor(
-    private readonly contentProcessor: ContentProcessor
+    private readonly embeddingGenerator: EmbeddingGeneratorService
   ) {}
 
   /**
@@ -42,8 +41,8 @@ export class IndexingDomainService {
     organization: Organization
   ): Promise<RagDocument[]> {
     const content = this.generateOrganizationContent(organization);
-    const embedding = await this.contentProcessor.generateEmbedding(content);
-    const contentHash = this.contentProcessor.calculateContentHash(content);
+    const embedding = await this.embeddingGenerator.generateEmbedding(content);
+    const contentHash = this.embeddingGenerator.calculateContentHash(content);
 
     const document = RagDocument.create({
       indexId,
@@ -81,8 +80,8 @@ export class IndexingDomainService {
     for (const table of tables) {
       const fields = fieldsMap?.get(table.id.value) || [];
       const content = this.generateTableSchemaContent(table, fields, databasesMap);
-      const embedding = await this.contentProcessor.generateEmbedding(content);
-      const contentHash = this.contentProcessor.calculateContentHash(content);
+      const embedding = await this.embeddingGenerator.generateEmbedding(content);
+      const contentHash = this.embeddingGenerator.calculateContentHash(content);
 
       const document = RagDocument.create({
         indexId,
@@ -122,7 +121,7 @@ export class IndexingDomainService {
 
     for (const file of files) {
       try {
-        const processedChunks = await this.contentProcessor.processFileContent(file);
+        const processedChunks = await this.embeddingGenerator.processFileContent(file);
 
         for (let chunkIndex = 0; chunkIndex < processedChunks.length; chunkIndex++) {
           const chunk = processedChunks[chunkIndex];
@@ -174,8 +173,8 @@ export class IndexingDomainService {
 
     for (const agent of agents) {
       const content = this.generateAgentContent(agent);
-      const embedding = await this.contentProcessor.generateEmbedding(content);
-      const contentHash = this.contentProcessor.calculateContentHash(content);
+      const embedding = await this.embeddingGenerator.generateEmbedding(content);
+      const contentHash = this.embeddingGenerator.calculateContentHash(content);
 
       const document = RagDocument.create({
         indexId,
@@ -216,8 +215,8 @@ export class IndexingDomainService {
 
     for (const database of databases) {
       const content = this.generateDatabaseContent(database);
-      const embedding = await this.contentProcessor.generateEmbedding(content);
-      const contentHash = this.contentProcessor.calculateContentHash(content);
+      const embedding = await this.embeddingGenerator.generateEmbedding(content);
+      const contentHash = this.embeddingGenerator.calculateContentHash(content);
 
       const document = RagDocument.create({
         indexId,
@@ -255,8 +254,8 @@ export class IndexingDomainService {
 
     for (const team of teams) {
       const content = this.generateTeamContent(team);
-      const embedding = await this.contentProcessor.generateEmbedding(content);
-      const contentHash = this.contentProcessor.calculateContentHash(content);
+      const embedding = await this.embeddingGenerator.generateEmbedding(content);
+      const contentHash = this.embeddingGenerator.calculateContentHash(content);
 
       const document = RagDocument.create({
         indexId,

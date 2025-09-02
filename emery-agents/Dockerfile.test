@@ -1,0 +1,37 @@
+# Test-specific Dockerfile with fixed package versions using uv.lock
+FROM python:3.11-slim
+
+WORKDIR /usr/src/app
+
+# Install uv for faster Python package installation (pinned version for reproducibility)
+RUN pip install uv==0.5.30
+
+# Copy dependency files - uv.lock ensures reproducible builds with fixed versions
+COPY ./pyproject.toml ./uv.lock ./README.md ./
+
+# AIDEV-NOTE: uv.lock guarantees exact same package versions across environments
+# This creates a completely reproducible container for testing
+RUN uv pip install . --system --locked
+
+# Copy source code
+COPY ./src ./src
+COPY ./tests ./tests
+
+# Set environment variables for testing
+ENV PYTHONPATH=/usr/src/app/src
+ENV WORKER_ADDRESS=50051
+ENV ORGANIZATION_ID=test-org
+ENV ENVIRONMENT=test
+
+# Install additional test dependencies if not in uv.lock
+RUN uv pip install pytest pytest-asyncio pytest-grpc grpcio-health-checking --system
+
+# Expose gRPC port
+EXPOSE 50051
+
+# Health check for container readiness
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+  CMD python -c "from grpc_health.v1 import health_pb2_grpc, health_pb2; import grpc; channel = grpc.insecure_channel('localhost:50051'); stub = health_pb2_grpc.HealthStub(channel); stub.Check(health_pb2.HealthCheckRequest())" || exit 1
+
+# Default command runs the gRPC server
+CMD ["python", "-m", "emery_agents.infrastructure.grpc.main"]

@@ -5,14 +5,15 @@
 -- TASK NOTIFICATION TRIGGERS
 -- =============================================================================
 
--- Function to send task notification for manual dispatcher
+-- Function to send task notification for scheduler
 CREATE OR REPLACE FUNCTION notify_new_task()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Send notification for manual tasks (dispatcher expects manual_task_created)
+    -- Send notification for task scheduler (scheduler expects task_event)
     PERFORM pg_notify(
-        'manual_task_created',
+        'task_event',
         json_build_object(
+            'event_type', 'task_created',
             'taskId', NEW.id,
             'agentId', NEW.agent_id,
             'organizationId', NEW.organization_id,

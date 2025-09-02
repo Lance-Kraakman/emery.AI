@@ -31,9 +31,13 @@ export default defineConfig({
     },
     // Environment variables for persistent server
     env: {
+      // AIDEV-NOTE: Set DATABASE_URL so application services use test database
+      DATABASE_URL: 'postgresql://postgres:integration_test_password@localhost:5436/emery_integration_test',
       TEST_DATABASE_URL: 'postgresql://postgres:integration_test_password@localhost:5436/emery_integration_test',
       TEST_APP_URL: 'http://localhost:3002',
       TEST_GRPC_URL: 'localhost:50053',
+      WORKER_ADDRESS: 'localhost:50053',
+      NODE_ENV: 'test',
       // Skip container management in setup files
       PERSISTENT_TEST_SERVER: 'true'
     }

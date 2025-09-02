@@ -1,17 +1,25 @@
-# 1. Build the application
-FROM node:20-alpine AS builder
+# 1. Build the application - using Debian for native module compatibility
+FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 
 # Copy package files first for better caching
 COPY package.json pnpm-lock.yaml ./
-# Install git for dependencies
-RUN apk add --no-cache git
+# Install build dependencies for native modules (DuckDB, Sharp, etc.)
+RUN apt-get update && apt-get install -y \
+    git \
+    python3 \
+    make \
+    g++ \
+    libvips-dev \
+    && rm -rf /var/lib/apt/lists/*
 RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
-RUN apt install gtimout timeout
 RUN npm i -g pnpm
 
 # AIDEV-NOTE: Install dependencies with frozen lockfile for cache efficiency
 RUN pnpm install --frozen-lockfile
+
+# AIDEV-NOTE: Force rebuild DuckDB from source in container environment
+RUN cd node_modules/duckdb && npm rebuild --build-from-source
 
 # Copy source code after dependencies are installed
 COPY . .
@@ -29,11 +37,15 @@ RUN pnpm run build
 
 # AIDEV-NOTE: Skip bundled scheduler, use tsx directly to avoid bundling issues
 
-# 2. Production image
-FROM node:20-alpine AS runner
+# 2. Production image - using Debian for native module compatibility
+FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
-RUN npm i -g pnpm && apk add --no-cache curl
+RUN apt-get update && apt-get install -y \
+    curl \
+    libvips42 \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm i -g pnpm
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

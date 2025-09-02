@@ -265,7 +265,7 @@ export class DualContextRagService {
             const searchApplicationService = getRagSearchApplicationService();
             const searchResult = await searchApplicationService.search(searchQuery);
         
-            secondaryContext = searchResult.documents.map(doc => ({
+            secondaryContext = searchResult.data?.documents.map(doc => ({
               id: doc.id,
               title: doc.title,
               content: doc.content.substring(0, 500) + '...',
@@ -273,7 +273,7 @@ export class DualContextRagService {
               sourceName: doc.sourceName || 'Organization Data',
               similarity: doc.similarity,
               metadata: doc.metadata
-            }));
+            })) ?? [];
 
             if (secondaryContext.length > 0) {
               ragSources.push({

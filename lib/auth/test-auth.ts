@@ -63,7 +63,7 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
             email: apiKeyUser.email,
             name: apiKeyUser.name,
             organizationId: apiKeyUser.organizationId,
-            organizationRole: apiKeyUser.organizationRole || 'member',
+            organizationRole: 'member', // Default role for API key users
           },
         };
       }

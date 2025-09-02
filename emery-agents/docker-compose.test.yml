@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  emery-agent-worker-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    ports:
+      - "50051:50051"
+    environment:
+      - WORKER_ADDRESS=50051
+      - ORGANIZATION_ID=test-org
+      - HF_TOKEN=${HF_TOKEN:-}
+      - PYTHONPATH=/usr/src/app/src
+    volumes:
+      # Mount source code for development testing
+      - ./src:/usr/src/app/src:ro
+      - ./tests:/usr/src/app/tests:ro
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import grpc; grpc.insecure_channel('localhost:50051').unary_unary('emery.agents.AgentWorker/GetWorkerInfo', request_serializer=lambda x: b'', response_deserializer=lambda x: x)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Test database if needed for integration tests
+  test-postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=emery_test
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=testpass
+    ports:
+      - "5434:5432"
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge

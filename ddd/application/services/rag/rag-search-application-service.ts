@@ -55,7 +55,11 @@ export class RagSearchApplicationService {
    * Perform vector similarity search
    */
   async search(query: SearchRagQuery): Promise<Result<SearchResult>> {
-    SearchRagQueryValidator.validate(query);
+    try {
+      SearchRagQueryValidator.validate(query);
+    } catch (error) {
+      return ResultHelpers.failure(`${error instanceof Error ? error.message : String(error)}`);
+    }
 
     const { indexId, searchQuery, sourceTypes, context } = SearchRagQueryValidator.toDomainParams(query);
     const startTime = Date.now();
@@ -122,7 +126,7 @@ export class RagSearchApplicationService {
       const searchTime = Date.now() - startTime;
       console.error(`[RAG-SEARCH-APP] Search failed after ${searchTime}ms:`, error);
 
-      return ResultHelpers.failure("failed to search ${error}")
+      return ResultHelpers.failure(`${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }

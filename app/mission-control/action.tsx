@@ -9,7 +9,8 @@ import { generateText } from 'ai'
 import { getAIModel, getAIProviderInfo } from '@/lib/ai/models'
 import type { SearchRagQuery } from '@/ddd/application/services/rag/queries/search-query'
 import type { CreateIndexCommand } from '@/ddd/application/services/rag/commands/create-index-command'
-import { RagIndexId, OrganizationId } from '@/ddd/domain/rag/value-objects'
+import { RagIndexId } from '@/ddd/domain/rag/value-objects'
+import { OrganizationId } from '@/ddd/domain/shared/value-objects'
 
 export async function chatAction(question: string): Promise<ReactNode> {
   const session = await auth()
@@ -49,11 +50,11 @@ Your question: "${question}"`}
   try {
     if (session?.user?.id) {
       // Get or create default organization RAG index
-      const organizationId = 1 // AIDEV-TODO: Get from session
+      const organizationId = OrganizationId.fromNumber(1) // AIDEV-TODO: Get from session
       
       // AIDEV-NOTE: Using DDD repository directly instead of legacy ragService
       const indexRepository = getRagIndexRepository();
-      const indexes = await indexRepository.findByOrganization(OrganizationId.fromNumber(organizationId))
+      const indexes = await indexRepository.findByOrganization(organizationId)
       let ragIndex = indexes.find(idx => idx.domainTypes.includes('table'))
       
       // Create default RAG index if none exists
@@ -86,10 +87,11 @@ Your question: "${question}"`}
         const searchApplicationService = getRagSearchApplicationService();
         const searchResult = await searchApplicationService.search(searchQuery)
 
-        if (searchResult.documents.length > 0) {
+        if (searchResult.success && searchResult.data!.documents.length > 0) {
+          const searchData = searchResult.data!;
           ragContext = `
 RELEVANT ORGANIZATION DATA:
-${searchResult.documents.map((doc, idx) => 
+${searchData.documents.map((doc, idx) => 
   `[${idx + 1}] ${doc.title}
 ${doc.content.substring(0, 500)}...
 Source: ${doc.domainType} - ${doc.sourceName} (${(doc.similarity! * 100).toFixed(1)}% match)

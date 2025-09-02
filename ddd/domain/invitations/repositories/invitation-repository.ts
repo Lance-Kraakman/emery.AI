@@ -23,18 +23,14 @@ export interface IInvitationRepository {
   
   // Query operations
   findByOrganization(organizationId: OrganizationId): Promise<Invitation[]>;
-  findByInviter(invitedBy: UserId): Promise<Invitation[]>;
   findByQuery(query: InvitationQuery): Promise<Invitation[]>;
   
   // Token and validation operations
   validateToken(token: InvitationToken): Promise<{ valid: boolean; invitation?: Invitation; error?: string }>;
-  isTokenExpired(token: InvitationToken): Promise<boolean>;
   generateUniqueToken(): Promise<InvitationToken>;
   
   // Invitation management
   acceptInvitation(token: InvitationToken, acceptingUserId: UserId): Promise<void>;
-  resendInvitation(id: InvitationId): Promise<Invitation>;
-  revokeInvitation(id: InvitationId): Promise<void>;
   
   // Bulk operations
   createBulkInvitations(data: BulkInvitationData): Promise<BulkInvitationResult>;
@@ -44,7 +40,6 @@ export interface IInvitationRepository {
   // Statistics and analytics
   getInvitationStats(organizationId: OrganizationId): Promise<InvitationStats>;
   getPendingInvitations(organizationId: OrganizationId): Promise<Invitation[]>;
-  getExpiredInvitations(organizationId: OrganizationId): Promise<Invitation[]>;
   
   // Business logic validations
   canInviteToOrganization(inviterId: UserId, organizationId: OrganizationId): Promise<boolean>;

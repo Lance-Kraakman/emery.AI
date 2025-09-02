@@ -31,7 +31,7 @@ export interface ProcessedContent {
   contentHash: string;
 }
 
-export interface ContentProcessingConfig {
+export interface EmbeddingGeneratorConfig {
   chunkSize: number;
   chunkOverlap: number;
   maxFileSize: number;
@@ -41,7 +41,7 @@ export interface ContentProcessingConfig {
  * Domain service interface for content processing
  * Implementations can use different providers (LlamaIndex, OpenAI, local models, etc.)
  */
-export interface ContentProcessor {
+export interface EmbeddingGeneratorService {
   /**
    * Generate embeddings for text content
    */
@@ -70,5 +70,5 @@ export interface ContentProcessor {
   /**
    * Get processing configuration
    */
-  getProcessingConfig(): ContentProcessingConfig;
+  getProcessingConfig(): EmbeddingGeneratorConfig;
 }

@@ -314,7 +314,6 @@ export class DIContainer {
     const contentProcessor = new LlamaIndexContentProcessor(embeddingService);
     
     this.repositories.set('EmbeddingService', embeddingService);
-    this.repositories.set('SearchAnalyticsService', searchAnalyticsService);
     this.repositories.set('LlamaIndexContentProcessor', contentProcessor);
 
     // Initialize RAG domain services

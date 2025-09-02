@@ -1,93 +1,94 @@
-# Emery Agent Scheduler
+# Event-Driven Agent Scheduler
 
-Event-driven scheduling system for Emery agents using Domain-Driven Design architecture.
+Modern event-driven scheduling system for Emery agents with PostgreSQL LISTEN/NOTIFY and automatic RAG reindexing.
 
 ## Architecture
 
-The scheduler implements a hybrid approach:
-- **Timer-based fallback**: Periodic checks every 5 minutes for reliability
-- **Real-time event callbacks**: PostgreSQL LISTEN/NOTIFY for instant responsiveness
-- **DDD Architecture**: Clean separation between domain, application, and infrastructure layers
+The scheduler implements a **pure event-driven architecture** with fallback polling:
 
-## Available Scripts
+- **Real-time events**: PostgreSQL LISTEN/NOTIFY for instant task processing
+- **Auto RAG reindexing**: Automatic reindexing when data changes
+- **Fallback timer**: 5-minute intervals for scheduled (CALENDAR) tasks
+- **DDD Architecture**: Clean separation with EventDrivenScheduler orchestrating services
+
+## Quick Start
 
 ```bash
-# Build and start scheduler (single command for all environments)
+# Start the event-driven scheduler
 pnpm scheduler:start
 
-# Build only (for container deployment)
-pnpm scheduler:build
+# Or run directly
+tsx scripts/run-scheduler.ts
 ```
-
-## Container Deployment
-
-### Using the provided Dockerfile:
-```bash
-# Build the container
-docker build -f Dockerfile.scheduler -t emery-scheduler .
-
-# Run the container
-docker run -d \
-  --name emery-scheduler \
-  --env-file .env.local \
-  --network host \
-  emery-scheduler
-```
-
-### Key features:
-- **4.5MB bundled output** with all dependencies included
-- **Node 20 Alpine** base image for minimal size
-- **Non-root user** for security
-- **Health checks** included
-- **Production optimized** with proper memory limits
 
 ## Event Types
 
-The scheduler responds to these database events:
-- `task_created` - New agent tasks
-- `scheduled_job_due` - CRON scheduled jobs
-- `table_changed` - Database table modifications
-- `periodic_check` - Fallback timer events
+The scheduler handles these PostgreSQL notification events:
 
-## Configuration
+### Task Events
+- `task_event` - New agent tasks (MANUAL triggers)
+  - Processed immediately via TaskSchedulingApplicationService
 
-Environment variables required:
-- `DATABASE_URL` - PostgreSQL connection string
-- `NODE_ENV` - Environment (development/production)
+### RAG Events  
+- `rag_reindex_needed` - Data changes requiring reindexing
+  - Organizations, agents, or tables modified
+  - Debounced and processed via RagIndexingApplicationService
 
-Optional configuration:
-- `SCHEDULER_TIMEZONE` - Timezone for CRON jobs (default: UTC)
-- `MAX_CONCURRENT_TASKS` - Maximum concurrent task execution (default: 10)
+### Scheduled Events (Timer-based)
+- **CALENDAR triggers** - RRule-based scheduling (daily, weekly, monthly)
+- **Timeouts** - Handle stuck tasks
+- **Retries** - Exponential backoff for failed tasks
+
+## Trigger Types Supported
+
+- ✅ **MANUAL** - Immediate execution (via database events)
+- ✅ **CALENDAR** - RRule scheduling (via timer polling)
+- ✅ **RAG_REINDEX** - Auto reindexing (via database events)
+- 🚧 **DATABASE_EVENT** - Table change triggers (planned)
+- 🚧 **WEBHOOK** - HTTP-triggered tasks (planned)
+
+## Environment Variables
+
+```bash
+DATABASE_URL=postgresql://postgres:password@localhost:5433/emery
+NODE_ENV=development
+```
+
+## Architecture Components
+
+### EventDrivenScheduler (`scripts/run-scheduler.ts`)
+- Central orchestrator for all trigger types
+- PostgreSQL event listeners
+- RAG reindex debouncing
+- Fallback timer for scheduled tasks
+
+### TaskSchedulingApplicationService
+- Individual task execution
+- Task lifecycle management (start, complete, fail, timeout)
+- gRPC agent integration
+
+### RagIndexingApplicationService  
+- Automatic data reindexing
+- Handles organization, agent, and table changes
+- Incremental reindexing for performance
+
+## Container Deployment
+
+```bash
+# Build and run scheduler
+docker build -f Dockerfile.scheduler -t emery-scheduler .
+docker run -d --name emery-scheduler --env-file .env.local emery-scheduler
+```
 
 ## Monitoring
 
-The scheduler provides built-in logging and monitoring:
-- Real-time status updates
-- Event processing counts
-- Error tracking and reporting
-- Database connection health checks
+The scheduler provides detailed logging:
+- 🚀 Startup and configuration
+- 📨 Real-time event processing  
+- ⏰ Scheduled task execution
+- 🔄 RAG reindexing operations
+- ❌ Error handling and retries
 
-## Dependencies
+## Development
 
-All dependencies are bundled in the esbuild output. External dependencies that require runtime availability:
-- `pg-native` (optional PostgreSQL optimization)
-- `sharp` (image processing, optional)
-- `canvas` (optional for advanced processing)
-
-## Development Notes
-
-- Uses TSX for development with hot-reload support
-- ESBuild handles all TypeScript compilation and bundling
-- Path mappings (`@/*`) are properly resolved in the bundle
-- Source maps included for debugging
-- All DDD infrastructure dependencies are included
-
-## Testing
-
-```bash
-# Test the scheduler system
-pnpm test:scheduler
-
-# Run GRPC integration tests
-pnpm test:grpc
-```
+The scheduler auto-initializes DI containers and connects to the database. It runs continuously, processing events as they arrive and falling back to timer-based polling for scheduled tasks.

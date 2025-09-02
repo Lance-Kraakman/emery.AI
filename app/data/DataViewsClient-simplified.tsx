@@ -14,6 +14,7 @@ import { getFields } from "@/app/actions/fields"
 import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
 import type { TableField } from "@/ddd/domain/tables/value-objects/table-field"
 import type { Row } from "@/ddd/domain/tables/value-objects/row"
+import { Row as RowClass, FieldValue } from "@/ddd/domain/tables/value-objects/row"
 
 export function DataViewsClientSimplified() {
   const searchParams = useSearchParams()
@@ -95,9 +96,22 @@ export function DataViewsClientSimplified() {
         data: { [field.name]: value },
       });
       setRows(prevRows =>
-        prevRows.map(row =>
-          row.id.value === rowId ? { ...row, [`field_${field.id.value}`]: value } : row
-        )
+        prevRows.map(row => {
+          if (row.id.value === rowId) {
+            // Create a new Row with updated field value
+            const updatedFieldValues = [...row.fieldValues].map(fv =>
+              fv.fieldSlug === field.name 
+                ? new FieldValue(field.name, value, field.type)
+                : fv
+            );
+            // Add field if it doesn't exist
+            if (!row.hasField(field.name)) {
+              updatedFieldValues.push(new FieldValue(field.name, value, field.type));
+            }
+            return new RowClass(row.id, row.tableId, updatedFieldValues);
+          }
+          return row;
+        })
       );
     } catch (err) {
       console.error("Failed to update row:", err)
@@ -143,7 +157,7 @@ export function DataViewsClientSimplified() {
 
     try {
       await deleteRowData(selectedTableId, rowId)
-      setRows(prevRows => prevRows.filter(row => row.id !== rowId))
+      setRows(prevRows => prevRows.filter(row => row.id.value !== rowId))
     } catch (err) {
       console.error("Failed to delete row:", err)
     }

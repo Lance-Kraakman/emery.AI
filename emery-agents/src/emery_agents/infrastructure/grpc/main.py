@@ -20,7 +20,13 @@ def main():
     logger.info(f"HF_TOKEN: {'✓ Available' if hf_token else '✗ Missing'}")
     logger.info(f"Worker address: {worker_address}")
 
-    port = int(os.environ.get('WORKER_PORT', '50051'))
+    # Extract port from WORKER_ADDRESS
+    if ':' in worker_address:
+        # Extract port from address like "localhost:50053"
+        port = int(worker_address.split(':')[1])
+    else:
+        port = 50051  # Default port
+    
     organization_id = os.environ.get('ORGANIZATION_ID', 'default')
     
     if len(sys.argv) > 1:

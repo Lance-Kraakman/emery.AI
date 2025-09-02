@@ -66,7 +66,7 @@ export async function validateUserApiKey(apiKey: string): Promise<UserApiKeyInfo
       email: user.email || '',
       name: user.name,
       organizationId: user.organizationId,
-      roleId: user.roleId,
+      roleId: null, // Role handling not implemented yet
     };
   } catch (error) {
     console.error('Error validating user API key:', error);

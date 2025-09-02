@@ -136,7 +136,6 @@ async function createTestTable(
     name: tableName,
     databaseId: databaseId,
     organizationId: context.organizationId,
-    fields: fields.map(f => ({ name: f.name, type: f.type, isRequired: false })),
     createdBy: context.ownerUserId
   });
   
