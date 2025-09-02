@@ -5,7 +5,7 @@ AIDEV-NOTE: Clean protobuf ↔ domain entity conversion.
 No complex abstractions - just direct mapping functions.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from ...grpc.generated import agent_worker_pb2
 from ...core.entities import (
     TaskRequest, TaskProgress, WorkerInfo, CancelTaskRequest, CancelTaskResponse,
@@ -179,3 +179,66 @@ class ProtoMapper:
             tools=tools,
             servers=servers
         )
+    
+    # AIDEV-NOTE: Value object conversion methods for DDD compliance
+    
+    def convert_to_domain_agent_id(self, primitive_id: int) -> 'AgentId':
+        """Convert primitive integer to AgentId value object."""
+        from ...domain.shared.value_objects.ids import AgentId
+        return AgentId(primitive_id)
+    
+    def convert_to_domain_organization_id(self, primitive_id: str) -> 'OrganizationId':
+        """Convert primitive string to OrganizationId value object."""
+        from ...domain.shared.value_objects.ids import OrganizationId
+        try:
+            # Try to convert string to int for OrganizationId
+            org_id_int = int(primitive_id)
+            return OrganizationId(org_id_int)
+        except ValueError:
+            raise ValueError(f"OrganizationId must be numeric, got: {primitive_id}")
+    
+    def convert_to_domain_task_id(self, primitive_id: str) -> 'TaskId':
+        """Convert primitive string to TaskId value object."""
+        from ...domain.shared.value_objects.ids import TaskId
+        return TaskId(primitive_id)
+    
+    def convert_to_domain_owner_id(self, primitive_id: str) -> 'OwnerId':
+        """Convert primitive string to OwnerId value object."""
+        from ...domain.shared.value_objects.ids import OwnerId
+        return OwnerId(primitive_id)
+    
+    def convert_to_domain_capability_name(self, primitive_name: Optional[str]) -> Optional['CapabilityName']:
+        """Convert primitive string to CapabilityName value object."""
+        if not primitive_name:
+            return None
+        from ...domain.execution.value_objects.execution_value_objects import CapabilityName
+        return CapabilityName(primitive_name)
+    
+    def convert_to_domain_timeout_seconds(self, primitive_seconds: int) -> 'TimeoutSeconds':
+        """Convert primitive integer to TimeoutSeconds value object."""
+        from ...domain.execution.value_objects.execution_value_objects import TimeoutSeconds
+        return TimeoutSeconds(primitive_seconds)
+    
+    def convert_from_domain_agent_id(self, agent_id: 'AgentId') -> int:
+        """Convert AgentId value object to primitive integer."""
+        return agent_id.value
+    
+    def convert_from_domain_organization_id(self, org_id: 'OrganizationId') -> str:
+        """Convert OrganizationId value object to primitive string."""
+        return str(org_id.value)
+    
+    def convert_from_domain_task_id(self, task_id: 'TaskId') -> str:
+        """Convert TaskId value object to primitive string."""
+        return task_id.value
+    
+    def convert_from_domain_owner_id(self, owner_id: 'OwnerId') -> str:
+        """Convert OwnerId value object to primitive string."""
+        return owner_id.value
+    
+    def convert_from_domain_capability_name(self, capability_name: Optional['CapabilityName']) -> Optional[str]:
+        """Convert CapabilityName value object to primitive string."""
+        return capability_name.value if capability_name else None
+    
+    def convert_from_domain_timeout_seconds(self, timeout: 'TimeoutSeconds') -> int:
+        """Convert TimeoutSeconds value object to primitive integer."""
+        return timeout.value

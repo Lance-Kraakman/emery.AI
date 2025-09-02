@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 from enum import Enum
 from ...shared.value_objects.ids import AgentId, OrganizationId
+from ..value_objects.execution_value_objects import CapabilityName, TimeoutSeconds, MaxSteps
 
 
 class ExecutionMode(Enum):
@@ -29,9 +30,9 @@ class ExecutionContext:
     # Optional context
     agent_id: Optional[AgentId] = None
     organization_id: Optional[OrganizationId] = None
-    capability_name: Optional[str] = None
-    max_steps: Optional[int] = None
-    timeout_seconds: Optional[int] = None
+    capability_name: Optional[CapabilityName] = None
+    max_steps: Optional[MaxSteps] = None
+    timeout_seconds: Optional[TimeoutSeconds] = None
     
     # Environment data
     environment: Dict[str, Any] = None
@@ -42,10 +43,10 @@ class ExecutionContext:
             self.environment = {}
         
         if self.max_steps is None:
-            self.max_steps = 10
+            self.max_steps = MaxSteps.default()
             
         if self.timeout_seconds is None:
-            self.timeout_seconds = 300  # 5 minutes default
+            self.timeout_seconds = TimeoutSeconds.default()
     
     @property
     def is_capability_mode(self) -> bool:

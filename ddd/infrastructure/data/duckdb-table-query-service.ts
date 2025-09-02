@@ -7,7 +7,7 @@
  * AIDEV-NOTE: Infrastructure implementation of TableQueryService using DuckDB for Arrow analytical queries
  */
 
-const duckdb = require('duckdb');
+import { DuckDBConnection } from '@duckdb/node-api';
 
 import { BUCKET_NAME } from '@/lib/s3/client';
 
@@ -21,7 +21,7 @@ import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import { DuckDB, eq, gt, gte, lt, lte, like, type QueryFilter } from './duckdb-sql-builder';
 
 export class DuckDBTableQueryService implements TableQueryService {
-  private db: any = null;
+  private connection: DuckDBConnection | null = null;
   private isInitialized = false;
 
   constructor() {
@@ -30,54 +30,44 @@ export class DuckDBTableQueryService implements TableQueryService {
     this.initializeDatabase();
   }
 
-  private initializeDatabase(): void {
+  private async initializeDatabase(): Promise<void> {
     try {
-      // Create DuckDB database using stable API
-      this.db = new duckdb.Database(':memory:');
+      // Create DuckDB connection using new API
+      this.connection = await DuckDBConnection.create();
       
-      // Install extensions synchronously
-      this.db.exec("INSTALL arrow FROM community; LOAD arrow;", (err: Error | null) => {
-        if (err) {
-          console.error('[DuckDB] Failed to load arrow extension:', err);
-          throw err;
-        }
-        console.log('[DuckDB] Arrow extension loaded successfully');
+      // Install extensions using new Promise-based API
+      await this.connection.run("INSTALL arrow FROM community; LOAD arrow;");
+      console.log('[DuckDB] Arrow extension loaded successfully');
+      
+      // Install httpfs for S3 access
+      await this.connection.run("INSTALL httpfs; LOAD httpfs;");
+      
+      // Configure S3 credentials if available
+      if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+        const s3Config = [
+          `SET s3_region='${process.env.AWS_REGION || 'ap-southeast-2'}';`,
+          `SET s3_access_key_id='${process.env.AWS_ACCESS_KEY_ID}';`,
+          `SET s3_secret_access_key='${process.env.AWS_SECRET_ACCESS_KEY}';`
+        ];
         
-        // Install httpfs for S3 access
-        this.db.exec("INSTALL httpfs; LOAD httpfs;", (err: Error | null) => {
-          if (err) {
-            console.error('[DuckDB] Failed to load httpfs extension:', err);
-            throw err;
-          }
-          
-          // Configure S3 credentials if available
-          if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-            const s3Config = [
-              `SET s3_region='${process.env.AWS_REGION || 'ap-southeast-2'}';`,
-              `SET s3_access_key_id='${process.env.AWS_ACCESS_KEY_ID}';`,
-              `SET s3_secret_access_key='${process.env.AWS_SECRET_ACCESS_KEY}';`
-            ];
-            
-            if (process.env.S3_ENDPOINT_URL) {
-              s3Config.push(`SET s3_endpoint='${process.env.S3_ENDPOINT_URL}';`);
-              s3Config.push(`SET s3_use_ssl='${!process.env.S3_ENDPOINT_URL.startsWith('http://')}';`);
-            }
-            
-            this.db.exec(s3Config.join(' '), (err: Error | null) => {
-              if (err) {
-                console.warn('[DuckDB] Failed to configure S3:', err);
-              } else {
-                console.log('[DuckDB] S3 configuration applied');
-              }
-              this.isInitialized = true;
-            });
-          } else {
-            this.isInitialized = true;
-          }
-          
-          console.log('[DuckDB] Database initialized successfully');
-        });
-      });
+        if (process.env.S3_ENDPOINT_URL) {
+          s3Config.push(`SET s3_endpoint='${process.env.S3_ENDPOINT_URL}';`);
+          s3Config.push(`SET s3_use_ssl='${!process.env.S3_ENDPOINT_URL.startsWith('http://')}';`);
+        }
+        
+        try {
+          await this.connection.run(s3Config.join(' '));
+          console.log('[DuckDB] S3 configuration applied');
+        } catch (err) {
+          console.warn('[DuckDB] Failed to configure S3:', err);
+        }
+      } else {
+        this.isInitialized = true;
+      }
+      
+      this.isInitialized = true;
+      
+      console.log('[DuckDB] Database initialized successfully');
       
     } catch (error) {
       console.error('[DuckDB] Failed to initialize database:', error);
@@ -87,35 +77,27 @@ export class DuckDBTableQueryService implements TableQueryService {
 
   private async executeQuery(sql: string): Promise<Result<QueryResult>> {
     try {
-      if (!this.db || !this.isInitialized) {
+      if (!this.connection || !this.isInitialized) {
         return { success: false, error: 'DuckDB not initialized' };
       }
 
       const startTime = Date.now();
       
-      // Use stable API with Promise wrapper
-      return new Promise((resolve) => {
-        this.db.all(sql, (err: Error | null, rows: any[]) => {
-          const executionTime = Date.now() - startTime;
-          
-          if (err) {
-            console.error('[DuckDB] Error executing query:', err);
-            resolve({
-              success: false,
-              error: err.message || 'Failed to execute query'
-            });
-          } else {
-            resolve({
-              success: true,
-              data: {
-                rows: rows || [],
-                rowCount: rows?.length || 0,
-                executionTime
-              }
-            });
-          }
-        });
-      });
+      // Use new Promise-based API for queries
+      const reader = await this.connection.runAndReadAll(sql);
+      const executionTime = Date.now() - startTime;
+      
+      // Get rows from the reader
+      const rows = reader.getRows();
+      
+      return {
+        success: true,
+        data: {
+          rows: rows || [],
+          rowCount: rows?.length || 0,
+          executionTime
+        }
+      };
       
     } catch (error) {
       console.error('[DuckDB] Error executing query:', error);

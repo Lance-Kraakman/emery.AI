@@ -8,7 +8,7 @@ Replace with real database implementation when needed.
 from typing import Optional, List
 from ...domain.agents.repositories.agent_repository import IAgentRepository
 from ...domain.agents.entities.agent import Agent, AgentConfig
-from ...domain.shared.value_objects.ids import AgentId, OrganizationId
+from ...domain.shared.value_objects.ids import AgentId, OrganizationId, OwnerId
 from ...domain.agents.value_objects.agent_value_objects import AgentName, AgentStatus, ApiKey
 
 
@@ -20,7 +20,7 @@ class MockAgentRepository(IAgentRepository):
         agent_123 = Agent.create(AgentConfig(
             name=AgentName("Test Agent"),
             organization_id=OrganizationId(1),
-            owner_id="test_user",
+            owner_id=OwnerId("test_user"),
             description="Mock agent for testing",
             status=AgentStatus.active(),
             api_key=ApiKey("ak_mock_secure_production_agent_123_abcdef")
@@ -30,7 +30,7 @@ class MockAgentRepository(IAgentRepository):
         agent_456 = Agent.create(AgentConfig(
             name=AgentName("Inactive Agent"),
             organization_id=OrganizationId(1),  
-            owner_id="test_user",
+            owner_id=OwnerId("test_user"),
             description="Mock inactive agent",
             status=AgentStatus.inactive(),
             api_key=ApiKey("ak_mock_secure_production_agent_456_ghijkl")

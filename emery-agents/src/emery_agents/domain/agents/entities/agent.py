@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Optional
 from ..value_objects.agent_value_objects import AgentName, AgentStatus, ApiKey, AgentRole
-from ...shared.value_objects.ids import AgentId, OrganizationId, RoleId
+from ...shared.value_objects.ids import AgentId, OrganizationId, RoleId, OwnerId, DatabaseId
 
 
 @dataclass
@@ -17,7 +17,7 @@ class AgentConfig:
     """Configuration for creating a new agent with value objects."""
     name: AgentName
     organization_id: OrganizationId
-    owner_id: str
+    owner_id: OwnerId
     role: Optional[AgentRole] = None
     description: Optional[str] = None
     persona: Optional[str] = None
@@ -25,7 +25,7 @@ class AgentConfig:
     servers: Optional[Dict[str, Any]] = None
     trigger: Optional[Dict[str, Any]] = None
     capabilities: Optional[Dict[str, Any]] = None
-    database_id: Optional[str] = None
+    database_id: Optional[DatabaseId] = None
     status: Optional[AgentStatus] = None
     role_id: Optional[RoleId] = None
     api_key: Optional[ApiKey] = None
@@ -39,7 +39,7 @@ class Agent:
         id: Optional[AgentId],
         name: AgentName,
         organization_id: OrganizationId,
-        owner_id: str,
+        owner_id: OwnerId,
         role: Optional[AgentRole] = None,
         description: Optional[str] = None,
         persona: Optional[str] = None,
@@ -47,7 +47,7 @@ class Agent:
         servers: Optional[Dict[str, Any]] = None,
         trigger: Optional[Dict[str, Any]] = None,
         capabilities: Optional[Dict[str, Any]] = None,
-        database_id: Optional[str] = None,
+        database_id: Optional[DatabaseId] = None,
         status: Optional[AgentStatus] = None,
         role_id: Optional[RoleId] = None,
         api_key: Optional[ApiKey] = None,
@@ -98,7 +98,7 @@ class Agent:
             id=AgentId(data["id"]),
             name=AgentName(data["name"]),
             organization_id=OrganizationId(data["organization_id"]),
-            owner_id=data["owner_id"],
+            owner_id=OwnerId(data["owner_id"]) if data.get("owner_id") else None,
             role=AgentRole(data["role"]) if data.get("role") else None,
             description=data.get("description"),
             persona=data.get("persona"),
@@ -106,7 +106,7 @@ class Agent:
             servers=data.get("servers"),
             trigger=data.get("trigger"),
             capabilities=data.get("capabilities"),
-            database_id=data.get("database_id"),
+            database_id=DatabaseId(data["database_id"]) if data.get("database_id") else None,
             status=AgentStatus(data["status"]) if data.get("status") else AgentStatus.active(),
             role_id=RoleId(data["role_id"]) if data.get("role_id") else None,
             api_key=ApiKey(data["api_key"]) if data.get("api_key") else None,

@@ -97,3 +97,85 @@ class RoleId(PositiveIntegerValueObject):
     def from_int(cls, value: int) -> "RoleId":
         """Create RoleId from integer."""
         return cls(value)
+
+
+class UserId(StringValueObject):
+    """
+    User identifier value object.
+    
+    Represents a unique identifier for a user.
+    Can be a UUID, email, or other unique string identifier.
+    """
+    
+    def _validate(self, value: str) -> None:
+        """Validate user ID format."""
+        super()._validate(value)
+        
+        # User IDs must be at least 3 characters
+        if len(value) < 3:
+            raise ValueError(f"UserId must be at least 3 characters, got: {value}")
+        
+        # Max length for database compatibility
+        if len(value) > 255:
+            raise ValueError(f"UserId must not exceed 255 characters, got length: {len(value)}")
+    
+    @classmethod
+    def from_string(cls, value: str) -> "UserId":
+        """Create UserId from string."""
+        return cls(value)
+    
+    @classmethod
+    def from_email(cls, email: str) -> "UserId":
+        """Create UserId from email address."""
+        # Basic email validation
+        if '@' not in email:
+            raise ValueError(f"Invalid email format for UserId: {email}")
+        return cls(email)
+
+
+class OwnerId(UserId):
+    """
+    Owner identifier value object.
+    
+    Represents the owner of a resource (agent, task, etc.).
+    Inherits from UserId as owners are users.
+    """
+    
+    @classmethod
+    def from_user_id(cls, user_id: UserId) -> "OwnerId":
+        """Create OwnerId from UserId."""
+        return cls(user_id.value)
+
+
+class DatabaseId(StringValueObject):
+    """
+    Database identifier value object.
+    
+    Represents a unique identifier for a database or table.
+    Must follow database naming conventions.
+    """
+    
+    def _validate(self, value: str) -> None:
+        """Validate database ID format."""
+        super()._validate(value)
+        
+        # Database IDs should follow naming conventions
+        if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]{2,63}$', value):
+            raise ValueError(
+                f"DatabaseId must start with a letter and contain only "
+                f"alphanumeric characters and underscores (3-64 chars), got: {value}"
+            )
+    
+    @classmethod
+    def from_string(cls, value: str) -> "DatabaseId":
+        """Create DatabaseId from string."""
+        return cls(value)
+    
+    @classmethod
+    def generate_for_table(cls, table_name: str) -> "DatabaseId":
+        """Generate a database ID for a table."""
+        # Sanitize table name for database ID
+        sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', table_name.lower())
+        if not sanitized[0].isalpha():
+            sanitized = 't_' + sanitized
+        return cls(sanitized[:64])  # Limit to 64 chars

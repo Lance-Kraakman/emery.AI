@@ -71,7 +71,9 @@ class TestRealAgentExecution:
         
         # Use real execution repository with smolagents
         tool_registry = ToolRegistryRepository()
-        execution_repo = SmolAgentsExecutionRepository(tool_registry)
+        from emery_agents.infrastructure.ai.smolagents_model_provider import SmolagentsModelProvider
+        model_provider = SmolagentsModelProvider()
+        execution_repo = SmolAgentsExecutionRepository(tool_registry, model_provider)
         
         # Use mock repositories for agent/task persistence (focus on execution testing)
         agent_repo = MockAgentRepository()

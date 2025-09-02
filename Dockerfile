@@ -14,12 +14,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
 RUN npm i -g pnpm
+RUN pnpm install @duckdb/node-api
 
 # AIDEV-NOTE: Install dependencies with frozen lockfile for cache efficiency
 RUN pnpm install --frozen-lockfile
-
-# AIDEV-NOTE: Force rebuild DuckDB from source in container environment
-RUN cd node_modules/duckdb && npm rebuild --build-from-source
 
 # Copy source code after dependencies are installed
 COPY . .
