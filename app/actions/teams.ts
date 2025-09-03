@@ -9,13 +9,25 @@ import { requireCurrentOrganization } from "./user-organizations";
 import { getTeamApplicationService } from "@/ddd/application/di/container";
 import { AgentId } from "@/ddd/domain/shared/value-objects";
 import { createTeamSchema, updateTeamSchema, parseFormDataToTeam } from "@/lib/schemas";
-import type { Result, CreateTeamData, TeamMembershipData } from "./types";
+import type { Result, CreateTeamData, CreateTeamClientData, TeamMembershipData } from "./types";
 import type { CreateTeamCommand, UpdateTeamCommand, TeamFilters } from "@/ddd/application/services/teams/team-application-service";
 import { TeamId, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
 import { TeamMapper, type TeamDTO } from "@/app/mappers/team-mapper";
 
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
+
+// Helper function for creating teams from client data (with plain types)
+export async function createTeamFromClient(data: CreateTeamClientData): Promise<Result> {
+  // No conversion needed for teams since they use the same plain types
+  return createTeam(data);
+}
+
+// Helper function for updating teams from client data (with plain types)
+export async function updateTeamFromClient(teamId: number, data: Partial<CreateTeamClientData>): Promise<Result> {
+  // No conversion needed for teams since they use the same plain types
+  return updateTeam(teamId, data);
+}
 
 export async function createTeam(data: CreateTeamData): Promise<Result> {
   try {
@@ -37,7 +49,7 @@ export async function createTeam(data: CreateTeamData): Promise<Result> {
 
     const result = await teamApplicationService.createTeam(command);
 
-    if (!result.success) {
+    if (!result.success || !result.data) {
       return {
         success: false,
         error: result.error || "Failed to create team"
@@ -50,9 +62,12 @@ export async function createTeam(data: CreateTeamData): Promise<Result> {
     revalidatePath('/dashboard');
     revalidatePath('/teams');
     
+    // Map domain entity to DTO for client serialization
+    const teamDTO = TeamMapper.toDTO(result.data);
+    
     return {
       success: true,
-      data: result.data,
+      data: teamDTO,
       warnings: result.warnings
     };
   } catch (error) {
@@ -148,7 +163,7 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
 
     const result = await teamApplicationService.updateTeam(command);
 
-    if (!result.success) {
+    if (!result.success || !result.data) {
       return {
         success: false,
         error: result.error || "Failed to update team"
@@ -159,9 +174,12 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
     revalidatePath('/dashboard');
     revalidatePath('/teams');
     
+    // Map domain entity to DTO for client serialization
+    const teamDTO = TeamMapper.toDTO(result.data);
+    
     return {
       success: true,
-      data: result.data,
+      data: teamDTO,
       warnings: result.warnings
     };
   } catch (error) {
@@ -227,7 +245,7 @@ export async function addAgentToTeam(teamId: number, agentId: string): Promise<R
     const teamApplicationService = getTeamApplicationService();
     const result = await teamApplicationService.addAgentToTeam(teamId, agentId);
 
-    if (!result.success) {
+    if (!result.success || !result.data) {
       return {
         success: false,
         error: result.error || "Failed to add agent to team"
@@ -237,9 +255,12 @@ export async function addAgentToTeam(teamId: number, agentId: string): Promise<R
     revalidatePath('/dashboard');
     revalidatePath('/teams');
     
+    // Map domain entity to DTO for client serialization
+    const teamDTO = TeamMapper.toDTO(result.data);
+    
     return {
       success: true,
-      data: result.data,
+      data: teamDTO,
       warnings: result.warnings
     };
   } catch (error) {
@@ -392,7 +413,7 @@ export async function bulkAssignAgents(teamId: number, agentIds: string[]): Prom
     const agentIdValueObjects = agentIds.map(id => AgentId.fromNumber(parseInt(id, 10)));
     const result = await teamApplicationService.bulkAssignAgents(teamIdValueObject, agentIdValueObjects);
 
-    if (!result.success) {
+    if (!result.success || !result.data) {
       return {
         success: false,
         error: result.error || "Failed to assign agents to team"
@@ -402,9 +423,12 @@ export async function bulkAssignAgents(teamId: number, agentIds: string[]): Prom
     revalidatePath('/dashboard');
     revalidatePath('/teams');
     
+    // Map domain entity to DTO for client serialization
+    const teamDTO = TeamMapper.toDTO(result.data);
+    
     return {
       success: true,
-      data: result.data,
+      data: teamDTO,
       warnings: result.warnings
     };
   } catch (error) {

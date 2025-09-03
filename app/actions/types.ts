@@ -68,6 +68,17 @@ export interface CreateTeamData {
   agentIds?: string[];
 }
 
+// Client-side team data interface for server actions (using plain serializable types)
+export interface CreateTeamClientData {
+  organizationId: number;
+  name: string;
+  purpose?: string;
+  description?: string;
+  responsibilities?: string[];
+  goals?: string[];
+  agentIds?: string[];
+}
+
 // UI-specific agent data interface (uses plain types, not Value Objects)
 export interface CreateAgentFormData {
   name: string;
@@ -78,6 +89,21 @@ export interface CreateAgentFormData {
   capabilities?: any[];
   status?: string; // Plain string, not AgentStatus Value Object
   trigger?: any;
+}
+
+// Client-side agent data interface for server actions (using plain serializable types)
+export interface CreateAgentClientData {
+  name: string;
+  role?: string;
+  description?: string;
+  persona?: string;
+  tools?: any[];
+  servers?: any[];
+  trigger?: any;
+  capabilities?: any[];
+  status?: string; // Plain string - converted to AgentStatus in action
+  organizationId?: number;
+  roleId?: number;
 }
 
 // Import agent types from domain layer

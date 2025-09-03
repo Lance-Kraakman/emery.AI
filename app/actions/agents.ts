@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
-import type { Result, CreateAgentData } from "./types";
+import type { Result, CreateAgentData, CreateAgentClientData } from "./types";
 import { getAgentApplicationService } from "@/ddd/application/di/container";
 import type { CreateAgentCommand, UpdateAgentCommand, AgentFilters } from "@/ddd/application/services/agents/agent-application-service";
 import type { CapabilityConfig } from "@/ddd/domain/agents/entities/agent";
@@ -39,7 +39,7 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
 
     const result = await agentApplicationService.createAgent(command);
 
-    if (!result.success) {
+    if (!result.success || !result.data) {
       return {
         success: false,
         error: result.error || "Failed to create agent"
@@ -55,11 +55,12 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
       revalidatePath('/manage'); // Default path for agent operations
     }
     
-    // Return domain entity directly - it already has proper defaults and types
+    // Map domain entity to DTO for client serialization
+    const agentDTO = AgentMapper.toDTO(result.data);
 
     return {
       success: true,
-      data: result.data,
+      data: agentDTO,
     };
   } catch (error) {
     console.error("Error creating agent:", error);
@@ -85,6 +86,28 @@ export async function addCapabilityToAgent(agentId: number, capability: Capabili
     console.error("Error adding capability to agent:", error);
     throw error;
   }
+}
+
+// Helper function for creating agents from client data (with plain types)
+export async function createAgentFromClient(data: CreateAgentClientData): Promise<Result> {
+  // Convert client data to domain data format
+  const domainData: CreateAgentData = {
+    ...data,
+    status: data.status ? AgentStatus.fromString(data.status) : AgentStatus.active(),
+    organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
+  };
+  return createAgent(domainData);
+}
+
+// Helper function for updating agents from client data (with plain types)
+export async function updateAgentFromClient(agentId: number, data: Partial<CreateAgentClientData>, revalidateUrl?: string): Promise<Result> {
+  // Convert client data to domain data format
+  const domainData: Partial<CreateAgentData> = {
+    ...data,
+    status: data.status ? AgentStatus.fromString(data.status) : undefined,
+    organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
+  };
+  return updateAgent(agentId, domainData, revalidateUrl);
 }
 
 export async function createAgentAction(formData: FormData): Promise<Result> {
@@ -116,12 +139,12 @@ export async function createAgentAction(formData: FormData): Promise<Result> {
           .map(serverName => ({ name: serverName })) // Simple format, can be enhanced later
       : undefined;
 
-    const result = await createAgent({ 
+    const result = await createAgentFromClient({ 
       ...validatedData,
-      organizationId: currentOrg.id,
+      organizationId: currentOrg.id.value,
       tools, 
       servers,
-      status: AgentStatus.active()
+      status: 'active' // Use plain string - will be converted to AgentStatus
     });
     
     return result;
@@ -207,7 +230,7 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
 
     const result = await agentApplicationService.updateAgent(command);
 
-    if (!result.success) {
+    if (!result.success || !result.data) {
       return {
         success: false,
         error: result.error || "Failed to update agent"
@@ -221,11 +244,12 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       revalidatePath('/manage'); // Default path for agent operations
     }
     
-    // Return domain entity directly - it already has proper defaults and types
+    // Map domain entity to DTO for client serialization
+    const agentDTO = AgentMapper.toDTO(result.data);
 
     return {
       success: true,
-      data: result.data,
+      data: agentDTO,
     };
   } catch (error) {
     console.error("Error updating agent:", error);
