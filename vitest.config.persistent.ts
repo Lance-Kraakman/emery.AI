@@ -38,6 +38,14 @@ export default defineConfig({
       TEST_GRPC_URL: 'localhost:50053',
       WORKER_ADDRESS: 'localhost:50053',
       NODE_ENV: 'test',
+      // S3 Configuration (MinIO for integration tests - matches .env.local.test)
+      AWS_ACCESS_KEY_ID: 'minioadmin',
+      AWS_SECRET_ACCESS_KEY: 'minioadmin',
+      AWS_REGION: 'us-east-1',
+      S3_BUCKET_NAME: 'emery-files',
+      AWS_ENDPOINT_URL: 'http://localhost:9005',
+      S3_ENDPOINT_URL: 'http://localhost:9005',  // AIDEV-NOTE: Both AWS_ENDPOINT_URL and S3_ENDPOINT_URL needed for different clients
+      S3_FORCE_PATH_STYLE: 'true',
       // Skip container management in setup files
       PERSISTENT_TEST_SERVER: 'true'
     }

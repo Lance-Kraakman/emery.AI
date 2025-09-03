@@ -14,7 +14,6 @@
     "test:run": "vitest run",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "test:integration": "vitest --config vitest.config.integration.ts tests/integration/",
     "test:integration:server": "npx tsx scripts/test-server-wrapper.ts start",
     "test:integration:dev": "vitest --config vitest.config.persistent.ts tests/integration/",
     "test:integration:file": "vitest --config vitest.config.persistent.ts --run",
