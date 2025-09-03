@@ -261,9 +261,6 @@ export class ChatMessageEntity {
       case 'team':
         content = `Welcome to your chat about team "${domainName}"! I can help you understand team dynamics, member roles, recent activities, and coordination tasks. What would you like to discuss?`;
         break;
-      case 'workflow':
-        content = `Welcome to your chat about workflow "${domainName}"! I can help you understand the process steps, execution history, optimization opportunities, and troubleshoot issues. How can I help?`;
-        break;
       default:
         content = `Welcome to your chat about ${domainType} "${domainName}"! I can provide assistance and insights. How can I help you today?`;
     }

@@ -13,7 +13,8 @@ import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import { AgentId, TableId, OrganizationId, UserId, ChatId } from '@/ddd/domain/shared/value-objects';
-import { Chat, ChatUtils, type CreateChatData, type ChatContextMetadata, type DomainType } from '@/ddd/domain/chat/entities/chat';
+import { Chat, ChatUtils, type CreateChatData, type ChatContextMetadata } from '@/ddd/domain/chat/entities/chat';
+import type { DomainType } from '@/ddd/domain/rag/value-objects';
 import type { ChatMessage, CreateChatMessageData, ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 import type { Result } from '@/ddd/domain/shared/result';
 import { ChatMessageEntity } from '@/ddd/domain/chat/entities/chat-message';
@@ -119,7 +120,7 @@ export class ChatApplicationService {
       // 5. Update chat message count
       await this.chatRepository.updateMessageStats(chat.id, 1, new Date());
 
-      const chatTypeDesc = contextMetadata.contextType === 'organization' ? 'organization' : `${contextMetadata.contextType}-connected`;
+      const chatTypeDesc = contextMetadata.contextType === 'organizations' ? 'organization' : `${contextMetadata.contextType}-connected`;
       console.log(`[CHAT-APP-SERVICE] Created ${chatTypeDesc} chat: ${chat.title}`);
 
       return {
@@ -146,7 +147,7 @@ export class ChatApplicationService {
     domainSchema?: any;
   }> {
     switch (domainType) {
-      case 'table':
+      case 'tables':
         const table = await this.dynamicTableService.getTable(TableId.fromNumber(domainId));
         if (!table) {
           return { valid: false, error: `Table ${domainId} not found` };
@@ -160,7 +161,7 @@ export class ChatApplicationService {
           domainSchema: { tableName: table.name, dbName: table.name }
         };
 
-      case 'agent':
+      case 'agents':
         if (!this.agentRepository) {
           return { valid: false, error: 'Agent repository not available' };
         }
@@ -177,7 +178,7 @@ export class ChatApplicationService {
           domainSchema: { agentName: agent.name, role: agent.role }
         };
 
-      case 'file':
+      case 'files':
         // TODO: Implement file validation when IFileRepository is available
         return {
           valid: true,
@@ -185,22 +186,13 @@ export class ChatApplicationService {
           domainSchema: { fileId: domainId }
         };
 
-      case 'team':
+      case 'teams':
         // TODO: Implement team validation when ITeamRepository is available
         return {
           valid: true,
           domainName: `Team ${domainId}`,
           domainSchema: { teamId: domainId }
         };
-
-      case 'workflow':
-        // TODO: Implement workflow validation when IWorkflowRepository is available
-        return {
-          valid: true,
-          domainName: `Workflow ${domainId}`,
-          domainSchema: { workflowId: domainId }
-        };
-
       default:
         return { valid: false, error: `Unsupported domain type: ${domainType}` };
     }
@@ -210,21 +202,19 @@ export class ChatApplicationService {
    * Create appropriate welcome message based on context metadata
    */
   private createWelcomeMessage(chatId: ChatId, contextMetadata: ChatContextMetadata): CreateChatMessageData {
-    if (contextMetadata.contextType !== 'organization' && contextMetadata.domainSchema?.name) {
+    if (contextMetadata.contextType !== 'organizations' && contextMetadata.domainSchema?.name) {
       const domainType = contextMetadata.contextType;
       const domainName = contextMetadata.domainSchema.name;
       
       switch (domainType) {
-        case 'table':
+        case 'tables':
           return ChatMessageEntity.createTableWelcomeMessage(chatId, 0, domainName);
-        case 'agent':
+        case 'agents':
           return ChatMessageEntity.createDomainWelcomeMessage(chatId, 0, 'agent', domainName);
-        case 'file':
+        case 'files':
           return ChatMessageEntity.createDomainWelcomeMessage(chatId, 0, 'file', domainName);
-        case 'team':
+        case 'teams':
           return ChatMessageEntity.createDomainWelcomeMessage(chatId, 0, 'team', domainName);
-        case 'workflow':
-          return ChatMessageEntity.createDomainWelcomeMessage(chatId, 0, 'workflow', domainName);
       }
     }
     

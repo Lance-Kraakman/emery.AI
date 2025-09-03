@@ -37,7 +37,7 @@ export interface DeleteFileCommand {
   fileId: FileKey;
   fieldId: FieldId; // Use fieldId to match repository interface  
   tableId: TableId; // Need table context
-  organizationId: number;
+  organizationId: OrganizationId;
 }
 
 export interface GetFilesCommand {
@@ -66,7 +66,7 @@ export class FileUseCases {
         };
       }
 
-      if (table.organizationId !== command.organizationId) {
+      if (!table.isOwnedBy(command.organizationId)) {
         return {
           success: false,
           error: 'Access denied: table not in your organization'
@@ -148,7 +148,7 @@ export class FileUseCases {
       }
 
       // Verify table belongs to organization
-      if (table.organizationId !== command.organizationId) {
+      if (!table.isOwnedBy(command.organizationId)) {
         return {
           success: false,
           error: 'Access denied: table not in your organization'
@@ -211,7 +211,7 @@ export class FileUseCases {
       }
 
       // Verify table belongs to organization
-      if (table.organizationId.value !== command.organizationId) {
+      if (!table.isOwnedBy(command.organizationId)) {
         return {
           success: false,
           error: 'Access denied: table not in your organization'
@@ -276,7 +276,7 @@ export class FileUseCases {
       }
 
       // Verify table belongs to organization
-      if (table.organizationId !== command.organizationId) {
+      if (!table.isOwnedBy(command.organizationId)) {
         return {
           success: false,
           error: 'Access denied: table not in your organization'

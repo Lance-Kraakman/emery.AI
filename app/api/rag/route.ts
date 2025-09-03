@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       name,
       description,
       organizationId,
-      domainTypes: domainTypes || ['table'], // DDD uses singular 'table' not 'tables'
+      domainTypes: domainTypes || ['tables'], // DDD uses plural 'tables'
       domainFilters,
       createdBy: session.user.id,
     };

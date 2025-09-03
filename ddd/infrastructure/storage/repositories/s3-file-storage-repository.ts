@@ -21,7 +21,7 @@ export class S3FileStorageRepository implements IFileStorageRepository {
   }
 
   private shouldUseEncryption(): boolean {
-    const customEndpoint = process.env.S3_ENDPOINT_URL;
+    const customEndpoint = process.env.AWS_ENDPOINT_URL;
     return !customEndpoint;
   }
   

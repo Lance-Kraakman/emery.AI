@@ -3,7 +3,7 @@
  * AIDEV-NOTE: Layout types that integrate with domain entities for type-safe UI state management
  */
 
-import type { DomainType } from '@/ddd/domain/chat/entities/chat'
+import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import type { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects'
 
 // Layout panel states
@@ -14,7 +14,7 @@ export type LayoutBreakpoint = 'mobile' | 'tablet' | 'desktop'
 
 // Chat context for different domain types
 export interface ChatContextConfig {
-  domainType?: DomainType | 'organization' | 'general'
+  domainType?: DomainType | 'organizations' | 'general'
   domainId?: number
   domainName?: string
   // Context-specific features
@@ -110,7 +110,7 @@ export const createChatContextForPage = (
     case 'agents':
       return {
         ...baseConfig,
-        domainType: 'agent',
+        domainType: 'agents',
         domainId,
         domainName,
         enableCodeGeneration: true,
@@ -120,7 +120,7 @@ export const createChatContextForPage = (
     case 'teams':
       return {
         ...baseConfig,
-        domainType: 'team',
+        domainType: 'teams',
         domainId,
         domainName,
         enableDomainQueries: true
@@ -129,7 +129,7 @@ export const createChatContextForPage = (
     case 'data':
       return {
         ...baseConfig,
-        domainType: 'table',
+        domainType: 'tables',
         domainId,
         domainName,
         enableDataAnalysis: true,
@@ -139,14 +139,14 @@ export const createChatContextForPage = (
     case 'organization':
       return {
         ...baseConfig,
-        domainType: 'organization',
+        domainType: 'organizations',
         enableDomainQueries: true
       }
     
     default:
       return {
         ...baseConfig,
-        domainType: 'organization'
+        domainType: 'organizations'
       }
   }
 }

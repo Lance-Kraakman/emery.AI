@@ -9,12 +9,11 @@
  */
 
 import { ChatId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
-
-export type DomainType = 'table' | 'agent' | 'file' | 'team' | 'workflow';
+import type { DomainType } from '@/ddd/domain/rag/value-objects';
 
 export interface ChatContextMetadata {
   ragIndexId?: string;
-  contextType?: DomainType | 'organization' | 'mixed';
+  contextType?: DomainType | 'organizations';
   domainSchema?: {
     id?: number;        // Domain entity ID (replaces domainId/tableId)
     name?: string;      // Domain entity name
@@ -230,7 +229,7 @@ export class ChatUtils {
    */
   static createOrganizationContextMetadata(ragIndexId?: string): ChatContextMetadata {
     return {
-      contextType: 'organization',
+      contextType: 'organizations',
       ragIndexId,
       lastRagUpdate: new Date().toISOString()
     };
@@ -245,11 +244,10 @@ export class ChatUtils {
       const domainName = contextMetadata.domainSchema.name;
       
       switch (domainType) {
-        case 'table': return `Table Chat: ${domainName}`;
-        case 'agent': return `Agent Chat: ${domainName}`;
-        case 'file': return `File Chat: ${domainName}`;
-        case 'team': return `Team Chat: ${domainName}`;
-        case 'workflow': return `Workflow Chat: ${domainName}`;
+        case 'tables': return `Table Chat: ${domainName}`;
+        case 'agents': return `Agent Chat: ${domainName}`;
+        case 'files': return `File Chat: ${domainName}`;
+        case 'teams': return `Team Chat: ${domainName}`;
       }
     }
     
