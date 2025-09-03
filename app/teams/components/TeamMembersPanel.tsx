@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Team } from '@/ddd/domain/teams/entities/team';
+import type { TeamDTO } from '@/app/mappers/team-mapper';
 import { getTeamMembers, addTeamMember, removeTeamMember } from '@/app/actions/teams';
 
 interface TeamMembersPanelProps {
-  team: Team;
+  team: TeamDTO;
 }
 
 interface TeamAgentsData {
@@ -19,12 +19,12 @@ export default function TeamMembersPanel({ team }: TeamMembersPanelProps) {
 
   useEffect(() => {
     loadMembers();
-  }, [team.id.value]);
+  }, [team.id]);
 
   const loadMembers = async () => {
     try {
       setLoading(true);
-      const teamMembers = await getTeamMembers(team.id.value);
+      const teamMembers = await getTeamMembers(team.id);
       setTeamAgents(teamMembers);
     } catch (error) {
       console.error('Failed to load team members:', error);
@@ -49,9 +49,9 @@ export default function TeamMembersPanel({ team }: TeamMembersPanelProps) {
       {teamAgents?.agentIds && teamAgents.agentIds.length > 0 ? (
         <div className="space-y-2">
           {teamAgents.agentIds.map((agentId, index) => (
-            <div key={typeof agentId === 'string' ? agentId : agentId.value || index} className="flex justify-between items-center p-3 border rounded">
+            <div key={agentId || index} className="flex justify-between items-center p-3 border rounded">
               <div>
-                <p className="font-medium text-foreground">Agent ID: {typeof agentId === 'string' ? agentId : agentId.value}</p>
+                <p className="font-medium text-foreground">Agent ID: {agentId}</p>
                 <p className="text-sm text-muted-foreground">
                   Type: Team Agent
                 </p>
@@ -59,8 +59,7 @@ export default function TeamMembersPanel({ team }: TeamMembersPanelProps) {
               <button
                 onClick={async () => {
                   try {
-                    const agentIdString = typeof agentId === 'string' ? agentId : agentId.value?.toString();
-                    await removeTeamMember(team.id.value, agentIdString);
+                    await removeTeamMember(team.id, agentId);
                     loadMembers();
                   } catch (error) {
                     console.error('Failed to remove agent:', error);

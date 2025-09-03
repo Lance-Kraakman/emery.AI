@@ -9,12 +9,14 @@ import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateRowCommand, UpdateRowCommand } from "./types";
 import { Row, RowId } from "@/ddd/domain/tables/value-objects/row";
 import { TableId, UserId } from "@/ddd/domain/shared/value-objects";
+import { RowMapper, type RowDTO } from "@/app/mappers/row-mapper";
 
 
 export async function createRow(data: CreateRowCommand, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("manage_data");
     const { tableId, data: rowData } = data;
+    
 
     if (!tableId) {
       return {
@@ -39,10 +41,18 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
     // Convert plain data to Row entity using table field information
     const row = Row.fromPlainObject(rowData || {}, tableId, table.fields);
 
+    // AIDEV-NOTE: Ensure we have a valid user ID
+    if (!session.user?.id || typeof session.user.id !== 'string') {
+      return {
+        success: false,
+        error: "Invalid user session - user ID not found"
+      };
+    }
+    
     const result = await tableAppService.createRow({
       tableId: TableId.fromNumber(tableId),
       data: row,
-      createdBy: UserId.fromString(session.userId)
+      createdBy: UserId.fromString(session.user.id)
     });
 
     if (!result.success) {
@@ -57,9 +67,12 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
       revalidatePath(revalidateUrl);
     }
     
+    // Convert Domain object to DTO for serialization
+    const rowDTO = result.data ? RowMapper.toDTO(result.data) : null;
+    
     return {
       success: true,
-      data: result.data,
+      data: rowDTO,
     };
   } catch (error) {
     console.error("Error creating row:", error);
@@ -91,7 +104,7 @@ export async function createRowAction(formData: FormData) {
   return result;
 }
 
-export async function getRowsData(tableId: number, limit = 100, offset = 0): Promise<any[]> {
+export async function getRowsData(tableId: number, limit = 100, offset = 0): Promise<RowDTO[]> {
   try {
     // Add authentication check (using manage_data as it covers view access)
     await requirePermission("manage_data");
@@ -107,7 +120,9 @@ export async function getRowsData(tableId: number, limit = 100, offset = 0): Pro
       TableId.fromNumber(tableId), 
       { limit, offset }
     );
-    return rowsData; // Row[] is already in the correct format
+    
+    // Convert Domain objects to DTOs for serialization
+    return rowsData.map(RowMapper.toDTO);
   } catch (error) {
     console.error("Error fetching rows:", error);
     throw new Error(error instanceof Error ? error.message : "Failed to fetch rows");
@@ -142,11 +157,19 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
     // Convert plain data to Row entity using table field information
     const row = Row.fromPlainObject({ ...rowData, id: rowId }, tableId, table.fields);
 
+    // AIDEV-NOTE: Ensure we have a valid user ID
+    if (!session.user?.id || typeof session.user.id !== 'string') {
+      return {
+        success: false,
+        error: "Invalid user session - user ID not found"
+      };
+    }
+
     const result = await tableAppService.updateRow({
       tableId: TableId.fromNumber(tableId),
       rowId: RowId.fromString(rowId),
       data: row,
-      updatedBy: UserId.fromString(session.userId)
+      updatedBy: UserId.fromString(session.user.id)
     });
 
     if (!result.success) {
@@ -161,9 +184,12 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       revalidatePath(revalidateUrl);
     }
     
+    // Convert Domain object to DTO for serialization
+    const rowDTO = result.data ? RowMapper.toDTO(result.data) : null;
+    
     return {
       success: true,
-      data: result.data,
+      data: rowDTO,
     };
   } catch (error) {
     console.error("Error updating row:", error);

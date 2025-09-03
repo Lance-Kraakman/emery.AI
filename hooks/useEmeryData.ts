@@ -98,38 +98,38 @@ export function useEmeryData() {
       ]);
 
       const tables: EmeryTable[] = tablesResult.map(table => ({
-        id: table.id.value,
+        id: table.id, // Already a number from TableDTO
         name: table.name,
         dbName: table.storageLocation, // Map storageLocation to dbName for compatibility
-        databaseId: table.databaseId.value,
-        organizationId: table.organizationId.value,
-        metadata: table.metadata ? table.metadata.toDatabaseJson() : null,
+        databaseId: table.databaseId, // Already a number from TableDTO
+        organizationId: table.organizationId, // Already a number from TableDTO
+        metadata: table.metadata, // Already plain object from TableDTO
         createdAt: table.createdAt || null,
         updatedAt: table.updatedAt || null,
         database: null // TODO: Add database info if needed
       }));
       const agents: EmeryAgent[] = agentsResult.map(agent => ({
-        id: agent.id.value,
+        id: agent.id, // Already a number from AgentDTO
         name: agent.name,
         description: agent.description,
-        status: agent.status?.value || 'active',
-        organizationId: agent.organizationId.value
+        status: agent.status || 'active', // Already a string from AgentDTO
+        organizationId: agent.organizationId // Already a number from AgentDTO
       }));
       const teams: EmeryTeam[] = teamsResult.map(team => ({
-        id: team.id.value,
+        id: team.id, // Already a number from TeamDTO
         name: team.name,
         purpose: team.purpose || undefined, // Convert null to undefined for compatibility
-        organizationId: team.organizationId.value,
-        agentIds: team.agentIds ? team.agentIds.map(agentId => agentId.value.toString()) : []
+        organizationId: team.organizationId, // Already a number from TeamDTO
+        agentIds: team.agentIds || [] // Already string[] from TeamDTO
       }));
 
       // Group tables by database and convert to interface format
       const databasesWithTables: EmeryDatabase[] = databasesResult.map(db => ({
-        id: db.id.value, // Convert DatabaseId to number
+        id: db.id, // Already a number from DatabaseDTO
         name: db.name,
         slug: db.slug,
         metadata: db.metadata,
-        tables: tables.filter(table => table.databaseId === db.id.value)
+        tables: tables.filter(table => table.databaseId === db.id)
       }));
 
       setData({

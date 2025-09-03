@@ -12,14 +12,15 @@ import { Badge } from "@/components/ui/badge"
 import { Plus, Trash2 } from "lucide-react"
 import { createField, deleteField } from "@/app/actions/fields"
 import { getTables } from "@/app/actions/tables"
-import type { TableField, FieldType } from "@/ddd/domain/tables/value-objects/table-field"
-import type { DynamicTable } from "@/ddd/domain/tables/entities/dynamic-table"
+import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field"
+import type { TableDTO } from "@/app/mappers/table-mapper"
+import type { FieldDTO } from "@/app/mappers/field-mapper"
 
 interface FieldManagerDialogProps {
   isOpen: boolean
   onClose: () => void
   tableId: number
-  fields: TableField[]
+  fields: FieldDTO[]
   onFieldsUpdated: () => void
 }
 
@@ -41,7 +42,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
   const [newFieldRequired, setNewFieldRequired] = useState(false)
   const [newFieldRelatedTableId, setNewFieldRelatedTableId] = useState<number | undefined>()
   const [loading, setLoading] = useState(false)
-  const [availableTables, setAvailableTables] = useState<DynamicTable[]>([])
+  const [availableTables, setAvailableTables] = useState<TableDTO[]>([])
 
   const handleAddField = async () => {
     if (!newFieldName || !newFieldType) return
@@ -100,7 +101,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
     if (newFieldType === 'relation' && availableTables.length === 0) {
       try {
         const tables = await getTables()
-        setAvailableTables(tables.filter(t => t.id.value !== tableId)) // Exclude current table
+        setAvailableTables(tables.filter(t => t.id !== tableId)) // Exclude current table
       } catch (error) {
         console.error("Failed to load tables:", error)
       }
@@ -146,7 +147,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
                 </TableHeader>
                 <TableBody>
                   {sortedFields.map((field) => (
-                    <TableRow key={field.id.value}>
+                    <TableRow key={field.id}>
                       <TableCell className="font-medium">{field.name}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="capitalize">
@@ -239,7 +240,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
                     </SelectTrigger>
                     <SelectContent>
                       {availableTables.map((table) => (
-                        <SelectItem key={table.id.value} value={table.id.value.toString()}>
+                        <SelectItem key={table.id} value={table.id.toString()}>
                           {table.name}
                         </SelectItem>
                       ))}

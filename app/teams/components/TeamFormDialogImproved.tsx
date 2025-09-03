@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import type { Team } from '@/ddd/domain/teams/entities/team';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { TeamDTO } from '@/app/mappers/team-mapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -23,15 +23,15 @@ import { AlertTriangle, Users } from 'lucide-react';
 interface TeamFormDialogImprovedProps {
   isOpen: boolean;
   onClose: () => void;
-  team?: Team | null;
-  agents: Agent[];
+  team?: TeamDTO | null;
+  agents: AgentDTO[];
 }
 
 export default function TeamFormDialogImproved({ isOpen, onClose, team, agents }: TeamFormDialogImprovedProps) {
   const { currentOrganization, refetch } = useEmery();
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>(
-    team?.agentIds?.map(id => typeof id === 'string' ? id : id.value?.toString()) || []
+    team?.agentIds || []
   );
 
   // Prepare default values - memoized to prevent infinite loops
@@ -41,7 +41,7 @@ export default function TeamFormDialogImproved({ isOpen, onClose, team, agents }
     description: team.description || '',
     responsibilities: team.responsibilities || [],
     goals: team.goals || [],
-    agentIds: team.agentIds?.map(id => typeof id === 'string' ? id : id.value?.toString()) || [],
+    agentIds: team.agentIds || [],
   } : {
     name: '',
     purpose: '',
@@ -64,7 +64,7 @@ export default function TeamFormDialogImproved({ isOpen, onClose, team, agents }
       try {
         if (team) {
           // Update existing team
-          const result = await updateTeam(team.id.value, {
+          const result = await updateTeam(team.id, {
             ...validatedData,
             agentIds: selectedAgentIds,
             organizationId: currentOrganization.id,
@@ -106,7 +106,7 @@ export default function TeamFormDialogImproved({ isOpen, onClose, team, agents }
   useEffect(() => {
     if (isOpen) {
       form.reset();
-      setSelectedAgentIds(team?.agentIds?.map(id => typeof id === 'string' ? id : id.value?.toString()) || []);
+      setSelectedAgentIds(team?.agentIds || []);
       setGlobalError(null);
     }
   }, [isOpen, team, form.reset]);
@@ -269,15 +269,15 @@ export default function TeamFormDialogImproved({ isOpen, onClose, team, agents }
               {agents.length > 0 ? (
                 <div className="space-y-3">
                   {agents.map((agent) => (
-                    <div key={agent.id.value} className="flex items-center space-x-2">
+                    <div key={agent.id} className="flex items-center space-x-2">
                       <Checkbox
-                        id={`agent-${agent.id.value}`}
-                        checked={selectedAgentIds.includes(agent.id.value.toString())}
-                        onCheckedChange={() => toggleAgentSelection(agent.id.value.toString())}
+                        id={`agent-${agent.id}`}
+                        checked={selectedAgentIds.includes(agent.id.toString())}
+                        onCheckedChange={() => toggleAgentSelection(agent.id.toString())}
                         disabled={form.isLoading}
                       />
                       <label
-                        htmlFor={`agent-${agent.id.value}`}
+                        htmlFor={`agent-${agent.id}`}
                         className="text-sm cursor-pointer flex-1"
                       >
                         <span className="font-medium">{agent.name}</span>

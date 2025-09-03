@@ -68,6 +68,18 @@ export interface CreateTeamData {
   agentIds?: string[];
 }
 
+// UI-specific agent data interface (uses plain types, not Value Objects)
+export interface CreateAgentFormData {
+  name: string;
+  role?: string;
+  description?: string;
+  persona?: string;
+  tools?: any[];
+  capabilities?: any[];
+  status?: string; // Plain string, not AgentStatus Value Object
+  trigger?: any;
+}
+
 // Import agent types from domain layer
 export type {
   ToolConfig,

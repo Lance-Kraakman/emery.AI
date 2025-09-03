@@ -12,9 +12,8 @@ import { FieldManagerDialog } from "./components/FieldManagerDialog"
 import { useEmeryData, EmeryTable } from "@/hooks/useEmeryData"
 import { getFields } from "@/app/actions/fields"
 import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
-import type { TableField } from "@/ddd/domain/tables/value-objects/table-field"
-import type { Row } from "@/ddd/domain/tables/value-objects/row"
-import { Row as RowClass, FieldValue } from "@/ddd/domain/tables/value-objects/row"
+import type { FieldDTO } from "@/app/mappers/field-mapper"
+import type { RowDTO } from "@/app/mappers/row-mapper"
 
 export function DataViewsClientSimplified() {
   const searchParams = useSearchParams()
@@ -39,8 +38,8 @@ export function DataViewsClientSimplified() {
   const [searchTerm, setSearchTerm] = useState("")
   
   // Table data state
-  const [fields, setFields] = useState<TableField[]>([])
-  const [rows, setRows] = useState<Row[]>([])
+  const [fields, setFields] = useState<FieldDTO[]>([])
+  const [rows, setRows] = useState<RowDTO[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -84,7 +83,7 @@ export function DataViewsClientSimplified() {
 
     try {
       // Find the field to get its slug
-      const field = fields.find(f => f.id.value === fieldId)
+      const field = fields.find(f => f.id === fieldId)
       if (!field) {
         console.error('Field not found for fieldId:', fieldId)
         return
@@ -97,18 +96,19 @@ export function DataViewsClientSimplified() {
       });
       setRows(prevRows =>
         prevRows.map(row => {
-          if (row.id.value === rowId) {
-            // Create a new Row with updated field value
+          if (row.id === rowId) {
+            // Create a new RowDTO with updated field value
             const updatedFieldValues = [...row.fieldValues].map(fv =>
               fv.fieldSlug === field.name 
-                ? new FieldValue(field.name, value, field.type)
+                ? { fieldSlug: field.name, value, fieldType: field.type }
                 : fv
             );
             // Add field if it doesn't exist
-            if (!row.hasField(field.name)) {
-              updatedFieldValues.push(new FieldValue(field.name, value, field.type));
+            const hasField = row.fieldValues.some(fv => fv.fieldSlug === field.name);
+            if (!hasField) {
+              updatedFieldValues.push({ fieldSlug: field.name, value, fieldType: field.type });
             }
-            return new RowClass(row.id, row.tableId, updatedFieldValues);
+            return { ...row, fieldValues: updatedFieldValues };
           }
           return row;
         })
@@ -157,7 +157,7 @@ export function DataViewsClientSimplified() {
 
     try {
       await deleteRowData(selectedTableId, rowId)
-      setRows(prevRows => prevRows.filter(row => row.id.value !== rowId))
+      setRows(prevRows => prevRows.filter(row => row.id !== rowId))
     } catch (err) {
       console.error("Failed to delete row:", err)
     }
@@ -172,12 +172,14 @@ export function DataViewsClientSimplified() {
   }
 
   // Filter rows based on search
-  const filteredRows = rows.filter((row: Row) => {
+  const filteredRows = rows.filter((row: RowDTO) => {
     if (!searchTerm) return true
-    const rowData = row.toPlainObject();
-    return Object.values(rowData).some(value => 
-      String(value).toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    // Convert fieldValues to searchable format
+    const searchableValues = row.fieldValues.map(fv => String(fv.value));
+    searchableValues.push(row.id); // Include row ID in search
+    return searchableValues.some(value => 
+      value.toLowerCase().includes(searchTerm.toLowerCase())
+    );
   })
 
   const renderEmptyState = () => (

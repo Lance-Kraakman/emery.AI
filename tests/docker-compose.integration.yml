@@ -32,6 +32,8 @@ services:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
       NODE_ENV: test
       NEXTAUTH_URL: http://localhost:3002
+      # Override WORKER_ADDRESS for internal container network
+      WORKER_ADDRESS: agent-integration:50051
       # MinIO S3 configuration for integration tests (internal container network)
       AWS_ENDPOINT_URL: http://minio-integration:9000
       AWS_ACCESS_KEY_ID: minioadmin
@@ -96,6 +98,35 @@ services:
       interval: 15s
       timeout: 10s
       retries: 3
+    networks:
+      - integration-test-network
+
+  scheduler-integration:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: emery-integration-scheduler
+    restart: unless-stopped
+    env_file:
+      - ../.env.local.test
+    environment:
+      DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
+      NODE_ENV: test
+      # Override WORKER_ADDRESS for internal container network to reach agent
+      WORKER_ADDRESS: agent-integration:50051
+      # MinIO S3 configuration for integration tests (internal container network)
+      AWS_ENDPOINT_URL: http://minio-integration:9000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      S3_BUCKET_NAME: emery-files
+      S3_FORCE_PATH_STYLE: true
+    command: "scheduler"
+    depends_on:
+      postgres-integration:
+        condition: service_healthy
+      agent-integration:
+        condition: service_healthy
     networks:
       - integration-test-network
 

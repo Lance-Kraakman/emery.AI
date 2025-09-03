@@ -8,7 +8,7 @@ import { ArrowLeft } from 'lucide-react';
 import { getFields } from '@/app/actions/fields';
 import { getRowsData } from '@/app/actions/rows';
 import { getTables } from '@/app/actions/tables';
-import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { Row } from '@/ddd/domain/tables/value-objects/row';
 import FieldManager from './FieldManager';
 import RowManager from './RowManager';
@@ -21,7 +21,7 @@ interface TableEditorClientProps {
 }
 
 export default function TableEditorClient({ tableId, tableName, organizationId, onBack }: TableEditorClientProps) {
-  const [fields, setFields] = useState<TableField[]>([]);
+  const [fields, setFields] = useState<FieldDTO[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [availableTables, setAvailableTables] = useState<Array<{ id: number; name: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,7 +40,7 @@ export default function TableEditorClient({ tableId, tableName, organizationId, 
       ]);
       setFields(fieldsData);
       setRows(Array.from(rowsData) as unknown as Row[]);
-      setAvailableTables(tablesData.map(t => ({ id: t.id.value, name: t.name })));
+      setAvailableTables(tablesData.map(t => ({ id: t.id, name: t.name })));
     } catch (error) {
       console.error('Error loading table data:', error);
     } finally {
@@ -58,7 +58,7 @@ export default function TableEditorClient({ tableId, tableName, organizationId, 
       ]);
       setFields(fieldsData);
       setRows(Array.from(rowsData) as unknown as Row[]);
-      setAvailableTables(tablesData.map(t => ({ id: t.id.value, name: t.name })));
+      setAvailableTables(tablesData.map(t => ({ id: t.id, name: t.name })));
     } catch (error) {
       console.error('Error refreshing fields:', error);
     }

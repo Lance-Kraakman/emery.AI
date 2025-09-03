@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import { AgentStatus } from '@/ddd/domain/shared/value-objects';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { createAgent, updateAgent } from '@/app/actions/agents';
+import { AgentStatus } from '@/ddd/domain/shared/value-objects';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,7 +11,7 @@ import { FormField } from '@/components/ui/form-field';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, Code, Database, MessageSquare, Globe, FileText, Brain, Settings } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { Capability } from './CapabilityEditor';
 import ScheduleManager from './ScheduleManager';
@@ -31,7 +31,7 @@ import {
 // AIDEV-NOTE: Enhanced agent configuration wizard with OAuth-aware tool selection
 interface AgentConfigurationWizardProps {
   onClose: () => void;
-  agent?: Agent | null;
+  agent?: AgentDTO | null;
   onSuccess?: () => void;
 }
 
@@ -217,7 +217,7 @@ export default function AgentConfigurationWizard({
 
       let result;
       if (agent) {
-        result = await updateAgent(agent.id.value, agentData);
+        result = await updateAgent(agent.id, agentData);
       } else {
         result = await createAgent(agentData);
       }
@@ -422,7 +422,7 @@ curl -H "x-test-user-id: ${userId}" http://localhost:3000/api/agents/${result.da
                 {formData.triggerType === 'CALENDAR' && agent?.id && (
                   <FormField label="Calendar Schedule">
                     <ScheduleManager
-                      agentId={agent.id.value}
+                      agentId={agent.id}
                       initialRRule={formData.triggerConfig.rrule}
                       onScheduleChange={(rrule) => setFormData(prev => ({
                         ...prev,

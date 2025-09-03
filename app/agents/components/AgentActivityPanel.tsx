@@ -1,12 +1,12 @@
 'use client';
 
-import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { useEffect, useState } from 'react';
 import { getTasks } from '@/app/actions/tasks';
 import TaskFormDialog from './TaskFormDialog';
 
 interface AgentActivityPanelProps {
-  agent: Agent;
+  agent: AgentDTO;
 }
 
 export default function AgentActivityPanel({ agent }: AgentActivityPanelProps) {
@@ -19,7 +19,7 @@ export default function AgentActivityPanel({ agent }: AgentActivityPanelProps) {
     setHasMounted(true);
     const fetchTasks = async () => {
       setLoading(true);
-      const result = await getTasks(agent.id.value);
+      const result = await getTasks(agent.id);
       if (result.success) {
         setTasks(result.data);
       }

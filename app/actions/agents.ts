@@ -9,6 +9,7 @@ import { getAgentApplicationService } from "@/ddd/application/di/container";
 import type { CreateAgentCommand, UpdateAgentCommand, AgentFilters } from "@/ddd/application/services/agents/agent-application-service";
 import type { CapabilityConfig } from "@/ddd/domain/agents/entities/agent";
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
+import { AgentMapper, type AgentDTO } from "@/app/mappers/agent-mapper";
 
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
 
@@ -133,7 +134,7 @@ export async function createAgentAction(formData: FormData): Promise<Result> {
   }
 }
 
-export async function getAgents(filters: { teamId?: number | string, searchQuery?: string, status?: 'active' | 'inactive' | 'archived' } = {}) {
+export async function getAgents(filters: { teamId?: number | string, searchQuery?: string, status?: 'active' | 'inactive' | 'archived' } = {}): Promise<AgentDTO[]> {
   try {
     const currentOrg = await requireCurrentOrganization();
     const agentApplicationService = getAgentApplicationService();
@@ -147,8 +148,8 @@ export async function getAgents(filters: { teamId?: number | string, searchQuery
 
     const domainAgents = await agentApplicationService.getAgents(agentFilters);
     
-    // Return domain entities directly - they already have proper defaults and types
-    return domainAgents;
+    // Map domain entities to DTOs for client serialization
+    return domainAgents.map(AgentMapper.toDTO);
   } catch (error) {
     console.error("Error fetching agents:", error);
     throw new Error("Failed to fetch agents");

@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { Edit, Users, Target, CheckCircle } from 'lucide-react';
-import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import type { Team } from '@/ddd/domain/teams/entities/team';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { TeamDTO } from '@/app/mappers/team-mapper';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -14,8 +14,8 @@ import TeamActivityPanel from './TeamActivityPanel';
 // AIDEV-NOTE: Team details view refactored to use consistent design system patterns
 
 interface TeamDetailsViewProps {
-  team: Team;
-  agents: Agent[];
+  team: TeamDTO;
+  agents: AgentDTO[];
   onEdit: () => void;
 }
 
@@ -25,7 +25,7 @@ export default function TeamDetailsView({ team, agents, onEdit }: TeamDetailsVie
   // Get agents that belong to this team
   const teamAgents = agents.filter(agent => 
     team.agentIds && team.agentIds.some(agentId => 
-      (typeof agentId === 'string' ? agentId : agentId.value?.toString()) === agent.id.value?.toString()
+      agentId === agent.id.toString()
     )
   );
 
@@ -125,7 +125,7 @@ export default function TeamDetailsView({ team, agents, onEdit }: TeamDetailsVie
             {teamAgents.length > 0 ? (
               <div className="grid gap-4 md:grid-cols-2">
                 {teamAgents.map((agent) => (
-                  <Card key={agent.id.value}>
+                  <Card key={agent.id}>
                     <CardContent className="p-4">
                       <h4 className="font-medium text-foreground">{agent.name}</h4>
                       <p className="text-sm text-muted-foreground">{agent.role}</p>
@@ -134,10 +134,10 @@ export default function TeamDetailsView({ team, agents, onEdit }: TeamDetailsVie
                       )}
                       {agent.status && (
                         <Badge 
-                          variant={agent.status?.value === 'active' ? 'success' : 'secondary'}
+                          variant={agent.status === 'active' ? 'success' : 'secondary'}
                           className="mt-2"
                         >
-                          {typeof agent.status === 'string' ? agent.status : agent.status?.value}
+                          {agent.status}
                         </Badge>
                       )}
                     </CardContent>

@@ -55,7 +55,7 @@ export default function RelationField({
         getRowsData(relatedTableId, 100, 0)
       ]);
 
-      const table = tables.find(t => t.id.value === relatedTableId);
+      const table = tables.find(t => t.id === relatedTableId);
       setRelatedTable(table);
       setAvailableRecords(Array.from(records) as any[]);
     } catch (error) {
