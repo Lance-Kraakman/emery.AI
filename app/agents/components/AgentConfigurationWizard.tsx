@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import { createAgent, updateAgent } from '@/app/actions/agents';
+import { createAgentFromClient, updateAgentFromClient } from '@/app/actions/agents';
 import { AgentStatus } from '@/ddd/domain/shared/value-objects';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -211,15 +211,15 @@ export default function AgentConfigurationWizard({
         tools,
         trigger,
         capabilities,
-        status: AgentStatus.active(),
+        status: 'active', // Use plain string instead of value object
         roleId: 1 // Default role ID - will be set by application layer
       };
 
       let result;
       if (agent) {
-        result = await updateAgent(agent.id, agentData);
+        result = await updateAgentFromClient(agent.id, agentData);
       } else {
-        result = await createAgent(agentData);
+        result = await createAgentFromClient(agentData);
       }
 
       if (result.success) {

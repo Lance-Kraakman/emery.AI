@@ -77,7 +77,7 @@ export class TeamApplicationService {
 
       // Create team using domain entity with temporary ID (repository will assign real ID)
       const team = Team.fromPersistence({
-        id: 0, // Temporary ID - repository will assign real ID
+        id: -1, // Use -1 for temporary ID (allowed by BaseId validation)
         name: command.name.trim(),
         purpose: command.purpose,
         description: command.description,

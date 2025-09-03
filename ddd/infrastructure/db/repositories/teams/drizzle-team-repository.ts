@@ -79,7 +79,7 @@ export class DrizzleTeamRepository implements ITeamRepository {
   }
 
   async save(team: Team): Promise<void> {
-    if (team.id.value === 0) {
+    if (team.id.value <= 0) {
       // Insert new team
       await this.db.insert(teams).values({
         name: team.name,
