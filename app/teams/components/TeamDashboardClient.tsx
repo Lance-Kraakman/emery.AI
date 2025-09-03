@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Search, Plus, Users, ChevronLeft, ChevronRight } from 'lucide-react';
-import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import type { Team } from '@/ddd/domain/teams/entities/team';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { TeamDTO } from '@/app/mappers/team-mapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,16 +19,16 @@ import { useEmery } from '@/contexts/EmeryContext';
 // AIDEV-NOTE: Teams dashboard refactored to use consistent design system patterns
 
 interface TeamDashboardClientProps {
-  initialTeams: Team[];
-  agents: Agent[];
+  initialTeams: TeamDTO[];
+  agents: AgentDTO[];
 }
 
 export default function TeamDashboardClient({ initialTeams, agents }: TeamDashboardClientProps) {
   const { currentOrganization } = useEmery();
-  const [teams, setTeams] = useState<Team[]>(initialTeams);
-  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [teams, setTeams] = useState<TeamDTO[]>(initialTeams);
+  const [selectedTeam, setSelectedTeam] = useState<TeamDTO | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [editingTeam, setEditingTeam] = useState<TeamDTO | null>(null);
   const [isPanelEditMode, setIsPanelEditMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -122,9 +122,9 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
           ) : (
             filteredTeams.map((team) => (
               <Card
-                key={team.id.value}
+                key={team.id}
                 className={`cursor-pointer transition-all hover:shadow-md ${
-                  selectedTeam?.id.value === team.id.value
+                  selectedTeam?.id === team.id
                     ? 'ring-2 ring-primary bg-secondary'
                     : ''
                 }`}

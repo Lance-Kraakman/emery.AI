@@ -1,9 +1,9 @@
 'use client'
 
-import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
 
 interface CellRendererProps {
-  field: TableField;
+  field: FieldDTO;
   value: any;
 }
 

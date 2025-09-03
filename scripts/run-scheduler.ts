@@ -3,10 +3,12 @@
 import { 
   getTaskRepository,
   getTaskQueueService,
-  getSchedulerService
+  getSchedulerService,
+  taskSchedulingContainer
 } from "@/ddd/application/di/scheduling-container";
-import { getRagIndexingApplicationService, getAgentTaskApplicationService } from "@/ddd/application/di/container";
-import { createNotificationClient } from "@/lib/db/client";
+import { getRagIndexingApplicationService, getAgentTaskApplicationService, initializeDI } from "@/ddd/application/di/container";
+import { createNotificationClient, rawClient } from "@/lib/db/client";
+import { contextAwareDb } from "@/lib/db/simple-context-proxy";
 import { TaskId } from "@/ddd/domain/tasks/value-objects/task-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 import { RagIndexId } from "@/ddd/domain/rag/value-objects";
@@ -229,6 +231,18 @@ async function main() {
   // Environment validation
   if (!process.env.DATABASE_URL) {
     console.error('❌ DATABASE_URL environment variable is required');
+    process.exit(1);
+  }
+
+  // Initialize DI containers
+  try {
+    initializeDI(contextAwareDb, rawClient);
+    console.log('✅ DI Container initialized for scheduler');
+    
+    taskSchedulingContainer.initialize(contextAwareDb, rawClient);
+    console.log('✅ TaskScheduling Container initialized for scheduler');
+  } catch (error) {
+    console.error('❌ Failed to initialize DI containers:', error);
     process.exit(1);
   }
 

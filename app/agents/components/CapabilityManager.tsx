@@ -1,7 +1,7 @@
 'use client';
 
 import { Settings } from 'lucide-react';
-import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 // AIDEV-NOTE: Capability manager refactored to use consistent design system patterns
 
 interface CapabilityManagerProps {
-  agent: Agent;
+  agent: AgentDTO;
 }
 
 export default function CapabilityManager({ agent }: CapabilityManagerProps) {

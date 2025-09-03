@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Team } from '@/ddd/domain/teams/entities/team';
+import type { TeamDTO } from '@/app/mappers/team-mapper';
 
 interface TeamActivityPanelProps {
-  team: Team;
+  team: TeamDTO;
 }
 
 interface ActivityItem {
@@ -33,7 +33,7 @@ export default function TeamActivityPanel({ team }: TeamActivityPanelProps) {
         timestamp: new Date(team.createdAt || new Date()),
       }
     ]);
-  }, [team.id.value]);
+  }, [team.id]);
 
   if (loading) {
     return <div className="text-muted-foreground">Loading team activity...</div>;

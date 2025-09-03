@@ -4,7 +4,7 @@
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { agents } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNotNull, sql } from 'drizzle-orm';
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
 import type { DbClient } from '@/lib/db/client';
 
@@ -115,6 +115,45 @@ export class DrizzleAgentRepository implements IAgentRepository {
       .where(eq(agents.organizationId, organizationId.value));
 
     return result.length;
+  }
+
+  async findActiveAgentsWithTriggers(organizationId?: OrganizationId): Promise<Agent[]> {
+    const conditions = [
+      eq(agents.status, 'active'),
+      isNotNull(agents.trigger),
+      // Ensure trigger is not empty JSON object
+      sql`jsonb_typeof(${agents.trigger}) = 'object' AND jsonb_array_length(jsonb_object_keys(${agents.trigger})) > 0`
+    ];
+
+    if (organizationId) {
+      conditions.push(eq(agents.organizationId, organizationId.value));
+    }
+
+    const results = await this.db
+      .select()
+      .from(agents)
+      .where(and(...conditions));
+
+    return results.map(result => this.mapToEntity(result));
+  }
+
+  async findAgentsWithTriggers(organizationId?: OrganizationId): Promise<Agent[]> {
+    const conditions = [
+      isNotNull(agents.trigger),
+      // Ensure trigger is not empty JSON object
+      sql`jsonb_typeof(${agents.trigger}) = 'object' AND jsonb_array_length(jsonb_object_keys(${agents.trigger})) > 0`
+    ];
+
+    if (organizationId) {
+      conditions.push(eq(agents.organizationId, organizationId.value));
+    }
+
+    const results = await this.db
+      .select()
+      .from(agents)
+      .where(and(...conditions));
+
+    return results.map(result => this.mapToEntity(result));
   }
 
   // Helper method to map database result to domain entity with defaults

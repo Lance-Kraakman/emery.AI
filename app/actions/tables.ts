@@ -10,6 +10,7 @@ import { getTableApplicationService } from "@/ddd/application/di/container";
 import { OrganizationId, TableId, DatabaseId, UserId } from "@/ddd/domain/shared/value-objects";
 import type { Result, CreateTableData } from "./types";
 import type { CreateTableCommand } from "@/ddd/application/services/tables/table-application-service";
+import { TableMapper, type TableDTO } from "@/app/mappers/table-mapper";
 
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
@@ -95,7 +96,7 @@ export async function createTableAction(formData: FormData) {
   return result;
 }
 
-export async function getTables() {
+export async function getTables(): Promise<TableDTO[]> {
   try {
     const currentOrg = await requireCurrentOrganization();
     const tableApplicationService = getTableApplicationService();
@@ -103,7 +104,7 @@ export async function getTables() {
     const tableList = await tableApplicationService.getTablesForOrganization(OrganizationId.fromNumber(currentOrg.id.value));
 
     console.log(`[GET-TABLES] Found ${tableList.length} tables for org ${currentOrg.id}`);
-    return tableList;
+    return tableList.map(TableMapper.toDTO);
   } catch (error) {
     console.error("Error fetching tables:", error);
     console.error("Error details:", error instanceof Error ? error.message : String(error));

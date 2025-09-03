@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Edit } from 'lucide-react';
-import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,7 @@ import AgentActivityPanel from './AgentActivityPanel';
 // AIDEV-NOTE: Agent details view refactored to use consistent design system patterns
 
 interface AgentDetailsViewProps {
-  agent: Agent;
+  agent: AgentDTO;
   onEdit: () => void;
 }
 
@@ -28,8 +28,8 @@ export default function AgentDetailsView({ agent, onEdit }: AgentDetailsViewProp
             <p className="text-muted-foreground">{agent.role}</p>
           )}
           {agent.status && (
-            <Badge variant={agent.status.value === 'active' ? 'success' : 'secondary'}>
-              {agent.status.value}
+            <Badge variant={agent.status === 'active' ? 'success' : 'secondary'}>
+              {agent.status}
             </Badge>
           )}
         </div>

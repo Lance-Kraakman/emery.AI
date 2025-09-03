@@ -18,6 +18,9 @@
 import { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
 
+// Import Value Objects for proper type safety
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+
 // Import existing chat services (DIContainer now auto-initializes)
 import { getChatApplicationService, getDynamicTableRepository, getAgentRepository } from '@/ddd/application/di/container';
 import type { CreateChatCommand, SendMessageCommand } from '@/ddd/application/services/chat/chat-application-service';
@@ -109,8 +112,8 @@ export async function POST(req: NextRequest) {
     if (!currentChatId && latestMessage) {
       console.log('[CHAT-GRPC-API] Creating new chat session');
       const createChatCommand: CreateChatCommand = {
-        organizationId,
-        createdBy: userId,
+        organizationId: OrganizationId.fromNumber(organizationId),
+        createdBy: UserId.fromString(userId),
         domainType: domainType as any,
         domainId: domainId ? parseInt(domainId) : undefined
       };
@@ -146,8 +149,8 @@ export async function POST(req: NextRequest) {
       console.log('[CHAT-GRPC-API] Saving user message to database');
       const userMessageCommand: SendMessageCommand = {
         chatId: currentChatId,
-        userId: userId,
-        organizationId,
+        userId: UserId.fromString(userId),
+        organizationId: OrganizationId.fromNumber(organizationId),
         content: latestMessage,
         role: 'user'
       };
@@ -164,8 +167,8 @@ export async function POST(req: NextRequest) {
       console.log('[CHAT-GRPC-API] Retrieving conversation history from database');
       const historyResult = await chatApplicationService.getChatHistory({
         chatId: currentChatId,
-        userId: userId,
-        organizationId,
+        userId: UserId.fromString(userId),
+        organizationId: OrganizationId.fromNumber(organizationId),
         limit: 10 // Last 10 messages for context
       });
       
@@ -223,8 +226,8 @@ export async function POST(req: NextRequest) {
             try {
               const assistantMessageCommand: SendMessageCommand = {
                 chatId: currentChatId,
-                userId: userId,
-                organizationId,
+                userId: UserId.fromString(userId),
+                organizationId: OrganizationId.fromNumber(organizationId),
                 content: fullAssistantResponse.trim(),
                 role: 'assistant',
                 metadata: {

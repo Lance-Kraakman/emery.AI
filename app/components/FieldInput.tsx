@@ -1,13 +1,13 @@
 'use client'
 
-import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import FileUpload from '../FileUpload';
 import RelationField from './RelationField';
 
 interface FieldInputProps {
-  field: TableField;
+  field: FieldDTO;
   value: any;
   onChange: (value: any) => void;
   disabled?: boolean;
@@ -66,7 +66,7 @@ export default function FieldInput({
           onChange={onChange}
           organizationId={organizationId}
           tableId={tableId}
-          fieldId={field.id.value}
+          fieldId={field.id}
         />
       );
     case 'relation':
@@ -78,7 +78,7 @@ export default function FieldInput({
         <RelationField
           value={value}
           onChange={onChange}
-          relatedTableId={field.relatedTableId?.value ?? null}
+          relatedTableId={field.relatedTableId ?? null}
           workspaceId={organizationId}
           disabled={disabled}
         />

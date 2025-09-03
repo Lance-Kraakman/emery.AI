@@ -7,9 +7,10 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateFieldData } from "./types";
-import type { TableField, FieldType } from "@/ddd/domain/tables/value-objects/table-field";
+import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field";
 import type { CreateFieldCommand } from "@/ddd/application/services/tables/table-application-service";
 import { TableId } from "@/ddd/domain/shared/value-objects";
+import { FieldMapper, type FieldDTO } from "@/app/mappers/field-mapper";
 
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<Result> {
   try {
@@ -82,7 +83,7 @@ export async function createFieldAction(formData: FormData) {
   return result;
 }
 
-export async function getFields(tableId: number): Promise<TableField[]> {
+export async function getFields(tableId: number): Promise<FieldDTO[]> {
   try {
     if (!tableId) {
       throw new Error("tableId is required");
@@ -91,7 +92,7 @@ export async function getFields(tableId: number): Promise<TableField[]> {
     const tableApplicationService = getTableApplicationService();
     const fieldList = await tableApplicationService.getFieldsForTable(TableId.fromNumber(tableId));
 
-    return fieldList;
+    return fieldList.map(FieldMapper.toDTO);
   } catch (error) {
     console.error("Error fetching fields:", error);
     throw new Error("Failed to fetch fields");

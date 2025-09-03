@@ -16,6 +16,7 @@ import type {
   DatabaseFilters
 } from "@/ddd/application/services/database/database-application-service"
 import { UserId, DatabaseId } from "@/ddd/domain/shared/value-objects"
+import { DatabaseMapper, type DatabaseDTO } from "@/app/mappers/database-mapper"
 
 const createDatabaseSchema = z.object({
   name: z.string().min(1, "Database name is required"),
@@ -30,7 +31,7 @@ const updateDatabaseSchema = z.object({
   metadata: z.record(z.any()).optional(),
 })
 
-export async function getDatabases(searchQuery?: string, hasTables?: boolean) {
+export async function getDatabases(searchQuery?: string, hasTables?: boolean): Promise<DatabaseDTO[]> {
   try {
     const session = await requirePermission("view_data");
     const currentOrg = await requireCurrentOrganization();
@@ -43,14 +44,15 @@ export async function getDatabases(searchQuery?: string, hasTables?: boolean) {
       hasTables
     };
     
-    return await databaseApplicationService.getDatabases(filters);
+    const databases = await databaseApplicationService.getDatabases(filters);
+    return databases.map(DatabaseMapper.toDTO);
   } catch (error) {
     console.error('Error fetching databases:', error)
     throw new Error('Failed to fetch databases')
   }
 }
 
-export async function getDatabase(id: number) {
+export async function getDatabase(id: number): Promise<DatabaseDTO> {
   try {
     const session = await requirePermission("view_data");
     
@@ -65,7 +67,7 @@ export async function getDatabase(id: number) {
       throw new Error("Database not found");
     }
     
-    return database;
+    return DatabaseMapper.toDTO(database);
   } catch (error) {
     console.error('Error fetching database:', error)
     throw new Error('Failed to fetch database')
@@ -109,7 +111,16 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
 
     return {
       success: true,
-      data: result.data,
+      data: result.data ? {
+        id: result.data.id.value,
+        name: result.data.name,
+        slug: result.data.slug,
+        metadata: result.data.metadata,
+        organizationId: result.data.organizationId.value,
+        createdBy: result.data.createdBy.value,
+        createdAt: result.data.createdAt,
+        updatedAt: result.data.updatedAt
+      } : null,
       warnings: result.warnings
     };
   } catch (error) {
@@ -165,7 +176,16 @@ export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>,
 
     return {
       success: true,
-      data: result.data,
+      data: result.data ? {
+        id: result.data.id.value,
+        name: result.data.name,
+        slug: result.data.slug,
+        metadata: result.data.metadata,
+        organizationId: result.data.organizationId.value,
+        createdBy: result.data.createdBy.value,
+        createdAt: result.data.createdAt,
+        updatedAt: result.data.updatedAt
+      } : null,
       warnings: result.warnings
     };
   } catch (error) {
@@ -240,7 +260,7 @@ export async function getDatabaseCount() {
 /**
  * Get database by slug
  */
-export async function getDatabaseBySlug(slug: string) {
+export async function getDatabaseBySlug(slug: string): Promise<DatabaseDTO> {
   try {
     const session = await requirePermission("view_data");
     

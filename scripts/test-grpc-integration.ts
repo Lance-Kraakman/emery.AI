@@ -12,7 +12,7 @@ async function testGrpcIntegration() {
   
   const client = new AgentWorkerTestClient({
     host: process.env.WORKER_HOST || 'localhost',
-    port: parseInt(process.env.WORKER_ADDRESS || '50051'),
+    port: parseInt(process.env.WORKER_BASE_PORT || '50051'),
     organizationId: process.env.ORGANIZATION_ID || 'test-org'
   });
 

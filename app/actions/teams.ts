@@ -12,6 +12,7 @@ import { createTeamSchema, updateTeamSchema, parseFormDataToTeam } from "@/lib/s
 import type { Result, CreateTeamData, TeamMembershipData } from "./types";
 import type { CreateTeamCommand, UpdateTeamCommand, TeamFilters } from "@/ddd/application/services/teams/team-application-service";
 import { TeamId, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
+import { TeamMapper, type TeamDTO } from "@/app/mappers/team-mapper";
 
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
@@ -87,7 +88,7 @@ export async function createTeamAction(formData: FormData): Promise<Result> {
   }
 }
 
-export async function getTeams(organizationId?: number) {
+export async function getTeams(organizationId?: number): Promise<TeamDTO[]> {
   try {
     const session = await requirePermission("view_teams");
     const currentOrg = await requireCurrentOrganization();
@@ -98,7 +99,8 @@ export async function getTeams(organizationId?: number) {
       organizationId: organizationId || currentOrg.id.value
     };
     
-    return await teamApplicationService.getTeams(filters);
+    const teams = await teamApplicationService.getTeams(filters);
+    return teams.map(TeamMapper.toDTO);
   } catch (error) {
     console.error("Error fetching teams:", error);
     throw new Error("Failed to fetch teams");

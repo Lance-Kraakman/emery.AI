@@ -7,13 +7,13 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
-import type { TableField } from "@/ddd/domain/tables/value-objects/table-field"
+import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { FileMetadata } from "@/types/db"
 import { uploadFileAction } from "@/app/actions/files"
 import { PlusCircle } from "lucide-react"
 
 interface EditableCellProps {
-  field: TableField;
+  field: FieldDTO;
   value: any;
   organizationId: number;
   tableId: number;

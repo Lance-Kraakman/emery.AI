@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import type { Team } from '@/ddd/domain/teams/entities/team';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { TeamDTO } from '@/app/mappers/team-mapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,8 +18,8 @@ import { AlertCircle } from 'lucide-react';
 
 interface TeamConfigurationPanelProps {
   onClose: () => void;
-  team?: Team | null;
-  agents: Agent[];
+  team?: TeamDTO | null;
+  agents: AgentDTO[];
   onSuccess?: () => void;
 }
 
@@ -33,7 +33,7 @@ export default function TeamConfigurationPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>(
-    team?.agentIds?.map(id => typeof id === 'string' ? id : id.value?.toString()) || []
+    team?.agentIds || []
   );
   const [formData, setFormData] = useState({
     name: team?.name || '',
@@ -53,7 +53,7 @@ export default function TeamConfigurationPanel({
         responsibilities: team.responsibilities?.join(', ') || '',
         goals: team.goals?.join(', ') || '',
       });
-      setSelectedAgentIds(team.agentIds?.map(id => typeof id === 'string' ? id : id.value?.toString()) || []);
+      setSelectedAgentIds(team.agentIds || []);
     } else {
       // Reset form for new team
       setFormData({
@@ -86,7 +86,7 @@ export default function TeamConfigurationPanel({
           goals: formData.goals?.split(',').map(g => g.trim()).filter(g => g),
           agentIds: selectedAgentIds,
         };
-        result = await updateTeam(team.id.value, data);
+        result = await updateTeam(team.id, data);
       } else {
         // Create new team
         const teamData = new FormData();
@@ -240,7 +240,7 @@ export default function TeamConfigurationPanel({
               <div className="space-y-2">
                 {agents.length > 0 ? (
                   agents.map((agent) => (
-                    <div key={agent.id.value} className="flex items-center space-x-3">
+                    <div key={agent.id} className="flex items-center space-x-3">
                       <Checkbox
                         id={`agent-${agent.id}`}
                         checked={selectedAgentIds.includes(agent.id.toString())}

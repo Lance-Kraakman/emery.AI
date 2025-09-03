@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import type { Agent, ToolConfig, ServerConfig } from '@/ddd/domain/agents/entities/agent';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { ToolConfig, ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import { createTask } from '@/app/actions/tasks';
 
 interface TaskFormDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  agent: Agent;
+  agent: AgentDTO;
 }
 
 export default function TaskFormDialog({ isOpen, onClose, agent }: TaskFormDialogProps) {
@@ -24,7 +25,7 @@ export default function TaskFormDialog({ isOpen, onClose, agent }: TaskFormDialo
     const instructions = formData.get('instructions') as string;
     
     await createTask({ 
-      agentId: agent.id.value, 
+      agentId: agent.id, 
       name, 
       capabilityName: capabilityName || undefined, // Auto-route if empty
       instructions: {

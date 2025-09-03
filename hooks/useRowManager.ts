@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useTransition } from 'react';
-import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { Row } from '@/ddd/domain/tables/value-objects/row';
 import { createRowAction, updateRowAction, deleteRowAction } from '@/app/actions/rows';
 
 interface UseRowManagerProps {
   tableId: number;
-  fields: TableField[];
+  fields: FieldDTO[];
   onRowUpdate: () => void;
 }
 
