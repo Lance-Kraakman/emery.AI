@@ -32,17 +32,29 @@ export default function TableEditorClient({ tableId, tableName, organizationId, 
 
   const loadData = async () => {
     try {
+      console.log('[TABLE-EDITOR-DEBUG] loadData started for tableId:', tableId, 'tableName:', tableName);
       setIsLoading(true);
+      
       const [fieldsData, rowsData, tablesData] = await Promise.all([
         getFields(tableId),
         getRowsData(tableId),
         getTables()
       ]);
+      
+      console.log('[TABLE-EDITOR-DEBUG] loadData results:', {
+        fieldsCount: fieldsData.length,
+        rowsCount: rowsData.length,
+        tablesCount: tablesData.length,
+        fields: fieldsData.map(f => ({ id: f.id, name: f.name, type: f.type }))
+      });
+      
       setFields(fieldsData);
       setRows(Array.from(rowsData) as unknown as Row[]);
       setAvailableTables(tablesData.map(t => ({ id: t.id, name: t.name })));
+      
+      console.log('[TABLE-EDITOR-DEBUG] State updated after loadData');
     } catch (error) {
-      console.error('Error loading table data:', error);
+      console.error('[TABLE-EDITOR-DEBUG] Error loading table data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -50,17 +62,38 @@ export default function TableEditorClient({ tableId, tableName, organizationId, 
 
   const handleFieldUpdate = async () => {
     try {
+      console.log('[TABLE-EDITOR-DEBUG] handleFieldUpdate started for tableId:', tableId);
+      console.log('[TABLE-EDITOR-DEBUG] Previous fields state:', fields.map(f => ({ id: f.id, name: f.name, type: f.type })));
+      
       // Reload both fields and rows since field changes affect row structure
       const [fieldsData, rowsData, tablesData] = await Promise.all([
         getFields(tableId),
         getRowsData(tableId),
         getTables()
       ]);
+      
+      console.log('[TABLE-EDITOR-DEBUG] handleFieldUpdate results:', {
+        fieldsCount: fieldsData.length,
+        rowsCount: rowsData.length,
+        tablesCount: tablesData.length,
+        newFields: fieldsData.map(f => ({ id: f.id, name: f.name, type: f.type })),
+        fieldChanges: {
+          added: fieldsData.filter(newF => !fields.find(oldF => oldF.id === newF.id)),
+          removed: fields.filter(oldF => !fieldsData.find(newF => newF.id === oldF.id)),
+          modified: fieldsData.filter(newF => {
+            const oldF = fields.find(oldF => oldF.id === newF.id);
+            return oldF && (oldF.name !== newF.name || oldF.type !== newF.type);
+          })
+        }
+      });
+      
       setFields(fieldsData);
       setRows(Array.from(rowsData) as unknown as Row[]);
       setAvailableTables(tablesData.map(t => ({ id: t.id, name: t.name })));
+      
+      console.log('[TABLE-EDITOR-DEBUG] State updated after handleFieldUpdate');
     } catch (error) {
-      console.error('Error refreshing fields:', error);
+      console.error('[TABLE-EDITOR-DEBUG] Error refreshing fields:', error);
     }
   };
 

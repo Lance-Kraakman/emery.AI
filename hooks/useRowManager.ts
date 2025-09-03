@@ -40,6 +40,13 @@ export function useRowManager({ tableId, fields, onRowUpdate }: UseRowManagerPro
   async function handleUpdateRow(rowId: string) {
     startTransition(async () => {
       try {
+        console.log('[ROW-EDIT-DEBUG] handleUpdateRow sending data:', {
+          rowId,
+          tableId,
+          fieldsBeingSent: Object.keys(editRowData),
+          dataBeingSent: editRowData
+        });
+        
         const formData = new FormData();
         formData.append('tableId', tableId.toString());
         formData.append('rowId', rowId);
@@ -49,7 +56,7 @@ export function useRowManager({ tableId, fields, onRowUpdate }: UseRowManagerPro
         setEditRowData({});
         onRowUpdate();
       } catch (error) {
-        console.error('Error updating row:', error);
+        console.error('[ROW-EDIT-DEBUG] Error updating row:', error);
         alert('Failed to update row');
       }
     });
@@ -73,12 +80,15 @@ export function useRowManager({ tableId, fields, onRowUpdate }: UseRowManagerPro
   }
 
   const startEditRow = (row: Row) => {
+    console.log('[ROW-EDIT-DEBUG] startEditRow called for row:', row.id.value);
     setEditingRow(row.id.value);
     const rowData: Record<string, any> = {};
     fields.forEach(field => {
       const fieldValue = row.getFieldValue(field.name);
       rowData[field.name] = fieldValue?.value;
+      console.log('[ROW-EDIT-DEBUG] Field loaded:', field.name, '=', fieldValue?.value);
     });
+    console.log('[ROW-EDIT-DEBUG] Total fields loaded into edit form:', Object.keys(rowData).length, rowData);
     setEditRowData(rowData);
   };
 
