@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { PREDEFINED_TOOLS, getAvailableToolsForUser } from '@/lib/agents/tools-registry'
 import { useEmery } from '@/contexts/EmeryContext'
-import { getUserOAuthConnections } from '@/app/actions/pipedream'
+import { getUserOAuthConnections } from '@/app/actions/connections'
 import type { NormalizedConnection } from '@/lib/pipedream/connection-mapper'
 import type {
   ChatMentionsHook,

@@ -70,6 +70,12 @@ import { RagIndexingApplicationService } from '@/ddd/application/services/rag/ra
 import { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
 import { LlamaIndexContentProcessor } from '../services/content-processing/llamaindex-content-processor';
 
+// Connection domain imports
+import { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
+import { PipedreamConnectionRepository } from '@/ddd/infrastructure/external/pipedream/pipedream-connection-repository';
+import { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service';
+import { pipedreamClient } from '@/lib/pipedream/client';
+
 
 // Registry of all available repository interfaces and services
 interface RepositoryRegistry {
@@ -132,6 +138,9 @@ interface RepositoryRegistry {
   RagIndexingApplicationService: RagIndexingApplicationService;
   RagSearchApplicationService: RagSearchApplicationService;
   
+  // Connection domain services
+  IConnectionRepository: IConnectionRepository;
+  ConnectionApplicationService: ConnectionApplicationService;
 }
 
 export class DIContainer {
@@ -348,10 +357,22 @@ export class DIContainer {
     this.repositories.set('RagIndexingApplicationService', ragIndexingApplicationService);
     this.repositories.set('RagSearchApplicationService', ragSearchApplicationService);
 
+    // Register connection services - fail fast if Pipedream client not available
+    if (!pipedreamClient) {
+      throw new Error('Pipedream client not configured. Please set PIPEDREAM_PROJECT_ID, PIPEDREAM_CLIENT_ID, and PIPEDREAM_CLIENT_SECRET environment variables.');
+    }
+    
+    const connectionRepository = new PipedreamConnectionRepository();
+    const connectionApplicationService = new ConnectionApplicationService(connectionRepository);
+    
+    this.repositories.set('IConnectionRepository', connectionRepository);
+    this.repositories.set('ConnectionApplicationService', connectionApplicationService);
+    
+    console.log('✅ Connection services registered with Pipedream client');
 
     
     this.isInitialized = true;
-    console.log('✅ DIContainer initialized with repositories, file storage, agent services, and RAG services');
+    console.log('✅ DIContainer initialized with repositories, file storage, agent services, RAG services, and connection services');
   }
 
   /**
@@ -439,6 +460,10 @@ type ServiceMap = {
   SearchDomainService: ISearchDomainService;
   RagIndexingApplicationService: RagIndexingApplicationService;
   RagSearchApplicationService: RagSearchApplicationService;
+  
+  // Connection Services
+  ConnectionRepository: IConnectionRepository;
+  ConnectionApplicationService: ConnectionApplicationService;
 };
 
 // Generate getter functions dynamically
@@ -447,15 +472,16 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
   // Map simple names to container keys (e.g., 'AgentRepository' -> 'IAgentRepository')
   let containerKey;
   
-  // Special mappings for RAG services
-  const ragMappings: Record<string, string> = {
+  // Special mappings for services with interface prefix
+  const specialMappings: Record<string, string> = {
     'RagIndexRepository': 'IRagIndexRepository',
     'RagDocumentRepository': 'IRagDocumentRepository', 
     'RagQueryLogRepository': 'IRagQueryLogRepository',
+    'ConnectionRepository': 'IConnectionRepository',
   };
   
-  if (ragMappings[key as string]) {
-    containerKey = ragMappings[key as string];
+  if (specialMappings[key as string]) {
+    containerKey = specialMappings[key as string];
   } else if (key.includes('Repository')) {
     containerKey = `I${key}`;
   } else {
@@ -501,6 +527,10 @@ export const getIndexingDomainService = createGetter('IndexingDomainService');
 export const getSearchDomainService = createGetter('SearchDomainService');
 export const getRagIndexingApplicationService = createGetter('RagIndexingApplicationService');
 export const getRagSearchApplicationService = createGetter('RagSearchApplicationService');
+
+// Connection service getters
+export const getConnectionRepository = createGetter('ConnectionRepository');
+export const getConnectionApplicationService = createGetter('ConnectionApplicationService');
 
 // RLS context management removed - RLS policies work automatically
 

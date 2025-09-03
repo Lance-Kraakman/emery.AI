@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, RefreshCw } from 'lucide-react';
-import { getUserOAuthConnections, getAppConnectionUrl, initializePipedreamUser, disconnectOAuthAccount } from '@/app/actions/pipedream';
+import { getUserOAuthConnections, getAppConnectionUrl, disconnectOAuthAccount } from '@/app/actions/connections';
 
 import { NormalizedConnection as Connection } from '@/lib/pipedream/connection-mapper';
 
@@ -49,14 +49,7 @@ export function ConnectionsManager() {
       setLoading(true);
       setError(null);
       
-      // Initialize Pipedream user first
-      const initResult = await initializePipedreamUser();
-      if (!initResult.success) {
-        setError(initResult.error || 'Failed to initialize Pipedream');
-        return;
-      }
-      
-      // Then get connections
+      // Get connections (user initialization handled automatically by DDD system)
       const result = await getUserOAuthConnections();
       if (result.success) {
         console.log('🔍 Raw connections data:', JSON.stringify(result.data, null, 2));
