@@ -19,7 +19,7 @@ import { useLayout } from '@/components/layout/LayoutProvider'
 import { useChatGRPC } from './useChatGRPC'
 import { ChatCanvas } from './ChatCanvas'
 import { CustomChatInput } from './CustomChatInput'
-import type { DomainType } from '@/ddd/domain/chat/entities/chat'
+import type { DomainType } from '@/ddd/domain/rag/value-objects'
 
 /**
  * EmeryChat - Main chat component with LlamaIndex integration
@@ -36,7 +36,7 @@ import type { DomainType } from '@/ddd/domain/chat/entities/chat'
  */
 
 interface EmeryChatHeaderProps {
-  domainType?: DomainType | 'organization' | 'general'
+  domainType?: DomainType | 'organizations' | 'general'
   domainName?: string
 }
 
@@ -47,12 +47,11 @@ function EmeryChatHeader({ domainType, domainName }: EmeryChatHeaderProps) {
   const getSubtitle = () => {
     if (domainType && domainName) {
       switch (domainType) {
-        case 'agent': return `Agent: ${domainName}`
-        case 'team': return `Team: ${domainName}`
-        case 'table': return `Table: ${domainName}`
-        case 'workflow': return `Workflow: ${domainName}`
-        case 'file': return `File: ${domainName}`
-        case 'organization': return 'Organization Assistant'
+        case 'agents': return `Agent: ${domainName}`
+        case 'teams': return `Team: ${domainName}`
+        case 'tables': return `Table: ${domainName}`
+        case 'files': return `File: ${domainName}`
+        case 'organizations': return 'Organization Assistant'
         default: return 'AI Assistant'
       }
     }
@@ -122,7 +121,7 @@ function ChatSuggestions({
 }: { 
   onSuggestionClick: (suggestion: string) => void
   selectedIndex?: number
-  domainType?: DomainType | 'organization' | 'general'
+  domainType?: DomainType | 'organizations' | 'general'
 }) {
   const suggestions = getSuggestionsForDomain(domainType)
 
@@ -293,9 +292,9 @@ export function EmeryChat() {
 }
 
 // Helper functions for domain-specific suggestions
-function getSuggestionsForDomain(domainType?: DomainType | 'organization' | 'general') {
+function getSuggestionsForDomain(domainType?: DomainType | 'organizations' | 'general') {
   switch (domainType) {
-    case 'agent':
+    case 'agents':
       return [
         {
           icon: <Code className="h-3 w-3" />,
@@ -309,7 +308,7 @@ function getSuggestionsForDomain(domainType?: DomainType | 'organization' | 'gen
         }
       ]
       
-    case 'team':
+    case 'teams':
       return [
         {
           icon: <Users className="h-3 w-3" />,
@@ -323,7 +322,7 @@ function getSuggestionsForDomain(domainType?: DomainType | 'organization' | 'gen
         }
       ]
       
-    case 'table':
+    case 'tables':
       return [
         {
           icon: <Database className="h-3 w-3" />,
@@ -337,7 +336,7 @@ function getSuggestionsForDomain(domainType?: DomainType | 'organization' | 'gen
         }
       ]
       
-    case 'organization':
+    case 'organizations':
       return [
         {
           icon: <BarChart className="h-3 w-3" />,
@@ -367,6 +366,6 @@ function getSuggestionsForDomain(domainType?: DomainType | 'organization' | 'gen
   }
 }
 
-function getSuggestionsPrompts(domainType?: DomainType | 'organization' | 'general'): string[] {
+function getSuggestionsPrompts(domainType?: DomainType | 'organizations' | 'general'): string[] {
   return getSuggestionsForDomain(domainType).map(s => s.prompt)
 }

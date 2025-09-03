@@ -55,7 +55,7 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
     
     return {
       success: true,
-      data: result.data,
+      data: result.data ? FieldMapper.toDTO(result.data) : null,
     };
   } catch (error) {
     console.error("Error creating field:", error);

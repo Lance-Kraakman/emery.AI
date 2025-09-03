@@ -145,7 +145,7 @@ export async function deleteFileAction(fileId: string, fieldName: string, tableI
       fileId,
       fieldId: field.id,
       tableId: TableId.fromNumber(tableId),
-      organizationId,
+      organizationId: OrganizationId.fromNumber(organizationId),
     };
 
     const result = await fileApplicationService.deleteFile(command);

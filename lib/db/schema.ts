@@ -463,7 +463,7 @@ export const ragIndexes = pgTable("rag_indexes", {
   // Note: roleId removed for simplified RBAC - use organization-level permissions instead
   
   // Domain configuration - what to RAG against
-  domainTypes: jsonb("domain_types").notNull(), // ["tables", "files", "agents", "workflows"]
+  domainTypes: jsonb("domain_types").notNull(), // ["tables", "files", "agents", "teams", "databases", "organizations"]
   domainFilters: jsonb("domain_filters"), // Additional filtering criteria
   
   // Embedding configuration
@@ -515,7 +515,7 @@ export const ragDocuments = pgTable("rag_documents", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id), // Denormalized for performance
   
   // Source identification
-  domainType: text("domain_type").notNull(), // "table", "file", "agent", "workflow"
+  domainType: text("domain_type").notNull(), // "tables", "files", "agents", "teams", "databases", "organizations"
   sourceId: text("source_id").notNull(), // ID of the source (table.id, file_path, etc.)
   sourceName: text("source_name").notNull(), // Human readable name
   
@@ -618,7 +618,7 @@ export const chats = pgTable("chats", {
   // RAG and AI context
   contextMetadata: jsonb("context_metadata").$type<{
     ragIndexId?: string;
-    contextType?: 'table' | 'agent' | 'file' | 'team' | 'workflow' | 'organization' | 'mixed';
+    contextType?: 'tables' | 'agents' | 'files' | 'teams' | 'databases' | 'organizations' | 'mixed';
     domainSchema?: {
       id?: number;        // Domain entity ID (replaces domainId/tableId)
       name?: string;      // Domain entity name

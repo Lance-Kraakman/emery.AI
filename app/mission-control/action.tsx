@@ -55,7 +55,7 @@ Your question: "${question}"`}
       // AIDEV-NOTE: Using DDD repository directly instead of legacy ragService
       const indexRepository = getRagIndexRepository();
       const indexes = await indexRepository.findByOrganization(organizationId)
-      let ragIndex = indexes.find(idx => idx.domainTypes.includes('table'))
+      let ragIndex = indexes.find(idx => idx.domainTypes.includes('tables'))
       
       // Create default RAG index if none exists
       if (!ragIndex) {
@@ -64,7 +64,7 @@ Your question: "${question}"`}
           name: 'Organization Knowledge Base',
           description: 'Automatic RAG index for organizational data',
           organizationId,
-          domainTypes: ['table', 'agent', 'team', 'file'], // DDD uses singular forms
+          domainTypes: ['tables', 'agents', 'teams', 'files'], // DDD uses plural forms
           createdBy: session.user.id,
         };
         

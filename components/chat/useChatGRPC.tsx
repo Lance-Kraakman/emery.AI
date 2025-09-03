@@ -3,7 +3,7 @@
 import { generateId } from 'ai'
 import { useState, useEffect, useRef } from 'react'
 import { ChatHandler, Message } from '@llamaindex/chat-ui'
-import type { DomainType } from '@/ddd/domain/chat/entities/chat'
+import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import { useLayout } from '@/components/layout/LayoutProvider'
 
 interface ChatMessage extends Message {
@@ -19,7 +19,7 @@ interface ExtendedChatHandler extends ChatHandler {
 
 // Chat context options for domain-specific functionality
 interface ChatContextOptions {
-  domainType?: DomainType | 'organization' | 'general'
+  domainType?: DomainType | 'organizations' | 'general'
   domainId?: number
   tableId?: number // Legacy support
   organizationId?: number
@@ -231,28 +231,24 @@ export const useChatForPage = {
   }),
   
   agents: (agentId?: number) => useChatGRPC({ 
-    domainType: 'agent',
+    domainType: 'agents',
     domainId: agentId 
   }),
   
   teams: (teamId?: number) => useChatGRPC({ 
-    domainType: 'team',
+    domainType: 'teams',
     domainId: teamId 
   }),
   
   data: (tableId?: number) => useChatGRPC({ 
-    domainType: 'table',
+    domainType: 'tables',
     domainId: tableId,
     tableId // Legacy support
   }),
   
   organization: (organizationId?: number) => useChatGRPC({ 
-    domainType: 'organization',
+    domainType: 'organizations',
     organizationId 
   }),
   
-  workflow: (workflowId?: number) => useChatGRPC({ 
-    domainType: 'workflow',
-    domainId: workflowId 
-  })
 }

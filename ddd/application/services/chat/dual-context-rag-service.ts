@@ -93,7 +93,7 @@ export class TableContextBuilder extends DomainContextBuilder {
         id: `table_schema_${domainId}`,
         title: `Table Schema: ${table.name}`,
         content: `Table "${table.name}"\nThis table contains structured data with multiple fields and relationships. Users can query and analyze data from this table.`,
-        domainType: 'table',
+        domainType: 'tables',
         sourceName: table.name,
         similarity: 1.0, // Perfect match for schema
         metadata: {
@@ -107,7 +107,7 @@ export class TableContextBuilder extends DomainContextBuilder {
         id: `table_activity_${domainId}`,
         title: `Recent Activity: ${table.name}`,
         content: `Recent data operations and user interactions with table "${table.name}". This table is actively used for data management and analysis.`,
-        domainType: 'table',
+        domainType: 'tables',
         sourceName: `${table.name} Activity`,
         similarity: 0.8,
         metadata: {

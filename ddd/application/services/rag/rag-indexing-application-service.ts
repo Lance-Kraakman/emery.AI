@@ -336,12 +336,12 @@ export class RagIndexingApplicationService {
     documentsDeleted: number;
   }> {
     const indexers = {
-      'organization': () => this.indexOrganization(index),
-      'table': () => this.indexTables(index),
-      'database': () => this.indexDatabases(index),
-      'agent': () => this.indexAgents(index),
-      'team': () => this.indexTeams(index),
-      'file': () => this.indexFiles(index)
+      'organizations': () => this.indexOrganization(index),
+      'tables': () => this.indexTables(index),
+      'databases': () => this.indexDatabases(index),
+      'agents': () => this.indexAgents(index),
+      'teams': () => this.indexTeams(index),
+      'files': () => this.indexFiles(index)
     };
 
     const indexer = indexers[domainType];
