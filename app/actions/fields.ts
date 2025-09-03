@@ -85,16 +85,34 @@ export async function createFieldAction(formData: FormData) {
 
 export async function getFields(tableId: number): Promise<FieldDTO[]> {
   try {
+    console.log('[FIELD-LOADING-DEBUG] getFields called for tableId:', tableId);
+    
     if (!tableId) {
       throw new Error("tableId is required");
     }
 
     const tableApplicationService = getTableApplicationService();
     const fieldList = await tableApplicationService.getFieldsForTable(TableId.fromNumber(tableId));
+    
+    console.log('[FIELD-LOADING-DEBUG] Raw fieldList from service:', fieldList.map(f => ({
+      id: f.id?.value,
+      name: f.name,
+      type: f.type,
+      required: f.required
+    })));
 
-    return fieldList.map(FieldMapper.toDTO);
+    const dtoFields = fieldList.map(FieldMapper.toDTO);
+    
+    console.log('[FIELD-LOADING-DEBUG] Mapped DTO fields:', dtoFields.map(f => ({
+      id: f.id,
+      name: f.name,
+      type: f.type,
+      required: f.required
+    })));
+
+    return dtoFields;
   } catch (error) {
-    console.error("Error fetching fields:", error);
+    console.error("[FIELD-LOADING-DEBUG] Error fetching fields:", error);
     throw new Error("Failed to fetch fields");
   }
 }
@@ -141,13 +159,61 @@ export async function deleteField(tableId: number, fieldName: string, revalidate
   }
 }
 
-// Legacy wrapper for old deleteField signature - DEPRECATED
+// Server action wrapper for deleteField - updated to use correct parameters
 export async function deleteFieldAction(formData: FormData): Promise<Result> {
-  const fieldId = formData.get('fieldId') as string;
+  const fieldId = parseInt(formData.get('fieldId') as string);
   
-  // This is deprecated and will fail - frontend components need to be updated
-  return {
-    success: false,
-    error: "deleteFieldAction is deprecated - use deleteField with tableId and fieldName"
-  };
+  console.log('[FIELD-DELETE-DEBUG] deleteFieldAction called with fieldId:', fieldId);
+  
+  if (!fieldId) {
+    return {
+      success: false,
+      error: "fieldId is required"
+    };
+  }
+  
+  try {
+    // We need to find the field by ID to get its name and table
+    const session = await requirePermission("manage_fields");
+    const tableApplicationService = getTableApplicationService();
+    
+    // Get all tables to find which table contains this field
+    const { getTables } = require('./tables');
+    const tables = await getTables();
+    
+    let targetTable = null;
+    let targetFieldName = null;
+    
+    for (const table of tables) {
+      const fields = await getFields(table.id);
+      const field = fields.find(f => f.id === fieldId);
+      if (field) {
+        targetTable = table;
+        targetFieldName = field.name;
+        break;
+      }
+    }
+    
+    if (!targetTable || !targetFieldName) {
+      console.log('[FIELD-DELETE-DEBUG] Field not found - fieldId:', fieldId);
+      return {
+        success: false,
+        error: "Field not found"
+      };
+    }
+    
+    console.log('[FIELD-DELETE-DEBUG] Found field:', targetFieldName, 'in table:', targetTable.id, targetTable.name);
+    
+    const result = await deleteField(targetTable.id, targetFieldName);
+    console.log('[FIELD-DELETE-DEBUG] Delete result:', result);
+    
+    return result;
+    
+  } catch (error) {
+    console.error('[FIELD-DELETE-DEBUG] Error deleting field:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to delete field"
+    };
+  }
 }

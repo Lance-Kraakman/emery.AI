@@ -515,15 +515,39 @@ export class TableApplicationService {
    */
   async getFieldsForTable(tableId: TableId): Promise<TableField[]> {
     try {
+      console.log('[TABLE-APP-SERVICE-DEBUG] getFieldsForTable called for tableId:', tableId.value);
+      
       const table = await this.dynamicTableService.getTable(tableId);
       if (!table) {
+        console.log('[TABLE-APP-SERVICE-DEBUG] Table not found for id:', tableId.value);
         return [];
       }
 
+      console.log('[TABLE-APP-SERVICE-DEBUG] Table found:', {
+        id: table.id.value,
+        name: table.name,
+        fieldsCount: table.fields.length,
+        fields: table.fields.map(f => ({
+          id: f.id?.value,
+          name: f.name,
+          type: f.type,
+          orderIndex: f.orderIndex
+        }))
+      });
+
       // Return fields sorted by order index (handle nullable orderIndex)
-      return [...table.fields].sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+      const sortedFields = [...table.fields].sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+      
+      console.log('[TABLE-APP-SERVICE-DEBUG] Sorted fields:', sortedFields.map(f => ({
+        id: f.id?.value,
+        name: f.name,
+        type: f.type,
+        orderIndex: f.orderIndex
+      })));
+      
+      return sortedFields;
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error getting fields for table:', error);
+      console.error('[TABLE-APP-SERVICE-DEBUG] Error getting fields for table:', error);
       return [];
     }
   }

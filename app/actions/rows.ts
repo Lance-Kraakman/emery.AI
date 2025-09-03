@@ -134,6 +134,13 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
     const session = await requirePermission("manage_data");
     const { tableId, rowId, data: rowData } = data;
 
+    console.log('[ROW-UPDATE-DEBUG] updateRowData called with:', {
+      tableId,
+      rowId,
+      incomingFields: Object.keys(rowData || {}),
+      incomingData: rowData
+    });
+
     if (!tableId || !rowId) {
       return {
         success: false,
@@ -154,8 +161,41 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       };
     }
 
-    // Convert plain data to Row entity using table field information
-    const row = Row.fromPlainObject({ ...rowData, id: rowId }, tableId, table.fields);
+    // CRITICAL FIX: Fetch existing row data first to preserve all fields
+    const existingRow = await tableAppService.getRow(
+      TableId.fromNumber(tableId),
+      RowId.fromString(rowId)
+    );
+
+    console.log('[ROW-UPDATE-DEBUG] Existing row found:', !!existingRow);
+
+    let mergedData = { ...rowData, id: rowId };
+    
+    if (existingRow) {
+      const existingData = existingRow.toPlainObject();
+      
+      console.log('[ROW-UPDATE-DEBUG] Existing row data:', {
+        existingFields: Object.keys(existingData),
+        existingData
+      });
+      
+      // MERGE: Start with existing data, then overlay the new changes
+      mergedData = { ...existingData, ...rowData, id: rowId };
+      
+      console.log('[ROW-UPDATE-DEBUG] Merged data:', {
+        mergedFields: Object.keys(mergedData),
+        mergedData
+      });
+    } else {
+      console.log('[ROW-UPDATE-DEBUG] WARNING: No existing row found, using only incoming data');
+    }
+
+    // Convert merged data to Row entity using table field information
+    const row = Row.fromPlainObject(mergedData, tableId, table.fields);
+
+    console.log('[ROW-UPDATE-DEBUG] Row entity created with fields:', 
+      row.fieldValues.map(fv => ({ slug: fv.fieldSlug, value: fv.value }))
+    );
 
     // AIDEV-NOTE: Ensure we have a valid user ID
     if (!session.user?.id || typeof session.user.id !== 'string') {
@@ -173,11 +213,14 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
     });
 
     if (!result.success) {
+      console.log('[ROW-UPDATE-DEBUG] Update failed:', result.error);
       return {
         success: false,
         error: result.error || "Failed to update row"
       };
     }
+
+    console.log('[ROW-UPDATE-DEBUG] Update successful');
 
     // Optional revalidation with custom URL
     if (revalidateUrl) {
@@ -192,7 +235,7 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       data: rowDTO,
     };
   } catch (error) {
-    console.error("Error updating row:", error);
+    console.error("[ROW-UPDATE-DEBUG] Error updating row:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to update row",
