@@ -69,9 +69,9 @@ async function fetchAndSavePipedreamTools() {
         let pageInfo: any = null;
         
         if (response && typeof response === 'object') {
-          // SDK wraps response in special object with data and response.page_info
+          // SDK wraps response in special object with data and page info
           appsData = response.data || [];
-          pageInfo = response.response?.page_info || null;
+          pageInfo = (response as any).page_info || null;
           
           // Log pagination info on first page
           if (pageCount === 1 && pageInfo) {
