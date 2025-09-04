@@ -3,6 +3,7 @@ import {
   getRagIndexingApplicationService,
   getTableApplicationService,
   getDatabaseApplicationService,
+  getIndexingQueueService,
   initializeDI,
   contextManager
 } from '@/ddd/application/di/container';
@@ -122,6 +123,14 @@ async function createTestRagIndexOnly(
   };
   
   return await ragService.createIndexOnly(command);
+}
+
+/**
+ * Helper to wait for queue processing to complete
+ */
+async function waitForQueueCompletion(timeoutMs: number = 10000): Promise<void> {
+  const queueService = getIndexingQueueService();
+  await queueService.waitForCompletion(timeoutMs);
 }
 
 /**
@@ -391,9 +400,17 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       expect(result).toBeDefined();
       expect(result.indexId).toBe(indexId);
-      expect(result.executionTime).toBeGreaterThan(0);
+      expect(result.executionTime).toBe(0); // Queue operations return immediately
       expect(result.errors).toEqual([]);
-      // Note: documentsProcessed may be 0 if no actual table data is indexed in test environment
+      
+      // Wait for queue to process the operation
+      const queueService = getIndexingQueueService();
+      await queueService.waitForCompletion(10000); // Wait up to 10 seconds
+      
+      // Verify operation completed successfully by checking index status
+      const indexingService = getRagIndexingApplicationService();
+      const status = await indexingService.getIndexingStatus(testContext.organizationId.value);
+      expect(status.activeIndexes).toBeGreaterThan(0);
     });
     
     test('should reindex specific index with file domain data', async () => {
@@ -428,7 +445,11 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       
       expect(result).toBeDefined();
       expect(result.indexId).toBe(indexId);
-      expect(result.executionTime).toBeGreaterThan(0);
+      expect(result.executionTime).toBe(0); // Queue operations return immediately
+      
+      // Wait for queue to process the operation
+      const queueService = getIndexingQueueService();
+      await queueService.waitForCompletion(10000);
       expect(result.errors).toEqual([]);
     });
     
@@ -461,7 +482,11 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       const result = await ragService.reindexData(command);
       
       expect(result).toBeDefined();
-      expect(result.executionTime).toBeGreaterThan(0);
+      expect(result.executionTime).toBe(0); // Queue operations return immediately
+      
+      // Wait for queue to process the operation
+      const queueService = getIndexingQueueService();
+      await queueService.waitForCompletion(10000);
       expect(result.errors).toEqual([]);
       // Should have processed multiple indexes
     });
@@ -481,7 +506,11 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       const result = await ragService.reindexData(command);
       
       expect(result).toBeDefined();
-      expect(result.executionTime).toBeGreaterThan(0);
+      expect(result.executionTime).toBe(0); // Queue operations return immediately
+      
+      // Wait for queue to process the operation
+      const queueService = getIndexingQueueService();
+      await queueService.waitForCompletion(10000);
       expect(result.errors).toEqual([]);
     });
     
@@ -501,7 +530,11 @@ describe('RAG Indexing Application Service Integration Tests', () => {
       expect(result.indexId).toBe(indexId);
       expect(result.documentsProcessed).toBe(0);
       expect(result.documentsAdded).toBe(0);
-      expect(result.executionTime).toBeGreaterThan(0);
+      expect(result.executionTime).toBe(0); // Queue operations return immediately
+      
+      // Wait for queue to process the operation
+      const queueService = getIndexingQueueService();
+      await queueService.waitForCompletion(10000);
       expect(result.errors).toEqual([]);
     });
     
@@ -647,12 +680,19 @@ describe('RAG Indexing Application Service Integration Tests', () => {
         ]
       );
       
-      // Step 2: Create index (this will auto-perform initial indexing with existing data)  
-      const indexId = await createTestRagIndexOnly(testContext, 'Workflow Test Index', ['tables', 'files']);
+      // Step 2: Create index with auto-indexing (queued)
+      const command: CreateIndexCommand = {
+        name: 'Workflow Test Index',
+        organizationId: testContext.organizationId,
+        domainTypes: ['tables', 'files']
+      };
+      const indexId = await ragService.createIndex(command);
       expect(indexId).toBeDefined();
       
-      // Step 3: Index creation with auto-indexing completed successfully
-      // (createTestRagIndex uses createIndex() which performs initial indexing)
+      // Step 3: Wait for initial indexing to complete
+      console.log('Waiting for initial indexing to complete...');
+      await waitForQueueCompletion(15000); // Allow 15 seconds for initial indexing
+      console.log('Initial indexing completed.');
       
       // Step 4: Simulate data change and incremental update
       await ragService.handleDataChange(
@@ -662,6 +702,11 @@ describe('RAG Indexing Application Service Integration Tests', () => {
         'workflow_test_table',
         { operation: 'row_update', rowCount: 1 }
       );
+      
+      // Step 5: Wait for data change processing to complete
+      console.log('Waiting for data change processing to complete...');
+      await waitForQueueCompletion(10000);
+      console.log('Data change processing completed.');
       
       // Complete workflow should execute without errors
     });

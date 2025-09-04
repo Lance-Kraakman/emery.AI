@@ -28,6 +28,8 @@ import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-re
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
 import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
+import type { RagIndexRepository } from '@/ddd/domain/rag/repositories/rag-index-repository';
+import type { RagDocumentRepository } from '@/ddd/domain/rag/repositories/rag-document-repository';
 
 // Import content processing interfaces
 import { 
@@ -41,7 +43,9 @@ export class IndexingDomainService {
     private readonly agentRepository: IAgentRepository,
     private readonly databaseRepository: IDatabaseRepository,
     private readonly teamRepository: ITeamRepository,
-    private readonly fileStorageRepository: IFileStorageRepository
+    private readonly fileStorageRepository: IFileStorageRepository,
+    private readonly indexRepository: RagIndexRepository,
+    private readonly documentRepository: RagDocumentRepository
   ) {}
 
   /**
@@ -522,5 +526,206 @@ ${team.description ? `Description: ${team.description}` : 'Description: Not prov
 About: ${team.name} is a team within the organization, responsible for specific functions and objectives. This team may utilize AI agents to automate tasks and achieve its goals.
 
 Functionality: The team collaborates on tasks, projects, and workflows within the Emery platform. Its activities are aligned with its defined purpose and responsibilities, contributing to the overall mission of the organization.`;
+  }
+
+  // ================================================================
+  // QUEUE EXECUTION METHODS - Called by IndexingQueueService
+  // These methods handle the actual indexing work and manage entity state
+  // ================================================================
+
+  /**
+   * Execute initial indexing for a newly created index (called by queue)
+   */
+  async executeInitialIndexing(indexId: string): Promise<void> {
+    const index = await this.indexRepository.findById(RagIndexId.fromString(indexId));
+    if (!index) {
+      throw new Error(`Index ${indexId} not found`);
+    }
+
+    console.log(`[RAG-INDEXING-DOMAIN] Starting initial indexing for ${index.name} (${indexId.substring(0, 8)})`);
+
+    // Safe to call startIndexing - only queue calls this method
+    index.startIndexing();
+    await this.indexRepository.save(index);
+
+    try {
+      // Perform the actual indexing work
+      let totalProcessed = 0;
+      let totalAdded = 0;
+      const errors: string[] = [];
+
+      // Index each domain type
+      for (const domainType of index.domainTypes) {
+        try {
+          const documents = await this.indexDomainData(
+            index.id,
+            index.organizationId,
+            domainType
+          );
+          totalProcessed += documents.length;
+          totalAdded += documents.length;
+        } catch (error) {
+          const errorMsg = `Failed to index ${domainType}: ${(error as Error).message}`;
+          errors.push(errorMsg);
+          console.error(`[RAG-INDEXING-DOMAIN] ${errorMsg}`);
+        }
+      }
+
+      // Complete indexing successfully
+      index.completeIndexing(totalAdded);
+      await this.indexRepository.save(index);
+
+      console.log(`[RAG-INDEXING-DOMAIN] Initial indexing completed for ${index.name} - ${totalAdded} documents processed`);
+
+      // Log errors but don't fail if we processed some data
+      if (errors.length > 0 && totalAdded === 0) {
+        throw new Error(`Initial indexing failed: ${errors.join(', ')}`);
+      }
+
+    } catch (error) {
+      // Mark index as failed
+      index.failIndexing();
+      await this.indexRepository.save(index);
+      
+      console.error(`[RAG-INDEXING-DOMAIN] Initial indexing failed for ${index.name}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Execute reindexing for an existing index (called by queue)
+   */
+  async executeReindex(indexId: string, domainType?: DomainType): Promise<void> {
+    const index = await this.indexRepository.findById(RagIndexId.fromString(indexId));
+    if (!index) {
+      throw new Error(`Index ${indexId} not found`);
+    }
+
+    console.log(`[RAG-INDEXING-DOMAIN] Starting reindex for ${index.name} (${indexId.substring(0, 8)})${domainType ? ` - ${domainType} domain only` : ''}`);
+
+    // Safe to call startIndexing - only queue calls this method
+    index.startIndexing();
+    await this.indexRepository.save(index);
+
+    try {
+      let totalProcessed = 0;
+      let totalAdded = 0;
+      let totalDeleted = 0;
+      const errors: string[] = [];
+
+      // Determine which domain types to reindex
+      const domainTypesToReindex = domainType ? [domainType] : index.domainTypes;
+
+      // Clear existing documents for the domain types being reindexed
+      for (const dt of domainTypesToReindex) {
+        await this.documentRepository.deleteByDomainType(index.id, dt);
+        totalDeleted += 1; // Track that we performed a delete operation
+      }
+
+      // Reindex each domain type
+      for (const dt of domainTypesToReindex) {
+        try {
+          const documents = await this.indexDomainData(
+            index.id,
+            index.organizationId,
+            dt
+          );
+          totalProcessed += documents.length;
+          totalAdded += documents.length;
+        } catch (error) {
+          const errorMsg = `Failed to reindex ${dt}: ${(error as Error).message}`;
+          errors.push(errorMsg);
+          console.error(`[RAG-INDEXING-DOMAIN] ${errorMsg}`);
+        }
+      }
+
+      // Complete reindexing
+      const currentDocCount = await this.documentRepository.countByIndexId(index.id);
+      index.completeIndexing(currentDocCount);
+      await this.indexRepository.save(index);
+
+      console.log(`[RAG-INDEXING-DOMAIN] Reindex completed for ${index.name} - ${totalAdded} added, ${totalDeleted} removed`);
+
+      // Log errors but don't fail if we processed some data
+      if (errors.length > 0 && totalAdded === 0) {
+        throw new Error(`Reindexing failed: ${errors.join(', ')}`);
+      }
+
+    } catch (error) {
+      // Mark index as failed
+      index.failIndexing();
+      await this.indexRepository.save(index);
+      
+      console.error(`[RAG-INDEXING-DOMAIN] Reindex failed for ${index.name}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Execute incremental indexing for data change events (called by queue)
+   */
+  async executeDataChange(
+    indexId: string, 
+    domainType: DomainType, 
+    sourceId: string,
+    changeType: string
+  ): Promise<void> {
+    const index = await this.indexRepository.findById(RagIndexId.fromString(indexId));
+    if (!index) {
+      throw new Error(`Index ${indexId} not found`);
+    }
+
+    console.log(`[RAG-INDEXING-DOMAIN] Processing ${changeType} for ${domainType}:${sourceId} in index ${index.name} (${indexId.substring(0, 8)})`);
+
+    // Don't change index status for data changes - they're incremental updates
+    // Only log if index is not in active state
+    if (index.status !== 'active') {
+      console.warn(`[RAG-INDEXING-DOMAIN] Data change processing on non-active index ${index.name} (status: ${index.status})`);
+    }
+
+    try {
+      switch (changeType.toLowerCase()) {
+        case 'insert':
+        case 'update':
+          // Re-index the entire domain type for simplicity
+          await this.indexDomainData(
+            index.id,
+            index.organizationId,
+            domainType
+          );
+          break;
+
+        case 'delete':
+          // For deletes, clear and re-index the entire domain type
+          await this.documentRepository.deleteByDomainType(index.id, domainType);
+          await this.indexDomainData(
+            index.id,
+            index.organizationId,
+            domainType
+          );
+          break;
+
+        default:
+          // For unknown change types, do a full reindex of the domain type
+          console.warn(`[RAG-INDEXING-DOMAIN] Unknown change type ${changeType}, performing full domain reindex`);
+          await this.indexDomainData(
+            index.id,
+            index.organizationId,
+            domainType
+          );
+      }
+
+      // Update last indexed time
+      const currentDocCount = await this.documentRepository.countByIndexId(index.id);
+      index.completeIndexing(currentDocCount);
+      await this.indexRepository.save(index);
+
+      console.log(`[RAG-INDEXING-DOMAIN] Data change processing completed for ${domainType}:${sourceId} in ${index.name}`);
+
+    } catch (error) {
+      console.error(`[RAG-INDEXING-DOMAIN] Data change processing failed for ${domainType}:${sourceId} in ${index.name}:`, error);
+      // Don't mark index as failed for data change errors - they're incremental
+      throw error;
+    }
   }
 }

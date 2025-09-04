@@ -45,7 +45,7 @@ describe('RAG Search Application Service Integration Tests', () => {
       const indexId = await createTestRagIndexWithDocuments(
         testContext, 
         'Empty Search Test Index', 
-        ['file']
+        ['files']
       );
       
       const query: SearchRagQuery = {
@@ -76,13 +76,13 @@ describe('RAG Search Application Service Integration Tests', () => {
       const indexId = await createTestRagIndexWithDocuments(
         testContext, 
         'Multi-Domain Index', 
-        ['file', 'table']
+        ['files', 'tables']
       );
       
       const query: SearchRagQuery = {
         indexId,
         query: 'data processing',
-        sourceTypes: ['file'], // Filter to only files
+        sourceTypes: ['files'], // Filter to only files
         limit: 10
       };
       
@@ -93,7 +93,7 @@ describe('RAG Search Application Service Integration Tests', () => {
       // All results should be files
       if (result.success && result.data) {
         result.data.documents.forEach(doc => {
-          expect(doc.domainType).toBe('file');
+          expect(doc.domainType).toBe('files');
         });
       }
     });
@@ -104,7 +104,7 @@ describe('RAG Search Application Service Integration Tests', () => {
       const indexId = await createTestRagIndexWithDocuments(
         testContext, 
         'Threshold Test Index', 
-        ['file']
+        ['files']
       );
       
       const query: SearchRagQuery = {
@@ -132,7 +132,7 @@ describe('RAG Search Application Service Integration Tests', () => {
       const indexId = await createTestRagIndexWithDocuments(
         testContext, 
         'Limit Test Index', 
-        ['file']
+        ['files']
       );
       
       const query: SearchRagQuery = {
@@ -176,7 +176,7 @@ describe('RAG Search Application Service Integration Tests', () => {
       const indexId = await createTestRagIndexWithDocuments(
         testContext, 
         'Empty Query Test', 
-        ['file']
+        ['files']
       );
       
       const emptyQuery: SearchRagQuery = {
@@ -196,7 +196,7 @@ describe('RAG Search Application Service Integration Tests', () => {
       const indexId = await createTestRagIndexWithDocuments(
         testContext, 
         'Threshold Validation Test', 
-        ['file']
+        ['files']
       );
       
       const invalidQuery: SearchRagQuery = {
@@ -217,7 +217,7 @@ describe('RAG Search Application Service Integration Tests', () => {
       const indexId = await createTestRagIndexWithDocuments(
         testContext, 
         'Source Type Test', 
-        ['file']
+        ['files']
       );
       
       const invalidQuery: SearchRagQuery = {
@@ -259,8 +259,7 @@ describe('RAG Search Application Service Integration Tests', () => {
         await ragIndexingService.createIndex({
           name: 'Inactive Test Index',
           organizationId: testContext.organizationId,
-          domainTypes: ['file'],
-          createdBy: testContext.ownerUserId
+          domainTypes: ['files']
         });
       } catch (error) {
         // Index creation might fail due to no data, that's expected
@@ -282,8 +281,7 @@ describe('RAG Search Application Service Integration Tests', () => {
       const emptyIndexId = await ragIndexingService.createIndex({
         name: 'Empty Index',
         organizationId: testContext.organizationId,
-        domainTypes: ['file'],
-        createdBy: testContext.ownerUserId
+        domainTypes: ['files']
       });
       
       const query: SearchRagQuery = {
@@ -308,7 +306,7 @@ describe('RAG Search Application Service Integration Tests', () => {
 async function createTestRagIndexWithDocuments(
   testContext: TestContext,
   name: string,
-  domainTypes: ('file' | 'table' | 'agent')[]
+  domainTypes: ('files' | 'tables' | 'agents')[]
 ): Promise<string> {
   const ragIndexingService = getRagIndexingApplicationService();
   
@@ -316,8 +314,7 @@ async function createTestRagIndexWithDocuments(
   const indexId = await ragIndexingService.createIndex({
     name,
     organizationId: testContext.organizationId,
-    domainTypes,
-    createdBy: testContext.ownerUserId
+    domainTypes
   });
   
   // Add real test documents to the index

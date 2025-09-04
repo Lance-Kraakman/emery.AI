@@ -68,6 +68,7 @@ import type { IIndexingDomainService, ISearchDomainService } from '@/ddd/domain/
 import { IndexingDomainService, SearchDomainService } from '@/ddd/domain/rag/services';
 import { RagIndexingApplicationService } from '@/ddd/application/services/rag/rag-indexing-application-service';
 import { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
+import { IndexingQueueService, indexingQueueService } from '@/ddd/application/services/rag/indexing-queue-service';
 
 // Connection domain imports
 import { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
@@ -138,6 +139,7 @@ interface RepositoryRegistry {
   // RAG use case services
   RagIndexingApplicationService: RagIndexingApplicationService;
   RagSearchApplicationService: RagSearchApplicationService;
+  IndexingQueueService: IndexingQueueService;
   
   // Connection domain services
   IConnectionRepository: IConnectionRepository;
@@ -333,19 +335,23 @@ export class DIContainer {
       agentRepository,
       databaseRepository,
       teamRepository,
-      fileStorageRepository
+      fileStorageRepository,
+      ragIndexRepository,
+      ragDocumentRepository
     );
     const searchDomainService = new SearchDomainService(embeddingService, searchAnalyticsService);
     
     this.repositories.set('IndexingDomainService', indexingDomainService);
     this.repositories.set('SearchDomainService', searchDomainService);
+    
+    // Register singleton IndexingQueueService
+    this.repositories.set('IndexingQueueService', indexingQueueService);
 
     // Initialize RAG use case services
     const ragIndexingApplicationService = new RagIndexingApplicationService(
       ragIndexRepository,
-      ragDocumentRepository,
-      indexingDomainService,
-      tableApplicationService
+      tableApplicationService,
+      indexingQueueService
     );
     
     const ragSearchApplicationService = new RagSearchApplicationService(
@@ -463,6 +469,7 @@ type ServiceMap = {
   SearchDomainService: ISearchDomainService;
   RagIndexingApplicationService: RagIndexingApplicationService;
   RagSearchApplicationService: RagSearchApplicationService;
+  IndexingQueueService: IndexingQueueService;
   
   // Connection Services
   ConnectionRepository: IConnectionRepository;
@@ -530,6 +537,7 @@ export const getIndexingDomainService = createGetter('IndexingDomainService');
 export const getSearchDomainService = createGetter('SearchDomainService');
 export const getRagIndexingApplicationService = createGetter('RagIndexingApplicationService');
 export const getRagSearchApplicationService = createGetter('RagSearchApplicationService');
+export const getIndexingQueueService = createGetter('IndexingQueueService');
 
 // Connection service getters
 export const getConnectionRepository = createGetter('ConnectionRepository');

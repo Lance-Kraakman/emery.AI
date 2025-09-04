@@ -18,7 +18,7 @@ interface CreateChatTestInput {
   organizationId: OrganizationId;
   createdBy: UserId;
   description?: string;
-  domainType?: 'table' | 'agent';
+  domainType?: 'tables' | 'agents';
   domainId?: number;
 }
 
@@ -92,7 +92,7 @@ interface CreateChatInput {
   organizationId: OrganizationId;
   createdBy: UserId;
   description?: string;
-  domainType?: 'table' | 'agent';
+  domainType?: 'tables' | 'agents';
   domainId?: number;
 }
 

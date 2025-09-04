@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, test, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { 
   getUserOAuthConnections, 
   getAppConnectionUrl, 
@@ -62,8 +62,8 @@ const mockSession = {
 };
 
 // Mock requireAuth to return our test session
-jest.mock('@/app/actions/permissions', () => ({
-  requireAuth: jest.fn().mockImplementation(() => Promise.resolve(mockSession))
+vi.mock('@/app/actions/permissions', () => ({
+  requireAuth: vi.fn().mockImplementation(() => Promise.resolve(mockSession))
 }));
 
 let testContext: TestContext;
