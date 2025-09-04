@@ -249,6 +249,48 @@ export class IntegrationTestClient {
     }, userId);
   }
 
+  // RAG indexing helper - wait for index to complete building
+  async waitForIndexComplete(indexId: string, timeoutMs: number = 30000): Promise<void> {
+    const startTime = Date.now();
+    const checkInterval = 200; // Check every 200ms
+
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        // Query index status using raw SQL to bypass any service caching
+        const result = await this.query(
+          'SELECT status FROM rag_indexes WHERE id = $1',
+          [indexId]
+        );
+
+        if (result.length === 0) {
+          throw new Error(`Index ${indexId} not found`);
+        }
+
+        const status = result[0].status;
+        
+        if (status === 'active') {
+          console.log(`✅ Index ${indexId.substring(0, 8)} completed building`);
+          return;
+        }
+
+        if (status === 'error') {
+          throw new Error(`Index ${indexId} failed to build`);
+        }
+
+        // Status is 'building' - keep waiting
+        await new Promise(resolve => setTimeout(resolve, checkInterval));
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('not found')) {
+          throw error;
+        }
+        // Other database errors - keep retrying
+        await new Promise(resolve => setTimeout(resolve, checkInterval));
+      }
+    }
+
+    throw new Error(`Timeout waiting for index ${indexId} to complete building after ${timeoutMs}ms`);
+  }
+
   // HTTP API operations
   async get(endpoint: string, options: RequestInit = {}): Promise<any> {
     const response = await fetch(`${this.appUrl}${endpoint}`, {

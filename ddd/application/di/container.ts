@@ -68,13 +68,14 @@ import type { IIndexingDomainService, ISearchDomainService } from '@/ddd/domain/
 import { IndexingDomainService, SearchDomainService } from '@/ddd/domain/rag/services';
 import { RagIndexingApplicationService } from '@/ddd/application/services/rag/rag-indexing-application-service';
 import { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
-import { LlamaIndexContentProcessor } from '../services/rag/embedding-generator-service/embedding-generator-service';
 
 // Connection domain imports
 import { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
 import { PipedreamConnectionRepository } from '@/ddd/infrastructure/external/pipedream/pipedream-connection-repository';
 import { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service';
 import { pipedreamClient } from '@/lib/pipedream/client';
+import { EmbeddingGeneratorService } from '@/ddd/domain/rag/services/embedding-generator-service';
+import { EmbeddingGeneratorDomainService } from '../services/rag/embedding-generator-service/embedding-generator-service';
 
 
 // Registry of all available repository interfaces and services
@@ -128,7 +129,7 @@ interface RepositoryRegistry {
   // RAG application services
   EmbeddingService: EmbeddingService;
   SearchAnalyticsService: SearchAnalyticsService;
-  LlamaIndexContentProcessor: LlamaIndexContentProcessor;
+  EmbeddingGeneratorService: EmbeddingGeneratorService;
 
   // RAG domain services
   IndexingDomainService: IIndexingDomainService;
@@ -320,13 +321,20 @@ export class DIContainer {
     // Initialize RAG application services
     const embeddingService = new EmbeddingService();
     const searchAnalyticsService = new SearchAnalyticsService(ragQueryLogRepository);
-    const contentProcessor = new LlamaIndexContentProcessor(embeddingService);
+    const embeddingGenerator = new EmbeddingGeneratorDomainService(embeddingService);
     
     this.repositories.set('EmbeddingService', embeddingService);
-    this.repositories.set('LlamaIndexContentProcessor', contentProcessor);
+    this.repositories.set('EmbeddingGeneratorService', embeddingGenerator);
 
     // Initialize RAG domain services
-    const indexingDomainService = new IndexingDomainService(contentProcessor);
+    const indexingDomainService = new IndexingDomainService(
+      embeddingGenerator,
+      this.repositories.get('IOrganizationRepository'),
+      agentRepository,
+      databaseRepository,
+      teamRepository,
+      fileStorageRepository
+    );
     const searchDomainService = new SearchDomainService(embeddingService, searchAnalyticsService);
     
     this.repositories.set('IndexingDomainService', indexingDomainService);
@@ -337,12 +345,7 @@ export class DIContainer {
       ragIndexRepository,
       ragDocumentRepository,
       indexingDomainService,
-      this.repositories.get('IOrganizationRepository'),
-      agentRepository,
-      databaseRepository,
-      teamRepository,
-      fileStorageRepository,
-      tableApplicationService,
+      tableApplicationService
     );
     
     const ragSearchApplicationService = new RagSearchApplicationService(
@@ -455,7 +458,7 @@ type ServiceMap = {
   RagQueryLogRepository: DrizzleRagQueryLogRepository;
   EmbeddingService: EmbeddingService;
   SearchAnalyticsService: SearchAnalyticsService;
-  LlamaIndexContentProcessor: LlamaIndexContentProcessor;
+  EmbeddingGeneratorDomainService: EmbeddingGeneratorService;
   IndexingDomainService: IIndexingDomainService;
   SearchDomainService: ISearchDomainService;
   RagIndexingApplicationService: RagIndexingApplicationService;

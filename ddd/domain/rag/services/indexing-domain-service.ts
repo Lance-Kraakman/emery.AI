@@ -22,6 +22,13 @@ import type { Database } from '@/ddd/domain/databases/entities/database';
 import type { Team } from '@/ddd/domain/teams/entities/team';
 import type { StoredFile } from '@/ddd/domain/files/entities/file-storage';
 
+// Import repository interfaces
+import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
+import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
+import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
+
 // Import content processing interfaces
 import { 
   type EmbeddingGeneratorService, 
@@ -29,13 +36,64 @@ import {
 
 export class IndexingDomainService {
   constructor(
-    private readonly embeddingGenerator: EmbeddingGeneratorService
+    private readonly embeddingGenerator: EmbeddingGeneratorService,
+    private readonly organizationRepository: IOrganizationRepository,
+    private readonly agentRepository: IAgentRepository,
+    private readonly databaseRepository: IDatabaseRepository,
+    private readonly teamRepository: ITeamRepository,
+    private readonly fileStorageRepository: IFileStorageRepository
   ) {}
 
   /**
-   * Index organization data for a RAG index
+   * Index any domain type data for a RAG index
+   */
+  async indexDomainData(
+    indexId: RagIndexId,
+    organizationId: OrganizationId,
+    domainType: DomainType
+  ): Promise<RagDocument[]> {
+    const indexers = {
+      'organizations': () => this.indexOrganizationData(indexId, organizationId),
+      'agents': () => this.indexAgentData(indexId, organizationId),
+      'databases': () => this.indexDatabaseData(indexId, organizationId),
+      'teams': () => this.indexTeamData(indexId, organizationId),
+      'tables': (tables: any[], fieldsMap?: Map<number, any[]>, databasesMap?: Map<number, any>) => 
+        this.indexTableData(indexId, organizationId, tables, fieldsMap, databasesMap),
+      'files': (files: any[]) => this.indexFileData(indexId, organizationId, files)
+    };
+
+    const indexer = indexers[domainType];
+    if (!indexer) {
+      console.warn(`[INDEXING-DOMAIN] Unsupported domain type: ${domainType}`);
+      return [];
+    }
+
+    // Note: tables and files still need special handling from application service
+    // as they require additional dependencies
+    if (domainType === 'tables' || domainType === 'files') {
+      return [];
+    }
+
+    return await (indexer as () => Promise<RagDocument[]>)();
+  }
+
+  /**
+   * Index organization data for a RAG index by fetching from repository
    */
   async indexOrganizationData(
+    indexId: RagIndexId,
+    organizationId: OrganizationId
+  ): Promise<RagDocument[]> {
+    const organization = await this.organizationRepository.findById(organizationId);
+    if (!organization) return [];
+
+    return this.processOrganizationData(indexId, organizationId, organization);
+  }
+
+  /**
+   * Process organization data into RAG documents
+   */
+  private async processOrganizationData(
     indexId: RagIndexId,
     organizationId: OrganizationId,
     organization: Organization
@@ -162,9 +220,22 @@ export class IndexingDomainService {
   }
 
   /**
-   * Index agent data for a RAG index
+   * Index agent data for a RAG index by fetching from repository
    */
   async indexAgentData(
+    indexId: RagIndexId,
+    organizationId: OrganizationId
+  ): Promise<RagDocument[]> {
+    const agents = await this.agentRepository.findByOrganization(organizationId);
+    if (agents.length === 0) return [];
+
+    return this.processAgentData(indexId, organizationId, agents);
+  }
+
+  /**
+   * Process agent data into RAG documents
+   */
+  private async processAgentData(
     indexId: RagIndexId,
     organizationId: OrganizationId,
     agents: Agent[]
@@ -204,9 +275,22 @@ export class IndexingDomainService {
   }
 
   /**
-   * Index database data for a RAG index
+   * Index database data for a RAG index by fetching from repository
    */
   async indexDatabaseData(
+    indexId: RagIndexId,
+    organizationId: OrganizationId
+  ): Promise<RagDocument[]> {
+    const databases = await this.databaseRepository.findByOrganization(organizationId);
+    if (databases.length === 0) return [];
+
+    return this.processDatabaseData(indexId, organizationId, databases);
+  }
+
+  /**
+   * Process database data into RAG documents
+   */
+  private async processDatabaseData(
     indexId: RagIndexId,
     organizationId: OrganizationId,
     databases: Database[]
@@ -243,9 +327,22 @@ export class IndexingDomainService {
   }
 
   /**
-   * Index team data for a RAG index
+   * Index team data for a RAG index by fetching from repository
    */
   async indexTeamData(
+    indexId: RagIndexId,
+    organizationId: OrganizationId
+  ): Promise<RagDocument[]> {
+    const teams = await this.teamRepository.findByOrganization(organizationId);
+    if (teams.length === 0) return [];
+
+    return this.processTeamData(indexId, organizationId, teams);
+  }
+
+  /**
+   * Process team data into RAG documents
+   */
+  private async processTeamData(
     indexId: RagIndexId,
     organizationId: OrganizationId,
     teams: Team[]

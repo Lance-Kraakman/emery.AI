@@ -76,7 +76,7 @@ function generateEnhancedContent(chunkText: string, templateData: TemplateData):
   return `${chunkText}${contextTemplate}${chunkInfoTemplate}`;
 }
 
-export class LlamaIndexContentProcessor implements EmbeddingGeneratorService {
+export class EmbeddingGeneratorDomainService implements EmbeddingGeneratorService {
   constructor(private readonly embeddingGenerator: EmbeddingGenerator) {}
 
   async generateEmbedding(content: string): Promise<number[]> {
