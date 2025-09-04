@@ -12,7 +12,6 @@ export interface RagIndexCreatedEvent extends BaseDomainEvent {
     organizationId: OrganizationId;
     name: string;
     domainTypes: DomainType[];
-    createdBy: string;
   };
 }
 
@@ -20,8 +19,7 @@ export function createRagIndexCreatedEvent(
   indexId: RagIndexId,
   organizationId: OrganizationId,
   name: string,
-  domainTypes: DomainType[],
-  createdBy: string
+  domainTypes: DomainType[]
 ): RagIndexCreatedEvent {
   return {
     ...createBaseDomainEvent(
@@ -32,8 +30,7 @@ export function createRagIndexCreatedEvent(
         indexId,
         organizationId,
         name,
-        domainTypes: [...domainTypes],
-        createdBy
+        domainTypes: [...domainTypes]
       }
     ),
     eventType: 'RagIndexCreated',

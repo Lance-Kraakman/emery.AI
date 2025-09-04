@@ -78,6 +78,14 @@ export class DynamicTable {
     return this._databaseId.equals(databaseId);
   }
 
+  /**
+   * Update the table's timestamp to trigger RAG reindexing
+   * Called after row operations to ensure RAG indexes stay synchronized
+   */
+  touch(): void {
+    this._updatedAt = new Date();
+  }
+
   // ===== FIELD QUERY METHODS =====
 
   /**

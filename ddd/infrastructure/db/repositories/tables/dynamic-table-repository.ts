@@ -9,15 +9,12 @@
  * AIDEV-NOTE: Hybrid repository implementation using both Drizzle and S3,
  * focused on data access only. Business logic handled by DynamicTableService.
  */
-
 import type { DbClient } from '@/lib/db/client';
 import { tables, fields } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { s3Client, BUCKET_NAME, ensureBucketExists } from '@/lib/s3/client';
 import { GetObjectCommand, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
-
-import type { Result } from '@/ddd/domain/shared/result';
 import { TableId, DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { 
   IDynamicTableRepository
@@ -27,7 +24,7 @@ import {
   DynamicTable
 } from '@/ddd/domain/tables/entities/dynamic-table';
 import { Row } from '@/ddd/domain/tables/value-objects/row';
-import type { DynamicTableRow, RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
+import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
@@ -717,6 +714,15 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         Body: storageBuffer.data,
         ContentType: 'application/vnd.apache.arrow.file'
       }));
+
+      // Update table updatedAt timestamp to trigger RAG reindexing
+      // Important: This triggers PostgreSQL triggers for automatic RAG reindexing
+      await this.db.update(tables)
+        .set({ 
+          updatedAt: new Date() 
+        })
+        .where(eq(tables.id, table.id.value));
+
     } catch (error) {
       console.error(`[DynamicTableRepository] Error saving to S3:`, error);
       throw error;

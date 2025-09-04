@@ -126,7 +126,6 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
       embeddingDimensions: persistence.embeddingDimensions,
       status: persistence.status,
       documentCount: persistence.documentCount,
-      createdBy: persistence.createdBy,
       createdAt: persistence.createdAt,
       lastIndexedAt: persistence.lastIndexedAt,
       updatedAt: new Date()
@@ -184,7 +183,6 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
       embeddingDimensions: record.embeddingDimensions || 768,
       status: record.status as IndexStatus,
       documentCount: record.documentCount || 0,
-      createdBy: record.createdBy,
       createdAt: record.createdAt,
       lastIndexedAt: record.lastIndexedAt
     });

@@ -82,8 +82,7 @@ export class RagIndexingApplicationService {
         index.id,
         index.organizationId,
         index.name,
-        index.domainTypes,
-        index.createdBy
+        index.domainTypes
       );
       await this.eventPublisher.publish(event);
     }
@@ -276,18 +275,30 @@ export class RagIndexingApplicationService {
     domainType?: DomainType,
     startTime: number = Date.now()
   ): Promise<IndexingResult> {
-    const indexes = await this.indexRepository.findByOrganization(organizationId);
+    let indexes = await this.indexRepository.findByOrganization(organizationId);
     
+    // AIDEV-NOTE: Auto-create default index if organization has no indexes
+    // This ensures all organizations can benefit from RAG indexing without manual setup
     if (indexes.length === 0) {
-      return {
-        indexId: 'organization-wide',
-        documentsProcessed: 0,
-        documentsAdded: 0,
-        documentsUpdated: 0,
-        documentsDeleted: 0,
-        executionTime: Date.now() - startTime,
-        errors: ['No indexes found for organization']
-      };
+      console.log(`[RAG-INDEXING-APP] No indexes found for organization ${organizationId.value}, creating default index`);
+      
+      try {
+        // Create system index with null creator (no user needed)
+        const defaultIndex = await this.createDefaultIndexForOrganization(organizationId);
+        indexes = [defaultIndex];
+        console.log(`[RAG-INDEXING-APP] Auto-created default index for organization ${organizationId.value}`);
+      } catch (error) {
+        console.error(`[RAG-INDEXING-APP] Failed to auto-create default index for organization ${organizationId.value}:`, error);
+        return {
+          indexId: 'organization-wide',
+          documentsProcessed: 0,
+          documentsAdded: 0,
+          documentsUpdated: 0,
+          documentsDeleted: 0,
+          executionTime: Date.now() - startTime,
+          errors: [`Failed to auto-create default index: ${error instanceof Error ? error.message : 'Unknown error'}`]
+        };
+      }
     }
 
     console.log(`[RAG-INDEXING-APP] Reindexing ${indexes.length} indexes for organization ${organizationId.value}`);
@@ -318,6 +329,7 @@ export class RagIndexingApplicationService {
         totalDeleted += result.value.documentsDeleted;
       }
     }
+    
 
     return {
       indexId: 'organization-wide',
@@ -350,22 +362,44 @@ export class RagIndexingApplicationService {
       return { documentsProcessed: 0, documentsAdded: 0, documentsDeleted: 0 };
     }
 
-    const documents = await indexer();
-    if (documents.length === 0) {
+    try {
+      console.log(`[RAG-INDEXING-APP] 🔍 Calling indexer for ${domainType}...`);
+      const documents = await indexer();
+      console.log(`[RAG-INDEXING-APP] 📄 Found ${documents.length} documents for ${domainType}`);
+      
+      if (documents.length === 0) {
+        console.log(`[RAG-INDEXING-APP] ⚠️  No documents found for ${domainType}, skipping synchronization`);
+        return { documentsProcessed: 0, documentsAdded: 0, documentsDeleted: 0 };
+      }
+
+      console.log(`[RAG-INDEXING-APP] 🔄 Synchronizing ${documents.length} documents for ${domainType}...`);
+      const syncResult = await this.documentRepository.synchronizeDocuments(
+        index.id, 
+        domainType, 
+        documents
+      );
+      console.log(`[RAG-INDEXING-APP] ✅ Sync result for ${domainType}: +${syncResult.added} documents, -${syncResult.deleted} documents`);
+
+      return {
+        documentsProcessed: documents.length,
+        documentsAdded: syncResult.added,
+        documentsDeleted: syncResult.deleted
+      };
+    } catch (error) {
+      // Log detailed embedding/indexing errors for debugging
+      console.error(`[RAG-INDEXING-APP] Error indexing ${domainType} for organization ${index.organizationId.value}:`);
+      console.error(`[RAG-INDEXING-APP] Error type: ${error instanceof Error ? error.name : typeof error}`);
+      console.error(`[RAG-INDEXING-APP] Error message: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`[RAG-INDEXING-APP] Full error:`, error);
+      
+      // Check if this is an embedding error specifically
+      if (error instanceof Error && error.message.includes('Embedding generation failed')) {
+        console.error(`[RAG-INDEXING-APP] 🔴 EMBEDDING SERVICE FAILURE - HuggingFace API may be down`);
+      }
+      
+      // Return zero progress but don't throw - allows other domain types to continue processing
       return { documentsProcessed: 0, documentsAdded: 0, documentsDeleted: 0 };
     }
-
-    const syncResult = await this.documentRepository.synchronizeDocuments(
-      index.id, 
-      domainType, 
-      documents
-    );
-
-    return {
-      documentsProcessed: documents.length,
-      documentsAdded: syncResult.added,
-      documentsDeleted: syncResult.deleted
-    };
   }
 
   private async indexOrganization(index: RagIndex): Promise<any[]> {
@@ -511,6 +545,64 @@ export class RagIndexingApplicationService {
       }
       console.error(`[RAG-INDEXING-APP] Initial indexing failed for ${index.name}:`, error);
       throw error; // Let caller handle the error
+    }
+  }
+
+  /**
+   * AIDEV-NOTE: Helper method to create a comprehensive default RAG index for an organization
+   * This ensures organizations always have a default index covering all domain types
+   * Called by reindexOrganizationIndexes() when no indexes exist
+   * Uses null creator since these are system-created indexes
+   */
+  private async createDefaultIndexForOrganization(organizationId: OrganizationId): Promise<RagIndex> {
+    // Check for existing default index to avoid duplicates
+    const existingIndexes = await this.indexRepository.findByOrganization(organizationId);
+    const defaultIndexName = 'Organization Knowledge Base';
+    
+    // If default index already exists, return it
+    const existingDefault = existingIndexes.find(idx => idx.name === defaultIndexName);
+    if (existingDefault) {
+      console.log(`[RAG-INDEXING-APP] Default index already exists for organization ${organizationId.value}`);
+      return existingDefault;
+    }
+
+    // Create comprehensive default index covering all domain types
+    const createIndexCommand: CreateIndexCommand = {
+      name: defaultIndexName,
+      description: 'Automatic RAG index for organizational data - covers all tables, agents, teams, databases, and files',
+      organizationId,
+      domainTypes: ['tables', 'agents', 'teams', 'organizations', 'databases', 'files'], // All available domain types
+      // createdBy omitted for system-created indexes (will be null in database)
+    };
+
+    console.log(`[RAG-INDEXING-APP] Creating default RAG index for organization ${organizationId.value}`);
+    
+    try {
+      const indexId = await this.createIndex(createIndexCommand);
+      
+      // Retrieve and return the created index
+      const createdIndex = await this.indexRepository.findById(RagIndexId.fromString(indexId));
+      if (!createdIndex) {
+        throw new Error(`Failed to retrieve created default index for organization ${organizationId.value}`);
+      }
+
+      console.log(`[RAG-INDEXING-APP] Default index created successfully: ${createdIndex.name} (${indexId})`);
+      return createdIndex;
+    } catch (error) {
+      // Handle race condition: another request may have created the default index
+      console.log(`[RAG-INDEXING-APP] Index creation failed, checking for race condition...`);
+      
+      // Re-check for existing default index (race condition)
+      const raceCheckIndexes = await this.indexRepository.findByOrganization(organizationId);
+      const existingAfterRace = raceCheckIndexes.find(idx => idx.name === defaultIndexName);
+      
+      if (existingAfterRace) {
+        console.log(`[RAG-INDEXING-APP] Race condition detected - default index created by another request: ${existingAfterRace.name}`);
+        return existingAfterRace;
+      }
+      
+      // If still no index exists, re-throw the original error
+      throw error;
     }
   }
 }

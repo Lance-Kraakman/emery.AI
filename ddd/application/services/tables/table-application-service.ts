@@ -777,4 +777,5 @@ export class TableApplicationService {
       return false;
     }
   }
+
 }

@@ -68,7 +68,7 @@ import type { IIndexingDomainService, ISearchDomainService } from '@/ddd/domain/
 import { IndexingDomainService, SearchDomainService } from '@/ddd/domain/rag/services';
 import { RagIndexingApplicationService } from '@/ddd/application/services/rag/rag-indexing-application-service';
 import { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
-import { LlamaIndexContentProcessor } from '../services/content-processing/llamaindex-content-processor';
+import { LlamaIndexContentProcessor } from '../services/rag/embedding-generator-service/embedding-generator-service';
 
 // Connection domain imports
 import { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';

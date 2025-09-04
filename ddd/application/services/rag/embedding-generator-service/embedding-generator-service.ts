@@ -1,5 +1,6 @@
 // AIDEV-NOTE: LlamaIndex infrastructure implementation of ContentProcessor
 // Provides file processing using LlamaIndex library
+// Refactored with template functions for maintainable content enhancement
 
 import crypto from 'crypto';
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
@@ -17,6 +18,63 @@ import {
   type FileProcessingContext
 } from '@/ddd/domain/rag/services/embedding-generator-service';
 import { type EmbeddingGenerator } from '@/ddd/domain/rag/services';
+
+/**
+ * Template data interface for content enhancement
+ */
+interface TemplateData {
+  tableName: string;
+  databaseName: string;
+  fieldName: string;
+  fileName: string;
+  chunkIndex: number;
+  totalChunks: number;
+}
+
+/**
+ * Generate context template for file content
+ */
+function generateContextTemplate(data: TemplateData): string {
+  return `
+
+CONTEXT AND RELATIONSHIPS:
+- This file belongs to the "${data.tableName}" table in the "${data.databaseName}" database
+- Stored in field: "${data.fieldName}" (field type: file)
+- This file contains data that is related to and belongs with other records in the "${data.tableName}" table
+- Use this file's content in context with the "${data.tableName}" table structure and data when answering questions
+- File location: Table "${data.tableName}" → Field "${data.fieldName}" → File "${data.fileName}"
+
+CONTENT QUESTIONS: This content can answer questions like:
+- What information is contained in ${data.fileName}?
+- What data does ${data.fileName} have?
+- Tell me about the contents of ${data.fileName}`;
+}
+
+/**
+ * Generate chunk info template
+ */
+function generateChunkInfoTemplate(data: TemplateData): string {
+  return `
+
+CHUNK INFO: This is chunk ${data.chunkIndex + 1} of ${data.totalChunks} from ${data.fileName}, processed by LlamaIndex`;
+}
+
+/**
+ * Generate context path template for metadata
+ */
+function generateContextPath(data: TemplateData): string {
+  return `${data.databaseName} → ${data.tableName} → ${data.fieldName}`;
+}
+
+/**
+ * Generate enhanced content by combining chunk text with templates
+ */
+function generateEnhancedContent(chunkText: string, templateData: TemplateData): string {
+  const contextTemplate = generateContextTemplate(templateData);
+  const chunkInfoTemplate = generateChunkInfoTemplate(templateData);
+  
+  return `${chunkText}${contextTemplate}${chunkInfoTemplate}`;
+}
 
 export class LlamaIndexContentProcessor implements EmbeddingGeneratorService {
   constructor(private readonly embeddingGenerator: EmbeddingGenerator) {}
@@ -90,24 +148,18 @@ export class LlamaIndexContentProcessor implements EmbeddingGeneratorService {
           for (let chunkIndex = 0; chunkIndex < textChunks.length; chunkIndex++) {
             const chunkText = textChunks[chunkIndex];
             
-            // Add context to improve search relevance
-            const baseContext = `
+            // Prepare template data for content enhancement
+            const templateData: TemplateData = {
+              tableName: fileData.tableName || 'Unknown',
+              databaseName: fileData.databaseName || 'Unknown', 
+              fieldName: fileData.fieldName || 'Unknown',
+              fileName: fileData.name,
+              chunkIndex,
+              totalChunks: textChunks.length
+            };
 
-CONTEXT AND RELATIONSHIPS:
-- This file belongs to the "${fileData.tableName || 'Unknown'}" table in the "${fileData.databaseName || 'Unknown'}" database
-- Stored in field: "${fileData.fieldName || 'Unknown'}" (field type: file)
-- This file contains data that is related to and belongs with other records in the "${fileData.tableName || 'Unknown'}" table
-- Use this file's content in context with the "${fileData.tableName || 'Unknown'}" table structure and data when answering questions
-- File location: Table "${fileData.tableName || 'Unknown'}" → Field "${fileData.fieldName || 'Unknown'}" → File "${fileData.name}"
-
-CONTENT QUESTIONS: This content can answer questions like:
-- What information is contained in ${fileData.name}?
-- What data does ${fileData.name} have?
-- Tell me about the contents of ${fileData.name}`;
-
-            const enhancedContent = `${chunkText}${baseContext}
-
-CHUNK INFO: This is chunk ${chunkIndex + 1} of ${textChunks.length} from ${fileData.name}, processed by LlamaIndex`;
+            // Generate enhanced content using template functions
+            const enhancedContent = generateEnhancedContent(chunkText, templateData);
 
             // Generate embedding for the enhanced content
             const embedding = await this.generateEmbedding(enhancedContent);
@@ -124,7 +176,7 @@ CHUNK INFO: This is chunk ${chunkIndex + 1} of ${textChunks.length} from ${fileD
                 mimeType: fileData.mimeType,
                 fileSize: fileData.size,
                 uploadedAt: fileData.uploadedAt,
-                contextPath: `${fileData.databaseName || 'Unknown'} → ${fileData.tableName || 'Unknown'} → ${fileData.fieldName || 'Unknown'}`,
+                contextPath: generateContextPath(templateData),
                 processingMethod: 'llamaindex'
               },
               embedding,
