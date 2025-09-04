@@ -105,9 +105,6 @@ class EventDrivenScheduler {
   }
 
   private async handleRagReindexEvent(event: RagReindexEvent): Promise<void> {
-    // TODO: Implement debouncing to batch rapid changes
-    // For now, process immediately
-    
     try {
       // Build the ReindexCommand based on event data
       const reindexCommand: ReindexCommand = {
