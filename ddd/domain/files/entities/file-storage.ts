@@ -3,6 +3,7 @@
 
 import { FieldId, OrganizationId, TableId } from "../../shared/value-objects";
 
+// This should technically be an entity. TODO: Minor
 export interface StoredFile {
   id: string;                            // Unique file identifier
   key: string;                          // Storage key/path for retrieval

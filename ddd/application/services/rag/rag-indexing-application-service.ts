@@ -4,11 +4,6 @@
 import type { RagIndexRepository } from '@/ddd/domain/rag/repositories/rag-index-repository';
 import type { RagDocumentRepository } from '@/ddd/domain/rag/repositories/rag-document-repository';
 import { IndexingDomainService, type ContentProcessor } from '@/ddd/domain/rag/services';
-import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
-import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
-import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
-import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
-import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
 import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
 import { RagIndex } from '@/ddd/domain/rag/entities';
 import { RagIndexId, OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
@@ -45,14 +40,13 @@ export class RagIndexingApplicationService {
     private readonly indexRepository: RagIndexRepository,
     private readonly documentRepository: RagDocumentRepository,
     private readonly indexingDomainService: IndexingDomainService,
-    private readonly organizationRepository: IOrganizationRepository,
-    private readonly agentRepository: IAgentRepository,
-    private readonly databaseRepository: IDatabaseRepository,
-    private readonly teamRepository: ITeamRepository,
-    private readonly fileStorageRepository: IFileStorageRepository,
     private readonly tableApplicationService: TableApplicationService,
     private readonly eventPublisher?: EventPublisher
   ) {}
+
+  // ================================================================
+  // PUBLIC API - Index Management
+  // ================================================================
 
   /**
    * Create a new RAG index
@@ -90,7 +84,46 @@ export class RagIndexingApplicationService {
     console.log(`[RAG-INDEXING-APP] Created RAG index: ${index.name} (${index.id.value.substring(0, 8)})`);
 
     // Perform initial indexing synchronously
-    await this.performInitialIndexing(index);
+    await this.performInitialIndexingInternal(index);
+
+    return index.id.value;
+  }
+
+  /**
+   * Create a RAG index WITHOUT performing initial indexing
+   * Useful for testing and when you want to control indexing timing
+   */
+  async createIndexOnly(command: CreateIndexCommand): Promise<string> {
+    CreateIndexCommandValidator.validate(command);
+
+    const domainParams = CreateIndexCommandValidator.toDomainParams(command);
+
+    // Check name uniqueness
+    const isNameUnique = await this.indexRepository.isNameUnique(
+      domainParams.organizationId, 
+      domainParams.name
+    );
+
+    if (!isNameUnique) {
+      throw new Error(`Index name "${domainParams.name}" already exists in this organization`);
+    }
+
+    // Create the index
+    const index = RagIndex.create(domainParams);
+    await this.indexRepository.save(index);
+
+    // Publish domain event
+    if (this.eventPublisher) {
+      const event = createRagIndexCreatedEvent(
+        index.id,
+        index.organizationId,
+        index.name,
+        index.domainTypes
+      );
+      await this.eventPublisher.publish(event);
+    }
+
+    console.log(`[RAG-INDEXING-APP] Created RAG index (no auto-indexing): ${index.name} (${index.id.value.substring(0, 8)})`);
 
     return index.id.value;
   }
@@ -203,7 +236,10 @@ export class RagIndexingApplicationService {
     };
   }
 
-  // Private implementation methods
+  // ================================================================
+  // PRIVATE - Core Indexing Logic
+  // ================================================================
+
   private async reindexSingleIndex(
     indexId: RagIndexId, 
     domainType?: DomainType,
@@ -386,28 +422,20 @@ export class RagIndexingApplicationService {
         documentsDeleted: syncResult.deleted
       };
     } catch (error) {
-      // Log detailed embedding/indexing errors for debugging
-      console.error(`[RAG-INDEXING-APP] Error indexing ${domainType} for organization ${index.organizationId.value}:`);
-      console.error(`[RAG-INDEXING-APP] Error type: ${error instanceof Error ? error.name : typeof error}`);
-      console.error(`[RAG-INDEXING-APP] Error message: ${error instanceof Error ? error.message : String(error)}`);
-      console.error(`[RAG-INDEXING-APP] Full error:`, error);
-      
-      // Check if this is an embedding error specifically
-      if (error instanceof Error && error.message.includes('Embedding generation failed')) {
-        console.error(`[RAG-INDEXING-APP] 🔴 EMBEDDING SERVICE FAILURE - HuggingFace API may be down`);
-      }
+      console.error(`[RAG-INDEXING-APP] Failed to index ${domainType}:`, error);
       
       // Return zero progress but don't throw - allows other domain types to continue processing
       return { documentsProcessed: 0, documentsAdded: 0, documentsDeleted: 0 };
     }
   }
 
-  private async indexOrganization(index: RagIndex): Promise<any[]> {
-    const organization = await this.organizationRepository.findById(index.organizationId);
-    if (!organization) return [];
+  // ================================================================
+  // PRIVATE - Domain Type Indexers
+  // ================================================================
 
-    return await this.indexingDomainService.indexOrganizationData(
-      index.id, index.organizationId, organization
+  private async indexOrganization(index: RagIndex): Promise<any[]> {
+    return await this.indexingDomainService.indexDomainData(
+      index.id, index.organizationId, 'organizations'
     );
   }
 
@@ -439,29 +467,20 @@ export class RagIndexingApplicationService {
   }
 
   private async indexDatabases(index: RagIndex): Promise<any[]> {
-    const databases = await this.databaseRepository.findByOrganization(index.organizationId);
-    if (databases.length === 0) return [];
-
-    return await this.indexingDomainService.indexDatabaseData(
-      index.id, index.organizationId, databases
+    return await this.indexingDomainService.indexDomainData(
+      index.id, index.organizationId, 'databases'
     );
   }
 
   private async indexAgents(index: RagIndex): Promise<any[]> {
-    const agents = await this.agentRepository.findByOrganization(index.organizationId);
-    if (agents.length === 0) return [];
-
-    return await this.indexingDomainService.indexAgentData(
-      index.id, index.organizationId, agents
+    return await this.indexingDomainService.indexDomainData(
+      index.id, index.organizationId, 'agents'
     );
   }
 
   private async indexTeams(index: RagIndex): Promise<any[]> {
-    const teams = await this.teamRepository.findByOrganization(index.organizationId);
-    if (teams.length === 0) return [];
-
-    return await this.indexingDomainService.indexTeamData(
-      index.id, index.organizationId, teams
+    return await this.indexingDomainService.indexDomainData(
+      index.id, index.organizationId, 'teams'
     );
   }
 
@@ -532,7 +551,39 @@ export class RagIndexingApplicationService {
     }
   }
 
-  private async performInitialIndexing(index: RagIndex): Promise<void> {
+  /**
+   * Perform initial indexing for a newly created index
+   * Made public to allow explicit control in testing
+   */
+  async performInitialIndexing(indexIdOrIndex: RagIndexId | RagIndex | string): Promise<void> {
+    let index: RagIndex;
+    
+    if (typeof indexIdOrIndex === 'string') {
+      const ragIndexId = RagIndexId.fromString(indexIdOrIndex);
+      const foundIndex = await this.indexRepository.findById(ragIndexId);
+      if (!foundIndex) {
+        throw new Error(`Index ${indexIdOrIndex} not found`);
+      }
+      index = foundIndex;
+    } else if (indexIdOrIndex instanceof RagIndex) {
+      index = indexIdOrIndex;
+    } else {
+      // It's a RagIndexId
+      const foundIndex = await this.indexRepository.findById(indexIdOrIndex);
+      if (!foundIndex) {
+        throw new Error(`Index ${indexIdOrIndex.value} not found`);
+      }
+      index = foundIndex;
+    }
+
+    return this.performInitialIndexingInternal(index);
+  }
+
+  // ================================================================
+  // PRIVATE - Helper Methods
+  // ================================================================
+
+  private async performInitialIndexingInternal(index: RagIndex): Promise<void> {
     try {
       await this.reindexSingleIndex(index.id);
       console.log(`[RAG-INDEXING-APP] Initial indexing completed for ${index.name}`);
@@ -572,13 +623,12 @@ export class RagIndexingApplicationService {
       description: 'Automatic RAG index for organizational data - covers all tables, agents, teams, databases, and files',
       organizationId,
       domainTypes: ['tables', 'agents', 'teams', 'organizations', 'databases', 'files'], // All available domain types
-      // createdBy omitted for system-created indexes (will be null in database)
     };
 
     console.log(`[RAG-INDEXING-APP] Creating default RAG index for organization ${organizationId.value}`);
     
     try {
-      const indexId = await this.createIndex(createIndexCommand);
+      const indexId = await this.createIndexOnly(createIndexCommand);
       
       // Retrieve and return the created index
       const createdIndex = await this.indexRepository.findById(RagIndexId.fromString(indexId));
