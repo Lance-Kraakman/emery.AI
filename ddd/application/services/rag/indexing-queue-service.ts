@@ -150,6 +150,22 @@ export class IndexingQueueService {
   }
 
   /**
+   * Get operation by ID (alias for getOperationStatus for test compatibility)
+   */
+  getOperation(operationId: string): QueueEntry | null {
+    return this.getOperationStatus(operationId);
+  }
+
+  /**
+   * Clear all queues (useful for tests)
+   */
+  async clearAll(): Promise<void> {
+    console.log(`[INDEXING-QUEUE] Clearing all queues`);
+    this.queues.clear();
+    this.processing.clear();
+  }
+
+  /**
    * Clear completed and failed operations (keep last N for debugging)
    */
   cleanup(keepLast: number = 10): void {
@@ -259,18 +275,22 @@ export class IndexingQueueService {
   private async executeOperation(entry: QueueEntry): Promise<void> {
     // Import here to avoid circular dependencies
     const { getIndexingDomainService } = await import('@/ddd/application/di/container');
+    const { RagIndexId } = await import('@/ddd/domain/rag/value-objects');
     const indexingService = getIndexingDomainService();
+    
+    // Convert string indexId to RagIndexId value object
+    const indexId = RagIndexId.fromString(entry.indexId);
     
     switch (entry.operation) {
       case 'initial':
-        await indexingService.executeInitialIndexing(entry.indexId);
+        await indexingService.executeInitialIndexing(indexId);
         break;
       case 'reindex':
-        await indexingService.executeReindex(entry.indexId, entry.domainType);
+        await indexingService.executeReindex(indexId, entry.domainType);
         break;
       case 'data-change':
         await indexingService.executeDataChange(
-          entry.indexId, 
+          indexId, 
           entry.domainType!, 
           entry.sourceId!,
           entry.changeType || 'UPDATE'

@@ -1,18 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import { createAgentAction } from '@/app/actions/agents';
+import { createAgentAction, updateAgent } from '@/app/actions/agents';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { FormField } from '@/components/ui/form-field';
 import { useEmery } from '@/contexts/EmeryContext';
+import { useFormWithUnsavedChanges } from '@/hooks/useFormWithUnsavedChanges';
+import { agentSchema } from '@/lib/schemas';
+import { AlertTriangle } from 'lucide-react';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import ScheduleManager from './ScheduleManager';
 
-// AIDEV-NOTE: Agent form dialog refactored to use consistent design system components and patterns
+// AIDEV-NOTE: Enhanced agent form dialog with Zod validation and unsaved changes detection
+// AIDEV-NOTE: Uses consistent form patterns and provides better user experience
 
 interface AgentFormDialogProps {
   isOpen: boolean;
@@ -21,73 +25,157 @@ interface AgentFormDialogProps {
 }
 
 export default function AgentFormDialog({ isOpen, onClose, agent }: AgentFormDialogProps) {
-  const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { refetch } = useEmery();
+  const { currentOrganization, refetch } = useEmery();
+  const [globalError, setGlobalError] = useState<string | null>(null);
 
-  const handleSubmit = async (formData: FormData) => {
-    try {
-      setIsPending(true);
-      setError(null);
-      await createAgentAction(formData);
-      refetch();
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save agent');
-    } finally {
-      setIsPending(false);
+  // Prepare default values - memoized to prevent infinite loops
+  const defaultValues = useMemo(() => agent ? {
+    name: agent.name || '',
+    role: agent.role || '',
+    description: agent.description || '',
+    persona: agent.persona || '',
+    model: (agent as any).model || '', // Handle potential model field
+  } : {
+    name: '',
+    role: '',
+    description: '',
+    persona: '',
+    model: '',
+  }, [agent]);
+
+  const form = useFormWithUnsavedChanges({
+    schema: agentSchema,
+    defaultValues,
+    onSubmit: async (validatedData) => {
+      setGlobalError(null);
+      
+      if (!currentOrganization) {
+        throw new Error("No organization selected");
+      }
+
+      try {
+        if (agent) {
+          // Update existing agent - convert organizationId to Value Object
+          const updateData = {
+            ...validatedData,
+            organizationId: currentOrganization.id ? OrganizationId.fromNumber(currentOrganization.id) : undefined
+          };
+          const result = await updateAgent(agent.id.value, updateData);
+          
+          if (!result.success) {
+            throw new Error(result.error);
+          }
+        } else {
+          // Create new agent using FormData (to match existing server action)
+          const formData = new FormData();
+          formData.append('name', validatedData.name);
+          formData.append('role', validatedData.role || '');
+          formData.append('description', validatedData.description || '');
+          formData.append('persona', validatedData.persona || '');
+          formData.append('organizationId', currentOrganization.id.toString());
+          
+          const result = await createAgentAction(formData);
+          
+          if (!result.success) {
+            throw new Error(result.error);
+          }
+        }
+        
+        refetch();
+        onClose();
+      } catch (error) {
+        console.error('Form submission error:', error);
+        setGlobalError(error instanceof Error ? error.message : 'Failed to save agent');
+        throw error; // Re-throw to prevent form from closing
+      }
+    },
+    onClose,
+  });
+
+  // Reset form when dialog opens/closes or agent changes
+  useEffect(() => {
+    if (isOpen) {
+      form.reset();
+      setGlobalError(null);
     }
-  };
+  }, [isOpen, agent, form.reset]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+    <Dialog open={isOpen} onOpenChange={form.handleClose}>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{agent ? 'Edit Agent' : 'Create New Agent'}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            {agent ? 'Edit Agent' : 'Create New Agent'}
+            {form.hasUnsavedChanges && (
+              <AlertTriangle className="w-4 h-4 text-orange-500" />
+            )}
+          </DialogTitle>
         </DialogHeader>
-        <form action={handleSubmit} className="space-y-3">
-          {error && (
+        
+        <form onSubmit={form.handleSubmit} className="space-y-4">
+          {globalError && (
             <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
-              {error}
+              {globalError}
             </div>
           )}
           
-          <FormField label="Name" required>
+          <FormField 
+            label="Name" 
+            required 
+            error={form.errors.name}
+          >
             <Input
-              name="name"
-              required
-              defaultValue={agent?.name}
+              value={form.values.name || ''}
+              onChange={(e) => form.setValue('name', e.target.value)}
+              onBlur={() => form.validateField('name')}
               placeholder="e.g., Sales Analyst Bot"
-              disabled={isPending}
+              disabled={form.isLoading}
+              className={form.errors.name ? 'border-destructive' : ''}
             />
           </FormField>
           
-          <FormField label="Role">
+          <FormField 
+            label="Role" 
+            error={form.errors.role}
+          >
             <Input
-              name="role"
-              defaultValue={agent?.role ?? ''}
+              value={form.values.role || ''}
+              onChange={(e) => form.setValue('role', e.target.value)}
+              onBlur={() => form.validateField('role')}
               placeholder="e.g., Data Analyst"
-              disabled={isPending}
+              disabled={form.isLoading}
+              className={form.errors.role ? 'border-destructive' : ''}
             />
           </FormField>
           
-          <FormField label="Description">
+          <FormField 
+            label="Description" 
+            error={form.errors.description}
+          >
             <Textarea
-              name="description"
-              rows={2}
-              defaultValue={agent?.description ?? ''}
+              value={form.values.description || ''}
+              onChange={(e) => form.setValue('description', e.target.value)}
+              onBlur={() => form.validateField('description')}
+              rows={3}
               placeholder="A brief description of the agent's purpose."
-              disabled={isPending}
+              disabled={form.isLoading}
+              className={form.errors.description ? 'border-destructive' : ''}
             />
           </FormField>
           
-          <FormField label="Persona">
+          <FormField 
+            label="Persona" 
+            error={form.errors.persona}
+            description="Describe the agent's personality and communication style"
+          >
             <Textarea
-              name="persona"
-              rows={2}
-              defaultValue={agent?.persona ?? ''}
-              placeholder="Describe the agent's personality and communication style."
-              disabled={isPending}
+              value={form.values.persona || ''}
+              onChange={(e) => form.setValue('persona', e.target.value)}
+              onBlur={() => form.validateField('persona')}
+              rows={3}
+              placeholder="Professional, analytical, and detail-oriented..."
+              disabled={form.isLoading}
+              className={form.errors.persona ? 'border-destructive' : ''}
             />
           </FormField>
 
@@ -104,21 +192,21 @@ export default function AgentFormDialog({ isOpen, onClose, agent }: AgentFormDia
             </FormField>
           )}
           
-          <div className="flex justify-end space-x-2 pt-3">
+          <div className="flex justify-end space-x-2 pt-4">
             <Button
               type="button"
               variant="outline"
-              onClick={onClose}
-              disabled={isPending}
+              onClick={form.handleClose}
+              disabled={form.isLoading}
             >
               Cancel
             </Button>
             <Button
               type="submit"
               variant="success"
-              disabled={isPending}
+              disabled={form.isLoading || Object.keys(form.errors).length > 0}
             >
-              {isPending ? 'Saving...' : (agent ? 'Save Changes' : 'Create Agent')}
+              {form.isLoading ? 'Saving...' : (agent ? 'Save Changes' : 'Create Agent')}
             </Button>
           </div>
         </form>
@@ -126,3 +214,10 @@ export default function AgentFormDialog({ isOpen, onClose, agent }: AgentFormDia
     </Dialog>
   );
 }
+
+// AIDEV-NOTE: This component provides:
+// 1. Zod validation with real-time error feedback
+// 2. Unsaved changes detection and warnings
+// 3. Better error handling and user feedback
+// 4. Consistent form patterns across the application
+// 5. Visual indicators for form state (unsaved changes icon)

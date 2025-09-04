@@ -9,7 +9,9 @@
 
 import { ReactNode } from 'react'
 import { ToolDefinition } from '@/lib/agents/tools-registry'
-import { EmeryAgent, EmeryTeam, EmeryDatabase } from '@/hooks/useEmeryData'
+import type { AgentDTO } from '@/app/mappers/agent-mapper'
+import type { TeamDTO } from '@/app/mappers/team-mapper'
+import type { DatabaseWithTables } from '@/hooks/useEmeryData'
 
 // Main category types for + button menu
 export type MentionCategory = 'tools' | 'agents' | 'teams' | 'settings' | 'data'
@@ -42,7 +44,7 @@ export interface ToolMentionItem extends MentionItem {
 // Agent mention item
 export interface AgentMentionItem extends MentionItem {
   category: 'agents'
-  agent: EmeryAgent
+  agent: AgentDTO
   status: string
   organizationId: number
 }
@@ -50,7 +52,7 @@ export interface AgentMentionItem extends MentionItem {
 // Team mention item
 export interface TeamMentionItem extends MentionItem {
   category: 'teams'
-  team: EmeryTeam
+  team: TeamDTO
   memberCount?: number
   organizationId: number
 }

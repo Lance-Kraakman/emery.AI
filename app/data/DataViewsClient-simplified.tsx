@@ -9,7 +9,8 @@ import { Settings, Plus, Search, TableIcon as Table, Database } from "lucide-rea
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { DynamicDataTable } from "./components/DynamicDataTable"
 import { FieldManagerDialog } from "./components/FieldManagerDialog"
-import { useEmeryData, EmeryTable } from "@/hooks/useEmeryData"
+import { useEmeryData } from "@/hooks/useEmeryData"
+import type { TableDTO } from "@/app/mappers/table-mapper"
 import { getFields } from "@/app/actions/fields"
 import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
@@ -23,7 +24,7 @@ export function DataViewsClientSimplified() {
   const initialTableId = tableIdParam ? parseInt(tableIdParam) : undefined
 
   // Find the initial table across all databases
-  const findTableById = (id: number): EmeryTable | undefined => {
+  const findTableById = (id: number): TableDTO | undefined => {
     for (const database of data.databases) {
       const table = database.tables.find(t => t.id === id)
       if (table) return table
@@ -234,7 +235,7 @@ export function DataViewsClientSimplified() {
         <h1 className="text-2xl font-bold">Data</h1>
         <p className="text-muted-foreground">
           {selectedTable 
-            ? `Viewing ${selectedTable.name} in ${selectedTable.database?.name || 'Unknown Database'}`
+            ? `Viewing ${selectedTable.name} in ${data.databases.find(db => db.id === selectedTable.databaseId)?.name || 'Unknown Database'}`
             : 'Select a table from the sidebar to view its data'
           }
         </p>

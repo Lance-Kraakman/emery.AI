@@ -11,6 +11,7 @@ export class SearchAnalyticsService implements SearchLogger {
   async logQuery(params: {
     indexId: RagIndexId;
     query: SearchQuery;
+    queryEmbedding: number[];
     resultCount: number;
     searchTime: number;
     userId?: string;
@@ -18,14 +19,11 @@ export class SearchAnalyticsService implements SearchLogger {
     sessionId?: string;
   }): Promise<void> {
     try {
-      // AIDEV-NOTE: Query embeddings for analytics not currently needed
-      // Could be added later for similarity-based query analytics
-      const queryEmbedding: number[] = [];
-
+      // AIDEV-NOTE: Query embeddings are not stored in analytics logs to avoid dimension issues
       await this.queryLogRepository.logQuery({
         indexId: params.indexId,
         query: params.query,
-        queryEmbedding,
+        queryEmbedding: params.queryEmbedding, // Passed through but ignored by repository
         resultCount: params.resultCount,
         userId: params.userId,
         agentId: params.agentId,

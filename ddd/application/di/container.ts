@@ -66,7 +66,6 @@ import { EmbeddingService } from '@/ddd/application/services/embedding-service';
 import { SearchAnalyticsService } from '@/ddd/application/services/search-analytics-service';
 import type { IIndexingDomainService, ISearchDomainService } from '@/ddd/domain/rag/services';
 import { IndexingDomainService, SearchDomainService } from '@/ddd/domain/rag/services';
-import { RagIndexingApplicationService } from '@/ddd/application/services/rag/rag-indexing-application-service';
 import { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
 import { IndexingQueueService, indexingQueueService } from '@/ddd/application/services/rag/indexing-queue-service';
 
@@ -137,7 +136,6 @@ interface RepositoryRegistry {
   SearchDomainService: ISearchDomainService;
 
   // RAG use case services
-  RagIndexingApplicationService: RagIndexingApplicationService;
   RagSearchApplicationService: RagSearchApplicationService;
   IndexingQueueService: IndexingQueueService;
   
@@ -330,12 +328,13 @@ export class DIContainer {
 
     // Initialize RAG domain services
     const indexingDomainService = new IndexingDomainService(
-      embeddingGenerator,
+      embeddingService,
       this.repositories.get('IOrganizationRepository'),
       agentRepository,
       databaseRepository,
       teamRepository,
       fileStorageRepository,
+      tableRepository,
       ragIndexRepository,
       ragDocumentRepository
     );
@@ -348,12 +347,6 @@ export class DIContainer {
     this.repositories.set('IndexingQueueService', indexingQueueService);
 
     // Initialize RAG use case services
-    const ragIndexingApplicationService = new RagIndexingApplicationService(
-      ragIndexRepository,
-      tableApplicationService,
-      indexingQueueService
-    );
-    
     const ragSearchApplicationService = new RagSearchApplicationService(
       ragIndexRepository,
       ragDocumentRepository,
@@ -362,8 +355,6 @@ export class DIContainer {
       searchAnalyticsService
     );
     
-    
-    this.repositories.set('RagIndexingApplicationService', ragIndexingApplicationService);
     this.repositories.set('RagSearchApplicationService', ragSearchApplicationService);
 
     // Register connection services - fail fast if Pipedream client not available
@@ -467,7 +458,6 @@ type ServiceMap = {
   EmbeddingGeneratorDomainService: EmbeddingGeneratorService;
   IndexingDomainService: IIndexingDomainService;
   SearchDomainService: ISearchDomainService;
-  RagIndexingApplicationService: RagIndexingApplicationService;
   RagSearchApplicationService: RagSearchApplicationService;
   IndexingQueueService: IndexingQueueService;
   
@@ -535,7 +525,6 @@ export const getEmbeddingService = createGetter('EmbeddingService');
 export const getSearchAnalyticsService = createGetter('SearchAnalyticsService');
 export const getIndexingDomainService = createGetter('IndexingDomainService');
 export const getSearchDomainService = createGetter('SearchDomainService');
-export const getRagIndexingApplicationService = createGetter('RagIndexingApplicationService');
 export const getRagSearchApplicationService = createGetter('RagSearchApplicationService');
 export const getIndexingQueueService = createGetter('IndexingQueueService');
 

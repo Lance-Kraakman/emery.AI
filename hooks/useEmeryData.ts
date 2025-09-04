@@ -7,52 +7,21 @@ import { getTables } from '@/app/actions/tables';
 import { getDatabases } from '@/app/actions/databases';
 import { getAgents } from '@/app/actions/agents';
 import { getTeams } from '@/app/actions/teams';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { TeamDTO } from '@/app/mappers/team-mapper';
+import type { TableDTO } from '@/app/mappers/table-mapper';
+import type { DatabaseDTO } from '@/app/mappers/database-mapper';
 
-export interface EmeryTable {
-  id: number;
-  name: string;
-  dbName: string;
-  databaseId: number;
-  organizationId: number;
-  metadata?: { description?: string; [key: string]: any } | null;
-  createdAt: Date | null;
-  updatedAt: Date | null;
-  database?: {
-    id: number;
-    name: string;
-    slug: string;
-    metadata?: { description?: string; [key: string]: any } | null;
-  } | null;
-}
-
-export interface EmeryAgent {
-  id: number;
-  name: string;
-  description?: string;
-  status: string;
-  organizationId?: number;
-}
-
-export interface EmeryTeam {
-  id: number;
-  name: string;
-  purpose?: string;
-  organizationId?: number;
-  agentIds?: string[];
-}
-
-export interface EmeryDatabase {
-  id: number;
-  name: string;
-  slug: string;
-  metadata?: { description?: string; [key: string]: any } | null;
-  tables: EmeryTable[];
+// AIDEV-NOTE: Now using DTOs from mappers instead of duplicate interfaces
+// Extended database interface to include tables for frontend convenience
+export interface DatabaseWithTables extends DatabaseDTO {
+  tables: TableDTO[];
 }
 
 export interface EmeryData {
-  databases: EmeryDatabase[];
-  agents: EmeryAgent[];
-  teams: EmeryTeam[];
+  databases: DatabaseWithTables[];
+  agents: AgentDTO[];
+  teams: TeamDTO[];
   organization?: {
     id: number;
     name: string;
@@ -97,43 +66,16 @@ export function useEmeryData() {
         getTeams(currentOrg.id)
       ]);
 
-      const tables: EmeryTable[] = tablesResult.map(table => ({
-        id: table.id, // Already a number from TableDTO
-        name: table.name,
-        dbName: table.storageLocation, // Map storageLocation to dbName for compatibility
-        databaseId: table.databaseId, // Already a number from TableDTO
-        organizationId: table.organizationId, // Already a number from TableDTO
-        metadata: table.metadata, // Already plain object from TableDTO
-        createdAt: table.createdAt || null,
-        updatedAt: table.updatedAt || null,
-        database: null // TODO: Add database info if needed
-      }));
-      const agents: EmeryAgent[] = agentsResult.map(agent => ({
-        id: agent.id, // Already a number from AgentDTO
-        name: agent.name,
-        description: agent.description,
-        status: agent.status || 'active', // Already a string from AgentDTO
-        organizationId: agent.organizationId // Already a number from AgentDTO
-      }));
-      const teams: EmeryTeam[] = teamsResult.map(team => ({
-        id: team.id, // Already a number from TeamDTO
-        name: team.name,
-        purpose: team.purpose || undefined, // Convert null to undefined for compatibility
-        organizationId: team.organizationId, // Already a number from TeamDTO
-        agentIds: team.agentIds || [] // Already string[] from TeamDTO
-      }));
-
-      // Group tables by database and convert to interface format
-      const databasesWithTables: EmeryDatabase[] = databasesResult.map(db => ({
-        id: db.id, // Already a number from DatabaseDTO
-        name: db.name,
-        slug: db.slug,
-        metadata: db.metadata,
-        tables: tables.filter(table => table.databaseId === db.id)
+      // Use DTOs directly, but group tables with databases for frontend convenience
+      const agents = agentsResult;
+      const teams = teamsResult;
+      const databases: DatabaseWithTables[] = databasesResult.map(db => ({
+        ...db,
+        tables: tablesResult.filter(table => table.databaseId === db.id)
       }));
 
       setData({
-        databases: databasesWithTables,
+        databases,
         agents,
         teams,
         organization: {

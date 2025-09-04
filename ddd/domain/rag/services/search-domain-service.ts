@@ -24,6 +24,7 @@ export interface SearchLogger {
   logQuery(params: {
     indexId: RagIndexId;
     query: SearchQuery;
+    queryEmbedding: number[];
     resultCount: number;
     searchTime: number;
     userId?: string;
@@ -173,6 +174,7 @@ export class SearchDomainService {
   async logSearchAnalytics(
     indexId: RagIndexId,
     query: SearchQuery,
+    queryEmbedding: number[],
     resultCount: number,
     searchTime: number,
     context?: {
@@ -186,6 +188,7 @@ export class SearchDomainService {
         await this.searchLogger.logQuery({
           indexId,
           query,
+          queryEmbedding,
           resultCount,
           searchTime,
           ...context

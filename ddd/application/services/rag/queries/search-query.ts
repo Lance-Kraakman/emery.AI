@@ -60,7 +60,7 @@ export class SearchRagQueryValidator {
         throw new Error('Source types must be an array');
       }
 
-      const validSourceTypes = ['table', 'file', 'agent', 'team', 'workflow', 'organization', 'database'];
+      const validSourceTypes = ['tables', 'files', 'agents', 'teams', 'organizations', 'databases'];
       for (const sourceType of query.sourceTypes) {
         if (!validSourceTypes.includes(sourceType)) {
           throw new Error(`Invalid source type: ${sourceType}`);

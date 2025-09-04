@@ -3,7 +3,7 @@
  * Uses HF_TOKEN for authentication
  */
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { FeatureExtractionOutput, HfInference } from '@huggingface/inference'
+import { HfInference } from '@huggingface/inference'
 
 const HF_MODELS = {
   chat: {
@@ -18,64 +18,6 @@ const HF_MODELS = {
   }
 }
 
-/**
- * Helper function to process HuggingFace embedding result
- */
-function processEmbeddingResult(result: FeatureExtractionOutput): number[] {
-  if (!Array.isArray(result)) {
-    throw new Error(`Unexpected result type: ${typeof result}`);
-  }
-  if (Array.isArray(result[0])) {
-    return result[0] as number[];
-  } else {
-    return result as number[];
-  }
-}
-
-/**
- * Helper function to generate single embedding via HuggingFace API
- */
-async function generateSingleEmbedding(
-  hf: HfInference, 
-  modelName: string, 
-  text: string
-): Promise<number[]> {
-  console.log(`[HF-PROVIDER] Single embedding for: "${text.substring(0, 50)}..."`);
-  
-  const result = await hf.featureExtraction({
-    model: modelName,
-    inputs: text
-  });
-  
-  console.log(`[HF-PROVIDER] Got result type: ${typeof result}, isArray: ${Array.isArray(result)}`);
-  
-  const embedding = processEmbeddingResult(result);
-  console.log(`[HF-PROVIDER] Returning embedding with ${embedding.length} dimensions`);
-  
-  return embedding;
-}
-
-/**
- * Helper function to generate batch embeddings via HuggingFace API  
- */
-async function generateBatchEmbeddings(
-  hf: HfInference,
-  modelName: string, 
-  texts: string[]
-): Promise<number[][]> {
-  console.log(`[HF-PROVIDER] Batch embedding for ${texts.length} values`);
-  
-  const results = await Promise.all(
-    texts.map((text: string) => 
-      hf.featureExtraction({
-        model: modelName,
-        inputs: text
-      })
-    )
-  );
-  
-  return results.map(processEmbeddingResult);
-}
 
 /**
  * Get chat model for HuggingFace via OpenAI-compatible endpoint
@@ -105,9 +47,9 @@ export function getAvailableChatModels() {
 }
 
 /**
- * Get the appropriate embedding model using HuggingFace SDK
+ * Get the appropriate embedding model using direct HuggingFace API
  * @param modelOverride - Optional embedding model override (can be 'default' or specific model name)
- * @returns Embedding model instance for use with AI SDK embed functions
+ * @returns HuggingFace inference client configured for embeddings
  */
 export function getEmbeddingModel(modelOverride?: string) {
   const hfToken = process.env.HF_TOKEN
@@ -116,39 +58,32 @@ export function getEmbeddingModel(modelOverride?: string) {
   }
 
   // Handle special 'default' keyword or use override
-  let modelName: string
-  if (!modelOverride || modelOverride === 'default') {
-    modelName = HF_MODELS.embedding.default
-  } else {
-    modelName = modelOverride
-  }
+  const modelName = modelOverride && modelOverride !== 'default' 
+    ? modelOverride 
+    : HF_MODELS.embedding.default
   
-  // Use HuggingFace SDK for embeddings with AI SDK compatibility
+  // Use direct HuggingFace API for embeddings (OpenAI-compatible doesn't support embeddings)
+  const hfClient = new HfInference(hfToken)
+  
+  // Return an object that matches the expected embedding interface
   return {
     modelId: modelName,
     provider: 'huggingface',
-    specificationVersion: 'v2' as const, // Required for AI SDK 5
-    maxEmbeddingsPerCall: 100, // HuggingFace API limit
-    supportsParallelCalls: true, // HuggingFace supports parallel requests
     
-    async doEmbed({ values, abortSignal }: { values: string[]; abortSignal?: AbortSignal }) {
-      console.log(`[HF-PROVIDER] doEmbed called with ${values.length} values`);
-      console.log(`[HF-PROVIDER] Model: ${modelName}`);
-      console.log(`[HF-PROVIDER] HF_TOKEN: ${hfToken ? 'present' : 'missing'}`);
+    // Method to generate embeddings compatible with AI SDK
+    async generateEmbedding(text: string): Promise<number[]> {
+      const result = await hfClient.featureExtraction({
+        model: modelName,
+        inputs: text,
+      })
       
-      const hf = new HfInference(hfToken);
-      
-      try {
-        if (values.length === 1) {
-          const embedding = await generateSingleEmbedding(hf, modelName, values[0]);
-          return { embeddings: [embedding] };
-        } else {
-          const embeddings = await generateBatchEmbeddings(hf, modelName, values);
-          return { embeddings };
-        }
-      } catch (error) {
-        console.error(`[HF-PROVIDER] Error:`, error);
-        throw new Error(`HuggingFace embedding error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Handle nested array response from HuggingFace
+      if (Array.isArray(result) && Array.isArray(result[0])) {
+        return result[0] as number[]
+      } else if (Array.isArray(result)) {
+        return result as number[]
+      } else {
+        throw new Error('Unexpected embedding response format from HuggingFace')
       }
     }
   }
