@@ -467,15 +467,14 @@ export const ragIndexes = pgTable("rag_indexes", {
   domainFilters: jsonb("domain_filters"), // Additional filtering criteria
   
   // Embedding configuration
-  embeddingModel: text("embedding_model").default("BAAI/bge-m3"),
-  embeddingDimensions: integer("embedding_dimensions").default(1024),
+  embeddingModel: text("embedding_model").default("sentence-transformers/all-mpnet-base-v2"),
+  embeddingDimensions: integer("embedding_dimensions").default(768),
   
   // Status and metadata
   status: text("status").default("active"), // active, building, error
   lastIndexedAt: timestamp("last_indexed_at"),
   documentCount: integer("document_count").default(0),
   
-  createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -499,13 +498,6 @@ export const ragIndexes = pgTable("rag_indexes", {
     for: "select",
     to: [appMemberRole],
     using: sql`organization_id = get_current_organization_id()`,
-  }),
-  pgPolicy("rag_indexes_creator_control", {
-    as: "permissive",
-    for: "all",
-    to: [authenticatedRole],
-    using: sql`created_by = auth.uid() AND organization_id = get_current_organization_id()`,
-    withCheck: sql`created_by = auth.uid() AND organization_id = get_current_organization_id()`,
   }),
 ]);
 

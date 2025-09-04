@@ -2,7 +2,7 @@
 // Updated to use value objects instead of primitives for type safety
 
 import { OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
-import { UserId, AgentId } from '@/ddd/domain/shared/value-objects';
+import { AgentId } from '@/ddd/domain/shared/value-objects';
 
 export interface CreateIndexCommand {
   name: string;
@@ -13,7 +13,6 @@ export interface CreateIndexCommand {
   domainFilters?: Record<string, any>;
   embeddingModel?: string;
   embeddingDimensions?: number;
-  createdBy: UserId;
 }
 
 export class CreateIndexCommandValidator {
@@ -44,10 +43,6 @@ export class CreateIndexCommandValidator {
       }
     }
 
-    if (!command.createdBy) {
-      throw new Error('Creator ID is required');
-    }
-
     // Value objects already validated on construction, no need for additional validation
 
     if (command.embeddingDimensions !== undefined && (!Number.isInteger(command.embeddingDimensions) || command.embeddingDimensions <= 0)) {
@@ -64,8 +59,7 @@ export class CreateIndexCommandValidator {
       domainTypes: [...command.domainTypes],
       domainFilters: command.domainFilters ? { ...command.domainFilters } : undefined,
       embeddingModel: command.embeddingModel,
-      embeddingDimensions: command.embeddingDimensions,
-      createdBy: command.createdBy.value // Extract primitive for domain params
+      embeddingDimensions: command.embeddingDimensions
     };
   }
 }

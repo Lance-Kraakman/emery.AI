@@ -12,7 +12,6 @@ export interface RagIndexCreationParams {
   domainFilters?: Record<string, any>;
   embeddingModel?: string;
   embeddingDimensions?: number;
-  createdBy: string;
 }
 
 export interface RagIndexUpdateParams {
@@ -36,7 +35,6 @@ export class RagIndex {
     private readonly _embeddingDimensions: number,
     private _status: IndexStatus,
     private _documentCount: number,
-    private readonly _createdBy: string,
     private readonly _createdAt: Date,
     private _lastIndexedAt: Date | undefined
   ) {}
@@ -85,10 +83,6 @@ export class RagIndex {
 
   get documentCount(): number {
     return this._documentCount;
-  }
-
-  get createdBy(): string {
-    return this._createdBy;
   }
 
   get createdAt(): Date {
@@ -199,7 +193,6 @@ export class RagIndex {
       embeddingDimensions,
       'created',
       0,
-      params.createdBy,
       new Date(),
       undefined
     );
@@ -217,7 +210,6 @@ export class RagIndex {
     embeddingDimensions: number;
     status: IndexStatus;
     documentCount: number;
-    createdBy: string;
     createdAt: Date;
     lastIndexedAt?: Date;
   }): RagIndex {
@@ -233,7 +225,6 @@ export class RagIndex {
       data.embeddingDimensions,
       data.status,
       data.documentCount,
-      data.createdBy,
       data.createdAt,
       data.lastIndexedAt
     );
@@ -286,7 +277,6 @@ export class RagIndex {
     embeddingDimensions: number;
     status: IndexStatus;
     documentCount: number;
-    createdBy: string;
     createdAt: Date;
     lastIndexedAt?: Date;
   } {
@@ -302,7 +292,6 @@ export class RagIndex {
       embeddingDimensions: this._embeddingDimensions,
       status: this._status,
       documentCount: this._documentCount,
-      createdBy: this._createdBy,
       createdAt: this._createdAt,
       lastIndexedAt: this._lastIndexedAt
     };

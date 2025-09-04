@@ -1,6 +1,6 @@
 {
-  "id": "70c70d4e-9b4b-4e19-80be-e2ce4812d746",
-  "prevId": "14de08f3-fce3-432c-93ea-57d3b90a984b",
+  "id": "6355f640-d5bf-4b2d-ae39-f58ec278b4b7",
+  "prevId": "70c70d4e-9b4b-4e19-80be-e2ce4812d746",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1194,12 +1194,6 @@
           "notNull": false,
           "default": 0
         },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -1242,19 +1236,6 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "rag_indexes_created_by_users_id_fk": {
-          "name": "rag_indexes_created_by_users_id_fk",
-          "tableFrom": "rag_indexes",
-          "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1288,16 +1269,6 @@
             "app_member"
           ],
           "using": "organization_id = get_current_organization_id()"
-        },
-        "rag_indexes_creator_control": {
-          "name": "rag_indexes_creator_control",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "authenticated"
-          ],
-          "using": "created_by = auth.uid() AND organization_id = get_current_organization_id()",
-          "withCheck": "created_by = auth.uid() AND organization_id = get_current_organization_id()"
         }
       },
       "checkConstraints": {},
