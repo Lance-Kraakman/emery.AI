@@ -6,13 +6,11 @@ import {
   getSchedulerService,
   taskSchedulingContainer
 } from "@/ddd/application/di/scheduling-container";
-import { getRagIndexingApplicationService, getAgentTaskApplicationService, initializeDI } from "@/ddd/application/di/container";
+import { getIndexingDomainService, getAgentTaskApplicationService, initializeDI } from "@/ddd/application/di/container";
 import { createNotificationClient, rawClient } from "@/lib/db/client";
 import { contextAwareDb } from "@/lib/db/simple-context-proxy";
 import { TaskId } from "@/ddd/domain/tasks/value-objects/task-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects";
-import { RagIndexId } from "@/ddd/domain/rag/value-objects";
-import type { ReindexCommand } from "@/ddd/application/services/rag/commands/reindex-command";
 import type { DomainType } from "@/ddd/domain/rag/value-objects";
 import type { RagReindexEvent, TaskEvent } from "@/ddd/domain/scheduling";
 import postgres from "postgres";
@@ -29,7 +27,7 @@ class EventDrivenScheduler {
 
   constructor(
     private agentTaskService = getAgentTaskApplicationService(),
-    private ragIndexingService = getRagIndexingApplicationService(),
+    private indexingDomainService = getIndexingDomainService(),
     private schedulerService = getSchedulerService(),
     private taskRepository = getTaskRepository(),
     private taskQueueService = getTaskQueueService()
@@ -106,16 +104,12 @@ class EventDrivenScheduler {
 
   private async handleRagReindexEvent(event: RagReindexEvent): Promise<void> {
     try {
-      // Build the ReindexCommand based on event data
-      const reindexCommand: ReindexCommand = {
-        organizationId: OrganizationId.fromNumber(event.organizationId),
-        domainType: event.domainType as DomainType,
-        force: false // Incremental reindex for auto-triggered events
-      };
+      const organizationId = OrganizationId.fromNumber(event.organizationId);
+      const domainType = event.domainType as DomainType;
 
       console.log(`🔄 Starting reindex for org=${event.organizationId}, type=${event.domainType}`);
-      const result = await this.ragIndexingService.reindexData(reindexCommand);
-      console.log(`✅ Reindex completed: ${result.documentsProcessed} documents processed`);
+      await this.indexingDomainService.reindexData(organizationId, domainType);
+      console.log(`✅ Reindex completed for org=${event.organizationId}, type=${event.domainType}`);
     } catch (error) {
       console.error(`❌ Failed to reindex for org ${event.organizationId}:`, error);
     }

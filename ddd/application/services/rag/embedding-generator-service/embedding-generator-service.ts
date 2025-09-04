@@ -76,16 +76,8 @@ function generateEnhancedContent(chunkText: string, templateData: TemplateData):
   return `${chunkText}${contextTemplate}${chunkInfoTemplate}`;
 }
 
-export class EmbeddingGeneratorDomainService implements EmbeddingGeneratorService {
+export class EmbeddingGeneratorDomainService {
   constructor(private readonly embeddingGenerator: EmbeddingGenerator) {}
-
-  async generateEmbedding(content: string): Promise<number[]> {
-    return this.embeddingGenerator.generateEmbedding(content);
-  }
-
-  calculateContentHash(content: string): string {
-    return crypto.createHash('md5').update(content).digest('hex');
-  }
 
   async processFileContent(fileData: FileProcessingContext): Promise<ProcessedContent[]> {
     try {
@@ -162,8 +154,8 @@ export class EmbeddingGeneratorDomainService implements EmbeddingGeneratorServic
             const enhancedContent = generateEnhancedContent(chunkText, templateData);
 
             // Generate embedding for the enhanced content
-            const embedding = await this.generateEmbedding(enhancedContent);
-            const contentHash = this.calculateContentHash(enhancedContent);
+            const embedding = await this.embeddingGenerator.generateEmbedding(enhancedContent);
+            const contentHash = this.embeddingGenerator.calculateContentHash(enhancedContent);
 
             processedChunks.push({
               content: enhancedContent,

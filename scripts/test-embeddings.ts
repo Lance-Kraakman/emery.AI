@@ -55,25 +55,21 @@ async function testEmbeddings() {
     }
   }
   
-  // Now test using the AI SDK approach
-  console.log('\n📦 Testing via AI SDK embed function:');
+  // Now test using our direct HuggingFace approach
+  console.log('\n📦 Testing via Direct HuggingFace API:');
   try {
-    const { embed } = await import('ai');
     const { getEmbeddingModel } = await import('../lib/ai/models');
     
     const embeddingModel = getEmbeddingModel();
     console.log(`Using model config: ${JSON.stringify({ modelId: embeddingModel.modelId, provider: embeddingModel.provider })}`);
     
     const startTime = Date.now();
-    const { embedding } = await embed({
-      model: embeddingModel,
-      value: testText,
-    });
+    const embedding = await embeddingModel.generateEmbedding(testText);
     const elapsed = Date.now() - startTime;
     
-    console.log(`✅ AI SDK Success! Got embedding with ${embedding.length} dimensions in ${elapsed}ms`);
+    console.log(`✅ Direct API Success! Got embedding with ${embedding.length} dimensions in ${elapsed}ms`);
   } catch (error) {
-    console.error(`❌ AI SDK Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error(`❌ Direct API Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     if (error instanceof Error) {
       console.error('Full error:', error);
     }

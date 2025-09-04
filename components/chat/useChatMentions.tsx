@@ -197,12 +197,12 @@ export function useChatMentions(): ChatMentionsHook {
       database.tables?.forEach(table => {
         dataItems.push({
           id: `table_${table.id}`,
-          name: table.dbName,
+          name: table.storageLocation,
           displayName: table.name,
           description: `Table in ${database.name}`,
           icon: <Table className="h-3 w-3" />,
           category: 'data',
-          insertText: `@table:${table.dbName}`,
+          insertText: `@table:${table.storageLocation}`,
           available: true,
           type: 'table',
           databaseId: database.id,

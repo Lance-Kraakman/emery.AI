@@ -16,7 +16,6 @@ interface SearchFilters {
   domainTypes?: string[];
   dateRange?: { from: Date; to: Date };
 }
-import { RagIndexId } from '@/ddd/domain/rag/value-objects';
 
 import { 
   type SearchRagQuery, 
@@ -55,28 +54,47 @@ export class RagSearchApplicationService {
    * Perform vector similarity search
    */
   async search(query: SearchRagQuery): Promise<Result<SearchResult>> {
+    console.log('[RAG-SEARCH-APP] 🔍 Starting search operation');
+    console.log(`[RAG-SEARCH-APP] Raw query:`, JSON.stringify(query, null, 2));
+    
     try {
       SearchRagQueryValidator.validate(query);
+      console.log('[RAG-SEARCH-APP] ✅ Query validation passed');
     } catch (error) {
+      console.error('[RAG-SEARCH-APP] ❌ Query validation failed:', error);
       return ResultHelpers.failure(`${error instanceof Error ? error.message : String(error)}`);
     }
 
     const { indexId, searchQuery, sourceTypes, context } = SearchRagQueryValidator.toDomainParams(query);
+    console.log(`[RAG-SEARCH-APP] Parsed query - IndexId: ${indexId.value}, Text: "${searchQuery.text}", Limit: ${searchQuery.limit}`);
+    console.log(`[RAG-SEARCH-APP] Source types: ${sourceTypes?.join(', ') || 'none'}`);
+    
     const startTime = Date.now();
 
     try {
       // Verify index exists and is active
+      console.log(`[RAG-SEARCH-APP] 🔎 Looking up index: ${indexId.value}`);
       const index = await this.indexRepository.findById(indexId);
       if (!index) {
+        console.error(`[RAG-SEARCH-APP] ❌ Index not found: ${indexId.value}`);
         throw new Error(`Index ${indexId.value} not found`);
       }
 
+      console.log(`[RAG-SEARCH-APP] ✅ Found index: "${index.name}" (status: ${index.status})`);
+      
       if (index.status !== 'active') {
+        console.error(`[RAG-SEARCH-APP] ❌ Index not active: ${index.status}`);
         throw new Error(`Index ${index.name} is not active (status: ${index.status})`);
       }
 
       // Prepare search query with embeddings
+      console.log('[RAG-SEARCH-APP] 🧮 Preparing search query (generating embeddings)...');
+      const embeddingStartTime = Date.now();
+      
       const { queryEmbedding } = await this.searchDomainService.prepareSearchQuery(searchQuery);
+      
+      const embeddingTime = Date.now() - embeddingStartTime;
+      console.log(`[RAG-SEARCH-APP] ✅ Query embedding generated in ${embeddingTime}ms (${queryEmbedding.length} dimensions)`);
 
       // Perform vector search
       const vectorSearchParams: VectorSearchParams = {
@@ -87,32 +105,55 @@ export class RagSearchApplicationService {
         similarityMetric: searchQuery.similarityMetric
       };
 
+      console.log(`[RAG-SEARCH-APP] 🔍 Performing vector search with params:`, {
+        indexId: indexId.value,
+        embeddingDimensions: queryEmbedding.length,
+        limit: vectorSearchParams.limit,
+        threshold: vectorSearchParams.threshold,
+        similarityMetric: vectorSearchParams.similarityMetric
+      });
+
+      const vectorSearchStartTime = Date.now();
       const vectorResult = await this.documentRepository.vectorSearch(vectorSearchParams);
+      const vectorSearchTime = Date.now() - vectorSearchStartTime;
+      
+      console.log(`[RAG-SEARCH-APP] ✅ Vector search completed in ${vectorSearchTime}ms: ${vectorResult.documents.length} raw documents found`);
 
       // Apply domain filters and ranking
       const searchFilters: SearchFilters = {
         domainTypes: sourceTypes
       };
 
+      console.log('[RAG-SEARCH-APP] 🔽 Filtering and ranking results...');
+      const filterStartTime = Date.now();
+      
       const filteredDocuments = this.searchDomainService.filterAndRankResults(
         vectorResult.documents,
         searchQuery,
         searchFilters as any
       );
 
+      const filterTime = Date.now() - filterStartTime;
+      console.log(`[RAG-SEARCH-APP] ✅ Filtering completed in ${filterTime}ms: ${filteredDocuments.length} documents after filtering`);
+
       const searchTime = Date.now() - startTime;
 
       // Log search for analytics
       if (this.searchLogger) {
+        console.log('[RAG-SEARCH-APP] 📊 Logging search analytics...');
         await this.searchDomainService.logSearchAnalytics(
           indexId,
           searchQuery,
+          queryEmbedding,
           filteredDocuments.length,
           searchTime,
           context
         );
       }
-      console.log(`[RAG-SEARCH-APP] Search completed in ${searchTime}ms: "${searchQuery.text.substring(0, 50)}..." → ${filteredDocuments.length} results`);
+
+      console.log(`[RAG-SEARCH-APP] ✅ Search completed successfully in ${searchTime}ms`);
+      console.log(`[RAG-SEARCH-APP] Performance breakdown: embedding=${embeddingTime}ms, vector=${vectorSearchTime}ms, filter=${filterTime}ms`);
+      console.log(`[RAG-SEARCH-APP] Final results: ${filteredDocuments.length} documents for "${searchQuery.text.substring(0, 50)}..."`);
 
       return ResultHelpers.success({
         documents: filteredDocuments.map(doc => doc.toSearchResult()),
@@ -124,7 +165,17 @@ export class RagSearchApplicationService {
 
     } catch (error) {
       const searchTime = Date.now() - startTime;
-      console.error(`[RAG-SEARCH-APP] Search failed after ${searchTime}ms:`, error);
+      console.error(`[RAG-SEARCH-APP] ❌ Search failed after ${searchTime}ms`);
+      console.error(`[RAG-SEARCH-APP] Error details:`, error);
+      
+      if (error instanceof Error) {
+        console.error(`[RAG-SEARCH-APP] Error type: ${error.constructor.name}`);
+        console.error(`[RAG-SEARCH-APP] Error message: ${error.message}`);
+        if (error.stack) {
+          console.error(`[RAG-SEARCH-APP] Stack trace (first 3 lines):`);
+          console.error(error.stack.split('\n').slice(0, 3).join('\n'));
+        }
+      }
 
       return ResultHelpers.failure(`${error instanceof Error ? error.message : String(error)}`);
     }

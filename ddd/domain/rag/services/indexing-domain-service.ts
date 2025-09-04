@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Domain service for RAG indexing operations
 // Contains core business logic for indexing different data types
 
-import { RagDocument, type DocumentMetadata } from '../entities';
+import { RagDocument, RagIndex, type DocumentMetadata } from '../entities';
 import { RagIndexId, OrganizationId, type DomainType } from '../value-objects';
 
 export interface IndexingResult {
@@ -16,6 +16,7 @@ export interface IndexingResult {
 import type { Organization } from '@/ddd/domain/organizations/entities/organization';
 import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
+import type { FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { getCapabilitiesCount } from '@/ddd/domain/agents/entities/agent';
 import type { Database } from '@/ddd/domain/databases/entities/database';
@@ -28,6 +29,7 @@ import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-re
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
 import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
+import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { RagIndexRepository } from '@/ddd/domain/rag/repositories/rag-index-repository';
 import type { RagDocumentRepository } from '@/ddd/domain/rag/repositories/rag-document-repository';
 
@@ -44,6 +46,7 @@ export class IndexingDomainService {
     private readonly databaseRepository: IDatabaseRepository,
     private readonly teamRepository: ITeamRepository,
     private readonly fileStorageRepository: IFileStorageRepository,
+    private readonly tableRepository: IDynamicTableRepository,
     private readonly indexRepository: RagIndexRepository,
     private readonly documentRepository: RagDocumentRepository
   ) {}
@@ -72,10 +75,87 @@ export class IndexingDomainService {
       return [];
     }
 
-    // Note: tables and files still need special handling from application service
-    // as they require additional dependencies
-    if (domainType === 'tables' || domainType === 'files') {
-      return [];
+    // Special handling for tables - fetch data from repository
+    if (domainType === 'tables') {
+      const tables = await this.tableRepository.findByOrganization(organizationId);
+      const fieldsMap = new Map<number, any[]>();
+      const databasesMap = new Map<number, any>();
+      
+      // Fields are already included in the table entity
+      for (const table of tables) {
+        fieldsMap.set(table.id.value, table.fields);
+      }
+      
+      // Fetch databases for metadata
+      const databases = await this.databaseRepository.findByOrganization(organizationId);
+      for (const db of databases) {
+        databasesMap.set(db.id.value, db);
+      }
+      
+      return this.indexTableData(indexId, organizationId, tables, fieldsMap, databasesMap);
+    }
+    
+    // Special handling for files - discover files through table field values
+    if (domainType === 'files') {
+      const files: StoredFile[] = [];
+      
+      // Get all tables for the organization
+      const tables = await this.tableRepository.findByOrganization(organizationId);
+      
+      for (const table of tables) {
+        // Find file fields in the table
+        const fileFields = table.fields.filter(field => field.type === 'file');
+        
+        if (fileFields.length > 0) {
+          // Get rows that might contain file values
+          const rows = await this.tableRepository.findRows(table.id, { limit: 10000 });
+          
+          for (const row of rows) {
+            for (const fileField of fileFields) {
+              // Use proper Row entity method to get field value
+              const fieldValueObj = row.getFieldValue(fileField.name);
+              
+              if (fieldValueObj && !fieldValueObj.isNull()) {
+                const fieldValue = fieldValueObj.value;
+                
+                // Handle both single file and file array values  
+                const fileValues = Array.isArray(fieldValue) ? fieldValue : [fieldValue];
+                
+                for (const fileValue of fileValues) {
+                  // Type guard for FileFieldValue
+                  if (fileValue && typeof fileValue === 'object' && 's3Key' in fileValue && fileValue.s3Key) {
+                    // Cast to FileFieldValue for type safety
+                    const fileFieldValue = fileValue as FileFieldValue;
+                    
+                    // Convert FileFieldValue to StoredFile format
+                    const storedFile: StoredFile = {
+                      id: fileFieldValue.id,
+                      key: fileFieldValue.s3Key,
+                      name: fileFieldValue.name,
+                      size: fileFieldValue.size,
+                      mimeType: fileFieldValue.mimeType,
+                      uploadedAt: new Date(fileFieldValue.uploadedAt),
+                      // Add table context for better RAG indexing
+                      metadata: {
+                        organizationId: organizationId.value,
+                        tableId: table.id.value,
+                        tableName: table.name,
+                        fieldId: fileField.id.value,
+                        fieldName: fileField.name,
+                        rowId: row.id.value
+                      }
+                    };
+                    files.push(storedFile);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      console.log(`[INDEXING-DOMAIN] Found ${files.length} files across ${tables.length} tables for organization ${organizationId.value}`);
+      return this.indexFileData(indexId, organizationId, files);
     }
 
     return await (indexer as () => Promise<RagDocument[]>)();
@@ -536,13 +616,13 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
   /**
    * Execute initial indexing for a newly created index (called by queue)
    */
-  async executeInitialIndexing(indexId: string): Promise<void> {
-    const index = await this.indexRepository.findById(RagIndexId.fromString(indexId));
+  async executeInitialIndexing(indexId: RagIndexId): Promise<void> {
+    const index = await this.indexRepository.findById(indexId);
     if (!index) {
-      throw new Error(`Index ${indexId} not found`);
+      throw new Error(`Index ${indexId.value} not found`);
     }
 
-    console.log(`[RAG-INDEXING-DOMAIN] Starting initial indexing for ${index.name} (${indexId.substring(0, 8)})`);
+    console.log(`[RAG-INDEXING-DOMAIN] Starting initial indexing for ${index.name} (${indexId.value.substring(0, 8)})`);
 
     // Safe to call startIndexing - only queue calls this method
     index.startIndexing();
@@ -595,13 +675,13 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
   /**
    * Execute reindexing for an existing index (called by queue)
    */
-  async executeReindex(indexId: string, domainType?: DomainType): Promise<void> {
-    const index = await this.indexRepository.findById(RagIndexId.fromString(indexId));
+  async executeReindex(indexId: RagIndexId, domainType?: DomainType): Promise<void> {
+    const index = await this.indexRepository.findById(indexId);
     if (!index) {
-      throw new Error(`Index ${indexId} not found`);
+      throw new Error(`Index ${indexId.value} not found`);
     }
 
-    console.log(`[RAG-INDEXING-DOMAIN] Starting reindex for ${index.name} (${indexId.substring(0, 8)})${domainType ? ` - ${domainType} domain only` : ''}`);
+    console.log(`[RAG-INDEXING-DOMAIN] Starting reindex for ${index.name} (${indexId.value.substring(0, 8)})${domainType ? ` - ${domainType} domain only` : ''}`);
 
     // Safe to call startIndexing - only queue calls this method
     index.startIndexing();
@@ -665,17 +745,17 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
    * Execute incremental indexing for data change events (called by queue)
    */
   async executeDataChange(
-    indexId: string, 
+    indexId: RagIndexId, 
     domainType: DomainType, 
     sourceId: string,
     changeType: string
   ): Promise<void> {
-    const index = await this.indexRepository.findById(RagIndexId.fromString(indexId));
+    const index = await this.indexRepository.findById(indexId);
     if (!index) {
-      throw new Error(`Index ${indexId} not found`);
+      throw new Error(`Index ${indexId.value} not found`);
     }
 
-    console.log(`[RAG-INDEXING-DOMAIN] Processing ${changeType} for ${domainType}:${sourceId} in index ${index.name} (${indexId.substring(0, 8)})`);
+    console.log(`[RAG-INDEXING-DOMAIN] Processing ${changeType} for ${domainType}:${sourceId} in index ${index.name} (${indexId.value.substring(0, 8)})`);
 
     // Don't change index status for data changes - they're incremental updates
     // Only log if index is not in active state
@@ -725,6 +805,102 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
     } catch (error) {
       console.error(`[RAG-INDEXING-DOMAIN] Data change processing failed for ${domainType}:${sourceId} in ${index.name}:`, error);
       // Don't mark index as failed for data change errors - they're incremental
+      throw error;
+    }
+  }
+
+  // ================================================================
+  // PUBLIC API - Called directly by scheduler
+  // ================================================================
+
+  /**
+   * Public reindexData method for scheduler to call directly
+   * Handles organization-wide reindexing with auto-index creation
+   */
+  async reindexData(organizationId: OrganizationId, domainType?: DomainType): Promise<void> {
+    console.log(`[RAG-INDEXING-DOMAIN] Starting reindex for organization ${organizationId.value}${domainType ? ` - ${domainType} domain only` : ''}`);
+
+    let indexes = await this.indexRepository.findByOrganization(organizationId);
+    
+    // AIDEV-NOTE: Auto-create default index if organization has no indexes
+    // This ensures all organizations can benefit from RAG indexing without manual setup
+    if (indexes.length === 0) {
+      console.log(`[RAG-INDEXING-DOMAIN] No indexes found for organization ${organizationId.value}, creating default index`);
+      
+      try {
+        const defaultIndex = await this.createDefaultIndexForOrganization(organizationId);
+        indexes = [defaultIndex];
+        console.log(`[RAG-INDEXING-DOMAIN] Auto-created default index for organization ${organizationId.value}`);
+      } catch (error) {
+        console.error(`[RAG-INDEXING-DOMAIN] Failed to auto-create default index for organization ${organizationId.value}:`, error);
+        return;
+      }
+    }
+
+    console.log(`[RAG-INDEXING-DOMAIN] Reindexing ${indexes.length} indexes for organization ${organizationId.value}`);
+
+    // Process indexes and queue individual reindex operations
+    for (const index of indexes) {
+      try {
+        if (domainType) {
+          // Queue targeted domain type reindex
+          await this.executeReindex(index.id, domainType);
+        } else {
+          // Queue full reindex
+          await this.executeReindex(index.id);
+        }
+      } catch (error) {
+        console.error(`[RAG-INDEXING-DOMAIN] Failed to reindex ${index.name}:`, error);
+        // Continue with other indexes
+      }
+    }
+  }
+
+  /**
+   * AIDEV-NOTE: Helper method to create a comprehensive default RAG index for an organization
+   * This ensures organizations always have a default index covering all domain types
+   * Called by reindexData() when no indexes exist
+   */
+  private async createDefaultIndexForOrganization(organizationId: OrganizationId): Promise<RagIndex> {
+    // Check for existing default index to avoid duplicates
+    const existingIndexes = await this.indexRepository.findByOrganization(organizationId);
+    const defaultIndexName = 'Organization Knowledge Base';
+    
+    // If default index already exists, return it
+    const existingDefault = existingIndexes.find(idx => idx.name === defaultIndexName);
+    if (existingDefault) {
+      console.log(`[RAG-INDEXING-DOMAIN] Default index already exists for organization ${organizationId.value}`);
+      return existingDefault;
+    }
+
+    // Create comprehensive default index covering all domain types
+    const defaultIndex = RagIndex.create({
+      name: defaultIndexName,
+      description: 'Automatic RAG index for organizational data - covers all tables, agents, teams, databases, and files',
+      organizationId,
+      domainTypes: ['tables', 'agents', 'teams', 'organizations', 'databases', 'files'], // All available domain types
+    });
+
+    console.log(`[RAG-INDEXING-DOMAIN] Creating default RAG index for organization ${organizationId.value}`);
+    
+    try {
+      await this.indexRepository.save(defaultIndex);
+      console.log(`[RAG-INDEXING-DOMAIN] Default index created successfully: ${defaultIndex.name} (${defaultIndex.id.value})`);
+      return defaultIndex;
+    } catch (error) {
+      // Handle race condition: another request may have created the default index
+      console.log(`[RAG-INDEXING-DOMAIN] Index creation failed, checking for race condition...`);
+      
+      // Re-check for existing default index (race condition)
+      const raceCheckIndexes = await this.indexRepository.findByOrganization(organizationId);
+      const existingAfterRace = raceCheckIndexes.find(idx => idx.name === defaultIndexName);
+      
+      if (existingAfterRace) {
+        console.log(`[RAG-INDEXING-DOMAIN] Race condition detected - default index created by another request: ${existingAfterRace.name}`);
+        return existingAfterRace;
+      }
+      
+      // If still no index exists, re-throw the original error
       throw error;
     }
   }

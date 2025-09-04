@@ -8,7 +8,7 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['./tests/integration/setup.ts'],
     // NO globalSetup - assumes containers are already running
-    testTimeout: 30000,  // Shorter timeout since containers are already running
+    testTimeout: 60000,  // Increased timeout for embedding API calls
     hookTimeout: 10000,  // Much shorter since no container startup
     poolOptions: {
       threads: {
@@ -38,6 +38,10 @@ export default defineConfig({
       TEST_GRPC_URL: 'localhost:50053',
       WORKER_ADDRESS: 'localhost:50053',
       NODE_ENV: 'test',
+      // AI/ML API Keys  
+      HF_TOKEN: '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',
+      OPENAI_API_KEY: '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',
+      // AI/ML API Keys for real functionality (not mocked)
       // S3 Configuration (MinIO for integration tests - matches .env.local.test)
       AWS_ACCESS_KEY_ID: 'minioadmin',
       AWS_SECRET_ACCESS_KEY: 'minioadmin',
