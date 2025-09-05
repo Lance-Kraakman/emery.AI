@@ -1,10 +1,17 @@
-import { getUserRepository, getOrganizationRepository } from '@/ddd/application/di/container';
+import { getUserRepository, getOrganizationRepository, getAgentRepository, getTeamApplicationService, initializeDI } from '@/ddd/application/di/container';
 import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
 import { EmailAddress } from '@/ddd/domain/shared/value-objects/email-address';
 import { OrganizationName } from '@/ddd/domain/shared/value-objects/organization-name';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
+import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
+import { TeamId } from '@/ddd/domain/shared/value-objects/team-id';
+import { AgentStatus } from '@/ddd/domain/shared/value-objects/agent-status';
 import type { CreateUserData } from '@/ddd/domain/users/entities/user';
 import type { CreateOrganizationData } from '@/ddd/domain/organizations/entities/organization';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import type { Team } from '@/ddd/domain/teams/entities/team';
+import type { CreateTeamCommand } from '@/ddd/application/services/teams/team-application-service';
+import { testClient } from './integration-helpers';
 
 export interface TestContext {
   organizationId: OrganizationId;
@@ -171,4 +178,138 @@ export async function createTestOrganizationWithRoles(
     }
     throw error;
   }
+}
+
+/**
+ * Create a test user in an existing organization
+ * 
+ * AIDEV-NOTE: Creates user with specified role and organization context.
+ * Used for permission testing scenarios.
+ */
+export async function createTestUser(
+  email: string,
+  name: string,
+  organizationId: OrganizationId | number,
+  role: 'owner' | 'admin' | 'member' = 'member'
+): Promise<{ id: string; email: string; name: string; organizationRole: string }> {
+  const userRepository = getUserRepository();
+  
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substr(2, 5);
+  const uniqueEmail = email.includes('@') ? email.replace('@', `-${timestamp}-${random}@`) : `${email}-${timestamp}-${random}@test.com`;
+  
+  const userId = UserId.generate();
+  const orgId = typeof organizationId === 'number' ? organizationId : organizationId.value;
+  
+  const userData: CreateUserData = {
+    id: userId,
+    name,
+    email: EmailAddress.fromString(uniqueEmail),
+    organizationRole: role,
+    currentOrganizationId: OrganizationId.fromNumber(orgId)
+  };
+  
+  const user = await userRepository.create(userData);
+  
+  return {
+    id: user.id.value,
+    email: user.email.value,
+    name: user.name,
+    organizationRole: user.organizationRole.value
+  };
+}
+
+/**
+ * Create a test agent for permission testing
+ * 
+ * AIDEV-NOTE: Creates agent with owner and organization context.
+ * Returns agent with numeric ID for permission testing.
+ */
+export async function createTestAgent(
+  name: string,
+  ownerId: UserId,
+  organizationId: OrganizationId
+): Promise<{ id: AgentId; name: string; ownerId: UserId; organizationId: OrganizationId }> {
+  const agentRepository = getAgentRepository();
+  
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substr(2, 5);
+  const uniqueName = `${name} ${timestamp}-${random}`;
+  
+  const agentEntity: Agent = {
+    id: AgentId.newEntity(), // New entity, ID will be set by repository
+    name: uniqueName,
+    role: 'assistant',
+    description: 'Test agent description',
+    persona: 'Test agent persona',
+    tools: [],
+    servers: [],
+    capabilities: [],
+    status: AgentStatus.fromString('active'),
+    organizationId,
+    ownerId,
+    databaseId: null,
+    apiKey: null,
+    agentType: 'general',
+    specialization: undefined,
+    trigger: undefined,
+    createdAt: null,
+    updatedAt: null
+  };
+  
+  const agent = await agentRepository.save(agentEntity);
+  
+  return {
+    id: agent.id,
+    name: agent.name,
+    ownerId: agent.ownerId,
+    organizationId: agent.organizationId
+  };
+}
+
+/**
+ * Create a test team for permission testing
+ * 
+ * AIDEV-NOTE: Creates team with organization context.
+ * Returns team with numeric ID for permission testing.
+ */
+export async function createTestTeam(
+  name: string,
+  organizationId: OrganizationId
+): Promise<{ id: TeamId; name: string; organizationId: OrganizationId }> {
+  const teamApplicationService = getTeamApplicationService();
+  
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substr(2, 5);
+  const uniqueName = `${name} ${timestamp}-${random}`;
+  
+  const command = {
+    name: uniqueName,
+    organizationId: organizationId.value,
+    description: 'Test team for permission testing'
+  };
+  
+  const result = await teamApplicationService.createTeam(command);
+  
+  if (!result.success) {
+    throw new Error(`Failed to create test team: ${result.error}`);
+  }
+  
+  return {
+    id: result.data!.id,
+    name: result.data!.name,
+    organizationId: result.data!.organizationId
+  };
+}
+
+/**
+ * Initialize DI container with proper context-aware database client for integration tests
+ * 
+ * AIDEV-NOTE: This ensures tests use the context-aware database client for RLS functionality
+ * while providing the raw client for cleanup operations.
+ */
+export function initializeTestDI(): void {
+  // Use context-aware client for repositories (handles RLS automatically)
+  initializeDI(testClient.db as any);
+  console.log('✅ DI container initialized with context-aware database client for tests');
 }

@@ -88,12 +88,12 @@ export class TeamApplicationService {
         organizationId: command.organizationId
       });
 
-      // Save to repository
-      await this.teamRepository.save(team);
+      // Save to repository - get saved team with real database ID
+      const savedTeam = await this.teamRepository.save(team);
 
       return {
         success: true,
-        data: team,
+        data: savedTeam,
         warnings: warnings.length > 0 ? warnings : undefined
       };
     } catch (error) {
@@ -148,11 +148,11 @@ export class TeamApplicationService {
       });
 
       // Save updated team
-      await this.teamRepository.save(updatedTeam);
+      const savedTeam = await this.teamRepository.save(updatedTeam);
 
       return {
         success: true,
-        data: updatedTeam,
+        data: savedTeam,
         warnings: warnings.length > 0 ? warnings : undefined
       };
     } catch (error) {
@@ -286,11 +286,11 @@ export class TeamApplicationService {
         createdAt: existingTeam.createdAt
       });
 
-      await this.teamRepository.save(updatedTeam);
+      const savedTeam = await this.teamRepository.save(updatedTeam);
 
       return {
         success: true,
-        data: updatedTeam
+        data: savedTeam
       };
     } catch (error) {
       console.error("Error adding agent to team:", error);
@@ -337,11 +337,11 @@ export class TeamApplicationService {
         createdAt: existingTeam.createdAt
       });
 
-      await this.teamRepository.save(updatedTeam);
+      const savedTeam = await this.teamRepository.save(updatedTeam);
 
       return {
         success: true,
-        data: updatedTeam
+        data: savedTeam
       };
     } catch (error) {
       console.error("Error removing agent from team:", error);
@@ -404,11 +404,11 @@ export class TeamApplicationService {
         createdAt: existingTeam.createdAt
       });
 
-      await this.teamRepository.save(updatedTeam);
+      const savedTeam = await this.teamRepository.save(updatedTeam);
 
       return {
         success: true,
-        data: updatedTeam
+        data: savedTeam
       };
     } catch (error) {
       console.error("Error bulk assigning agents:", error);

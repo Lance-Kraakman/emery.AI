@@ -6,9 +6,9 @@ import {
   getIndexingDomainService,
   getRagIndexRepository,
   getRagDocumentRepository,
-  initializeDI,
   contextManager
 } from '@/ddd/application/di/container';
+import { initializeTestDI } from '../shared/test-setup';
 import { testClient } from '../shared/integration-helpers';
 import { createTestOrganization, type TestContext } from '../shared/test-setup';
 import { RagIndex } from '@/ddd/domain/rag/entities';
@@ -19,9 +19,7 @@ describe('RAG Indexing Domain Service Integration Tests', () => {
 
   beforeAll(async () => {
     // Initialize DI container
-    const { contextAwareDb } = await import('@/lib/db/simple-context-proxy');
-    const { rawClient } = await import('@/lib/db/client');
-    initializeDI(contextAwareDb, rawClient);
+    initializeTestDI();
   });
 
   afterEach(async () => {

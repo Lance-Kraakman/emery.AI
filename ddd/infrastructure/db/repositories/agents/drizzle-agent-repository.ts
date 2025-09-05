@@ -3,6 +3,7 @@
 
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import type { AgentTaskPermissions } from '@/ddd/application/services/agents/agent-permissions-application-service';
 import { agents } from '@/lib/db/schema';
 import { eq, and, isNotNull, sql } from 'drizzle-orm';
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
@@ -176,5 +177,22 @@ export class DrizzleAgentRepository implements IAgentRepository {
       createdAt: data.createdAt,
       updatedAt: data.updatedAt
     };
+  }
+
+  async updateTaskPermissions(id: AgentId, permissions: AgentTaskPermissions): Promise<void> {
+    await this.db
+      .update(agents)
+      .set({ taskPermissions: permissions })
+      .where(eq(agents.id, id.value));
+  }
+
+  async getTaskPermissions(id: AgentId): Promise<AgentTaskPermissions | null> {
+    const [result] = await this.db
+      .select({ taskPermissions: agents.taskPermissions })
+      .from(agents)
+      .where(eq(agents.id, id.value))
+      .limit(1);
+    
+    return result?.taskPermissions || null;
   }
 }

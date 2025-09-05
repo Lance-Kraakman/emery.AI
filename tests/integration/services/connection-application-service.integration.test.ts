@@ -1,10 +1,11 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { getConnectionApplicationService, initializeDI } from '@/ddd/application/di/container';
+import { getConnectionApplicationService } from '@/ddd/application/di/container';
 import { UserId } from '@/ddd/domain/shared/value-objects';
 import { AppName, ConnectionId } from '@/ddd/domain/connections/value-objects';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';
 import type { TestContext } from '../shared/test-setup';
+import { initializeTestDI } from '../shared/test-setup';
 
 // AIDEV-NOTE: Comprehensive Connection Application Service integration tests
 // Tests complete OAuth connection workflows with real Pipedream integration
@@ -57,7 +58,7 @@ describe('Connection Application Service Integration Tests', () => {
   
   beforeAll(async () => {
     // Initialize DI container
-    initializeDI(testClient.db as any, testClient.db as any);
+    initializeTestDI();
     await testClient.verifyDatabaseConnection();
   });
 

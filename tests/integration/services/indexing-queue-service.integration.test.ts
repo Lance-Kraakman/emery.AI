@@ -5,9 +5,9 @@ import { expect, test, describe, beforeAll, afterEach } from 'vitest';
 import { 
   getIndexingQueueService,
   getRagIndexRepository,
-  initializeDI,
   contextManager
 } from '@/ddd/application/di/container';
+import { initializeTestDI } from '../shared/test-setup';
 import { testClient } from '../shared/integration-helpers';
 import { createTestOrganization, type TestContext } from '../shared/test-setup';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
@@ -18,9 +18,7 @@ describe('Indexing Queue Service Integration Tests', () => {
 
   beforeAll(async () => {
     // Initialize DI container
-    const { contextAwareDb } = await import('@/lib/db/simple-context-proxy');
-    const { rawClient } = await import('@/lib/db/client');
-    initializeDI(contextAwareDb, rawClient);
+    initializeTestDI();
   });
 
   afterEach(async () => {

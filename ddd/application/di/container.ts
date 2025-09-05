@@ -179,7 +179,7 @@ export class DIContainer {
    * Initialize the container with database clients
    * This should be called once at application startup
    */
-  initialize(db: DbClient | ContextAwareDbClient, rawClient: postgres.Sql): void {
+  initialize(db: DbClient | ContextAwareDbClient): void {
     if (this.isInitialized) {
       console.warn('DIContainer is already initialized');
       return;
@@ -197,9 +197,9 @@ export class DIContainer {
 
     // Register other repository implementations
     this.repositories.set('IOrganizationRepository', 
-      new DrizzleOrganizationRepository(db, rawClient));
+      new DrizzleOrganizationRepository(db));
     this.repositories.set('IUserRepository', 
-      new DrizzleUserRepository(db, rawClient));
+      new DrizzleUserRepository(db));
 
     // Register team and invitation repositories
     const teamRepository = new DrizzleTeamRepository(db);
@@ -536,8 +536,8 @@ export const getConnectionApplicationService = createGetter('ConnectionApplicati
 // RLS context management removed - RLS policies work automatically
 
 // Helper to initialize container from existing clients
-export function initializeDI(db: DbClient | ContextAwareDbClient, rawClient: postgres.Sql): void {
-  DIContainer.getInstance().initialize(db, rawClient);
+export function initializeDI(db: DbClient | ContextAwareDbClient): void {
+  DIContainer.getInstance().initialize(db);
 }
 
 // Export context manager for API routes and tests

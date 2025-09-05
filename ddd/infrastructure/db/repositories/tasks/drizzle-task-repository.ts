@@ -58,9 +58,29 @@ export class DrizzleTaskRepository implements ITaskRepository {
     
     if (existing.length === 0) {
       // New task - do a straight INSERT (should trigger database triggers)
-      await this.db
-        .insert(tasks)
-        .values(data);
+      try {        
+        await this.db
+          .insert(tasks)
+          .values(data);
+        
+        console.log(`[DRIZZLE-TASK-REPO] Successfully inserted task ${task.id.value.toString().substring(0, 8)}`);
+      } catch (error) {
+        console.error(`[DRIZZLE-TASK-REPO] Failed to insert task ${task.id.value.toString().substring(0, 8)}:`, error);
+        
+        // Check if this is an RLS policy violation
+        if (error instanceof Error && (
+          error.message.includes('permission denied') || 
+          error.message.includes('policy violation') ||
+          error.message.includes('insufficient privilege') ||
+          error.message.includes('row level security') ||
+          error.message.includes('RLS')
+        )) {
+          throw new Error(`Permission denied: You do not have permission to assign tasks to this agent`);
+        }
+        
+        // Re-throw other database errors as-is
+        throw error;
+      }
     } else {
       // Existing task - do an UPDATE
       await this.db

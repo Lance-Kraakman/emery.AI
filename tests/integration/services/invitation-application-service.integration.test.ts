@@ -1,10 +1,11 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { getInvitationApplicationService, getUserRepository, initializeDI } from '@/ddd/application/di/container';
+import { getInvitationApplicationService, getUserRepository } from '@/ddd/application/di/container';
 import { OrganizationId, UserId, EmailAddress, OrganizationRole, InvitationToken } from '@/ddd/domain/shared/value-objects';
 import type { SendInvitationCommand, AcceptInvitationCommand, BulkInvitationCommand } from '@/ddd/application/services/invitations/invitation-application-service';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';
 import type { TestContext } from '../shared/test-setup';
+import { initializeTestDI } from '../shared/test-setup';
 
 // AIDEV-NOTE: Invitation Application Service integration tests using TestCase pattern
 // Tests invitation workflow: send, accept, revoke, resend, and bulk operations
@@ -109,7 +110,7 @@ describe('Invitation Application Service Integration Tests', () => {
   
   beforeAll(() => {
     // Initialize DI container
-    initializeDI(testClient.db as any, testClient.db as any);
+    initializeTestDI();
   });
 
   afterAll(async () => {
