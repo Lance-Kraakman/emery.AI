@@ -1,7 +1,7 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import DashboardMainContent from '../components/DashboardMainContent'
+import DashboardMainContent from '@/app/components/DashboardMainContent'
 import { MissionControlCanvas } from '@/components/canvas'
 
 /**
