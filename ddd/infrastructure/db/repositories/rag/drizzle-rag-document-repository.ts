@@ -350,6 +350,22 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
 
   // Private mapping methods
   private mapToDomainEntity(record: any): RagDocument {
+    // Parse embedding - handle pgvector string format, arrays, and nulls
+    let embedding: number[] = [];
+    if (record.embedding) {
+      if (typeof record.embedding === 'string') {
+        // pgvector returns embeddings as strings like "[0.1,0.2,...]"
+        // Remove brackets and parse
+        const cleanString = record.embedding.replace(/^\[|\]$/g, '');
+        embedding = cleanString.split(',').map((v: string) => parseFloat(v.trim()));
+      } else if (Array.isArray(record.embedding)) {
+        embedding = record.embedding;
+      } else {
+        console.warn('[DOCUMENT-REPO] Unexpected embedding type:', typeof record.embedding);
+        embedding = [];
+      }
+    }
+
     return RagDocument.fromPersistence({
       id: record.id,
       indexId: record.rag_index_id || record.ragIndexId,
@@ -360,9 +376,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
       title: record.title,
       content: record.content,
       metadata: record.metadata as DocumentMetadata,
-      embedding: typeof record.embedding === 'string' 
-        ? JSON.parse(record.embedding) 
-        : record.embedding,
+      embedding: embedding,
       contentHash: record.content_hash || record.contentHash,
       createdAt: record.indexed_at || record.indexedAt || new Date(),
       updatedAt: record.source_updated_at || record.sourceUpdatedAt || new Date(),
