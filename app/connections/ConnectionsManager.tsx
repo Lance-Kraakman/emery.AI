@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, RefreshCw } from 'lucide-react';
 import { getUserOAuthConnections, getAppConnectionUrl, disconnectOAuthAccount } from '@/app/actions/connections';
+import { Button } from '@/components/ui/button';
 
 import { NormalizedConnection as Connection } from '@/lib/pipedream/connection-mapper';
 
@@ -132,14 +133,14 @@ export function ConnectionsManager() {
 
     if (connection.status === 'error') {
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 capitalize">
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-destructive/10 text-destructive capitalize">
           {statusText}
         </span>
       );
     }
 
     return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 capitalize">
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground capitalize">
         {statusText}
       </span>
     );
@@ -148,8 +149,8 @@ export function ConnectionsManager() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
-        <span className="ml-2 text-gray-600">Loading connections...</span>
+        <RefreshCw className="w-6 h-6 animate-spin text-primary" />
+        <span className="ml-2 text-muted-foreground">Loading connections...</span>
       </div>
     );
   }
@@ -157,11 +158,11 @@ export function ConnectionsManager() {
   return (
     <div className="space-y-6">
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
-          <div className="text-red-800">{error}</div>
+        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+          <div className="text-destructive font-medium">{error}</div>
           <button
             onClick={loadConnections}
-            className="mt-2 text-red-600 hover:text-red-800 text-sm underline"
+            className="mt-2 text-destructive hover:text-destructive/80 text-sm underline transition-colors"
           >
             Try again
           </button>
@@ -170,14 +171,14 @@ export function ConnectionsManager() {
 
       {/* Connected Apps */}
       {connections && connections.length > 0 && (
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-medium text-gray-900">Connected Apps</h2>
-            <p className="text-sm text-gray-500">
+        <div className="bg-card border border-border rounded-lg shadow-sm">
+          <div className="px-6 py-4 border-b border-border">
+            <h2 className="text-lg font-medium">Connected Apps</h2>
+            <p className="text-sm text-muted-foreground">
               Apps that your agents can use on your behalf
             </p>
           </div>
-          <div className="divide-y divide-gray-200">
+          <div className="divide-y divide-border">
             {connections?.map((connection) => (
               <div key={connection.id} className="px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center">
@@ -185,11 +186,11 @@ export function ConnectionsManager() {
                     <img className="w-10 h-10 rounded-lg" src={AVAILABLE_APPS.find(a => a.id === connection.app)?.icon || ''} alt={connection.app} />
                   </div>
                   <div className="ml-4">
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm font-medium">
                       {AVAILABLE_APPS.find(a => a.id === connection.app)?.name || 'Unknown App'}
                     </div>
                     {connection.account_name && (
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-muted-foreground">
                         {connection.account_name}
                       </div>
                     )}
@@ -197,10 +198,12 @@ export function ConnectionsManager() {
                 </div>
                 <div className="flex items-center space-x-4">
                   {getConnectionStatus(connection)}
-                  <button
+                  <Button
                     onClick={() => handleDisconnectAccount(connection.id)}
                     disabled={disconnectingAccount === connection.id}
-                    className="text-gray-400 hover:text-red-600 disabled:opacity-50"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-destructive"
                     title="Disconnect"
                   >
                     {disconnectingAccount === connection.id ? (
@@ -208,7 +211,7 @@ export function ConnectionsManager() {
                     ) : (
                       <Trash2 size={16} />
                     )}
-                  </button>
+                  </Button>
                 </div>
               </div>
             ))}
@@ -217,10 +220,10 @@ export function ConnectionsManager() {
       )}
 
       {/* Available Apps */}
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-medium text-gray-900">Available Apps</h2>
-          <p className="text-sm text-gray-500">
+      <div className="bg-card border border-border rounded-lg shadow-sm">
+        <div className="px-6 py-4 border-b border-border">
+          <h2 className="text-lg font-medium">Available Apps</h2>
+          <p className="text-sm text-muted-foreground">
             Connect apps to allow your agents to use them
           </p>
         </div>
@@ -237,7 +240,7 @@ export function ConnectionsManager() {
                     <img className="w-10 h-10 rounded-lg" src={app.icon} alt={app.name} />
                   </div>
                   <div className="ml-4">
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm font-medium">
                       {app.name}
                     </div>
                     <div className="text-sm text-gray-500">
@@ -247,12 +250,12 @@ export function ConnectionsManager() {
                 </div>
                 <div>
                   {isConnected ? (
-                    <span className="text-green-600 text-sm">Connected</span>
+                    <span className="text-green-600 text-sm font-medium">Connected</span>
                   ) : (
-                    <button
+                    <Button
                       onClick={() => handleConnectApp(app.id)}
                       disabled={isConnecting}
-                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                      size="sm"
                     >
                       {isConnecting ? (
                         <RefreshCw className="w-4 h-4 animate-spin mr-1" />
@@ -260,7 +263,7 @@ export function ConnectionsManager() {
                         <Plus className="w-4 h-4 mr-1" />
                       )}
                       Connect
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>

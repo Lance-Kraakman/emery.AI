@@ -3,7 +3,7 @@
  * Uses HF_TOKEN for authentication
  */
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { HfInference } from '@huggingface/inference'
+import { InferenceClient } from '@huggingface/inference'
 
 const HF_MODELS = {
   chat: {
@@ -17,7 +17,6 @@ const HF_MODELS = {
     ]
   }
 }
-
 
 /**
  * Get chat model for HuggingFace via OpenAI-compatible endpoint
@@ -62,8 +61,12 @@ export function getEmbeddingModel(modelOverride?: string) {
     ? modelOverride 
     : HF_MODELS.embedding.default
   
-  // Use direct HuggingFace API for embeddings (OpenAI-compatible doesn't support embeddings)
-  const hfClient = new HfInference(hfToken)
+  // Use direct HuggingFace Serverless API for embeddings (bypasses router issues)
+  const hfClient = new InferenceClient(hfToken, {
+    // Use direct model endpoint instead of router to avoid provider selection issues
+    endpointUrl: `https://d5dbt5o5chwagd2v.us-east-1.aws.endpoints.huggingface.cloud`,
+    retry_on_error: true,
+  })
   
   // Return an object that matches the expected embedding interface
   return {
@@ -72,18 +75,56 @@ export function getEmbeddingModel(modelOverride?: string) {
     
     // Method to generate embeddings compatible with AI SDK
     async generateEmbedding(text: string): Promise<number[]> {
-      const result = await hfClient.featureExtraction({
-        model: modelName,
-        inputs: text,
-      })
+      try {
+        const result = await hfClient.featureExtraction({
+          inputs: text,
+        })
+        
+        // Handle nested array response from HuggingFace
+        if (Array.isArray(result) && Array.isArray(result[0])) {
+          const embedding = result[0] as number[];
+          console.log(`[HF-EMBEDDING] Got ${embedding.length} dimensions`);
+          return embedding;
+        } else if (Array.isArray(result)) {
+          const embedding = result as number[];
+          console.log(`[HF-EMBEDDING] Got ${embedding.length} dimensions`);
+          return embedding;
+        } else {
+          console.error(`[HF-EMBEDDING] Unexpected response:`, result);
+          throw new Error('Unexpected embedding response format from HuggingFace')
+        }
+      } catch (error) {
+        console.error(`[HF-EMBEDDING] API Error:`, error);
+        throw error;
+      }
+    },
+
+    // Method to generate batch embeddings using HuggingFace batch API
+    async generateEmbeddingsBatch(texts: string[]): Promise<number[][]> {
+      console.log(`[HF-BATCH] Processing ${texts.length} texts`);
       
-      // Handle nested array response from HuggingFace
-      if (Array.isArray(result) && Array.isArray(result[0])) {
-        return result[0] as number[]
-      } else if (Array.isArray(result)) {
-        return result as number[]
-      } else {
-        throw new Error('Unexpected embedding response format from HuggingFace')
+      try {
+        const result = await hfClient.featureExtraction({
+          inputs: texts,
+        })
+        
+        // HuggingFace returns array of embeddings for batch input
+        if (Array.isArray(result)) {
+          if (result.length > 0 && Array.isArray(result[0])) {
+            const embeddings = result as number[][];
+            console.log(`[HF-BATCH] Got ${embeddings.length} embeddings, ${embeddings[0]?.length || 0} dimensions each`);
+            return embeddings;
+          } else {
+            console.error(`[HF-BATCH] Unexpected batch response:`, result);
+            throw new Error('Unexpected batch embedding response format from HuggingFace')
+          }
+        } else {
+          console.error(`[HF-BATCH] Expected array, got:`, result);
+          throw new Error('Expected array response for batch embedding generation')
+        }
+      } catch (error) {
+        console.error(`[HF-BATCH] API Error:`, error);
+        throw error;
       }
     }
   }

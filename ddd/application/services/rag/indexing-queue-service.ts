@@ -2,7 +2,9 @@
 // Eliminates race conditions by ensuring sequential processing per index
 // Handles retries and failure states gracefully
 
-import { DomainType } from '@/ddd/domain/rag/value-objects';
+import { DomainType, RagIndexId } from '@/ddd/domain/rag/value-objects';
+import { getIndexingDomainService } from '../../di/container';
+
 
 export interface QueueEntry {
   id: string;                    // UUID for operation tracking
@@ -273,9 +275,6 @@ export class IndexingQueueService {
    * Execute a single queue operation
    */
   private async executeOperation(entry: QueueEntry): Promise<void> {
-    // Import here to avoid circular dependencies
-    const { getIndexingDomainService } = await import('@/ddd/application/di/container');
-    const { RagIndexId } = await import('@/ddd/domain/rag/value-objects');
     const indexingService = getIndexingDomainService();
     
     // Convert string indexId to RagIndexId value object

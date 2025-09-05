@@ -6,7 +6,13 @@ import {
   getSchedulerService,
   taskSchedulingContainer
 } from "@/ddd/application/di/scheduling-container";
-import { getIndexingDomainService, getAgentTaskApplicationService, initializeDI } from "@/ddd/application/di/container";
+import { 
+  getIndexingDomainService, 
+  getAgentTaskApplicationService, 
+  initializeDI,
+  getIndexingQueueService,
+  getRagIndexRepository 
+} from "@/ddd/application/di/container";
 import { createNotificationClient, rawClient } from "@/lib/db/client";
 import { contextAwareDb } from "@/lib/db/simple-context-proxy";
 import { TaskId } from "@/ddd/domain/tasks/value-objects/task-id";
@@ -30,7 +36,9 @@ class EventDrivenScheduler {
     private indexingDomainService = getIndexingDomainService(),
     private schedulerService = getSchedulerService(),
     private taskRepository = getTaskRepository(),
-    private taskQueueService = getTaskQueueService()
+    private taskQueueService = getTaskQueueService(),
+    private indexingQueueService = getIndexingQueueService(),
+    private ragIndexRepository = getRagIndexRepository()
   ) {}
 
   async start(): Promise<void> {
@@ -107,12 +115,70 @@ class EventDrivenScheduler {
       const organizationId = OrganizationId.fromNumber(event.organizationId);
       const domainType = event.domainType as DomainType;
 
-      console.log(`🔄 Starting reindex for org=${event.organizationId}, type=${event.domainType}`);
-      await this.indexingDomainService.reindexData(organizationId, domainType);
-      console.log(`✅ Reindex completed for org=${event.organizationId}, type=${event.domainType}`);
+      console.log(`🔄 Queuing reindex for org=${event.organizationId}, type=${event.domainType}`);
+
+      // Get existing indexes for this organization
+      const indexes = await this.ragIndexRepository.findByOrganization(organizationId);
+
+      if (indexes.length === 0) {
+        // No indexes exist, create a default index first, then queue initial indexing
+        console.log(`[SCHEDULER] No indexes found for org ${event.organizationId}, creating default index`);
+        
+        try {
+          // Create default index using domain service helper
+          const defaultIndex = await this.createDefaultIndex(organizationId);
+          
+          // Now queue initial indexing for the newly created index
+          await this.indexingQueueService.enqueue({
+            indexId: defaultIndex.id.value,
+            operation: 'initial',
+            domainType,
+            maxRetries: 3
+          });
+          
+          console.log(`📥 Created default index and queued initial indexing for org=${event.organizationId}, type=${event.domainType}`);
+        } catch (error) {
+          console.error(`❌ Failed to create default index for org ${event.organizationId}:`, error);
+          return;
+        }
+      } else {
+        // Queue reindex for each existing index
+        console.log(`[SCHEDULER] Found ${indexes.length} indexes for org ${event.organizationId}, queuing reindex operations`);
+        
+        for (const index of indexes) {
+          await this.indexingQueueService.enqueue({
+            indexId: index.id.value,
+            operation: 'reindex',
+            domainType,
+            maxRetries: 3
+          });
+          console.log(`📥 Queued reindex for index ${index.name} (${index.id.value.substring(0, 8)})`);
+        }
+        
+        console.log(`📥 Queued ${indexes.length} reindex operations for org=${event.organizationId}, type=${event.domainType}`);
+      }
     } catch (error) {
-      console.error(`❌ Failed to reindex for org ${event.organizationId}:`, error);
+      console.error(`❌ Failed to queue reindex operations for org ${event.organizationId}:`, error);
     }
+  }
+
+  /**
+   * Create a default RAG index for an organization (extracted from domain service logic)
+   */
+  private async createDefaultIndex(organizationId: OrganizationId) {
+    const { RagIndex } = await import('@/ddd/domain/rag/entities/rag-index');
+    
+    const defaultIndex = RagIndex.create({
+      name: 'Organization Knowledge Base',
+      description: 'Automatic RAG index for organizational data - covers all tables, agents, teams, databases, and files',
+      organizationId,
+      domainTypes: ['tables', 'agents', 'teams', 'organizations', 'databases', 'files']
+    });
+
+    await this.ragIndexRepository.save(defaultIndex);
+    console.log(`[SCHEDULER] Created default index "${defaultIndex.name}" for organization ${organizationId.value}`);
+    
+    return defaultIndex;
   }
 
   private startFallbackTimer(): void {

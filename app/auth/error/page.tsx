@@ -3,32 +3,54 @@
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Suspense } from "react"
+import { Button } from "@/components/ui/button"
+import { AlertCircle } from "lucide-react"
 
 function AuthErrorContent() {
   const searchParams = useSearchParams()
   const error = searchParams.get("error")
 
+  const getErrorMessage = (error: string | null) => {
+    switch (error) {
+      case "Configuration":
+        return "There was an error with the authentication configuration."
+      case "AccessDenied":
+        return "Access was denied. You may not have permission to sign in."
+      case "Verification":
+        return "The verification link was invalid or has expired."
+      default:
+        return "An unknown error occurred during authentication."
+    }
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Authentication Error
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            {error === "Configuration" && "There was an error with the authentication configuration."}
-            {error === "AccessDenied" && "Access was denied. You may not have permission to sign in."}
-            {error === "Verification" && "The verification link was invalid or has expired."}
-            {!error && "An unknown error occurred during authentication."}
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-destructive/10 mb-4">
+            <AlertCircle className="w-6 h-6 text-destructive" />
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">Authentication Error</h1>
+          <p className="mt-2 text-muted-foreground">
+            {getErrorMessage(error)}
           </p>
         </div>
-        <div className="mt-8">
-          <Link
-            href="/auth/signin"
-            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            Try again
-          </Link>
+        
+        <div className="bg-card border border-border rounded-lg shadow-sm p-6">
+          <Button asChild className="w-full">
+            <Link href="/auth/signin">
+              Try again
+            </Link>
+          </Button>
+          
+          <div className="mt-4 text-center">
+            <Link 
+              href="/mission-control" 
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Go to dashboard
+            </Link>
+          </div>
         </div>
       </div>
     </div>
@@ -38,8 +60,8 @@ function AuthErrorContent() {
 export default function AuthError() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center text-muted-foreground">Loading...</div>
       </div>
     }>
       <AuthErrorContent />

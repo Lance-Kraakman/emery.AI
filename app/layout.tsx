@@ -1,10 +1,7 @@
 import './globals.css'
 import AuthProvider from '@/components/AuthProvider'
-
-// Initialize agent scheduler on server startup
-import AnimatedBackground from './components/AnimatedBackground'
+import { ConditionalLayout } from '@/components/ConditionalLayout'
 import { Metadata } from 'next'
-import { EmeryProviders } from '@/components/EmeryProviders'
 
 export const metadata: Metadata = {
   title: 'Emery - Dynamic Database Builder',
@@ -19,13 +16,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full" suppressHydrationWarning>
       <body className="relative h-full">
-        <AnimatedBackground />
         <AuthProvider>
-        <EmeryProviders>
-          <div className="relative z-10 h-full">
+          <ConditionalLayout>
             {children}
-          </div>
-          </EmeryProviders>
+          </ConditionalLayout>
         </AuthProvider>
       </body>
     </html>

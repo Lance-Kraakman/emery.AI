@@ -14,7 +14,17 @@ export interface EmbeddingGenerator {
   /**
    * Generate embedding vector for search query text
    */
-  generateEmbedding(text: string): Promise<number[]>;
+  generateEmbedding(text: string, options?: { timeout?: number }): Promise<number[]>;
+
+  /**
+   * Generate embedding vectors for multiple texts in batch (more efficient)
+   */
+  generateEmbeddingsBatch(texts: string[], options?: { timeout?: number }): Promise<number[][]>;
+
+  /**
+   * Calculate content hash for deduplication
+   */
+  calculateContentHash(content: string): string;
 }
 
 export interface SearchLogger {
@@ -42,11 +52,11 @@ export class SearchDomainService {
   /**
    * Prepare search query by generating embeddings
    */
-  async prepareSearchQuery(query: SearchQuery): Promise<{
+  async prepareSearchQuery(query: SearchQuery, options?: { timeout?: number }): Promise<{
     query: SearchQuery;
     queryEmbedding: number[];
   }> {
-    const queryEmbedding = await this.embeddingGenerator.generateEmbedding(query.text);
+    const queryEmbedding = await this.embeddingGenerator.generateEmbedding(query.text, options);
     
     return {
       query,

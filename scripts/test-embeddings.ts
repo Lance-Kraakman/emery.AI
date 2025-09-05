@@ -1,79 +1,33 @@
 #!/usr/bin/env npx tsx
+// Test our actual embedding service with enhanced logging
 
-// Direct test of HuggingFace embedding API
-import { HfInference } from '@huggingface/inference';
+import { EmbeddingService } from '../ddd/application/services/embedding-service';
 
-async function testEmbeddings() {
-  const hfToken = process.env.HF_TOKEN;
+async function testEmbeddingService() {
+  console.log('Testing EmbeddingService with enhanced logging...');
   
-  if (!hfToken) {
-    console.error('❌ HF_TOKEN is not set!');
-    process.exit(1);
-  }
+  const embeddingService = new EmbeddingService();
   
-  console.log('✅ HF_TOKEN is set');
-  console.log(`Token starts with: ${hfToken.substring(0, 10)}...`);
-  
-  const hf = new HfInference(hfToken);
-  const testText = "This is a test sentence for embedding generation.";
-  
-  // Test different models
-  const models = [
-    'BAAI/bge-m3',
-    'BAAI/bge-large-en-v1.5', 
-    'sentence-transformers/all-mpnet-base-v2',
-    'sentence-transformers/all-MiniLM-L6-v2'
-  ];
-  
-  for (const model of models) {
-    console.log(`\n🔍 Testing model: ${model}`);
-    try {
-      const startTime = Date.now();
-      
-      const result = await hf.featureExtraction({
-        model,
-        inputs: testText,
-      });
-      
-      const elapsed = Date.now() - startTime;
-      
-      if (Array.isArray(result)) {
-        console.log(`✅ Success! Got embedding with ${result.length} dimensions in ${elapsed}ms`);
-        
-        // Check if it's nested array
-        if (Array.isArray(result[0])) {
-          console.log(`   Note: Result is nested array, actual dimensions: ${result[0].length}`);
-        }
-      } else {
-        console.log(`⚠️  Unexpected result type: ${typeof result}`);
-      }
-    } catch (error) {
-      console.error(`❌ Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      if (error instanceof Error && error.stack) {
-        console.error(`   Stack: ${error.stack.split('\n')[1]?.trim()}`);
-      }
-    }
-  }
-  
-  // Now test using our direct HuggingFace approach
-  console.log('\n📦 Testing via Direct HuggingFace API:');
   try {
-    const { getEmbeddingModel } = await import('../lib/ai/models');
+    // Test single embedding
+    console.log('\n=== SINGLE EMBEDDING TEST ===');
+    const text = 'Test document for embedding';
+    const embedding = await embeddingService.generateEmbedding(text);
+    console.log(`Success: ${embedding.length} dimensions`);
     
-    const embeddingModel = getEmbeddingModel();
-    console.log(`Using model config: ${JSON.stringify({ modelId: embeddingModel.modelId, provider: embeddingModel.provider })}`);
+    // Test batch embedding
+    console.log('\n=== BATCH EMBEDDING TEST ===');
+    const texts = [
+      'First test document',
+      'Second test document', 
+      'Third test document'
+    ];
+    const embeddings = await embeddingService.generateEmbeddingsBatch(texts);
+    console.log(`Batch success: ${embeddings.length} embeddings`);
     
-    const startTime = Date.now();
-    const embedding = await embeddingModel.generateEmbedding(testText);
-    const elapsed = Date.now() - startTime;
-    
-    console.log(`✅ Direct API Success! Got embedding with ${embedding.length} dimensions in ${elapsed}ms`);
   } catch (error) {
-    console.error(`❌ Direct API Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    if (error instanceof Error) {
-      console.error('Full error:', error);
-    }
+    console.error('Test failed:', error);
   }
 }
 
-testEmbeddings().catch(console.error);
+testEmbeddingService().catch(console.error);

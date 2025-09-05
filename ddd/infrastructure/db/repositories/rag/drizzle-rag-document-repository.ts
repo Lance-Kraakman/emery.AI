@@ -184,7 +184,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
       title: persistence.title,
       content: persistence.content,
       metadata: persistence.metadata,
-      embedding: persistence.embedding, // Should be number[] not string
+      embedding: persistence.embedding,
       contentHash: persistence.contentHash,
       sourceUpdatedAt: persistence.updatedAt
     });

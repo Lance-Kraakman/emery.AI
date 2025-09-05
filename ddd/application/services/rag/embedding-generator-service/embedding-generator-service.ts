@@ -76,7 +76,7 @@ function generateEnhancedContent(chunkText: string, templateData: TemplateData):
   return `${chunkText}${contextTemplate}${chunkInfoTemplate}`;
 }
 
-export class EmbeddingGeneratorDomainService {
+export class EmbeddingGeneratorDomainService implements EmbeddingGeneratorService {
   constructor(private readonly embeddingGenerator: EmbeddingGenerator) {}
 
   async processFileContent(fileData: FileProcessingContext): Promise<ProcessedContent[]> {
@@ -223,5 +223,26 @@ export class EmbeddingGeneratorDomainService {
       chunkOverlap: 50,
       maxFileSize: 10 * 1024 * 1024 // 10MB
     };
+  }
+
+  /**
+   * Delegate embedding generation to the underlying service
+   */
+  async generateEmbedding(content: string): Promise<number[]> {
+    return this.embeddingGenerator.generateEmbedding(content);
+  }
+
+  /**
+   * Delegate batch embedding generation to the underlying service
+   */
+  async generateEmbeddingsBatch(texts: string[]): Promise<number[][]> {
+    return this.embeddingGenerator.generateEmbeddingsBatch(texts);
+  }
+
+  /**
+   * Delegate content hash calculation to the underlying service
+   */
+  calculateContentHash(content: string): string {
+    return this.embeddingGenerator.calculateContentHash(content);
   }
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { 
   ChatSection, 
   ChatMessages
@@ -19,6 +20,7 @@ import { useLayout } from '@/components/layout/LayoutProvider'
 import { useChatGRPC } from './useChatGRPC'
 import { ChatCanvas } from './ChatCanvas'
 import { CustomChatInput } from './CustomChatInput'
+import { createChatContextForPage } from '@/components/layout/types'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
 
 /**
@@ -160,7 +162,42 @@ function ChatSuggestions({
 }
 
 export function EmeryChat() {
-  const { chatState, canvasState, chatContext, toggleCanvas } = useLayout()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const { chatState, canvasState, chatContext, toggleCanvas, setChatContext } = useLayout()
+  
+  // Auto-detect page context if not already set
+  useEffect(() => {
+    if (!chatContext) {
+      // Extract page name from pathname
+      const pageName = pathname.split('/')[1] || 'mission-control'
+      
+      // Extract domain ID from search params or pathname segments
+      let domainId: number | undefined
+      let domainName: string | undefined
+      
+      if (searchParams.has('tableId')) {
+        domainId = parseInt(searchParams.get('tableId')!)
+      } else if (searchParams.has('agentId')) {
+        domainId = parseInt(searchParams.get('agentId')!)
+      } else if (searchParams.has('teamId')) {
+        domainId = parseInt(searchParams.get('teamId')!)
+      } else {
+        // Try to extract from URL segments like /agents/123
+        const segments = pathname.split('/').filter(Boolean)
+        if (segments.length >= 2 && !isNaN(parseInt(segments[1]))) {
+          domainId = parseInt(segments[1])
+        }
+      }
+      
+      console.log('[EMERY-CHAT] Auto-detecting context:', { pathname, pageName, domainId })
+      
+      // Create context based on detected page
+      const detectedContext = createChatContextForPage(pageName, domainId, domainName)
+      setChatContext(detectedContext)
+    }
+  }, [pathname, searchParams, chatContext, setChatContext])
+  
   const handler = useChatGRPC({
     domainType: chatContext?.domainType,
     domainId: chatContext?.domainId
