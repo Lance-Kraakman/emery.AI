@@ -7,5 +7,5 @@ export { SearchQuery, type SimilarityMetric } from './search-query';
 // Value objects are only needed for external API boundaries
 
 // Common types used across value objects
-export type DomainType = 'tables' | 'files' | 'agents' | 'teams' | 'organizations' | 'databases';
+export type DomainType = 'tables' | 'files' | 'agents' | 'teams' | 'organizations' | 'databases' | 'tasks';
 export type IndexStatus = 'created' | 'building' | 'active' | 'error' | 'paused';

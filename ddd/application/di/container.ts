@@ -333,6 +333,7 @@ export class DIContainer {
       agentRepository,
       databaseRepository,
       teamRepository,
+      taskRepository,
       fileStorageRepository,
       tableRepository,
       ragIndexRepository,
