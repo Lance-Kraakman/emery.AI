@@ -21,23 +21,8 @@ export async function createTask(data: CreateTaskData): Promise<Result> {
       };
     }
 
-    // Verify agent ownership
-    const agentApplicationService = getAgentApplicationService();
-    const agent = await agentApplicationService.getAgent(AgentId.fromNumber(agentId));
-
-    if (!agent) {
-      return {
-        success: false,
-        error: "Agent not found",
-      };
-    }
-
-    if (agent.ownerId !== session.user.id) {
-      return {
-        success: false,
-        error: "Access denied: You can only create tasks for agents you own",
-      };
-    }
+    // Agent permissions are now enforced at database level via RLS policies
+    // No need for application-level ownership checks
 
     // Create task using application service
     const taskApplicationService = getAgentTaskApplicationService();
