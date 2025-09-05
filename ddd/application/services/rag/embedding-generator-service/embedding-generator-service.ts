@@ -38,7 +38,7 @@ function generateContextTemplate(data: TemplateData): string {
   return `
 
 TABLE: ${data.tableName} | FIELD: ${data.fieldName} | FILE: ${data.fileName}
-Context: File belongs to "${data.tableName}" table in "${data.databaseName}" database`;
+Context: File belongs to "${data.tableName}" table in "${data.databaseName}" database. This content is from field "${data.fieldName}" which contains structured data related to the table's purpose and business domain.`;
 }
 
 /**
