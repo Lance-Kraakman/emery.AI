@@ -5,6 +5,8 @@ Creates and manages AI models for chat processing.
 Uses HuggingFace Inference API for model access.
 """
 
+from huggingface_hub import AsyncInferenceClient
+import json
 import os
 import asyncio
 import logging
@@ -101,8 +103,6 @@ class ModelFactory:
         try:
             # Try importing HuggingFace client
             try:
-                from huggingface_hub import AsyncInferenceClient
-                import json
                 
                 client = AsyncInferenceClient(
                     model=model_config.model_id,
@@ -114,24 +114,32 @@ class ModelFactory:
                 
                 logger.info(f"📡 Starting stream for {len(formatted_messages)} messages")
                 
-                # Use the text generation streaming API instead of chat completion
-                # Build prompt from messages
-                prompt = self._build_prompt_from_messages(formatted_messages)
-                
-                # Stream response using text generation
-                async for token in client.text_generation(
-                    prompt=prompt,
-                    max_new_tokens=model_config.max_tokens,
+                # Use chat completion API for conversational models
+                # AIDEV-NOTE: HuggingFace chat_completion with stream=True returns an async iterator
+                stream = await client.chat_completion(
+                    messages=formatted_messages,
+                    max_tokens=model_config.max_tokens,
                     temperature=model_config.temperature,
                     top_p=model_config.top_p,
                     stream=True
-                ):
-                    # token is a string chunk from the model
-                    if isinstance(token, str) and token.strip():
-                        yield token
+                )
+                
+                async for token in stream:
+                    # Handle chat completion streaming response format
+                    if hasattr(token, 'choices') and token.choices:
+                        # Standard chat completion format
+                        choice = token.choices[0]
+                        if hasattr(choice, 'delta') and hasattr(choice.delta, 'content'):
+                            content = choice.delta.content
+                            if content and content.strip():
+                                yield content
                     elif hasattr(token, 'token') and hasattr(token.token, 'text'):
-                        # Handle different response formats
-                        yield token.token.text
+                        # Alternative token format
+                        if token.token.text and token.token.text.strip():
+                            yield token.token.text
+                    elif isinstance(token, str) and token.strip():
+                        # Plain string format
+                        yield token
                             
                 logger.info("✅ HuggingFace streaming completed successfully")
                 
@@ -174,24 +182,6 @@ class ModelFactory:
                 
         return formatted
     
-    def _build_prompt_from_messages(self, messages: List[Dict[str, str]]) -> str:
-        """Build a single prompt string from conversation messages."""
-        
-        prompt = ""
-        for msg in messages:
-            role = msg.get('role', 'user')
-            content = msg.get('content', '')
-            
-            if role == 'system':
-                prompt += f"System: {content}\n\n"
-            elif role == 'user':
-                prompt += f"Human: {content}\n\n"
-            elif role == 'assistant':
-                prompt += f"Assistant: {content}\n\n"
-        
-        # Add final assistant prompt
-        prompt += "Assistant: "
-        return prompt
     
     async def _mock_stream_response(
         self, 

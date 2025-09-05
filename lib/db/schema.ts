@@ -38,7 +38,7 @@ export const anonymousRole = pgRole('anon', {
 // Custom vector type for pgvector
 const vector = customType<{ data: number[]; notNull: false; default: false }>({
   dataType() {
-    return 'vector(1024)'; // Updated for BAAI/bge-m3 (multilingual, 8192 tokens)
+    return 'vector(768)'; // sentence-transformers/all-mpnet-base-v2 (768 dimensions)
   },
   toDriver(value: number[]): string {
     return JSON.stringify(value);

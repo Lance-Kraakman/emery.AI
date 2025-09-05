@@ -97,64 +97,8 @@ export class IndexingDomainService {
     
     // Special handling for files - discover files through table field values
     if (domainType === 'files') {
-      const files: StoredFile[] = [];
-      
-      // Get all tables for the organization
-      const tables = await this.tableRepository.findByOrganization(organizationId);
-      
-      for (const table of tables) {
-        // Find file fields in the table
-        const fileFields = table.fields.filter(field => field.type === 'file');
-        
-        if (fileFields.length > 0) {
-          // Get rows that might contain file values
-          const rows = await this.tableRepository.findRows(table.id, { limit: 10000 });
-          
-          for (const row of rows) {
-            for (const fileField of fileFields) {
-              // Use proper Row entity method to get field value
-              const fieldValueObj = row.getFieldValue(fileField.name);
-              
-              if (fieldValueObj && !fieldValueObj.isNull()) {
-                const fieldValue = fieldValueObj.value;
-                
-                // Handle both single file and file array values  
-                const fileValues = Array.isArray(fieldValue) ? fieldValue : [fieldValue];
-                
-                for (const fileValue of fileValues) {
-                  // Type guard for FileFieldValue
-                  if (fileValue && typeof fileValue === 'object' && 's3Key' in fileValue && fileValue.s3Key) {
-                    // Cast to FileFieldValue for type safety
-                    const fileFieldValue = fileValue as FileFieldValue;
-                    
-                    // Convert FileFieldValue to StoredFile format
-                    const storedFile: StoredFile = {
-                      id: fileFieldValue.id,
-                      key: fileFieldValue.s3Key,
-                      name: fileFieldValue.name,
-                      size: fileFieldValue.size,
-                      mimeType: fileFieldValue.mimeType,
-                      uploadedAt: new Date(fileFieldValue.uploadedAt),
-                      // Add table context for better RAG indexing
-                      metadata: {
-                        organizationId: organizationId.value,
-                        tableId: table.id.value,
-                        tableName: table.name,
-                        fieldId: fileField.id.value,
-                        fieldName: fileField.name,
-                        rowId: row.id.value
-                      }
-                    };
-                    files.push(storedFile);
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-      
-      console.log(`[INDEXING-DOMAIN] Found ${files.length} files across ${tables.length} tables for organization ${organizationId.value}`);
+      const files = await this.discoverFilesFromTables(organizationId);
+      console.log(`[INDEXING-DOMAIN] Found ${files.length} files for organization ${organizationId.value}`);
       return this.indexFileData(indexId, organizationId, files);
     }
 
@@ -208,7 +152,75 @@ export class IndexingDomainService {
   }
 
   /**
-   * Index table data for a RAG index
+   * Discover files from table rows that contain file fields
+   */
+  private async discoverFilesFromTables(
+    organizationId: OrganizationId,
+    tables?: DynamicTable[]
+  ): Promise<StoredFile[]> {
+    const files: StoredFile[] = [];
+    
+    // Get tables if not provided
+    const tablesToScan = tables || await this.tableRepository.findByOrganization(organizationId);
+    
+    for (const table of tablesToScan) {
+      // Find file fields in the table
+      const fileFields = table.fields.filter(field => field.type === 'file');
+      
+      if (fileFields.length > 0) {
+        // Get rows that might contain file values
+        const rows = await this.tableRepository.findRows(table.id, { limit: 10000 });
+        
+        for (const row of rows) {
+          for (const fileField of fileFields) {
+            // Use proper Row entity method to get field value
+            const fieldValueObj = row.getFieldValue(fileField.name);
+            
+            if (fieldValueObj && !fieldValueObj.isNull()) {
+              const fieldValue = fieldValueObj.value;
+              
+              // Handle both single file and file array values  
+              const fileValues = Array.isArray(fieldValue) ? fieldValue : [fieldValue];
+              
+              for (const fileValue of fileValues) {
+                // Type guard for FileFieldValue
+                if (fileValue && typeof fileValue === 'object' && 's3Key' in fileValue && fileValue.s3Key) {
+                  // Cast to FileFieldValue for type safety
+                  const fileFieldValue = fileValue as FileFieldValue;
+                  
+                  // Convert FileFieldValue to StoredFile format
+                  const storedFile: StoredFile = {
+                    id: fileFieldValue.id,
+                    key: fileFieldValue.s3Key,
+                    name: fileFieldValue.name,
+                    size: fileFieldValue.size,
+                    mimeType: fileFieldValue.mimeType,
+                    uploadedAt: new Date(fileFieldValue.uploadedAt),
+                    // Add table context for better RAG indexing
+                    metadata: {
+                      organizationId: organizationId.value,
+                      tableId: table.id.value,
+                      tableName: table.name,
+                      fieldId: fileField.id.value,
+                      fieldName: fileField.name,
+                      rowId: row.id.value
+                    }
+                  };
+                  
+                  files.push(storedFile);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    return files;
+  }
+
+  /**
+   * Index table data for a RAG index using batch embedding generation
    */
   async indexTableData(
     indexId: RagIndexId,
@@ -217,12 +229,36 @@ export class IndexingDomainService {
     fieldsMap?: Map<number, TableField[]>,
     databasesMap?: Map<number, Database>
   ): Promise<RagDocument[]> {
-    const documents: RagDocument[] = [];
+    if (tables.length === 0) return [];
 
+    // Generate content for all tables first
+    const tableContents: string[] = [];
+    const tableFieldsData: TableField[][] = [];
+    let hasFileFields = false;
+    
     for (const table of tables) {
       const fields = fieldsMap?.get(table.id.value) || [];
+      tableFieldsData.push(fields);
       const content = this.generateTableSchemaContent(table, fields, databasesMap);
-      const embedding = await this.embeddingGenerator.generateEmbedding(content);
+      tableContents.push(content);
+      
+      // Check if this table has any file fields
+      if (fields.some(field => field.type === 'file')) {
+        hasFileFields = true;
+      }
+    }
+    
+    // Generate embeddings in batch (much faster than sequential calls)
+    console.log(`[INDEXING-DOMAIN] Generating embeddings for ${tables.length} tables using batch API`);
+    const embeddings = await this.embeddingGenerator.generateEmbeddingsBatch(tableContents);
+    
+    // Create documents with pre-generated embeddings
+    const documents: RagDocument[] = [];
+    for (let i = 0; i < tables.length; i++) {
+      const table = tables[i];
+      const content = tableContents[i];
+      const fields = tableFieldsData[i];
+      const embedding = embeddings[i];
       const contentHash = this.embeddingGenerator.calculateContentHash(content);
 
       const document = RagDocument.create({
@@ -246,6 +282,21 @@ export class IndexingDomainService {
       });
 
       documents.push(document);
+    }
+
+    // If any tables have file fields, automatically index the file content as well
+    if (hasFileFields) {
+      console.log(`[INDEXING-DOMAIN] File fields detected, indexing file content for organization ${organizationId.value}`);
+      
+      // Use the extracted function to discover files from table rows
+      const files = await this.discoverFilesFromTables(organizationId, tables);
+      
+      // Index the discovered files and add their documents
+      if (files.length > 0) {
+        console.log(`[INDEXING-DOMAIN] Indexing ${files.length} files from table rows`);
+        const fileDocuments = await this.indexFileData(indexId, organizationId, files);
+        documents.push(...fileDocuments);
+      }
     }
 
     return documents;
@@ -317,18 +368,28 @@ export class IndexingDomainService {
   }
 
   /**
-   * Process agent data into RAG documents
+   * Process agent data into RAG documents using batch embedding generation
    */
   private async processAgentData(
     indexId: RagIndexId,
     organizationId: OrganizationId,
     agents: Agent[]
   ): Promise<RagDocument[]> {
-    const documents: RagDocument[] = [];
+    if (agents.length === 0) return [];
 
-    for (const agent of agents) {
-      const content = this.generateAgentContent(agent);
-      const embedding = await this.embeddingGenerator.generateEmbedding(content);
+    // Generate content for all agents first
+    const agentContents = agents.map(agent => this.generateAgentContent(agent));
+    
+    // Generate embeddings in batch (much faster than sequential calls)
+    console.log(`[INDEXING-DOMAIN] Generating embeddings for ${agents.length} agents using batch API`);
+    const embeddings = await this.embeddingGenerator.generateEmbeddingsBatch(agentContents);
+    
+    // Create documents with pre-generated embeddings
+    const documents: RagDocument[] = [];
+    for (let i = 0; i < agents.length; i++) {
+      const agent = agents[i];
+      const content = agentContents[i];
+      const embedding = embeddings[i];
       const contentHash = this.embeddingGenerator.calculateContentHash(content);
 
       const document = RagDocument.create({
@@ -372,18 +433,28 @@ export class IndexingDomainService {
   }
 
   /**
-   * Process database data into RAG documents
+   * Process database data into RAG documents using batch embedding generation
    */
   private async processDatabaseData(
     indexId: RagIndexId,
     organizationId: OrganizationId,
     databases: Database[]
   ): Promise<RagDocument[]> {
-    const documents: RagDocument[] = [];
+    if (databases.length === 0) return [];
 
-    for (const database of databases) {
-      const content = this.generateDatabaseContent(database);
-      const embedding = await this.embeddingGenerator.generateEmbedding(content);
+    // Generate content for all databases first
+    const databaseContents = databases.map(database => this.generateDatabaseContent(database));
+    
+    // Generate embeddings in batch (much faster than sequential calls)
+    console.log(`[INDEXING-DOMAIN] Generating embeddings for ${databases.length} databases using batch API`);
+    const embeddings = await this.embeddingGenerator.generateEmbeddingsBatch(databaseContents);
+    
+    // Create documents with pre-generated embeddings
+    const documents: RagDocument[] = [];
+    for (let i = 0; i < databases.length; i++) {
+      const database = databases[i];
+      const content = databaseContents[i];
+      const embedding = embeddings[i];
       const contentHash = this.embeddingGenerator.calculateContentHash(content);
 
       const document = RagDocument.create({
@@ -424,18 +495,28 @@ export class IndexingDomainService {
   }
 
   /**
-   * Process team data into RAG documents
+   * Process team data into RAG documents using batch embedding generation
    */
   private async processTeamData(
     indexId: RagIndexId,
     organizationId: OrganizationId,
     teams: Team[]
   ): Promise<RagDocument[]> {
-    const documents: RagDocument[] = [];
+    if (teams.length === 0) return [];
 
-    for (const team of teams) {
-      const content = this.generateTeamContent(team);
-      const embedding = await this.embeddingGenerator.generateEmbedding(content);
+    // Generate content for all teams first
+    const teamContents = teams.map(team => this.generateTeamContent(team));
+    
+    // Generate embeddings in batch (much faster than sequential calls)
+    console.log(`[INDEXING-DOMAIN] Generating embeddings for ${teams.length} teams using batch API`);
+    const embeddings = await this.embeddingGenerator.generateEmbeddingsBatch(teamContents);
+    
+    // Create documents with pre-generated embeddings
+    const documents: RagDocument[] = [];
+    for (let i = 0; i < teams.length; i++) {
+      const team = teams[i];
+      const content = teamContents[i];
+      const embedding = embeddings[i];
       const contentHash = this.embeddingGenerator.calculateContentHash(content);
 
       const document = RagDocument.create({
@@ -642,6 +723,12 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
             index.organizationId,
             domainType
           );
+          
+          // CRITICAL FIX: Save the generated documents to the database
+          for (const document of documents) {
+            await this.documentRepository.save(document);
+          }
+          
           totalProcessed += documents.length;
           totalAdded += documents.length;
         } catch (error) {
@@ -710,6 +797,12 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
             index.organizationId,
             dt
           );
+          
+          // CRITICAL FIX: Save the generated documents to the database
+          for (const document of documents) {
+            await this.documentRepository.save(document);
+          }
+          
           totalProcessed += documents.length;
           totalAdded += documents.length;
         } catch (error) {
@@ -768,31 +861,43 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
         case 'insert':
         case 'update':
           // Re-index the entire domain type for simplicity
-          await this.indexDomainData(
+          const insertUpdateDocs = await this.indexDomainData(
             index.id,
             index.organizationId,
             domainType
           );
+          // CRITICAL FIX: Save the generated documents to the database
+          for (const document of insertUpdateDocs) {
+            await this.documentRepository.save(document);
+          }
           break;
 
         case 'delete':
           // For deletes, clear and re-index the entire domain type
           await this.documentRepository.deleteByDomainType(index.id, domainType);
-          await this.indexDomainData(
+          const deleteDocs = await this.indexDomainData(
             index.id,
             index.organizationId,
             domainType
           );
+          // CRITICAL FIX: Save the generated documents to the database
+          for (const document of deleteDocs) {
+            await this.documentRepository.save(document);
+          }
           break;
 
         default:
           // For unknown change types, do a full reindex of the domain type
           console.warn(`[RAG-INDEXING-DOMAIN] Unknown change type ${changeType}, performing full domain reindex`);
-          await this.indexDomainData(
+          const defaultDocs = await this.indexDomainData(
             index.id,
             index.organizationId,
             domainType
           );
+          // CRITICAL FIX: Save the generated documents to the database
+          for (const document of defaultDocs) {
+            await this.documentRepository.save(document);
+          }
       }
 
       // Update last indexed time

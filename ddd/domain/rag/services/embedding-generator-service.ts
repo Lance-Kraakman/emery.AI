@@ -48,6 +48,11 @@ export interface EmbeddingGeneratorService {
   generateEmbedding(content: string): Promise<number[]>;
 
   /**
+   * Generate embedding vectors for multiple texts in batch (more efficient)
+   */
+  generateEmbeddingsBatch(texts: string[]): Promise<number[][]>;
+
+  /**
    * Calculate content hash for deduplication
    */
   calculateContentHash(content: string): string;

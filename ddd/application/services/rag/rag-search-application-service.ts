@@ -91,7 +91,8 @@ export class RagSearchApplicationService {
       console.log('[RAG-SEARCH-APP] 🧮 Preparing search query (generating embeddings)...');
       const embeddingStartTime = Date.now();
       
-      const { queryEmbedding } = await this.searchDomainService.prepareSearchQuery(searchQuery);
+      // AIDEV-NOTE: Use shorter timeout for RAG context to avoid blocking chat
+      const { queryEmbedding } = await this.searchDomainService.prepareSearchQuery(searchQuery, { timeout: 8000 });
       
       const embeddingTime = Date.now() - embeddingStartTime;
       console.log(`[RAG-SEARCH-APP] ✅ Query embedding generated in ${embeddingTime}ms (${queryEmbedding.length} dimensions)`);

@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react'
 import { ChatHandler, Message } from '@llamaindex/chat-ui'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import { useLayout } from '@/components/layout/LayoutProvider'
+import { createChatStreamRequest, type ChatContextOptions } from './types/chat-requests'
 
 interface ChatMessage extends Message {
   id: string
@@ -15,14 +16,6 @@ interface ExtendedChatHandler extends ChatHandler {
   scrollRef?: React.RefObject<HTMLDivElement>
   scrollToBottom?: () => void
   clearMessages?: () => void
-}
-
-// Chat context options for domain-specific functionality
-interface ChatContextOptions {
-  domainType?: DomainType | 'organizations' | 'general'
-  domainId?: number
-  tableId?: number // Legacy support
-  organizationId?: number
 }
 
 /**
@@ -109,18 +102,19 @@ export function useChatGRPC(contextOptions?: ChatContextOptions): ExtendedChatHa
         domainType: contextOptions?.domainType || chatContext?.domainType
       })
       
-      // Prepare context data for API call
-      const requestBody = {
-        messages: [...messages, userMessage].map(m => ({
-          role: m.role,
-          content: m.content,
-        })),
-        // Include context from both hook params and layout context
+      // Prepare context data for API call using proper UI types
+      const chatMessages = [...messages, userMessage].map(m => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }))
+      
+      const chatContextOptions = {
         domainType: contextOptions?.domainType || chatContext?.domainType,
-        domainId: contextOptions?.domainId || chatContext?.domainId,
-        tableId: contextOptions?.tableId, // Legacy support
-        organizationId: contextOptions?.organizationId
+        domainId: contextOptions?.domainId || chatContext?.domainId
       }
+      
+      // AIDEV-NOTE: Use helper function for consistent request structure
+      const requestBody = createChatStreamRequest(chatMessages, chatContextOptions)
       
       // Call the gRPC-based streaming chat API
       const response = await fetch('/api/chat/stream-grpc', {
@@ -242,13 +236,11 @@ export const useChatForPage = {
   
   data: (tableId?: number) => useChatGRPC({ 
     domainType: 'tables',
-    domainId: tableId,
-    tableId // Legacy support
+    domainId: tableId
   }),
   
-  organization: (organizationId?: number) => useChatGRPC({ 
-    domainType: 'organizations',
-    organizationId 
+  organization: () => useChatGRPC({ 
+    domainType: 'organizations'
   }),
   
 }

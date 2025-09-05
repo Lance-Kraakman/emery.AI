@@ -49,7 +49,11 @@ export function EmailSignInForm() {
       <Button type="submit" disabled={loading} className="w-full">
         {loading ? "Sending..." : "Sign in with Email"}
       </Button>
-      {message && <p className="text-sm text-center text-gray-600 mt-2">{message}</p>}
+      {message && (
+        <p className="text-sm text-center text-muted-foreground mt-2">
+          {message}
+        </p>
+      )}
     </form>
   )
 }

@@ -12,37 +12,45 @@ export default async function SignInPage() {
   // }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to Emery
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold tracking-tight">
+            Welcome to <span className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">Emery</span>
+          </h1>
+          <p className="mt-2 text-muted-foreground">
             Dynamic database builder for modern teams
           </p>
         </div>
         
-        <div className="mt-8 space-y-6">
-          {/* OAuth Providers */}
-          <div className="space-y-3">
-            <SignInButton provider="github" />
-            <SignInButton provider="google" />
-          </div>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
+        <div className="bg-card border border-border rounded-lg shadow-sm p-6 space-y-6">
+          <div>
+            <h2 className="text-2xl font-semibold text-center mb-6">Sign in to your account</h2>
+            
+            {/* OAuth Providers */}
+            <div className="space-y-3">
+              <SignInButton provider="github" />
+              <SignInButton provider="google" />
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-gray-50 px-2 text-gray-500">
-                Or continue with
-              </span>
-            </div>
-          </div>
 
-          <EmailSignInForm />
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <Separator className="w-full" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">
+                  Or continue with email
+                </span>
+              </div>
+            </div>
+
+            <EmailSignInForm />
+          </div>
         </div>
+        
+        <p className="text-center text-sm text-muted-foreground">
+          Don't have an account? Contact your organization administrator.
+        </p>
       </div>
     </div>
   )

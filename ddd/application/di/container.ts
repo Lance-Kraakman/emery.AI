@@ -328,7 +328,7 @@ export class DIContainer {
 
     // Initialize RAG domain services
     const indexingDomainService = new IndexingDomainService(
-      embeddingService,
+      embeddingGenerator,
       this.repositories.get('IOrganizationRepository'),
       agentRepository,
       databaseRepository,
