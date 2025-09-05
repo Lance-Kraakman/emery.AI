@@ -37,17 +37,8 @@ interface TemplateData {
 function generateContextTemplate(data: TemplateData): string {
   return `
 
-CONTEXT AND RELATIONSHIPS:
-- This file belongs to the "${data.tableName}" table in the "${data.databaseName}" database
-- Stored in field: "${data.fieldName}" (field type: file)
-- This file contains data that is related to and belongs with other records in the "${data.tableName}" table
-- Use this file's content in context with the "${data.tableName}" table structure and data when answering questions
-- File location: Table "${data.tableName}" → Field "${data.fieldName}" → File "${data.fileName}"
-
-CONTENT QUESTIONS: This content can answer questions like:
-- What information is contained in ${data.fileName}?
-- What data does ${data.fileName} have?
-- Tell me about the contents of ${data.fileName}`;
+TABLE: ${data.tableName} | FIELD: ${data.fieldName} | FILE: ${data.fileName}
+Context: File belongs to "${data.tableName}" table in "${data.databaseName}" database`;
 }
 
 /**
@@ -56,7 +47,7 @@ CONTENT QUESTIONS: This content can answer questions like:
 function generateChunkInfoTemplate(data: TemplateData): string {
   return `
 
-CHUNK INFO: This is chunk ${data.chunkIndex + 1} of ${data.totalChunks} from ${data.fileName}, processed by LlamaIndex`;
+CHUNK: ${data.chunkIndex + 1}/${data.totalChunks}`;
 }
 
 /**
@@ -219,8 +210,8 @@ export class EmbeddingGeneratorDomainService implements EmbeddingGeneratorServic
    */
   getProcessingConfig(): EmbeddingGeneratorConfig {
     return {
-      chunkSize: 1024,
-      chunkOverlap: 50,
+      chunkSize: 200, // Reduced from 1024 to stay under HuggingFace 384 token limit
+      chunkOverlap: 20, // Reduced proportionally 
       maxFileSize: 10 * 1024 * 1024 // 10MB
     };
   }

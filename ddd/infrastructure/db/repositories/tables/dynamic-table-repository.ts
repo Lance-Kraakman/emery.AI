@@ -151,21 +151,49 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         where: eq(tables.organizationId, organizationId.value)
       });
 
-      // For bulk operations, create tables without fields for efficiency
-      // Individual table access via findById will load fields
-      return tableRecords.map(record => DynamicTable.fromPersistence({
-        id: record.id,
-        databaseId: record.databaseId,
-        organizationId: record.organizationId,
-        name: record.name,
-        storageLocation: record.s3Path,
-        description: record.metadata?.description,
-        metadata: record.metadata ? TableMetadata.fromDatabase(record.metadata).data : undefined,
-        createdBy: record.createdBy,
-        createdAt: record.createdAt!,
-        updatedAt: record.updatedAt!,
-        fields: [] // Not loaded for bulk operations - use findById for full entity
-      }));
+      // Load all tables with their fields for complete functionality
+      const tablesWithFields: DynamicTable[] = [];
+      
+      for (const tableRecord of tableRecords) {
+        // Load fields for each table
+        const fieldRecords = await this.db.query.fields.findMany({
+          where: eq(fields.tableId, tableRecord.id),
+          orderBy: [fields.orderIndex]
+        });
+
+        // Convert field persistence records to domain TableField objects
+        const tableFields = fieldRecords.map(fieldRecord => 
+          TableField.fromPersistence({
+            id: fieldRecord.id,
+            tableId: fieldRecord.tableId,
+            name: fieldRecord.name,
+            type: fieldRecord.type as FieldType,
+            orderIndex: fieldRecord.orderIndex,
+            relatedTableId: fieldRecord.fieldConfig?.relatedTableId || null,
+            required: fieldRecord.required,
+            metadata: fieldRecord.fieldConfig || undefined,
+            createdAt: fieldRecord.createdAt
+          })
+        );
+
+        const dynamicTable = DynamicTable.fromPersistence({
+          id: tableRecord.id,
+          databaseId: tableRecord.databaseId,
+          organizationId: tableRecord.organizationId,
+          name: tableRecord.name,
+          storageLocation: tableRecord.s3Path,
+          description: tableRecord.metadata?.description,
+          metadata: tableRecord.metadata ? TableMetadata.fromDatabase(tableRecord.metadata).data : undefined,
+          createdBy: tableRecord.createdBy,
+          createdAt: tableRecord.createdAt!,
+          updatedAt: tableRecord.updatedAt!,
+          fields: tableFields
+        });
+
+        tablesWithFields.push(dynamicTable);
+      }
+
+      return tablesWithFields;
 
     } catch (error) {
       console.error('[TableService] Error finding tables by organization:', error);
