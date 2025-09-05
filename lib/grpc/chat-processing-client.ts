@@ -125,13 +125,13 @@ export class ChatProcessingClient {
       const call = this.client.ProcessMessage(request);
 
       call.on('data', (response: ProcessMessageResponse) => {
-        console.log(`[CHAT-GRPC-CLIENT] Received streaming response:`, {
-          hasContentChunk: !!response.content_chunk,
-          hasRagContext: !!response.rag_context,
-          hasComplete: !!response.complete,
-          hasError: !!response.error,
-          timestamp: response.timestamp
-        });
+        // console.log(`[CHAT-GRPC-CLIENT] Received streaming response:`, {
+        //   hasContentChunk: !!response.content_chunk,
+        //   hasRagContext: !!response.rag_context,
+        //   hasComplete: !!response.complete,
+        //   hasError: !!response.error,
+        //   timestamp: response.timestamp
+        // });
 
         // Convert gRPC response to standardized streaming response
         let streamingResponse: StreamingChatResponse;

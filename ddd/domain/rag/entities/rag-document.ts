@@ -229,6 +229,17 @@ export class RagDocument {
     updatedAt: Date;
     similarity?: number;
   }): RagDocument {
+    // Ensure embedding is a valid array
+    const embedding = Array.isArray(data.embedding) 
+      ? [...data.embedding] 
+      : [];
+    
+    // Validate embedding if not empty
+    if (embedding.length > 0 && embedding.some(value => !Number.isFinite(value))) {
+      console.warn('[RAG-DOCUMENT] Invalid embedding values detected, using empty array');
+      embedding.length = 0;
+    }
+
     return new RagDocument(
       DocumentId.fromString(data.id),
       RagIndexId.fromString(data.indexId),
@@ -239,7 +250,7 @@ export class RagDocument {
       data.title,
       data.content,
       { ...data.metadata },
-      [...data.embedding],
+      embedding,
       data.contentHash,
       data.createdAt,
       data.updatedAt,
