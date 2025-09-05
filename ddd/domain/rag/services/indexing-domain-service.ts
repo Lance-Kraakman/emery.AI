@@ -234,13 +234,24 @@ export class IndexingDomainService {
     // Generate content for all tables first
     const tableContents: string[] = [];
     const tableFieldsData: TableField[][] = [];
+    const tableRowsData: any[][] = [];
     let hasFileFields = false;
     
     for (const table of tables) {
-      const fields = fieldsMap?.get(table.id.value) || [];
+      const fields = fieldsMap?.get(table.id.value) || table.fields; // Use table.fields if fieldsMap not provided
       tableFieldsData.push(fields);
-      const content = this.generateTableSchemaContent(table, fields, databasesMap);
+      
+      console.log(`[INDEXING-DEBUG] Processing table ${table.name} with ${fields.length} fields`);
+      
+      // Fetch sample rows for this table
+      const sampleRows = await this.fetchSampleRows(table);
+      tableRowsData.push(sampleRows);
+      
+      // Generate enhanced content with row data
+      const content = await this.generateTableSchemaContent(table, fields, databasesMap, sampleRows);
       tableContents.push(content);
+      
+      console.log(`[INDEXING-DEBUG] Generated content for table ${table.name}, size: ${content.length} chars`);
       
       // Check if this table has any file fields
       if (fields.some(field => field.type === 'file')) {
@@ -261,6 +272,17 @@ export class IndexingDomainService {
       const embedding = embeddings[i];
       const contentHash = this.embeddingGenerator.calculateContentHash(content);
 
+      // Calculate enhanced metadata
+      const sampleRows = tableRowsData[i];
+      const fieldTypes = fields.reduce((acc, field) => {
+        acc[field.type] = (acc[field.type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      
+      const hasFiles = fields.some(field => field.type === 'file');
+      const relationshipFields = fields.filter(f => f.relatedTableId);
+      const hasRelationships = relationshipFields.length > 0;
+
       const document = RagDocument.create({
         indexId,
         organizationId,
@@ -276,11 +298,22 @@ export class IndexingDomainService {
           tableMetadata: table.metadata,
           organizationId: table.organizationId,
           fieldCount: fields.length,
+          rowCount: sampleRows.length, // This is sample count, not total count
+          fieldTypes: fieldTypes,
+          hasFiles: hasFiles,
+          hasRelationships: hasRelationships,
+          relationships: relationshipFields.map(f => ({
+            fieldName: f.name,
+            relatedTableId: f.relatedTableId
+          })),
+          lastUpdated: new Date().toISOString(),
+          contentSize: content.length
         },
         embedding,
         contentHash,
       });
 
+      console.log(`[INDEXING-DEBUG] Created table document: ${table.name}, fieldCount: ${fields.length}, hasFiles: ${hasFiles}, rowCount: ${sampleRows.length}`);
       documents.push(document);
     }
 
@@ -295,7 +328,10 @@ export class IndexingDomainService {
       if (files.length > 0) {
         console.log(`[INDEXING-DOMAIN] Indexing ${files.length} files from table rows`);
         const fileDocuments = await this.indexFileData(indexId, organizationId, files);
+        console.log(`[INDEXING-DEBUG] Successfully indexed ${fileDocuments.length} file documents`);
         documents.push(...fileDocuments);
+      } else {
+        console.log(`[INDEXING-DEBUG] No files found despite having file fields in tables`);
       }
     }
 
@@ -542,6 +578,79 @@ export class IndexingDomainService {
     return documents;
   }
 
+  /**
+   * Fetch sample rows from a table for content generation
+   */
+  private async fetchSampleRows(table: DynamicTable, limit: number = 15): Promise<any[]> {
+    try {
+      // Use the repository to get sample rows
+      const rows = await this.tableRepository.findRows(table.id, { 
+        limit, 
+        orderBy: 'created_at DESC' 
+      });
+      
+      console.log(`[INDEXING-DEBUG] Fetched ${rows.length} sample rows from table ${table.name}`);
+      return rows;
+    } catch (error) {
+      console.error(`[INDEXING-DEBUG] Failed to fetch rows from table ${table.name}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Format row data as readable text for embedding generation
+   */
+  private formatRowsForContent(rows: any[], fields: TableField[]): string {
+    if (rows.length === 0) return '\nNo data available.';
+
+    const rowTexts: string[] = [];
+    
+    for (const row of rows.slice(0, 15)) { // Limit to 15 rows max
+      const rowValues: string[] = [];
+      
+      for (const field of fields) {
+        try {
+          const fieldValueObj = row.getFieldValue(field.name);
+          
+          if (fieldValueObj && !fieldValueObj.isNull()) {
+            const fieldValue = fieldValueObj.value;
+            
+            // Format different field types appropriately
+            if (field.type === 'file') {
+              // Handle file fields - show filename instead of content
+              if (Array.isArray(fieldValue)) {
+                const fileNames = fieldValue
+                  .filter(f => f && f.name)
+                  .map(f => f.name)
+                  .join(', ');
+                if (fileNames) rowValues.push(`${field.name}: ${fileNames}`);
+              } else if (fieldValue && fieldValue.name) {
+                rowValues.push(`${field.name}: ${fieldValue.name}`);
+              }
+            } else if (typeof fieldValue === 'string' && fieldValue.length > 100) {
+              // Truncate very long text
+              rowValues.push(`${field.name}: ${fieldValue.substring(0, 100)}...`);
+            } else if (fieldValue !== null && fieldValue !== undefined) {
+              // Handle other field types
+              rowValues.push(`${field.name}: ${fieldValue}`);
+            }
+          }
+        } catch (error) {
+          // Skip problematic fields silently
+          continue;
+        }
+      }
+      
+      if (rowValues.length > 0) {
+        rowTexts.push(`- ${rowValues.join(', ')}`);
+      }
+    }
+    
+    return rowTexts.length > 0 
+      ? `\n\nSample Data:\n${rowTexts.join('\n')}`
+      : '\nNo readable data available.';
+  }
+
   // Content generation methods (moved from existing service)
   private generateOrganizationContent(organization: Organization): string {
     const toolsList = organization.sharedTools && organization.sharedTools.length > 0
@@ -564,7 +673,7 @@ About: ${organization.name} is an active organization on the Emery platform, whi
 Capabilities: The organization has access to Emery's full feature set including dynamic table creation, field management, data operations, agent-powered workflows, team collaboration, role-based access control, and integration with external services through shared tools and servers.`;
   }
 
-  private generateTableSchemaContent(table: DynamicTable, fields: TableField[], databasesMap?: Map<number, Database>): string {
+  private async generateTableSchemaContent(table: DynamicTable, fields: TableField[], databasesMap?: Map<number, Database>, sampleRows?: any[]): Promise<string> {
     const fieldsDescription = fields.map(field => {
       let desc = `- ${field.name} (${field.type})`;
       if (field.required) desc += ' *required*';
@@ -613,7 +722,7 @@ Purpose: Structured data storage and workflow operations${description}
 Schema Overview: ${fieldTypeSummary} (${fields.length} total fields)
 ${fieldsDescription}${relationshipContext}${fileContext}
 
-Data Context: This table is part of the "${databaseName}" database and contains structured data for the organization. Records in this table may have relationships to other tables and can include uploaded files that contain additional data or documentation.
+Data Context: This table is part of the "${databaseName}" database and contains structured data for the organization. Records in this table may have relationships to other tables and can include uploaded files that contain additional data or documentation.${sampleRows ? this.formatRowsForContent(sampleRows, fields) : ''}
 
 Usage: This table supports data analysis, reporting, workflow automation, and integration with other Emery systems. The dynamic schema allows for flexible data operations while maintaining type safety and relationships.`;
   }
