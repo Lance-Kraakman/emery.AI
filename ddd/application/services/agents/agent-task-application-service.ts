@@ -13,15 +13,16 @@ import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repos
 import type { IAgentExecutionRepository, AgentExecutionRequest } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 import { Task, type TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 import { isActiveAgent, getAgentDisplayName } from '@/ddd/domain/agents/entities/agent';
-import { AgentId, OrganizationId, TaskId, UserId, TaskStatus } from '@/ddd/domain/shared/value-objects';
+import { AgentId, OrganizationId, TaskId, UserId, TaskStatus, TeamId } from '@/ddd/domain/shared/value-objects';
 
 export interface CreateTaskRequest {
-  agentId: number; // Will be converted to AgentId in application service
+  agentId?: AgentId; // Optional - for direct agent assignment
+  teamId?: TeamId; // Optional - for team assignment (agentId and teamId are mutually exclusive)
   name: string;
   instructions: TaskInstructions;
   capabilityName?: string;
-  createdBy?: string;
-  organizationId?: number; // Optional override, will be converted to OrganizationId
+  createdBy?: UserId;
+  organizationId: OrganizationId;
 }
 
 export interface ExecuteTaskRequest {
@@ -51,31 +52,43 @@ export class AgentTaskApplicationService {
    * Create a new task for an agent
    */
   async createTask(request: CreateTaskRequest): Promise<Task> {
-    console.log(`[AGENT-TASK-SERVICE] Creating task for agent ${request.agentId}: ${request.name}`);
+    console.log(`[AGENT-TASK-SERVICE] Creating task: ${request.name}`);
     
-    // 1. Validate agent exists and is active
-    const agentId = AgentId.fromNumber(request.agentId);
-    const agent = await this.agentRepository.findById(agentId);
-    if (!agent) {
-      throw new Error(`Agent ${request.agentId} not found`);
+    // Validate request - either agentId or teamId must be provided
+    if (!request.agentId && !request.teamId) {
+      throw new Error('Either agentId or teamId must be provided for task assignment');
+    }
+    
+    if (request.agentId && request.teamId) {
+      throw new Error('Cannot specify both agentId and teamId - they are mutually exclusive');
     }
 
-    if (!isActiveAgent(agent)) {
-      throw new Error(`Agent ${request.agentId} is not active (status: ${agent.status})`);
-    }
+    let agentId: AgentId;
+    let organizationId: OrganizationId;
 
-    // 2. Use agent's organization or override
-    const organizationId = request.organizationId 
-      ? OrganizationId.fromNumber(request.organizationId) 
-      : agent.organizationId;
+    if (request.agentId) {
+      // Direct agent assignment
+      agentId = request.agentId;
+      const agent = await this.agentRepository.findById(agentId);
+      if (!agent) {
+        throw new Error(`Agent ${request.agentId.value} not found`);
+      }
+
+      if (!isActiveAgent(agent)) {
+        throw new Error(`Agent ${request.agentId.value} is not active (status: ${agent.status})`);
+      }
+
+      organizationId = request.organizationId;
+    } else {
+      // Team assignment - for now, throw error since Task entity doesn't support teamId yet
+      throw new Error('Team task assignment not yet implemented in Task entity');
+    }
     
     // AIDEV-DEBUG: Log organization ID resolution to debug constraint violation
     console.log('[AGENT-TASK-SERVICE] Organization ID resolution:', {
       requestOrganizationId: request.organizationId,
-      agentOrganizationId: agent.organizationId,
       resolvedOrganizationId: organizationId,
       organizationIdType: typeof organizationId,
-      agentName: agent.name,
       requestName: request.name
     });
 
@@ -86,14 +99,14 @@ export class AgentTaskApplicationService {
       name: request.name,
       capabilityName: request.capabilityName,
       instructions: request.instructions,
-      createdBy: request.createdBy ? UserId.fromString(request.createdBy) : undefined,
+      createdBy: request.createdBy,
       status: TaskStatus.pending()
     });
 
     // 4. Save task
     await this.taskRepository.save(task);
 
-    console.log(`[AGENT-TASK-SERVICE] Created task ${task.id.value.toString().substring(0, 8)} for agent ${getAgentDisplayName(agent)}`);
+    console.log(`[AGENT-TASK-SERVICE] Created task ${task.id.value.toString().substring(0, 8)} for ${request.agentId ? `agent ${request.agentId.value}` : `team ${request.teamId?.value}`}`);
     return task;
   }
 

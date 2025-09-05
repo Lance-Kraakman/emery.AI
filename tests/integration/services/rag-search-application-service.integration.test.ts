@@ -8,9 +8,9 @@ import {
   getRagDocumentRepository,
   getRagIndexRepository,
   getEmbeddingService,
-  initializeDI,
   contextManager
 } from '@/ddd/application/di/container';
+import { initializeTestDI } from '../shared/test-setup';
 import type { EmbeddingGenerator } from '@/ddd/domain/rag/services';
 import { testClient } from '../shared/integration-helpers';
 import { createTestOrganization, type TestContext } from '../shared/test-setup';
@@ -54,10 +54,7 @@ describe('RAG Search Application Service Integration Tests', () => {
 
   beforeAll(async () => {
     // Initialize DI container with simplified context proxy (avoids Drizzle proxy array issues)
-    const { contextAwareDb } = await import('@/lib/db/simple-context-proxy');
-    const { rawClient } = await import('@/lib/db/client');
-    initializeDI(contextAwareDb, rawClient);
-    console.log('✅ DIContainer initialized with repositories, file storage, agent services, and RAG services');
+    initializeTestDI();
   });
 
   afterAll(async () => {

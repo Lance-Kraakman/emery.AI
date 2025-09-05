@@ -1,6 +1,6 @@
 {
-  "id": "4e36ab0d-2be8-480a-93b8-c9c726e0e314",
-  "prevId": "d162d372-87c2-4f81-9a34-08ebf351b7d7",
+  "id": "b12d15b4-7af8-4bff-a345-d783028348bd",
+  "prevId": "5ea0dc76-d908-4ae8-afcc-525702dde140",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -269,8 +269,8 @@
           "to": [
             "app_owner"
           ],
-          "using": "organization_id = get_current_organization_id() AND EXISTS(\n      SELECT 1 FROM users WHERE id = auth.uid() \n      AND current_organization_id = agents.organization_id \n      AND organization_role = 'owner'\n    )",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer AND EXISTS(\n      SELECT 1 FROM users WHERE id = current_setting('app.current_user_id')::uuid \n      AND current_organization_id = agents.organization_id \n      AND organization_role = 'owner'\n    )",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer"
         },
         "agents_admin_view": {
           "name": "agents_admin_view",
@@ -279,7 +279,7 @@
           "to": [
             "app_admin"
           ],
-          "using": "organization_id = get_current_organization_id() AND EXISTS(\n      SELECT 1 FROM users WHERE id = auth.uid() \n      AND current_organization_id = agents.organization_id \n      AND organization_role IN ('admin', 'owner')\n    )"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer AND EXISTS(\n      SELECT 1 FROM users WHERE id = current_setting('app.current_user_id')::uuid \n      AND current_organization_id = agents.organization_id \n      AND organization_role IN ('admin', 'owner')\n    )"
         },
         "agents_member_view": {
           "name": "agents_member_view",
@@ -288,7 +288,7 @@
           "to": [
             "app_member"
           ],
-          "using": "organization_id = get_current_organization_id() AND EXISTS(\n      SELECT 1 FROM users WHERE id = auth.uid() \n      AND current_organization_id = agents.organization_id\n    )"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer AND EXISTS(\n      SELECT 1 FROM users WHERE id = current_setting('app.current_user_id')::uuid \n      AND current_organization_id = agents.organization_id\n    )"
         },
         "agents_owner_control": {
           "name": "agents_owner_control",
@@ -297,8 +297,8 @@
           "to": [
             "authenticated"
           ],
-          "using": "owner_id = auth.uid() AND organization_id = get_current_organization_id()",
-          "withCheck": "owner_id = auth.uid() AND organization_id = get_current_organization_id()"
+          "using": "owner_id = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer",
+          "withCheck": "owner_id = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer"
         }
       },
       "checkConstraints": {},
@@ -398,7 +398,7 @@
           "to": [
             "public"
           ],
-          "using": "EXISTS (SELECT 1 FROM chats c WHERE c.id = chat_id AND c.organization_id = get_current_organization_id())"
+          "using": "EXISTS (SELECT 1 FROM chats c WHERE c.id = chat_id AND c.organization_id = current_setting('app.current_organization_id')::integer)"
         }
       },
       "checkConstraints": {},
@@ -519,7 +519,7 @@
           "to": [
             "public"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer"
         }
       },
       "checkConstraints": {},
@@ -627,7 +627,7 @@
           "to": [
             "public"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer"
         }
       },
       "checkConstraints": {},
@@ -721,7 +721,7 @@
           "to": [
             "public"
           ],
-          "using": "EXISTS (SELECT 1 FROM tables t WHERE t.id = table_id AND t.organization_id = get_current_organization_id())"
+          "using": "EXISTS (SELECT 1 FROM tables t WHERE t.id = table_id AND t.organization_id = current_setting('app.current_organization_id')::integer)"
         }
       },
       "checkConstraints": {},
@@ -829,7 +829,7 @@
           "to": [
             "public"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer"
         }
       },
       "checkConstraints": {},
@@ -946,7 +946,7 @@
           "to": [
             "public"
           ],
-          "using": "id = get_current_organization_id()"
+          "using": "id = current_setting('app.current_organization_id')::integer"
         },
         "organizations_owner_access": {
           "name": "organizations_owner_access",
@@ -1094,8 +1094,8 @@
           "to": [
             "app_owner"
           ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer"
         },
         "rag_documents_admin_management": {
           "name": "rag_documents_admin_management",
@@ -1104,8 +1104,8 @@
           "to": [
             "app_admin"
           ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer"
         },
         "rag_documents_member_view": {
           "name": "rag_documents_member_view",
@@ -1114,7 +1114,7 @@
           "to": [
             "app_member"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer"
         }
       },
       "checkConstraints": {},
@@ -1255,8 +1255,8 @@
           "to": [
             "app_owner"
           ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer"
         },
         "rag_indexes_admin_management": {
           "name": "rag_indexes_admin_management",
@@ -1265,8 +1265,8 @@
           "to": [
             "app_admin"
           ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer"
         },
         "rag_indexes_member_view": {
           "name": "rag_indexes_member_view",
@@ -1275,7 +1275,7 @@
           "to": [
             "app_member"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer"
         }
       },
       "checkConstraints": {},
@@ -1431,8 +1431,8 @@
           "to": [
             "app_owner"
           ],
-          "using": "organization_id = get_current_organization_id() OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = get_current_organization_id()))",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer))",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer"
         },
         "rag_query_logs_admin_management": {
           "name": "rag_query_logs_admin_management",
@@ -1441,8 +1441,8 @@
           "to": [
             "app_admin"
           ],
-          "using": "organization_id = get_current_organization_id() OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = get_current_organization_id()))",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer))",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer"
         },
         "rag_query_logs_user_access": {
           "name": "rag_query_logs_user_access",
@@ -1452,7 +1452,7 @@
             "app_member",
             "authenticated"
           ],
-          "using": "user_id = auth.uid() AND (organization_id = get_current_organization_id() OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = get_current_organization_id())))"
+          "using": "user_id = current_setting('app.current_user_id')::uuid AND (organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer)))"
         }
       },
       "checkConstraints": {},
@@ -1624,7 +1624,7 @@
           "to": [
             "public"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer"
         }
       },
       "checkConstraints": {},
@@ -1837,8 +1837,8 @@
           "to": [
             "app_owner"
           ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer"
         },
         "tasks_admin_management": {
           "name": "tasks_admin_management",
@@ -1847,7 +1847,7 @@
           "to": [
             "app_admin"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer"
         },
         "tasks_admin_updates": {
           "name": "tasks_admin_updates",
@@ -1856,8 +1856,8 @@
           "to": [
             "app_admin"
           ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer"
         },
         "tasks_member_view": {
           "name": "tasks_member_view",
@@ -1866,7 +1866,7 @@
           "to": [
             "app_member"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer"
         },
         "tasks_creator_control": {
           "name": "tasks_creator_control",
@@ -1875,8 +1875,8 @@
           "to": [
             "authenticated"
           ],
-          "using": "created_by = auth.uid() AND organization_id = get_current_organization_id()",
-          "withCheck": "created_by = auth.uid() AND organization_id = get_current_organization_id()"
+          "using": "created_by = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer",
+          "withCheck": "created_by = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer"
         },
         "tasks_agent_assignment_permissions": {
           "name": "tasks_agent_assignment_permissions",
@@ -1885,7 +1885,7 @@
           "to": [
             "authenticated"
           ],
-          "using": "EXISTS (\n      SELECT 1 FROM agents a\n      WHERE a.id = agent_id\n      AND a.organization_id = get_current_organization_id()\n      AND (\n        a.owner_id = auth.uid()\n        OR\n        (\n          COALESCE(a.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true\n          AND EXISTS (\n            SELECT 1 FROM users u\n            WHERE u.id = auth.uid()\n            AND u.organization_role IN ('owner', 'admin')\n            AND u.current_organization_id = a.organization_id\n          )\n        )\n        OR\n        auth.uid()::text = ANY(\n          SELECT jsonb_array_elements_text(\n            COALESCE(a.task_permissions->'assignment'->'allowedUsers', '[]'::jsonb)\n          )\n        )\n        OR\n        (\n          COALESCE(a.task_permissions->'assignment'->>'allowTeamMembers', 'false')::boolean = true\n          AND EXISTS (\n            SELECT 1 FROM team_memberships tm1\n            JOIN team_memberships tm2 ON tm1.team_id = tm2.team_id\n            WHERE tm1.user_id = auth.uid() AND tm2.user_id = a.owner_id\n          )\n        )\n        OR\n        (\n          COALESCE(a.task_permissions->'assignment'->>'allowOrgMembers', 'false')::boolean = true\n          AND EXISTS (\n            SELECT 1 FROM users u\n            WHERE u.id = auth.uid()\n            AND u.current_organization_id = a.organization_id\n          )\n        )\n        OR\n        EXISTS (\n          SELECT 1 FROM agents allowed_agent\n          WHERE allowed_agent.owner_id = auth.uid()\n          AND allowed_agent.id::text = ANY(\n            SELECT jsonb_array_elements_text(\n              COALESCE(a.task_permissions->'assignment'->'allowedAgents', '[]'::jsonb)\n            )\n          )\n        )\n        OR\n        EXISTS (\n          SELECT 1 FROM team_memberships tm\n          JOIN teams t ON t.id = tm.team_id\n          WHERE tm.user_id = auth.uid()\n          AND t.id::text = ANY(\n            SELECT jsonb_array_elements_text(\n              COALESCE(a.task_permissions->'assignment'->'allowedTeams', '[]'::jsonb)\n            )\n          )\n        )\n      )\n    )"
+          "withCheck": "EXISTS (\n      SELECT 1 FROM agents a\n      WHERE a.id = agent_id\n      AND a.organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        a.owner_id = current_setting('app.current_user_id')::uuid\n        OR\n        (\n          COALESCE(a.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true\n          AND EXISTS (\n            SELECT 1 FROM users u\n            WHERE u.id = current_setting('app.current_user_id')::uuid\n            AND u.organization_role IN ('owner', 'admin')\n            AND u.current_organization_id = a.organization_id\n          )\n        )\n        OR\n        current_setting('app.current_user_id')::uuid::text = ANY(\n          SELECT jsonb_array_elements_text(\n            COALESCE(a.task_permissions->'assignment'->'allowedUsers', '[]'::jsonb)\n          )\n        )\n        OR\n        (\n          COALESCE(a.task_permissions->'assignment'->>'allowTeamMembers', 'false')::boolean = true\n          AND EXISTS (\n            SELECT 1 FROM team_memberships tm1\n            JOIN team_memberships tm2 ON tm1.team_id = tm2.team_id\n            WHERE tm1.user_id = current_setting('app.current_user_id')::uuid AND tm2.user_id = a.owner_id\n          )\n        )\n        OR\n        EXISTS (\n          SELECT 1 FROM agents allowed_agent\n          WHERE allowed_agent.owner_id = current_setting('app.current_user_id')::uuid\n          AND allowed_agent.id::text = ANY(\n            SELECT jsonb_array_elements_text(\n              COALESCE(a.task_permissions->'assignment'->'allowedAgents', '[]'::jsonb)\n            )\n          )\n        )\n      )\n    )"
         },
         "tasks_team_assignment_permissions": {
           "name": "tasks_team_assignment_permissions",
@@ -1894,16 +1894,7 @@
           "to": [
             "authenticated"
           ],
-          "using": "team_id IS NOT NULL AND EXISTS (\n      SELECT 1 FROM teams t\n      WHERE t.id = team_id\n      AND t.organization_id = get_current_organization_id()\n      AND (\n        EXISTS (\n          SELECT 1 FROM team_memberships tm\n          WHERE tm.team_id = t.id AND tm.user_id = auth.uid()\n        )\n        OR\n        (\n          COALESCE(t.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true\n          AND EXISTS (\n            SELECT 1 FROM users u\n            WHERE u.id = auth.uid()\n            AND u.organization_role IN ('owner', 'admin')\n            AND u.current_organization_id = t.organization_id\n          )\n        )\n        OR\n        auth.uid()::text = ANY(\n          SELECT jsonb_array_elements_text(\n            COALESCE(t.task_permissions->'assignment'->'allowedUsers', '[]'::jsonb)\n          )\n        )\n        OR\n        EXISTS (\n          SELECT 1 FROM agents allowed_agent\n          WHERE allowed_agent.owner_id = auth.uid()\n          AND allowed_agent.id::text = ANY(\n            SELECT jsonb_array_elements_text(\n              COALESCE(t.task_permissions->'assignment'->'allowedAgents', '[]'::jsonb)\n            )\n          )\n        )\n        OR\n        EXISTS (\n          SELECT 1 FROM team_memberships tm\n          JOIN teams allowed_team ON allowed_team.id = tm.team_id\n          WHERE tm.user_id = auth.uid()\n          AND allowed_team.id::text = ANY(\n            SELECT jsonb_array_elements_text(\n              COALESCE(t.task_permissions->'assignment'->'allowedTeams', '[]'::jsonb)\n            )\n          )\n        )\n        OR\n        (\n          COALESCE(t.task_permissions->'assignment'->>'allowTeamMembers', 'false')::boolean = true\n          AND EXISTS (\n            SELECT 1 FROM team_memberships tm\n            WHERE tm.team_id = t.id AND tm.user_id = auth.uid()\n          )\n        )\n        OR\n        (\n          COALESCE(t.task_permissions->'assignment'->>'allowOrgMembers', 'false')::boolean = true\n          AND EXISTS (\n            SELECT 1 FROM users u\n            WHERE u.id = auth.uid()\n            AND u.current_organization_id = t.organization_id\n          )\n        )\n      )\n    )"
-        },
-        "tasks_routing_permissions": {
-          "name": "tasks_routing_permissions",
-          "as": "PERMISSIVE",
-          "for": "UPDATE",
-          "to": [
-            "authenticated"
-          ],
-          "using": "(\n      CASE WHEN routed_from_agent_id IS NOT NULL THEN\n        EXISTS (\n          SELECT 1 FROM agents source_agent\n          WHERE source_agent.id = routed_from_agent_id\n          AND source_agent.owner_id = auth.uid()\n          AND (\n            (agent_id IS NOT NULL AND agent_id::text = ANY(\n              SELECT jsonb_array_elements_text(\n                COALESCE(source_agent.task_permissions->'routing'->'allowedAgents', '[]'::jsonb)\n              )\n            ))\n            OR\n            (team_id IS NOT NULL AND team_id::text = ANY(\n              SELECT jsonb_array_elements_text(\n                COALESCE(source_agent.task_permissions->'routing'->'allowedTeams', '[]'::jsonb)\n              )\n            ))\n            OR\n            (\n              agent_id IS NOT NULL \n              AND COALESCE(source_agent.task_permissions->'routing'->>'allowAnyTeamAgent', 'true')::boolean = true\n              AND EXISTS (\n                SELECT 1 FROM team_memberships tm1\n                JOIN team_memberships tm2 ON tm1.team_id = tm2.team_id\n                JOIN agents target_agent ON target_agent.id = agent_id\n                WHERE tm1.user_id = source_agent.owner_id AND tm2.user_id = target_agent.owner_id\n              )\n            )\n            OR\n            (\n              agent_id IS NOT NULL\n              AND COALESCE(source_agent.task_permissions->'routing'->>'allowAnyOrgAgent', 'false')::boolean = true\n              AND EXISTS (\n                SELECT 1 FROM agents target_agent\n                WHERE target_agent.id = agent_id\n                AND target_agent.organization_id = source_agent.organization_id\n              )\n            )\n            OR\n            (\n              COALESCE(source_agent.task_permissions->'routing'->>'allowCrossTeamRouting', 'false')::boolean = true\n            )\n          )\n        )\n      WHEN routed_from_team_id IS NOT NULL THEN\n        EXISTS (\n          SELECT 1 FROM teams source_team\n          WHERE source_team.id = routed_from_team_id\n          AND EXISTS (\n            SELECT 1 FROM team_memberships tm\n            WHERE tm.team_id = source_team.id AND tm.user_id = auth.uid()\n          )\n          AND (\n            (agent_id IS NOT NULL AND agent_id::text = ANY(\n              SELECT jsonb_array_elements_text(\n                COALESCE(source_team.task_permissions->'routing'->'allowedAgents', '[]'::jsonb)\n              )\n            ))\n            OR\n            (team_id IS NOT NULL AND team_id::text = ANY(\n              SELECT jsonb_array_elements_text(\n                COALESCE(source_team.task_permissions->'routing'->'allowedTeams', '[]'::jsonb)\n              )\n            ))\n            OR\n            (\n              agent_id IS NOT NULL\n              AND COALESCE(source_team.task_permissions->'routing'->>'allowAnyOrgAgent', 'false')::boolean = true\n            )\n            OR\n            (\n              COALESCE(source_team.task_permissions->'routing'->>'allowCrossTeamRouting', 'false')::boolean = true\n            )\n          )\n        )\n      ELSE true\n      END\n    )"
+          "withCheck": "team_id IS NOT NULL AND EXISTS (\n      SELECT 1 FROM teams t\n      WHERE t.id = team_id\n      AND t.organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        EXISTS (\n          SELECT 1 FROM team_memberships tm\n          WHERE tm.team_id = t.id AND tm.user_id = current_setting('app.current_user_id')::uuid\n        )\n        OR\n        (\n          COALESCE(t.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true\n          AND EXISTS (\n            SELECT 1 FROM users u\n            WHERE u.id = current_setting('app.current_user_id')::uuid\n            AND u.organization_role IN ('owner', 'admin')\n            AND u.current_organization_id = t.organization_id\n          )\n        )\n        OR\n        current_setting('app.current_user_id')::uuid::text = ANY(\n          SELECT jsonb_array_elements_text(\n            COALESCE(t.task_permissions->'assignment'->'allowedUsers', '[]'::jsonb)\n          )\n        )\n      )\n    )"
         }
       },
       "checkConstraints": {},
@@ -1978,8 +1969,8 @@
           "to": [
             "app_owner"
           ],
-          "using": "EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())",
-          "withCheck": "EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())"
+          "using": "EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)",
+          "withCheck": "EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)"
         },
         "team_memberships_admin_management": {
           "name": "team_memberships_admin_management",
@@ -1988,8 +1979,8 @@
           "to": [
             "app_admin"
           ],
-          "using": "EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())",
-          "withCheck": "EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())"
+          "using": "EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)",
+          "withCheck": "EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)"
         },
         "team_memberships_member_view": {
           "name": "team_memberships_member_view",
@@ -1998,7 +1989,7 @@
           "to": [
             "app_member"
           ],
-          "using": "user_id = auth.uid() OR EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())"
+          "using": "user_id = current_setting('app.current_user_id')::uuid OR EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)"
         }
       },
       "checkConstraints": {},
@@ -2103,8 +2094,8 @@
           "to": [
             "app_owner"
           ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer"
         },
         "teams_admin_management": {
           "name": "teams_admin_management",
@@ -2113,8 +2104,8 @@
           "to": [
             "app_admin"
           ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer"
         },
         "teams_member_view": {
           "name": "teams_member_view",
@@ -2123,7 +2114,7 @@
           "to": [
             "app_member"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer"
         }
       },
       "checkConstraints": {},
@@ -2212,7 +2203,7 @@
           "to": [
             "public"
           ],
-          "using": "user_id = current_setting('app.current_user_id')::uuid AND organization_id = get_current_organization_id()"
+          "using": "user_id = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer"
         }
       },
       "checkConstraints": {},
@@ -2333,8 +2324,8 @@
           "to": [
             "app_owner"
           ],
-          "using": "current_organization_id = get_current_organization_id()",
-          "withCheck": "current_organization_id = get_current_organization_id()"
+          "using": "current_organization_id = current_setting('app.current_organization_id')::integer",
+          "withCheck": "current_organization_id = current_setting('app.current_organization_id')::integer"
         },
         "users_admin_management": {
           "name": "users_admin_management",
@@ -2343,7 +2334,7 @@
           "to": [
             "app_admin"
           ],
-          "using": "current_organization_id = get_current_organization_id()"
+          "using": "current_organization_id = current_setting('app.current_organization_id')::integer"
         },
         "users_member_self": {
           "name": "users_member_self",
@@ -2352,7 +2343,7 @@
           "to": [
             "app_member"
           ],
-          "using": "id = auth.uid()"
+          "using": "id = current_setting('app.current_user_id')::uuid"
         }
       },
       "checkConstraints": {},

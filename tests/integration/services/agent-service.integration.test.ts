@@ -1,10 +1,11 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { getAgentApplicationService, getAgentRepository, initializeDI } from '@/ddd/application/di/container';
+import { getAgentApplicationService, getAgentRepository } from '@/ddd/application/di/container';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { CreateAgentCommand } from '@/ddd/application/services/agents/agent-application-service';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';
 import type { TestContext } from '../shared/test-setup';
+import { initializeTestDI } from '../shared/test-setup';
 
 // AIDEV-NOTE: Clean Agent Application Service integration tests using TestCase pattern
 // Tests core agent operations with minimal, maintainable test cases
@@ -70,7 +71,7 @@ describe('Agent Application Service Integration Tests', () => {
   
   beforeAll(() => {
     // Initialize DI container
-    initializeDI(testClient.db as any, testClient.db as any);
+    initializeTestDI();
   });
 
   afterAll(async () => {

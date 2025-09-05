@@ -21,7 +21,6 @@ import type { DbClient } from '@/lib/db/client';
 export class DrizzleUserRepository implements IUserRepository {
   constructor(
     private db: DbClient,
-    private rawClient: postgres.Sql
   ) {}
 
 

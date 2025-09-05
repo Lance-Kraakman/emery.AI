@@ -22,9 +22,9 @@ export interface ITeamRepository {
   findByAgentId(agentId: AgentId): Promise<Team[]>;
 
   /**
-   * Save team
+   * Save team - returns saved team with database-generated ID for new teams
    */
-  save(team: Team): Promise<void>;
+  save(team: Team): Promise<Team>;
 
   /**
    * Delete team

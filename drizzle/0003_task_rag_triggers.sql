@@ -1,4 +1,13 @@
--- Task RAG Notification Triggers
+-- Combined schema changes and RAG triggers
+-- Includes both the chat table changes and the task RAG notification triggers
+
+-- Schema changes from 0003_aromatic_centennial.sql
+ALTER TABLE "chats" DROP CONSTRAINT "chats_table_id_tables_id_fk";--> statement-breakpoint
+ALTER TABLE "chats" DROP COLUMN "domain_type";--> statement-breakpoint
+ALTER TABLE "chats" DROP COLUMN "domain_id";--> statement-breakpoint
+ALTER TABLE "chats" DROP COLUMN "table_id";--> statement-breakpoint
+
+-- Task RAG Notification Triggers from 0003_task_rag_triggers.sql
 -- Automatically notify the RAG dispatcher when task data changes that affect indexes
 -- Uses PostgreSQL LISTEN/NOTIFY for real-time event-driven re-indexing
 

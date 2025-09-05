@@ -10,7 +10,6 @@ import { OrganizationId, UserId, OrganizationRole, OrganizationName, EmailAddres
 export class DrizzleOrganizationRepository implements IOrganizationRepository {
   constructor(
     private db: DbClient,
-    private rawClient: postgres.Sql
   ) {}
 
   /**

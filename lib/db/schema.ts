@@ -65,7 +65,7 @@ export const databases = pgTable("databases", {
     as: "permissive",
     for: "all",
     to: "public",
-    using: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
 ]);
 
@@ -84,7 +84,7 @@ export const tables = pgTable("tables", {
     as: "permissive",
     for: "all",
     to: "public",
-    using: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
 ]);
 
@@ -119,7 +119,7 @@ export const fields = pgTable("fields", {
     as: "permissive",
     for: "all",
     to: "public",
-    using: sql`EXISTS (SELECT 1 FROM tables t WHERE t.id = table_id AND t.organization_id = get_current_organization_id())`,
+    using: sql`EXISTS (SELECT 1 FROM tables t WHERE t.id = table_id AND t.organization_id = current_setting('app.current_organization_id')::integer)`,
   }),
 ]);
 
@@ -144,7 +144,7 @@ export const organizations = pgTable("organizations", {
     as: "permissive",
     for: "all",
     to: "public",
-    using: sql`id = get_current_organization_id()`,
+    using: sql`id = current_setting('app.current_organization_id')::integer`,
   }),
   // Role-based policy for owners - full access to their organizations
   pgPolicy("organizations_owner_access", {
@@ -194,20 +194,20 @@ export const users = pgTable("users", {
     as: "permissive",
     for: "all",
     to: [appOwnerRole],
-    using: sql`current_organization_id = get_current_organization_id()`,
-    withCheck: sql`current_organization_id = get_current_organization_id()`,
+    using: sql`current_organization_id = current_setting('app.current_organization_id')::integer`,
+    withCheck: sql`current_organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("users_admin_management", {
     as: "permissive", 
     for: "select",
     to: [appAdminRole],
-    using: sql`current_organization_id = get_current_organization_id()`,
+    using: sql`current_organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("users_member_self", {
     as: "permissive",
     for: "select",
     to: [appMemberRole],
-    using: sql`id = auth.uid()`,
+    using: sql`id = current_setting('app.current_user_id')::uuid`,
   }),
 ]);
 
@@ -223,7 +223,7 @@ export const userOrganizations = pgTable("user_organizations", {
     as: "permissive",
     for: "all",
     to: "public",
-    using: sql`user_id = current_setting('app.current_user_id')::uuid AND organization_id = get_current_organization_id()`,
+    using: sql`user_id = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer`,
   }),
 ]);
 
@@ -241,7 +241,7 @@ export const invitations = pgTable("invitations", {
     as: "permissive",
     for: "all",
     to: "public",
-    using: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
 ]);
 
@@ -271,7 +271,7 @@ export const teams = pgTable("teams", {
       allowCrossTeamRouting?: boolean;    // Other teams
       internalRoutingStrategy?: 'round_robin' | 'least_busy' | 'manual';
     };
-  }>().default('{"assignment": {"allowOrgAdmins": true}, "routing": {"allowCrossTeamRouting": false}}'),
+  }>().default(sql`'{"assignment": {"allowOrgAdmins": true}, "routing": {"allowCrossTeamRouting": false}}'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   // Enhanced role-based team policies
@@ -279,21 +279,21 @@ export const teams = pgTable("teams", {
     as: "permissive",
     for: "all",
     to: [appOwnerRole],
-    using: sql`organization_id = get_current_organization_id()`,
-    withCheck: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("teams_admin_management", {
     as: "permissive",
     for: "all",
     to: [appAdminRole],
-    using: sql`organization_id = get_current_organization_id()`,
-    withCheck: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("teams_member_view", {
     as: "permissive",
     for: "select",
     to: [appMemberRole],
-    using: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
 ]);
 
@@ -308,21 +308,21 @@ export const teamMemberships = pgTable("team_memberships", {
     as: "permissive",
     for: "all",
     to: [appOwnerRole],
-    using: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())`,
-    withCheck: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())`,
+    using: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)`,
+    withCheck: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)`,
   }),
   pgPolicy("team_memberships_admin_management", {
     as: "permissive",
     for: "all", 
     to: [appAdminRole],
-    using: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())`,
-    withCheck: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())`,
+    using: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)`,
+    withCheck: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)`,
   }),
   pgPolicy("team_memberships_member_view", {
     as: "permissive",
     for: "select",
     to: [appMemberRole],
-    using: sql`user_id = auth.uid() OR EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())`,
+    using: sql`user_id = current_setting('app.current_user_id')::uuid OR EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)`,
   }),
 ]);
 
@@ -359,7 +359,7 @@ export const agents = pgTable("agents", {
       allowAnyOrgAgent?: boolean;         // Any org agent
       allowCrossTeamRouting?: boolean;    // Cross-team routing
     };
-  }>().default('{"assignment": {"allowOrgAdmins": true}, "routing": {"allowAnyTeamAgent": true}}'),
+  }>().default(sql`'{"assignment": {"allowOrgAdmins": true}, "routing": {"allowAnyTeamAgent": true}}'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   // Pure Drizzle simplified role-based policies
@@ -367,19 +367,19 @@ export const agents = pgTable("agents", {
     as: "permissive",
     for: "all",
     to: [appOwnerRole],
-    using: sql`organization_id = get_current_organization_id() AND EXISTS(
-      SELECT 1 FROM users WHERE id = auth.uid() 
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer AND EXISTS(
+      SELECT 1 FROM users WHERE id = current_setting('app.current_user_id')::uuid 
       AND current_organization_id = agents.organization_id 
       AND organization_role = 'owner'
     )`,
-    withCheck: sql`organization_id = get_current_organization_id()`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("agents_admin_view", {
     as: "permissive", 
     for: "select",
     to: [appAdminRole],
-    using: sql`organization_id = get_current_organization_id() AND EXISTS(
-      SELECT 1 FROM users WHERE id = auth.uid() 
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer AND EXISTS(
+      SELECT 1 FROM users WHERE id = current_setting('app.current_user_id')::uuid 
       AND current_organization_id = agents.organization_id 
       AND organization_role IN ('admin', 'owner')
     )`,
@@ -388,8 +388,8 @@ export const agents = pgTable("agents", {
     as: "permissive",
     for: "select",
     to: [appMemberRole],
-    using: sql`organization_id = get_current_organization_id() AND EXISTS(
-      SELECT 1 FROM users WHERE id = auth.uid() 
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer AND EXISTS(
+      SELECT 1 FROM users WHERE id = current_setting('app.current_user_id')::uuid 
       AND current_organization_id = agents.organization_id
     )`,
   }),
@@ -397,8 +397,8 @@ export const agents = pgTable("agents", {
     as: "permissive", 
     for: "all",
     to: [authenticatedRole],
-    using: sql`owner_id = auth.uid() AND organization_id = get_current_organization_id()`,
-    withCheck: sql`owner_id = auth.uid() AND organization_id = get_current_organization_id()`,
+    using: sql`owner_id = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer`,
+    withCheck: sql`owner_id = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer`,
   }),
 ]);
 
@@ -432,57 +432,57 @@ export const tasks = pgTable("tasks", {
     as: "permissive",
     for: "all",
     to: [appOwnerRole],
-    using: sql`organization_id = get_current_organization_id()`,
-    withCheck: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("tasks_admin_management", {
     as: "permissive", 
     for: "select",
     to: [appAdminRole],
-    using: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("tasks_admin_updates", {
     as: "permissive",
     for: "update", 
     to: [appAdminRole],
-    using: sql`organization_id = get_current_organization_id()`,
-    withCheck: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("tasks_member_view", {
     as: "permissive",
     for: "select",
     to: [appMemberRole],
-    using: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("tasks_creator_control", {
     as: "permissive", 
     for: "all",
     to: [authenticatedRole],
-    using: sql`created_by = auth.uid() AND organization_id = get_current_organization_id()`,
-    withCheck: sql`created_by = auth.uid() AND organization_id = get_current_organization_id()`,
+    using: sql`created_by = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer`,
+    withCheck: sql`created_by = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("tasks_agent_assignment_permissions", {
     as: "permissive",
     for: "insert",
     to: [authenticatedRole],
-    using: sql`EXISTS (
+    withCheck: sql`EXISTS (
       SELECT 1 FROM agents a
       WHERE a.id = agent_id
-      AND a.organization_id = get_current_organization_id()
+      AND a.organization_id = current_setting('app.current_organization_id')::integer
       AND (
-        a.owner_id = auth.uid()
+        a.owner_id = current_setting('app.current_user_id')::uuid
         OR
         (
           COALESCE(a.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true
           AND EXISTS (
             SELECT 1 FROM users u
-            WHERE u.id = auth.uid()
+            WHERE u.id = current_setting('app.current_user_id')::uuid
             AND u.organization_role IN ('owner', 'admin')
             AND u.current_organization_id = a.organization_id
           )
         )
         OR
-        auth.uid()::text = ANY(
+        current_setting('app.current_user_id')::uuid::text = ANY(
           SELECT jsonb_array_elements_text(
             COALESCE(a.task_permissions->'assignment'->'allowedUsers', '[]'::jsonb)
           )
@@ -493,36 +493,16 @@ export const tasks = pgTable("tasks", {
           AND EXISTS (
             SELECT 1 FROM team_memberships tm1
             JOIN team_memberships tm2 ON tm1.team_id = tm2.team_id
-            WHERE tm1.user_id = auth.uid() AND tm2.user_id = a.owner_id
-          )
-        )
-        OR
-        (
-          COALESCE(a.task_permissions->'assignment'->>'allowOrgMembers', 'false')::boolean = true
-          AND EXISTS (
-            SELECT 1 FROM users u
-            WHERE u.id = auth.uid()
-            AND u.current_organization_id = a.organization_id
+            WHERE tm1.user_id = current_setting('app.current_user_id')::uuid AND tm2.user_id = a.owner_id
           )
         )
         OR
         EXISTS (
           SELECT 1 FROM agents allowed_agent
-          WHERE allowed_agent.owner_id = auth.uid()
+          WHERE allowed_agent.owner_id = current_setting('app.current_user_id')::uuid
           AND allowed_agent.id::text = ANY(
             SELECT jsonb_array_elements_text(
               COALESCE(a.task_permissions->'assignment'->'allowedAgents', '[]'::jsonb)
-            )
-          )
-        )
-        OR
-        EXISTS (
-          SELECT 1 FROM team_memberships tm
-          JOIN teams t ON t.id = tm.team_id
-          WHERE tm.user_id = auth.uid()
-          AND t.id::text = ANY(
-            SELECT jsonb_array_elements_text(
-              COALESCE(a.task_permissions->'assignment'->'allowedTeams', '[]'::jsonb)
             )
           )
         )
@@ -531,156 +511,34 @@ export const tasks = pgTable("tasks", {
   }),
   pgPolicy("tasks_team_assignment_permissions", {
     as: "permissive",
-    for: "insert",
+    for: "insert", 
     to: [authenticatedRole],
-    using: sql`team_id IS NOT NULL AND EXISTS (
+    withCheck: sql`team_id IS NOT NULL AND EXISTS (
       SELECT 1 FROM teams t
       WHERE t.id = team_id
-      AND t.organization_id = get_current_organization_id()
+      AND t.organization_id = current_setting('app.current_organization_id')::integer
       AND (
         EXISTS (
           SELECT 1 FROM team_memberships tm
-          WHERE tm.team_id = t.id AND tm.user_id = auth.uid()
+          WHERE tm.team_id = t.id AND tm.user_id = current_setting('app.current_user_id')::uuid
         )
         OR
         (
           COALESCE(t.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true
           AND EXISTS (
             SELECT 1 FROM users u
-            WHERE u.id = auth.uid()
+            WHERE u.id = current_setting('app.current_user_id')::uuid
             AND u.organization_role IN ('owner', 'admin')
             AND u.current_organization_id = t.organization_id
           )
         )
         OR
-        auth.uid()::text = ANY(
+        current_setting('app.current_user_id')::uuid::text = ANY(
           SELECT jsonb_array_elements_text(
             COALESCE(t.task_permissions->'assignment'->'allowedUsers', '[]'::jsonb)
           )
         )
-        OR
-        EXISTS (
-          SELECT 1 FROM agents allowed_agent
-          WHERE allowed_agent.owner_id = auth.uid()
-          AND allowed_agent.id::text = ANY(
-            SELECT jsonb_array_elements_text(
-              COALESCE(t.task_permissions->'assignment'->'allowedAgents', '[]'::jsonb)
-            )
-          )
-        )
-        OR
-        EXISTS (
-          SELECT 1 FROM team_memberships tm
-          JOIN teams allowed_team ON allowed_team.id = tm.team_id
-          WHERE tm.user_id = auth.uid()
-          AND allowed_team.id::text = ANY(
-            SELECT jsonb_array_elements_text(
-              COALESCE(t.task_permissions->'assignment'->'allowedTeams', '[]'::jsonb)
-            )
-          )
-        )
-        OR
-        (
-          COALESCE(t.task_permissions->'assignment'->>'allowTeamMembers', 'false')::boolean = true
-          AND EXISTS (
-            SELECT 1 FROM team_memberships tm
-            WHERE tm.team_id = t.id AND tm.user_id = auth.uid()
-          )
-        )
-        OR
-        (
-          COALESCE(t.task_permissions->'assignment'->>'allowOrgMembers', 'false')::boolean = true
-          AND EXISTS (
-            SELECT 1 FROM users u
-            WHERE u.id = auth.uid()
-            AND u.current_organization_id = t.organization_id
-          )
-        )
       )
-    )`,
-  }),
-  pgPolicy("tasks_routing_permissions", {
-    as: "permissive",
-    for: "update",
-    to: [authenticatedRole],
-    using: sql`(
-      CASE WHEN routed_from_agent_id IS NOT NULL THEN
-        EXISTS (
-          SELECT 1 FROM agents source_agent
-          WHERE source_agent.id = routed_from_agent_id
-          AND source_agent.owner_id = auth.uid()
-          AND (
-            (agent_id IS NOT NULL AND agent_id::text = ANY(
-              SELECT jsonb_array_elements_text(
-                COALESCE(source_agent.task_permissions->'routing'->'allowedAgents', '[]'::jsonb)
-              )
-            ))
-            OR
-            (team_id IS NOT NULL AND team_id::text = ANY(
-              SELECT jsonb_array_elements_text(
-                COALESCE(source_agent.task_permissions->'routing'->'allowedTeams', '[]'::jsonb)
-              )
-            ))
-            OR
-            (
-              agent_id IS NOT NULL 
-              AND COALESCE(source_agent.task_permissions->'routing'->>'allowAnyTeamAgent', 'true')::boolean = true
-              AND EXISTS (
-                SELECT 1 FROM team_memberships tm1
-                JOIN team_memberships tm2 ON tm1.team_id = tm2.team_id
-                JOIN agents target_agent ON target_agent.id = agent_id
-                WHERE tm1.user_id = source_agent.owner_id AND tm2.user_id = target_agent.owner_id
-              )
-            )
-            OR
-            (
-              agent_id IS NOT NULL
-              AND COALESCE(source_agent.task_permissions->'routing'->>'allowAnyOrgAgent', 'false')::boolean = true
-              AND EXISTS (
-                SELECT 1 FROM agents target_agent
-                WHERE target_agent.id = agent_id
-                AND target_agent.organization_id = source_agent.organization_id
-              )
-            )
-            OR
-            (
-              COALESCE(source_agent.task_permissions->'routing'->>'allowCrossTeamRouting', 'false')::boolean = true
-            )
-          )
-        )
-      WHEN routed_from_team_id IS NOT NULL THEN
-        EXISTS (
-          SELECT 1 FROM teams source_team
-          WHERE source_team.id = routed_from_team_id
-          AND EXISTS (
-            SELECT 1 FROM team_memberships tm
-            WHERE tm.team_id = source_team.id AND tm.user_id = auth.uid()
-          )
-          AND (
-            (agent_id IS NOT NULL AND agent_id::text = ANY(
-              SELECT jsonb_array_elements_text(
-                COALESCE(source_team.task_permissions->'routing'->'allowedAgents', '[]'::jsonb)
-              )
-            ))
-            OR
-            (team_id IS NOT NULL AND team_id::text = ANY(
-              SELECT jsonb_array_elements_text(
-                COALESCE(source_team.task_permissions->'routing'->'allowedTeams', '[]'::jsonb)
-              )
-            ))
-            OR
-            (
-              agent_id IS NOT NULL
-              AND COALESCE(source_team.task_permissions->'routing'->>'allowAnyOrgAgent', 'false')::boolean = true
-            )
-            OR
-            (
-              COALESCE(source_team.task_permissions->'routing'->>'allowCrossTeamRouting', 'false')::boolean = true
-            )
-          )
-        )
-      ELSE true
-      END
     )`,
   }),
 ]);
@@ -747,21 +605,21 @@ export const ragIndexes = pgTable("rag_indexes", {
     as: "permissive",
     for: "all",
     to: [appOwnerRole],
-    using: sql`organization_id = get_current_organization_id()`,
-    withCheck: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("rag_indexes_admin_management", {
     as: "permissive",
     for: "all",
     to: [appAdminRole],
-    using: sql`organization_id = get_current_organization_id()`,
-    withCheck: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("rag_indexes_member_view", {
     as: "permissive",
     for: "select",
     to: [appMemberRole],
-    using: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
 ]);
 
@@ -795,21 +653,21 @@ export const ragDocuments = pgTable("rag_documents", {
     as: "permissive",
     for: "all",
     to: [appOwnerRole],
-    using: sql`organization_id = get_current_organization_id()`,
-    withCheck: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("rag_documents_admin_management", {
     as: "permissive",
     for: "all",
     to: [appAdminRole],
-    using: sql`organization_id = get_current_organization_id()`,
-    withCheck: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("rag_documents_member_view", {
     as: "permissive",
     for: "select",
     to: [appMemberRole],
-    using: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
 ]);
 
@@ -842,21 +700,21 @@ export const ragQueryLogs = pgTable("rag_query_logs", {
     as: "permissive",
     for: "all",
     to: [appOwnerRole],
-    using: sql`organization_id = get_current_organization_id() OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = get_current_organization_id()))`,
-    withCheck: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer))`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("rag_query_logs_admin_management", {
     as: "permissive",
     for: "all",
     to: [appAdminRole],
-    using: sql`organization_id = get_current_organization_id() OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = get_current_organization_id()))`,
-    withCheck: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer))`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
   pgPolicy("rag_query_logs_user_access", {
     as: "permissive",
     for: "select",
     to: [appMemberRole, authenticatedRole],
-    using: sql`user_id = auth.uid() AND (organization_id = get_current_organization_id() OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = get_current_organization_id())))`,
+    using: sql`user_id = current_setting('app.current_user_id')::uuid AND (organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer)))`,
   }),
 ]);
 
@@ -897,7 +755,7 @@ export const chats = pgTable("chats", {
     as: "permissive",
     for: "all",
     to: "public",
-    using: sql`organization_id = get_current_organization_id()`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
 ]);
 
@@ -933,7 +791,7 @@ export const chatMessages: any = pgTable("chat_messages", {
     as: "permissive",
     for: "all",
     to: "public",
-    using: sql`EXISTS (SELECT 1 FROM chats c WHERE c.id = chat_id AND c.organization_id = get_current_organization_id())`,
+    using: sql`EXISTS (SELECT 1 FROM chats c WHERE c.id = chat_id AND c.organization_id = current_setting('app.current_organization_id')::integer)`,
   }),
 ]);
 

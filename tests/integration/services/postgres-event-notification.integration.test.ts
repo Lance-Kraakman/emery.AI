@@ -13,9 +13,10 @@
 import { describe, test, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import postgres from 'postgres';
 import { taskSchedulingContainer } from '@/ddd/application/di/scheduling-container';
-import { initializeDI, getAgentApplicationService, getAgentTaskApplicationService } from '@/ddd/application/di/container';
+import { getAgentApplicationService, getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import { testClient } from '../shared/integration-helpers';
 import type { TestContext } from '../shared/test-setup';
+import { initializeTestDI } from '../shared/test-setup';
 import { contextAwareDb } from '@/lib/db/simple-context-proxy';
 import { rawClient } from '@/lib/db/client';
 import { contextManager } from '@/lib/db/context-manager';
@@ -27,7 +28,7 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
 
   beforeAll(() => {
     // Initialize DI containers for testing
-    initializeDI(contextAwareDb, rawClient);
+    initializeTestDI();
     taskSchedulingContainer.initialize(contextAwareDb, rawClient);
     console.log('✅ DI containers initialized for event notification tests');
   });

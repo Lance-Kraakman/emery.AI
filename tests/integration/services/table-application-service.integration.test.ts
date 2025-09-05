@@ -1,7 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { 
   getTableApplicationService,
-  initializeDI,
   getDatabaseApplicationService
 } from '@/ddd/application/di/container';
 import { testClient } from '../shared/integration-helpers';
@@ -10,7 +9,7 @@ import type { TableApplicationService } from '@/ddd/application/services/tables/
 import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { TestCase } from '../../shared/types';
-import { createTestOrganization, type TestContext } from '../shared/test-setup';
+import { createTestOrganization, type TestContext, initializeTestDI } from '../shared/test-setup';
 import { Row, RowId } from '@/ddd/domain/tables/value-objects/row';
 import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
 
@@ -247,7 +246,7 @@ describe('TableApplicationService Integration Tests', () => {
 
   beforeAll(() => {
     // Initialize DI container with test database clients
-    initializeDI(testClient.db as any, testClient.db as any);
+    initializeTestDI();
     
     tableAppService = getTableApplicationService();
   });

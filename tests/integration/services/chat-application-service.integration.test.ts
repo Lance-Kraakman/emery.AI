@@ -1,7 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { 
-  getChatApplicationService, 
-  initializeDI 
+  getChatApplicationService
 } from '@/ddd/application/di/container';
 import { testClient } from '../shared/integration-helpers';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
@@ -9,6 +8,7 @@ import type { TestCase } from '../../shared/types';
 import type { CreateChatCommand } from '@/ddd/application/services/chat/chat-application-service';
 import type { TestContext } from '../shared/test-setup';
 import { ChatId } from '@/ddd/domain/shared/value-objects';
+import { initializeTestDI } from '../shared/test-setup';
 
 // AIDEV-NOTE: Chat Application Service integration tests focusing on core DDD functionality
 // Tests Value Object usage, repository integration, and business logic validation
@@ -109,7 +109,7 @@ describe('Chat Application Service Integration Tests', () => {
 
   beforeAll(() => {
     // Initialize DI container with test database clients
-    initializeDI(testClient.db as any, testClient.db as any);
+    initializeTestDI();
   });
 
   afterAll(async () => {

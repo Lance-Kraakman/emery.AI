@@ -128,6 +128,11 @@ function createSimpleContextProxy(baseDb: DbClient): DbClient {
     get(target, prop, receiver) {
       const originalValue = Reflect.get(target, prop, receiver);
       
+      // Debug: Log all property access
+      if (typeof prop === 'string' && ['select', 'insert', 'update', 'delete', 'transaction'].includes(prop)) {
+        console.log(`🔍 PROXY DEBUG: Accessing property "${prop}"`);
+      }
+      
       // Intercept transaction method - this covers most repository operations
       if (prop === 'transaction') {
         return function(callback: any, config?: any) {
@@ -152,7 +157,7 @@ function createSimpleContextProxy(baseDb: DbClient): DbClient {
       if (prop === 'select' || prop === 'insert' || prop === 'update' || prop === 'delete') {
         return function(...args: any[]) {
           const context = contextManager.getContext();
-          // console.log(`🔍 RLS Proxy: Intercepted ${prop as string} method, context:`, context ? `org=${context.organizationId.value}` : 'NONE');
+          console.log(`🔍 RLS Proxy: Intercepted ${prop as string} method, context:`, context ? `org=${context.organizationId.value}` : 'NONE');
           
           if (context) {
             // Create the query builder first, then proxy it with the initial step
@@ -222,7 +227,9 @@ function createSimpleContextProxy(baseDb: DbClient): DbClient {
  * Context-aware database client using simplified JavaScript proxy
  * This preserves all Drizzle functionality while automatically applying RLS when context is set
  */
+console.log('🔍 PROXY: Creating context-aware database client');
 export const contextAwareDb = createSimpleContextProxy(db);
+console.log('🔍 PROXY: Context-aware database client created');
 
 // Export the type - same as regular DbClient since proxy preserves all functionality
 export type ContextAwareDbClient = DbClient;
