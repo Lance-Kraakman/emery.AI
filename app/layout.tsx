@@ -1,6 +1,5 @@
 import './globals.css'
 import AuthProvider from '@/components/AuthProvider'
-import { ConditionalLayout } from '@/components/ConditionalLayout'
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -17,9 +16,7 @@ export default function RootLayout({
     <html lang="en" className="h-full" suppressHydrationWarning>
       <body className="relative h-full">
         <AuthProvider>
-          <ConditionalLayout>
-            {children}
-          </ConditionalLayout>
+          {children}
         </AuthProvider>
       </body>
     </html>

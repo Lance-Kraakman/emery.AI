@@ -90,6 +90,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;--> statement-breakpoint
 
+-- Function for team changes
+CREATE OR REPLACE FUNCTION notify_rag_reindex_teams()
+RETURNS TRIGGER AS $$
+BEGIN
+  PERFORM pg_notify('rag_reindex_needed', json_build_object(
+    'organizationId', COALESCE(NEW.organization_id, OLD.organization_id),
+    'domainType', 'teams',
+    'changeType', TG_OP,
+    'sourceId', COALESCE(NEW.id, OLD.id)::text,
+    'metadata', json_build_object(
+      'teamName', COALESCE(NEW.name, OLD.name),
+      'teamId', COALESCE(NEW.id, OLD.id)
+    ),
+    'timestamp', extract(epoch from now())
+  )::text);
+  RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;--> statement-breakpoint
+
 -- Organizations trigger
 DROP TRIGGER IF EXISTS rag_reindex_organization_trigger ON organizations;--> statement-breakpoint
 CREATE TRIGGER rag_reindex_organization_trigger
@@ -107,3 +126,9 @@ DROP TRIGGER IF EXISTS rag_reindex_tables_trigger ON tables;--> statement-breakp
 CREATE TRIGGER rag_reindex_tables_trigger
   AFTER INSERT OR UPDATE OR DELETE ON tables
   FOR EACH ROW EXECUTE FUNCTION notify_rag_reindex_tables();--> statement-breakpoint
+
+-- Teams trigger  
+DROP TRIGGER IF EXISTS rag_reindex_teams_trigger ON teams;--> statement-breakpoint
+CREATE TRIGGER rag_reindex_teams_trigger
+  AFTER INSERT OR UPDATE OR DELETE ON teams
+  FOR EACH ROW EXECUTE FUNCTION notify_rag_reindex_teams();--> statement-breakpoint
