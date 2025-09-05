@@ -74,6 +74,12 @@ export class EmbeddingGeneratorDomainService implements EmbeddingGeneratorServic
     try {
       console.log(`[LLAMAINDEX-PROCESSOR] Processing file: ${fileData.name}`);
       
+      // Check if file type is supported before processing
+      if (!this.isFileTypeSupported(fileData.mimeType)) {
+        console.log(`[LLAMAINDEX-PROCESSOR] Skipping unsupported file type: ${fileData.mimeType} for file: ${fileData.name}`);
+        return [];
+      }
+      
       // Download file from S3 to temporary location
       const response = await s3Client.send(new GetObjectCommand({
         Bucket: BUCKET_NAME,
@@ -183,18 +189,33 @@ export class EmbeddingGeneratorDomainService implements EmbeddingGeneratorServic
 
   /**
    * Get supported file types for processing
+   * AIDEV-NOTE: Only text-based files are supported to avoid token limit issues with binary/image content
    */
   getSupportedFileTypes(): string[] {
     return [
+      // Document formats
       'application/pdf',
       'text/plain',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'application/vnd.ms-excel',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      
+      // Data formats
       'text/csv',
       'application/json',
-      'text/markdown'
+      'text/markdown',
+      
+      // Additional text formats
+      'text/html',
+      'application/xml',
+      'text/xml',
+      'text/rtf'
+      
+      // AIDEV-TODO: Add image/OCR support in future
+      // - 'image/jpeg', 'image/png', 'image/tiff' with OCR processing
+      // - 'image/svg+xml' with text extraction
+      // - Consider using vision models for image understanding
     ];
   }
 
