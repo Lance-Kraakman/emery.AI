@@ -610,7 +610,7 @@ export const chats = pgTable("chats", {
   // RAG and AI context
   contextMetadata: jsonb("context_metadata").$type<{
     ragIndexId?: string;
-    contextType?: 'tables' | 'agents' | 'files' | 'teams' | 'databases' | 'organizations' | 'mixed';
+    contextType?: 'tables' | 'agents' | 'files' | 'teams' | 'databases' | 'organizations' | 'tasks' | 'mixed';
     domainSchema?: {
       id?: number;        // Domain entity ID (replaces domainId/tableId)
       name?: string;      // Domain entity name

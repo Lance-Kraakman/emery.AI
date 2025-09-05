@@ -21,6 +21,7 @@ import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { getCapabilitiesCount } from '@/ddd/domain/agents/entities/agent';
 import type { Database } from '@/ddd/domain/databases/entities/database';
 import type { Team } from '@/ddd/domain/teams/entities/team';
+import type { Task } from '@/ddd/domain/tasks/entities/task';
 import type { StoredFile } from '@/ddd/domain/files/entities/file-storage';
 
 // Import repository interfaces
@@ -30,6 +31,7 @@ import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/da
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
 import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
 import type { RagIndexRepository } from '@/ddd/domain/rag/repositories/rag-index-repository';
 import type { RagDocumentRepository } from '@/ddd/domain/rag/repositories/rag-document-repository';
 
@@ -45,6 +47,7 @@ export class IndexingDomainService {
     private readonly agentRepository: IAgentRepository,
     private readonly databaseRepository: IDatabaseRepository,
     private readonly teamRepository: ITeamRepository,
+    private readonly taskRepository: ITaskRepository,
     private readonly fileStorageRepository: IFileStorageRepository,
     private readonly tableRepository: IDynamicTableRepository,
     private readonly indexRepository: RagIndexRepository,
@@ -64,6 +67,7 @@ export class IndexingDomainService {
       'agents': () => this.indexAgentData(indexId, organizationId),
       'databases': () => this.indexDatabaseData(indexId, organizationId),
       'teams': () => this.indexTeamData(indexId, organizationId),
+      'tasks': () => this.indexTaskData(indexId, organizationId),
       'tables': (tables: any[], fieldsMap?: Map<number, any[]>, databasesMap?: Map<number, any>) => 
         this.indexTableData(indexId, organizationId, tables, fieldsMap, databasesMap),
       'files': (files: any[]) => this.indexFileData(indexId, organizationId, files)
@@ -579,6 +583,78 @@ export class IndexingDomainService {
   }
 
   /**
+   * Index task data for a RAG index by fetching from repository
+   */
+  async indexTaskData(
+    indexId: RagIndexId,
+    organizationId: OrganizationId
+  ): Promise<RagDocument[]> {
+    const tasks = await this.taskRepository.findByOrganization(organizationId);
+    if (tasks.length === 0) return [];
+
+    return this.processTaskData(indexId, organizationId, tasks);
+  }
+
+  /**
+   * Process task data into RAG documents using batch embedding generation
+   */
+  private async processTaskData(
+    indexId: RagIndexId,
+    organizationId: OrganizationId,
+    tasks: Task[]
+  ): Promise<RagDocument[]> {
+    if (tasks.length === 0) return [];
+
+    // Generate content for all tasks first
+    const taskContents = tasks.map(task => this.generateTaskContent(task));
+    
+    // Generate embeddings in batch (much faster than sequential calls)
+    console.log(`[INDEXING-DOMAIN] Generating embeddings for ${tasks.length} tasks using batch API`);
+    const embeddings = await this.embeddingGenerator.generateEmbeddingsBatch(taskContents);
+    
+    // Create documents with pre-generated embeddings
+    const documents: RagDocument[] = [];
+    for (let i = 0; i < tasks.length; i++) {
+      const task = tasks[i];
+      const content = taskContents[i];
+      const embedding = embeddings[i];
+      const contentHash = this.embeddingGenerator.calculateContentHash(content);
+
+      const document = RagDocument.create({
+        indexId,
+        organizationId,
+        sourceId: task.id.toString(),
+        domainType: 'tasks',
+        sourceName: task.name,
+        title: `Task: ${task.name}`,
+        content,
+        metadata: {
+          taskId: task.id,
+          agentId: task.agentId,
+          organizationId: organizationId.value,
+          status: task.status.value,
+          capabilityName: task.capabilityName,
+          hasResult: !!task.result,
+          hasError: !!task.error,
+          duration: task.duration,
+          createdAt: task.createdAt,
+          startedAt: task.startedAt,
+          completedAt: task.completedAt,
+          isTerminal: task.isTerminal,
+          toolCount: task.instructions.tools?.length || 0,
+          serverCount: task.instructions.servers?.length || 0,
+        },
+        embedding,
+        contentHash,
+      });
+
+      documents.push(document);
+    }
+
+    return documents;
+  }
+
+  /**
    * Fetch sample rows from a table for content generation
    */
   private async fetchSampleRows(table: DynamicTable, limit: number = 15): Promise<any[]> {
@@ -796,6 +872,58 @@ ${team.description ? `Description: ${team.description}` : 'Description: Not prov
 About: ${team.name} is a team within the organization, responsible for specific functions and objectives. This team may utilize AI agents to automate tasks and achieve its goals.
 
 Functionality: The team collaborates on tasks, projects, and workflows within the Emery platform. Its activities are aligned with its defined purpose and responsibilities, contributing to the overall mission of the organization.`;
+  }
+
+  private generateTaskContent(task: Task): string {
+    const toolsList = task.instructions.tools && task.instructions.tools.length > 0
+      ? `\nTools: ${task.instructions.tools.map(tool => tool.name).join(', ')}`
+      : '\nTools: None configured';
+
+    const serversList = task.instructions.servers && task.instructions.servers.length > 0
+      ? `\nServers: ${task.instructions.servers.map(server => server.name).join(', ')}`
+      : '\nServers: None configured';
+
+    const createdDate = task.createdAt 
+      ? `\nCreated: ${task.createdAt.toLocaleDateString()}`
+      : '';
+
+    const startedDate = task.startedAt
+      ? `\nStarted: ${task.startedAt.toLocaleDateString()}`
+      : '';
+
+    const completedDate = task.completedAt
+      ? `\nCompleted: ${task.completedAt.toLocaleDateString()}`
+      : '';
+
+    const durationInfo = task.duration
+      ? `\nDuration: ${Math.round(task.duration / 1000)}s`
+      : '';
+
+    const resultInfo = task.result
+      ? `\nResult: ${typeof task.result === 'string' ? task.result.substring(0, 200) : JSON.stringify(task.result).substring(0, 200)}${typeof task.result === 'string' && task.result.length > 200 || JSON.stringify(task.result).length > 200 ? '...' : ''}`
+      : task.error
+      ? `\nError: ${task.error}`
+      : task.status.value === 'in_progress'
+      ? '\nStatus: Currently executing'
+      : '';
+
+    const instructionsSummary = task.instructions.instructions.length > 300
+      ? `${task.instructions.instructions.substring(0, 297)}...`
+      : task.instructions.instructions;
+
+    const capabilityInfo = task.capabilityName
+      ? `\nCapability: ${task.capabilityName}`
+      : '';
+
+    return `Task: ${task.name}
+Agent ID: ${task.agentId.value}${capabilityInfo}
+Status: ${task.status.value}${createdDate}${startedDate}${completedDate}${durationInfo}
+
+Instructions: ${instructionsSummary}${toolsList}${serversList}${resultInfo}
+
+About: ${task.name} is an execution task within the Emery platform, tracking automated agent workflows and their outcomes. This task provides insight into agent performance, workflow patterns, and organizational automation activities.
+
+Context: This task execution record contains valuable information about agent capabilities, execution patterns, success/failure rates, and performance metrics. It helps understand which workflows are effective, common failure points, and optimization opportunities within the organization's automation processes.`;
   }
 
   // ================================================================
@@ -1090,9 +1218,9 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
     // Create comprehensive default index covering all domain types
     const defaultIndex = RagIndex.create({
       name: defaultIndexName,
-      description: 'Automatic RAG index for organizational data - covers all tables, agents, teams, databases, and files',
+      description: 'Automatic RAG index for organizational data - covers all tables, agents, teams, tasks, databases, and files',
       organizationId,
-      domainTypes: ['tables', 'agents', 'teams', 'organizations', 'databases', 'files'], // All available domain types
+      domainTypes: ['tables', 'agents', 'teams', 'tasks', 'organizations', 'databases', 'files'], // All available domain types
     });
 
     console.log(`[RAG-INDEXING-DOMAIN] Creating default RAG index for organization ${organizationId.value}`);
