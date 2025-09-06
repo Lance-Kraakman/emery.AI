@@ -161,7 +161,7 @@ export class DIContainer {
     this.initializationAttempted = true;
     try {
       // Use context-aware db client for automatic RLS context
-      this.initialize(contextAwareDb, rawClient);
+      this.initialize(contextAwareDb);
       console.log('✅ DIContainer auto-initialized with context-aware database');
     } catch (error) {
       console.warn('⚠️ DIContainer auto-initialization failed, will require manual initialization:', error);
@@ -213,7 +213,7 @@ export class DIContainer {
 
     // Register agent domain repositories and services  
     const agentRepository = new DrizzleAgentRepository(db);
-    const taskRepository = new DrizzleTaskRepository(db);
+    const taskRepository = new DrizzleTaskRepository(contextAwareDb);
     const agentExecutionRepository = new GrpcAgentExecutionRepository(agentRepository);
     const agentTaskApplicationService = new AgentTaskApplicationService(
       agentRepository,
