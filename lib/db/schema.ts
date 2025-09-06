@@ -454,13 +454,10 @@ export const tasks = pgTable("tasks", {
     to: [appMemberRole],
     using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
-  pgPolicy("tasks_creator_control", {
-    as: "permissive", 
-    for: "all",
-    to: [authenticatedRole],
-    using: sql`created_by = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer`,
-    withCheck: sql`created_by = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer`,
-  }),
+  // Removed tasks_creator_control policy - it was bypassing agent permission checks
+  // by allowing any user to create tasks as long as they set themselves as creator.
+  // The tasks_agent_assignment_permissions and tasks_team_assignment_permissions
+  // policies now handle all INSERT permission checks based on agent/team permissions.
   pgPolicy("tasks_agent_assignment_permissions", {
     as: "permissive",
     for: "insert",
