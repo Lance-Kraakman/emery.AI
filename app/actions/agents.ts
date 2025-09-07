@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
+import { withAuthContext } from '@/lib/auth/with-context';
 import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
 import type { Result, CreateAgentData, CreateAgentClientData } from "./types";
 import { getAgentApplicationService } from "@/ddd/application/di/container";
@@ -14,13 +15,10 @@ import { AgentMapper, type AgentDTO } from "@/app/mappers/agent-mapper";
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
 
 export async function createAgent(data: CreateAgentData, revalidateUrl?: string): Promise<Result> {
-  try {
-    const session = await requirePermission("manage_agents");
-    const agentApplicationService = getAgentApplicationService();
-    
-    // AIDEV-NOTE: Set RLS context for database operations
-    const { contextManager } = await import('@/lib/db/context-manager');
-    contextManager.setContext(OrganizationId.fromNumber(session.user.currentOrganizationId), UserId.fromString(session.user.id));
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("manage_agents");
+      const agentApplicationService = getAgentApplicationService();
     
     const command: CreateAgentCommand = {
       name: data.name,
@@ -68,11 +66,12 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
     };
   } catch (error) {
     console.error("Error creating agent:", error);
-    return {
-      success: false,
-      error: "Failed to create agent",
-    };
-  }
+      return {
+        success: false,
+        error: "Failed to create agent",
+      };
+    }
+  });
 }
 
 export async function addCapabilityToAgent(agentId: number, capability: CapabilityConfig) {
@@ -162,15 +161,11 @@ export async function createAgentAction(formData: FormData): Promise<Result> {
 }
 
 export async function getAgents(filters: { teamId?: number | string, searchQuery?: string, status?: 'active' | 'inactive' | 'archived' } = {}): Promise<AgentDTO[]> {
-  try {
-    const session = await requirePermission("view_agents");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("view_agents");
     const currentOrg = await requireCurrentOrganization();
     const agentApplicationService = getAgentApplicationService();
-    
-    // AIDEV-NOTE: Set RLS context for database operations
-    // This ensures all queries in the application service use proper organization/user context
-    const { contextManager } = await import('@/lib/db/context-manager');
-    contextManager.setContext(currentOrg.id, UserId.fromString(session.user.id));
     
     const agentFilters: AgentFilters = {
       organizationId: currentOrg.id,
@@ -184,23 +179,22 @@ export async function getAgents(filters: { teamId?: number | string, searchQuery
     // Map domain entities to DTOs for client serialization
     return domainAgents.map(AgentMapper.toDTO);
   } catch (error) {
-    console.error("Error fetching agents:", error);
-    throw new Error("Failed to fetch agents");
-  }
+      console.error("Error fetching agents:", error);
+      throw new Error("Failed to fetch agents");
+    }
+  });
 }
 
 export async function getAgent(agentId: number) {
-  try {
-    if (!agentId) {
-      throw new Error("agentId is required");
-    }
+  return withAuthContext(async () => {
+    try {
+      if (!agentId) {
+        throw new Error("agentId is required");
+      }
 
-    const session = await requirePermission("view_agents");
+      const session = await requirePermission("view_agents");
     const agentApplicationService = getAgentApplicationService();
     
-    // AIDEV-NOTE: Set RLS context for database operations
-    const { contextManager } = await import('@/lib/db/context-manager');
-    contextManager.setContext(OrganizationId.fromNumber(session.user.currentOrganizationId), UserId.fromString(session.user.id));
     const domainAgent = await agentApplicationService.getAgent(AgentId.fromNumber(agentId));
     
     if (!domainAgent) {
@@ -210,26 +204,25 @@ export async function getAgent(agentId: number) {
     // Return domain entity directly - it already has proper defaults and types
     return domainAgent;
   } catch (error) {
-    console.error("Error fetching agent:", error);
-    throw new Error("Failed to fetch agent");
-  }
+      console.error("Error fetching agent:", error);
+      throw new Error("Failed to fetch agent");
+    }
+  });
 }
 
 export async function updateAgent(agentId: number, data: Partial<CreateAgentData>, revalidateUrl?: string): Promise<Result> {
-  try {
-    if (!agentId) {
-      return {
-        success: false,
-        error: "agentId is required",
-      };
-    }
+  return withAuthContext(async () => {
+    try {
+      if (!agentId) {
+        return {
+          success: false,
+          error: "agentId is required",
+        };
+      }
 
-    const session = await requirePermission("manage_agents");
+      const session = await requirePermission("manage_agents");
     const agentApplicationService = getAgentApplicationService();
     
-    // AIDEV-NOTE: Set RLS context for database operations
-    const { contextManager } = await import('@/lib/db/context-manager');
-    contextManager.setContext(OrganizationId.fromNumber(session.user.currentOrganizationId), UserId.fromString(session.user.id));
     const command: UpdateAgentCommand = {
       agentId: AgentId.fromNumber(agentId),
       name: data.name,
@@ -273,28 +266,27 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
     };
   } catch (error) {
     console.error("Error updating agent:", error);
-    return {
-      success: false,
-      error: "Failed to update agent",
-    };
-  }
+      return {
+        success: false,
+        error: "Failed to update agent",
+      };
+    }
+  });
 }
 
 export async function deleteAgent(agentId: number, revalidateUrl?: string): Promise<Result> {
-  try {
-    if (!agentId) {
-      return {
-        success: false,
-        error: "agentId is required",
-      };
-    }
+  return withAuthContext(async () => {
+    try {
+      if (!agentId) {
+        return {
+          success: false,
+          error: "agentId is required",
+        };
+      }
 
-    const session = await requirePermission("manage_agents");
+      const session = await requirePermission("manage_agents");
     const agentApplicationService = getAgentApplicationService();
     
-    // AIDEV-NOTE: Set RLS context for database operations
-    const { contextManager } = await import('@/lib/db/context-manager');
-    contextManager.setContext(OrganizationId.fromNumber(session.user.currentOrganizationId), UserId.fromString(session.user.id));
     const result = await agentApplicationService.deleteAgent(AgentId.fromNumber(agentId));
 
     if (!result.success) {
@@ -317,9 +309,10 @@ export async function deleteAgent(agentId: number, revalidateUrl?: string): Prom
     };
   } catch (error) {
     console.error("Error deleting agent:", error);
-    return {
-      success: false,
-      error: "Failed to delete agent",
-    };
-  }
+      return {
+        success: false,
+        error: "Failed to delete agent",
+      };
+    }
+  });
 }

@@ -2,13 +2,15 @@
 
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
+import { withAuthContext } from '@/lib/auth/with-context';
 import { getTeamPermissionsApplicationService } from "@/ddd/application/di/container";
 import type { Result } from "./types";
 import type { TeamTaskPermissions, UpdateTeamPermissionsRequest } from "@/ddd/application/services/teams/team-permissions-application-service";
 
 export async function getTeamPermissions(teamId: number): Promise<Result<TeamTaskPermissions>> {
-  try {
-    const session = await requirePermission("manage_teams");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("manage_teams");
     const currentOrg = await requireCurrentOrganization();
     const teamPermissionsService = getTeamPermissionsApplicationService();
 
@@ -20,19 +22,21 @@ export async function getTeamPermissions(teamId: number): Promise<Result<TeamTas
     return result;
   } catch (error) {
     console.error("Error getting team permissions:", error);
-    return {
-      success: false,
-      error: "Failed to get team permissions"
-    };
-  }
+      return {
+        success: false,
+        error: "Failed to get team permissions"
+      };
+    }
+  });
 }
 
 export async function updateTeamPermissions(
   teamId: number, 
   permissions: TeamTaskPermissions
 ): Promise<Result> {
-  try {
-    const session = await requirePermission("manage_teams");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("manage_teams");
     const currentOrg = await requireCurrentOrganization();
     const teamPermissionsService = getTeamPermissionsApplicationService();
 
@@ -48,11 +52,12 @@ export async function updateTeamPermissions(
     return result;
   } catch (error) {
     console.error("Error updating team permissions:", error);
-    return {
-      success: false,
-      error: "Failed to update team permissions"
-    };
-  }
+      return {
+        success: false,
+        error: "Failed to update team permissions"
+      };
+    }
+  });
 }
 
 export async function getAllTeamPermissionsForOrganization(): Promise<Result<Array<{
@@ -60,8 +65,9 @@ export async function getAllTeamPermissionsForOrganization(): Promise<Result<Arr
   teamName: string;
   permissions: TeamTaskPermissions;
 }>>> {
-  try {
-    const session = await requirePermission("view_teams");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("view_teams");
     const currentOrg = await requireCurrentOrganization();
     const teamPermissionsService = getTeamPermissionsApplicationService();
 
@@ -70,9 +76,10 @@ export async function getAllTeamPermissionsForOrganization(): Promise<Result<Arr
     return result;
   } catch (error) {
     console.error("Error getting organization team permissions:", error);
-    return {
-      success: false,
-      error: "Failed to get organization team permissions"
-    };
-  }
+      return {
+        success: false,
+        error: "Failed to get organization team permissions"
+      };
+    }
+  });
 }

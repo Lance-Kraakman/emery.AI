@@ -3,12 +3,13 @@ import { auth, hasPermission } from "@/lib/auth";
 import { getFileApplicationService, getTableApplicationService } from "@/ddd/application/di/container";
 import { FieldId, OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
 import type { UploadFileCommand } from "@/ddd/application/services/tables/file-application-service";
-import { contextManager } from "@/lib/db/context-manager";
+import { withAuthContext } from '@/lib/auth/with-context';
 
 export async function POST(request: NextRequest) {
-  try {
-    // Check authentication and permissions
-    const session = await auth();
+  return withAuthContext(async () => {
+    try {
+      // Check authentication and permissions
+      const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json(
         { error: "Authentication required" },
@@ -45,14 +46,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Set organizational context for RLS policies
-    contextManager.setContext(
-      OrganizationId.fromNumber(organizationId),
-      UserId.fromString(session.user.id)
-    );
-
-    try {
-      // Use TableApplicationService to find field by name and get its ID
+    // Use TableApplicationService to find field by name and get its ID
       const tableApplicationService = getTableApplicationService();
       const table = await tableApplicationService.getTable(TableId.fromNumber(tableId));
       if (!table) {
@@ -104,15 +98,12 @@ export async function POST(request: NextRequest) {
         ...result.data,
         warnings: result.warnings
       }, { status: 201 });
-    } finally {
-      // Always clear context after database operations
-      contextManager.clearContext();
-    }
   } catch (error) {
     console.error("Error uploading file:", error);
-    return NextResponse.json(
-      { error: "Failed to upload file" },
-      { status: 500 }
-    );
-  }
+      return NextResponse.json(
+        { error: "Failed to upload file" },
+        { status: 500 }
+      );
+    }
+  });
 }

@@ -6,6 +6,7 @@
 import { auth, hasPermission as authHasPermission } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { requireCurrentOrganization } from "./user-organizations";
+import { withAuthContext } from '@/lib/auth/with-context';
 import { getUserRoleApplicationService } from "@/ddd/application/di/container";
 import type { Result } from "./types";
 import { UserRole, type UserRoleCapabilities } from "@/ddd/domain/shared/value-objects/user-role";

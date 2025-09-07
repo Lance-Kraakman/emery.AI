@@ -7,13 +7,15 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { getInvitationApplicationService } from "@/ddd/application/di/container";
+import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import type { SendInvitationCommand, AcceptInvitationCommand } from "@/ddd/application/services/invitations/invitation-application-service";
 import { EmailAddress, OrganizationRole, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
 
 export async function inviteUser(formData: FormData): Promise<Result> {
-  try {
-    const session = await requirePermission("manage_users");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("manage_users");
     const currentOrg = await requireCurrentOrganization();
     const email = formData.get("email") as string;
     const role = formData.get("role") as string;
@@ -51,13 +53,14 @@ export async function inviteUser(formData: FormData): Promise<Result> {
       data: result.data,
       warnings: result.warnings
     };
-  } catch (error) {
-    console.error("Error sending invitation:", error);
-    return {
-      success: false,
-      error: "Failed to send invitation"
-    };
-  }
+    } catch (error) {
+      console.error("Error sending invitation:", error);
+      return {
+        success: false,
+        error: "Failed to send invitation"
+      };
+    }
+  });
 }
 
 export async function acceptInvitation(token: string): Promise<Result> {

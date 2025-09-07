@@ -5,6 +5,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
+import { withAuthContext } from '@/lib/auth/with-context';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateFieldData } from "./types";
 import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field";

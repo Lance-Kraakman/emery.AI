@@ -6,6 +6,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
+import { withAuthContext } from '@/lib/auth/with-context';
 import { getTeamApplicationService } from "@/ddd/application/di/container";
 import { AgentId } from "@/ddd/domain/shared/value-objects";
 import { createTeamSchema, updateTeamSchema, parseFormDataToTeam } from "@/lib/schemas";
@@ -20,18 +21,19 @@ import { TeamMapper, type TeamDTO } from "@/app/mappers/team-mapper";
 // Helper function for creating teams from client data (with plain types)
 export async function createTeamFromClient(data: CreateTeamClientData): Promise<Result> {
   // No conversion needed for teams since they use the same plain types
-  return createTeam(data);
+  return withAuthContext(() => createTeam(data));
 }
 
 // Helper function for updating teams from client data (with plain types)
 export async function updateTeamFromClient(teamId: number, data: Partial<CreateTeamClientData>): Promise<Result> {
   // No conversion needed for teams since they use the same plain types
-  return updateTeam(teamId, data);
+  return withAuthContext(() => updateTeam(teamId, data));
 }
 
 export async function createTeam(data: CreateTeamData): Promise<Result> {
-  try {
-    const session = await requirePermission("manage_teams");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("manage_teams");
     const currentOrg = await requireCurrentOrganization();
     const { name, purpose, description, responsibilities, goals, agentIds } = data;
 
@@ -72,11 +74,12 @@ export async function createTeam(data: CreateTeamData): Promise<Result> {
     };
   } catch (error) {
     console.error("Error creating team:", error);
-    return {
-      success: false,
-      error: "Failed to create team",
-    };
-  }
+      return {
+        success: false,
+        error: "Failed to create team",
+      };
+    }
+  });
 }
 
 export async function createTeamAction(formData: FormData): Promise<Result> {

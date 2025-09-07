@@ -3,14 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
+import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result, CreateTaskData } from "./types";
 import { getAgentTaskApplicationService, getAgentApplicationService } from "@/ddd/application/di/container";
 import type { CreateTaskRequest } from "@/ddd/application/services/agents/agent-task-application-service";
 import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export async function createTask(data: CreateTaskData): Promise<Result> {
-  try {
-    const session = await requirePermission("manage_agents");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("manage_agents");
     const currentOrg = await requireCurrentOrganization();
     const { agentId, name, capabilityName, instructions, createdBy } = data;
 
@@ -64,14 +66,16 @@ export async function createTask(data: CreateTaskData): Promise<Result> {
     console.error("Error creating task:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to create task",
-    };
-  }
+        error: error instanceof Error ? error.message : "Failed to create task",
+      };
+    }
+  });
 }
 
 export async function getTasks(agentId?: number, limit = 50): Promise<Result> {
-  try {
-    await requirePermission("manage_agents");
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("manage_agents");
     const currentOrg = await requireCurrentOrganization();
 
     const taskApplicationService = getAgentTaskApplicationService();
@@ -108,14 +112,16 @@ export async function getTasks(agentId?: number, limit = 50): Promise<Result> {
     console.error("Error fetching tasks:", error);
     return {
       success: false,
-      error: "Failed to fetch tasks",
-    };
-  }
+        error: "Failed to fetch tasks",
+      };
+    }
+  });
 }
 
 export async function getTask(taskId: string): Promise<Result> {
-  try {
-    await requirePermission("manage_agents");
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("manage_agents");
 
     const taskApplicationService = getAgentTaskApplicationService();
     const domainTask = await taskApplicationService.getTask(taskId);
@@ -152,9 +158,10 @@ export async function getTask(taskId: string): Promise<Result> {
     console.error("Error fetching task:", error);
     return {
       success: false,
-      error: "Failed to fetch task",
-    };
-  }
+        error: "Failed to fetch task",
+      };
+    }
+  });
 }
 
 export async function updateTaskStatus(
@@ -163,8 +170,9 @@ export async function updateTaskStatus(
   result?: any,
   error?: string
 ): Promise<Result> {
-  try {
-    await requirePermission("manage_agents");
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("manage_agents");
 
     const taskApplicationService = getAgentTaskApplicationService();
     
@@ -255,14 +263,16 @@ export async function updateTaskStatus(
     console.error("Error updating task status:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to update task status",
-    };
-  }
+        error: error instanceof Error ? error.message : "Failed to update task status",
+      };
+    }
+  });
 }
 
 export async function deleteTask(taskId: string): Promise<Result> {
-  try {
-    await requirePermission("manage_agents");
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("manage_agents");
 
     if (!taskId) {
       return {
@@ -296,14 +306,16 @@ export async function deleteTask(taskId: string): Promise<Result> {
     console.error("Error deleting task:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to delete task",
-    };
-  }
+        error: error instanceof Error ? error.message : "Failed to delete task",
+      };
+    }
+  });
 }
 
 export async function getTaskStats(agentId?: number): Promise<Result> {
-  try {
-    await requirePermission("manage_agents");
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("manage_agents");
     const currentOrg = await requireCurrentOrganization();
 
     const taskApplicationService = getAgentTaskApplicationService();
@@ -333,7 +345,8 @@ export async function getTaskStats(agentId?: number): Promise<Result> {
     console.error("Error fetching task stats:", error);
     return {
       success: false,
-      error: "Failed to fetch task stats",
-    };
-  }
+        error: "Failed to fetch task stats",
+      };
+    }
+  });
 }
