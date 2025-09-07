@@ -18,7 +18,7 @@ import { sql } from 'drizzle-orm';
 export async function seedTestOrganizations() {
   // Ensure DI is initialized
   try {
-    initializeDI(db, rawClient);
+    initializeDI(db);
   } catch (e) {
     // May already be initialized
   }
@@ -46,7 +46,7 @@ export async function seedTestOrganizations() {
 export async function seedTestUsers() {
   // Ensure DI is initialized
   try {
-    initializeDI(db, rawClient);
+    initializeDI(db);
   } catch (e) {
     // May already be initialized
   }

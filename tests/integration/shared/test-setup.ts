@@ -213,9 +213,9 @@ export async function createTestUser(
   
   return {
     id: user.id.value,
-    email: user.email.value,
-    name: user.name,
-    organizationRole: user.organizationRole.value
+    email: user.email?.value || '',
+    name: user.name || '',
+    organizationRole: (user.organizationRole as any)?.value || user.organizationRole || 'member'
   };
 }
 

@@ -8,6 +8,7 @@ import { agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
+import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import crypto from 'crypto';
 
 export interface AgentExecuteRequest {
@@ -94,9 +95,11 @@ export async function POST(
     
     // Create and execute task
     const taskResult = await agentTaskService.createAndExecuteTask({
-      agentId: agentId,
+      agentId: AgentId.fromNumber(agentId),
       name: `Agent execution: ${instructions.substring(0, 50)}...`,
       instructions: taskInstructions,
+      organizationId: OrganizationId.fromNumber(agent.organizationId),
+      createdBy: UserId.fromString(userId),
       timeoutSeconds: Math.floor(timeout / 1000)
     });
     

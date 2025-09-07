@@ -6,7 +6,7 @@ import { requireCurrentOrganization } from "./user-organizations";
 import type { Result, CreateTaskData } from "./types";
 import { getAgentTaskApplicationService, getAgentApplicationService } from "@/ddd/application/di/container";
 import type { CreateTaskRequest } from "@/ddd/application/services/agents/agent-task-application-service";
-import { AgentId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export async function createTask(data: CreateTaskData): Promise<Result> {
   try {
@@ -27,12 +27,12 @@ export async function createTask(data: CreateTaskData): Promise<Result> {
     // Create task using application service
     const taskApplicationService = getAgentTaskApplicationService();
     const createRequest: CreateTaskRequest = {
-      agentId,
+      agentId: AgentId.fromNumber(agentId),
       name,
       instructions,
       capabilityName,
-      createdBy: createdBy || session.user.id,
-      organizationId: currentOrg.id.value
+      createdBy: UserId.fromString(createdBy || session.user.id),
+      organizationId: OrganizationId.fromNumber(currentOrg.id.value)
     };
 
     const task = await taskApplicationService.createTask(createRequest);

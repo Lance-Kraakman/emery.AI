@@ -66,7 +66,7 @@ export class TestDatabaseClient {
 }
 
 export function initializeTestDI(): void {
-  initializeDI(db, rawClient);
+  initializeDI(db);
 }
 
 export const testDb = new TestDatabaseClient();

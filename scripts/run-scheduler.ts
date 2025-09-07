@@ -293,7 +293,7 @@ async function main() {
 
   // Initialize DI containers
   try {
-    initializeDI(contextAwareDb, rawClient);
+    initializeDI(contextAwareDb);
     console.log('✅ DI Container initialized for scheduler');
     
     taskSchedulingContainer.initialize(contextAwareDb, rawClient);

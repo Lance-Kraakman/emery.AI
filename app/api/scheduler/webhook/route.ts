@@ -9,6 +9,7 @@ import { agents } from '@/lib/db/schema';
 import { sql, eq, and } from 'drizzle-orm';
 import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
+import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { v4 as uuidv4 } from 'uuid';
 import { createHmac, timingSafeEqual } from 'crypto';
 
@@ -129,9 +130,11 @@ export async function POST(request: NextRequest): Promise<Response> {
       };
 
       const taskResult = await agentTaskService.createAndExecuteTask({
-        agentId: agent.id,
+        agentId: AgentId.fromNumber(agent.id),
         name: `Webhook: ${instructions}`,
         instructions: taskInstructions,
+        organizationId: OrganizationId.fromNumber(agent.organizationId),
+        createdBy: UserId.fromString('system'),
         timeoutSeconds: 300
       });
 
@@ -175,9 +178,11 @@ export async function POST(request: NextRequest): Promise<Response> {
       };
 
       const taskResult = await agentTaskService.createAndExecuteTask({
-        agentId: agent.id,
+        agentId: AgentId.fromNumber(agent.id),
         name: `Webhook: ${instructions}`,
         instructions: taskInstructions,
+        organizationId: OrganizationId.fromNumber(agent.organizationId),
+        createdBy: UserId.fromString('system'),
         timeoutSeconds: 300
       });
 

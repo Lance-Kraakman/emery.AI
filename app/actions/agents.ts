@@ -18,6 +18,10 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
     const session = await requirePermission("manage_agents");
     const agentApplicationService = getAgentApplicationService();
     
+    // AIDEV-NOTE: Set RLS context for database operations
+    const { contextManager } = await import('@/lib/db/context-manager');
+    contextManager.setContext(OrganizationId.fromNumber(session.user.currentOrganizationId), UserId.fromString(session.user.id));
+    
     const command: CreateAgentCommand = {
       name: data.name,
       role: data.role,
@@ -159,8 +163,14 @@ export async function createAgentAction(formData: FormData): Promise<Result> {
 
 export async function getAgents(filters: { teamId?: number | string, searchQuery?: string, status?: 'active' | 'inactive' | 'archived' } = {}): Promise<AgentDTO[]> {
   try {
+    const session = await requirePermission("view_agents");
     const currentOrg = await requireCurrentOrganization();
     const agentApplicationService = getAgentApplicationService();
+    
+    // AIDEV-NOTE: Set RLS context for database operations
+    // This ensures all queries in the application service use proper organization/user context
+    const { contextManager } = await import('@/lib/db/context-manager');
+    contextManager.setContext(currentOrg.id, UserId.fromString(session.user.id));
     
     const agentFilters: AgentFilters = {
       organizationId: currentOrg.id,
@@ -185,7 +195,12 @@ export async function getAgent(agentId: number) {
       throw new Error("agentId is required");
     }
 
+    const session = await requirePermission("view_agents");
     const agentApplicationService = getAgentApplicationService();
+    
+    // AIDEV-NOTE: Set RLS context for database operations
+    const { contextManager } = await import('@/lib/db/context-manager');
+    contextManager.setContext(OrganizationId.fromNumber(session.user.currentOrganizationId), UserId.fromString(session.user.id));
     const domainAgent = await agentApplicationService.getAgent(AgentId.fromNumber(agentId));
     
     if (!domainAgent) {
@@ -209,7 +224,12 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       };
     }
 
+    const session = await requirePermission("manage_agents");
     const agentApplicationService = getAgentApplicationService();
+    
+    // AIDEV-NOTE: Set RLS context for database operations
+    const { contextManager } = await import('@/lib/db/context-manager');
+    contextManager.setContext(OrganizationId.fromNumber(session.user.currentOrganizationId), UserId.fromString(session.user.id));
     const command: UpdateAgentCommand = {
       agentId: AgentId.fromNumber(agentId),
       name: data.name,
@@ -269,7 +289,12 @@ export async function deleteAgent(agentId: number, revalidateUrl?: string): Prom
       };
     }
 
+    const session = await requirePermission("manage_agents");
     const agentApplicationService = getAgentApplicationService();
+    
+    // AIDEV-NOTE: Set RLS context for database operations
+    const { contextManager } = await import('@/lib/db/context-manager');
+    contextManager.setContext(OrganizationId.fromNumber(session.user.currentOrganizationId), UserId.fromString(session.user.id));
     const result = await agentApplicationService.deleteAgent(AgentId.fromNumber(agentId));
 
     if (!result.success) {
