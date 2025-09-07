@@ -237,13 +237,17 @@ export async function hasPermission(userId: string, permission: string): Promise
       
       // Admin has most permissions except organization management
       if (role === 'admin') {
-        const adminPermissions = ['canManageUsers', 'canCreateAgents', 'canManageAgents', 'canViewAgents', 'canExecuteAgents'];
+        const adminPermissions = [
+          'canManageUsers', 'manage_users', 'view_users',
+          'canCreateAgents', 'canManageAgents', 'canViewAgents', 'canExecuteAgents', 
+          'view_agents', 'manage_agents', 'view_teams', 'manage_teams'
+        ];
         return adminPermissions.includes(permission);
       }
       
-      // Member has basic permissions
+      // Member has basic permissions including viewing users
       if (role === 'member') {
-        const memberPermissions = ['canViewAgents', 'canExecuteAgents'];
+        const memberPermissions = ['view_users', 'canViewAgents', 'canExecuteAgents'];
         return memberPermissions.includes(permission);
       }
       

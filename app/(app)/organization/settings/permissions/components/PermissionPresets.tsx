@@ -222,7 +222,7 @@ export function PermissionPresets({
     
     // Check routing permissions
     const routingMatches = type === 'agent' 
-      ? (routing.allowAnyTeamAgent || false) === (preset.permissions.routing.allowAnyTeamAgent || false) &&
+      ? ((routing as any).allowAnyTeamAgent || false) === (preset.permissions.routing.allowAnyTeamAgent || false) &&
         (routing.allowAnyOrgAgent || false) === (preset.permissions.routing.allowAnyOrgAgent) &&
         (routing.allowCrossTeamRouting || false) === (preset.permissions.routing.allowCrossTeamRouting) &&
         (routing.allowedAgents?.length || 0) === 0 &&

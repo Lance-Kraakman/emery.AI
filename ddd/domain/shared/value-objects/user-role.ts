@@ -30,6 +30,17 @@ export interface UserRoleCapabilities {
   canCreateTables: boolean;
   canManageTables: boolean;
   canEditTableData: boolean;
+  
+  // Field Management
+  canCreateFields: boolean;
+  canManageFields: boolean;
+  
+  // Invitation Management  
+  canViewInvitations: boolean;
+  canAcceptInvitations: boolean;
+  
+  // Row/Data Management
+  canManageRows: boolean;
 }
 
 export class UserRole {

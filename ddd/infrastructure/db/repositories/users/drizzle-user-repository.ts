@@ -108,13 +108,47 @@ export class DrizzleUserRepository implements IUserRepository {
       .where(eq(users.id, id.value));
   }
 
-  // Simplified role management - just update the user's organizationRole
+  // AIDEV-NOTE: Dual storage pattern for performance and RLS policy simplicity
+  // - user_organizations table: Source of truth for multi-org relationships (supports users in multiple orgs)  
+  // - users.organization_role: Denormalized cache for fast RLS policy checks (avoids complex subqueries)
+  // - Transaction ensures both stay synchronized during role updates
+  // Simplified role management - update both userOrganizations and cached users.organizationRole
   async updateUserRole(userId: UserId, role: string): Promise<User> {
+    // First get the user's current organization ID
+    const user = await this.db.query.users.findFirst({
+      where: eq(users.id, userId.value),
+      columns: { currentOrganizationId: true }
+    });
+
+    if (!user?.currentOrganizationId) {
+      throw new Error(`User with id ${userId.value} not found or has no current organization`);
+    }
+
+    // Update both places in a transaction
+    await this.db.transaction(async (tx) => {
+      // Update the junction table (source of truth)
+      await tx
+        .update(userOrganizations)
+        .set({ role })
+        .where(
+          and(
+            eq(userOrganizations.userId, userId.value),
+            eq(userOrganizations.organizationId, user.currentOrganizationId!)
+          )
+        );
+
+      // Update the cached field for performance/permissions
+      await tx
+        .update(users)
+        .set({ organizationRole: role })
+        .where(eq(users.id, userId.value));
+    });
+
+    // Return the updated user
     const [updatedUser] = await this.db
-      .update(users)
-      .set({ organizationRole: role })
-      .where(eq(users.id, userId.value))
-      .returning();
+      .select()
+      .from(users)
+      .where(eq(users.id, userId.value));
 
     if (!updatedUser) {
       throw new Error(`User with id ${userId.value} not found`);

@@ -10,15 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { UserPlus, Crown, Shield, User, Loader2 } from "lucide-react";
 import { getOrganizationMembers, getPendingInvitations, inviteUser } from "@/app/actions/invitations";
 import { assignUserRole } from "@/app/actions/permissions";
+import type { OrganizationMember } from "@/ddd/domain/organizations/entities/organization";
 
-interface OrganizationMember {
-  id: number;
-  name: string;
-  email: string;
-  role: string;
-  teams?: string[];
-  lastActive?: Date;
-}
 
 interface PendingInvitation {
   id: { value: number };
@@ -27,14 +20,24 @@ interface PendingInvitation {
   expiresAt?: Date;
 }
 
+// DTO for UI layer - converts domain OrganizationMember to UI-friendly format
+interface OrganizationMemberDTO {
+  id: string; // userId.value  
+  name: string;
+  email: string;
+  role: string;
+  teams?: string[];
+  lastActive?: Date;
+}
+
 export function UsersTab() {
-  const [members, setMembers] = useState<OrganizationMember[]>([]);
+  const [members, setMembers] = useState<OrganizationMemberDTO[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [inviteLoading, setInviteLoading] = useState(false);
-  const [roleUpdating, setRoleUpdating] = useState<number | null>(null);
+  const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -83,10 +86,10 @@ export function UsersTab() {
     }
   };
 
-  const handleRoleChange = async (userId: number, newRole: string) => {
+  const handleRoleChange = async (userId: string, newRole: string) => {
     setRoleUpdating(userId);
     try {
-      const result = await assignUserRole(userId.toString(), newRole as any);
+      const result = await assignUserRole(userId, newRole as any);
       if (result.success) {
         await loadData(); // Refresh data
       } else {

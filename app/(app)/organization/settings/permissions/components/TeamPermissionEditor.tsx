@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { EntityMultiSelect, type EntityOption } from './EntityMultiSelect';
 import { PermissionPresets } from './PermissionPresets';
-import { getOrganizationMembers } from "@/app/actions/user-organizations";
+import { getOrganizationMembers } from "@/app/actions/invitations";
 import { getAgents } from "@/app/actions/agents";
 import { getTeams } from "@/app/actions/teams";
 import type { TeamTaskPermissions } from "@/ddd/application/services/teams/team-permissions-application-service";
@@ -59,11 +59,11 @@ export function TeamPermissionEditor({
     try {
       const members = await getOrganizationMembers();
       return members.map(member => ({
-        id: member.userId,
-        name: member.userDisplayName || member.userEmail || 'Unknown User',
+        id: member.id,
+        name: member.name || member.email || 'Unknown User',
         type: 'user' as const,
         status: member.role,
-        description: member.userEmail
+        description: member.email
       }));
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -97,7 +97,7 @@ export function TeamPermissionEditor({
           name: team.name,
           type: 'team' as const,
           status: 'active',
-          description: team.description
+          description: team.description || undefined
         }));
     } catch (error) {
       console.error('Error fetching teams:', error);
