@@ -8,11 +8,8 @@
  * instead of creating duplicate ScheduledJob entities.
  */
 
-import { Task, TaskInstructions, CreateTaskData, TaskConfig } from '../entities/task';
-import { TaskId } from '../value-objects/task-id';
-import { TaskStatus } from '../value-objects/task-status';
-import type { AgentId, OrganizationId } from '@/ddd/domain/shared/value-objects';
-import { AgentStatus } from '@/ddd/domain/shared/value-objects';
+import { Task } from '../entities/task';
+import type { AgentId } from '@/ddd/domain/shared/value-objects';
 import type { TriggerConfig, TriggerType, ScheduledTask, ScheduleTaskRequest } from '@/ddd/domain/scheduling';
 import { IAgentRepository } from '../../agents/repositories/agent-repository';
 

@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import type { CreateTaskRequest } from '@/ddd/application/services/agents/agent-task-application-service';
-import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { AgentId, UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 /**
  * Get tasks list using AgentTaskApplicationService
@@ -60,11 +60,12 @@ export async function POST(request: NextRequest) {
     const agentTaskApplicationService = getAgentTaskApplicationService();
 
     const command: CreateTaskRequest = {
-      agentId: parseInt(agentId),
+      agentId: AgentId.fromNumber(parseInt(agentId)),
       name,
       capabilityName,
       instructions: instructions || {},
-      createdBy: authResult.user.id
+      organizationId: OrganizationId.fromNumber(authResult.user.organizationId!),
+      createdBy: UserId.fromString(authResult.user.id)
     };
 
     const task = await agentTaskApplicationService.createTask(command);

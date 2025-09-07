@@ -72,7 +72,7 @@ describe('Connection Server Actions Integration Tests', () => {
   
   beforeAll(async () => {
     // Initialize DI container
-    initializeDI(testClient.db as any, testClient.db as any);
+    initializeDI(testClient.db as any);
     await testClient.verifyDatabaseConnection();
   });
 

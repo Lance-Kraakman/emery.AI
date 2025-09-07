@@ -50,8 +50,8 @@ const settingsNavItems = [
     icon: Plug,
   },
   {
-    label: "Users & Permissions",
-    href: "/organization/settings/users",
+    label: "Permissions",
+    href: "/organization/settings/permissions",
     icon: Users,
   },
   {
