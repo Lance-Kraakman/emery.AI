@@ -2,20 +2,17 @@
 
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
+import { withAuthContext } from '@/lib/auth/with-context';
 import { getAgentPermissionsApplicationService } from "@/ddd/application/di/container";
 import type { Result } from "./types";
 import type { AgentTaskPermissions, UpdateAgentPermissionsRequest } from "@/ddd/application/services/agents/agent-permissions-application-service";
 
 export async function getAgentPermissions(agentId: number): Promise<Result<AgentTaskPermissions>> {
-  try {
-    const session = await requirePermission("manage_agents");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("manage_agents");
     const currentOrg = await requireCurrentOrganization();
     const agentPermissionsService = getAgentPermissionsApplicationService();
-
-    // AIDEV-NOTE: Set RLS context for database operations
-    const { contextManager } = await import('@/lib/db/context-manager');
-    const { UserId } = await import('@/ddd/domain/shared/value-objects');
-    contextManager.setContext(currentOrg.id, UserId.fromString(session.user.id));
 
     const result = await agentPermissionsService.getAgentTaskPermissions({
       agentId,
@@ -25,26 +22,23 @@ export async function getAgentPermissions(agentId: number): Promise<Result<Agent
     return result;
   } catch (error) {
     console.error("Error getting agent permissions:", error);
-    return {
-      success: false,
-      error: "Failed to get agent permissions"
-    };
-  }
+      return {
+        success: false,
+        error: "Failed to get agent permissions"
+      };
+    }
+  });
 }
 
 export async function updateAgentPermissions(
   agentId: number, 
   permissions: AgentTaskPermissions
 ): Promise<Result> {
-  try {
-    const session = await requirePermission("manage_agents");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("manage_agents");
     const currentOrg = await requireCurrentOrganization();
     const agentPermissionsService = getAgentPermissionsApplicationService();
-
-    // AIDEV-NOTE: Set RLS context for database operations
-    const { contextManager } = await import('@/lib/db/context-manager');
-    const { UserId } = await import('@/ddd/domain/shared/value-objects');
-    contextManager.setContext(currentOrg.id, UserId.fromString(session.user.id));
 
     const request: UpdateAgentPermissionsRequest = {
       agentId,
@@ -58,11 +52,12 @@ export async function updateAgentPermissions(
     return result;
   } catch (error) {
     console.error("Error updating agent permissions:", error);
-    return {
-      success: false,
-      error: "Failed to update agent permissions"
-    };
-  }
+      return {
+        success: false,
+        error: "Failed to update agent permissions"
+      };
+    }
+  });
 }
 
 export async function getAllAgentPermissionsForOrganization(): Promise<Result<Array<{
@@ -70,15 +65,11 @@ export async function getAllAgentPermissionsForOrganization(): Promise<Result<Ar
   agentName: string;
   permissions: AgentTaskPermissions;
 }>>> {
-  try {
-    const session = await requirePermission("view_agents");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("view_agents");
     const currentOrg = await requireCurrentOrganization();
     const agentPermissionsService = getAgentPermissionsApplicationService();
-
-    // AIDEV-NOTE: Set RLS context for database operations
-    const { contextManager } = await import('@/lib/db/context-manager');
-    const { UserId } = await import('@/ddd/domain/shared/value-objects');
-    contextManager.setContext(currentOrg.id, UserId.fromString(session.user.id));
 
     const result = await agentPermissionsService.getAllAgentPermissionsForOrganization(currentOrg.id.value);
     
@@ -93,9 +84,10 @@ export async function getAllAgentPermissionsForOrganization(): Promise<Result<Ar
     return result;
   } catch (error) {
     console.error("Error getting organization agent permissions:", error);
-    return {
-      success: false,
-      error: "Failed to get organization agent permissions"
-    };
-  }
+      return {
+        success: false,
+        error: "Failed to get organization agent permissions"
+      };
+    }
+  });
 }

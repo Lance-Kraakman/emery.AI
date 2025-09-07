@@ -7,6 +7,7 @@ import { z } from "zod"
 import { revalidatePath } from "next/cache"
 import { requirePermission } from "./permissions"
 import { requireCurrentOrganization } from "./user-organizations"
+import { withAuthContext } from '@/lib/auth/with-context';
 import { getDatabaseApplicationService } from "@/ddd/application/di/container"
 import type { Result } from "./types"
 

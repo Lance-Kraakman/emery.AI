@@ -5,6 +5,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
+import { withAuthContext } from '@/lib/auth/with-context';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateRowCommand, UpdateRowCommand } from "./types";
 import { Row, RowId } from "@/ddd/domain/tables/value-objects/row";

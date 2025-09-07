@@ -6,6 +6,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { getUserRoleApplicationService, getUserRepository, getOrganizationRepository } from "@/ddd/application/di/container";
+import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
 
@@ -19,8 +20,9 @@ import type {
 } from "@/ddd/application/services/user-organizations/user-role-application-service";
 
 export async function switchCurrentOrganization(organizationId: number): Promise<Result> {
-  try {
-    const session = await requirePermission("manage_users");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("manage_users");
     
     if (!organizationId) {
       return {
@@ -55,16 +57,18 @@ export async function switchCurrentOrganization(organizationId: number): Promise
     };
   } catch (error) {
     console.error("Error switching organization:", error);
-    return {
-      success: false,
-      error: "Failed to switch organization",
-    };
-  }
+      return {
+        success: false,
+        error: "Failed to switch organization",
+      };
+    }
+  });
 }
 
 export async function joinOrganization(organizationId: number, role: string = 'member'): Promise<Result> {
-  try {
-    const session = await requirePermission("manage_users");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("manage_users");
     
     if (!organizationId) {
       return {
@@ -98,18 +102,20 @@ export async function joinOrganization(organizationId: number, role: string = 'm
       data: result.data,
       warnings: result.warnings
     };
-  } catch (error) {
-    console.error("Error joining organization:", error);
-    return {
-      success: false,
-      error: "Failed to join organization",
-    };
-  }
+    } catch (error) {
+      console.error("Error joining organization:", error);
+      return {
+        success: false,
+        error: "Failed to join organization",
+      };
+    }
+  });
 }
 
 export async function leaveOrganization(organizationId: number): Promise<Result> {
-  try {
-    const session = await requirePermission("manage_users");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("manage_users");
     
     if (!organizationId) {
       return {
@@ -145,16 +151,18 @@ export async function leaveOrganization(organizationId: number): Promise<Result>
     };
   } catch (error) {
     console.error("Error leaving organization:", error);
-    return {
-      success: false,
-      error: "Failed to leave organization",
-    };
-  }
+      return {
+        success: false,
+        error: "Failed to leave organization",
+      };
+    }
+  });
 }
 
 export async function getUserOrganizations() {
-  try {
-    const session = await requirePermission("view_users");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("view_users");
     
     const userRepository = getUserRepository();
     const organizations = await userRepository.getUserOrganizations(UserId.fromString(session.user.id));
@@ -166,15 +174,17 @@ export async function getUserOrganizations() {
       isCurrentOrganization: org.id.value === session.user.currentOrganizationId,
       joinedAt: org.createdAt
     }));
-  } catch (error) {
-    console.error("Error fetching user organizations:", error);
-    throw new Error("Failed to fetch organizations");
-  }
+    } catch (error) {
+      console.error("Error fetching user organizations:", error);
+      throw new Error("Failed to fetch organizations");
+    }
+  });
 }
 
 export async function getCurrentOrganization() {
-  try {
-    const session = await requirePermission("view_users");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("view_users");
     
     if (!session.user.currentOrganizationId) {
       return null;
@@ -196,10 +206,11 @@ export async function getCurrentOrganization() {
       ...organization,
       userRole: userRole || 'member'
     };
-  } catch (error) {
-    console.error("Error fetching current organization:", error);
-    return null;
-  }
+    } catch (error) {
+      console.error("Error fetching current organization:", error);
+      return null;
+    }
+  });
 }
 
 // AIDEV-NOTE: Helper function to check if user has access to current organization context
@@ -215,8 +226,9 @@ export async function requireCurrentOrganization() {
  * Add another user to an organization (admin function)
  */
 export async function addUserToOrganization(userId: string, organizationId: number, role: string = 'member'): Promise<Result> {
-  try {
-    const session = await requirePermission("manage_users");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("manage_users");
     
     if (!userId || !organizationId) {
       return {
@@ -253,19 +265,21 @@ export async function addUserToOrganization(userId: string, organizationId: numb
     };
   } catch (error) {
     console.error("Error adding user to organization:", error);
-    return {
-      success: false,
-      error: "Failed to add user to organization",
-    };
-  }
+      return {
+        success: false,
+        error: "Failed to add user to organization",
+      };
+    }
+  });
 }
 
 /**
  * Remove another user from organization (admin function)
  */
 export async function removeUserFromOrganization(userId: string, organizationId: number): Promise<Result> {
-  try {
-    const session = await requirePermission("manage_users");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("manage_users");
     
     if (!userId || !organizationId) {
       return {
@@ -307,21 +321,23 @@ export async function removeUserFromOrganization(userId: string, organizationId:
       data: { message: "User removed from organization successfully" },
       warnings: result.warnings
     };
-  } catch (error) {
-    console.error("Error removing user from organization:", error);
-    return {
-      success: false,
-      error: "Failed to remove user from organization",
-    };
-  }
+    } catch (error) {
+      console.error("Error removing user from organization:", error);
+      return {
+        success: false,
+        error: "Failed to remove user from organization",
+      };
+    }
+  });
 }
 
 /**
  * Get organization members (admin function)
  */
 export async function getOrganizationMembers(organizationId?: number, searchQuery?: string, role?: string) {
-  try {
-    const session = await requirePermission("view_users");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("view_users");
     const currentOrg = await requireCurrentOrganization();
     
     const userOrganizationApplicationService = getUserRoleApplicationService();
@@ -334,18 +350,20 @@ export async function getOrganizationMembers(organizationId?: number, searchQuer
     };
 
     return await userOrganizationApplicationService.getOrganizationMembers(filters);
-  } catch (error) {
-    console.error("Error fetching organization members:", error);
-    throw new Error("Failed to fetch organization members");
-  }
+    } catch (error) {
+      console.error("Error fetching organization members:", error);
+      throw new Error("Failed to fetch organization members");
+    }
+  });
 }
 
 /**
  * Update user role in organization (admin function)
  */
 export async function updateUserRole(userId: string, organizationId: number, newRole: string): Promise<Result> {
-  try {
-    const session = await requirePermission("manage_users");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("manage_users");
     
     if (!userId || !organizationId || !newRole) {
       return {
@@ -382,10 +400,11 @@ export async function updateUserRole(userId: string, organizationId: number, new
     };
   } catch (error) {
     console.error("Error updating user role:", error);
-    return {
-      success: false,
-      error: "Failed to update user role",
-    };
-  }
+      return {
+        success: false,
+        error: "Failed to update user role",
+      };
+    }
+  });
 }
 
