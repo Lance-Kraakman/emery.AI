@@ -19,10 +19,29 @@ export interface UserRoleCapabilities {
   canViewAgents: boolean;
   canExecuteAgents: boolean;
   
+  // Ownership-based Agent Management (for members)
+  canManageOwnAgents: boolean;
+  canViewOwnAgents: boolean;
+  
   // Team Management
   canCreateTeams: boolean;
   canManageTeams: boolean;
   canViewTeams: boolean;
+  
+  // Team-based Access (for members)
+  canViewTeamAgents: boolean;
+  canViewTeamTasks: boolean;
+  canViewTeamData: boolean;
+  
+  // Task Management
+  canCreateTasks: boolean;
+  canManageTasks: boolean;
+  canViewTasks: boolean;
+  canExecuteTasks: boolean;
+  
+  // Ownership-based Task Management (for members)
+  canManageOwnTasks: boolean;
+  canViewOwnTasks: boolean;
   
   // Data Management
   canViewData: boolean;
@@ -30,6 +49,9 @@ export interface UserRoleCapabilities {
   canCreateTables: boolean;
   canManageTables: boolean;
   canEditTableData: boolean;
+  
+  // Ownership-based Data Management (for members)
+  canManageOwnData: boolean;
   
   // Field Management
   canCreateFields: boolean;
@@ -74,14 +96,31 @@ export class UserRole {
           canManageAgents: true,
           canViewAgents: true,
           canExecuteAgents: true,
+          canManageOwnAgents: true,
+          canViewOwnAgents: true,
           canCreateTeams: true,
           canManageTeams: true,
           canViewTeams: true,
+          canViewTeamAgents: true,
+          canViewTeamTasks: true,
+          canViewTeamData: true,
+          canCreateTasks: true,
+          canManageTasks: true,
+          canViewTasks: true,
+          canExecuteTasks: true,
+          canManageOwnTasks: true,
+          canViewOwnTasks: true,
           canViewData: true,
           canManageData: true,
           canCreateTables: true,
           canManageTables: true,
           canEditTableData: true,
+          canManageOwnData: true,
+          canCreateFields: true,
+          canManageFields: true,
+          canViewInvitations: true,
+          canAcceptInvitations: true,
+          canManageRows: true,
         };
 
       case ORGANIZATION_ROLES.ADMIN:
@@ -96,36 +135,70 @@ export class UserRole {
           canManageAgents: true,
           canViewAgents: true,
           canExecuteAgents: true,
+          canManageOwnAgents: true,
+          canViewOwnAgents: true,
           canCreateTeams: true,
           canManageTeams: true,
           canViewTeams: true,
+          canViewTeamAgents: true,
+          canViewTeamTasks: true,
+          canViewTeamData: true,
+          canCreateTasks: true,
+          canManageTasks: true,
+          canViewTasks: true,
+          canExecuteTasks: true,
+          canManageOwnTasks: true,
+          canViewOwnTasks: true,
           canViewData: true,
           canManageData: true,
           canCreateTables: true,
           canManageTables: true,
           canEditTableData: true,
+          canManageOwnData: true,
+          canCreateFields: true,
+          canManageFields: true,
+          canViewInvitations: true,
+          canAcceptInvitations: true,
+          canManageRows: true,
         };
 
       case ORGANIZATION_ROLES.MEMBER:
         return {
-          // Limited read/execute access
+          // Limited access with ownership and team-based permissions
           canManageOrganization: false,
           canViewOrganization: true,
           canManageUsers: false,
           canViewUsers: true,
           canInviteUsers: false,
-          canCreateAgents: false,
-          canManageAgents: false,
+          canCreateAgents: true, // Members can create their own agents
+          canManageAgents: false, // Cannot manage all agents
           canViewAgents: true,
           canExecuteAgents: true,
+          canManageOwnAgents: true, // Can manage their own agents
+          canViewOwnAgents: true, // Can view their own agents
           canCreateTeams: false,
           canManageTeams: false,
           canViewTeams: true,
+          canViewTeamAgents: true, // Can view team agents
+          canViewTeamTasks: true, // Can view team tasks
+          canViewTeamData: true, // Can view team data
+          canCreateTasks: true, // Members can create their own tasks
+          canManageTasks: false, // Cannot manage all tasks
+          canViewTasks: true,
+          canExecuteTasks: true,
+          canManageOwnTasks: true, // Can manage their own tasks
+          canViewOwnTasks: true, // Can view their own tasks
           canViewData: true,
           canManageData: false,
           canCreateTables: false,
           canManageTables: false,
           canEditTableData: true, // Can edit data but not structure
+          canManageOwnData: true, // Can manage their own data
+          canCreateFields: false,
+          canManageFields: false,
+          canViewInvitations: false,
+          canAcceptInvitations: true, // Can accept invitations sent to them
+          canManageRows: false,
         };
 
       default:

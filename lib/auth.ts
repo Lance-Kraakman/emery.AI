@@ -9,6 +9,9 @@ import { users, accounts, sessions, verificationTokens, organizations, userOrgan
 import { eq } from "drizzle-orm"
 import { getServerSession } from "next-auth"
 import { getSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react"
+import { Permission, type PermissionCheck } from '@/ddd/domain/shared/value-objects/permission'
+import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects'
+import { getRBACRepository } from '@/ddd/application/di/container'
 
 // AIDEV-NOTE: Development bypass for testing - allows tests to authenticate as specific user
 export function getTestUserId(): string {
@@ -80,7 +83,6 @@ export const authOptions = {
 
           session.user.id = user.id;
           session.user.currentOrganizationId = userRecord?.currentOrganizationId;
-          session.user.organizationRole = userRecord?.organizationRole;
           session.user.jobTitle = userRecord?.jobTitle;
           
           // Get user's organizations and current organization details
@@ -96,16 +98,14 @@ export const authOptions = {
                 .where(eq(userOrganizations.userId, user.id));
 
               session.user.availableOrganizations = userOrgs.map((uo: any) => ({
-                ...uo.organization,
-                userRole: uo.userOrg.role
+                ...uo.organization
               }));
 
               // Get current organization details
               if (userRecord.currentOrganizationId) {
                 const currentOrg = userOrgs.find((uo: any) => uo.organization.id === userRecord.currentOrganizationId);
                 session.user.currentOrganization = currentOrg ? {
-                  ...currentOrg.organization,
-                  userRole: currentOrg.userOrg.role
+                  ...currentOrg.organization
                 } : null;
               }
 
@@ -114,8 +114,7 @@ export const authOptions = {
               if (!session.user.currentOrganization && userOrgs.length > 0) {
                 const firstOrg = userOrgs[0];
                 session.user.currentOrganization = {
-                  ...firstOrg.organization,
-                  userRole: firstOrg.userOrg.role
+                  ...firstOrg.organization
                 };
                 session.user.currentOrganizationId = firstOrg.organization.id;
 
@@ -131,7 +130,8 @@ export const authOptions = {
           }
           
           // After attempting to set the organization, check if the user still needs setup.
-          const needsSetup = !session.user.currentOrganizationId || !userRecord?.organizationRole;
+          // User needs setup if they don't have a current organization
+          const needsSetup = !session.user.currentOrganizationId;
           session.user.needsSetup = needsSetup;
 
           if (needsSetup) {
@@ -212,60 +212,29 @@ export { getSession }
 export const signIn = nextAuthSignIn
 export const signOut = nextAuthSignOut
 
-export async function hasPermission(userId: string, permission: string): Promise<boolean> {
+export async function hasPermission(userId: string, permission: PermissionCheck, organizationId: number): Promise<boolean> {
   try {
-    // Check user's organization role using simplified RBAC
-    const userQuery = await db
-      .select({
-        organizationRole: users.organizationRole,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (userQuery.length > 0) {
-      const user = userQuery[0];
-      if (!user?.organizationRole) {
-        return false;
-      }
-      
-      // Simple permission check based on organization role
-      const role = user.organizationRole;
-      
-      // Owner has all permissions
-      if (role === 'owner') return true;
-      
-      // Admin has most permissions except organization management
-      if (role === 'admin') {
-        const adminPermissions = [
-          'canManageUsers', 'manage_users', 'view_users',
-          'canCreateAgents', 'canManageAgents', 'canViewAgents', 'canExecuteAgents', 
-          'view_agents', 'manage_agents', 'view_teams', 'manage_teams'
-        ];
-        return adminPermissions.includes(permission);
-      }
-      
-      // Member has basic permissions including viewing users
-      if (role === 'member') {
-        const memberPermissions = ['view_users', 'canViewAgents', 'canExecuteAgents'];
-        return memberPermissions.includes(permission);
-      }
-      
-      return false;
-    }
-
-    // If not a user, check if it's a worker (by API key or worker ID)
-    // This allows workers to have permissions too
-    return false; // For now, workers need separate handling
+    const rbac = getRBACRepository();
+    const userIdVO = UserId.fromString(userId);
+    const orgIdVO = OrganizationId.fromNumber(organizationId);
+    const permissionVO = typeof permission === 'string' ? Permission.fromString(permission) : permission;
+    
+    return await rbac.hasPermission(userIdVO, permissionVO, orgIdVO);
   } catch (error) {
     console.error("Error checking permission:", error);
     return false;
   }
 }
 
-export async function requirePermission(userId: string, permission: string) {
-  const hasAccess = await hasPermission(userId, permission);
-  if (!hasAccess) {
-    throw new Error(`Permission denied: ${permission}`);
+export async function requirePermission(userId: string, permission: PermissionCheck, organizationId: number): Promise<void> {
+  try {
+    const rbac = getRBACRepository();
+    const userIdVO = UserId.fromString(userId);
+    const orgIdVO = OrganizationId.fromNumber(organizationId);
+    const permissionVO = typeof permission === 'string' ? Permission.fromString(permission) : permission;
+    
+    await rbac.requirePermission(userIdVO, permissionVO, orgIdVO);
+  } catch (error) {
+    throw new Error(`Permission denied: ${typeof permission === 'string' ? permission : permission.toString()}`);
   }
 }

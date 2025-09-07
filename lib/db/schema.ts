@@ -4,26 +4,7 @@ import { sql } from "drizzle-orm";
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
 
-// AIDEV-NOTE: Database roles for multi-tenant RBAC system
-// These roles provide database-level security in addition to application-level permissions
-
-// Application-wide roles (created once during initial setup)
-export const appOwnerRole = pgRole('app_owner', { 
-  createRole: false,
-  inherit: true 
-});
-
-export const appAdminRole = pgRole('app_admin', { 
-  createRole: false,
-  inherit: true 
-});
-
-export const appMemberRole = pgRole('app_member', { 
-  createRole: false,
-  inherit: true 
-});
-
-// Authenticated user role - base role for all logged-in users
+// AIDEV-NOTE: Authenticated user role for RLS policies
 export const authenticatedRole = pgRole('authenticated', {
   createRole: false,
   inherit: true
@@ -50,6 +31,7 @@ const vector = customType<{ data: number[]; notNull: false; default: false }>({
     return value as number[];
   },
 });
+
 
 export const databases = pgTable("databases", {
   id: serial("id").primaryKey(),
@@ -139,41 +121,93 @@ export const organizations = pgTable("organizations", {
   analysisCapabilities: jsonb("analysis_capabilities").$type<OrganizationAnalysisCapabilities>(), // Type-safe organizational analysis configuration
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
-  // Primary RLS policy - organization context based
-  pgPolicy("organizations_member_access", {
+  // RBAC-based policy for viewing organizations
+  pgPolicy("organizations_view_permission", {
     as: "permissive",
-    for: "all",
+    for: "select", 
     to: "public",
-    using: sql`id = current_setting('app.current_organization_id')::integer`,
+    using: sql`id = current_setting('app.current_organization_id')::integer 
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'organizations:view',
+        id
+      )`
   }),
-  // Role-based policy for owners - full access to their organizations
-  pgPolicy("organizations_owner_access", {
-    as: "permissive", 
-    for: "all",
-    to: appOwnerRole,
-    using: sql`EXISTS (
-      SELECT 1 FROM user_organizations 
-      WHERE organization_id = ${table.id} 
-      AND user_id = current_setting('app.current_user_id', true)::uuid
-      AND role = 'owner'
-    )`,
-  }),
-  // Role-based policy for admins - read and update access
-  pgPolicy("organizations_admin_access", {
+  // RBAC-based policy for managing organizations
+  pgPolicy("organizations_manage_permission", {
     as: "permissive",
-    for: "select",
-    to: appAdminRole,
-    using: sql`EXISTS (
-      SELECT 1 FROM user_organizations 
-      WHERE organization_id = ${table.id} 
-      AND user_id = current_setting('app.current_user_id', true)::uuid
-      AND role IN ('admin', 'owner')
+    for: "update",
+    to: "public", 
+    using: sql`user_has_permission(
+      current_setting('app.current_user_id')::uuid,
+      'organizations:manage',
+      id
     )`,
+    withCheck: sql`user_has_permission(
+      current_setting('app.current_user_id')::uuid,
+      'organizations:manage',
+      id
+    )`
   }),
 ]);
 
+// AIDEV-NOTE: RBAC System Tables - Flexible permission-based access control
+// Replaces hardcoded role system with configurable roles and permissions
 
-// AIDEV-NOTE: Removed complex roles table - using simplified 3-role system in users.organization_role
+// Permissions (seeded system data)
+export const permissions = pgTable("permissions", {
+  id: serial("id").primaryKey(),
+  resource: text("resource").notNull(), // 'organizations', 'users', 'teams', 'agents', 'tasks', 'data'
+  action: text("action").notNull(),     // 'view', 'manage', 'create', 'execute', 'invite'
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  unique("unique_permission").on(table.resource, table.action)
+]);
+
+// Roles (system + custom per organization)  
+export const roles = pgTable("roles", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  organizationId: integer("organization_id").references(() => organizations.id),
+  isSystem: boolean("is_system").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  pgPolicy("roles_tenant_isolation", {
+    as: "permissive",
+    for: "all", 
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer OR is_system = true`,
+  })
+]);
+
+// Role-Permission assignments (many-to-many)
+export const rolePermissions = pgTable("role_permissions", {
+  id: serial("id").primaryKey(),
+  roleId: integer("role_id").notNull().references(() => roles.id, { onDelete: "cascade" }),
+  permissionId: integer("permission_id").notNull().references(() => permissions.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  unique("unique_role_permission").on(table.roleId, table.permissionId)
+]);
+
+// User-Role assignments (replaces organizationRole field)
+export const userRoles = pgTable("user_roles", {
+  id: serial("id").primaryKey(), 
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  roleId: integer("role_id").notNull().references(() => roles.id, { onDelete: "cascade" }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  assignedAt: timestamp("assigned_at").defaultNow(),
+}, (table) => [
+  unique("unique_user_role_org").on(table.userId, table.roleId, table.organizationId),
+  pgPolicy("user_roles_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public", 
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+  })
+]);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -182,32 +216,43 @@ export const users = pgTable("users", {
   emailVerified: timestamp("email_verified"),
   image: text("image"),
   currentOrganizationId: integer("current_organization_id").references(() => organizations.id),
-  // Simplified 3-role system: 'owner' | 'admin' | 'member'
-  organizationRole: text("organization_role").notNull().default("member"), // Fixed 3-role RBAC
   jobTitle: text("job_title"),
   teams: text("teams").array(),
   apiKey: text("api_key").unique(), // User API key for management APIs
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
-  // Pure Drizzle simplified role-based policies
-  pgPolicy("users_owner_management", {
-    as: "permissive",
-    for: "all",
-    to: [appOwnerRole],
-    using: sql`current_organization_id = current_setting('app.current_organization_id')::integer`,
-    withCheck: sql`current_organization_id = current_setting('app.current_organization_id')::integer`,
-  }),
-  pgPolicy("users_admin_management", {
-    as: "permissive", 
-    for: "select",
-    to: [appAdminRole],
-    using: sql`current_organization_id = current_setting('app.current_organization_id')::integer`,
-  }),
-  pgPolicy("users_member_self", {
+  // RBAC-based policy for viewing users
+  pgPolicy("users_view_permission", {
     as: "permissive",
     for: "select",
-    to: [appMemberRole],
-    using: sql`id = current_setting('app.current_user_id')::uuid`,
+    to: "public",
+    using: sql`current_organization_id = current_setting('app.current_organization_id')::integer 
+      AND (
+        id = current_setting('app.current_user_id')::uuid 
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'users:view',
+          current_organization_id
+        )
+      )`
+  }),
+  // RBAC-based policy for managing users
+  pgPolicy("users_manage_permission", {
+    as: "permissive",
+    for: "update",
+    to: "public",
+    using: sql`current_organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'users:manage', 
+        current_organization_id
+      )`,
+    withCheck: sql`current_organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'users:manage', 
+        current_organization_id
+      )`
   }),
 ]);
 
@@ -215,7 +260,6 @@ export const userOrganizations = pgTable("user_organizations", {
   id: serial("id").primaryKey(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
-  role: text("role").notNull().default("member"), // owner, admin, member
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -232,7 +276,7 @@ export const invitations = pgTable("invitations", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
   invitedBy: uuid("invited_by").notNull().references(() => users.id, { onDelete: "cascade" }),
   email: text("email").notNull(),
-  role: text("role").notNull().default("member"), // owner, admin, member
+  roleId: integer("role_id").references(() => roles.id), // Role to assign when invitation is accepted
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -274,26 +318,47 @@ export const teams = pgTable("teams", {
   }>().default(sql`'{"assignment": {"allowOrgAdmins": true}, "routing": {"allowCrossTeamRouting": false}}'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
-  // Enhanced role-based team policies
-  pgPolicy("teams_owner_management", {
-    as: "permissive",
-    for: "all",
-    to: [appOwnerRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-  }),
-  pgPolicy("teams_admin_management", {
-    as: "permissive",
-    for: "all",
-    to: [appAdminRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-  }),
-  pgPolicy("teams_member_view", {
+  // RBAC-based policy for viewing teams
+  pgPolicy("teams_view_permission", {
     as: "permissive",
     for: "select",
-    to: [appMemberRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'teams:view',
+        organization_id
+      )`
+  }),
+  // RBAC-based policy for managing teams
+  pgPolicy("teams_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'teams:manage',
+        organization_id
+      )`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'teams:manage',
+        organization_id
+      )`
+  }),
+  // RBAC-based policy for creating teams
+  pgPolicy("teams_create_permission", {
+    as: "permissive",
+    for: "insert",
+    to: "public",
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'teams:create',
+        organization_id
+      )`
   }),
 ]);
 
@@ -303,26 +368,48 @@ export const teamMemberships = pgTable("team_memberships", {
   userId: uuid("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
-  // Enhanced role-based team membership policies
-  pgPolicy("team_memberships_owner_management", {
-    as: "permissive",
-    for: "all",
-    to: [appOwnerRole],
-    using: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)`,
-    withCheck: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)`,
-  }),
-  pgPolicy("team_memberships_admin_management", {
-    as: "permissive",
-    for: "all", 
-    to: [appAdminRole],
-    using: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)`,
-    withCheck: sql`EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)`,
-  }),
-  pgPolicy("team_memberships_member_view", {
+  // RBAC-based policy for viewing team memberships
+  pgPolicy("team_memberships_view_permission", {
     as: "permissive",
     for: "select",
-    to: [appMemberRole],
-    using: sql`user_id = current_setting('app.current_user_id')::uuid OR EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = current_setting('app.current_organization_id')::integer)`,
+    to: "public",
+    using: sql`user_id = current_setting('app.current_user_id')::uuid 
+      OR EXISTS (
+        SELECT 1 FROM teams t 
+        WHERE t.id = team_id 
+        AND t.organization_id = current_setting('app.current_organization_id')::integer
+        AND user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'teams:view',
+          t.organization_id
+        )
+      )`
+  }),
+  // RBAC-based policy for managing team memberships
+  pgPolicy("team_memberships_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM teams t 
+      WHERE t.id = team_id 
+      AND t.organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'teams:manage',
+        t.organization_id
+      )
+    )`,
+    withCheck: sql`EXISTS (
+      SELECT 1 FROM teams t 
+      WHERE t.id = team_id 
+      AND t.organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'teams:manage',
+        t.organization_id
+      )
+    )`
   }),
 ]);
 
@@ -362,43 +449,71 @@ export const agents = pgTable("agents", {
   }>().default(sql`'{"assignment": {"allowOrgAdmins": true}, "routing": {"allowAnyTeamAgent": true}}'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
-  // Pure Drizzle simplified role-based policies
-  pgPolicy("agents_owner_management", {
-    as: "permissive",
-    for: "all",
-    to: [appOwnerRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer AND EXISTS(
-      SELECT 1 FROM users WHERE id = current_setting('app.current_user_id')::uuid 
-      AND current_organization_id = agents.organization_id 
-      AND organization_role = 'owner'
-    )`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-  }),
-  pgPolicy("agents_admin_view", {
-    as: "permissive", 
-    for: "select",
-    to: [appAdminRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer AND EXISTS(
-      SELECT 1 FROM users WHERE id = current_setting('app.current_user_id')::uuid 
-      AND current_organization_id = agents.organization_id 
-      AND organization_role IN ('admin', 'owner')
-    )`,
-  }),
-  pgPolicy("agents_member_view", {
+  // RBAC-based policy for viewing agents
+  pgPolicy("agents_view_permission", {
     as: "permissive",
     for: "select",
-    to: [appMemberRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer AND EXISTS(
-      SELECT 1 FROM users WHERE id = current_setting('app.current_user_id')::uuid 
-      AND current_organization_id = agents.organization_id
-    )`,
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        owner_id = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'agents:view',
+          organization_id
+        )
+      )`
   }),
-  pgPolicy("agents_owner_control", {
+  // RBAC-based policy for managing agents
+  pgPolicy("agents_manage_permission", {
     as: "permissive", 
     for: "all",
-    to: [authenticatedRole],
-    using: sql`owner_id = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer`,
-    withCheck: sql`owner_id = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer`,
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        owner_id = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'agents:manage',
+          organization_id
+        )
+      )`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        owner_id = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'agents:manage',
+          organization_id
+        )
+      )`
+  }),
+  // RBAC-based policy for creating agents
+  pgPolicy("agents_create_permission", {
+    as: "permissive",
+    for: "insert",
+    to: "public",
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'agents:create',
+        organization_id
+      )`
+  }),
+  // RBAC-based policy for executing agents
+  pgPolicy("agents_execute_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        owner_id = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'agents:execute',
+          organization_id
+        )
+      )`
   }),
 ]);
 
@@ -427,32 +542,35 @@ export const tasks = pgTable("tasks", {
   
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
-  // Enhanced role-based task policies
-  pgPolicy("tasks_owner_management", {
-    as: "permissive",
-    for: "all",
-    to: [appOwnerRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-  }),
-  pgPolicy("tasks_admin_management", {
-    as: "permissive", 
-    for: "select",
-    to: [appAdminRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-  }),
-  pgPolicy("tasks_admin_updates", {
-    as: "permissive",
-    for: "update", 
-    to: [appAdminRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-  }),
-  pgPolicy("tasks_member_view", {
+  // RBAC-based policy for viewing tasks
+  pgPolicy("tasks_view_permission", {
     as: "permissive",
     for: "select",
-    to: [appMemberRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'tasks:view',
+        organization_id
+      )`
+  }),
+  // RBAC-based policy for managing tasks
+  pgPolicy("tasks_manage_permission", {
+    as: "permissive",
+    for: "update",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'tasks:manage',
+        organization_id
+      )`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'tasks:manage',
+        organization_id
+      )`
   }),
   // Removed tasks_creator_control policy - it was bypassing agent permission checks
   // by allowing any user to create tasks as long as they set themselves as creator.
@@ -597,26 +715,34 @@ export const ragIndexes = pgTable("rag_indexes", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
-  // Enhanced role-based RAG index policies
-  pgPolicy("rag_indexes_owner_management", {
+  // RBAC-based policies for RAG indexes
+  pgPolicy("rag_indexes_manage_permission", {
     as: "permissive",
     for: "all",
-    to: [appOwnerRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:manage',
+        organization_id
+      )`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:manage',
+        organization_id
+      )`,
   }),
-  pgPolicy("rag_indexes_admin_management", {
-    as: "permissive",
-    for: "all",
-    to: [appAdminRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-  }),
-  pgPolicy("rag_indexes_member_view", {
+  pgPolicy("rag_indexes_view_permission", {
     as: "permissive",
     for: "select",
-    to: [appMemberRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:view',
+        organization_id
+      )`,
   }),
 ]);
 
@@ -645,26 +771,34 @@ export const ragDocuments = pgTable("rag_documents", {
   indexedAt: timestamp("indexed_at").defaultNow(),
   sourceUpdatedAt: timestamp("source_updated_at"),
 }, (table) => [
-  // Enhanced role-based RAG document policies
-  pgPolicy("rag_documents_owner_management", {
+  // RBAC-based policies for RAG documents
+  pgPolicy("rag_documents_manage_permission", {
     as: "permissive",
     for: "all",
-    to: [appOwnerRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:manage',
+        organization_id
+      )`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:manage',
+        organization_id
+      )`,
   }),
-  pgPolicy("rag_documents_admin_management", {
-    as: "permissive",
-    for: "all",
-    to: [appAdminRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-  }),
-  pgPolicy("rag_documents_member_view", {
+  pgPolicy("rag_documents_view_permission", {
     as: "permissive",
     for: "select",
-    to: [appMemberRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:view',
+        organization_id
+      )`,
   }),
 ]);
 
@@ -692,26 +826,34 @@ export const ragQueryLogs = pgTable("rag_query_logs", {
   
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
-  // Enhanced role-based RAG query logs policies
-  pgPolicy("rag_query_logs_owner_management", {
+  // RBAC-based policies for RAG query logs
+  pgPolicy("rag_query_logs_manage_permission", {
     as: "permissive",
     for: "all",
-    to: [appOwnerRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer))`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    to: "public",
+    using: sql`(organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer)))
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:manage',
+        COALESCE(organization_id, (SELECT ri.organization_id FROM rag_indexes ri WHERE ri.id = rag_index_id))
+      )`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:manage',
+        organization_id
+      )`,
   }),
-  pgPolicy("rag_query_logs_admin_management", {
-    as: "permissive",
-    for: "all",
-    to: [appAdminRole],
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer))`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer`,
-  }),
-  pgPolicy("rag_query_logs_user_access", {
+  pgPolicy("rag_query_logs_view_permission", {
     as: "permissive",
     for: "select",
-    to: [appMemberRole, authenticatedRole],
-    using: sql`user_id = current_setting('app.current_user_id')::uuid AND (organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer)))`,
+    to: "public",
+    using: sql`(user_id = current_setting('app.current_user_id')::uuid OR user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:view',
+        COALESCE(organization_id, (SELECT ri.organization_id FROM rag_indexes ri WHERE ri.id = rag_index_id))
+      ))
+      AND (organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer)))`,
   }),
 ]);
 

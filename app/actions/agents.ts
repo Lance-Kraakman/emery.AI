@@ -17,7 +17,7 @@ import { AgentMapper, type AgentDTO } from "@/app/mappers/agent-mapper";
 export async function createAgent(data: CreateAgentData, revalidateUrl?: string): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("manage_agents");
+      const session = await requirePermission("agents:manage");
       const agentApplicationService = getAgentApplicationService();
     
     const command: CreateAgentCommand = {
@@ -163,7 +163,7 @@ export async function createAgentAction(formData: FormData): Promise<Result> {
 export async function getAgents(filters: { teamId?: number | string, searchQuery?: string, status?: 'active' | 'inactive' | 'archived' } = {}): Promise<AgentDTO[]> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("view_agents");
+      const session = await requirePermission("agents:view");
     const currentOrg = await requireCurrentOrganization();
     const agentApplicationService = getAgentApplicationService();
     
@@ -192,7 +192,7 @@ export async function getAgent(agentId: number) {
         throw new Error("agentId is required");
       }
 
-      const session = await requirePermission("view_agents");
+      const session = await requirePermission("agents:view");
     const agentApplicationService = getAgentApplicationService();
     
     const domainAgent = await agentApplicationService.getAgent(AgentId.fromNumber(agentId));
@@ -220,7 +220,7 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
         };
       }
 
-      const session = await requirePermission("manage_agents");
+      const session = await requirePermission("agents:manage");
     const agentApplicationService = getAgentApplicationService();
     
     const command: UpdateAgentCommand = {
@@ -284,7 +284,7 @@ export async function deleteAgent(agentId: number, revalidateUrl?: string): Prom
         };
       }
 
-      const session = await requirePermission("manage_agents");
+      const session = await requirePermission("agents:manage");
     const agentApplicationService = getAgentApplicationService();
     
     const result = await agentApplicationService.deleteAgent(AgentId.fromNumber(agentId));

@@ -12,7 +12,7 @@ import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objec
 export async function createTask(data: CreateTaskData): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("manage_agents");
+      const session = await requirePermission("tasks:manage");
     const currentOrg = await requireCurrentOrganization();
     const { agentId, name, capabilityName, instructions, createdBy } = data;
 
@@ -75,7 +75,7 @@ export async function createTask(data: CreateTaskData): Promise<Result> {
 export async function getTasks(agentId?: number, limit = 50): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      await requirePermission("manage_agents");
+      await requirePermission("tasks:manage");
     const currentOrg = await requireCurrentOrganization();
 
     const taskApplicationService = getAgentTaskApplicationService();
@@ -121,7 +121,7 @@ export async function getTasks(agentId?: number, limit = 50): Promise<Result> {
 export async function getTask(taskId: string): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      await requirePermission("manage_agents");
+      await requirePermission("tasks:manage");
 
     const taskApplicationService = getAgentTaskApplicationService();
     const domainTask = await taskApplicationService.getTask(taskId);
@@ -172,7 +172,7 @@ export async function updateTaskStatus(
 ): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      await requirePermission("manage_agents");
+      await requirePermission("tasks:manage");
 
     const taskApplicationService = getAgentTaskApplicationService();
     
@@ -272,7 +272,7 @@ export async function updateTaskStatus(
 export async function deleteTask(taskId: string): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      await requirePermission("manage_agents");
+      await requirePermission("tasks:manage");
 
     if (!taskId) {
       return {
@@ -315,7 +315,7 @@ export async function deleteTask(taskId: string): Promise<Result> {
 export async function getTaskStats(agentId?: number): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      await requirePermission("manage_agents");
+      await requirePermission("tasks:manage");
     const currentOrg = await requireCurrentOrganization();
 
     const taskApplicationService = getAgentTaskApplicationService();

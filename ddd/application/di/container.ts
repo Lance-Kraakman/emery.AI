@@ -39,6 +39,10 @@ import { DrizzleTeamRepository } from '@/ddd/infrastructure/db/repositories/team
 import { IInvitationRepository } from '@/ddd/domain/invitations/repositories/invitation-repository';
 import { DrizzleInvitationRepository } from '@/ddd/infrastructure/db/repositories/invitations/drizzle-invitation-repository';
 
+// RBAC domain imports
+import { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
+import { DrizzleRBACRepository } from '@/ddd/infrastructure/db/repositories/rbac/drizzle-rbac-repository';
+
 // Database domain imports
 import { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/databases/drizzle-database-repository';
@@ -96,6 +100,9 @@ interface RepositoryRegistry {
   
   // Invitation domain
   IInvitationRepository: IInvitationRepository;
+  
+  // RBAC domain
+  IRBACRepository: IRBACRepository;
   
   // Database domain
   IDatabaseRepository: IDatabaseRepository;
@@ -208,6 +215,10 @@ export class DIContainer {
     const invitationRepository = new DrizzleInvitationRepository(db);
     this.repositories.set('ITeamRepository', teamRepository);
     this.repositories.set('IInvitationRepository', invitationRepository);
+    
+    // Register RBAC repository
+    const rbacRepository = new DrizzleRBACRepository(db);
+    this.repositories.set('IRBACRepository', rbacRepository);
     
     // Register database repository
     const databaseRepository = new DrizzleDatabaseRepository(db);
@@ -439,6 +450,7 @@ type ServiceMap = {
   AgentExecutionRepository: IAgentExecutionRepository;
   TeamRepository: ITeamRepository;
   InvitationRepository: IInvitationRepository;
+  RBACRepository: IRBACRepository;
   DatabaseRepository: IDatabaseRepository;
   ChatRepository: IChatRepository;
   ChatMessageRepository: IChatMessageRepository;
@@ -517,6 +529,7 @@ export const getTaskRepository = createGetter('TaskRepository');
 export const getAgentExecutionRepository = createGetter('AgentExecutionRepository');
 export const getTeamRepository = createGetter('TeamRepository');
 export const getInvitationRepository = createGetter('InvitationRepository');
+export const getRBACRepository = createGetter('RBACRepository');
 export const getDatabaseRepository = createGetter('DatabaseRepository');
 export const getChatRepository = createGetter('ChatRepository');
 export const getChatMessageRepository = createGetter('ChatMessageRepository');

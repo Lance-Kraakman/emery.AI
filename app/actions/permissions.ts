@@ -3,7 +3,8 @@
 // AIDEV-NOTE: Minimal permission/auth functions - only what's actually used
 // Most files just import requireAuth and requirePermission
 
-import { auth, hasPermission as authHasPermission } from "@/lib/auth";
+import { auth, hasPermission as authHasPermission, requirePermission as authRequirePermission } from "@/lib/auth";
+import { Permission } from "@/ddd/domain/shared/value-objects/permission";
 import { revalidatePath } from "next/cache";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
@@ -96,12 +97,16 @@ export async function requireAuth() {
   return session;
 }
 
-export async function requirePermission(permission: string) {
+export async function requirePermission(permissionString: string) {
   const session = await requireAuth();
-  const hasAccess = await authHasPermission(session.user.id, permission);
-  if (!hasAccess) {
-    throw new Error(`Permission denied: ${permission}`);
-  }
+  const currentOrg = await requireCurrentOrganization();
+  
+  // Convert string permission to Permission object
+  const permission = Permission.fromString(permissionString);
+  
+  // Use the new RBAC requirePermission with organization ID
+  await authRequirePermission(session.user.id, permission, currentOrg.id.value);
+  
   return session;
 }
 
