@@ -33,7 +33,7 @@ export async function updateTeamFromClient(teamId: number, data: Partial<CreateT
 export async function createTeam(data: CreateTeamData): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("manage_teams");
+      const session = await requirePermission("teams:manage");
     const currentOrg = await requireCurrentOrganization();
     const { name, purpose, description, responsibilities, goals, agentIds } = data;
 
@@ -108,7 +108,7 @@ export async function createTeamAction(formData: FormData): Promise<Result> {
 
 export async function getTeams(organizationId?: number): Promise<TeamDTO[]> {
   try {
-    const session = await requirePermission("view_teams");
+    const session = await requirePermission("teams:view");
     const currentOrg = await requireCurrentOrganization();
     
     const teamApplicationService = getTeamApplicationService();
@@ -127,7 +127,7 @@ export async function getTeams(organizationId?: number): Promise<TeamDTO[]> {
 
 export async function getTeam(teamId: number) {
   try {
-    const session = await requirePermission("view_teams");
+    const session = await requirePermission("teams:view");
     
     if (!teamId) {
       throw new Error("teamId is required");
@@ -143,7 +143,7 @@ export async function getTeam(teamId: number) {
 
 export async function updateTeam(teamId: number, data: Partial<CreateTeamData>): Promise<Result> {
   try {
-    const session = await requirePermission("manage_teams");
+    const session = await requirePermission("teams:manage");
     
     if (!teamId) {
       return {
@@ -196,7 +196,7 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
 
 export async function deleteTeam(teamId: number): Promise<Result> {
   try {
-    const session = await requirePermission("manage_teams");
+    const session = await requirePermission("teams:manage");
     
     if (!teamId) {
       return {
@@ -236,7 +236,7 @@ export async function deleteTeam(teamId: number): Promise<Result> {
 // This function adds an agent to a team instead of a user membership
 export async function addAgentToTeam(teamId: number, agentId: string): Promise<Result> {
   try {
-    const session = await requirePermission("manage_teams");
+    const session = await requirePermission("teams:manage");
 
     if (!teamId || !agentId) {
       return {
@@ -279,7 +279,7 @@ export async function addAgentToTeam(teamId: number, agentId: string): Promise<R
 // This function removes an agent from a team instead of a user membership
 export async function removeAgentFromTeam(teamId: number, agentId: string): Promise<Result> {
   try {
-    const session = await requirePermission("manage_teams");
+    const session = await requirePermission("teams:manage");
     
     if (!teamId || !agentId) {
       return {
@@ -318,7 +318,7 @@ export async function removeAgentFromTeam(teamId: number, agentId: string): Prom
 // Get the team details which includes agent information
 export async function getTeamAgents(teamId: number) {
   try {
-    const session = await requirePermission("view_teams");
+    const session = await requirePermission("teams:view");
     
     if (!teamId) {
       throw new Error("teamId is required");
@@ -366,7 +366,7 @@ export async function removeTeamMember(teamId: number, agentId: string): Promise
  */
 export async function getTeamsForAgent(agentId: string) {
   try {
-    const session = await requirePermission("view_teams");
+    const session = await requirePermission("teams:view");
     
     if (!agentId) {
       throw new Error("agentId is required");
@@ -385,7 +385,7 @@ export async function getTeamsForAgent(agentId: string) {
  */
 export async function getTeamCount(organizationId?: number) {
   try {
-    const session = await requirePermission("view_teams");
+    const session = await requirePermission("teams:view");
     const currentOrg = await requireCurrentOrganization();
     
     const teamApplicationService = getTeamApplicationService();
@@ -402,7 +402,7 @@ export async function getTeamCount(organizationId?: number) {
  */
 export async function bulkAssignAgents(teamId: number, agentIds: string[]): Promise<Result> {
   try {
-    const session = await requirePermission("manage_teams");
+    const session = await requirePermission("teams:manage");
     
     if (!teamId || !agentIds || agentIds.length === 0) {
       return {

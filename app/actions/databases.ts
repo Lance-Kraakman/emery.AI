@@ -34,7 +34,7 @@ const updateDatabaseSchema = z.object({
 
 export async function getDatabases(searchQuery?: string, hasTables?: boolean): Promise<DatabaseDTO[]> {
   try {
-    const session = await requirePermission("view_data");
+    const session = await requirePermission("data:view");
     const currentOrg = await requireCurrentOrganization();
     
     const databaseApplicationService = getDatabaseApplicationService();
@@ -55,7 +55,7 @@ export async function getDatabases(searchQuery?: string, hasTables?: boolean): P
 
 export async function getDatabase(id: number): Promise<DatabaseDTO> {
   try {
-    const session = await requirePermission("view_data");
+    const session = await requirePermission("data:view");
     
     if (!id) {
       throw new Error("Database ID is required");
@@ -77,7 +77,7 @@ export async function getDatabase(id: number): Promise<DatabaseDTO> {
 
 export async function createDatabase(data: z.infer<typeof createDatabaseSchema>, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("create_data");
+    const session = await requirePermission("data:create");
     const currentOrg = await requireCurrentOrganization();
     
     const validatedData = createDatabaseSchema.parse(data);
@@ -140,7 +140,7 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
 
 export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("manage_data");
+    const session = await requirePermission("data:manage");
     
     const validatedData = updateDatabaseSchema.parse(data);
     
@@ -205,7 +205,7 @@ export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>,
 
 export async function deleteDatabase(id: number, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("manage_data");
+    const session = await requirePermission("data:manage");
     const currentOrg = await requireCurrentOrganization();
     
     if (!id) {
@@ -247,7 +247,7 @@ export async function deleteDatabase(id: number, revalidateUrl?: string): Promis
  */
 export async function getDatabaseCount() {
   try {
-    const session = await requirePermission("view_data");
+    const session = await requirePermission("data:view");
     const currentOrg = await requireCurrentOrganization();
     
     const databaseApplicationService = getDatabaseApplicationService();
@@ -263,7 +263,7 @@ export async function getDatabaseCount() {
  */
 export async function getDatabaseBySlug(slug: string): Promise<DatabaseDTO> {
   try {
-    const session = await requirePermission("view_data");
+    const session = await requirePermission("data:view");
     
     if (!slug) {
       throw new Error("Database slug is required");

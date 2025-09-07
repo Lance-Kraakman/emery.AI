@@ -15,7 +15,7 @@ import { EmailAddress, OrganizationRole, OrganizationId, UserId } from "@/ddd/do
 export async function inviteUser(formData: FormData): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("manage_users");
+      const session = await requirePermission("users:manage");
     const currentOrg = await requireCurrentOrganization();
     const email = formData.get("email") as string;
     const role = formData.get("role") as string;
@@ -114,7 +114,7 @@ export async function acceptInvitation(token: string): Promise<Result> {
 // through the getMembers method. Consider moving this to organization actions.
 export async function getOrganizationMembers(): Promise<Array<{id: string, name: string, email: string, role: string}>> {
   try {
-    const session = await requirePermission("view_users");
+    const session = await requirePermission("users:view");
     const currentOrg = await requireCurrentOrganization();
     
     const userOrganizationApplicationService = getUserRoleApplicationService();
@@ -153,7 +153,7 @@ export async function getPendingInvitations() {
  */
 export async function revokeInvitation(invitationId: number): Promise<Result> {
   try {
-    const session = await requirePermission("manage_users");
+    const session = await requirePermission("users:manage");
     
     if (!invitationId) {
       return {
@@ -191,7 +191,7 @@ export async function revokeInvitation(invitationId: number): Promise<Result> {
  */
 export async function resendInvitation(invitationId: number): Promise<Result> {
   try {
-    const session = await requirePermission("manage_users");
+    const session = await requirePermission("users:manage");
     
     if (!invitationId) {
       return {
@@ -246,7 +246,7 @@ export async function getInvitationStats() {
  */
 export async function cleanupExpiredInvitations(): Promise<Result> {
   try {
-    const session = await requirePermission("manage_users");
+    const session = await requirePermission("users:manage");
     const currentOrg = await requireCurrentOrganization();
     
     const invitationApplicationService = getInvitationApplicationService();
