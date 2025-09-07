@@ -12,6 +12,8 @@ import { Separator } from "@/components/ui/separator";
 import { UsersIcon, Settings, Users, Shield, ChevronDown, ChevronRight, Loader2, Save } from "lucide-react";
 import { getTeams, getTeamMembers } from "@/app/actions/teams";
 import { getAllTeamPermissionsForOrganization, updateTeamPermissions } from "@/app/actions/team-permissions";
+import { TeamPermissionEditor } from './TeamPermissionEditor';
+import { CombinedPermissionBadge } from './PermissionLevelBadge';
 import type { TeamDTO } from "@/app/mappers/team-mapper";
 import type { TeamTaskPermissions } from "@/ddd/application/services/teams/team-permissions-application-service";
 
@@ -130,152 +132,6 @@ export function TeamsPermissionsTab() {
     }
   };
 
-  const renderPermissionEditor = (teamWithPerms: TeamWithPermissions) => {
-    const [editPermissions, setEditPermissions] = useState<TeamTaskPermissions>(teamWithPerms.permissions);
-
-    const updateAssignmentPermission = (key: keyof NonNullable<TeamTaskPermissions['assignment']>, value: any) => {
-      setEditPermissions(prev => ({
-        ...prev,
-        assignment: {
-          ...prev.assignment,
-          [key]: value
-        }
-      }));
-    };
-
-    const updateRoutingPermission = (key: keyof NonNullable<TeamTaskPermissions['routing']>, value: any) => {
-      setEditPermissions(prev => ({
-        ...prev,
-        routing: {
-          ...prev.routing,
-          [key]: value
-        }
-      }));
-    };
-
-    return (
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit Permissions: {teamWithPerms.teamName}</DialogTitle>
-        </DialogHeader>
-        
-        <div className="space-y-6">
-          {/* Task Assignment Permissions */}
-          <div>
-            <h3 className="text-lg font-medium mb-3 flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              Who can assign tasks to this team
-            </h3>
-            
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="allowOrgAdmins"
-                  checked={editPermissions.assignment?.allowOrgAdmins || false}
-                  onCheckedChange={(checked) => updateAssignmentPermission('allowOrgAdmins', checked)}
-                />
-                <label htmlFor="allowOrgAdmins" className="text-sm">
-                  Organization admins can assign tasks
-                </label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="allowTeamMembers"
-                  checked={editPermissions.assignment?.allowTeamMembers || false}
-                  onCheckedChange={(checked) => updateAssignmentPermission('allowTeamMembers', checked)}
-                />
-                <label htmlFor="allowTeamMembers" className="text-sm">
-                  Team members can assign tasks
-                </label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="allowOrgMembers"
-                  checked={editPermissions.assignment?.allowOrgMembers || false}
-                  onCheckedChange={(checked) => updateAssignmentPermission('allowOrgMembers', checked)}
-                />
-                <label htmlFor="allowOrgMembers" className="text-sm">
-                  Any organization member can assign tasks
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Task Routing Permissions */}
-          <div>
-            <h3 className="text-lg font-medium mb-3 flex items-center gap-2">
-              <Shield className="w-5 h-5" />
-              Where this team can route tasks
-            </h3>
-            
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="allowAnyOrgAgent"
-                  checked={editPermissions.routing?.allowAnyOrgAgent || false}
-                  onCheckedChange={(checked) => updateRoutingPermission('allowAnyOrgAgent', checked)}
-                />
-                <label htmlFor="allowAnyOrgAgent" className="text-sm">
-                  Can route to any organization agent
-                </label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="allowCrossTeamRouting"
-                  checked={editPermissions.routing?.allowCrossTeamRouting || false}
-                  onCheckedChange={(checked) => updateRoutingPermission('allowCrossTeamRouting', checked)}
-                />
-                <label htmlFor="allowCrossTeamRouting" className="text-sm">
-                  Can route to other teams
-                </label>
-              </div>
-              
-              <div className="flex items-center space-x-2 gap-4">
-                <label htmlFor="internalRoutingStrategy" className="text-sm font-medium">
-                  Internal routing strategy:
-                </label>
-                <Select 
-                  value={editPermissions.routing?.internalRoutingStrategy || 'manual'} 
-                  onValueChange={(value) => updateRoutingPermission('internalRoutingStrategy', value)}
-                >
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="round_robin">Round Robin</SelectItem>
-                    <SelectItem value="least_busy">Least Busy</SelectItem>
-                    <SelectItem value="manual">Manual</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setEditingTeam(null)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => handleSavePermissions(teamWithPerms.teamId, editPermissions)}
-              disabled={saveLoading}
-            >
-              {saveLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Save className="w-4 h-4 mr-2" />
-              )}
-              Save Changes
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    );
-  };
 
   if (loading) {
     return (
@@ -307,8 +163,7 @@ export function TeamsPermissionsTab() {
                   <TableHead className="w-[50px]"></TableHead>
                   <TableHead>Team</TableHead>
                   <TableHead>Members</TableHead>
-                  <TableHead>Assignment Permissions</TableHead>
-                  <TableHead>Routing Permissions</TableHead>
+                  <TableHead>Access Level</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -348,58 +203,32 @@ export function TeamsPermissionsTab() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm">{getPermissionSummary(teamWithPerms.permissions)}</span>
+                        <CombinedPermissionBadge 
+                          permissions={teamWithPerms.permissions} 
+                          compact={true} 
+                        />
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm">{getRoutingSummary(teamWithPerms.permissions)}</span>
-                      </TableCell>
-                      <TableCell>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => setEditingTeam(teamWithPerms)}
-                            >
-                              <Settings className="w-4 h-4 mr-1" />
-                              Edit
-                            </Button>
-                          </DialogTrigger>
-                          {editingTeam?.teamId === teamWithPerms.teamId && renderPermissionEditor(editingTeam)}
-                        </Dialog>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setEditingTeam(teamWithPerms)}
+                        >
+                          <Settings className="w-4 h-4 mr-1" />
+                          Edit
+                        </Button>
                       </TableCell>
                     </TableRow>
                     
                     {/* Expanded Details Row */}
                     {expandedTeams.has(teamWithPerms.teamId) && (
                       <TableRow>
-                        <TableCell colSpan={6} className="bg-muted/50">
+                        <TableCell colSpan={5} className="bg-muted/50">
                           <div className="p-4 space-y-4">
-                            <div>
-                              <h4 className="font-medium mb-2">Assignment Details</h4>
-                              <div className="grid grid-cols-2 gap-4 text-sm">
-                                <div>
-                                  <strong>Allowed Users:</strong> {teamWithPerms.permissions.assignment?.allowedUsers?.length || 0}
-                                </div>
-                                <div>
-                                  <strong>Allowed Agents:</strong> {teamWithPerms.permissions.assignment?.allowedAgents?.length || 0}
-                                </div>
-                                <div>
-                                  <strong>Allowed Teams:</strong> {teamWithPerms.permissions.assignment?.allowedTeams?.length || 0}
-                                </div>
-                              </div>
-                            </div>
-                            <div>
-                              <h4 className="font-medium mb-2">Routing Details</h4>
-                              <div className="grid grid-cols-2 gap-4 text-sm">
-                                <div>
-                                  <strong>Internal Strategy:</strong> {teamWithPerms.permissions.routing?.internalRoutingStrategy || 'manual'}
-                                </div>
-                                <div>
-                                  <strong>Allowed Teams:</strong> {teamWithPerms.permissions.routing?.allowedTeams?.length || 0}
-                                </div>
-                              </div>
-                            </div>
+                            <CombinedPermissionBadge 
+                              permissions={teamWithPerms.permissions} 
+                              compact={false} 
+                            />
                             {teamWithPerms.team?.description && (
                               <div>
                                 <h4 className="font-medium mb-2">Description</h4>
@@ -417,6 +246,20 @@ export function TeamsPermissionsTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Team Permissions Dialog */}
+      {editingTeam && (
+        <Dialog open={!!editingTeam} onOpenChange={() => setEditingTeam(null)}>
+          <TeamPermissionEditor
+            teamId={editingTeam.teamId}
+            teamName={editingTeam.teamName}
+            initialPermissions={editingTeam.permissions}
+            onSave={handleSavePermissions}
+            onCancel={() => setEditingTeam(null)}
+            saveLoading={saveLoading}
+          />
+        </Dialog>
+      )}
     </div>
   );
 }

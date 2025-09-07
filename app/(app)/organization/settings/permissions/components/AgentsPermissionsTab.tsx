@@ -11,6 +11,8 @@ import { Separator } from "@/components/ui/separator";
 import { Bot, Settings, Users, Shield, ChevronDown, ChevronRight, Loader2, Save } from "lucide-react";
 import { getAgents } from "@/app/actions/agents";
 import { getAllAgentPermissionsForOrganization, updateAgentPermissions } from "@/app/actions/agent-permissions";
+import { AgentPermissionEditor } from './AgentPermissionEditor';
+import { CombinedPermissionBadge } from './PermissionLevelBadge';
 import type { AgentDTO } from "@/app/mappers/agent-mapper";
 import type { AgentTaskPermissions } from "@/ddd/application/services/agents/agent-permissions-application-service";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -113,144 +115,6 @@ export function AgentsPermissionsTab() {
     }
   };
 
-  const renderPermissionEditor = (agentWithPerms: AgentWithPermissions) => {
-    const [editPermissions, setEditPermissions] = useState<AgentTaskPermissions>(agentWithPerms.permissions);
-
-    const updateAssignmentPermission = (key: keyof NonNullable<AgentTaskPermissions['assignment']>, value: any) => {
-      setEditPermissions(prev => ({
-        ...prev,
-        assignment: {
-          ...prev.assignment,
-          [key]: value
-        }
-      }));
-    };
-
-    const updateRoutingPermission = (key: keyof NonNullable<AgentTaskPermissions['routing']>, value: any) => {
-      setEditPermissions(prev => ({
-        ...prev,
-        routing: {
-          ...prev.routing,
-          [key]: value
-        }
-      }));
-    };
-
-    return (
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit Permissions: {agentWithPerms.agentName}</DialogTitle>
-        </DialogHeader>
-        
-        <div className="space-y-6">
-          {/* Task Assignment Permissions */}
-          <div>
-            <h3 className="text-lg font-medium mb-3 flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              Who can assign tasks to this agent
-            </h3>
-            
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="allowOrgAdmins"
-                  checked={editPermissions.assignment?.allowOrgAdmins || false}
-                  onCheckedChange={(checked) => updateAssignmentPermission('allowOrgAdmins', checked)}
-                />
-                <label htmlFor="allowOrgAdmins" className="text-sm">
-                  Organization admins can assign tasks
-                </label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="allowTeamMembers"
-                  checked={editPermissions.assignment?.allowTeamMembers || false}
-                  onCheckedChange={(checked) => updateAssignmentPermission('allowTeamMembers', checked)}
-                />
-                <label htmlFor="allowTeamMembers" className="text-sm">
-                  Team members can assign tasks
-                </label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="allowOrgMembers"
-                  checked={editPermissions.assignment?.allowOrgMembers || false}
-                  onCheckedChange={(checked) => updateAssignmentPermission('allowOrgMembers', checked)}
-                />
-                <label htmlFor="allowOrgMembers" className="text-sm">
-                  Any organization member can assign tasks
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Task Routing Permissions */}
-          <div>
-            <h3 className="text-lg font-medium mb-3 flex items-center gap-2">
-              <Shield className="w-5 h-5" />
-              Where this agent can route tasks
-            </h3>
-            
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="allowAnyTeamAgent"
-                  checked={editPermissions.routing?.allowAnyTeamAgent || false}
-                  onCheckedChange={(checked) => updateRoutingPermission('allowAnyTeamAgent', checked)}
-                />
-                <label htmlFor="allowAnyTeamAgent" className="text-sm">
-                  Can route to other team agents
-                </label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="allowAnyOrgAgent"
-                  checked={editPermissions.routing?.allowAnyOrgAgent || false}
-                  onCheckedChange={(checked) => updateRoutingPermission('allowAnyOrgAgent', checked)}
-                />
-                <label htmlFor="allowAnyOrgAgent" className="text-sm">
-                  Can route to any organization agent
-                </label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="allowCrossTeamRouting"
-                  checked={editPermissions.routing?.allowCrossTeamRouting || false}
-                  onCheckedChange={(checked) => updateRoutingPermission('allowCrossTeamRouting', checked)}
-                />
-                <label htmlFor="allowCrossTeamRouting" className="text-sm">
-                  Can route to other teams
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setEditingAgent(null)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => handleSavePermissions(agentWithPerms.agentId, editPermissions)}
-              disabled={saveLoading}
-            >
-              {saveLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Save className="w-4 h-4 mr-2" />
-              )}
-              Save Changes
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    );
-  };
 
   if (loading) {
     return (
@@ -282,8 +146,7 @@ export function AgentsPermissionsTab() {
                   <TableHead className="w-[50px]"></TableHead>
                   <TableHead>Agent</TableHead>
                   <TableHead>Owner</TableHead>
-                  <TableHead>Assignment Permissions</TableHead>
-                  <TableHead>Routing Permissions</TableHead>
+                  <TableHead>Access Level</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -325,58 +188,32 @@ export function AgentsPermissionsTab() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm">{getPermissionSummary(agentWithPerms.permissions)}</span>
+                        <CombinedPermissionBadge 
+                          permissions={agentWithPerms.permissions} 
+                          compact={true} 
+                        />
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm">{getRoutingSummary(agentWithPerms.permissions)}</span>
-                      </TableCell>
-                      <TableCell>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => setEditingAgent(agentWithPerms)}
-                            >
-                              <Settings className="w-4 h-4 mr-1" />
-                              Edit
-                            </Button>
-                          </DialogTrigger>
-                          {editingAgent?.agentId === agentWithPerms.agentId && renderPermissionEditor(editingAgent)}
-                        </Dialog>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setEditingAgent(agentWithPerms)}
+                        >
+                          <Settings className="w-4 h-4 mr-1" />
+                          Edit
+                        </Button>
                       </TableCell>
                     </TableRow>
                     
                     {/* Expanded Details Row */}
                     {expandedAgents.has(agentWithPerms.agentId) && (
                       <TableRow>
-                        <TableCell colSpan={6} className="bg-muted/50">
-                          <div className="p-4 space-y-4">
-                            <div>
-                              <h4 className="font-medium mb-2">Assignment Details</h4>
-                              <div className="grid grid-cols-2 gap-4 text-sm">
-                                <div>
-                                  <strong>Allowed Users:</strong> {agentWithPerms.permissions.assignment?.allowedUsers?.length || 0}
-                                </div>
-                                <div>
-                                  <strong>Allowed Agents:</strong> {agentWithPerms.permissions.assignment?.allowedAgents?.length || 0}
-                                </div>
-                                <div>
-                                  <strong>Allowed Teams:</strong> {agentWithPerms.permissions.assignment?.allowedTeams?.length || 0}
-                                </div>
-                              </div>
-                            </div>
-                            <div>
-                              <h4 className="font-medium mb-2">Routing Details</h4>
-                              <div className="grid grid-cols-2 gap-4 text-sm">
-                                <div>
-                                  <strong>Allowed Agents:</strong> {agentWithPerms.permissions.routing?.allowedAgents?.length || 0}
-                                </div>
-                                <div>
-                                  <strong>Allowed Teams:</strong> {agentWithPerms.permissions.routing?.allowedTeams?.length || 0}
-                                </div>
-                              </div>
-                            </div>
+                        <TableCell colSpan={5} className="bg-muted/50">
+                          <div className="p-4">
+                            <CombinedPermissionBadge 
+                              permissions={agentWithPerms.permissions} 
+                              compact={false} 
+                            />
                           </div>
                         </TableCell>
                       </TableRow>
@@ -388,6 +225,20 @@ export function AgentsPermissionsTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Agent Permissions Dialog */}
+      {editingAgent && (
+        <Dialog open={!!editingAgent} onOpenChange={() => setEditingAgent(null)}>
+          <AgentPermissionEditor
+            agentId={editingAgent.agentId}
+            agentName={editingAgent.agentName}
+            initialPermissions={editingAgent.permissions}
+            onSave={handleSavePermissions}
+            onCancel={() => setEditingAgent(null)}
+            saveLoading={saveLoading}
+          />
+        </Dialog>
+      )}
     </div>
   );
 }
