@@ -7,6 +7,7 @@
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { UserOrganization, CreateUserOrganizationData } from '@/ddd/domain/users/entities/user';
+import type { OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
 import { UserId, OrganizationId, OrganizationRole } from '@/ddd/domain/shared/value-objects';
 import type { Result } from '@/ddd/domain/shared/result';
 
@@ -42,13 +43,6 @@ export interface OrganizationMemberFilters {
   includeUserDetails?: boolean;
 }
 
-export interface OrganizationMember {
-  userId: string;
-  name: string;
-  email: string;
-  role: string;
-  joinedAt: Date;
-}
 
 // Use unified Result interface from domain shared types
 export type UserOrganizationApplicationResult<T = any> = Result<T>;
@@ -257,24 +251,24 @@ export class UserRoleApplicationService {
 
       // Map to OrganizationMember format
       let members = users.map(user => ({
-        userId: user.id.value,
-        name: user.name || 'Unknown',
-        email: user.email?.value || '',
-        role: user.organizationRole || 'member',
-        joinedAt: user.createdAt || new Date()
+        userId: user.id,
+        name: user.name,
+        email: user.email,
+        role: new OrganizationRole(user.organizationRole || 'member'),
+        joinedAt: user.createdAt
       }));
 
       // Apply role filter
       if (filters.role) {
-        members = members.filter(member => member.role === filters.role);
+        members = members.filter(member => member.role.value === filters.role);
       }
 
       // Apply search filter
       if (filters.searchQuery) {
         const searchLower = filters.searchQuery.toLowerCase();
         members = members.filter(member => 
-          member.name.toLowerCase().includes(searchLower) ||
-          member.email.toLowerCase().includes(searchLower)
+          (member.name?.toLowerCase() || '').includes(searchLower) ||
+          (member.email?.value?.toLowerCase() || '').includes(searchLower)
         );
       }
 

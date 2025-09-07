@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { EntityMultiSelect, type EntityOption } from './EntityMultiSelect';
 import { PermissionPresets } from './PermissionPresets';
-import { getOrganizationMembers } from "@/app/actions/user-organizations";
+import { getOrganizationMembers } from "@/app/actions/invitations";
 import { getAgents } from "@/app/actions/agents";
 import { getTeams } from "@/app/actions/teams";
 import type { AgentTaskPermissions } from "@/ddd/application/services/agents/agent-permissions-application-service";
@@ -58,11 +58,11 @@ export function AgentPermissionEditor({
     try {
       const members = await getOrganizationMembers();
       return members.map(member => ({
-        id: member.userId,
-        name: member.userDisplayName || member.userEmail || 'Unknown User',
+        id: member.id,
+        name: member.name || member.email || 'Unknown User',
         type: 'user' as const,
         status: member.role,
-        description: member.userEmail
+        description: member.email
       }));
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -96,7 +96,7 @@ export function AgentPermissionEditor({
         name: team.name,
         type: 'team' as const,
         status: 'active',
-        description: team.description
+        description: team.description || undefined
       }));
     } catch (error) {
       console.error('Error fetching teams:', error);

@@ -6,7 +6,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { getInvitationApplicationService } from "@/ddd/application/di/container";
+import { getInvitationApplicationService, getUserRoleApplicationService } from "@/ddd/application/di/container";
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import type { SendInvitationCommand, AcceptInvitationCommand } from "@/ddd/application/services/invitations/invitation-application-service";
@@ -112,14 +112,23 @@ export async function acceptInvitation(token: string): Promise<Result> {
 
 // AIDEV-NOTE: This functionality is now handled by the OrganizationRepository
 // through the getMembers method. Consider moving this to organization actions.
-export async function getOrganizationMembers(): Promise<Array<{id: number, name: string, email: string, role: string}>> {
+export async function getOrganizationMembers(): Promise<Array<{id: string, name: string, email: string, role: string}>> {
   try {
     const session = await requirePermission("view_users");
     const currentOrg = await requireCurrentOrganization();
     
-    // AIDEV-NOTE: Temporary return empty array to fix build
-    // TODO: Move to organization actions and use proper application service
-    return [];
+    const userOrganizationApplicationService = getUserRoleApplicationService();
+    const members = await userOrganizationApplicationService.getOrganizationMembers({
+      organizationId: currentOrg.id.value
+    });
+    
+    // Convert domain objects to DTOs for UI
+    return members.map(member => ({
+      id: member.userId.value,
+      name: member.name || 'Unknown User',
+      email: member.email?.value || '',
+      role: member.role.value
+    }));
   } catch (error) {
     console.error("Error fetching organization members:", error);
     return [];

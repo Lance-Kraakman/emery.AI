@@ -791,8 +791,3 @@ export const chatMessages: any = pgTable("chat_messages", {
     using: sql`EXISTS (SELECT 1 FROM chats c WHERE c.id = chat_id AND c.organization_id = current_setting('app.current_organization_id')::integer)`,
   }),
 ]);
-
-// Index for efficient chat message retrieval
-// Note: This would be created in a migration file
-// CREATE INDEX idx_chat_messages_chat_id_order ON chat_messages(chat_id, message_index);
-// CREATE INDEX idx_chats_table_id ON chats(table_id) WHERE table_id IS NOT NULL;
