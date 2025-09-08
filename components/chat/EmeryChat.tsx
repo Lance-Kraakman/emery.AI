@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { 
   ChatSection, 
   ChatMessages
@@ -20,6 +21,7 @@ import { useLayout } from '@/components/layout/LayoutProvider'
 import { useChatGRPC } from './useChatGRPC'
 import { ChatCanvas } from './ChatCanvas'
 import { CustomChatInput } from './CustomChatInput'
+import { ChatHistoryDropdown } from './ChatHistoryDropdown'
 import { createChatContextForPage } from '@/components/layout/types'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
 
@@ -40,9 +42,24 @@ import type { DomainType } from '@/ddd/domain/rag/value-objects'
 interface EmeryChatHeaderProps {
   domainType?: DomainType | 'organizations' | 'general'
   domainName?: string
+  currentChatId?: string
+  onChatSelect: (chatId: string) => void
+  onNewChat: () => void
+  onChatHistoryUpdate?: () => void
+  userId: string
+  organizationId: number
 }
 
-function EmeryChatHeader({ domainType, domainName }: EmeryChatHeaderProps) {
+function EmeryChatHeader({ 
+  domainType, 
+  domainName, 
+  currentChatId, 
+  onChatSelect, 
+  onNewChat, 
+  onChatHistoryUpdate,
+  userId,
+  organizationId 
+}: EmeryChatHeaderProps) {
   const { chatState, toggleChat, canvasState, toggleCanvas } = useLayout()
   
   // Determine context subtitle based on domain
@@ -64,9 +81,21 @@ function EmeryChatHeader({ domainType, domainName }: EmeryChatHeaderProps) {
     <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="min-w-0 flex-1">
-          <h3 className="font-bold text-lg bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-            Emery
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-lg bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+              Emery
+            </h3>
+            <ChatHistoryDropdown
+              currentChatId={currentChatId}
+              onChatSelect={onChatSelect}
+              onNewChat={onNewChat}
+              onChatHistoryUpdate={onChatHistoryUpdate}
+              domainType={domainType}
+              domainName={domainName}
+              userId={userId}
+              organizationId={organizationId}
+            />
+          </div>
           <p className="text-xs text-muted-foreground truncate">{getSubtitle()}</p>
         </div>
       </div>
@@ -164,7 +193,11 @@ function ChatSuggestions({
 export function EmeryChat() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const { data: session } = useSession()
   const { chatState, canvasState, chatContext, toggleCanvas, setChatContext } = useLayout()
+  
+  // Chat session state
+  const [currentChatId, setCurrentChatId] = useState<string | undefined>()
   
   // Auto-detect page context if not already set
   useEffect(() => {
@@ -198,16 +231,40 @@ export function EmeryChat() {
     }
   }, [pathname, searchParams, chatContext, setChatContext])
   
-  const handler = useChatGRPC({
-    domainType: chatContext?.domainType,
-    domainId: chatContext?.domainId
-  })
-  
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const [isClient, setIsClient] = useState(false)
   const [inputValue, setInputValue] = useState('')
   const [cursorPosition, setCursorPosition] = useState(0)
+  
+  // Handle chat history updates (callback for forcing refresh)
+  const handleChatHistoryUpdate = () => {
+    // Trigger refresh of chat history dropdown
+    if (typeof window !== 'undefined' && (window as any).refreshChatHistory) {
+      (window as any).refreshChatHistory()
+    }
+  }
+
+  // Handle chat created callback from useChatGRPC
+  const handleChatCreated = (chatId: string) => {
+    console.log('[EMERY-CHAT] New chat created:', chatId)
+    setCurrentChatId(chatId)
+    // Trigger refresh of chat history dropdown
+    handleChatHistoryUpdate()
+  }
+  
+  const handler = useChatGRPC({
+    domainType: chatContext?.domainType,
+    domainId: chatContext?.domainId,
+    chatId: currentChatId
+  }, handleChatCreated)
+  
+  // Update currentChatId when handler provides one
+  useEffect(() => {
+    if (handler.currentChatId && handler.currentChatId !== currentChatId) {
+      setCurrentChatId(handler.currentChatId)
+    }
+  }, [handler.currentChatId, currentChatId])
   
   // Fix hydration by ensuring client-only rendering of dynamic content
   useEffect(() => {
@@ -219,6 +276,35 @@ export function EmeryChat() {
     return null
   }
   
+  // Get user info for chat history
+  const userId = session?.user?.id
+  const organizationId = session?.user?.currentOrganizationId
+  
+  // Don't render if user is not authenticated
+  if (!userId || !organizationId) {
+    return (
+      <div className="w-96 h-full flex flex-col bg-card border-l border-border items-center justify-center p-8">
+        <p className="text-sm text-muted-foreground">Please sign in to use chat</p>
+      </div>
+    )
+  }
+  
+  // Handle chat selection from history
+  const handleChatSelect = async (chatId: string) => {
+    if (handler.switchToChat) {
+      await handler.switchToChat(chatId)
+      setCurrentChatId(chatId)
+    }
+  }
+  
+  // Handle new chat creation
+  const handleNewChat = async () => {
+    if (handler.createNewChat) {
+      await handler.createNewChat()
+      setCurrentChatId(undefined)
+    }
+  }
+  
   // Collapsed state - just show header with expand button
   if (chatState === 'collapsed') {
     return (
@@ -226,6 +312,12 @@ export function EmeryChat() {
         <EmeryChatHeader 
           domainType={chatContext?.domainType}
           domainName={chatContext?.domainName}
+          currentChatId={currentChatId}
+          onChatSelect={handleChatSelect}
+          onNewChat={handleNewChat}
+          onChatHistoryUpdate={handleChatHistoryUpdate}
+          userId={userId || ''}
+          organizationId={organizationId || 0}
         />
         <div className="flex-1" />
       </div>
@@ -272,11 +364,17 @@ export function EmeryChat() {
   
   return (
     <div className={`flex bg-card border-l border-border ${isFullWidth ? 'h-screen' : 'h-full'}`}>
-      {/* Chat Section */}
+      {/* Chat Section - now full width without sidebar */}
       <div className={`flex flex-col ${isFullWidth ? 'h-screen' : 'h-full'} ${isFullWidth ? 'flex-1' : 'w-96'}`}>
         <EmeryChatHeader 
           domainType={chatContext?.domainType}
           domainName={chatContext?.domainName}
+          currentChatId={currentChatId}
+          onChatSelect={handleChatSelect}
+          onNewChat={handleNewChat}
+          onChatHistoryUpdate={handleChatHistoryUpdate}
+          userId={userId}
+          organizationId={organizationId}
         />
         
         {/* Chat content area - takes remaining height after header */}

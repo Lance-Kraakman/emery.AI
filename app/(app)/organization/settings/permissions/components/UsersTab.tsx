@@ -27,9 +27,10 @@ interface OrganizationMemberDTO {
   id: string; // userId.value  
   name: string;
   email: string;
-  systemRole: SystemRoleType;
+  systemRole: SystemRoleType | string; // SystemRoleType or error message
   teams?: string[];
   lastActive?: Date;
+  hasRoleError?: boolean; // Flag to indicate role loading error
 }
 
 export function UsersTab() {
@@ -104,8 +105,13 @@ export function UsersTab() {
     }
   };
 
-  const getRoleIcon = (role: SystemRoleType) => {
-    switch (role) {
+  const getRoleIcon = (role: SystemRoleType | string) => {
+    // Handle error case - if role is not a valid SystemRoleType, return default icon
+    if (!Object.values(SYSTEM_ROLES).includes(role as SystemRoleType)) {
+      return <User className="w-4 h-4" />;
+    }
+    
+    switch (role as SystemRoleType) {
       case SYSTEM_ROLES.ORGANIZATION_OWNER:
         return <Crown className="w-4 h-4" />;
       case SYSTEM_ROLES.ORGANIZATION_ADMIN:
@@ -121,8 +127,13 @@ export function UsersTab() {
     }
   };
 
-  const getRoleBadgeVariant = (role: SystemRoleType) => {
-    switch (role) {
+  const getRoleBadgeVariant = (role: SystemRoleType | string) => {
+    // Handle error case - if role is not a valid SystemRoleType, return default variant
+    if (!Object.values(SYSTEM_ROLES).includes(role as SystemRoleType)) {
+      return 'outline' as const;
+    }
+    
+    switch (role as SystemRoleType) {
       case SYSTEM_ROLES.ORGANIZATION_OWNER:
         return 'default' as const;
       case SYSTEM_ROLES.ORGANIZATION_ADMIN:
@@ -221,10 +232,17 @@ export function UsersTab() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={getRoleBadgeVariant(member.systemRole)} className="flex items-center gap-1 w-fit">
-                        {getRoleIcon(member.systemRole)}
-                        {member.systemRole}
-                      </Badge>
+                      {member.hasRoleError ? (
+                        <Badge variant="destructive" className="flex items-center gap-1 w-fit">
+                          <span className="text-xs">⚠️</span>
+                          Error loading role
+                        </Badge>
+                      ) : (
+                        <Badge variant={getRoleBadgeVariant(member.systemRole)} className="flex items-center gap-1 w-fit">
+                          {getRoleIcon(member.systemRole)}
+                          {member.systemRole}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1 flex-wrap">

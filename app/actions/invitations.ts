@@ -113,7 +113,7 @@ export async function acceptInvitation(token: string): Promise<Result> {
 
 // AIDEV-NOTE: This functionality is now handled by the OrganizationRepository
 // through the getMembers method. Consider moving this to organization actions.
-export async function getOrganizationMembers(): Promise<Array<{id: string, name: string, email: string, systemRole: SystemRoleType}>> {
+export async function getOrganizationMembers(): Promise<Array<{id: string, name: string, email: string, systemRole: SystemRoleType | string}>> {
   try {
     const session = await requirePermission("users:view");
     const currentOrg = await requireCurrentOrganization();

@@ -52,8 +52,9 @@ export interface OrganizationMember {
   userId: UserId;
   name?: string | null;
   email?: EmailAddress | null;
-  systemRole: SystemRoleType; // RBAC system role
+  systemRole: SystemRoleType | string; // RBAC system role or error message
   joinedAt?: Date | null;
+  hasRoleError?: boolean; // Flag to indicate role loading error
 }
 
 // Analysis capabilities for organizations

@@ -295,14 +295,28 @@ export class UserRoleApplicationService {
         OrganizationId.fromNumber(filters.organizationId)
       );
 
-      // Map to OrganizationMember format
-      let members = users.map(user => ({
-        userId: user.id,
-        name: user.name,
-        email: user.email,
-        systemRole: SYSTEM_ROLES.MEMBER, // TODO: Get actual role from RBAC system
-        joinedAt: user.createdAt
-      }));
+      // Map to OrganizationMember format and fetch actual roles from RBAC
+      const organizationId = OrganizationId.fromNumber(filters.organizationId);
+      
+      let members = await Promise.all(
+        users.map(async (user) => {
+          // Get the user's actual role from RBAC system
+          const userRole = await this.getUserOrganizationRole(user.id, organizationId);
+          
+          if (!userRole) {
+            console.error(`⚠️ No role found for user ${user.id.value} in organization ${organizationId.value}. This indicates a data integrity issue.`);
+          }
+          
+          return {
+            userId: user.id,
+            name: user.name,
+            email: user.email,
+            systemRole: userRole || "Error loading role", // Show error message instead of crashing
+            joinedAt: user.createdAt,
+            hasRoleError: !userRole // Flag to indicate role loading error
+          };
+        })
+      );
 
       // Apply system role filter
       if (filters.systemRole) {

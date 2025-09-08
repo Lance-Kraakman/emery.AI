@@ -29,12 +29,6 @@ export function AgentsCanvas({ agentId, children }: AgentsCanvasProps) {
       title={title}
       subtitle={subtitle}
       icon={<Bot className="h-5 w-5" />}
-      headerActions={
-        <Button size="sm">
-          <Plus className="h-4 w-4 mr-2" />
-          New Agent
-        </Button>
-      }
     >
       <div className="h-full flex flex-col overflow-hidden">
         {children || (
