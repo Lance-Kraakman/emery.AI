@@ -290,5 +290,109 @@
         ]
       }
     ]
+  },
+  {
+    "id": 8,
+    "name": "DRCare Healthcare Report Writer",
+    "role": "report_writer",
+    "description": "Specialized healthcare report generator for aged care placement, life planning, and executive summaries. Creates professional healthcare documentation using approved templates and client data.",
+    "persona": "Professional healthcare documentation specialist with expertise in aged care placement, life planning, and executive summaries. Ensures compliance with healthcare standards and maintains patient confidentiality.",
+    "tools": [
+      {"name": "file_reader", "version": "1.0"},
+      {"name": "document_generator", "version": "1.0"},
+      {"name": "file_writer", "version": "1.0"}
+    ],
+    "capabilities": [
+      {
+        "name": "residential_aged_care_report",
+        "description": "Generate comprehensive residential aged care placement reports using approved templates",
+        "steps": [
+          {
+            "id": "analyze_client_data",
+            "type": "CODE_STEP",
+            "instructions": "Analyze client demographics, health status, care needs, and preferences for aged care placement",
+            "model": "Qwen/Qwen2.5-14B-Instruct"
+          },
+          {
+            "id": "generate_care_report",
+            "type": "CODE_STEP",
+            "instructions": "Generate professional aged care placement report with recommendations, facility matching, and care level assessment based on approved DRCare template structure",
+            "model": "Qwen/Qwen2.5-14B-Instruct"
+          },
+          {
+            "id": "format_final_document",
+            "type": "TOOL_STEP",
+            "instructions": "Format the report according to DRCare standards with proper sections: Executive Summary, Client Profile, Care Assessment, Facility Recommendations, Implementation Plan",
+            "tools": [{"name": "document_generator"}]
+          },
+          {
+            "id": "save_report_to_file",
+            "type": "TOOL_STEP",
+            "instructions": "Save the generated aged care placement report to the filesystem with proper naming convention and client organization",
+            "tools": [{"name": "file_writer"}]
+          }
+        ]
+      },
+      {
+        "name": "life_plan_report",
+        "description": "Create detailed life planning documents for healthcare and aged care transitions",
+        "steps": [
+          {
+            "id": "assess_life_planning_needs",
+            "type": "CODE_STEP",
+            "instructions": "Assess client's current situation, future healthcare needs, financial considerations, and family dynamics for comprehensive life planning",
+            "model": "Qwen/Qwen2.5-14B-Instruct"
+          },
+          {
+            "id": "develop_life_plan_strategy",
+            "type": "CODE_STEP",
+            "instructions": "Develop comprehensive life plan including healthcare pathways, financial strategies, accommodation options, and care progression stages",
+            "model": "Qwen/Qwen2.5-14B-Instruct"
+          },
+          {
+            "id": "create_life_plan_document",
+            "type": "TOOL_STEP",
+            "instructions": "Create structured life plan document with sections: Current Situation, Future Projections, Healthcare Pathway, Financial Planning, Accommodation Strategy, Implementation Timeline",
+            "tools": [{"name": "document_generator"}]
+          },
+          {
+            "id": "save_life_plan_to_file",
+            "type": "TOOL_STEP",
+            "instructions": "Save the generated life plan report to the filesystem with proper naming convention and client organization",
+            "tools": [{"name": "file_writer"}]
+          }
+        ]
+      },
+      {
+        "name": "executive_summary_report",
+        "description": "Produce concise executive summaries for healthcare assessments and recommendations",
+        "steps": [
+          {
+            "id": "extract_key_findings",
+            "type": "CODE_STEP",
+            "instructions": "Extract key findings, critical decisions, and priority recommendations from detailed healthcare assessments",
+            "model": "Qwen/Qwen2.5-14B-Instruct"
+          },
+          {
+            "id": "create_executive_summary",
+            "type": "CODE_STEP",
+            "instructions": "Create concise executive summary highlighting critical points, immediate actions required, and strategic recommendations for decision makers",
+            "model": "Qwen/Qwen2.5-14B-Instruct"
+          },
+          {
+            "id": "finalize_summary_document",
+            "type": "TOOL_STEP",
+            "instructions": "Format executive summary with professional presentation: Key Points, Critical Decisions, Immediate Actions, Strategic Recommendations, Next Steps",
+            "tools": [{"name": "document_generator"}]
+          },
+          {
+            "id": "save_executive_summary_to_file",
+            "type": "TOOL_STEP",
+            "instructions": "Save the generated executive summary to the filesystem with proper naming convention and client organization",
+            "tools": [{"name": "file_writer"}]
+          }
+        ]
+      }
+    ]
   }
 ]

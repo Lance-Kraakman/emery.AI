@@ -1,0 +1,108 @@
+{
+  "templateName": "Residential Aged Care Placement Report",
+  "version": "2025.1",
+  "sections": [
+    {
+      "id": "executive_summary",
+      "title": "Executive Summary",
+      "description": "Brief overview of client needs and recommendations",
+      "fields": [
+        "client_overview",
+        "primary_recommendations",
+        "urgency_level",
+        "next_steps"
+      ]
+    },
+    {
+      "id": "client_profile",
+      "title": "Client Profile",
+      "description": "Comprehensive client information",
+      "fields": [
+        "personal_details",
+        "contact_information",
+        "emergency_contacts",
+        "cultural_preferences",
+        "social_history"
+      ]
+    },
+    {
+      "id": "health_assessment",
+      "title": "Health and Care Assessment",
+      "description": "Detailed health status and care requirements",
+      "fields": [
+        "medical_conditions",
+        "current_medications",
+        "cognitive_assessment",
+        "mobility_status",
+        "care_level_assessment",
+        "specialist_requirements"
+      ]
+    },
+    {
+      "id": "care_requirements",
+      "title": "Care Requirements Analysis",
+      "description": "Specific care needs and support requirements",
+      "fields": [
+        "daily_living_assistance",
+        "personal_care_needs",
+        "medical_support_required",
+        "dietary_requirements",
+        "social_and_recreational_needs"
+      ]
+    },
+    {
+      "id": "facility_recommendations",
+      "title": "Facility Recommendations",
+      "description": "Matched aged care facilities with suitability analysis",
+      "fields": [
+        "primary_recommendations",
+        "alternative_options",
+        "facility_comparison",
+        "availability_status",
+        "cost_analysis"
+      ]
+    },
+    {
+      "id": "financial_analysis",
+      "title": "Financial Assessment",
+      "description": "Cost analysis and funding options",
+      "fields": [
+        "means_testing_results",
+        "accommodation_payment_options",
+        "government_subsidies",
+        "ongoing_costs",
+        "payment_recommendations"
+      ]
+    },
+    {
+      "id": "implementation_plan",
+      "title": "Implementation Plan",
+      "description": "Step-by-step plan for aged care placement",
+      "fields": [
+        "immediate_actions",
+        "application_process",
+        "timeline",
+        "preparation_requirements",
+        "transition_support"
+      ]
+    }
+  ],
+  "expectedOutcome": {
+    "format": "Professional report",
+    "length": "8-12 pages",
+    "deliverables": [
+      "Comprehensive assessment report",
+      "Facility comparison table",
+      "Financial analysis summary",
+      "Implementation timeline",
+      "Contact list of recommended facilities"
+    ]
+  },
+  "qualityIndicators": [
+    "All sections completed with relevant information",
+    "At least 3 facility recommendations provided",
+    "Clear financial analysis with payment options",
+    "Actionable implementation plan with timeline",
+    "Professional formatting and presentation"
+  ]
+}

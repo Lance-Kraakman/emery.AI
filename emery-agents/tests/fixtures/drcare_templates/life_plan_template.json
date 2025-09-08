@@ -1,0 +1,123 @@
+{
+  "templateName": "Life Plan Report",
+  "version": "2024.2",
+  "sections": [
+    {
+      "id": "current_situation",
+      "title": "Current Situation Analysis",
+      "description": "Comprehensive assessment of client's present circumstances",
+      "fields": [
+        "health_status_overview",
+        "living_arrangements",
+        "support_network",
+        "financial_position",
+        "lifestyle_preferences"
+      ]
+    },
+    {
+      "id": "future_projections",
+      "title": "Future Health and Care Projections",
+      "description": "Anticipated changes and care requirements",
+      "fields": [
+        "health_trajectory_analysis",
+        "care_needs_progression",
+        "cognitive_considerations",
+        "mobility_projections",
+        "life_expectancy_factors"
+      ]
+    },
+    {
+      "id": "healthcare_pathway",
+      "title": "Healthcare Pathway Planning",
+      "description": "Structured approach to future healthcare needs",
+      "fields": [
+        "preventive_care_strategies",
+        "home_care_options",
+        "residential_care_pathway",
+        "specialist_care_requirements",
+        "emergency_care_planning"
+      ]
+    },
+    {
+      "id": "financial_planning",
+      "title": "Financial Planning Strategy",
+      "description": "Long-term financial strategy for healthcare and aged care",
+      "fields": [
+        "current_asset_analysis",
+        "income_projections",
+        "aged_care_cost_projections",
+        "funding_strategies",
+        "estate_planning_considerations",
+        "insurance_recommendations"
+      ]
+    },
+    {
+      "id": "accommodation_strategy",
+      "title": "Accommodation Strategy",
+      "description": "Housing and accommodation planning across care levels",
+      "fields": [
+        "home_modification_needs",
+        "alternative_housing_options",
+        "retirement_village_considerations",
+        "aged_care_facility_planning",
+        "location_preferences_analysis"
+      ]
+    },
+    {
+      "id": "support_systems",
+      "title": "Support Systems and Networks",
+      "description": "Family, social, and professional support planning",
+      "fields": [
+        "family_involvement_planning",
+        "social_support_maintenance",
+        "professional_care_coordination",
+        "community_resource_utilization",
+        "advocacy_and_decision_making"
+      ]
+    },
+    {
+      "id": "implementation_timeline",
+      "title": "Implementation Timeline",
+      "description": "Phased approach to life plan implementation",
+      "fields": [
+        "immediate_priorities",
+        "short_term_goals",
+        "medium_term_planning",
+        "long_term_objectives",
+        "review_and_adjustment_schedule"
+      ]
+    },
+    {
+      "id": "contingency_planning",
+      "title": "Contingency Planning",
+      "description": "Plans for unexpected circumstances",
+      "fields": [
+        "health_crisis_planning",
+        "financial_market_considerations",
+        "family_circumstance_changes",
+        "care_system_changes",
+        "alternative_pathway_options"
+      ]
+    }
+  ],
+  "expectedOutcome": {
+    "format": "Comprehensive life planning document",
+    "length": "15-25 pages",
+    "deliverables": [
+      "Detailed life plan report",
+      "Financial projection tables",
+      "Care pathway flowchart",
+      "Implementation timeline",
+      "Resource and contact directory",
+      "Regular review schedule"
+    ]
+  },
+  "qualityIndicators": [
+    "Comprehensive coverage of all life planning domains",
+    "Realistic financial projections with multiple scenarios",
+    "Clear implementation timeline with measurable milestones",
+    "Contingency plans for major life events",
+    "Integration of client preferences throughout plan",
+    "Professional presentation with executive summary"
+  ]
+}
