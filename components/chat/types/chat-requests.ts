@@ -21,6 +21,7 @@ export interface ChatStreamRequest {
 export interface ChatContextOptions {
   domainType?: DomainType | 'organizations' | 'general'
   domainId?: number
+  chatId?: string
 }
 
 // Helper function to create properly structured chat requests

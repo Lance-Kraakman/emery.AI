@@ -2,10 +2,13 @@
 
 import { generateId } from 'ai'
 import { useState, useEffect, useRef } from 'react'
+import { useSession } from 'next-auth/react'
 import { ChatHandler, Message } from '@llamaindex/chat-ui'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import { useLayout } from '@/components/layout/LayoutProvider'
 import { createChatStreamRequest, type ChatContextOptions } from './types/chat-requests'
+import { loadChatWithFullHistory, getCurrentChatSession } from '@/app/actions/chat-history'
+import type { ChatMessageDTO, ChatContextDTO } from './types/chat-dtos'
 
 interface ChatMessage extends Message {
   id: string
@@ -16,6 +19,10 @@ interface ExtendedChatHandler extends ChatHandler {
   scrollRef?: React.RefObject<HTMLDivElement>
   scrollToBottom?: () => void
   clearMessages?: () => void
+  currentChatId?: string
+  switchToChat?: (chatId: string) => Promise<void>
+  createNewChat?: () => Promise<void>
+  onChatCreated?: (chatId: string) => void
 }
 
 /**
@@ -32,16 +39,20 @@ interface ExtendedChatHandler extends ChatHandler {
  * AIDEV-NOTE: Generic gRPC-based chat handler that can be used across all pages
  * with domain-specific context and proper TypeScript types.
  */
-export function useChatGRPC(contextOptions?: ChatContextOptions): ExtendedChatHandler {
+export function useChatGRPC(
+  contextOptions?: ChatContextOptions, 
+  onChatCreated?: (chatId: string) => void
+): ExtendedChatHandler {
   const [input, setInput] = useState<string>('')
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isClient, setIsClient] = useState(false)
+  const [currentChatId, setCurrentChatId] = useState<string | undefined>()
   const scrollRef = useRef<HTMLDivElement>(null)
   const { chatContext } = useLayout()
   
-  // Generate a consistent storage key for this chat session
-  const chatStorageKey = 'emery-chat-messages'
+  // Generate domain-specific storage key for this chat session
+  const chatStorageKey = `emery-chat-${contextOptions?.domainType || chatContext?.domainType || 'general'}-${contextOptions?.domainId || chatContext?.domainId || 'default'}`
 
   // Auto-scroll to bottom function
   const scrollToBottom = () => {
@@ -50,11 +61,54 @@ export function useChatGRPC(contextOptions?: ChatContextOptions): ExtendedChatHa
     }
   }
 
-  // Initialize client-side and load persisted messages
+  // Initialize client-side
   useEffect(() => {
     setIsClient(true)
-    
-    // Load persisted messages from localStorage
+  }, [])
+  
+  // Load chat when chatId changes
+  useEffect(() => {
+    if (contextOptions?.chatId) {
+      loadChatSession(contextOptions.chatId)
+    } else {
+      // Clear messages if no chatId (new chat)
+      setMessages([])
+      setCurrentChatId(undefined)
+    }
+  }, [contextOptions?.chatId])
+
+  // Load a specific chat session with full history
+  const loadChatSession = async (chatId: string) => {
+    try {
+      console.log('[CHAT-GRPC-HOOK] Loading chat session:', chatId)
+      const result = await loadChatWithFullHistory(chatId)
+      
+      if (result.success && result.data) {
+        setCurrentChatId(chatId)
+        
+        // Convert DTOs to ChatMessage format
+        const chatMessages: ChatMessage[] = result.data.messages.map(msg => ({
+          id: msg.id,
+          content: msg.content,
+          role: msg.role as 'user' | 'assistant'
+        }))
+        
+        setMessages(chatMessages)
+        console.log(`[CHAT-GRPC-HOOK] Loaded ${chatMessages.length} messages for chat ${chatId}`)
+      } else {
+        console.error('[CHAT-GRPC-HOOK] Failed to load chat session:', result.error)
+        // Fall back to localStorage for this context
+        loadFromLocalStorage()
+      }
+    } catch (error) {
+      console.error('[CHAT-GRPC-HOOK] Error loading chat session:', error)
+      // Fall back to localStorage for this context
+      loadFromLocalStorage()
+    }
+  }
+  
+  // Fallback to localStorage (for transition period)
+  const loadFromLocalStorage = () => {
     if (typeof window !== 'undefined') {
       try {
         const savedMessages = localStorage.getItem(chatStorageKey)
@@ -63,10 +117,10 @@ export function useChatGRPC(contextOptions?: ChatContextOptions): ExtendedChatHa
           setMessages(parsedMessages)
         }
       } catch (error) {
-        console.warn('[CHAT-GRPC-HOOK] Failed to load persisted messages:', error)
+        console.warn('[CHAT-GRPC-HOOK] Failed to load from localStorage:', error)
       }
     }
-  }, [chatStorageKey])
+  }
 
   // Auto-scroll when messages change
   useEffect(() => {
@@ -114,7 +168,7 @@ export function useChatGRPC(contextOptions?: ChatContextOptions): ExtendedChatHa
       }
       
       // AIDEV-NOTE: Use helper function for consistent request structure
-      const requestBody = createChatStreamRequest(chatMessages, chatContextOptions)
+      const requestBody = createChatStreamRequest(chatMessages, chatContextOptions, currentChatId)
       
       // Call the gRPC-based streaming chat API
       const response = await fetch('/api/chat/stream-grpc', {
@@ -174,6 +228,9 @@ export function useChatGRPC(contextOptions?: ChatContextOptions): ExtendedChatHa
 
       console.log('[CHAT-GRPC-HOOK] Final assistant message length:', assistantMessage.length)
 
+      // Check for new chat creation after stream completes
+      await checkForNewChat()
+
     } catch (error) {
       console.error('[CHAT-GRPC-HOOK] Chat error:', error)
       
@@ -193,12 +250,89 @@ export function useChatGRPC(contextOptions?: ChatContextOptions): ExtendedChatHa
   // Clear all messages and localStorage
   const clearMessages = () => {
     setMessages([])
+    setCurrentChatId(undefined)
     if (typeof window !== 'undefined') {
       try {
         localStorage.removeItem(chatStorageKey)
       } catch (error) {
         console.warn('[CHAT-GRPC-HOOK] Failed to clear persisted messages:', error)
       }
+    }
+  }
+
+  // Switch to a different chat session
+  const switchToChat = async (chatId: string) => {
+    try {
+      console.log('[CHAT-GRPC-HOOK] Switching to chat:', chatId)
+      await loadChatSession(chatId)
+    } catch (error) {
+      console.error('[CHAT-GRPC-HOOK] Failed to switch chat:', error)
+    }
+  }
+
+  // Check for new chat creation after stream completes
+  const checkForNewChat = async () => {
+    try {
+      // Only check if we don't already have a currentChatId
+      if (currentChatId) return
+      
+      const { data: session } = await import('next-auth/react').then(m => ({ data: m.getSession() }))
+      const organizationId = (session as any)?.user?.currentOrganizationId
+      const userId = (session as any)?.user?.id
+      
+      if (!organizationId || !userId) return
+      
+      // Create context for the current domain
+      const context: ChatContextDTO = {
+        domainType: contextOptions?.domainType === 'general' ? undefined : contextOptions?.domainType,
+        domainId: contextOptions?.domainId,
+        organizationId,
+        userId
+      }
+      
+      console.log('[CHAT-GRPC-HOOK] Checking for new chat creation:', context)
+      
+      // Get the current (most recent) chat for this context
+      const result = await getCurrentChatSession(context)
+      
+      if (result.success && result.data) {
+        const newChatId = result.data.id
+        console.log('[CHAT-GRPC-HOOK] Found new chat created:', newChatId)
+        
+        // Update current chat ID
+        setCurrentChatId(newChatId)
+        
+        // Notify parent component if callback provided
+        onChatCreated?.(newChatId)
+      }
+      
+    } catch (error) {
+      console.error('[CHAT-GRPC-HOOK] Failed to check for new chat:', error)
+    }
+  }
+
+  // Create a new chat session
+  const createNewChat = async () => {
+    try {
+      console.log('[CHAT-GRPC-HOOK] Creating new chat for context:', {
+        domainType: contextOptions?.domainType || chatContext?.domainType,
+        domainId: contextOptions?.domainId || chatContext?.domainId
+      })
+      
+      // Clear current session
+      setMessages([])
+      setCurrentChatId(undefined)
+      
+      // Clear localStorage for this context
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(chatStorageKey)
+      }
+      
+      // Note: New chat sessions are created automatically by stream-grpc
+      // when the first message is sent with no chatId
+      
+    } catch (error) {
+      console.error('[CHAT-GRPC-HOOK] Failed to create new chat:', error)
     }
   }
 
@@ -212,6 +346,9 @@ export function useChatGRPC(contextOptions?: ChatContextOptions): ExtendedChatHa
     scrollRef,
     scrollToBottom,
     clearMessages,
+    currentChatId,
+    switchToChat,
+    createNewChat,
   }
 }
 

@@ -9,7 +9,7 @@ import { getUserRoleApplicationService, getUserRepository, getOrganizationReposi
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
-import { SystemRoleType } from "@/ddd/domain/rbac/entities/role";
+import { SystemRoleType, SYSTEM_ROLES } from "@/ddd/domain/rbac/entities/role";
 
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
@@ -181,13 +181,30 @@ export async function getUserOrganizations() {
       }))
     });
 
-    // Map to expected format for backwards compatibility
-    return organizations.map(org => ({
-      ...org,
-      userRole: 'member', // Default role - would need to be fetched separately if needed
-      isCurrentOrganization: org.id.value === session.user.currentOrganizationId,
-      joinedAt: org.createdAt
-    }));
+    // Map to expected format and fetch actual roles
+    const userRoleApplicationService = getUserRoleApplicationService();
+    const organizationsWithRoles = await Promise.all(
+      organizations.map(async (org) => {
+        const userRole = await userRoleApplicationService.getUserOrganizationRole(
+          UserId.fromString(session.user.id),
+          org.id
+        );
+        
+        if (!userRole) {
+          console.error(`⚠️ No role found for user ${session.user.id} in organization ${org.id.value}. This indicates a data integrity issue.`);
+        }
+        
+        return {
+          ...org,
+          userRole: userRole || "Error loading role", // Show error message instead of crashing
+          isCurrentOrganization: org.id.value === session.user.currentOrganizationId,
+          joinedAt: org.createdAt,
+          hasRoleError: !userRole // Flag to indicate role loading error
+        };
+      })
+    );
+    
+    return organizationsWithRoles;
     } catch (error) {
       console.error("Error fetching user organizations:", error);
       throw new Error("Failed to fetch organizations");
@@ -214,11 +231,21 @@ export async function getCurrentOrganization() {
   }
 
   // Get the user's role in this organization
-  const userRole = await userRoleApplicationService.getUserOrganizationRole(UserId.fromString(session.user.id), OrganizationId.fromNumber(session.user.currentOrganizationId));
+  const userRole = await userRoleApplicationService.getUserOrganizationRole(
+    UserId.fromString(session.user.id), 
+    OrganizationId.fromNumber(session.user.currentOrganizationId)
+  );
+  
+  console.log(`📋 getCurrentOrganization() - User role for org ${session.user.currentOrganizationId}:`, userRole);
+  
+  if (!userRole) {
+    console.error(`⚠️ No role found for user ${session.user.id} in current organization ${session.user.currentOrganizationId}. This indicates a data integrity issue.`);
+  }
 
   return {
     ...organization,
-    userRole: userRole || 'member'
+    userRole: userRole || "Error loading role", // Show error message instead of crashing
+    hasRoleError: !userRole // Flag to indicate role loading error
   };
   } catch (error) {
     console.error("Error fetching current organization:", error);

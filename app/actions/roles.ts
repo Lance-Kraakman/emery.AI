@@ -9,8 +9,8 @@ import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import { db } from '@/lib/db/client';
-import { roles, permissions, rolePermissions } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { roles, permissions, rolePermissions, userRoles } from '@/lib/db/schema';
+import { eq, and, or, isNull, sql } from 'drizzle-orm';
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 
 export interface CustomRole {
@@ -62,10 +62,13 @@ export async function getOrganizationRoles(): Promise<CustomRole[]> {
         })
         .from(roles)
         .where(
-          and(
-            // Include system roles (isSystem = true) and custom roles for this org
-            // System roles have organizationId = null
-            // Custom roles have organizationId = currentOrg.id
+          or(
+            // Include system roles (isSystem = true, organizationId = null)
+            and(
+              eq(roles.isSystem, true),
+              isNull(roles.organizationId)
+            ),
+            // Include custom roles for this org
             eq(roles.organizationId, currentOrg.id.value)
           )
         );
@@ -79,8 +82,16 @@ export async function getOrganizationRoles(): Promise<CustomRole[]> {
             .from(rolePermissions)
             .where(eq(rolePermissions.roleId, role.id));
 
-          // TODO: Count users with this role when user_roles table is fully integrated
-          const userCount = 0; // Placeholder
+          // Count users with this role in the current organization
+          const userCountResult = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(userRoles)
+            .where(and(
+              eq(userRoles.roleId, role.id),
+              eq(userRoles.organizationId, currentOrg.id.value)
+            ));
+          
+          const userCount = userCountResult[0]?.count || 0;
 
           return {
             ...role,

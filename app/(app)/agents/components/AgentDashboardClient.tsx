@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loading } from '@/components/ui/loading';
-import AgentConfigurationWizard from './AgentConfigurationWizard';
 import AgentDetailsView from './AgentDetailsView';
 import { getAgents } from '@/app/actions/agents';
 
@@ -22,8 +21,6 @@ interface AgentDashboardClientProps {
 export default function AgentDashboardClient({ initialAgents, teams }: AgentDashboardClientProps) {
   const [agents, setAgents] = useState<AgentDTO[]>(initialAgents);
   const [selectedAgent, setSelectedAgent] = useState<AgentDTO | null>(null);
-  const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [editingAgent, setEditingAgent] = useState<AgentDTO | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
   const [loading, setLoading] = useState(false);
@@ -92,8 +89,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
             </div>
             <Button
               onClick={() => {
-                setEditingAgent(null);
-                setIsWizardOpen(true);
+                // TODO: Handle agent creation via separate modal/dialog
               }}
             >
               <Plus size={16} className="mr-2" />
@@ -128,8 +124,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
                   </p>
                   <Button
                     onClick={() => {
-                      setEditingAgent(null);
-                      setIsWizardOpen(true);
+                      // TODO: Handle agent creation via separate modal/dialog
                     }}
                   >
                     <Plus size={16} className="mr-2" />
@@ -147,22 +142,24 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
                     }`}
                     onClick={() => {
                       setSelectedAgent(agent);
-                      // If in edit mode, update the editing agent as well
-                      if (isWizardOpen) {
-                        setEditingAgent(agent);
-                      }
                     }}
                   >
-                    <CardContent className="p-4">
-                      <h3 className="font-semibold text-foreground">{agent.name}</h3>
-                      <p className="text-sm text-muted-foreground">{agent.role || 'No role specified'}</p>
-                      {agent.status && (
-                        <span className={`inline-block px-2 py-1 text-xs rounded-full mt-2 ${
-                          agent.status === 'active' ? 'bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-muted/50 text-muted-foreground'
-                        }`}>
-                          {agent.status}
-                        </span>
-                      )}
+                    <CardContent className="p-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-medium text-sm text-foreground truncate">{agent.name}</h3>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {agent.role || 'No role specified'}
+                          </p>
+                        </div>
+                        {agent.status && (
+                          <span className={`inline-block px-1.5 py-0.5 text-xs rounded-full ml-2 flex-shrink-0 ${
+                            agent.status === 'active' ? 'bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-muted/50 text-muted-foreground'
+                          }`}>
+                            {agent.status}
+                          </span>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 ))
@@ -176,26 +173,13 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
       <div className="flex-1 p-0">
         <Card className="h-full rounded-none border-none">
           <CardContent className="p-6 h-full">
-            {isWizardOpen ? (
-              <AgentConfigurationWizard
-                agent={editingAgent}
-                onClose={() => {
-                  setIsWizardOpen(false);
-                  setEditingAgent(null);
-                }}
-                onSuccess={() => {
-                  refreshAgents();
-                  setIsWizardOpen(false);
-                  setEditingAgent(null);
-                }}
-              />
-            ) : selectedAgent ? (
+            {selectedAgent ? (
               <AgentDetailsView
                 agent={selectedAgent}
                 onEdit={() => {
-                  setEditingAgent(selectedAgent);
-                  setIsWizardOpen(true);
+                  // This is now handled inline within AgentDetailsView
                 }}
+                onUpdate={refreshAgents}
               />
             ) : (
               <div className="text-center p-8 h-full flex flex-col items-center justify-center">

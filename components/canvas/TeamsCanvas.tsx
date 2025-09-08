@@ -1,7 +1,7 @@
 'use client'
 
 import { BaseCanvas } from './BaseCanvas'
-import { Users, Plus, UserPlus } from 'lucide-react'
+import { Users, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -30,21 +30,6 @@ export function TeamsCanvas({ teamId, teamName, children }: TeamsCanvasProps) {
       title={title}
       subtitle={subtitle}
       icon={<Users className="h-5 w-5" />}
-      headerActions={
-        <Button size="sm">
-          {teamId ? (
-            <>
-              <UserPlus className="h-4 w-4 mr-2" />
-              Add Member
-            </>
-          ) : (
-            <>
-              <Plus className="h-4 w-4 mr-2" />
-              New Team
-            </>
-          )}
-        </Button>
-      }
     >
       <div className="h-full flex flex-col overflow-hidden">
         {children || (

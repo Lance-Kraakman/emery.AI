@@ -10,8 +10,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Loading } from '@/components/ui/loading';
 import { Badge } from '@/components/ui/badge';
-import TeamFormDialog from './TeamFormDialog';
-import TeamConfigurationPanel from './TeamConfigurationPanel';
 import TeamDetailsView from './TeamDetailsView';
 import { getTeams } from '@/app/actions/teams';
 import { useEmery } from '@/contexts/EmeryContext';
@@ -27,9 +25,6 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
   const { currentOrganization } = useEmery();
   const [teams, setTeams] = useState<TeamDTO[]>(initialTeams);
   const [selectedTeam, setSelectedTeam] = useState<TeamDTO | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingTeam, setEditingTeam] = useState<TeamDTO | null>(null);
-  const [isPanelEditMode, setIsPanelEditMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,9 +82,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
             </div>
             <Button
               onClick={() => {
-                setEditingTeam(null);
-                setSelectedTeam(null);
-                setIsPanelEditMode(true);
+                // TODO: Handle team creation via separate modal/dialog
               }}
               variant="default"
               size="sm"
@@ -113,9 +106,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
               action={{
                 label: "Create Team",
                 onClick: () => {
-                  setEditingTeam(null);
-                  setSelectedTeam(null);
-                  setIsPanelEditMode(true);
+                  // TODO: Handle team creation via separate modal/dialog
                 }
               }}
             />
@@ -130,25 +121,25 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
                 }`}
                 onClick={() => {
                   setSelectedTeam(team);
-                  // If in edit mode, update the editing team as well
-                  if (isPanelEditMode) {
-                    setEditingTeam(team);
-                  }
                 }}
               >
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Users size={16} className="text-muted-foreground" />
-                    <h3 className="font-semibold text-foreground">{team.name}</h3>
+                <CardContent className="p-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1 mb-1">
+                        <Users size={14} className="text-muted-foreground flex-shrink-0" />
+                        <h3 className="font-medium text-sm text-foreground truncate">{team.name}</h3>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {team.purpose || 'No purpose defined'}
+                      </p>
+                    </div>
+                    {team.agentIds && team.agentIds.length > 0 && (
+                      <Badge variant="outline" className="text-xs h-5 ml-2 flex-shrink-0">
+                        {team.agentIds.length}
+                      </Badge>
+                    )}
                   </div>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    {team.purpose || 'No purpose defined'}
-                  </p>
-                  {team.agentIds && team.agentIds.length > 0 && (
-                    <Badge variant="outline" className="text-xs">
-                      {team.agentIds.length} agent{team.agentIds.length !== 1 ? 's' : ''}
-                    </Badge>
-                  )}
                 </CardContent>
               </Card>
             ))
@@ -162,28 +153,14 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
       <div className="flex-1 p-0">
         <Card className="h-full rounded-none border-none">
           <CardContent className="p-6 h-full">
-            {isPanelEditMode ? (
-              <TeamConfigurationPanel
-                team={editingTeam}
-                agents={agents}
-                onClose={() => {
-                  setIsPanelEditMode(false);
-                  setEditingTeam(null);
-                }}
-                onSuccess={() => {
-                  refreshTeams();
-                  setIsPanelEditMode(false);
-                  setEditingTeam(null);
-                }}
-              />
-            ) : selectedTeam ? (
+            {selectedTeam ? (
               <TeamDetailsView
                 team={selectedTeam}
                 agents={agents}
                 onEdit={() => {
-                  setEditingTeam(selectedTeam);
-                  setIsPanelEditMode(true);
+                  // This is now handled inline within TeamDetailsView
                 }}
+                onUpdate={refreshTeams}
               />
             ) : (
               <EmptyState
@@ -196,15 +173,6 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
         </Card>
       </div>
 
-      <TeamFormDialog
-        isOpen={isFormOpen}
-        onClose={() => {
-          setIsFormOpen(false);
-          refreshTeams();
-        }}
-        team={editingTeam}
-        agents={agents}
-      />
     </div>
   );
 }
