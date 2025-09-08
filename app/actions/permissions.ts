@@ -6,18 +6,27 @@
 import { auth, hasPermission as authHasPermission, requirePermission as authRequirePermission } from "@/lib/auth";
 import { Permission } from "@/ddd/domain/shared/value-objects/permission";
 import { revalidatePath } from "next/cache";
-import { requireCurrentOrganization } from "./user-organizations";
-import { withAuthContext } from '@/lib/auth/with-context';
+// REMOVED: import { requireCurrentOrganization } from "./user-organizations"; - causes circular dependency
 import { getUserRoleApplicationService } from "@/ddd/application/di/container";
 import type { Result } from "./types";
-import { UserRole, type UserRoleCapabilities } from "@/ddd/domain/shared/value-objects/user-role";
-import { ORGANIZATION_ROLES, type OrganizationRoleType } from "@/ddd/domain/shared/value-objects/organization-role";
-import { UserId } from "@/ddd/domain/shared/value-objects";
+import { SYSTEM_ROLES, type SystemRoleType } from "@/ddd/domain/rbac/entities/role";
 
-export async function assignUserRole(userId: string, role: OrganizationRoleType): Promise<Result> {
+export async function assignUserRole(userId: string, role: SystemRoleType): Promise<Result> {
   try {
-    const session = await requirePermission("manage_users");
-    const currentOrg = await requireCurrentOrganization();
+    const session = await requireAuth();
+    
+    if (!session.user.currentOrganizationId) {
+      return {
+        success: false,
+        error: "No current organization selected"
+      };
+    }
+    
+    // Check permission with explicit context instead of using wrapper
+    const permission = Permission.fromString("users:manage");
+    await authRequirePermission(session.user.id, permission, session.user.currentOrganizationId);
+    
+    const currentOrgId = session.user.currentOrganizationId;
     
     if (!userId || !role) {
       return {
@@ -27,18 +36,18 @@ export async function assignUserRole(userId: string, role: OrganizationRoleType)
     }
 
     // Validate role is one of the allowed roles
-    if (!Object.values(ORGANIZATION_ROLES).includes(role)) {
+    if (!Object.values(SYSTEM_ROLES).includes(role)) {
       return {
         success: false,
-        error: `Invalid role: ${role}. Must be one of: ${Object.values(ORGANIZATION_ROLES).join(', ')}`
+        error: `Invalid role: ${role}. Must be one of: ${Object.values(SYSTEM_ROLES).join(', ')}`
       };
     }
 
     const userRoleService = getUserRoleApplicationService();
     const result = await userRoleService.updateMemberRole({
       userId,
-      organizationId: currentOrg.id.value,
-      newRole: role,
+      organizationId: currentOrgId,
+      newSystemRole: role,
       updatedBy: session.user.id
     });
 
@@ -65,49 +74,78 @@ export async function assignUserRole(userId: string, role: OrganizationRoleType)
   }
 }
 
-export async function hasCapability(capability: keyof UserRoleCapabilities): Promise<boolean> {
-  try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return false;
-    }
-    
-    const currentOrg = await requireCurrentOrganization();
-    const userRoleService = getUserRoleApplicationService();
-    
-    // Get user's role in the organization
-    const userRoleString = await userRoleService.getUserOrganizationRole(UserId.fromString(session.user.id), currentOrg.id);
-    if (!userRoleString) {
-      return false;
-    }
-
-    const userRole = UserRole.fromString(userRoleString);
-    return userRole.capabilities[capability];
-  } catch (error) {
-    console.error("Error checking capability:", error);
-    return false;
-  }
-}
+// TODO: Replace with RBAC permission-based capability checking
+// export async function hasCapability(capability: string): Promise<boolean> {
+//   try {
+//     const session = await auth();
+//     if (!session?.user?.id) {
+//       return false;
+//     }
+//     
+//     const currentOrg = await requireCurrentOrganization();
+//     // Use RBAC repository to check specific permissions
+//     // return await rbacRepository.hasPermission(userId, permission, organizationId);
+//     return false; // For now, return false to fix compilation
+//   } catch (error) {
+//     console.error("Error checking capability:", error);
+//     return false;
+//   }
+// }
 
 export async function requireAuth() {
   const session = await auth();
+  console.log("🔐 requireAuth() - Session check:", {
+    hasSession: !!session,
+    hasUser: !!session?.user,
+    userId: session?.user?.id,
+    currentOrgId: session?.user?.currentOrganizationId
+  });
+  
   if (!session?.user) {
+    console.error("🚫 requireAuth() - Authentication failed: No session or user");
     throw new Error("Authentication required");
   }
+  
+  console.log("✅ requireAuth() - Authentication successful");
   return session;
 }
 
+// TEMPORARY: Restored non-circular wrapper for compatibility during migration
 export async function requirePermission(permissionString: string) {
+  console.log("🛡️ requirePermission() - Starting permission check for:", permissionString);
+  
   const session = await requireAuth();
-  const currentOrg = await requireCurrentOrganization();
+  
+  if (!session.user.currentOrganizationId) {
+    throw new Error("No current organization selected");
+  }
+  
+  console.log("🛡️ requirePermission() - Context:", {
+    userId: session.user.id,
+    organizationId: session.user.currentOrganizationId,
+    permission: permissionString
+  });
   
   // Convert string permission to Permission object
   const permission = Permission.fromString(permissionString);
   
-  // Use the new RBAC requirePermission with organization ID
-  await authRequirePermission(session.user.id, permission, currentOrg.id.value);
+  console.log("🛡️ requirePermission() - About to call RBAC requirePermission...");
   
-  return session;
+  try {
+    // Use explicit organization context from session instead of requireCurrentOrganization
+    await authRequirePermission(session.user.id, permission, session.user.currentOrganizationId);
+    
+    console.log("✅ requirePermission() - Permission check PASSED");
+    return session;
+  } catch (error) {
+    console.error("🚫 requirePermission() - Permission check FAILED:", {
+      error: error instanceof Error ? error.message : error,
+      userId: session.user.id,
+      organizationId: session.user.currentOrganizationId,
+      permission: permissionString
+    });
+    throw error;
+  }
 }
 
 // AIDEV-NOTE: Only these 4 functions are actually used throughout the app

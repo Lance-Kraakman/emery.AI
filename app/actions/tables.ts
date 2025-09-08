@@ -18,7 +18,7 @@ import { TableMapper, type TableDTO } from "@/app/mappers/table-mapper";
 
 export async function createTable(data: CreateTableData & { databaseId: number; description?: string }, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("create_tables");
+    const session = await requirePermission("data:create");
     const currentOrg = await requireCurrentOrganization();
     const { name, databaseId, description } = data;
 
@@ -119,7 +119,7 @@ export async function getTables(): Promise<TableDTO[]> {
 
 export async function deleteTable(tableId: number, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("manage_tables");
+    const session = await requirePermission("data:manage");
     const currentOrg = await requireCurrentOrganization();
     
     if (!tableId) {

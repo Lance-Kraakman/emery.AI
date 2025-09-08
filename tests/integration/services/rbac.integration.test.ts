@@ -1,74 +1,48 @@
 /**
- * Integration tests for Simplified 3-Role RBAC System
+ * Integration tests for RBAC System
  * 
- * AIDEV-NOTE: Tests the simplified 3-role system (owner/admin/member) domain logic.
- * Focuses on UserRole value object behavior and capabilities.
+ * AIDEV-NOTE: Tests the RBAC system role constants and validation.
+ * Focuses on SystemRoleType constants and role validation functions.
  */
 
 import { describe, it, expect } from 'vitest';
-import { UserRole } from '@/ddd/domain/shared/value-objects/user-role';
+import { SYSTEM_ROLES, SystemRoleType, isSystemRole } from '@/ddd/domain/rbac/entities/role';
 
-describe('Simplified 3-Role RBAC System', () => {
+describe('RBAC System', () => {
 
-  describe('UserRole Value Object', () => {
-    it('should define correct capabilities for owner role', () => {
-      const ownerRole = UserRole.owner();
-      
-      expect(ownerRole.role).toBe('owner');
-      expect(ownerRole.isOwner()).toBe(true);
-      expect(ownerRole.isAdministrative()).toBe(true);
-      expect(ownerRole.hasCapability('canManageOrganization')).toBe(true);
-      expect(ownerRole.hasCapability('canManageUsers')).toBe(true);
-      expect(ownerRole.hasCapability('canCreateAgents')).toBe(true);
-      expect(ownerRole.hasCapability('canManageAgents')).toBe(true);
-      expect(ownerRole.getHierarchyLevel()).toBe(3);
+  describe('System Role Constants', () => {
+    it('should define all expected system roles', () => {
+      expect(SYSTEM_ROLES.ORGANIZATION_OWNER).toBe('Organization Owner');
+      expect(SYSTEM_ROLES.ORGANIZATION_ADMIN).toBe('Organization Admin');
+      expect(SYSTEM_ROLES.TEAM_LEAD).toBe('Team Lead');
+      expect(SYSTEM_ROLES.MEMBER).toBe('Member');
+      expect(SYSTEM_ROLES.VIEWER).toBe('Viewer');
     });
 
-    it('should define correct capabilities for admin role', () => {
-      const adminRole = UserRole.admin();
+    it('should validate system roles correctly', () => {
+      expect(isSystemRole('Organization Owner')).toBe(true);
+      expect(isSystemRole('Organization Admin')).toBe(true);
+      expect(isSystemRole('Team Lead')).toBe(true);
+      expect(isSystemRole('Member')).toBe(true);
+      expect(isSystemRole('Viewer')).toBe(true);
       
-      expect(adminRole.role).toBe('admin');
-      expect(adminRole.isAdmin()).toBe(true);
-      expect(adminRole.isAdministrative()).toBe(true);
-      expect(adminRole.hasCapability('canManageOrganization')).toBe(false);
-      expect(adminRole.hasCapability('canManageUsers')).toBe(true);
-      expect(adminRole.hasCapability('canCreateAgents')).toBe(true);
-      expect(adminRole.hasCapability('canManageAgents')).toBe(true);
-      expect(adminRole.getHierarchyLevel()).toBe(2);
+      expect(isSystemRole('invalid-role')).toBe(false);
+      expect(isSystemRole('owner')).toBe(false); // Legacy role name
+      expect(isSystemRole('admin')).toBe(false); // Legacy role name
     });
 
-    it('should define correct capabilities for member role', () => {
-      const memberRole = UserRole.member();
+    it('should have proper TypeScript typing for SystemRoleType', () => {
+      const organizationOwner: SystemRoleType = SYSTEM_ROLES.ORGANIZATION_OWNER;
+      const organizationAdmin: SystemRoleType = SYSTEM_ROLES.ORGANIZATION_ADMIN;
+      const teamLead: SystemRoleType = SYSTEM_ROLES.TEAM_LEAD;
+      const member: SystemRoleType = SYSTEM_ROLES.MEMBER;
+      const viewer: SystemRoleType = SYSTEM_ROLES.VIEWER;
       
-      expect(memberRole.role).toBe('member');
-      expect(memberRole.isMember()).toBe(true);
-      expect(memberRole.isAdministrative()).toBe(false);
-      expect(memberRole.hasCapability('canManageOrganization')).toBe(false);
-      expect(memberRole.hasCapability('canManageUsers')).toBe(false);
-      expect(memberRole.hasCapability('canCreateAgents')).toBe(false);
-      expect(memberRole.hasCapability('canViewAgents')).toBe(true);
-      expect(memberRole.hasCapability('canExecuteAgents')).toBe(true);
-      expect(memberRole.getHierarchyLevel()).toBe(1);
-    });
-
-    it('should correctly compare role hierarchy', () => {
-      const owner = UserRole.owner();
-      const admin = UserRole.admin();
-      const member = UserRole.member();
-
-      expect(owner.hasHigherPrivilegesThan(admin)).toBe(true);
-      expect(admin.hasHigherPrivilegesThan(member)).toBe(true);
-      expect(owner.hasHigherPrivilegesThan(member)).toBe(true);
-      
-      expect(member.hasHigherPrivilegesThan(admin)).toBe(false);
-      expect(admin.hasHigherPrivilegesThan(owner)).toBe(false);
-    });
-
-    it('should validate role creation from string', () => {
-      expect(() => UserRole.fromString('invalid-role')).toThrow();
-      expect(() => UserRole.fromString('owner')).not.toThrow();
-      expect(() => UserRole.fromString('admin')).not.toThrow();
-      expect(() => UserRole.fromString('member')).not.toThrow();
+      expect(organizationOwner).toBe('Organization Owner');
+      expect(organizationAdmin).toBe('Organization Admin');
+      expect(teamLead).toBe('Team Lead');
+      expect(member).toBe('Member');
+      expect(viewer).toBe('Viewer');
     });
   });
 

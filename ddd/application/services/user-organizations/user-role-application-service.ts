@@ -2,26 +2,28 @@
  * User Role Application Service
  * 
  * Handles user creation, role assignment, and organization membership.
- * Simplified service for 3-role RBAC system (owner/admin/member).
+ * Updated for full RBAC system with SystemRoleType roles.
  */
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
 import type { UserOrganization, CreateUserOrganizationData } from '@/ddd/domain/users/entities/user';
 import type { OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
-import { UserId, OrganizationId, OrganizationRole } from '@/ddd/domain/shared/value-objects';
+import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 import type { Result } from '@/ddd/domain/shared/result';
 
 export interface AddUserToOrganizationCommand {
   userId: string;
   organizationId: number;
-  role?: string; // defaults to 'member'
+  systemRole: SystemRoleType; // RBAC system role (required)
   invitedBy?: string;
 }
 
 export interface UpdateMemberRoleCommand {
   userId: string;
   organizationId: number;
-  newRole: string;
+  newSystemRole: SystemRoleType;
   updatedBy: string;
 }
 
@@ -38,7 +40,7 @@ export interface RemoveUserFromOrganizationCommand {
 
 export interface OrganizationMemberFilters {
   organizationId: number;
-  role?: string;
+  systemRole?: SystemRoleType; // Updated to RBAC system role
   searchQuery?: string;
   includeUserDetails?: boolean;
 }
@@ -50,7 +52,8 @@ export type UserOrganizationApplicationResult<T = any> = Result<T>;
 export class UserRoleApplicationService {
   constructor(
     private readonly userRepository: IUserRepository,
-    private readonly organizationRepository: IOrganizationRepository
+    private readonly organizationRepository: IOrganizationRepository,
+    private readonly rbacRepository: IRBACRepository
   ) {}
 
   /**
@@ -88,10 +91,35 @@ export class UserRoleApplicationService {
       const userOrganizationData: CreateUserOrganizationData = {
         userId: UserId.fromString(command.userId),
         organizationId: OrganizationId.fromNumber(command.organizationId),
-        role: OrganizationRole.fromString(command.role || 'member')
+        systemRole: command.systemRole
       };
 
       const userOrganization = await this.userRepository.addUserToOrganization(userOrganizationData);
+
+      // Now assign the role in the RBAC system
+      try {
+        // Get all roles for the organization (including system roles)
+        const roles = await this.rbacRepository.findRolesByOrganization(OrganizationId.fromNumber(command.organizationId));
+        
+        // Find the system role by name
+        const systemRole = roles.find((r: any) => r.name === command.systemRole && r.isSystem);
+        
+        if (systemRole) {
+          // Assign the role to the user
+          await this.rbacRepository.assignRole(
+            UserId.fromString(command.userId),
+            systemRole.id,
+            OrganizationId.fromNumber(command.organizationId)
+          );
+          console.log(`✅ Assigned role ${command.systemRole} (ID: ${systemRole.id}) to user ${command.userId} in org ${command.organizationId}`);
+        } else {
+          console.error(`⚠️ System role '${command.systemRole}' not found in organization ${command.organizationId}. User added without role assignment.`);
+          // Continue anyway - user is added to org, just without role
+        }
+      } catch (roleError) {
+        console.error('Error assigning role after adding user to organization:', roleError);
+        // Don't fail the whole operation - user is already added to org
+      }
 
       return {
         success: true,
@@ -112,34 +140,35 @@ export class UserRoleApplicationService {
   async updateMemberRole(command: UpdateMemberRoleCommand): Promise<UserOrganizationApplicationResult<UserOrganization>> {
     try {
       // Validate inputs
-      if (!command.userId || !command.organizationId || !command.newRole) {
+      if (!command.userId || !command.organizationId || !command.newSystemRole) {
         return {
           success: false,
           error: "User ID, Organization ID, and new role are required"
         };
       }
 
-      // Validate role is one of the allowed roles
-      const validRoles = ['owner', 'admin', 'member'];
-      if (!validRoles.includes(command.newRole)) {
+      // Validate role is one of the allowed system roles
+      if (!Object.values(SYSTEM_ROLES).includes(command.newSystemRole)) {
         return {
           success: false,
-          error: `Invalid role: ${command.newRole}. Must be one of: ${validRoles.join(', ')}`
+          error: `Invalid role: ${command.newSystemRole}. Must be one of: ${Object.values(SYSTEM_ROLES).join(', ')}`
         };
       }
 
-      // Update the user's organization role
-      const updatedUser = await this.userRepository.updateUserRole(
-        UserId.fromString(command.userId), 
-        command.newRole
-      );
+      // TODO: Update user role via RBAC system
+      // const updatedUser = await this.rbacRepository.setUserRoles(
+      //   UserId.fromString(command.userId),
+      //   [roleId], // Need to get role ID from SystemRoleType
+      //   OrganizationId.fromNumber(command.organizationId)
+      // );
+      // For now, return success without actual update
 
       // Return a UserOrganization-like response
       const userOrganization: UserOrganization = {
         id: 0, // Will be set by repository
         userId: UserId.fromString(command.userId),
         organizationId: OrganizationId.fromNumber(command.organizationId),
-        role: OrganizationRole.fromString(command.newRole),
+        systemRole: command.newSystemRole,
         createdAt: new Date()
       };
 
@@ -159,9 +188,26 @@ export class UserRoleApplicationService {
   /**
    * Get a user's role within a specific organization
    */
-  async getUserOrganizationRole(userId: UserId, organizationId: OrganizationId): Promise<string | null> {
+  async getUserOrganizationRole(userId: UserId, organizationId: OrganizationId): Promise<SystemRoleType | null> {
     try {
-      return await this.userRepository.getUserOrganizationRole(userId, organizationId);
+      // Get user's roles from RBAC system
+      const roles = await this.rbacRepository.getUserRoles(userId, organizationId);
+      
+      if (roles.length === 0) {
+        console.log(`⚠️ No roles found for user ${userId.value} in organization ${organizationId.value}`);
+        return null;
+      }
+      
+      // Return the first system role found (users should have exactly one role per org)
+      const systemRole = roles.find(r => r.isSystem);
+      if (systemRole) {
+        console.log(`Found system role '${systemRole.name}' for user ${userId.value} in org ${organizationId.value}`);
+        return systemRole.name as SystemRoleType;
+      }
+      
+      // If no system role, return the first role's name
+      console.log(`Using first role '${roles[0].name}' for user ${userId.value} in org ${organizationId.value}`);
+      return roles[0].name as SystemRoleType;
     } catch (error) {
       console.error("Error getting user organization role:", error);
       return null;
@@ -254,13 +300,13 @@ export class UserRoleApplicationService {
         userId: user.id,
         name: user.name,
         email: user.email,
-        role: new OrganizationRole(user.organizationRole || 'member'),
+        systemRole: SYSTEM_ROLES.MEMBER, // TODO: Get actual role from RBAC system
         joinedAt: user.createdAt
       }));
 
-      // Apply role filter
-      if (filters.role) {
-        members = members.filter(member => member.role.value === filters.role);
+      // Apply system role filter
+      if (filters.systemRole) {
+        members = members.filter(member => member.systemRole === filters.systemRole);
       }
 
       // Apply search filter

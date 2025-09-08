@@ -10,7 +10,8 @@ import { getInvitationApplicationService, getUserRoleApplicationService } from "
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import type { SendInvitationCommand, AcceptInvitationCommand } from "@/ddd/application/services/invitations/invitation-application-service";
-import { EmailAddress, OrganizationRole, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
+import { EmailAddress, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
+import { SystemRoleType, SYSTEM_ROLES } from "@/ddd/domain/rbac/entities/role";
 
 export async function inviteUser(formData: FormData): Promise<Result> {
   return withAuthContext(async () => {
@@ -18,12 +19,12 @@ export async function inviteUser(formData: FormData): Promise<Result> {
       const session = await requirePermission("users:manage");
     const currentOrg = await requireCurrentOrganization();
     const email = formData.get("email") as string;
-    const role = formData.get("role") as string;
+    const systemRole = formData.get("systemRole") as string;
 
-    if (!email || !role) {
+    if (!email || !systemRole) {
       return {
         success: false,
-        error: "Email and role are required"
+        error: "Email and system role are required"
       };
     }
 
@@ -33,7 +34,7 @@ export async function inviteUser(formData: FormData): Promise<Result> {
       organizationId: currentOrg.id.value,
       invitedBy: session.user.id,
       email,
-      role,
+      systemRole: systemRole as SystemRoleType,
       expiryDays: 7, // Default to 7 days
       sendEmail: true
     };
@@ -65,7 +66,7 @@ export async function inviteUser(formData: FormData): Promise<Result> {
 
 export async function acceptInvitation(token: string): Promise<Result> {
   try {
-    const session = await requirePermission("accept_invitations");
+    const session = await requirePermission("users:invite");
     
     if (!token) {
       return {
@@ -112,7 +113,7 @@ export async function acceptInvitation(token: string): Promise<Result> {
 
 // AIDEV-NOTE: This functionality is now handled by the OrganizationRepository
 // through the getMembers method. Consider moving this to organization actions.
-export async function getOrganizationMembers(): Promise<Array<{id: string, name: string, email: string, role: string}>> {
+export async function getOrganizationMembers(): Promise<Array<{id: string, name: string, email: string, systemRole: SystemRoleType}>> {
   try {
     const session = await requirePermission("users:view");
     const currentOrg = await requireCurrentOrganization();
@@ -127,7 +128,7 @@ export async function getOrganizationMembers(): Promise<Array<{id: string, name:
       id: member.userId.value,
       name: member.name || 'Unknown User',
       email: member.email?.value || '',
-      role: member.role.value
+      systemRole: member.systemRole
     }));
   } catch (error) {
     console.error("Error fetching organization members:", error);
@@ -135,13 +136,21 @@ export async function getOrganizationMembers(): Promise<Array<{id: string, name:
   }
 }
 
-export async function getPendingInvitations() {
+export async function getPendingInvitations(): Promise<Array<{id: number, email: string, systemRole: SystemRoleType, expiresAt?: Date}>> {
   try {
-    const session = await requirePermission("view_invitations");
+    const session = await requirePermission("users:view");
     const currentOrg = await requireCurrentOrganization();
     
     const invitationApplicationService = getInvitationApplicationService();
-    return await invitationApplicationService.getPendingInvitations(currentOrg.id.value);
+    const invitations = await invitationApplicationService.getPendingInvitations(currentOrg.id.value);
+    
+    // Convert domain objects to DTOs for UI
+    return invitations.map(invitation => ({
+      id: invitation.id.value,
+      email: invitation.email.value,
+      systemRole: invitation.systemRole,
+      expiresAt: invitation.expiresAt
+    }));
   } catch (error) {
     console.error("Error fetching pending invitations:", error);
     throw new Error("Failed to fetch pending invitations");
@@ -230,7 +239,7 @@ export async function resendInvitation(invitationId: number): Promise<Result> {
  */
 export async function getInvitationStats() {
   try {
-    const session = await requirePermission("view_invitations");
+    const session = await requirePermission("users:view");
     const currentOrg = await requireCurrentOrganization();
     
     const invitationApplicationService = getInvitationApplicationService();

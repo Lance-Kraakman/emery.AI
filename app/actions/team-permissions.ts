@@ -10,7 +10,7 @@ import type { TeamTaskPermissions, UpdateTeamPermissionsRequest } from "@/ddd/ap
 export async function getTeamPermissions(teamId: number): Promise<Result<TeamTaskPermissions>> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("manage_teams");
+      const session = await requirePermission("teams:manage");
     const currentOrg = await requireCurrentOrganization();
     const teamPermissionsService = getTeamPermissionsApplicationService();
 
@@ -36,7 +36,7 @@ export async function updateTeamPermissions(
 ): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("manage_teams");
+      const session = await requirePermission("teams:manage");
     const currentOrg = await requireCurrentOrganization();
     const teamPermissionsService = getTeamPermissionsApplicationService();
 
@@ -67,7 +67,7 @@ export async function getAllTeamPermissionsForOrganization(): Promise<Result<Arr
 }>>> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("view_teams");
+      const session = await requirePermission("teams:view");
     const currentOrg = await requireCurrentOrganization();
     const teamPermissionsService = getTeamPermissionsApplicationService();
 

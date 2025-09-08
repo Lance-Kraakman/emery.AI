@@ -15,7 +15,7 @@ import { FieldMapper, type FieldDTO } from "@/app/mappers/field-mapper";
 
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("create_fields");
+    const session = await requirePermission("data:create");
     const { tableId, name, type, required = false, relatedTableId } = data;
 
     if (!tableId || !name || !type) {
@@ -120,7 +120,7 @@ export async function getFields(tableId: number): Promise<FieldDTO[]> {
 
 export async function deleteField(tableId: number, fieldName: string, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("manage_fields");
+    const session = await requirePermission("data:manage");
     
     if (!tableId || !fieldName) {
       return {
@@ -175,7 +175,7 @@ export async function deleteFieldAction(formData: FormData): Promise<Result> {
   
   try {
     // We need to find the field by ID to get its name and table
-    const session = await requirePermission("manage_fields");
+    const session = await requirePermission("data:manage");
     const tableApplicationService = getTableApplicationService();
     
     // Get all tables to find which table contains this field

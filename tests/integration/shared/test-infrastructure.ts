@@ -134,6 +134,13 @@ async function runMigrations(): Promise<void> {
       console.log(`📊 Migration attempt ${attempt}/3...`);
       execSync(migrationCommand, { stdio: 'inherit', cwd: process.cwd() });
       console.log('✅ Database migrations completed successfully');
+      
+      // Run RBAC seeding after successful migration
+      console.log('🌱 Seeding RBAC data...');
+      const seedCommand = 'NODE_ENV=test DATABASE_URL="postgresql://postgres:integration_test_password@localhost:5436/emery_integration_test" npx tsx drizzle/seeds/rbac.ts';
+      execSync(seedCommand, { stdio: 'inherit', cwd: process.cwd() });
+      console.log('✅ RBAC seeding completed successfully');
+      
       return;
     } catch (error) {
       console.error(`❌ Migration attempt ${attempt} failed`);

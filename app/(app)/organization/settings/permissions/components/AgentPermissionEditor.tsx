@@ -61,7 +61,7 @@ export function AgentPermissionEditor({
         id: member.id,
         name: member.name || member.email || 'Unknown User',
         type: 'user' as const,
-        status: member.role,
+        status: member.systemRole,
         description: member.email
       }));
     } catch (error) {

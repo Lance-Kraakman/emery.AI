@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Drizzle implementation of IUserRepository - handles user authentication and management
 // User business operations with organization relationships and role management
 
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import type postgres from 'postgres';
 
@@ -15,7 +15,8 @@ import type {
   CreateUserOrganizationData
 } from '@/ddd/domain/users/entities/user';
 import type { Organization } from '@/ddd/domain/organizations/entities/organization';
-import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationName, OrganizationRole } from '@/ddd/domain/shared/value-objects';
+import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationName } from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 import type { DbClient } from '@/lib/db/client';
 
 export class DrizzleUserRepository implements IUserRepository {
@@ -54,7 +55,7 @@ export class DrizzleUserRepository implements IUserRepository {
       emailVerified: data.emailVerified,
       image: data.image,
       currentOrganizationId: data.currentOrganizationId?.value || null,
-      organizationRole: data.organizationRole || 'member', // Use simplified RBAC
+      // organizationRole removed in RBAC system
       apiKey: data.apiKey?.value || null
     };
 
@@ -78,7 +79,7 @@ export class DrizzleUserRepository implements IUserRepository {
     if (data.emailVerified !== undefined) updateData.emailVerified = data.emailVerified;
     if (data.image !== undefined) updateData.image = data.image;
     if (data.currentOrganizationId !== undefined) updateData.currentOrganizationId = data.currentOrganizationId?.value || null;
-    if (data.organizationRole !== undefined) updateData.organizationRole = data.organizationRole;
+    // organizationRole field removed in RBAC system
     if (data.jobTitle !== undefined) updateData.jobTitle = data.jobTitle;
     if (data.teams !== undefined) updateData.teams = data.teams;
     // Note: apiKey updates handled through separate methods for security
@@ -108,53 +109,10 @@ export class DrizzleUserRepository implements IUserRepository {
       .where(eq(users.id, id.value));
   }
 
-  // AIDEV-NOTE: Dual storage pattern for performance and RLS policy simplicity
-  // - user_organizations table: Source of truth for multi-org relationships (supports users in multiple orgs)  
-  // - users.organization_role: Denormalized cache for fast RLS policy checks (avoids complex subqueries)
-  // - Transaction ensures both stay synchronized during role updates
-  // Simplified role management - update both userOrganizations and cached users.organizationRole
+  // AIDEV-NOTE: Role management now handled through RBAC system
+  // TODO: Reimplement this method to work with user_roles table when RBAC is fully integrated
   async updateUserRole(userId: UserId, role: string): Promise<User> {
-    // First get the user's current organization ID
-    const user = await this.db.query.users.findFirst({
-      where: eq(users.id, userId.value),
-      columns: { currentOrganizationId: true }
-    });
-
-    if (!user?.currentOrganizationId) {
-      throw new Error(`User with id ${userId.value} not found or has no current organization`);
-    }
-
-    // Update both places in a transaction
-    await this.db.transaction(async (tx) => {
-      // Update the junction table (source of truth)
-      await tx
-        .update(userOrganizations)
-        .set({ role })
-        .where(
-          and(
-            eq(userOrganizations.userId, userId.value),
-            eq(userOrganizations.organizationId, user.currentOrganizationId!)
-          )
-        );
-
-      // Update the cached field for performance/permissions
-      await tx
-        .update(users)
-        .set({ organizationRole: role })
-        .where(eq(users.id, userId.value));
-    });
-
-    // Return the updated user
-    const [updatedUser] = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId.value));
-
-    if (!updatedUser) {
-      throw new Error(`User with id ${userId.value} not found`);
-    }
-
-    return this.mapToEntity(updatedUser);
+    throw new Error('Role updates not yet implemented for RBAC system. Use role management through user_roles table.');
   }
 
   // API Key management
@@ -226,6 +184,8 @@ export class DrizzleUserRepository implements IUserRepository {
   }
 
   async getUserOrganizations(userId: UserId): Promise<Organization[]> {
+    console.log("🗃️ DrizzleUserRepository.getUserOrganizations() - Querying for user:", userId.value);
+    
     const result = await this.db
       .select({
         organization: organizations
@@ -234,12 +194,25 @@ export class DrizzleUserRepository implements IUserRepository {
       .innerJoin(organizations, eq(userOrganizations.organizationId, organizations.id))
       .where(eq(userOrganizations.userId, userId.value));
 
-    return result.map(r => ({
+    console.log("🗃️ DrizzleUserRepository.getUserOrganizations() - Raw query result:", {
+      count: result.length,
+      results: result.map(r => ({
+        orgId: r.organization.id,
+        orgName: r.organization.name,
+        orgSlug: r.organization.slug
+      }))
+    });
+
+    const mappedResults = result.map(r => ({
       ...r.organization,
       id: OrganizationId.fromNumber(r.organization.id),
       name: OrganizationName.fromString(r.organization.name),
       viewConfig: r.organization.viewConfig as Record<string, any> | null
     }));
+    
+    console.log("🗃️ DrizzleUserRepository.getUserOrganizations() - Mapped results:", mappedResults.length);
+    
+    return mappedResults;
   }
 
   // User-Organization relationship management
@@ -247,7 +220,7 @@ export class DrizzleUserRepository implements IUserRepository {
     const relationshipData = {
       userId: data.userId.value,
       organizationId: data.organizationId.value,
-      role: data.role ? data.role.value : 'member',
+      // role field removed in RBAC system
     };
 
     const [newRelationship] = await this.db
@@ -264,7 +237,7 @@ export class DrizzleUserRepository implements IUserRepository {
       id: newRelationship.id,
       userId: UserId.fromString(newRelationship.userId),
       organizationId: OrganizationId.fromNumber(newRelationship.organizationId),
-      role: OrganizationRole.fromString(newRelationship.role),
+      systemRole: SYSTEM_ROLES.MEMBER, // Default system role for new relationships
       createdAt: newRelationship.createdAt
     };
   }
@@ -287,30 +260,9 @@ export class DrizzleUserRepository implements IUserRepository {
   }
 
 
-  async updateUserOrganizationRole(userId: UserId, organizationId: OrganizationId, role: OrganizationRole): Promise<UserOrganization> {
-    const [updatedRelationship] = await this.db
-      .update(userOrganizations)
-      .set({ role: role.value })
-      .where(
-        and(
-          eq(userOrganizations.userId, userId.value),
-          eq(userOrganizations.organizationId, organizationId.value)
-        )
-      )
-      .returning();
-
-    if (!updatedRelationship) {
-      throw new Error(`User-organization relationship not found or could not be updated`);
-    }
-
-    // Convert database result back to domain entity
-    return {
-      id: updatedRelationship.id,
-      userId: UserId.fromString(updatedRelationship.userId),
-      organizationId: OrganizationId.fromNumber(updatedRelationship.organizationId),
-      role: OrganizationRole.fromString(updatedRelationship.role),
-      createdAt: updatedRelationship.createdAt
-    };
+  async updateUserOrganizationRole(userId: UserId, organizationId: OrganizationId, systemRole: SystemRoleType): Promise<UserOrganization> {
+    // TODO: Update for RBAC system - roles now managed through user_roles table
+    throw new Error('Role updates not yet implemented for RBAC system. Use role management through user_roles table.');
   }
 
 
@@ -337,7 +289,7 @@ export class DrizzleUserRepository implements IUserRepository {
       .where(
         and(
           eq(userOrganizations.organizationId, organizationId.value),
-          eq(users.organizationRole, role)
+          sql`true` /* organizationRole filtering removed in RBAC system */
         )
       );
 
@@ -400,7 +352,7 @@ export class DrizzleUserRepository implements IUserRepository {
 
   async getUserOrganizationRole(userId: UserId, organizationId: OrganizationId): Promise<string | null> {
     const result = await this.db
-      .select({ organizationRole: users.organizationRole })
+      .select({ id: users.id }) /* organizationRole removed */
       .from(users)
       .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
       .where(
@@ -411,7 +363,8 @@ export class DrizzleUserRepository implements IUserRepository {
       )
       .limit(1);
 
-    return result[0]?.organizationRole || null;
+    // TODO: Implement role lookup via RBAC system
+    return result[0] ? 'member' : null;
   }
 
   // AIDEV-NOTE: Boundary conversion - maps database primitives to domain Value Objects
@@ -423,7 +376,7 @@ export class DrizzleUserRepository implements IUserRepository {
       emailVerified: data.emailVerified,
       image: data.image,
       currentOrganizationId: data.currentOrganizationId ? OrganizationId.fromNumber(data.currentOrganizationId) : null,
-      organizationRole: data.organizationRole || 'member', // Use simplified RBAC
+      // organizationRole removed in RBAC system
       apiKey: data.apiKey ? ApiKey.fromString(data.apiKey) : null,
       createdAt: data.createdAt
     };

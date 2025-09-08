@@ -15,7 +15,7 @@ import { RowMapper, type RowDTO } from "@/app/mappers/row-mapper";
 
 export async function createRow(data: CreateRowCommand, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("manage_data");
+    const session = await requirePermission("data:manage");
     const { tableId, data: rowData } = data;
     
 
@@ -107,8 +107,8 @@ export async function createRowAction(formData: FormData) {
 
 export async function getRowsData(tableId: number, limit = 100, offset = 0): Promise<RowDTO[]> {
   try {
-    // Add authentication check (using manage_data as it covers view access)
-    await requirePermission("manage_data");
+    // Add authentication check (using data:manage as it covers view access)
+    await requirePermission("data:manage");
     
     if (!tableId) {
       throw new Error("tableId is required");
@@ -132,7 +132,7 @@ export async function getRowsData(tableId: number, limit = 100, offset = 0): Pro
 
 export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("manage_data");
+    const session = await requirePermission("data:manage");
     const { tableId, rowId, data: rowData } = data;
 
     console.log('[ROW-UPDATE-DEBUG] updateRowData called with:', {
@@ -268,7 +268,7 @@ export async function updateRowAction(formData: FormData) {
 
 export async function deleteRowData(tableId: number, rowId: string, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("manage_data");
+    const session = await requirePermission("data:manage");
     
     if (!tableId || !rowId) {
       return {

@@ -18,7 +18,6 @@ class ContextManager {
    * @param userId - Optional user context for audit trails and user-specific operations
    */
   setContext(organizationId: OrganizationId, userId?: UserId): void {
-    console.log(`🔍 CONTEXT-MANAGER: Setting context - org=${organizationId.value}, user=${userId?.value || 'none'}`);
     this.context = { organizationId, userId };
   }
 

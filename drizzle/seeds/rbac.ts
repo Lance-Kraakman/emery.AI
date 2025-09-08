@@ -3,10 +3,10 @@
 // AIDEV-NOTE: Seeds RBAC system with permissions and system roles
 // Run this after database migration to set up the basic permission system
 
-import { db } from '@/lib/db/client';
-import { permissions, roles, rolePermissions } from '@/lib/db/schema';
-import { Permission } from '@/ddd/domain/shared/value-objects/permission';
-import { SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
+import { db } from '../../lib/db/client';
+import { permissions, roles, rolePermissions } from '../../lib/db/schema';
+import { Permission } from '../../ddd/domain/shared/value-objects/permission';
+import { SYSTEM_ROLES } from '../../ddd/domain/rbac/entities/role';
 import { eq, and } from 'drizzle-orm';
 
 async function seedPermissions() {
@@ -85,7 +85,7 @@ async function seedSystemRoles() {
 
   let created = 0;
 
-  for (const [roleName, rolePermissions] of Object.entries(systemRolePermissions)) {
+  for (const [roleName, systemRolePerms] of Object.entries(systemRolePermissions)) {
     try {
       // Create the role
       const [role] = await db
@@ -102,7 +102,7 @@ async function seedSystemRoles() {
       if (role) {
         // Get permission IDs
         const permissionIds = await Promise.all(
-          rolePermissions.map(async (permission) => {
+          systemRolePerms.map(async (permission) => {
             const result = await db
               .select({ id: permissions.id })
               .from(permissions)

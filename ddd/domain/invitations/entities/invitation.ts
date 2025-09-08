@@ -6,9 +6,9 @@ import {
   UserId, 
   EmailAddress, 
   InvitationToken, 
-  OrganizationRole,
   InvitationId
 } from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 
 export class Invitation {
   private constructor(
@@ -16,7 +16,7 @@ export class Invitation {
     private readonly _organizationId: OrganizationId,
     private readonly _invitedBy: UserId,     // UUID reference to users.id
     private _email: EmailAddress,
-    private _role: OrganizationRole,         // owner, admin, member
+    private _systemRole: SystemRoleType,     // RBAC system role
     private readonly _token: InvitationToken,  // Unique invitation token
     private _expiresAt: Date,
     private readonly _createdAt: Date | null
@@ -27,7 +27,7 @@ export class Invitation {
   get organizationId(): OrganizationId { return this._organizationId; }
   get invitedBy(): UserId { return this._invitedBy; }
   get email(): EmailAddress { return this._email; }
-  get role(): OrganizationRole { return this._role; }
+  get systemRole(): SystemRoleType { return this._systemRole; }
   get token(): InvitationToken { return this._token; }
   get expiresAt(): Date { return new Date(this._expiresAt); }
   get createdAt(): Date | null { return this._createdAt ? new Date(this._createdAt) : null; }
@@ -37,8 +37,8 @@ export class Invitation {
     this._email = newEmail;
   }
 
-  updateRole(newRole: OrganizationRole): void {
-    this._role = newRole;
+  updateSystemRole(newSystemRole: SystemRoleType): void {
+    this._systemRole = newSystemRole;
   }
 
   updateExpirationDate(newExpiresAt: Date): void {
@@ -85,7 +85,7 @@ export class Invitation {
     organizationId: number;
     invitedBy: string;
     email: string;
-    role: string;
+    systemRole: string;
     token: string;
     expiresAt: Date;
     createdAt?: Date | null;
@@ -95,7 +95,7 @@ export class Invitation {
       OrganizationId.fromNumber(data.organizationId),
       UserId.fromString(data.invitedBy),
       EmailAddress.fromString(data.email),
-      OrganizationRole.fromString(data.role),
+      data.systemRole as SystemRoleType,
       InvitationToken.fromString(data.token),
       data.expiresAt,
       data.createdAt || null
@@ -108,7 +108,7 @@ export class Invitation {
     organizationId: number;
     invitedBy: string;
     email: string;
-    role: string;
+    systemRole: string;
     token: string;
     expiresAt: Date;
     createdAt: Date | null;
@@ -118,7 +118,7 @@ export class Invitation {
       organizationId: this._organizationId.value,
       invitedBy: this._invitedBy.value,
       email: this._email.value,
-      role: this._role.value,
+      systemRole: this._systemRole,
       token: this._token.value,
       expiresAt: this._expiresAt,
       createdAt: this._createdAt
@@ -130,13 +130,13 @@ export interface CreateInvitationData {
   organizationId: OrganizationId;
   invitedBy: UserId;
   email: EmailAddress;
-  role?: OrganizationRole;                 // defaults to 'member'
+  systemRole: SystemRoleType;              // Required RBAC system role
   expiresAt?: Date;                        // defaults to 7 days from now
 }
 
 export interface UpdateInvitationData {
   email?: EmailAddress;
-  role?: OrganizationRole;
+  systemRole?: SystemRoleType;             // RBAC system role
   expiresAt?: Date;
 }
 
@@ -195,7 +195,7 @@ export interface InvitationQuery {
   organizationId?: OrganizationId;
   invitedBy?: UserId;
   email?: EmailAddress;
-  role?: OrganizationRole;
+  systemRole?: SystemRoleType;
   isExpired?: boolean;
   dateRange?: {
     from: Date;
@@ -209,9 +209,9 @@ export interface BulkInvitationData {
   invitedBy: UserId;
   invitations: Array<{
     email: EmailAddress;
-    role?: OrganizationRole;
+    systemRole?: SystemRoleType;
   }>;
-  defaultRole?: OrganizationRole;          // Default role for invitations without specific role
+  defaultRole?: SystemRoleType;            // Default role for invitations without specific role
   expiresAt?: Date;
 }
 
@@ -234,13 +234,13 @@ export interface InvitationTokenData {
   expiresAt: Date;
 }
 
-// AIDEV-NOTE: Role validation now handled by OrganizationRole Value Object
+// AIDEV-NOTE: Role validation now handled by RBAC SystemRoleType
 export const DEFAULT_INVITATION_EXPIRY_DAYS = 7;
 export const MAX_INVITATION_EXPIRY_DAYS = 30;
 
 // Helper functions
 export const isValidInvitationRole = (role: string): boolean => {
-  return OrganizationRole.isValidRole(role);
+  return Object.values(SYSTEM_ROLES).includes(role as SystemRoleType);
 };
 
 export const generateInvitationToken = (): InvitationToken => {

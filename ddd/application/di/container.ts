@@ -266,12 +266,14 @@ export class DIContainer {
         
     const userRoleApplicationService = new UserRoleApplicationService(
       this.repositories.get('IUserRepository'),
-      this.repositories.get('IOrganizationRepository')
+      this.repositories.get('IOrganizationRepository'),
+      this.repositories.get('IRBACRepository')
     );
     const invitationApplicationService = new InvitationApplicationService(
       this.repositories.get('IInvitationRepository'),
       this.repositories.get('IUserRepository'),
-      this.repositories.get('IOrganizationRepository')
+      this.repositories.get('IOrganizationRepository'),
+      this.repositories.get('IRBACRepository')
     );
     const agentPermissionsApplicationService = new AgentPermissionsApplicationService(
       agentRepository
