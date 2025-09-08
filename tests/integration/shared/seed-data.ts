@@ -58,7 +58,6 @@ export async function seedTestUsers() {
     id: UserId.fromString('550e8400-e29b-41d4-a716-446655440001'),
     email: EmailAddress.fromString('test1@example.com'),
     name: 'Test User 1',
-    organizationRole: 'owner',
     currentOrganizationId: OrganizationId.fromNumber(1)
   });
   
@@ -66,7 +65,6 @@ export async function seedTestUsers() {
     id: UserId.fromString('550e8400-e29b-41d4-a716-446655440002'),
     email: EmailAddress.fromString('test2@example.com'),
     name: 'Test User 2',
-    organizationRole: 'owner',
     currentOrganizationId: OrganizationId.fromNumber(2)
   });
 }

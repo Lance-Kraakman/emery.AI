@@ -589,11 +589,10 @@ export const tasks = pgTable("tasks", {
         OR
         (
           COALESCE(a.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true
-          AND EXISTS (
-            SELECT 1 FROM users u
-            WHERE u.id = current_setting('app.current_user_id')::uuid
-            AND u.organization_role IN ('owner', 'admin')
-            AND u.current_organization_id = a.organization_id
+          AND user_has_permission(
+            current_setting('app.current_user_id')::uuid,
+            'tasks:create',
+            a.organization_id
           )
         )
         OR
@@ -640,11 +639,10 @@ export const tasks = pgTable("tasks", {
         OR
         (
           COALESCE(t.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true
-          AND EXISTS (
-            SELECT 1 FROM users u
-            WHERE u.id = current_setting('app.current_user_id')::uuid
-            AND u.organization_role IN ('owner', 'admin')
-            AND u.current_organization_id = t.organization_id
+          AND user_has_permission(
+            current_setting('app.current_user_id')::uuid,
+            'tasks:create',
+            t.organization_id
           )
         )
         OR

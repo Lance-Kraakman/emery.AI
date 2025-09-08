@@ -48,8 +48,7 @@ export async function createTestOrganization(
     const userData: CreateUserData = {
       id: ownerUserId,
       name: 'Test Owner',
-      email: EmailAddress.fromString(`owner-${timestamp}-${random}@test.com`),
-      organizationRole: 'owner'
+      email: EmailAddress.fromString(`owner-${timestamp}-${random}@test.com`)
       // Don't set currentOrganizationId yet - will be set by createWithOwner
     };
     
@@ -113,8 +112,7 @@ export async function createTestOrganizationWithRoles(
     const ownerData: CreateUserData = {
       id: ownerUserId,
       name: 'Test Owner',
-      email: EmailAddress.fromString(`owner-${timestamp}-${random}@rbac-test.com`),
-      organizationRole: 'owner'
+      email: EmailAddress.fromString(`owner-${timestamp}-${random}@rbac-test.com`)
       // Don't set currentOrganizationId yet - will be set by createWithOwner
     };
     const owner = await userRepository.create(ownerData);
@@ -134,7 +132,6 @@ export async function createTestOrganizationWithRoles(
       id: adminUserId,
       name: 'Test Admin',
       email: EmailAddress.fromString(`admin-${timestamp}-${random}@rbac-test.com`),
-      organizationRole: 'admin',
       currentOrganizationId: org.id
     };
     const admin = await userRepository.create(adminData);
@@ -144,7 +141,6 @@ export async function createTestOrganizationWithRoles(
       id: memberUserId,
       name: 'Test Member',
       email: EmailAddress.fromString(`member-${timestamp}-${random}@rbac-test.com`),
-      organizationRole: 'member',
       currentOrganizationId: org.id
     };
     const member = await userRepository.create(memberData);
@@ -205,7 +201,6 @@ export async function createTestUser(
     id: userId,
     name,
     email: EmailAddress.fromString(uniqueEmail),
-    organizationRole: role,
     currentOrganizationId: OrganizationId.fromNumber(orgId)
   };
   
