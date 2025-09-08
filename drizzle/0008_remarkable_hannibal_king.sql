@@ -1,2 +1,0 @@
-ALTER TABLE "agents" ALTER COLUMN "task_permissions" SET DEFAULT '{"assignment": {"allowOrgAdmins": true}, "routing": {"allowAnyTeamAgent": true}}'::jsonb;--> statement-breakpoint
-ALTER TABLE "teams" ALTER COLUMN "task_permissions" SET DEFAULT '{"assignment": {"allowOrgAdmins": true}, "routing": {"allowCrossTeamRouting": false}}'::jsonb;

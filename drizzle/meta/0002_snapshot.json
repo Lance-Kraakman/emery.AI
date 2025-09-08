@@ -1,6 +1,6 @@
 {
-  "id": "bbcac172-8be1-4385-ae25-3c86658ae928",
-  "prevId": "6355f640-d5bf-4b2d-ae39-f58ec278b4b7",
+  "id": "e749146f-7090-4788-b2c1-66146f732117",
+  "prevId": "ca55090f-63ce-4cb1-9a39-6202ab573471",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -80,15 +80,15 @@
         "accounts_user_id_users_id_fk": {
           "name": "accounts_user_id_users_id_fk",
           "tableFrom": "accounts",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {
@@ -207,6 +207,13 @@
           "notNull": false,
           "default": "'general'"
         },
+        "task_permissions": {
+          "name": "task_permissions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'{\"assignment\": {\"allowOrgAdmins\": true}, \"routing\": {\"allowAnyTeamAgent\": true}}'::jsonb"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -220,78 +227,77 @@
         "agents_owner_id_users_id_fk": {
           "name": "agents_owner_id_users_id_fk",
           "tableFrom": "agents",
-          "tableTo": "users",
           "columnsFrom": [
             "owner_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "agents_organization_id_organizations_id_fk": {
           "name": "agents_organization_id_organizations_id_fk",
           "tableFrom": "agents",
-          "tableTo": "organizations",
           "columnsFrom": [
             "organization_id"
           ],
+          "tableTo": "organizations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "agents_api_key_unique": {
           "name": "agents_api_key_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "api_key"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {
-        "agents_owner_management": {
-          "name": "agents_owner_management",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "app_owner"
-          ],
-          "using": "organization_id = get_current_organization_id() AND EXISTS(\n      SELECT 1 FROM users WHERE id = auth.uid() \n      AND current_organization_id = agents.organization_id \n      AND organization_role = 'owner'\n    )",
-          "withCheck": "organization_id = get_current_organization_id()"
-        },
-        "agents_admin_view": {
-          "name": "agents_admin_view",
+        "agents_view_permission": {
+          "name": "agents_view_permission",
           "as": "PERMISSIVE",
           "for": "SELECT",
           "to": [
-            "app_admin"
+            "public"
           ],
-          "using": "organization_id = get_current_organization_id() AND EXISTS(\n      SELECT 1 FROM users WHERE id = auth.uid() \n      AND current_organization_id = agents.organization_id \n      AND organization_role IN ('admin', 'owner')\n    )"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        owner_id = current_setting('app.current_user_id')::uuid\n        OR user_has_permission(\n          current_setting('app.current_user_id')::uuid,\n          'agents:view',\n          organization_id\n        )\n      )"
         },
-        "agents_member_view": {
-          "name": "agents_member_view",
-          "as": "PERMISSIVE",
-          "for": "SELECT",
-          "to": [
-            "app_member"
-          ],
-          "using": "organization_id = get_current_organization_id() AND EXISTS(\n      SELECT 1 FROM users WHERE id = auth.uid() \n      AND current_organization_id = agents.organization_id\n    )"
-        },
-        "agents_owner_control": {
-          "name": "agents_owner_control",
+        "agents_manage_permission": {
+          "name": "agents_manage_permission",
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": [
-            "authenticated"
+            "public"
           ],
-          "using": "owner_id = auth.uid() AND organization_id = get_current_organization_id()",
-          "withCheck": "owner_id = auth.uid() AND organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        owner_id = current_setting('app.current_user_id')::uuid\n        OR user_has_permission(\n          current_setting('app.current_user_id')::uuid,\n          'agents:manage',\n          organization_id\n        )\n      )",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        owner_id = current_setting('app.current_user_id')::uuid\n        OR user_has_permission(\n          current_setting('app.current_user_id')::uuid,\n          'agents:manage',\n          organization_id\n        )\n      )"
+        },
+        "agents_create_permission": {
+          "name": "agents_create_permission",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "public"
+          ],
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'agents:create',\n        organization_id\n      )"
+        },
+        "agents_execute_permission": {
+          "name": "agents_execute_permission",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "public"
+          ],
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        owner_id = current_setting('app.current_user_id')::uuid\n        OR user_has_permission(\n          current_setting('app.current_user_id')::uuid,\n          'agents:execute',\n          organization_id\n        )\n      )"
         }
       },
       "checkConstraints": {},
@@ -357,28 +363,28 @@
         "chat_messages_chat_id_chats_id_fk": {
           "name": "chat_messages_chat_id_chats_id_fk",
           "tableFrom": "chat_messages",
-          "tableTo": "chats",
           "columnsFrom": [
             "chat_id"
           ],
+          "tableTo": "chats",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "chat_messages_parent_message_id_chat_messages_id_fk": {
           "name": "chat_messages_parent_message_id_chat_messages_id_fk",
           "tableFrom": "chat_messages",
-          "tableTo": "chat_messages",
           "columnsFrom": [
             "parent_message_id"
           ],
+          "tableTo": "chat_messages",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -391,7 +397,7 @@
           "to": [
             "public"
           ],
-          "using": "EXISTS (SELECT 1 FROM chats c WHERE c.id = chat_id AND c.organization_id = get_current_organization_id())"
+          "using": "EXISTS (SELECT 1 FROM chats c WHERE c.id = chat_id AND c.organization_id = current_setting('app.current_organization_id')::integer)"
         }
       },
       "checkConstraints": {},
@@ -478,28 +484,28 @@
         "chats_organization_id_organizations_id_fk": {
           "name": "chats_organization_id_organizations_id_fk",
           "tableFrom": "chats",
-          "tableTo": "organizations",
           "columnsFrom": [
             "organization_id"
           ],
+          "tableTo": "organizations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "chats_created_by_users_id_fk": {
           "name": "chats_created_by_users_id_fk",
           "tableFrom": "chats",
-          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -512,7 +518,7 @@
           "to": [
             "public"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer"
         }
       },
       "checkConstraints": {},
@@ -578,38 +584,38 @@
         "databases_organization_id_organizations_id_fk": {
           "name": "databases_organization_id_organizations_id_fk",
           "tableFrom": "databases",
-          "tableTo": "organizations",
           "columnsFrom": [
             "organization_id"
           ],
+          "tableTo": "organizations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "databases_created_by_users_id_fk": {
           "name": "databases_created_by_users_id_fk",
           "tableFrom": "databases",
-          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "databases_slug_unique": {
           "name": "databases_slug_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "slug"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {
@@ -620,7 +626,7 @@
           "to": [
             "public"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer"
         }
       },
       "checkConstraints": {},
@@ -693,15 +699,15 @@
         "fields_table_id_tables_id_fk": {
           "name": "fields_table_id_tables_id_fk",
           "tableFrom": "fields",
-          "tableTo": "tables",
           "columnsFrom": [
             "table_id"
           ],
+          "tableTo": "tables",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -714,7 +720,7 @@
           "to": [
             "public"
           ],
-          "using": "EXISTS (SELECT 1 FROM tables t WHERE t.id = table_id AND t.organization_id = get_current_organization_id())"
+          "using": "EXISTS (SELECT 1 FROM tables t WHERE t.id = table_id AND t.organization_id = current_setting('app.current_organization_id')::integer)"
         }
       },
       "checkConstraints": {},
@@ -748,12 +754,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "role": {
-          "name": "role",
-          "type": "text",
+        "role_id": {
+          "name": "role_id",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'member'"
+          "notNull": false
         },
         "token": {
           "name": "token",
@@ -780,38 +785,51 @@
         "invitations_organization_id_organizations_id_fk": {
           "name": "invitations_organization_id_organizations_id_fk",
           "tableFrom": "invitations",
-          "tableTo": "organizations",
           "columnsFrom": [
             "organization_id"
           ],
+          "tableTo": "organizations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "invitations_invited_by_users_id_fk": {
           "name": "invitations_invited_by_users_id_fk",
           "tableFrom": "invitations",
-          "tableTo": "users",
           "columnsFrom": [
             "invited_by"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        },
+        "invitations_role_id_roles_id_fk": {
+          "name": "invitations_role_id_roles_id_fk",
+          "tableFrom": "invitations",
+          "columnsFrom": [
+            "role_id"
+          ],
+          "tableTo": "roles",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "invitations_token_unique": {
           "name": "invitations_token_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "token"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {
@@ -822,7 +840,7 @@
           "to": [
             "public"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer"
         }
       },
       "checkConstraints": {},
@@ -925,41 +943,86 @@
       "uniqueConstraints": {
         "organizations_slug_unique": {
           "name": "organizations_slug_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "slug"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {
-        "organizations_member_access": {
-          "name": "organizations_member_access",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "public"
-          ],
-          "using": "id = get_current_organization_id()"
-        },
-        "organizations_owner_access": {
-          "name": "organizations_owner_access",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "app_owner"
-          ],
-          "using": "EXISTS (\n      SELECT 1 FROM user_organizations \n      WHERE organization_id = \"organizations\".\"id\" \n      AND user_id = current_setting('app.current_user_id', true)::uuid\n      AND role = 'owner'\n    )"
-        },
-        "organizations_admin_access": {
-          "name": "organizations_admin_access",
+        "organizations_view_permission": {
+          "name": "organizations_view_permission",
           "as": "PERMISSIVE",
           "for": "SELECT",
           "to": [
-            "app_admin"
+            "public"
           ],
-          "using": "EXISTS (\n      SELECT 1 FROM user_organizations \n      WHERE organization_id = \"organizations\".\"id\" \n      AND user_id = current_setting('app.current_user_id', true)::uuid\n      AND role IN ('admin', 'owner')\n    )"
+          "using": "id = current_setting('app.current_organization_id')::integer \n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'organizations:view',\n        id\n      )"
+        },
+        "organizations_manage_permission": {
+          "name": "organizations_manage_permission",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "public"
+          ],
+          "using": "user_has_permission(\n      current_setting('app.current_user_id')::uuid,\n      'organizations:manage',\n      id\n    )",
+          "withCheck": "user_has_permission(\n      current_setting('app.current_user_id')::uuid,\n      'organizations:manage',\n      id\n    )"
         }
       },
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.permissions": {
+      "name": "permissions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "resource": {
+          "name": "resource",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "unique_permission": {
+          "name": "unique_permission",
+          "columns": [
+            "resource",
+            "action"
+          ],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
     },
@@ -1053,61 +1116,51 @@
         "rag_documents_rag_index_id_rag_indexes_id_fk": {
           "name": "rag_documents_rag_index_id_rag_indexes_id_fk",
           "tableFrom": "rag_documents",
-          "tableTo": "rag_indexes",
           "columnsFrom": [
             "rag_index_id"
           ],
+          "tableTo": "rag_indexes",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "rag_documents_organization_id_organizations_id_fk": {
           "name": "rag_documents_organization_id_organizations_id_fk",
           "tableFrom": "rag_documents",
-          "tableTo": "organizations",
           "columnsFrom": [
             "organization_id"
           ],
+          "tableTo": "organizations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {
-        "rag_documents_owner_management": {
-          "name": "rag_documents_owner_management",
+        "rag_documents_manage_permission": {
+          "name": "rag_documents_manage_permission",
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": [
-            "app_owner"
+            "public"
           ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:manage',\n        organization_id\n      )",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:manage',\n        organization_id\n      )"
         },
-        "rag_documents_admin_management": {
-          "name": "rag_documents_admin_management",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "app_admin"
-          ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
-        },
-        "rag_documents_member_view": {
-          "name": "rag_documents_member_view",
+        "rag_documents_view_permission": {
+          "name": "rag_documents_view_permission",
           "as": "PERMISSIVE",
           "for": "SELECT",
           "to": [
-            "app_member"
+            "public"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:view',\n        organization_id\n      )"
         }
       },
       "checkConstraints": {},
@@ -1214,61 +1267,51 @@
         "rag_indexes_organization_id_organizations_id_fk": {
           "name": "rag_indexes_organization_id_organizations_id_fk",
           "tableFrom": "rag_indexes",
-          "tableTo": "organizations",
           "columnsFrom": [
             "organization_id"
           ],
+          "tableTo": "organizations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "rag_indexes_agent_id_agents_id_fk": {
           "name": "rag_indexes_agent_id_agents_id_fk",
           "tableFrom": "rag_indexes",
-          "tableTo": "agents",
           "columnsFrom": [
             "agent_id"
           ],
+          "tableTo": "agents",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {
-        "rag_indexes_owner_management": {
-          "name": "rag_indexes_owner_management",
+        "rag_indexes_manage_permission": {
+          "name": "rag_indexes_manage_permission",
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": [
-            "app_owner"
+            "public"
           ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:manage',\n        organization_id\n      )",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:manage',\n        organization_id\n      )"
         },
-        "rag_indexes_admin_management": {
-          "name": "rag_indexes_admin_management",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "app_admin"
-          ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
-        },
-        "rag_indexes_member_view": {
-          "name": "rag_indexes_member_view",
+        "rag_indexes_view_permission": {
+          "name": "rag_indexes_view_permission",
           "as": "PERMISSIVE",
           "for": "SELECT",
           "to": [
-            "app_member"
+            "public"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:view',\n        organization_id\n      )"
         }
       },
       "checkConstraints": {},
@@ -1364,88 +1407,226 @@
         "rag_query_logs_rag_index_id_rag_indexes_id_fk": {
           "name": "rag_query_logs_rag_index_id_rag_indexes_id_fk",
           "tableFrom": "rag_query_logs",
-          "tableTo": "rag_indexes",
           "columnsFrom": [
             "rag_index_id"
           ],
+          "tableTo": "rag_indexes",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "rag_query_logs_organization_id_organizations_id_fk": {
           "name": "rag_query_logs_organization_id_organizations_id_fk",
           "tableFrom": "rag_query_logs",
-          "tableTo": "organizations",
           "columnsFrom": [
             "organization_id"
           ],
+          "tableTo": "organizations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "rag_query_logs_user_id_users_id_fk": {
           "name": "rag_query_logs_user_id_users_id_fk",
           "tableFrom": "rag_query_logs",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "rag_query_logs_agent_id_agents_id_fk": {
           "name": "rag_query_logs_agent_id_agents_id_fk",
           "tableFrom": "rag_query_logs",
-          "tableTo": "agents",
           "columnsFrom": [
             "agent_id"
           ],
+          "tableTo": "agents",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {
-        "rag_query_logs_owner_management": {
-          "name": "rag_query_logs_owner_management",
+        "rag_query_logs_manage_permission": {
+          "name": "rag_query_logs_manage_permission",
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": [
-            "app_owner"
+            "public"
           ],
-          "using": "organization_id = get_current_organization_id() OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = get_current_organization_id()))",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "(organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer)))\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:manage',\n        COALESCE(organization_id, (SELECT ri.organization_id FROM rag_indexes ri WHERE ri.id = rag_index_id))\n      )",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:manage',\n        organization_id\n      )"
         },
-        "rag_query_logs_admin_management": {
-          "name": "rag_query_logs_admin_management",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "app_admin"
-          ],
-          "using": "organization_id = get_current_organization_id() OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = get_current_organization_id()))",
-          "withCheck": "organization_id = get_current_organization_id()"
-        },
-        "rag_query_logs_user_access": {
-          "name": "rag_query_logs_user_access",
+        "rag_query_logs_view_permission": {
+          "name": "rag_query_logs_view_permission",
           "as": "PERMISSIVE",
           "for": "SELECT",
           "to": [
-            "app_member",
-            "authenticated"
+            "public"
           ],
-          "using": "user_id = auth.uid() AND (organization_id = get_current_organization_id() OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = get_current_organization_id())))"
+          "using": "(user_id = current_setting('app.current_user_id')::uuid OR user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:view',\n        COALESCE(organization_id, (SELECT ri.organization_id FROM rag_indexes ri WHERE ri.id = rag_index_id))\n      ))\n      AND (organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer)))"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.role_permissions": {
+      "name": "role_permissions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "role_id": {
+          "name": "role_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "permission_id": {
+          "name": "permission_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "role_permissions_role_id_roles_id_fk": {
+          "name": "role_permissions_role_id_roles_id_fk",
+          "tableFrom": "role_permissions",
+          "columnsFrom": [
+            "role_id"
+          ],
+          "tableTo": "roles",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        },
+        "role_permissions_permission_id_permissions_id_fk": {
+          "name": "role_permissions_permission_id_permissions_id_fk",
+          "tableFrom": "role_permissions",
+          "columnsFrom": [
+            "permission_id"
+          ],
+          "tableTo": "permissions",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "unique_role_permission": {
+          "name": "unique_role_permission",
+          "columns": [
+            "role_id",
+            "permission_id"
+          ],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.roles": {
+      "name": "roles",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_system": {
+          "name": "is_system",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "roles_organization_id_organizations_id_fk": {
+          "name": "roles_organization_id_organizations_id_fk",
+          "tableFrom": "roles",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "tableTo": "organizations",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "roles_tenant_isolation": {
+          "name": "roles_tenant_isolation",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "organization_id = current_setting('app.current_organization_id')::integer OR is_system = true"
         }
       },
       "checkConstraints": {},
@@ -1479,15 +1660,15 @@
         "sessions_user_id_users_id_fk": {
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -1562,51 +1743,51 @@
         "tables_database_id_databases_id_fk": {
           "name": "tables_database_id_databases_id_fk",
           "tableFrom": "tables",
-          "tableTo": "databases",
           "columnsFrom": [
             "database_id"
           ],
+          "tableTo": "databases",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "tables_organization_id_organizations_id_fk": {
           "name": "tables_organization_id_organizations_id_fk",
           "tableFrom": "tables",
-          "tableTo": "organizations",
           "columnsFrom": [
             "organization_id"
           ],
+          "tableTo": "organizations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "tables_created_by_users_id_fk": {
           "name": "tables_created_by_users_id_fk",
           "tableFrom": "tables",
-          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "tables_s3_path_unique": {
           "name": "tables_s3_path_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "s3_path"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {
@@ -1617,7 +1798,7 @@
           "to": [
             "public"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer"
         }
       },
       "checkConstraints": {},
@@ -1701,6 +1882,36 @@
           "primaryKey": false,
           "notNull": false
         },
+        "team_id": {
+          "name": "team_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "routed_from_agent_id": {
+          "name": "routed_from_agent_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "routed_from_team_id": {
+          "name": "routed_from_team_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "routed_at": {
+          "name": "routed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "routing_reason": {
+          "name": "routing_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -1714,93 +1925,121 @@
         "tasks_agent_id_agents_id_fk": {
           "name": "tasks_agent_id_agents_id_fk",
           "tableFrom": "tasks",
-          "tableTo": "agents",
           "columnsFrom": [
             "agent_id"
           ],
+          "tableTo": "agents",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "tasks_organization_id_organizations_id_fk": {
           "name": "tasks_organization_id_organizations_id_fk",
           "tableFrom": "tasks",
-          "tableTo": "organizations",
           "columnsFrom": [
             "organization_id"
           ],
+          "tableTo": "organizations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "tasks_created_by_users_id_fk": {
           "name": "tasks_created_by_users_id_fk",
           "tableFrom": "tasks",
-          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "tasks_team_id_teams_id_fk": {
+          "name": "tasks_team_id_teams_id_fk",
+          "tableFrom": "tasks",
+          "columnsFrom": [
+            "team_id"
+          ],
+          "tableTo": "teams",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "tasks_routed_from_agent_id_agents_id_fk": {
+          "name": "tasks_routed_from_agent_id_agents_id_fk",
+          "tableFrom": "tasks",
+          "columnsFrom": [
+            "routed_from_agent_id"
+          ],
+          "tableTo": "agents",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "tasks_routed_from_team_id_teams_id_fk": {
+          "name": "tasks_routed_from_team_id_teams_id_fk",
+          "tableFrom": "tasks",
+          "columnsFrom": [
+            "routed_from_team_id"
+          ],
+          "tableTo": "teams",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {
-        "tasks_owner_management": {
-          "name": "tasks_owner_management",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "app_owner"
-          ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
-        },
-        "tasks_admin_management": {
-          "name": "tasks_admin_management",
+        "tasks_view_permission": {
+          "name": "tasks_view_permission",
           "as": "PERMISSIVE",
           "for": "SELECT",
           "to": [
-            "app_admin"
+            "public"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'tasks:view',\n        organization_id\n      )"
         },
-        "tasks_admin_updates": {
-          "name": "tasks_admin_updates",
+        "tasks_manage_permission": {
+          "name": "tasks_manage_permission",
           "as": "PERMISSIVE",
           "for": "UPDATE",
           "to": [
-            "app_admin"
+            "public"
           ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'tasks:manage',\n        organization_id\n      )",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'tasks:manage',\n        organization_id\n      )"
         },
-        "tasks_member_view": {
-          "name": "tasks_member_view",
+        "tasks_agent_assignment_permissions": {
+          "name": "tasks_agent_assignment_permissions",
           "as": "PERMISSIVE",
-          "for": "SELECT",
-          "to": [
-            "app_member"
-          ],
-          "using": "organization_id = get_current_organization_id()"
-        },
-        "tasks_creator_control": {
-          "name": "tasks_creator_control",
-          "as": "PERMISSIVE",
-          "for": "ALL",
+          "for": "INSERT",
           "to": [
             "authenticated"
           ],
-          "using": "created_by = auth.uid() AND organization_id = get_current_organization_id()",
-          "withCheck": "created_by = auth.uid() AND organization_id = get_current_organization_id()"
+          "withCheck": "EXISTS (\n      SELECT 1 FROM agents a\n      WHERE a.id = agent_id\n      AND a.organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        a.owner_id = current_setting('app.current_user_id')::uuid\n        OR\n        (\n          COALESCE(a.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true\n          AND user_has_permission(\n            current_setting('app.current_user_id')::uuid,\n            'tasks:create',\n            a.organization_id\n          )\n        )\n        OR\n        current_setting('app.current_user_id')::uuid::text = ANY(\n          SELECT jsonb_array_elements_text(\n            COALESCE(a.task_permissions->'assignment'->'allowedUsers', '[]'::jsonb)\n          )\n        )\n        OR\n        (\n          COALESCE(a.task_permissions->'assignment'->>'allowTeamMembers', 'false')::boolean = true\n          AND EXISTS (\n            SELECT 1 FROM team_memberships tm1\n            JOIN team_memberships tm2 ON tm1.team_id = tm2.team_id\n            WHERE tm1.user_id = current_setting('app.current_user_id')::uuid AND tm2.user_id = a.owner_id\n          )\n        )\n        OR\n        EXISTS (\n          SELECT 1 FROM agents allowed_agent\n          WHERE allowed_agent.owner_id = current_setting('app.current_user_id')::uuid\n          AND allowed_agent.id::text = ANY(\n            SELECT jsonb_array_elements_text(\n              COALESCE(a.task_permissions->'assignment'->'allowedAgents', '[]'::jsonb)\n            )\n          )\n        )\n      )\n    )"
+        },
+        "tasks_team_assignment_permissions": {
+          "name": "tasks_team_assignment_permissions",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "authenticated"
+          ],
+          "withCheck": "team_id IS NOT NULL AND EXISTS (\n      SELECT 1 FROM teams t\n      WHERE t.id = team_id\n      AND t.organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        EXISTS (\n          SELECT 1 FROM team_memberships tm\n          WHERE tm.team_id = t.id AND tm.user_id = current_setting('app.current_user_id')::uuid\n        )\n        OR\n        (\n          COALESCE(t.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true\n          AND user_has_permission(\n            current_setting('app.current_user_id')::uuid,\n            'tasks:create',\n            t.organization_id\n          )\n        )\n        OR\n        current_setting('app.current_user_id')::uuid::text = ANY(\n          SELECT jsonb_array_elements_text(\n            COALESCE(t.task_permissions->'assignment'->'allowedUsers', '[]'::jsonb)\n          )\n        )\n      )\n    )"
         }
       },
       "checkConstraints": {},
@@ -1841,61 +2080,51 @@
         "team_memberships_team_id_teams_id_fk": {
           "name": "team_memberships_team_id_teams_id_fk",
           "tableFrom": "team_memberships",
-          "tableTo": "teams",
           "columnsFrom": [
             "team_id"
           ],
+          "tableTo": "teams",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "team_memberships_user_id_users_id_fk": {
           "name": "team_memberships_user_id_users_id_fk",
           "tableFrom": "team_memberships",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {
-        "team_memberships_owner_management": {
-          "name": "team_memberships_owner_management",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "app_owner"
-          ],
-          "using": "EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())",
-          "withCheck": "EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())"
-        },
-        "team_memberships_admin_management": {
-          "name": "team_memberships_admin_management",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "app_admin"
-          ],
-          "using": "EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())",
-          "withCheck": "EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())"
-        },
-        "team_memberships_member_view": {
-          "name": "team_memberships_member_view",
+        "team_memberships_view_permission": {
+          "name": "team_memberships_view_permission",
           "as": "PERMISSIVE",
           "for": "SELECT",
           "to": [
-            "app_member"
+            "public"
           ],
-          "using": "user_id = auth.uid() OR EXISTS (SELECT 1 FROM teams t WHERE t.id = team_id AND t.organization_id = get_current_organization_id())"
+          "using": "user_id = current_setting('app.current_user_id')::uuid \n      OR EXISTS (\n        SELECT 1 FROM teams t \n        WHERE t.id = team_id \n        AND t.organization_id = current_setting('app.current_organization_id')::integer\n        AND user_has_permission(\n          current_setting('app.current_user_id')::uuid,\n          'teams:view',\n          t.organization_id\n        )\n      )"
+        },
+        "team_memberships_manage_permission": {
+          "name": "team_memberships_manage_permission",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "EXISTS (\n      SELECT 1 FROM teams t \n      WHERE t.id = team_id \n      AND t.organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'teams:manage',\n        t.organization_id\n      )\n    )",
+          "withCheck": "EXISTS (\n      SELECT 1 FROM teams t \n      WHERE t.id = team_id \n      AND t.organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'teams:manage',\n        t.organization_id\n      )\n    )"
         }
       },
       "checkConstraints": {},
@@ -1959,6 +2188,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "task_permissions": {
+          "name": "task_permissions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'{\"assignment\": {\"allowOrgAdmins\": true}, \"routing\": {\"allowCrossTeamRouting\": false}}'::jsonb"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -1972,48 +2208,47 @@
         "teams_organization_id_organizations_id_fk": {
           "name": "teams_organization_id_organizations_id_fk",
           "tableFrom": "teams",
-          "tableTo": "organizations",
           "columnsFrom": [
             "organization_id"
           ],
+          "tableTo": "organizations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {
-        "teams_owner_management": {
-          "name": "teams_owner_management",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "app_owner"
-          ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
-        },
-        "teams_admin_management": {
-          "name": "teams_admin_management",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "app_admin"
-          ],
-          "using": "organization_id = get_current_organization_id()",
-          "withCheck": "organization_id = get_current_organization_id()"
-        },
-        "teams_member_view": {
-          "name": "teams_member_view",
+        "teams_view_permission": {
+          "name": "teams_view_permission",
           "as": "PERMISSIVE",
           "for": "SELECT",
           "to": [
-            "app_member"
+            "public"
           ],
-          "using": "organization_id = get_current_organization_id()"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'teams:view',\n        organization_id\n      )"
+        },
+        "teams_manage_permission": {
+          "name": "teams_manage_permission",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'teams:manage',\n        organization_id\n      )",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'teams:manage',\n        organization_id\n      )"
+        },
+        "teams_create_permission": {
+          "name": "teams_create_permission",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "public"
+          ],
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'teams:create',\n        organization_id\n      )"
         }
       },
       "checkConstraints": {},
@@ -2041,13 +2276,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "role": {
-          "name": "role",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'member'"
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -2068,28 +2296,28 @@
         "user_organizations_user_id_users_id_fk": {
           "name": "user_organizations_user_id_users_id_fk",
           "tableFrom": "user_organizations",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "user_organizations_organization_id_organizations_id_fk": {
           "name": "user_organizations_organization_id_organizations_id_fk",
           "tableFrom": "user_organizations",
-          "tableTo": "organizations",
           "columnsFrom": [
             "organization_id"
           ],
+          "tableTo": "organizations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -2102,7 +2330,111 @@
           "to": [
             "public"
           ],
-          "using": "user_id = current_setting('app.current_user_id')::uuid AND organization_id = get_current_organization_id()"
+          "using": "user_id = current_setting('app.current_user_id')::uuid AND organization_id = current_setting('app.current_organization_id')::integer"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.user_roles": {
+      "name": "user_roles",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role_id": {
+          "name": "role_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "assigned_at": {
+          "name": "assigned_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "user_roles_user_id_users_id_fk": {
+          "name": "user_roles_user_id_users_id_fk",
+          "tableFrom": "user_roles",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "tableTo": "users",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        },
+        "user_roles_role_id_roles_id_fk": {
+          "name": "user_roles_role_id_roles_id_fk",
+          "tableFrom": "user_roles",
+          "columnsFrom": [
+            "role_id"
+          ],
+          "tableTo": "roles",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        },
+        "user_roles_organization_id_organizations_id_fk": {
+          "name": "user_roles_organization_id_organizations_id_fk",
+          "tableFrom": "user_roles",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "tableTo": "organizations",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "unique_user_role_org": {
+          "name": "unique_user_role_org",
+          "columns": [
+            "user_id",
+            "role_id",
+            "organization_id"
+          ],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {
+        "user_roles_tenant_isolation": {
+          "name": "user_roles_tenant_isolation",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "organization_id = current_setting('app.current_organization_id')::integer"
         }
       },
       "checkConstraints": {},
@@ -2149,13 +2481,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "organization_role": {
-          "name": "organization_role",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'member'"
-        },
         "job_title": {
           "name": "job_title",
           "type": "text",
@@ -2187,62 +2512,53 @@
         "users_current_organization_id_organizations_id_fk": {
           "name": "users_current_organization_id_organizations_id_fk",
           "tableFrom": "users",
-          "tableTo": "organizations",
           "columnsFrom": [
             "current_organization_id"
           ],
+          "tableTo": "organizations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "users_email_unique": {
           "name": "users_email_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "email"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "users_api_key_unique": {
           "name": "users_api_key_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "api_key"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {
-        "users_owner_management": {
-          "name": "users_owner_management",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "app_owner"
-          ],
-          "using": "current_organization_id = get_current_organization_id()",
-          "withCheck": "current_organization_id = get_current_organization_id()"
-        },
-        "users_admin_management": {
-          "name": "users_admin_management",
+        "users_view_permission": {
+          "name": "users_view_permission",
           "as": "PERMISSIVE",
           "for": "SELECT",
           "to": [
-            "app_admin"
+            "public"
           ],
-          "using": "current_organization_id = get_current_organization_id()"
+          "using": "current_organization_id = current_setting('app.current_organization_id')::integer \n      AND (\n        id = current_setting('app.current_user_id')::uuid \n        OR user_has_permission(\n          current_setting('app.current_user_id')::uuid,\n          'users:view',\n          current_organization_id\n        )\n      )"
         },
-        "users_member_self": {
-          "name": "users_member_self",
+        "users_manage_permission": {
+          "name": "users_manage_permission",
           "as": "PERMISSIVE",
-          "for": "SELECT",
+          "for": "UPDATE",
           "to": [
-            "app_member"
+            "public"
           ],
-          "using": "id = auth.uid()"
+          "using": "current_organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'users:manage', \n        current_organization_id\n      )",
+          "withCheck": "current_organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'users:manage', \n        current_organization_id\n      )"
         }
       },
       "checkConstraints": {},
@@ -2282,6 +2598,7 @@
   },
   "enums": {},
   "schemas": {},
+  "views": {},
   "sequences": {},
   "roles": {
     "anon": {
@@ -2289,24 +2606,6 @@
       "createDb": false,
       "createRole": false,
       "inherit": false
-    },
-    "app_admin": {
-      "name": "app_admin",
-      "createDb": false,
-      "createRole": false,
-      "inherit": true
-    },
-    "app_member": {
-      "name": "app_member",
-      "createDb": false,
-      "createRole": false,
-      "inherit": true
-    },
-    "app_owner": {
-      "name": "app_owner",
-      "createDb": false,
-      "createRole": false,
-      "inherit": true
     },
     "authenticated": {
       "name": "authenticated",
@@ -2316,7 +2615,6 @@
     }
   },
   "policies": {},
-  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},
