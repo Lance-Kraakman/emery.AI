@@ -87,7 +87,7 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
             email: user.email || '',
             name: user.name,
             organizationId: user.currentOrganizationId,
-            organizationRole: user.organizationRole || 'member',
+            // organizationRole removed in RBAC system
           },
         };
       }

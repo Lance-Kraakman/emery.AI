@@ -18,10 +18,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user has permission to manage data
-    const hasDataPermission = await hasPermission(session.user.id, "manage_data");
+    const hasDataPermission = await hasPermission(session.user.id, "data:manage", session.user.currentOrganizationId);
     if (!hasDataPermission) {
       return NextResponse.json(
-        { error: "Permission denied: manage_data required" },
+        { error: "Permission denied: data:manage required" },
         { status: 403 }
       );
     }

@@ -1,5 +1,6 @@
 import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '../entities/organization';
-import { OrganizationId, UserId, OrganizationRole } from '@/ddd/domain/shared/value-objects';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType } from '@/ddd/domain/rbac/entities/role';
 
 export interface IOrganizationRepository {
   /**
@@ -46,7 +47,7 @@ export interface IOrganizationRepository {
   /**
    * Add a member to organization
    */
-  addMember(organizationId: OrganizationId, userId: UserId, role?: OrganizationRole): Promise<void>;
+  addMember(organizationId: OrganizationId, userId: UserId, systemRole?: SystemRoleType): Promise<void>;
 
   /**
    * Remove a member from organization
@@ -56,7 +57,7 @@ export interface IOrganizationRepository {
   /**
    * Update member role in organization
    */
-  updateMemberRole(organizationId: OrganizationId, userId: UserId, role: OrganizationRole): Promise<void>;
+  updateMemberRole(organizationId: OrganizationId, userId: UserId, systemRole: SystemRoleType): Promise<void>;
 
   /**
    * Check if user is member of organization
@@ -66,7 +67,7 @@ export interface IOrganizationRepository {
   /**
    * Get user's role in organization
    */
-  getUserRole(organizationId: OrganizationId, userId: UserId): Promise<OrganizationRole | null>;
+  getUserRole(organizationId: OrganizationId, userId: UserId): Promise<SystemRoleType | null>;
 
   /**
    * Find organizations by name (for search/autocomplete)

@@ -4,8 +4,9 @@ import type postgres from 'postgres';
 import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
 import type { DbClient } from '@/lib/db/client';
-import { organizations, users, userOrganizations } from '@/lib/db/schema';
-import { OrganizationId, UserId, OrganizationRole, OrganizationName, EmailAddress } from '@/ddd/domain/shared/value-objects';
+import { organizations, users, userOrganizations, roles, userRoles } from '@/lib/db/schema';
+import { OrganizationId, UserId, OrganizationName, EmailAddress } from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 
 export class DrizzleOrganizationRepository implements IOrganizationRepository {
   constructor(
@@ -77,20 +78,13 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
         userId: userOrganizations.userId,
         name: users.name,
         email: users.email,
-        role: userOrganizations.role,
         joinedAt: userOrganizations.createdAt,
       })
       .from(userOrganizations)
       .leftJoin(users, eq(userOrganizations.userId, users.id))
       .where(eq(userOrganizations.organizationId, organizationId.value));
 
-    return result.map(member => ({
-      userId: new UserId(member.userId),
-      name: member.name,
-      email: member.email ? new EmailAddress(member.email) : null,
-      role: new OrganizationRole(member.role),
-      joinedAt: member.joinedAt
-    }));
+    throw new Error('getMembers() not implemented for RBAC system. Use permission-based queries instead.');
   }
 
   async create(data: CreateOrganizationData): Promise<Organization> {
@@ -131,23 +125,46 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
       .values(dbData)
       .returning();
 
-    // Add owner as organization member with owner role (simplified RBAC)
+    // Add owner as organization member (no role column in new schema)
     await tx
       .insert(userOrganizations)
       .values({
         userId: ownerId.value,
-        organizationId: org.id,
-        role: 'owner' // Use simple string role instead of ROLE_TYPES
+        organizationId: org.id
       });
 
-    // Update user's current organization and role (simplified RBAC)
+    // Update user's current organization (no organizationRole column in new schema)
     await tx
       .update(users)
       .set({ 
-        currentOrganizationId: org.id,
-        organizationRole: 'owner' // Set organizationRole directly
+        currentOrganizationId: org.id
       })
       .where(eq(users.id, ownerId.value));
+
+    // RBAC: Assign Organization Owner role
+    // First, get the Organization Owner system role
+    const ownerRole = await tx
+      .select()
+      .from(roles)
+      .where(and(
+        eq(roles.name, 'Organization Owner'),
+        eq(roles.isSystem, true)
+      ))
+      .limit(1);
+
+    if (ownerRole.length > 0) {
+      // Create user_roles entry
+      await tx
+        .insert(userRoles)
+        .values({
+          userId: ownerId.value,
+          roleId: ownerRole[0].id,
+          organizationId: org.id,
+          assignedAt: new Date()
+        });
+    } else {
+      console.error(`⚠️ System role 'Organization Owner' not found during organization creation. Run RBAC seed first.`);
+    }
 
     return this.mapToEntity(org);
   }
@@ -186,7 +203,7 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
     });
   }
 
-  async addMember(organizationId: OrganizationId, userId: UserId, role: OrganizationRole = new OrganizationRole('member')): Promise<void> {
+  async addMember(organizationId: OrganizationId, userId: UserId, systemRole: SystemRoleType = SYSTEM_ROLES.MEMBER): Promise<void> {
     // Check if user is already a member
     const existing = await this.db.query.userOrganizations.findFirst({
       where: and(
@@ -204,7 +221,7 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
       .values({
         userId: userId.value,
         organizationId: organizationId.value,
-        role: role.value
+        // Note: role column removed in RBAC system - roles now managed through user_roles table
       });
   }
 
@@ -220,14 +237,10 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
     // or transfer ownership first
   }
 
-  async updateMemberRole(organizationId: OrganizationId, userId: UserId, role: OrganizationRole): Promise<void> {
-    const result = await this.db
-      .update(userOrganizations)
-      .set({ role: role.value })
-      .where(and(
-        eq(userOrganizations.organizationId, organizationId.value),
-        eq(userOrganizations.userId, userId.value)
-      ));
+  async updateMemberRole(organizationId: OrganizationId, userId: UserId, systemRole: SystemRoleType): Promise<void> {
+    // TODO: Update for RBAC system - roles are now managed through user_roles table
+    // This method needs to be reimplemented to work with the permission-based system
+    throw new Error('Role updates not yet implemented for RBAC system');
   }
 
   async isMember(organizationId: OrganizationId, userId: UserId): Promise<boolean> {
@@ -241,27 +254,22 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
     return !!result;
   }
 
-  async getUserRole(organizationId: OrganizationId, userId: UserId): Promise<OrganizationRole | null> {
-    const result = await this.db.query.userOrganizations.findFirst({
-      where: and(
-        eq(userOrganizations.organizationId, organizationId.value),
-        eq(userOrganizations.userId, userId.value)
-      ),
-      columns: {
-        role: true
-      }
-    });
-
-    return result?.role ? new OrganizationRole(result.role) : null;
+  async getUserRole(organizationId: OrganizationId, userId: UserId): Promise<SystemRoleType | null> {
+    throw new Error('getUserRole() not implemented for RBAC system. Use permission checking instead.');
   }
 
   async findByName(name: string, limit: number = 10): Promise<Organization[]> {
-    const result = await this.db.query.organizations.findMany({
-      where: ilike(organizations.name, `%${name}%`),
-      limit
-    });
-
-    return result.map(org => this.mapToEntity(org));
+    try {
+      const result = await this.db.query.organizations.findMany({
+        where: ilike(organizations.name, `%${name}%`),
+        limit
+      });
+      return result.map(org => this.mapToEntity(org));
+    } catch (error) {
+      console.log("error finding org", error);
+    } finally {
+      return []
+    }
   }
 
   // AIDEV-NOTE: Boundary conversion - maps database primitives to domain Value Objects

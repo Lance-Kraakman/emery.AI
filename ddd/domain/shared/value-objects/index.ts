@@ -20,8 +20,7 @@ export { EmailAddress } from './email-address';
 export { ApiKey } from './api-key';
 export { InvitationToken } from './invitation-token';
 
-// Domain Status & Role Value Objects
-export { OrganizationRole, ORGANIZATION_ROLES } from './organization-role';
+// Domain Status Value Objects
 export { AgentStatus, AGENT_STATUS } from './agent-status';
 // Task status moved to tasks domain
 export { TaskStatus, TASK_STATUS } from '@/ddd/domain/tasks/value-objects/task-status';

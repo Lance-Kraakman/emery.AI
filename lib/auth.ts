@@ -11,7 +11,7 @@ import { getServerSession } from "next-auth"
 import { getSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react"
 import { Permission, type PermissionCheck } from '@/ddd/domain/shared/value-objects/permission'
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects'
-import { getRBACRepository } from '@/ddd/application/di/container'
+import { getRBACRepository } from "@/ddd/application/di/container"
 
 // AIDEV-NOTE: Development bypass for testing - allows tests to authenticate as specific user
 export function getTestUserId(): string {
@@ -235,6 +235,13 @@ export async function requirePermission(userId: string, permission: PermissionCh
     
     await rbac.requirePermission(userIdVO, permissionVO, orgIdVO);
   } catch (error) {
-    throw new Error(`Permission denied: ${typeof permission === 'string' ? permission : permission.toString()}`);
+    const permissionString = typeof permission === 'string' ? permission : permission.toString();
+    console.error('🚫 RBAC permission check failed:', {
+      userId,
+      organizationId,
+      requiredPermission: permissionString,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    throw new Error(`Permission denied: ${permissionString}`);
   }
 }

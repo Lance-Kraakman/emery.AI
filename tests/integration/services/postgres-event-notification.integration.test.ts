@@ -106,8 +106,8 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
         // Create task via application service - RLS context already set in beforeEach
         const agentTaskService = getAgentTaskApplicationService();
         const task = await agentTaskService.createTask({
-          agentId: testAgentId.value,
-          organizationId: testContext.organizationId.value,
+          agentId: testAgentId,
+          organizationId: testContext.organizationId,
           name: 'Event Trigger Test Task',
           instructions: { 
             instructions: 'Test event notification system',
@@ -172,8 +172,8 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
         const agentTaskService = getAgentTaskApplicationService();
         const taskPromises = Array.from({ length: eventCount }, (_, i) =>
           agentTaskService.createTask({
-            agentId: testAgentId.value,
-            organizationId: testContext.organizationId.value,
+            agentId: testAgentId,
+            organizationId: testContext.organizationId,
             name: `Concurrent Event Test ${i + 1}`,
             instructions: { 
               instructions: `Concurrent test task ${i + 1}`,
@@ -240,7 +240,7 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
 
         // Use test API endpoint to trigger event (validates our channel fix in the API)
         const response = await testClient.post('/api/test-manual-trigger', {
-          agentId: testAgentId.value,
+          agentId: testAgentId,
           instructions: 'API endpoint trigger test'
         });
 
@@ -296,8 +296,8 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
         // Create task - RLS context already set in beforeEach
         const agentTaskService = getAgentTaskApplicationService();
         await agentTaskService.createTask({
-          agentId: testAgentId.value,
-          organizationId: testContext.organizationId.value,
+          agentId: testAgentId,
+          organizationId: testContext.organizationId,
           name: 'Event Timing Test',
           instructions: { 
             instructions: 'Test immediate event notification',

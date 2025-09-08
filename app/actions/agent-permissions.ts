@@ -10,7 +10,7 @@ import type { AgentTaskPermissions, UpdateAgentPermissionsRequest } from "@/ddd/
 export async function getAgentPermissions(agentId: number): Promise<Result<AgentTaskPermissions>> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("manage_agents");
+      const session = await requirePermission("agents:manage");
     const currentOrg = await requireCurrentOrganization();
     const agentPermissionsService = getAgentPermissionsApplicationService();
 
@@ -36,7 +36,7 @@ export async function updateAgentPermissions(
 ): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("manage_agents");
+      const session = await requirePermission("agents:manage");
     const currentOrg = await requireCurrentOrganization();
     const agentPermissionsService = getAgentPermissionsApplicationService();
 
@@ -67,7 +67,7 @@ export async function getAllAgentPermissionsForOrganization(): Promise<Result<Ar
 }>>> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("view_agents");
+      const session = await requirePermission("agents:view");
     const currentOrg = await requireCurrentOrganization();
     const agentPermissionsService = getAgentPermissionsApplicationService();
 

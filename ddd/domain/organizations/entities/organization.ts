@@ -5,11 +5,11 @@ import {
   AgentId, 
   TeamId,
   OrganizationName,
-  OrganizationRole,
   EmailAddress,
   MeasurementCategory,
   CalculationFrequency
 } from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType } from '@/ddd/domain/rbac/entities/role';
 
 export interface Organization {
   id: OrganizationId;
@@ -52,7 +52,7 @@ export interface OrganizationMember {
   userId: UserId;
   name?: string | null;
   email?: EmailAddress | null;
-  role: OrganizationRole; // owner, admin, member
+  systemRole: SystemRoleType; // RBAC system role
   joinedAt?: Date | null;
 }
 

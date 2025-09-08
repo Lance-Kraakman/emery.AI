@@ -17,18 +17,35 @@ export async function withAuthContext<T>(
 ): Promise<T> {
   const session = await auth();
   
+  console.log("🔧 withAuthContext() - Setting RLS context:", {
+    hasSession: !!session,
+    hasUser: !!session?.user,
+    userId: session?.user?.id,
+    currentOrgId: session?.user?.currentOrganizationId,
+    willSetContext: !!(session?.user?.id && session?.user?.currentOrganizationId)
+  });
+  
   if (session?.user?.id && session?.user?.currentOrganizationId) {
     contextManager.setContext(
       OrganizationId.fromNumber(session.user.currentOrganizationId),
       UserId.fromString(session.user.id)
     );
+    console.log("✅ withAuthContext() - RLS context set successfully");
+  } else {
+    console.warn("⚠️ withAuthContext() - Cannot set RLS context - missing user ID or organization ID");
   }
   
   try {
-    return await operation();
+    const result = await operation();
+    console.log("✅ withAuthContext() - Operation completed successfully");
+    return result;
+  } catch (error) {
+    console.error("🚫 withAuthContext() - Operation failed:", error);
+    throw error;
   } finally {
     // Clear context after operation to prevent leakage
     contextManager.clearContext();
+    console.log("🧹 withAuthContext() - Context cleared");
   }
 }
 

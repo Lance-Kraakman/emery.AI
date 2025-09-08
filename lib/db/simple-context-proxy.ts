@@ -101,9 +101,16 @@ function createQueryBuilderProxy(queryBuilder: any, originalDb: DbClient, contex
           // console.log(`🔍 RLS Proxy: Recording query step: ${prop as string}`, args.length > 0 ? `with ${args.length} args` : '');
           const result = originalMethod.apply(target, args);
           
-          // Return proxy for continued chaining, passing along accumulated steps
-          if (result && typeof result === 'object' && result !== target) {
-            return createQueryBuilderProxy(result, originalDb, context, querySteps);
+          // Return proxy for continued chaining, but avoid infinite recursion
+          if (result && typeof result === 'object' && result !== target && !result._isQueryBuilderProxy) {
+            // Mark this object as already being a proxy to prevent recursive wrapping
+            const proxiedResult = createQueryBuilderProxy(result, originalDb, context, querySteps);
+            Object.defineProperty(proxiedResult, '_isQueryBuilderProxy', { 
+              value: true, 
+              writable: false, 
+              enumerable: false 
+            });
+            return proxiedResult;
           }
           
           return result;
@@ -128,10 +135,10 @@ function createSimpleContextProxy(baseDb: DbClient): DbClient {
     get(target, prop, receiver) {
       const originalValue = Reflect.get(target, prop, receiver);
       
-      // Debug: Log all property access
-      if (typeof prop === 'string' && ['select', 'insert', 'update', 'delete', 'transaction'].includes(prop)) {
-        console.log(`🔍 PROXY DEBUG: Accessing property "${prop}"`);
-      }
+      // Debug: Log all property access to key methods (temporarily disabled)
+      // if (typeof prop === 'string' && ['select', 'insert', 'update', 'delete', 'transaction'].includes(prop)) {
+      //   console.log(`🔍 PROXY DEBUG: Accessing property "${prop}"`);
+      // }
       
       // Intercept transaction method - this covers most repository operations
       if (prop === 'transaction') {
@@ -227,9 +234,9 @@ function createSimpleContextProxy(baseDb: DbClient): DbClient {
  * Context-aware database client using simplified JavaScript proxy
  * This preserves all Drizzle functionality while automatically applying RLS when context is set
  */
-console.log('🔍 PROXY: Creating context-aware database client');
+console.log('🔍 PROXY: Creating context-aware database client (with recursion fix)');
 export const contextAwareDb = createSimpleContextProxy(db);
-console.log('🔍 PROXY: Context-aware database client created');
+console.log('🔍 PROXY: Context-aware database client created (recursion fixed)');
 
 // Export the type - same as regular DbClient since proxy preserves all functionality
 export type ContextAwareDbClient = DbClient;

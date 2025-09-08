@@ -7,6 +7,7 @@ import { getTables } from '@/app/actions/tables';
 import { getDatabases } from '@/app/actions/databases';
 import { getAgents } from '@/app/actions/agents';
 import { getTeams } from '@/app/actions/teams';
+import { getCurrentOrganization } from '@/app/actions/user-organizations';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { TeamDTO } from '@/app/mappers/team-mapper';
 import type { TableDTO } from '@/app/mappers/table-mapper';
@@ -39,16 +40,14 @@ export function useEmeryData() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const currentOrg = session?.user?.currentOrganization;
-
   useEffect(() => {
-    if (session?.user?.needsSetup && !session?.user?.currentOrganization) {
+    if (session?.user?.needsSetup && !session?.user?.currentOrganizationId) {
       router.push('/setup');
     }
   }, [session, router]);
 
   const fetchData = useCallback(async () => {
-    if (!session?.user || !currentOrg) {
+    if (!session?.user || !session?.user?.currentOrganizationId) {
       setData({ databases: [], agents: [], teams: [] });
       setIsLoading(false);
       return;
@@ -58,12 +57,13 @@ export function useEmeryData() {
     setError(null);
 
     try {
-      // Fetch databases and tables
-      const [databasesResult, tablesResult, agentsResult, teamsResult] = await Promise.all([
+      // Fetch current organization and other data
+      const [currentOrgResult, databasesResult, tablesResult, agentsResult, teamsResult] = await Promise.all([
+        getCurrentOrganization(),
         getDatabases(),
         getTables(),
         getAgents(),
-        getTeams(currentOrg.id)
+        getTeams(session.user.currentOrganizationId)
       ]);
 
       // Use DTOs directly, but group tables with databases for frontend convenience
@@ -78,10 +78,10 @@ export function useEmeryData() {
         databases,
         agents,
         teams,
-        organization: {
-          id: currentOrg.id,
-          name: currentOrg.name
-        }
+        organization: currentOrgResult ? {
+          id: currentOrgResult.id.value,
+          name: currentOrgResult.name.value
+        } : undefined
       });
     } catch (err) {
       console.error('Error fetching Emery data:', err);
@@ -89,7 +89,7 @@ export function useEmeryData() {
     } finally {
       setIsLoading(false);
     }
-  }, [session, currentOrg]);
+  }, [session]);
 
   useEffect(() => {
     fetchData();
@@ -104,7 +104,7 @@ export function useEmeryData() {
     isLoading,
     error,
     refetch,
-    currentOrganization: currentOrg,
+    currentOrganization: data.organization,
     availableOrganizations: session?.user?.availableOrganizations || [],
   };
 }

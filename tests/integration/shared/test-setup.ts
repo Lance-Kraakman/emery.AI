@@ -12,6 +12,9 @@ import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import type { Team } from '@/ddd/domain/teams/entities/team';
 import type { CreateTeamCommand } from '@/ddd/application/services/teams/team-application-service';
 import { testClient } from './integration-helpers';
+import { SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
+import { userRoles, roles } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 export interface TestContext {
   organizationId: OrganizationId;
@@ -187,7 +190,7 @@ export async function createTestUser(
   name: string,
   organizationId: OrganizationId | number,
   role: 'owner' | 'admin' | 'member' = 'member'
-): Promise<{ id: string; email: string; name: string; organizationRole: string }> {
+): Promise<{ id: string; email: string; name: string; role: string }> {
   const userRepository = getUserRepository();
   
   const timestamp = Date.now();
@@ -206,11 +209,39 @@ export async function createTestUser(
   
   const user = await userRepository.create(userData);
   
+  // Map old role names to RBAC system role names
+  const systemRoleName = {
+    'owner': SYSTEM_ROLES.ORGANIZATION_OWNER,
+    'admin': SYSTEM_ROLES.ORGANIZATION_ADMIN,
+    'member': SYSTEM_ROLES.MEMBER
+  }[role];
+  
+  // Get the system role ID
+  const systemRole = await testClient.db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(eq(roles.name, systemRoleName))
+    .limit(1);
+    
+  if (systemRole[0]) {
+    // Assign the system role to the user for this organization
+    await testClient.db
+      .insert(userRoles)
+      .values({
+        userId: user.id.value,
+        roleId: systemRole[0].id,
+        organizationId: orgId
+      })
+      .onConflictDoNothing();
+  } else {
+    console.warn(`System role '${systemRoleName}' not found in database. Run seed-rbac.ts first.`);
+  }
+  
   return {
     id: user.id.value,
     email: user.email?.value || '',
     name: user.name || '',
-    organizationRole: (user.organizationRole as any)?.value || user.organizationRole || 'member'
+    role: systemRoleName // Return the actual system role name
   };
 }
 

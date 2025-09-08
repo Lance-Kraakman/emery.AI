@@ -30,7 +30,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requirePermission("manage_agents");
+    const session = await requirePermission("agents:manage");
     const { id } = await params;
     const organizationId = parseInt(id);
     
@@ -127,7 +127,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requirePermission("view_agents");
+    const session = await requirePermission("agents:view");
     const { id } = await params;
     const organizationId = parseInt(id);
     
@@ -197,7 +197,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requirePermission("manage_agents");
+    const session = await requirePermission("agents:manage");
     const { id } = await params;
     const organizationId = parseInt(id);
     

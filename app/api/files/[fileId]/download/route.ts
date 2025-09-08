@@ -23,10 +23,10 @@ export async function GET(
     }
 
     // Check permissions
-    const hasDataPermission = await hasPermission(session.user.id, "view_data");
+    const hasDataPermission = await hasPermission(session.user.id, "data:view", session.user.currentOrganizationId);
     if (!hasDataPermission) {
       return NextResponse.json(
-        { error: "Permission denied: view_data required" },
+        { error: "Permission denied: data:view required" },
         { status: 403 }
       );
     }

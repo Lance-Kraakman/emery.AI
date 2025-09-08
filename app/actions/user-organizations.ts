@@ -4,11 +4,12 @@
 // Migrated from direct DB access to proper DDD application service pattern
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "./permissions";
+import { requireAuth, requirePermission } from "./permissions";
 import { getUserRoleApplicationService, getUserRepository, getOrganizationRepository } from "@/ddd/application/di/container";
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
+import { SystemRoleType } from "@/ddd/domain/rbac/entities/role";
 
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
@@ -22,7 +23,7 @@ import type {
 export async function switchCurrentOrganization(organizationId: number): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("manage_users");
+      const session = await requirePermission("users:manage");
     
     if (!organizationId) {
       return {
@@ -65,10 +66,10 @@ export async function switchCurrentOrganization(organizationId: number): Promise
   });
 }
 
-export async function joinOrganization(organizationId: number, role: string = 'member'): Promise<Result> {
+export async function joinOrganization(organizationId: number, systemRole: SystemRoleType = 'Member'): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("manage_users");
+      const session = await requirePermission("users:manage");
     
     if (!organizationId) {
       return {
@@ -82,7 +83,7 @@ export async function joinOrganization(organizationId: number, role: string = 'm
     const command: AddUserToOrganizationCommand = {
       userId: session.user.id,
       organizationId,
-      role
+      systemRole
     };
 
     const result = await userOrganizationApplicationService.addUserToOrganization(command);
@@ -115,7 +116,7 @@ export async function joinOrganization(organizationId: number, role: string = 'm
 export async function leaveOrganization(organizationId: number): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("manage_users");
+      const session = await requirePermission("users:manage");
     
     if (!organizationId) {
       return {
@@ -162,10 +163,23 @@ export async function leaveOrganization(organizationId: number): Promise<Result>
 export async function getUserOrganizations() {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("view_users");
-    
+      console.log("📋 getUserOrganizations() - Starting to fetch user organizations");
+      
+      const session = await requirePermission("users:view");
+      
+      console.log("📋 getUserOrganizations() - Auth successful, fetching organizations for user:", session.user.id);
+      
     const userRepository = getUserRepository();
     const organizations = await userRepository.getUserOrganizations(UserId.fromString(session.user.id));
+    
+    console.log("📋 getUserOrganizations() - Found organizations:", {
+      count: organizations.length,
+      organizations: organizations.map(org => ({
+        id: org.id.value,
+        name: org.name.value,
+        slug: org.slug
+      }))
+    });
 
     // Map to expected format for backwards compatibility
     return organizations.map(org => ({
@@ -182,35 +196,34 @@ export async function getUserOrganizations() {
 }
 
 export async function getCurrentOrganization() {
-  return withAuthContext(async () => {
-    try {
-      const session = await requirePermission("view_users");
-    
-    if (!session.user.currentOrganizationId) {
-      return null;
-    }
+  try {
+    // FIXED: Cannot use requirePermission here as it causes circular dependency with requireCurrentOrganization
+    const session = await requireAuth();
+  
+  if (!session.user.currentOrganizationId) {
+    return null;
+  }
 
-    const organizationRepository = getOrganizationRepository();
-    const userRoleApplicationService = getUserRoleApplicationService();
-    
-    const organization = await organizationRepository.findById(OrganizationId.fromNumber(session.user.currentOrganizationId));
-    
-    if (!organization) {
-      return null;
-    }
+  const organizationRepository = getOrganizationRepository();
+  const userRoleApplicationService = getUserRoleApplicationService();
+  
+  const organization = await organizationRepository.findById(OrganizationId.fromNumber(session.user.currentOrganizationId));
+  
+  if (!organization) {
+    return null;
+  }
 
-    // Get the user's role in this organization
-    const userRole = await userRoleApplicationService.getUserOrganizationRole(UserId.fromString(session.user.id), OrganizationId.fromNumber(session.user.currentOrganizationId));
+  // Get the user's role in this organization
+  const userRole = await userRoleApplicationService.getUserOrganizationRole(UserId.fromString(session.user.id), OrganizationId.fromNumber(session.user.currentOrganizationId));
 
-    return {
-      ...organization,
-      userRole: userRole || 'member'
-    };
-    } catch (error) {
-      console.error("Error fetching current organization:", error);
-      return null;
-    }
-  });
+  return {
+    ...organization,
+    userRole: userRole || 'member'
+  };
+  } catch (error) {
+    console.error("Error fetching current organization:", error);
+    return null;
+  }
 }
 
 // AIDEV-NOTE: Helper function to check if user has access to current organization context
@@ -225,10 +238,10 @@ export async function requireCurrentOrganization() {
 /**
  * Add another user to an organization (admin function)
  */
-export async function addUserToOrganization(userId: string, organizationId: number, role: string = 'member'): Promise<Result> {
+export async function addUserToOrganization(userId: string, organizationId: number, systemRole: SystemRoleType = 'Member'): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("manage_users");
+      const session = await requirePermission("users:manage");
     
     if (!userId || !organizationId) {
       return {
@@ -242,7 +255,7 @@ export async function addUserToOrganization(userId: string, organizationId: numb
     const command: AddUserToOrganizationCommand = {
       userId,
       organizationId,
-      role,
+      systemRole,
       invitedBy: session.user.id
     };
 
@@ -279,7 +292,7 @@ export async function addUserToOrganization(userId: string, organizationId: numb
 export async function removeUserFromOrganization(userId: string, organizationId: number): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("manage_users");
+      const session = await requirePermission("users:manage");
     
     if (!userId || !organizationId) {
       return {
@@ -334,10 +347,10 @@ export async function removeUserFromOrganization(userId: string, organizationId:
 /**
  * Get organization members (admin function)
  */
-export async function getOrganizationMembers(organizationId?: number, searchQuery?: string, role?: string) {
+export async function getOrganizationMembers(organizationId?: number, searchQuery?: string, systemRole?: SystemRoleType) {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("view_users");
+      const session = await requirePermission("users:view");
     const currentOrg = await requireCurrentOrganization();
     
     const userOrganizationApplicationService = getUserRoleApplicationService();
@@ -345,7 +358,7 @@ export async function getOrganizationMembers(organizationId?: number, searchQuer
     const filters: OrganizationMemberFilters = {
       organizationId: organizationId || currentOrg.id.value,
       searchQuery,
-      role,
+      systemRole,
       includeUserDetails: true
     };
 
@@ -363,7 +376,7 @@ export async function getOrganizationMembers(organizationId?: number, searchQuer
 export async function updateUserRole(userId: string, organizationId: number, newRole: string): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("manage_users");
+      const session = await requirePermission("users:manage");
     
     if (!userId || !organizationId || !newRole) {
       return {
@@ -377,7 +390,7 @@ export async function updateUserRole(userId: string, organizationId: number, new
     const command = {
       userId,
       organizationId,
-      newRole,
+      newSystemRole: newRole as SystemRoleType,
       updatedBy: session.user.id
     };
 

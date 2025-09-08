@@ -13,9 +13,9 @@ import {
   UserId, 
   OrganizationId, 
   EmailAddress, 
-  ApiKey, 
-  OrganizationRole 
+  ApiKey
 } from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType } from '@/ddd/domain/rbac/entities/role';
 
 export interface IUserRepository {
   // Basic CRUD operations
@@ -38,15 +38,15 @@ export interface IUserRepository {
   addUserToOrganization(data: CreateUserOrganizationData): Promise<UserOrganization>;
   removeUserFromOrganization(userId: UserId, organizationId: OrganizationId): Promise<void>;
   
-  // Simplified role management - just update the user's organizationRole
-  updateUserRole(userId: UserId, role: string): Promise<User>;
+  // Role management now handled via RBAC system - use IRBACRepository
+  // updateUserRole method removed - use RBAC assignRole() method instead
   
   // User queries for admin operations
   findByOrganizationId(organizationId: OrganizationId): Promise<User[]>;
-  findByRole(organizationId: OrganizationId, role: string): Promise<User[]>;
+  // findByRole removed - use RBAC permission-based queries instead
   
-  // Role checking
-  getUserOrganizationRole(userId: UserId, organizationId: OrganizationId): Promise<string | null>;
+  // Role checking now handled via RBAC system - use IRBACRepository
+  // getUserOrganizationRole removed - use RBAC getUserRoles() method instead
   
   // Business logic operations
   verifyEmail(userId: UserId): Promise<User>;

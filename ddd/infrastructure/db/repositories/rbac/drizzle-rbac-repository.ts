@@ -24,6 +24,14 @@ export class DrizzleRBACRepository implements IRBACRepository {
 
   // Core permission checking
   async hasPermission(userId: UserId, permission: Permission, organizationId: OrganizationId): Promise<boolean> {
+    console.log("🔍 DrizzleRBACRepository.hasPermission() - Checking permission:", {
+      userId: userId.value,
+      organizationId: organizationId.value,
+      permission: permission.toString(),
+      resource: permission.resource,
+      action: permission.action
+    });
+
     const result = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(userRoles)
@@ -36,14 +44,69 @@ export class DrizzleRBACRepository implements IRBACRepository {
         eq(permissions.action, permission.action)
       ));
 
-    return result[0]?.count > 0;
+    const hasPermission = result[0]?.count > 0;
+    console.log("🔍 DrizzleRBACRepository.hasPermission() - Query result:", {
+      count: result[0]?.count,
+      hasPermission,
+      query: "userRoles -> rolePermissions -> permissions"
+    });
+
+    return hasPermission;
   }
 
   async requirePermission(userId: UserId, permission: Permission, organizationId: OrganizationId): Promise<void> {
+    console.log("🛡️ DrizzleRBACRepository.requirePermission() - Starting check");
+    
+    // DEBUG: Show user's current roles and permissions
+    await this.debugUserPermissions(userId, organizationId);
+    
     const hasAccess = await this.hasPermission(userId, permission, organizationId);
+    
     if (!hasAccess) {
+      console.error("🚫 DrizzleRBACRepository.requirePermission() - ACCESS DENIED");
       throw new Error(`Permission denied: ${permission.toString()}`);
     }
+    
+    console.log("✅ DrizzleRBACRepository.requirePermission() - ACCESS GRANTED");
+  }
+  
+  // DEBUG method to show user's roles and permissions
+  private async debugUserPermissions(userId: UserId, organizationId: OrganizationId): Promise<void> {
+    console.log("🔍 DEBUG - User roles and permissions:");
+    
+    // Get user roles
+    const userRolesResult = await this.db
+      .select({
+        roleId: userRoles.roleId,
+        roleName: roles.name,
+        isSystem: roles.isSystem
+      })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(and(
+        eq(userRoles.userId, userId.value),
+        eq(userRoles.organizationId, organizationId.value)
+      ));
+      
+    console.log("🔍 DEBUG - User roles:", userRolesResult);
+    
+    // Get user permissions
+    const userPermissionsResult = await this.db
+      .select({
+        resource: permissions.resource,
+        action: permissions.action,
+        roleName: roles.name
+      })
+      .from(userRoles)
+      .innerJoin(rolePermissions, eq(userRoles.roleId, rolePermissions.roleId))
+      .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(and(
+        eq(userRoles.userId, userId.value),
+        eq(userRoles.organizationId, organizationId.value)
+      ));
+      
+    console.log("🔍 DEBUG - User permissions:", userPermissionsResult);
   }
 
   // User permission queries
@@ -328,7 +391,7 @@ export class DrizzleRBACRepository implements IRBACRepository {
         )})`
       );
 
-    return result.map(r => r.id);
+    return result.map((r: any) => r.id);
   }
 
   private mapToRoleEntity(roleData: any, permissionStrings: string[]): Role {

@@ -7,16 +7,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, Crown, Shield, User, Loader2 } from "lucide-react";
+import { UserPlus, Crown, Shield, User, Loader2, Eye, Users as TeamIcon } from "lucide-react";
 import { getOrganizationMembers, getPendingInvitations, inviteUser } from "@/app/actions/invitations";
 import { assignUserRole } from "@/app/actions/permissions";
 import type { OrganizationMember } from "@/ddd/domain/organizations/entities/organization";
+import { SYSTEM_ROLES, type SystemRoleType } from "@/ddd/domain/rbac/entities/role";
 
 
+// DTO for UI layer - converts domain Invitation to UI-friendly format
 interface PendingInvitation {
-  id: { value: number };
-  email: { value?: string } | string;
-  role: { value?: string } | string;
+  id: number; // invitationId.value
+  email: string; // email.value
+  systemRole: SystemRoleType; // Updated to use RBAC system role
   expiresAt?: Date;
 }
 
@@ -25,7 +27,7 @@ interface OrganizationMemberDTO {
   id: string; // userId.value  
   name: string;
   email: string;
-  role: string;
+  systemRole: SystemRoleType;
   teams?: string[];
   lastActive?: Date;
 }
@@ -35,7 +37,7 @@ export function UsersTab() {
   const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("member");
+  const [inviteRole, setInviteRole] = useState<SystemRoleType>(SYSTEM_ROLES.MEMBER);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
 
@@ -68,13 +70,13 @@ export function UsersTab() {
     try {
       const formData = new FormData();
       formData.append("email", inviteEmail);
-      formData.append("role", inviteRole);
+      formData.append("systemRole", inviteRole);
       
       const result = await inviteUser(formData);
       
       if (result.success) {
         setInviteEmail("");
-        setInviteRole("member");
+        setInviteRole(SYSTEM_ROLES.MEMBER);
         await loadData(); // Refresh data
       } else {
         console.error("Failed to invite user:", result.error);
@@ -86,7 +88,7 @@ export function UsersTab() {
     }
   };
 
-  const handleRoleChange = async (userId: string, newRole: string) => {
+  const handleRoleChange = async (userId: string, newRole: SystemRoleType) => {
     setRoleUpdating(userId);
     try {
       const result = await assignUserRole(userId, newRole as any);
@@ -102,25 +104,37 @@ export function UsersTab() {
     }
   };
 
-  const getRoleIcon = (role: string) => {
+  const getRoleIcon = (role: SystemRoleType) => {
     switch (role) {
-      case 'owner':
+      case SYSTEM_ROLES.ORGANIZATION_OWNER:
         return <Crown className="w-4 h-4" />;
-      case 'admin':
+      case SYSTEM_ROLES.ORGANIZATION_ADMIN:
         return <Shield className="w-4 h-4" />;
+      case SYSTEM_ROLES.TEAM_LEAD:
+        return <TeamIcon className="w-4 h-4" />;
+      case SYSTEM_ROLES.MEMBER:
+        return <User className="w-4 h-4" />;
+      case SYSTEM_ROLES.VIEWER:
+        return <Eye className="w-4 h-4" />;
       default:
         return <User className="w-4 h-4" />;
     }
   };
 
-  const getRoleBadgeVariant = (role: string) => {
+  const getRoleBadgeVariant = (role: SystemRoleType) => {
     switch (role) {
-      case 'owner':
-        return 'default';
-      case 'admin':
-        return 'secondary';
+      case SYSTEM_ROLES.ORGANIZATION_OWNER:
+        return 'default' as const;
+      case SYSTEM_ROLES.ORGANIZATION_ADMIN:
+        return 'secondary' as const;
+      case SYSTEM_ROLES.TEAM_LEAD:
+        return 'destructive' as const;
+      case SYSTEM_ROLES.MEMBER:
+        return 'outline' as const;
+      case SYSTEM_ROLES.VIEWER:
+        return 'secondary' as const;
       default:
-        return 'outline';
+        return 'outline' as const;
     }
   };
 
@@ -153,14 +167,16 @@ export function UsersTab() {
               required
               className="flex-1"
             />
-            <Select value={inviteRole} onValueChange={setInviteRole}>
+            <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as SystemRoleType)}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Select a role" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="member">Member</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="owner">Owner</SelectItem>
+                <SelectItem value={SYSTEM_ROLES.VIEWER}>Viewer</SelectItem>
+                <SelectItem value={SYSTEM_ROLES.MEMBER}>Member</SelectItem>
+                <SelectItem value={SYSTEM_ROLES.TEAM_LEAD}>Team Lead</SelectItem>
+                <SelectItem value={SYSTEM_ROLES.ORGANIZATION_ADMIN}>Organization Admin</SelectItem>
+                <SelectItem value={SYSTEM_ROLES.ORGANIZATION_OWNER}>Organization Owner</SelectItem>
               </SelectContent>
             </Select>
             <Button type="submit" disabled={inviteLoading || !inviteEmail.trim()}>
@@ -205,9 +221,9 @@ export function UsersTab() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={getRoleBadgeVariant(member.role)} className="flex items-center gap-1 w-fit">
-                        {getRoleIcon(member.role)}
-                        {member.role}
+                      <Badge variant={getRoleBadgeVariant(member.systemRole)} className="flex items-center gap-1 w-fit">
+                        {getRoleIcon(member.systemRole)}
+                        {member.systemRole}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -228,17 +244,19 @@ export function UsersTab() {
                     </TableCell>
                     <TableCell>
                       <Select
-                        value={member.role}
-                        onValueChange={(newRole) => handleRoleChange(member.id, newRole)}
+                        value={member.systemRole}
+                        onValueChange={(newRole) => handleRoleChange(member.id, newRole as SystemRoleType)}
                         disabled={roleUpdating === member.id}
                       >
-                        <SelectTrigger className="w-[120px]">
+                        <SelectTrigger className="w-[140px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="member">Member</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="owner">Owner</SelectItem>
+                          <SelectItem value={SYSTEM_ROLES.VIEWER}>Viewer</SelectItem>
+                          <SelectItem value={SYSTEM_ROLES.MEMBER}>Member</SelectItem>
+                          <SelectItem value={SYSTEM_ROLES.TEAM_LEAD}>Team Lead</SelectItem>
+                          <SelectItem value={SYSTEM_ROLES.ORGANIZATION_ADMIN}>Organization Admin</SelectItem>
+                          <SelectItem value={SYSTEM_ROLES.ORGANIZATION_OWNER}>Organization Owner</SelectItem>
                         </SelectContent>
                       </Select>
                       {roleUpdating === member.id && (
@@ -262,17 +280,13 @@ export function UsersTab() {
           <CardContent>
             <div className="space-y-3">
               {pendingInvitations.map((invitation) => (
-                <div key={invitation.id.value} className="flex items-center justify-between p-3 border rounded-lg">
+                <div key={invitation.id} className="flex items-center justify-between p-3 border rounded-lg">
                   <div>
                     <p className="font-medium">
-                      {typeof invitation.email === 'string' 
-                        ? invitation.email 
-                        : invitation.email?.value || 'Unknown email'}
+                      {invitation.email}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      Role: {typeof invitation.role === 'string' 
-                        ? invitation.role 
-                        : invitation.role?.value || 'member'}
+                      Role: {invitation.systemRole || 'Member'}
                     </p>
                   </div>
                   <Badge variant="outline">Pending</Badge>

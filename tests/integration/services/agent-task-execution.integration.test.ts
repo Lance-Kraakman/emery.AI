@@ -30,7 +30,7 @@ import { initializeTestDI } from '../shared/test-setup';
 // Tests actual gRPC communication and task lifecycle management
 
 interface CreateAndExecuteTaskTestInput {
-  agentId: number;
+  agentId: AgentId;
   name: string;
   instructions: string;
   tools: { name: string }[];
@@ -51,7 +51,7 @@ function createTaskExecutionTestCases(testAgentId: AgentId): TestCase<CreateAndE
     {
       name: 'should execute simple python calculation',
       input: {
-        agentId: testAgentId.value,
+        agentId: testAgentId,
         name: 'Simple Python Calculation',
         instructions: 'Calculate 2 + 2 using python and return the result',
         tools: [{ name: 'python_repl' }],
@@ -63,7 +63,7 @@ function createTaskExecutionTestCases(testAgentId: AgentId): TestCase<CreateAndE
     {
       name: 'should execute calculator operation',
       input: {
-        agentId: testAgentId.value,
+        agentId: testAgentId,
         name: 'Calculator Test',
         instructions: 'Use the calculator to compute 5 * 3',
         tools: [{ name: 'calculator' }],
@@ -75,7 +75,7 @@ function createTaskExecutionTestCases(testAgentId: AgentId): TestCase<CreateAndE
     {
       name: 'should execute mathematical expression',
       input: {
-        agentId: testAgentId.value,
+        agentId: testAgentId,
         name: 'Math Expression Test',
         instructions: 'Calculate the square root of 16',
         tools: [{ name: 'calculator' }],
@@ -194,8 +194,8 @@ describe('Agent Task Execution Integration Tests', () => {
       const agentTaskService = getAgentTaskApplicationService();
       
       const createRequest: CreateTaskRequest = {
-        agentId: testAgentId.value,
-        organizationId: testContext.organizationId.value,
+        agentId: testAgentId,
+        organizationId: testContext.organizationId,
         name: 'Creation Test Task',
         instructions: {
           instructions: 'Test task creation without execution',
@@ -225,8 +225,8 @@ describe('Agent Task Execution Integration Tests', () => {
       
       // First create a task
       const createRequest: CreateTaskRequest = {
-        agentId: testAgentId.value,
-        organizationId: testContext.organizationId.value,
+        agentId: testAgentId,
+        organizationId: testContext.organizationId,
         name: 'Individual Execution Test',
         instructions: {
           instructions: 'Calculate 3 + 5 using python',
@@ -282,14 +282,14 @@ describe('Agent Task Execution Integration Tests', () => {
         
         const createRequest: CreateTaskRequest = {
           agentId: testCase.input.agentId,
-          organizationId: testContext.organizationId.value,
+          organizationId: testContext.organizationId,
           name: testCase.input.name,
           instructions: {
             instructions: testCase.input.instructions,
             tools: testCase.input.tools,
             servers: testCase.input.servers
           },
-          createdBy: testContext.ownerUserId.value
+          createdBy: testContext.ownerUserId
         };
 
         try {
@@ -347,8 +347,8 @@ describe('Agent Task Execution Integration Tests', () => {
       
       for (const name of taskNames) {
         const task = await agentTaskService.createTask({
-          agentId: testAgentId.value,
-          organizationId: testContext.organizationId.value,
+          agentId: testAgentId,
+          organizationId: testContext.organizationId,
           name,
           instructions: {
             instructions: `Task instructions for ${name}`,
@@ -388,8 +388,8 @@ describe('Agent Task Execution Integration Tests', () => {
       
       // Create a task
       const task = await agentTaskService.createTask({
-        agentId: testAgentId.value,
-        organizationId: testContext.organizationId.value,
+        agentId: testAgentId,
+        organizationId: testContext.organizationId,
         name: 'Cancellation Test Task',
         instructions: {
           instructions: 'This task will be cancelled',
@@ -494,8 +494,8 @@ describe('Agent Task Execution Integration Tests', () => {
       
       // Create tasks in both organizations
       const task1 = await agentTaskService.createTask({
-        agentId: testAgentId.value,
-        organizationId: testContext.organizationId.value,
+        agentId: testAgentId,
+        organizationId: testContext.organizationId,
         name: 'Org 1 Task',
         instructions: {
           instructions: 'Task in organization 1',
@@ -505,8 +505,8 @@ describe('Agent Task Execution Integration Tests', () => {
       });
       
       const task2 = await agentTaskService.createTask({
-        agentId: agent2Id.value,
-        organizationId: org2Context.organizationId.value,
+        agentId: agent2Id,
+        organizationId: org2Context.organizationId,
         name: 'Org 2 Task',
         instructions: {
           instructions: 'Task in organization 2',
