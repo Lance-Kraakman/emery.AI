@@ -1,0 +1,236 @@
+[
+  {
+    "clientId": "HCC001",
+    "name": "Margaret Thompson",
+    "age": 78,
+    "dateOfBirth": "1946-03-15",
+    "gender": "Female",
+    "address": {
+      "street": "45 Rosewood Avenue",
+      "suburb": "Brighton",
+      "state": "VIC",
+      "postcode": "3186",
+      "country": "Australia"
+    },
+    "contactDetails": {
+      "phone": "03 9555 1234",
+      "mobile": "0412 345 678",
+      "email": "margaret.thompson@email.com"
+    },
+    "emergencyContact": {
+      "name": "Sarah Thompson",
+      "relationship": "Daughter",
+      "phone": "0423 456 789",
+      "address": "12 Oak Street, Richmond, VIC 3121"
+    },
+    "healthInformation": {
+      "medicalConditions": [
+        "Type 2 Diabetes",
+        "Hypertension",
+        "Mild Dementia",
+        "Osteoarthritis"
+      ],
+      "medications": [
+        {
+          "name": "Metformin",
+          "dosage": "500mg",
+          "frequency": "Twice daily"
+        },
+        {
+          "name": "Amlodipine",
+          "dosage": "5mg",
+          "frequency": "Once daily"
+        },
+        {
+          "name": "Donepezil",
+          "dosage": "10mg",
+          "frequency": "Once daily"
+        }
+      ],
+      "allergies": ["Penicillin"],
+      "mobilityStatus": "Uses walking frame",
+      "cognitiveStatus": "Mild cognitive impairment",
+      "dietaryRequirements": "Diabetic diet, low sodium"
+    },
+    "careRequirements": {
+      "currentLivingSituation": "Living alone at home with home care package",
+      "careLevel": "Level 3",
+      "assistanceNeeded": [
+        "Personal care",
+        "Medication management",
+        "Meal preparation",
+        "Light housekeeping",
+        "Transportation"
+      ],
+      "preferredCareType": "Residential aged care",
+      "urgency": "High - safety concerns at home"
+    },
+    "preferences": {
+      "preferredLocation": "Within 10km of Brighton",
+      "religiousAffiliation": "Anglican",
+      "culturalRequirements": "English speaking environment",
+      "socialPreferences": "Enjoys reading, gardening, classical music",
+      "roomPreference": "Single room with ensuite"
+    },
+    "financial": {
+      "pensionStatus": "Age Pension",
+      "assetsValue": 450000,
+      "incomePerWeek": 550,
+      "fundingType": "Supported Resident",
+      "accommodationPayment": "RAD - Refundable Accommodation Deposit"
+    }
+  },
+  {
+    "clientId": "HCC002",
+    "name": "Robert and Joan Wilson",
+    "coupleAssessment": true,
+    "clients": [
+      {
+        "name": "Robert Wilson",
+        "age": 82,
+        "dateOfBirth": "1942-07-22",
+        "gender": "Male",
+        "healthInformation": {
+          "medicalConditions": ["Parkinson's Disease", "Depression"],
+          "medications": [
+            {
+              "name": "Levodopa/Carbidopa",
+              "dosage": "25/100mg",
+              "frequency": "Three times daily"
+            }
+          ],
+          "mobilityStatus": "Wheelchair bound",
+          "cognitiveStatus": "Intact"
+        }
+      },
+      {
+        "name": "Joan Wilson",
+        "age": 79,
+        "dateOfBirth": "1945-11-08",
+        "gender": "Female",
+        "healthInformation": {
+          "medicalConditions": ["Cardiovascular disease", "Hearing loss"],
+          "medications": [
+            {
+              "name": "Warfarin",
+              "dosage": "5mg",
+              "frequency": "Once daily"
+            }
+          ],
+          "mobilityStatus": "Ambulant with walking stick",
+          "cognitiveStatus": "Intact"
+        }
+      }
+    ],
+    "address": {
+      "street": "78 Elm Grove",
+      "suburb": "Camberwell",
+      "state": "VIC",
+      "postcode": "3124",
+      "country": "Australia"
+    },
+    "contactDetails": {
+      "phone": "03 9882 5566",
+      "mobile": "0401 234 567"
+    },
+    "emergencyContact": {
+      "name": "Michael Wilson",
+      "relationship": "Son",
+      "phone": "0433 567 890",
+      "address": "156 High Street, Kew, VIC 3101"
+    },
+    "careRequirements": {
+      "currentLivingSituation": "Living together at home with comprehensive home care",
+      "careLevel": "Level 4 (Robert), Level 2 (Joan)",
+      "preferredCareType": "Residential aged care - together",
+      "urgency": "Moderate - declining health"
+    },
+    "preferences": {
+      "preferredLocation": "Eastern suburbs Melbourne",
+      "religiousAffiliation": "Catholic",
+      "roomPreference": "Shared room or adjacent rooms",
+      "specialRequirements": "Must remain together"
+    },
+    "financial": {
+      "pensionStatus": "Age Pension (both)",
+      "assetsValue": 680000,
+      "incomePerWeek": 1100,
+      "fundingType": "Part Pensioner",
+      "accommodationPayment": "Combination RAD and DAP"
+    }
+  },
+  {
+    "clientId": "HCC003",
+    "name": "William Chen",
+    "age": 71,
+    "dateOfBirth": "1953-09-12",
+    "gender": "Male",
+    "address": {
+      "street": "23 Garden Court",
+      "suburb": "Box Hill",
+      "state": "VIC",
+      "postcode": "3128",
+      "country": "Australia"
+    },
+    "contactDetails": {
+      "phone": "03 9890 7788",
+      "mobile": "0467 123 456",
+      "email": "william.chen@email.com"
+    },
+    "emergencyContact": {
+      "name": "Lisa Chen",
+      "relationship": "Daughter",
+      "phone": "0404 987 654",
+      "address": "67 Burke Road, Glen Iris, VIC 3146"
+    },
+    "healthInformation": {
+      "medicalConditions": [
+        "Early-stage dementia",
+        "High cholesterol",
+        "Prostate enlargement"
+      ],
+      "medications": [
+        {
+          "name": "Memantine",
+          "dosage": "10mg",
+          "frequency": "Twice daily"
+        },
+        {
+          "name": "Atorvastatin",
+          "dosage": "20mg",
+          "frequency": "Once daily"
+        }
+      ],
+      "allergies": ["Shellfish"],
+      "mobilityStatus": "Independent with occasional falls",
+      "cognitiveStatus": "Early dementia - requires supervision",
+      "dietaryRequirements": "Low cholesterol, Chinese cuisine preferred"
+    },
+    "careRequirements": {
+      "currentLivingSituation": "Recently widowed, living alone",
+      "careLevel": "Assessment pending",
+      "assistanceNeeded": [
+        "Medication reminders",
+        "Safety supervision",
+        "Social interaction",
+        "Meal assistance"
+      ],
+      "preferredCareType": "Initially home care, potentially residential care",
+      "urgency": "Low to moderate - planning ahead"
+    },
+    "preferences": {
+      "preferredLocation": "Eastern suburbs, multicultural environment",
+      "religiousAffiliation": "Buddhist",
+      "culturalRequirements": "Chinese-speaking staff preferred",
+      "socialPreferences": "Enjoys tai chi, mahjong, reading Chinese literature",
+      "roomPreference": "Single room, quiet environment"
+    },
+    "financial": {
+      "pensionStatus": "Full Age Pension",
+      "assetsValue": 320000,
+      "incomePerWeek": 480,
+      "fundingType": "Supported Resident",
+      "accommodationPayment": "DAP - Daily Accommodation Payment"
+    }
+  }
+]

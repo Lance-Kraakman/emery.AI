@@ -22,13 +22,15 @@ class ToolRegistryRepository(IToolRegistryRepository):
         from .....execution.tools.mock_data_tools import DATA_TOOLS
         from .....execution.tools.organizational_tools import ORGANIZATIONAL_TOOLS
         from .....execution.tools.api_tools import API_TOOLS
+        from .....execution.tools.healthcare_tools import HEALTHCARE_TOOLS
         
         self._tool_registry = {
             **BASE_TOOLS,
             **EMAIL_TOOLS,
             **DATA_TOOLS,
             **ORGANIZATIONAL_TOOLS,
-            **API_TOOLS
+            **API_TOOLS,
+            **HEALTHCARE_TOOLS
         }
     
     def load_tool(self, tool_config: ToolConfig) -> Any:

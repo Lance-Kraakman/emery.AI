@@ -414,5 +414,113 @@
     },
     "capabilityName": "context_adaptive_framework_design",
     "status": "pending"
+  },
+  {
+    "id": "task_healthcare_001",
+    "agentId": 8,
+    "name": "Generate Residential Aged Care Report",
+    "instructions": {
+      "instructions": "Generate a comprehensive residential aged care placement report for Margaret Thompson (Client ID: HCC001). First, read the client data from /Users/lancekraakman/orchastrate/emery-agents/tests/fixtures/healthcare_data.json to get Margaret's complete information. Then generate a detailed professional report and save it to /Users/lancekraakman/orchastrate/emery-agents/outputs/healthcare_reports/aged_care/ using filename format: Margaret_Thompson_aged_care_report_YYYYMMDD.md",
+      "tools": [{"name": "file_reader"}, {"name": "document_generator"}, {"name": "file_writer"}],
+      "context": {
+        "client_data_path": "/Users/lancekraakman/orchastrate/emery-agents/tests/fixtures/healthcare_data.json",
+        "client_id": "HCC001",
+        "template_path": "/Users/lancekraakman/orchastrate/emery-agents/tests/fixtures/drcare_templates/aged_care_template.json",
+        "assessment_focus": "High urgency placement due to safety concerns at home",
+        "report_requirements": {
+          "include_facility_matching": true,
+          "financial_assessment": true,
+          "implementation_timeline": true,
+          "care_level_recommendation": "Level 3 or higher"
+        }
+      }
+    },
+    "capabilityName": "residential_aged_care_report",
+    "status": "pending"
+  },
+  {
+    "id": "task_healthcare_002", 
+    "agentId": 8,
+    "name": "Create Life Plan Report",
+    "instructions": {
+      "instructions": "Create a comprehensive life plan report for Robert and Joan Wilson (Client ID: HCC002). First, read their client data from the healthcare_data.json file to understand their current health status, care levels, and couple preferences. Then develop a detailed long-term strategy for healthcare, accommodation, and financial planning that keeps them together as they age.",
+      "tools": [{"name": "file_reader"}, {"name": "document_generator"}, {"name": "file_writer"}],
+      "context": {
+        "client_data_path": "/Users/lancekraakman/orchastrate/emery-agents/tests/fixtures/healthcare_data.json",
+        "client_id": "HCC002",
+        "template_path": "/Users/lancekraakman/orchastrate/emery-agents/tests/fixtures/drcare_templates/life_plan_template.json",
+        "planning_focus": "Couple planning with different care levels",
+        "report_requirements": {
+          "financial_projection_years": 10,
+          "accommodation_options": "Together preference priority",
+          "healthcare_pathway": "Progressive care planning",
+          "contingency_scenarios": true
+        }
+      }
+    },
+    "capabilityName": "life_plan_report",
+    "status": "pending"
+  },
+  {
+    "id": "task_healthcare_003",
+    "agentId": 8,
+    "name": "Produce Executive Summary Report",
+    "instructions": {
+      "instructions": "Create a concise executive summary report for William Chen (Client ID: HCC003). First, read his client data from the healthcare_data.json file to understand his recently widowed situation, early-stage dementia, and cultural preferences. Then create a focused executive summary highlighting key decisions needed and immediate actions required for his proactive planning while cognitive function allows.",
+      "tools": [{"name": "file_reader"}, {"name": "document_generator"}, {"name": "file_writer"}],
+      "context": {
+        "client_data_path": "/Users/lancekraakman/orchastrate/emery-agents/tests/fixtures/healthcare_data.json",
+        "client_id": "HCC003",
+        "template_path": "/Users/lancekraakman/orchastrate/emery-agents/tests/fixtures/drcare_templates/executive_summary_template.json",
+        "summary_focus": "Planning ahead while cognitive function allows",
+        "report_requirements": {
+          "word_limit_enforcement": true,
+          "decision_timeline": "6-month planning window",
+          "cultural_considerations": "Chinese cultural preferences",
+          "urgency_level": "Moderate - proactive planning"
+        }
+      }
+    },
+    "capabilityName": "executive_summary_report", 
+    "status": "pending"
+  },
+  {
+    "id": "task_healthcare_004",
+    "agentId": 8,
+    "name": "Complete Healthcare Documentation Workflow",
+    "instructions": {
+      "instructions": "Execute a complete healthcare documentation workflow: generate an aged care report for Margaret Thompson, create a life plan for the Wilson couple, and produce an executive summary for William Chen. This tests the full range of DRCare report capabilities in sequence.",
+      "tools": [{"name": "file_reader"}, {"name": "document_generator"}],
+      "context": {
+        "workflow_sequence": [
+          {
+            "step": 1,
+            "task": "aged_care_report",
+            "client_id": "HCC001",
+            "priority": "High urgency placement"
+          },
+          {
+            "step": 2,
+            "task": "life_plan_report", 
+            "client_id": "HCC002",
+            "priority": "Couple planning coordination"
+          },
+          {
+            "step": 3,
+            "task": "executive_summary",
+            "client_id": "HCC003",
+            "priority": "Proactive planning"
+          }
+        ],
+        "quality_requirements": {
+          "professional_formatting": true,
+          "compliance_standards": "Healthcare documentation guidelines",
+          "confidentiality": "Patient privacy maintained",
+          "completeness": "All sections must be populated"
+        }
+      }
+    },
+    "capabilityName": "residential_aged_care_report",
+    "status": "pending"
   }
 ]
