@@ -16,7 +16,7 @@ import type {
   UpdateDatabaseCommand,
   DatabaseFilters
 } from "@/ddd/application/services/database/database-application-service"
-import { UserId, DatabaseId } from "@/ddd/domain/shared/value-objects"
+import { UserId, DatabaseId, OrganizationId } from "@/ddd/domain/shared/value-objects"
 import { DatabaseMapper, type DatabaseDTO } from "@/app/mappers/database-mapper"
 
 const createDatabaseSchema = z.object({
@@ -33,26 +33,24 @@ const updateDatabaseSchema = z.object({
 })
 
 export async function getDatabases(searchQuery?: string, hasTables?: boolean): Promise<DatabaseDTO[]> {
-  return withAuthContext(async () => {
-    try {
-      const session = await requirePermission("data:view");
-      const currentOrg = await requireCurrentOrganization();
-      
-      const databaseApplicationService = getDatabaseApplicationService();
-      
-      const filters: DatabaseFilters = {
-        organizationId: currentOrg.id,
-        searchQuery,
-        hasTables
-      };
-      
-      const databases = await databaseApplicationService.getDatabases(filters);
-      return databases.map(DatabaseMapper.toDTO);
-    } catch (error) {
-      console.error('Error fetching databases:', error)
-      throw new Error('Failed to fetch databases')
-    }
-  });
+  try {
+    const session = await requirePermission("data:view");
+    const currentOrg = await requireCurrentOrganization();
+    
+    const databaseApplicationService = getDatabaseApplicationService();
+    
+    const filters: DatabaseFilters = {
+      organizationId: OrganizationId.fromNumber(currentOrg.id),
+      searchQuery,
+      hasTables
+    };
+    
+    const databases = await databaseApplicationService.getDatabases(filters);
+    return databases.map(DatabaseMapper.toDTO);
+  } catch (error) {
+    console.error('Error fetching databases:', error)
+    throw new Error('Failed to fetch databases')
+  }
 }
 
 export async function getDatabase(id: number): Promise<DatabaseDTO> {
@@ -90,7 +88,7 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
       name: validatedData.name,
       description: validatedData.description,
       metadata: validatedData.metadata,
-      organizationId: currentOrg.id,
+      organizationId: OrganizationId.fromNumber(currentOrg.id),
       createdBy: UserId.fromString(session.user.id)
     };
 
@@ -215,7 +213,7 @@ export async function deleteDatabase(id: number, revalidateUrl?: string): Promis
     }
     
     const databaseApplicationService = getDatabaseApplicationService();
-    const result = await databaseApplicationService.deleteDatabase(DatabaseId.fromNumber(id), currentOrg.id);
+    const result = await databaseApplicationService.deleteDatabase(DatabaseId.fromNumber(id), OrganizationId.fromNumber(currentOrg.id));
 
     if (!result.success) {
       return {
@@ -253,7 +251,7 @@ export async function getDatabaseCount() {
     const currentOrg = await requireCurrentOrganization();
     
     const databaseApplicationService = getDatabaseApplicationService();
-    return await databaseApplicationService.getDatabaseCount(currentOrg.id);
+    return await databaseApplicationService.getDatabaseCount(OrganizationId.fromNumber(currentOrg.id));
   } catch (error) {
     console.error('Error fetching database count:', error);
     throw new Error('Failed to fetch database count');

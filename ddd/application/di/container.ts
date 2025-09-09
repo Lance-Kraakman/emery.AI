@@ -204,26 +204,26 @@ export class DIContainer {
 
     // Register other repository implementations
     this.repositories.set('IOrganizationRepository', 
-      new DrizzleOrganizationRepository(db));
+      new DrizzleOrganizationRepository(contextAwareDb));
     this.repositories.set('IUserRepository', 
-      new DrizzleUserRepository(db));
+      new DrizzleUserRepository(contextAwareDb));
 
     // Register team and invitation repositories
-    const teamRepository = new DrizzleTeamRepository(db);
-    const invitationRepository = new DrizzleInvitationRepository(db);
+    const teamRepository = new DrizzleTeamRepository(contextAwareDb);
+    const invitationRepository = new DrizzleInvitationRepository(contextAwareDb);
     this.repositories.set('ITeamRepository', teamRepository);
     this.repositories.set('IInvitationRepository', invitationRepository);
     
-    // Register RBAC repository
-    const rbacRepository = new DrizzleRBACRepository(db);
+    // Register RBAC repository - use contextAwareDb for RLS support
+    const rbacRepository = new DrizzleRBACRepository(contextAwareDb);
     this.repositories.set('IRBACRepository', rbacRepository);
     
     // Register database repository
-    const databaseRepository = new DrizzleDatabaseRepository(db);
+    const databaseRepository = new DrizzleDatabaseRepository(contextAwareDb);
     this.repositories.set('IDatabaseRepository', databaseRepository);
 
     // Register agent domain repositories and services  
-    const agentRepository = new DrizzleAgentRepository(db);
+    const agentRepository = new DrizzleAgentRepository(contextAwareDb);
     const taskRepository = new DrizzleTaskRepository(contextAwareDb);
     const agentExecutionRepository = new GrpcAgentExecutionRepository(agentRepository);
     const agentTaskApplicationService = new AgentTaskApplicationService(
@@ -244,9 +244,9 @@ export class DIContainer {
     // Create simplified Arrow data storage service
     const arrowDataStorageService = new ArrowDataStorageService();
         
-    // Create table repository with data storage service using raw DB client
+    // Create table repository with data storage service using context-aware DB client
     const tableRepository = new DynamicTableRepository(
-      db,
+      contextAwareDb,
       arrowDataStorageService,
       tableQueryService
     );
@@ -306,8 +306,8 @@ export class DIContainer {
     );
     
     // Register chat repositories
-    const chatRepository = new DrizzleChatRepository(db);
-    const chatMessageRepository = new DrizzleChatMessageRepository(db);
+    const chatRepository = new DrizzleChatRepository(contextAwareDb);
+    const chatMessageRepository = new DrizzleChatMessageRepository(contextAwareDb);
     this.repositories.set('IChatRepository', chatRepository);
     this.repositories.set('IChatMessageRepository', chatMessageRepository);
     
@@ -324,9 +324,9 @@ export class DIContainer {
     this.repositories.set('ChatApplicationService', chatApplicationService);
 
     // Initialize RAG domain repositories
-    const ragIndexRepository = new DrizzleRagIndexRepository(db);
-    const ragDocumentRepository = new DrizzleRagDocumentRepository(db);
-    const ragQueryLogRepository = new DrizzleRagQueryLogRepository(db);
+    const ragIndexRepository = new DrizzleRagIndexRepository(contextAwareDb);
+    const ragDocumentRepository = new DrizzleRagDocumentRepository(contextAwareDb);
+    const ragQueryLogRepository = new DrizzleRagQueryLogRepository(contextAwareDb);
     this.repositories.set('IRagIndexRepository', ragIndexRepository);
     this.repositories.set('IRagDocumentRepository', ragDocumentRepository);
     this.repositories.set('IRagQueryLogRepository', ragQueryLogRepository);

@@ -144,7 +144,7 @@ export async function createAgentAction(formData: FormData): Promise<Result> {
 
     const result = await createAgentFromClient({ 
       ...validatedData,
-      organizationId: currentOrg.id.value,
+      organizationId: currentOrg.id,
       tools, 
       servers,
       status: 'active' // Use plain string - will be converted to AgentStatus
@@ -168,7 +168,7 @@ export async function getAgents(filters: { teamId?: number | string, searchQuery
     const agentApplicationService = getAgentApplicationService();
     
     const agentFilters: AgentFilters = {
-      organizationId: currentOrg.id,
+      organizationId: OrganizationId.fromNumber(currentOrg.id),
       teamId: filters.teamId,
       searchQuery: filters.searchQuery,
       status: filters.status

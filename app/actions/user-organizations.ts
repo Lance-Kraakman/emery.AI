@@ -10,6 +10,8 @@ import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
 import { SystemRoleType, SYSTEM_ROLES } from "@/ddd/domain/rbac/entities/role";
+import { contextManager } from '@/lib/db/context-manager';
+import { OrganizationMapper, type OrganizationDTO } from "@/app/mappers/organization-mapper";
 
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
@@ -212,7 +214,7 @@ export async function getUserOrganizations() {
   });
 }
 
-export async function getCurrentOrganization() {
+export async function getCurrentOrganization(): Promise<OrganizationDTO | null> {
   try {
     // FIXED: Cannot use requirePermission here as it causes circular dependency with requireCurrentOrganization
     const session = await requireAuth();
@@ -242,11 +244,12 @@ export async function getCurrentOrganization() {
     console.error(`⚠️ No role found for user ${session.user.id} in current organization ${session.user.currentOrganizationId}. This indicates a data integrity issue.`);
   }
 
-  return {
+  // Convert to DTO to avoid serialization issues with Value Objects
+  return OrganizationMapper.toDTO({
     ...organization,
     userRole: userRole || "Error loading role", // Show error message instead of crashing
     hasRoleError: !userRole // Flag to indicate role loading error
-  };
+  });
   } catch (error) {
     console.error("Error fetching current organization:", error);
     return null;
@@ -255,6 +258,20 @@ export async function getCurrentOrganization() {
 
 // AIDEV-NOTE: Helper function to check if user has access to current organization context
 export async function requireCurrentOrganization() {
+  const session = await requireAuth();
+  
+  // Set RLS context for subsequent database operations
+  if (session.user.id && session.user.currentOrganizationId) {
+    contextManager.setContext(
+      OrganizationId.fromNumber(session.user.currentOrganizationId),
+      UserId.fromString(session.user.id)
+    );
+    console.log("✅ requireCurrentOrganization() - RLS context set:", {
+      userId: session.user.id,
+      organizationId: session.user.currentOrganizationId
+    });
+  }
+  
   const org = await getCurrentOrganization();
   if (!org) {
     throw new Error("No current organization selected");
@@ -383,7 +400,7 @@ export async function getOrganizationMembers(organizationId?: number, searchQuer
     const userOrganizationApplicationService = getUserRoleApplicationService();
     
     const filters: OrganizationMemberFilters = {
-      organizationId: organizationId || currentOrg.id.value,
+      organizationId: organizationId || currentOrg.id,
       searchQuery,
       systemRole,
       includeUserDetails: true

@@ -31,7 +31,7 @@ export async function inviteUser(formData: FormData): Promise<Result> {
     const invitationApplicationService = getInvitationApplicationService();
     
     const command: SendInvitationCommand = {
-      organizationId: currentOrg.id.value,
+      organizationId: currentOrg.id,
       invitedBy: session.user.id,
       email,
       systemRole: systemRole as SystemRoleType,
@@ -120,7 +120,7 @@ export async function getOrganizationMembers(): Promise<Array<{id: string, name:
     
     const userOrganizationApplicationService = getUserRoleApplicationService();
     const members = await userOrganizationApplicationService.getOrganizationMembers({
-      organizationId: currentOrg.id.value
+      organizationId: currentOrg.id
     });
     
     // Convert domain objects to DTOs for UI
@@ -142,7 +142,7 @@ export async function getPendingInvitations(): Promise<Array<{id: number, email:
     const currentOrg = await requireCurrentOrganization();
     
     const invitationApplicationService = getInvitationApplicationService();
-    const invitations = await invitationApplicationService.getPendingInvitations(currentOrg.id.value);
+    const invitations = await invitationApplicationService.getPendingInvitations(currentOrg.id);
     
     // Convert domain objects to DTOs for UI
     return invitations.map(invitation => ({
@@ -243,7 +243,7 @@ export async function getInvitationStats() {
     const currentOrg = await requireCurrentOrganization();
     
     const invitationApplicationService = getInvitationApplicationService();
-    return await invitationApplicationService.getInvitationStats(currentOrg.id.value);
+    return await invitationApplicationService.getInvitationStats(currentOrg.id);
   } catch (error) {
     console.error("Error fetching invitation stats:", error);
     throw new Error("Failed to fetch invitation stats");
@@ -259,7 +259,7 @@ export async function cleanupExpiredInvitations(): Promise<Result> {
     const currentOrg = await requireCurrentOrganization();
     
     const invitationApplicationService = getInvitationApplicationService();
-    const result = await invitationApplicationService.cleanupExpiredInvitations(currentOrg.id.value);
+    const result = await invitationApplicationService.cleanupExpiredInvitations(currentOrg.id);
 
     if (!result.success) {
       return {
