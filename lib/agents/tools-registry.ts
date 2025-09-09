@@ -530,7 +530,7 @@ export function getRequiredOAuthServices(): string[] {
   ));
 }
 
-import { NormalizedConnection } from '@/lib/pipedream/connection-mapper';
+import { ConnectionDTO } from '@/app/mappers/connection-mapper';
 
 /**
  * Check if a tool is available for a user based on their OAuth connections.
@@ -540,7 +540,7 @@ import { NormalizedConnection } from '@/lib/pipedream/connection-mapper';
  * @param userConnections - An array of the user's normalized connection objects.
  * @returns True if the tool is available, false otherwise.
  */
-export function isToolAvailableForUser(toolName: string, userConnections: NormalizedConnection[]): boolean {
+export function isToolAvailableForUser(toolName: string, userConnections: ConnectionDTO[]): boolean {
   const tool = getToolByName(toolName);
   if (!tool) {
     return false;
@@ -569,7 +569,7 @@ export function isToolAvailableForUser(toolName: string, userConnections: Normal
  * @param userConnections - An array of the user's normalized connection objects.
  * @returns An array of tool definitions that are available to the user.
  */
-export function getAvailableToolsForUser(userConnections: NormalizedConnection[]): ToolDefinition[] {
+export function getAvailableToolsForUser(userConnections: ConnectionDTO[]): ToolDefinition[] {
   return PREDEFINED_TOOLS.filter(tool => isToolAvailableForUser(tool.name, userConnections));
 }
 
@@ -580,7 +580,7 @@ export function getAvailableToolsForUser(userConnections: NormalizedConnection[]
  * @param userConnections - An array of the user's normalized connection objects.
  * @returns An array of tool definitions that are unavailable to the user.
  */
-export function getUnavailableToolsForUser(userConnections: NormalizedConnection[]): ToolDefinition[] {
+export function getUnavailableToolsForUser(userConnections: ConnectionDTO[]): ToolDefinition[] {
   return PREDEFINED_TOOLS.filter(
     (tool) => tool.requires_auth && !isToolAvailableForUser(tool.name, userConnections)
   );

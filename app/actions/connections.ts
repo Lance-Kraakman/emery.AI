@@ -7,13 +7,14 @@ import { requireAuth } from "./permissions";
 import { getConnectionApplicationService } from "@/ddd/application/di/container";
 import { UserId } from "@/ddd/domain/shared/value-objects";
 import { AppName, ConnectionId } from "@/ddd/domain/connections/value-objects";
+import { ConnectionMapper, type ConnectionDTO } from "@/app/mappers/connection-mapper";
 import type { Result } from "./types";
 
 /**
  * Get user's OAuth connections - replaces getUserOAuthConnections from pipedream.ts
  * Returns connections sorted by most recent first
  */
-export async function getUserOAuthConnections(): Promise<Result> {
+export async function getUserOAuthConnections(): Promise<Result<ConnectionDTO[]>> {
   try {
     const session = await requireAuth();
     const connectionService = getConnectionApplicationService();
@@ -24,13 +25,14 @@ export async function getUserOAuthConnections(): Promise<Result> {
       UserId.fromString(session.user.id)
     );
     
-    if (result.success) {
-      console.log(`[ConnectionActions] Retrieved ${result.data?.length || 0} connections`);
+    if (result.success && result.data) {
+      console.log(`[ConnectionActions] Retrieved ${result.data.length} connections`);
+      const connectionDTOs = ConnectionMapper.toDTOArray(result.data);
+      return { success: true, data: connectionDTOs };
     } else {
       console.error(`[ConnectionActions] Failed to get connections:`, result.error);
+      return { success: false, error: result.error };
     }
-    
-    return result;
   } catch (error: unknown) {
     console.error('[ConnectionActions] Error getting user OAuth connections:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

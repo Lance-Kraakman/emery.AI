@@ -10,12 +10,13 @@ import ScheduleDialog from './ScheduleDialog';
 const localizer = momentLocalizer(moment);
 
 interface ScheduleManagerProps {
-  agentId: number;
+  agentId?: number;  // Optional for creation mode
   initialRRule?: string;
   onScheduleChange: (rrule: string) => void;
+  isCreationMode?: boolean;
 }
 
-const ScheduleManager: React.FC<ScheduleManagerProps> = ({ agentId, initialRRule, onScheduleChange }) => {
+const ScheduleManager: React.FC<ScheduleManagerProps> = ({ agentId, initialRRule, onScheduleChange, isCreationMode = false }) => {
   const [rrule, setRrule] = useState(initialRRule || '');
   const [date, setDate] = useState(new Date());
   const [view, setView] = useState(Views.MONTH);

@@ -165,23 +165,10 @@ export async function leaveOrganization(organizationId: number): Promise<Result>
 export async function getUserOrganizations() {
   return withAuthContext(async () => {
     try {
-      console.log("📋 getUserOrganizations() - Starting to fetch user organizations");
-      
       const session = await requirePermission("users:view");
-      
-      console.log("📋 getUserOrganizations() - Auth successful, fetching organizations for user:", session.user.id);
       
     const userRepository = getUserRepository();
     const organizations = await userRepository.getUserOrganizations(UserId.fromString(session.user.id));
-    
-    console.log("📋 getUserOrganizations() - Found organizations:", {
-      count: organizations.length,
-      organizations: organizations.map(org => ({
-        id: org.id.value,
-        name: org.name.value,
-        slug: org.slug
-      }))
-    });
 
     // Map to expected format and fetch actual roles
     const userRoleApplicationService = getUserRoleApplicationService();
@@ -238,7 +225,7 @@ export async function getCurrentOrganization(): Promise<OrganizationDTO | null> 
     OrganizationId.fromNumber(session.user.currentOrganizationId)
   );
   
-  console.log(`📋 getCurrentOrganization() - User role for org ${session.user.currentOrganizationId}:`, userRole);
+  // AIDEV-NOTE: Role lookup for organization context
   
   if (!userRole) {
     console.error(`⚠️ No role found for user ${session.user.id} in current organization ${session.user.currentOrganizationId}. This indicates a data integrity issue.`);
@@ -266,10 +253,6 @@ export async function requireCurrentOrganization() {
       OrganizationId.fromNumber(session.user.currentOrganizationId),
       UserId.fromString(session.user.id)
     );
-    console.log("✅ requireCurrentOrganization() - RLS context set:", {
-      userId: session.user.id,
-      organizationId: session.user.currentOrganizationId
-    });
   }
   
   const org = await getCurrentOrganization();

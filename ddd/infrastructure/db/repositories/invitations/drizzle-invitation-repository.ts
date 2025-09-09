@@ -403,15 +403,18 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
 
   // Business logic validations
   async canInviteToOrganization(inviterId: UserId, organizationId: OrganizationId): Promise<boolean> {
-    // Check if user has permission to invite users using RBAC system
-    const result = await this.db
-      .select({ 
-        hasPermission: sql<boolean>`user_has_permission(${inviterId.value}, 'users:invite', ${organizationId.value})`
-      })
-      .from(sql`(SELECT 1) as dummy`)
-      .limit(1);
-    
-    return result.length > 0 && result[0].hasPermission;
+    // Check if user has permission to invite users using the RBAC repository directly
+    try {
+      const { getRBACRepository } = await import('@/ddd/application/di/container');
+      const rbacRepository = getRBACRepository();
+      const { Permission } = await import('@/ddd/domain/shared/value-objects/permission');
+      const permission = Permission.fromString('users:invite');
+      
+      return await rbacRepository.hasPermission(inviterId, permission, organizationId);
+    } catch (error) {
+      console.error('Error checking invite permission:', error);
+      return false;
+    }
   }
 
   async hasExistingInvitation(organizationId: OrganizationId, email: EmailAddress): Promise<boolean> {

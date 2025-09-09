@@ -15,7 +15,7 @@ import {
 import { PREDEFINED_TOOLS, getAvailableToolsForUser } from '@/lib/agents/tools-registry'
 import { useEmery } from '@/contexts/EmeryContext'
 import { getUserOAuthConnections } from '@/app/actions/connections'
-import type { NormalizedConnection } from '@/lib/pipedream/connection-mapper'
+import type { ConnectionDTO } from '@/app/mappers/connection-mapper'
 import type {
   ChatMentionsHook,
   MentionDropdownState,
@@ -55,7 +55,7 @@ const DEFAULT_CONFIG = {
 export function useChatMentions(): ChatMentionsHook {
   // Get data from contexts
   const { data: emeryData } = useEmery()
-  const [connections, setConnections] = useState<NormalizedConnection[]>([])
+  const [connections, setConnections] = useState<ConnectionDTO[]>([])
 
   // Fetch OAuth connections for tool availability
   useEffect(() => {

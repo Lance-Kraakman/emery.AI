@@ -76,19 +76,21 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
 
 export async function addCapabilityToAgent(agentId: number, capability: CapabilityConfig) {
   'use server';
-  try {
-    const agentApplicationService = getAgentApplicationService();
-    const result = await agentApplicationService.addCapabilityToAgent(AgentId.fromNumber(agentId), capability);
-    
-    if (!result.success) {
-      throw new Error(result.error || "Failed to add capability");
+  return withAuthContext(async () => {
+    try {
+      const agentApplicationService = getAgentApplicationService();
+      const result = await agentApplicationService.addCapabilityToAgent(AgentId.fromNumber(agentId), capability);
+      
+      if (!result.success) {
+        throw new Error(result.error || "Failed to add capability");
+      }
+      
+      return result.data;
+    } catch (error) {
+      console.error("Error adding capability to agent:", error);
+      throw error;
     }
-    
-    return result.data;
-  } catch (error) {
-    console.error("Error adding capability to agent:", error);
-    throw error;
-  }
+  });
 }
 
 // Helper function for creating agents from client data (with plain types)
@@ -114,50 +116,52 @@ export async function updateAgentFromClient(agentId: number, data: Partial<Creat
 }
 
 export async function createAgentAction(formData: FormData): Promise<Result> {
-  try {
-    const currentOrg = await requireCurrentOrganization();
-    
-    // Parse form data
-    const rawData = parseFormDataToAgent(formData);
-    const dataWithOrg = { ...rawData, organizationId: currentOrg.id };
-    
-    // Validate using Zod schema
-    const validatedData = createAgentSchema.parse(dataWithOrg);
-    
-    // Parse tools and servers from form if they exist
-    const toolsStr = formData.get('tools') as string;
-    const serversStr = formData.get('servers') as string;
-    
-    const tools = toolsStr 
-      ? toolsStr.split(',')
-          .map(t => t.trim())
-          .filter(t => t)
-          .map(toolName => ({ name: toolName })) // Simple format, can be enhanced later
-      : undefined;
-    
-    const servers = serversStr 
-      ? serversStr.split(',')
-          .map(s => s.trim())
-          .filter(s => s)
-          .map(serverName => ({ name: serverName })) // Simple format, can be enhanced later
-      : undefined;
+  return withAuthContext(async () => {
+    try {
+      const currentOrg = await requireCurrentOrganization();
+      
+      // Parse form data
+      const rawData = parseFormDataToAgent(formData);
+      const dataWithOrg = { ...rawData, organizationId: currentOrg.id };
+      
+      // Validate using Zod schema
+      const validatedData = createAgentSchema.parse(dataWithOrg);
+      
+      // Parse tools and servers from form if they exist
+      const toolsStr = formData.get('tools') as string;
+      const serversStr = formData.get('servers') as string;
+      
+      const tools = toolsStr 
+        ? toolsStr.split(',')
+            .map(t => t.trim())
+            .filter(t => t)
+            .map(toolName => ({ name: toolName })) // Simple format, can be enhanced later
+        : undefined;
+      
+      const servers = serversStr 
+        ? serversStr.split(',')
+            .map(s => s.trim())
+            .filter(s => s)
+            .map(serverName => ({ name: serverName })) // Simple format, can be enhanced later
+        : undefined;
 
-    const result = await createAgentFromClient({ 
-      ...validatedData,
-      organizationId: currentOrg.id,
-      tools, 
-      servers,
-      status: 'active' // Use plain string - will be converted to AgentStatus
-    });
-    
-    return result;
-  } catch (error) {
-    console.error("Error in createAgentAction:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to create agent",
-    };
-  }
+      const result = await createAgentFromClient({ 
+        ...validatedData,
+        organizationId: currentOrg.id,
+        tools, 
+        servers,
+        status: 'active' // Use plain string - will be converted to AgentStatus
+      });
+      
+      return result;
+    } catch (error) {
+      console.error("Error in createAgentAction:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to create agent",
+      };
+    }
+  });
 }
 
 export async function getAgents(filters: { teamId?: number | string, searchQuery?: string, status?: 'active' | 'inactive' | 'archived' } = {}): Promise<AgentDTO[]> {

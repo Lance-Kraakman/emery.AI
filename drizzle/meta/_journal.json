@@ -29,6 +29,13 @@
       "when": 1757380302865,
       "tag": "0003_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1757459655493,
+      "tag": "0004_auto-users-assignments",
+      "breakpoints": true
     }
   ]
 }

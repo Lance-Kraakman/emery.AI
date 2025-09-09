@@ -3,6 +3,8 @@
 import { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { Row } from '@/ddd/domain/tables/value-objects/row';
+import type { ToolConfig, ServerConfig, CapabilityConfig } from '@/ddd/domain/agents/entities/agent';
+import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 // Export the unified Result interface for use in Server Actions
 export type { Result } from '@/ddd/domain/shared/result';
@@ -91,16 +93,16 @@ export interface CreateAgentFormData {
   trigger?: any;
 }
 
-// Client-side agent data interface for server actions (using plain serializable types)
+// Client-side agent data interface for server actions (using typed interfaces)
 export interface CreateAgentClientData {
   name: string;
   role?: string;
   description?: string;
   persona?: string;
-  tools?: any[];
-  servers?: any[];
-  trigger?: any;
-  capabilities?: any[];
+  tools?: ToolConfig[];
+  servers?: ServerConfig[];
+  trigger?: TriggerConfig;
+  capabilities?: CapabilityConfig[];
   status?: string; // Plain string - converted to AgentStatus in action
   organizationId?: number;
   roleId?: number;

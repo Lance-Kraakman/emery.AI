@@ -124,6 +124,27 @@ async function waitForHealthy(containerName: string, timeoutMs: number = 60000):
 }
 
 /**
+ * Run database seeding in correct order
+ */
+async function runDatabaseSeeds(): Promise<void> {
+  const baseEnv = 'NODE_ENV=test DATABASE_URL="postgresql://postgres:integration_test_password@localhost:5436/emery_integration_test"';
+  
+  console.log('🌱 Seeding RBAC data...');
+  execSync(`${baseEnv} npx tsx drizzle/seeds/rbac.ts`, { stdio: 'inherit', cwd: process.cwd() });
+  console.log('✅ RBAC seeding completed');
+
+  console.log('🤖 Seeding system users...');
+  execSync(`${baseEnv} npx tsx drizzle/seeds/system-users.ts`, { stdio: 'inherit', cwd: process.cwd() });
+  console.log('✅ System users seeding completed');
+
+  console.log('🔐 Assigning system user roles...');  
+  execSync(`${baseEnv} npx tsx drizzle/seeds/system-role-assignments.ts`, { stdio: 'inherit', cwd: process.cwd() });
+  console.log('✅ System role assignments completed');
+
+  console.log('✅ All database seeding completed successfully');
+}
+
+/**
  * Run database migrations with retry logic
  */
 async function runMigrations(): Promise<void> {
@@ -135,11 +156,8 @@ async function runMigrations(): Promise<void> {
       execSync(migrationCommand, { stdio: 'inherit', cwd: process.cwd() });
       console.log('✅ Database migrations completed successfully');
       
-      // Run RBAC seeding after successful migration
-      console.log('🌱 Seeding RBAC data...');
-      const seedCommand = 'NODE_ENV=test DATABASE_URL="postgresql://postgres:integration_test_password@localhost:5436/emery_integration_test" npx tsx drizzle/seeds/rbac.ts';
-      execSync(seedCommand, { stdio: 'inherit', cwd: process.cwd() });
-      console.log('✅ RBAC seeding completed successfully');
+      // Run all database seeding in order
+      await runDatabaseSeeds();
       
       return;
     } catch (error) {
