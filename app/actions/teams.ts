@@ -134,7 +134,14 @@ export async function getTeam(teamId: number) {
     }
 
     const teamApplicationService = getTeamApplicationService();
-    return await teamApplicationService.getTeam(teamId);
+    const domainTeam = await teamApplicationService.getTeam(teamId);
+    
+    if (!domainTeam) {
+      return null;
+    }
+    
+    // Map domain entity to DTO for client serialization
+    return TeamMapper.toDTO(domainTeam);
   } catch (error) {
     console.error("Error fetching team:", error);
     throw new Error("Failed to fetch team");
