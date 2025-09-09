@@ -46,7 +46,7 @@ export async function createTeam(data: CreateTeamData): Promise<Result> {
       responsibilities,
       goals,
       agentIds,
-      organizationId: currentOrg.id.value
+      organizationId: currentOrg.id
     };
 
     const result = await teamApplicationService.createTeam(command);
@@ -107,24 +107,22 @@ export async function createTeamAction(formData: FormData): Promise<Result> {
 }
 
 export async function getTeams(organizationId?: number): Promise<TeamDTO[]> {
-  return withAuthContext(async () => {
-    try {
-      const session = await requirePermission("teams:view");
-      const currentOrg = await requireCurrentOrganization();
-      
-      const teamApplicationService = getTeamApplicationService();
-      
-      const filters: TeamFilters = {
-        organizationId: organizationId || currentOrg.id.value
-      };
-      
-      const teams = await teamApplicationService.getTeams(filters);
-      return teams.map(TeamMapper.toDTO);
-    } catch (error) {
-      console.error("Error fetching teams:", error);
-      throw new Error("Failed to fetch teams");
-    }
-  });
+  try {
+    const session = await requirePermission("teams:view");
+    const currentOrg = await requireCurrentOrganization();
+    
+    const teamApplicationService = getTeamApplicationService();
+    
+    const filters: TeamFilters = {
+      organizationId: organizationId || currentOrg.id
+    };
+    
+    const teams = await teamApplicationService.getTeams(filters);
+    return teams.map(TeamMapper.toDTO);
+  } catch (error) {
+    console.error("Error fetching teams:", error);
+    throw new Error("Failed to fetch teams");
+  }
 }
 
 export async function getTeam(teamId: number) {
@@ -391,7 +389,7 @@ export async function getTeamCount(organizationId?: number) {
     const currentOrg = await requireCurrentOrganization();
     
     const teamApplicationService = getTeamApplicationService();
-    const orgId = organizationId ? OrganizationId.fromNumber(organizationId) : currentOrg.id;
+    const orgId = organizationId ? OrganizationId.fromNumber(organizationId) : OrganizationId.fromNumber(currentOrg.id);
     return await teamApplicationService.getTeamCount(orgId);
   } catch (error) {
     console.error("Error fetching team count:", error);

@@ -20,7 +20,12 @@ import type {
 import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
 
 export class DrizzleRBACRepository implements IRBACRepository {
-  constructor(private db: DbClient) {}
+  constructor(private db: DbClient) {
+    console.log("🔧 DrizzleRBACRepository initialized with db client:", {
+      hasProxy: 'Proxy' in Object.getPrototypeOf(this.db),
+      clientType: this.db.constructor.name
+    });
+  }
 
   // Core permission checking
   async hasPermission(userId: UserId, permission: Permission, organizationId: OrganizationId): Promise<boolean> {

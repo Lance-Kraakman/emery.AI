@@ -33,7 +33,7 @@ export async function createTask(data: CreateTaskData): Promise<Result> {
       instructions,
       capabilityName,
       createdBy: UserId.fromString(createdBy || session.user.id),
-      organizationId: OrganizationId.fromNumber(currentOrg.id.value)
+      organizationId: OrganizationId.fromNumber(currentOrg.id)
     };
 
     const task = await taskApplicationService.createTask(createRequest);
@@ -83,7 +83,7 @@ export async function getTasks(agentId?: number, limit = 50): Promise<Result> {
     if (agentId) {
       domainTasks = await taskApplicationService.getTasksForAgent(agentId);
     } else {
-      domainTasks = await taskApplicationService.getRecentTasksForOrganization(currentOrg.id.value, limit);
+      domainTasks = await taskApplicationService.getRecentTasksForOrganization(currentOrg.id, limit);
     }
 
     // Convert domain entities to database schema types for frontend compatibility
@@ -323,7 +323,7 @@ export async function getTaskStats(agentId?: number): Promise<Result> {
     if (agentId) {
       domainTasks = await taskApplicationService.getTasksForAgent(agentId);
     } else {
-      domainTasks = await taskApplicationService.getTasksForOrganization(currentOrg.id.value);
+      domainTasks = await taskApplicationService.getTasksForOrganization(currentOrg.id);
     }
     
     const stats = {

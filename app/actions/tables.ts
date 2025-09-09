@@ -42,7 +42,7 @@ export async function createTable(data: CreateTableData & { databaseId: number; 
     const command: CreateTableCommand = {
       name,
       databaseId: DatabaseId.fromNumber(databaseId),
-      organizationId: OrganizationId.fromNumber(currentOrg.id.value),
+      organizationId: OrganizationId.fromNumber(currentOrg.id),
       createdBy: UserId.fromString(session.user.id),
       description,
       metadata: {}
@@ -98,26 +98,24 @@ export async function createTableAction(formData: FormData) {
 }
 
 export async function getTables(): Promise<TableDTO[]> {
-  return withAuthContext(async () => {
-    try {
-      const session = await requirePermission("data:view");
-      const currentOrg = await requireCurrentOrganization();
-      const tableApplicationService = getTableApplicationService();
-      
-      const tableList = await tableApplicationService.getTablesForOrganization(OrganizationId.fromNumber(currentOrg.id.value));
+  try {
+    const session = await requirePermission("data:view");
+    const currentOrg = await requireCurrentOrganization();
+    const tableApplicationService = getTableApplicationService();
+    
+    const tableList = await tableApplicationService.getTablesForOrganization(OrganizationId.fromNumber(currentOrg.id));
 
-      console.log(`[GET-TABLES] Found ${tableList.length} tables for org ${currentOrg.id}`);
-      return tableList.map(TableMapper.toDTO);
-    } catch (error) {
-      console.error("Error fetching tables:", error);
-      console.error("Error details:", error instanceof Error ? error.message : String(error));
-      console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
-      
-      // Return empty array instead of throwing error to prevent UI crashes
-      console.log(`[GET-TABLES] Returning empty array due to error to prevent UI crash`);
-      return [];
-    }
-  });
+    console.log(`[GET-TABLES] Found ${tableList.length} tables for org ${currentOrg.id}`);
+    return tableList.map(TableMapper.toDTO);
+  } catch (error) {
+    console.error("Error fetching tables:", error);
+    console.error("Error details:", error instanceof Error ? error.message : String(error));
+    console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
+    
+    // Return empty array instead of throwing error to prevent UI crashes
+    console.log(`[GET-TABLES] Returning empty array due to error to prevent UI crash`);
+    return [];
+  }
 }
 
 export async function deleteTable(tableId: number, revalidateUrl?: string): Promise<Result> {

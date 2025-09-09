@@ -7,9 +7,10 @@ import { auth, hasPermission as authHasPermission, requirePermission as authRequ
 import { Permission } from "@/ddd/domain/shared/value-objects/permission";
 import { revalidatePath } from "next/cache";
 // REMOVED: import { requireCurrentOrganization } from "./user-organizations"; - causes circular dependency
-import { getUserRoleApplicationService } from "@/ddd/application/di/container";
+import { getRBACRepository, getUserRoleApplicationService } from "@/ddd/application/di/container";
 import type { Result } from "./types";
 import { SYSTEM_ROLES, type SystemRoleType } from "@/ddd/domain/rbac/entities/role";
+import { OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
 
 export async function assignUserRole(userId: string, role: SystemRoleType): Promise<Result> {
   try {
@@ -110,7 +111,6 @@ export async function requireAuth() {
   return session;
 }
 
-// TEMPORARY: Restored non-circular wrapper for compatibility during migration
 export async function requirePermission(permissionString: string) {
   console.log("🛡️ requirePermission() - Starting permission check for:", permissionString);
   
@@ -125,6 +125,7 @@ export async function requirePermission(permissionString: string) {
     organizationId: session.user.currentOrganizationId,
     permission: permissionString
   });
+  
   
   // Convert string permission to Permission object
   const permission = Permission.fromString(permissionString);
@@ -170,9 +171,6 @@ export async function requireResourcePermission(
   const permission = Permission.fromString(permissionString);
   
   try {
-    // Use RBAC repository directly for resource permissions
-    const { getRBACRepository } = await import('@/ddd/application/di/container');
-    const { UserId, OrganizationId } = await import('@/ddd/domain/shared/value-objects');
     const rbacRepository = getRBACRepository();
     
     await rbacRepository.requireResourcePermission(

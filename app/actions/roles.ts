@@ -69,7 +69,7 @@ export async function getOrganizationRoles(): Promise<CustomRole[]> {
               isNull(roles.organizationId)
             ),
             // Include custom roles for this org
-            eq(roles.organizationId, currentOrg.id.value)
+            eq(roles.organizationId, currentOrg.id)
           )
         );
 
@@ -88,7 +88,7 @@ export async function getOrganizationRoles(): Promise<CustomRole[]> {
             .from(userRoles)
             .where(and(
               eq(userRoles.roleId, role.id),
-              eq(userRoles.organizationId, currentOrg.id.value)
+              eq(userRoles.organizationId, currentOrg.id)
             ));
           
           const userCount = userCountResult[0]?.count || 0;
@@ -160,7 +160,7 @@ export async function getRoleDetails(roleId: number): Promise<CustomRole | null>
           and(
             eq(roles.id, roleId),
             // Ensure role belongs to current org (or is system role)
-            eq(roles.organizationId, currentOrg.id.value)
+            eq(roles.organizationId, currentOrg.id)
           )
         )
         .limit(1);
@@ -230,7 +230,7 @@ export async function createCustomRole(formData: FormData): Promise<Result> {
         .where(
           and(
             eq(roles.name, name),
-            eq(roles.organizationId, currentOrg.id.value)
+            eq(roles.organizationId, currentOrg.id)
           )
         )
         .limit(1);
@@ -250,7 +250,7 @@ export async function createCustomRole(formData: FormData): Promise<Result> {
           .values({
             name: name.trim(),
             description: description?.trim() || null,
-            organizationId: currentOrg.id.value,
+            organizationId: currentOrg.id,
             isSystem: false,
           })
           .returning({ id: roles.id });
@@ -323,7 +323,7 @@ export async function updateCustomRole(formData: FormData): Promise<Result> {
         .where(
           and(
             eq(roles.id, roleId),
-            eq(roles.organizationId, currentOrg.id.value)
+            eq(roles.organizationId, currentOrg.id)
           )
         )
         .limit(1);
@@ -349,7 +349,7 @@ export async function updateCustomRole(formData: FormData): Promise<Result> {
         .where(
           and(
             eq(roles.name, name),
-            eq(roles.organizationId, currentOrg.id.value),
+            eq(roles.organizationId, currentOrg.id),
             // Exclude current role from name conflict check
             // Using != instead of neq since neq might not be available
             // TODO: Use proper neq operator if available in this version
@@ -438,7 +438,7 @@ export async function deleteCustomRole(roleId: number): Promise<Result> {
         .where(
           and(
             eq(roles.id, roleId),
-            eq(roles.organizationId, currentOrg.id.value)
+            eq(roles.organizationId, currentOrg.id)
           )
         )
         .limit(1);

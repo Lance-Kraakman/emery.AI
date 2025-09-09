@@ -79,8 +79,8 @@ export function useEmeryData() {
         agents,
         teams,
         organization: currentOrgResult ? {
-          id: currentOrgResult.id.value,
-          name: currentOrgResult.name.value
+          id: currentOrgResult.id,
+          name: currentOrgResult.name
         } : undefined
       });
     } catch (err) {
