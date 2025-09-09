@@ -3,7 +3,6 @@
 
 import type { Agent } from '../entities/agent';
 import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
-import type { AgentTaskPermissions } from '@/ddd/application/services/agents/agent-permissions-application-service';
 
 export interface IAgentRepository {
   /**
@@ -50,14 +49,4 @@ export interface IAgentRepository {
    * Find all agents with trigger configurations (active and inactive)
    */
   findAgentsWithTriggers(organizationId?: OrganizationId): Promise<Agent[]>;
-
-  /**
-   * Update agent task permissions
-   */
-  updateTaskPermissions(id: AgentId, permissions: AgentTaskPermissions): Promise<void>;
-
-  /**
-   * Get agent task permissions
-   */
-  getTaskPermissions(id: AgentId): Promise<AgentTaskPermissions | null>;
 }

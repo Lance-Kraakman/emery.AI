@@ -187,9 +187,12 @@ export const rolePermissions = pgTable("role_permissions", {
   id: serial("id").primaryKey(),
   roleId: integer("role_id").notNull().references(() => roles.id, { onDelete: "cascade" }),
   permissionId: integer("permission_id").notNull().references(() => permissions.id, { onDelete: "cascade" }),
+  resourceType: text("resource_type"), // 'agent', 'team', 'user', null for global
+  resourceId: integer("resource_id"), // specific resource ID, null for scoped
+  resourceScope: text("resource_scope").default("all"), // 'all', 'specific', 'owned', 'team'
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
-  unique("unique_role_permission").on(table.roleId, table.permissionId)
+  unique("unique_role_permission_resource").on(table.roleId, table.permissionId, table.resourceType, table.resourceId)
 ]);
 
 // User-Role assignments (replaces organizationRole field)
@@ -299,26 +302,9 @@ export const teams = pgTable("teams", {
   goals: text("goals").array(),
   agentIds: text("agent_ids").array(),
   databaseId: text("database_id"),
-  taskPermissions: jsonb("task_permissions").$type<{
-    assignment?: {                         // WHO can assign tasks TO this team
-      allowedUsers?: string[];            // User UUIDs (string)
-      allowedAgents?: number[];           // Agent IDs (serial number)
-      allowedTeams?: number[];            // Team IDs (serial number)
-      allowTeamMembers?: boolean;         // Team members can assign
-      allowOrgMembers?: boolean;          // Any org member can assign
-      allowOrgAdmins?: boolean;           // Org admins can assign (default: true)
-    };
-    routing?: {                            // WHERE this team can route tasks TO
-      allowedAgents?: number[];           // Specific agent IDs
-      allowedTeams?: number[];            // Specific team IDs
-      allowAnyOrgAgent?: boolean;         // Any org agent
-      allowCrossTeamRouting?: boolean;    // Other teams
-      internalRoutingStrategy?: 'round_robin' | 'least_busy' | 'manual';
-    };
-  }>().default(sql`'{"assignment": {"allowOrgAdmins": true}, "routing": {"allowCrossTeamRouting": false}}'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
-  // RBAC-based policy for viewing teams
+  // RBAC-based policy for viewing teams (resource-aware)
   pgPolicy("teams_view_permission", {
     as: "permissive",
     for: "select",
@@ -327,10 +313,12 @@ export const teams = pgTable("teams", {
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
         'teams:view',
-        organization_id
+        organization_id,
+        'team',
+        id
       )`
   }),
-  // RBAC-based policy for managing teams
+  // RBAC-based policy for managing teams (resource-aware)
   pgPolicy("teams_manage_permission", {
     as: "permissive",
     for: "all",
@@ -339,13 +327,17 @@ export const teams = pgTable("teams", {
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
         'teams:manage',
-        organization_id
+        organization_id,
+        'team',
+        id
       )`,
     withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
         'teams:manage',
-        organization_id
+        organization_id,
+        'team',
+        id
       )`
   }),
   // RBAC-based policy for creating teams
@@ -430,26 +422,9 @@ export const agents = pgTable("agents", {
   apiKey: text("api_key").unique(), // For API authentication
   lastUsedAt: timestamp("last_used_at"), // Track API key usage
   agentType: text("agent_type").default("general"), // Agent specialization type
-  taskPermissions: jsonb("task_permissions").$type<{
-    assignment?: {                         // WHO can assign tasks TO this agent
-      allowedUsers?: string[];            // User UUIDs (string)
-      allowedAgents?: number[];           // Agent IDs (serial number)
-      allowedTeams?: number[];            // Team IDs (serial number)
-      allowTeamMembers?: boolean;         // Team members can assign
-      allowOrgMembers?: boolean;          // Any org member can assign
-      allowOrgAdmins?: boolean;           // Org admins can assign (default: true)
-    };
-    routing?: {                            // WHERE this agent can route tasks TO
-      allowedAgents?: number[];           // Specific agent IDs
-      allowedTeams?: number[];            // Specific team IDs
-      allowAnyTeamAgent?: boolean;        // Same team agents
-      allowAnyOrgAgent?: boolean;         // Any org agent
-      allowCrossTeamRouting?: boolean;    // Cross-team routing
-    };
-  }>().default(sql`'{"assignment": {"allowOrgAdmins": true}, "routing": {"allowAnyTeamAgent": true}}'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
-  // RBAC-based policy for viewing agents
+  // RBAC-based policy for viewing agents (resource-aware)
   pgPolicy("agents_view_permission", {
     as: "permissive",
     for: "select",
@@ -460,11 +435,13 @@ export const agents = pgTable("agents", {
         OR user_has_permission(
           current_setting('app.current_user_id')::uuid,
           'agents:view',
-          organization_id
+          organization_id,
+          'agent',
+          id
         )
       )`
   }),
-  // RBAC-based policy for managing agents
+  // RBAC-based policy for managing agents (resource-aware)
   pgPolicy("agents_manage_permission", {
     as: "permissive", 
     for: "all",
@@ -475,7 +452,9 @@ export const agents = pgTable("agents", {
         OR user_has_permission(
           current_setting('app.current_user_id')::uuid,
           'agents:manage',
-          organization_id
+          organization_id,
+          'agent',
+          id
         )
       )`,
     withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
@@ -484,7 +463,9 @@ export const agents = pgTable("agents", {
         OR user_has_permission(
           current_setting('app.current_user_id')::uuid,
           'agents:manage',
-          organization_id
+          organization_id,
+          'agent',
+          id
         )
       )`
   }),
@@ -500,7 +481,7 @@ export const agents = pgTable("agents", {
         organization_id
       )`
   }),
-  // RBAC-based policy for executing agents
+  // RBAC-based policy for executing agents (resource-aware)
   pgPolicy("agents_execute_permission", {
     as: "permissive",
     for: "select",
@@ -511,7 +492,9 @@ export const agents = pgTable("agents", {
         OR user_has_permission(
           current_setting('app.current_user_id')::uuid,
           'agents:execute',
-          organization_id
+          organization_id,
+          'agent',
+          id
         )
       )`
   }),
@@ -572,87 +555,37 @@ export const tasks = pgTable("tasks", {
         organization_id
       )`
   }),
-  // Removed tasks_creator_control policy - it was bypassing agent permission checks
-  // by allowing any user to create tasks as long as they set themselves as creator.
-  // The tasks_agent_assignment_permissions and tasks_team_assignment_permissions
-  // policies now handle all INSERT permission checks based on agent/team permissions.
-  pgPolicy("tasks_agent_assignment_permissions", {
+  // AIDEV-NOTE: RBAC-based task assignment policies using enhanced user_has_permission function
+  // These replace the old complex JSONB-based permission checks
+  pgPolicy("tasks_agent_assignment_rbac", {
     as: "permissive",
     for: "insert",
     to: [authenticatedRole],
-    withCheck: sql`EXISTS (
-      SELECT 1 FROM agents a
-      WHERE a.id = agent_id
-      AND a.organization_id = current_setting('app.current_organization_id')::integer
-      AND (
-        a.owner_id = current_setting('app.current_user_id')::uuid
-        OR
-        (
-          COALESCE(a.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true
-          AND user_has_permission(
-            current_setting('app.current_user_id')::uuid,
-            'tasks:create',
-            a.organization_id
-          )
-        )
-        OR
-        current_setting('app.current_user_id')::uuid::text = ANY(
-          SELECT jsonb_array_elements_text(
-            COALESCE(a.task_permissions->'assignment'->'allowedUsers', '[]'::jsonb)
-          )
-        )
-        OR
-        (
-          COALESCE(a.task_permissions->'assignment'->>'allowTeamMembers', 'false')::boolean = true
-          AND EXISTS (
-            SELECT 1 FROM team_memberships tm1
-            JOIN team_memberships tm2 ON tm1.team_id = tm2.team_id
-            WHERE tm1.user_id = current_setting('app.current_user_id')::uuid AND tm2.user_id = a.owner_id
-          )
-        )
-        OR
-        EXISTS (
-          SELECT 1 FROM agents allowed_agent
-          WHERE allowed_agent.owner_id = current_setting('app.current_user_id')::uuid
-          AND allowed_agent.id::text = ANY(
-            SELECT jsonb_array_elements_text(
-              COALESCE(a.task_permissions->'assignment'->'allowedAgents', '[]'::jsonb)
-            )
-          )
-        )
+    withCheck: sql`
+      agent_id IS NULL 
+      OR user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'tasks:assign',
+        current_setting('app.current_organization_id')::integer,
+        'agent',
+        agent_id
       )
-    )`,
+    `
   }),
-  pgPolicy("tasks_team_assignment_permissions", {
+  pgPolicy("tasks_team_assignment_rbac", {
     as: "permissive",
-    for: "insert", 
+    for: "insert",
     to: [authenticatedRole],
-    withCheck: sql`team_id IS NOT NULL AND EXISTS (
-      SELECT 1 FROM teams t
-      WHERE t.id = team_id
-      AND t.organization_id = current_setting('app.current_organization_id')::integer
-      AND (
-        EXISTS (
-          SELECT 1 FROM team_memberships tm
-          WHERE tm.team_id = t.id AND tm.user_id = current_setting('app.current_user_id')::uuid
-        )
-        OR
-        (
-          COALESCE(t.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true
-          AND user_has_permission(
-            current_setting('app.current_user_id')::uuid,
-            'tasks:create',
-            t.organization_id
-          )
-        )
-        OR
-        current_setting('app.current_user_id')::uuid::text = ANY(
-          SELECT jsonb_array_elements_text(
-            COALESCE(t.task_permissions->'assignment'->'allowedUsers', '[]'::jsonb)
-          )
-        )
+    withCheck: sql`
+      team_id IS NULL
+      OR user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'tasks:assign',
+        current_setting('app.current_organization_id')::integer,
+        'team',
+        team_id
       )
-    )`,
+    `
   }),
 ]);
 

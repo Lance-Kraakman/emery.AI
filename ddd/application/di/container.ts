@@ -28,8 +28,6 @@ import { TeamApplicationService } from '@/ddd/application/services/teams/team-ap
 import { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
 import { UserRoleApplicationService } from '@/ddd/application/services/user-organizations/user-role-application-service';
 import { InvitationApplicationService } from '@/ddd/application/services/invitations/invitation-application-service';
-import { AgentPermissionsApplicationService } from '@/ddd/application/services/agents/agent-permissions-application-service';
-import { TeamPermissionsApplicationService } from '@/ddd/application/services/teams/team-permissions-application-service';
 
 // Team domain imports
 import { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
@@ -275,12 +273,6 @@ export class DIContainer {
       this.repositories.get('IOrganizationRepository'),
       this.repositories.get('IRBACRepository')
     );
-    const agentPermissionsApplicationService = new AgentPermissionsApplicationService(
-      agentRepository
-    );
-    const teamPermissionsApplicationService = new TeamPermissionsApplicationService(
-      teamRepository
-    );
 
     this.repositories.set('IAgentRepository', agentRepository);
     this.repositories.set('ITaskRepository', taskRepository);
@@ -291,8 +283,6 @@ export class DIContainer {
     this.repositories.set('DatabaseApplicationService', databaseApplicationService);
     this.repositories.set('UserRoleApplicationService', userRoleApplicationService);
     this.repositories.set('InvitationApplicationService', invitationApplicationService);
-    this.repositories.set('AgentPermissionsApplicationService', agentPermissionsApplicationService);
-    this.repositories.set('TeamPermissionsApplicationService', teamPermissionsApplicationService);
     this.repositories.set('IDynamicTableRepository', tableRepository);
     this.repositories.set('DynamicTableService', dynamicTableService);
     
@@ -469,8 +459,6 @@ type ServiceMap = {
   DatabaseApplicationService: DatabaseApplicationService;
   UserRoleApplicationService: UserRoleApplicationService;
   InvitationApplicationService: InvitationApplicationService;
-  AgentPermissionsApplicationService: AgentPermissionsApplicationService;
-  TeamPermissionsApplicationService: TeamPermissionsApplicationService;
   TableApplicationService: TableApplicationService;
   FileApplicationService: FileUseCases;
   ChatApplicationService: ChatApplicationService;
@@ -541,8 +529,6 @@ export const getTeamApplicationService = createGetter('TeamApplicationService');
 export const getDatabaseApplicationService = createGetter('DatabaseApplicationService');
 export const getUserRoleApplicationService = createGetter('UserRoleApplicationService');
 export const getInvitationApplicationService = createGetter('InvitationApplicationService');
-export const getAgentPermissionsApplicationService = createGetter('AgentPermissionsApplicationService');
-export const getTeamPermissionsApplicationService = createGetter('TeamPermissionsApplicationService');
 export const getTableApplicationService = createGetter('TableApplicationService');
 export const getFileApplicationService = createGetter('FileApplicationService');
 export const getChatApplicationService = createGetter('ChatApplicationService');

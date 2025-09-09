@@ -107,22 +107,24 @@ export async function createTeamAction(formData: FormData): Promise<Result> {
 }
 
 export async function getTeams(organizationId?: number): Promise<TeamDTO[]> {
-  try {
-    const session = await requirePermission("teams:view");
-    const currentOrg = await requireCurrentOrganization();
-    
-    const teamApplicationService = getTeamApplicationService();
-    
-    const filters: TeamFilters = {
-      organizationId: organizationId || currentOrg.id.value
-    };
-    
-    const teams = await teamApplicationService.getTeams(filters);
-    return teams.map(TeamMapper.toDTO);
-  } catch (error) {
-    console.error("Error fetching teams:", error);
-    throw new Error("Failed to fetch teams");
-  }
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("teams:view");
+      const currentOrg = await requireCurrentOrganization();
+      
+      const teamApplicationService = getTeamApplicationService();
+      
+      const filters: TeamFilters = {
+        organizationId: organizationId || currentOrg.id.value
+      };
+      
+      const teams = await teamApplicationService.getTeams(filters);
+      return teams.map(TeamMapper.toDTO);
+    } catch (error) {
+      console.error("Error fetching teams:", error);
+      throw new Error("Failed to fetch teams");
+    }
+  });
 }
 
 export async function getTeam(teamId: number) {

@@ -5,7 +5,11 @@
 -- =============================================================================
 
 -- Grant execute permission to authenticated users (RLS policies need this)
-GRANT EXECUTE ON FUNCTION user_has_permission(UUID, TEXT, INTEGER) TO authenticated;--> statement-breakpoint
+-- Enhanced function with 5 parameters (2 optional with defaults)
+GRANT EXECUTE ON FUNCTION user_has_permission(UUID, TEXT, INTEGER, TEXT, INTEGER) TO authenticated;
+-- Also grant execute on helper functions
+GRANT EXECUTE ON FUNCTION is_resource_owned_by_user(TEXT, INTEGER, UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION is_resource_in_user_teams(TEXT, INTEGER, UUID) TO authenticated;--> statement-breakpoint
 
 -- =============================================================================
 -- NOTIFICATION & TRIGGER FUNCTIONS (must be created before triggers)

@@ -10,6 +10,22 @@ export interface IRBACRepository {
   hasPermission(userId: UserId, permission: Permission, organizationId: OrganizationId): Promise<boolean>;
   requirePermission(userId: UserId, permission: Permission, organizationId: OrganizationId): Promise<void>;
   
+  // Resource-specific permission checking
+  hasResourcePermission(
+    userId: UserId, 
+    permission: Permission, 
+    organizationId: OrganizationId, 
+    resourceType: string, 
+    resourceId?: number
+  ): Promise<boolean>;
+  requireResourcePermission(
+    userId: UserId, 
+    permission: Permission, 
+    organizationId: OrganizationId, 
+    resourceType: string, 
+    resourceId?: number
+  ): Promise<void>;
+  
   // User permission queries
   getUserPermissions(userId: UserId, organizationId: OrganizationId): Promise<Permission[]>;
   getUserRoles(userId: UserId, organizationId: OrganizationId): Promise<Role[]>;
@@ -26,6 +42,21 @@ export interface IRBACRepository {
   addPermissionsToRole(roleId: number, permissions: Permission[]): Promise<void>;
   removePermissionsFromRole(roleId: number, permissions: Permission[]): Promise<void>;
   setRolePermissions(roleId: number, permissions: Permission[]): Promise<void>;
+  
+  // Resource-specific permission assignment to roles
+  assignResourcePermissionToRole(
+    roleId: number, 
+    permission: Permission, 
+    resourceType: string, 
+    resourceScope: 'all' | 'specific' | 'owned' | 'team', 
+    resourceId?: number
+  ): Promise<void>;
+  removeResourcePermissionFromRole(
+    roleId: number, 
+    permission: Permission, 
+    resourceType: string, 
+    resourceId?: number
+  ): Promise<void>;
   
   // User-role assignment
   assignRole(userId: UserId, roleId: number, organizationId: OrganizationId): Promise<void>;
