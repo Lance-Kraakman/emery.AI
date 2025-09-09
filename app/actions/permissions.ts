@@ -148,4 +148,54 @@ export async function requirePermission(permissionString: string) {
   }
 }
 
+// Resource-specific permission checking
+export async function requireResourcePermission(
+  permissionString: string, 
+  resourceType: string, 
+  resourceId?: number
+) {
+  console.log("🛡️ requireResourcePermission() - Starting resource permission check:", {
+    permissionString,
+    resourceType,
+    resourceId
+  });
+  
+  const session = await requireAuth();
+  
+  if (!session.user.currentOrganizationId) {
+    throw new Error("No current organization selected");
+  }
+  
+  // Convert string permission to Permission object
+  const permission = Permission.fromString(permissionString);
+  
+  try {
+    // Use RBAC repository directly for resource permissions
+    const { getRBACRepository } = await import('@/ddd/application/di/container');
+    const { UserId, OrganizationId } = await import('@/ddd/domain/shared/value-objects');
+    const rbacRepository = getRBACRepository();
+    
+    await rbacRepository.requireResourcePermission(
+      UserId.fromString(session.user.id),
+      permission,
+      OrganizationId.fromNumber(session.user.currentOrganizationId),
+      resourceType,
+      resourceId
+    );
+    
+    console.log("✅ requireResourcePermission() - Resource permission check PASSED");
+    return session;
+  } catch (error) {
+    console.error("🚫 requireResourcePermission() - Resource permission check FAILED:", {
+      error: error instanceof Error ? error.message : error,
+      userId: session.user.id,
+      organizationId: session.user.currentOrganizationId,
+      permission: permissionString,
+      resourceType,
+      resourceId
+    });
+    throw error;
+  }
+}
+
 // AIDEV-NOTE: Only these 4 functions are actually used throughout the app

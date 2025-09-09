@@ -3,7 +3,6 @@
 
 import type { Team } from '../entities/team';
 import { TeamId, OrganizationId, AgentId } from '@/ddd/domain/shared/value-objects';
-import type { TeamTaskPermissions } from '@/ddd/application/services/teams/team-permissions-application-service';
 
 export interface ITeamRepository {
   /**
@@ -35,14 +34,4 @@ export interface ITeamRepository {
    * Count teams by organization
    */
   countByOrganization(organizationId: OrganizationId): Promise<number>;
-
-  /**
-   * Update team task permissions
-   */
-  updateTaskPermissions(id: TeamId, permissions: TeamTaskPermissions): Promise<void>;
-
-  /**
-   * Get team task permissions
-   */
-  getTaskPermissions(id: TeamId): Promise<TeamTaskPermissions | null>;
 }

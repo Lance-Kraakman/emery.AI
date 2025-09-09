@@ -32,7 +32,6 @@ CREATE TABLE "agents" (
 	"api_key" text,
 	"last_used_at" timestamp,
 	"agent_type" text DEFAULT 'general',
-	"task_permissions" jsonb DEFAULT '{"assignment": {"allowOrgAdmins": true}, "routing": {"allowAnyTeamAgent": true}}'::jsonb,
 	"created_at" timestamp DEFAULT now(),
 	CONSTRAINT "agents_api_key_unique" UNIQUE("api_key")
 );
@@ -188,8 +187,11 @@ CREATE TABLE "role_permissions" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"role_id" integer NOT NULL,
 	"permission_id" integer NOT NULL,
+	"resource_type" text,
+	"resource_id" integer,
+	"resource_scope" text DEFAULT 'all',
 	"created_at" timestamp DEFAULT now(),
-	CONSTRAINT "unique_role_permission" UNIQUE("role_id","permission_id")
+	CONSTRAINT "unique_role_permission_resource" UNIQUE("role_id","permission_id","resource_type","resource_id")
 );
 --> statement-breakpoint
 CREATE TABLE "roles" (
@@ -262,7 +264,6 @@ CREATE TABLE "teams" (
 	"goals" text[],
 	"agent_ids" text[],
 	"database_id" text,
-	"task_permissions" jsonb DEFAULT '{"assignment": {"allowOrgAdmins": true}, "routing": {"allowCrossTeamRouting": false}}'::jsonb,
 	"created_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint
@@ -357,7 +358,9 @@ CREATE POLICY "agents_view_permission" ON "agents" AS PERMISSIVE FOR SELECT TO p
         OR user_has_permission(
           current_setting('app.current_user_id')::uuid,
           'agents:view',
-          organization_id
+          organization_id,
+          'agent',
+          id
         )
       ));--> statement-breakpoint
 CREATE POLICY "agents_manage_permission" ON "agents" AS PERMISSIVE FOR ALL TO public USING (organization_id = current_setting('app.current_organization_id')::integer
@@ -366,7 +369,9 @@ CREATE POLICY "agents_manage_permission" ON "agents" AS PERMISSIVE FOR ALL TO pu
         OR user_has_permission(
           current_setting('app.current_user_id')::uuid,
           'agents:manage',
-          organization_id
+          organization_id,
+          'agent',
+          id
         )
       )) WITH CHECK (organization_id = current_setting('app.current_organization_id')::integer
       AND (
@@ -374,7 +379,9 @@ CREATE POLICY "agents_manage_permission" ON "agents" AS PERMISSIVE FOR ALL TO pu
         OR user_has_permission(
           current_setting('app.current_user_id')::uuid,
           'agents:manage',
-          organization_id
+          organization_id,
+          'agent',
+          id
         )
       ));--> statement-breakpoint
 CREATE POLICY "agents_create_permission" ON "agents" AS PERMISSIVE FOR INSERT TO public WITH CHECK (organization_id = current_setting('app.current_organization_id')::integer
@@ -389,7 +396,9 @@ CREATE POLICY "agents_execute_permission" ON "agents" AS PERMISSIVE FOR SELECT T
         OR user_has_permission(
           current_setting('app.current_user_id')::uuid,
           'agents:execute',
-          organization_id
+          organization_id,
+          'agent',
+          id
         )
       ));--> statement-breakpoint
 CREATE POLICY "chat_messages_tenant_isolation" ON "chat_messages" AS PERMISSIVE FOR ALL TO public USING (EXISTS (SELECT 1 FROM chats c WHERE c.id = chat_id AND c.organization_id = current_setting('app.current_organization_id')::integer));--> statement-breakpoint
@@ -482,74 +491,26 @@ CREATE POLICY "tasks_manage_permission" ON "tasks" AS PERMISSIVE FOR UPDATE TO p
         'tasks:manage',
         organization_id
       ));--> statement-breakpoint
-CREATE POLICY "tasks_agent_assignment_permissions" ON "tasks" AS PERMISSIVE FOR INSERT TO "authenticated" WITH CHECK (EXISTS (
-      SELECT 1 FROM agents a
-      WHERE a.id = agent_id
-      AND a.organization_id = current_setting('app.current_organization_id')::integer
-      AND (
-        a.owner_id = current_setting('app.current_user_id')::uuid
-        OR
-        (
-          COALESCE(a.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true
-          AND user_has_permission(
-            current_setting('app.current_user_id')::uuid,
-            'tasks:create',
-            a.organization_id
-          )
-        )
-        OR
-        current_setting('app.current_user_id')::uuid::text = ANY(
-          SELECT jsonb_array_elements_text(
-            COALESCE(a.task_permissions->'assignment'->'allowedUsers', '[]'::jsonb)
-          )
-        )
-        OR
-        (
-          COALESCE(a.task_permissions->'assignment'->>'allowTeamMembers', 'false')::boolean = true
-          AND EXISTS (
-            SELECT 1 FROM team_memberships tm1
-            JOIN team_memberships tm2 ON tm1.team_id = tm2.team_id
-            WHERE tm1.user_id = current_setting('app.current_user_id')::uuid AND tm2.user_id = a.owner_id
-          )
-        )
-        OR
-        EXISTS (
-          SELECT 1 FROM agents allowed_agent
-          WHERE allowed_agent.owner_id = current_setting('app.current_user_id')::uuid
-          AND allowed_agent.id::text = ANY(
-            SELECT jsonb_array_elements_text(
-              COALESCE(a.task_permissions->'assignment'->'allowedAgents', '[]'::jsonb)
-            )
-          )
-        )
+CREATE POLICY "tasks_agent_assignment_rbac" ON "tasks" AS PERMISSIVE FOR INSERT TO "authenticated" WITH CHECK (
+      agent_id IS NULL 
+      OR user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'tasks:assign',
+        current_setting('app.current_organization_id')::integer,
+        'agent',
+        agent_id
       )
-    ));--> statement-breakpoint
-CREATE POLICY "tasks_team_assignment_permissions" ON "tasks" AS PERMISSIVE FOR INSERT TO "authenticated" WITH CHECK (team_id IS NOT NULL AND EXISTS (
-      SELECT 1 FROM teams t
-      WHERE t.id = team_id
-      AND t.organization_id = current_setting('app.current_organization_id')::integer
-      AND (
-        EXISTS (
-          SELECT 1 FROM team_memberships tm
-          WHERE tm.team_id = t.id AND tm.user_id = current_setting('app.current_user_id')::uuid
-        )
-        OR
-        (
-          COALESCE(t.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true
-          AND user_has_permission(
-            current_setting('app.current_user_id')::uuid,
-            'tasks:create',
-            t.organization_id
-          )
-        )
-        OR
-        current_setting('app.current_user_id')::uuid::text = ANY(
-          SELECT jsonb_array_elements_text(
-            COALESCE(t.task_permissions->'assignment'->'allowedUsers', '[]'::jsonb)
-          )
-        )
+    );--> statement-breakpoint
+CREATE POLICY "tasks_team_assignment_rbac" ON "tasks" AS PERMISSIVE FOR INSERT TO "authenticated" WITH CHECK (
+      team_id IS NULL
+      OR user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'tasks:assign',
+        current_setting('app.current_organization_id')::integer,
+        'team',
+        team_id
       )
-    ));--> statement-breakpoint
+    );--> statement-breakpoint
 CREATE POLICY "team_memberships_view_permission" ON "team_memberships" AS PERMISSIVE FOR SELECT TO public USING (user_id = current_setting('app.current_user_id')::uuid 
       OR EXISTS (
         SELECT 1 FROM teams t 
@@ -584,18 +545,24 @@ CREATE POLICY "teams_view_permission" ON "teams" AS PERMISSIVE FOR SELECT TO pub
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
         'teams:view',
-        organization_id
+        organization_id,
+        'team',
+        id
       ));--> statement-breakpoint
 CREATE POLICY "teams_manage_permission" ON "teams" AS PERMISSIVE FOR ALL TO public USING (organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
         'teams:manage',
-        organization_id
+        organization_id,
+        'team',
+        id
       )) WITH CHECK (organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
         'teams:manage',
-        organization_id
+        organization_id,
+        'team',
+        id
       ));--> statement-breakpoint
 CREATE POLICY "teams_create_permission" ON "teams" AS PERMISSIVE FOR INSERT TO public WITH CHECK (organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(

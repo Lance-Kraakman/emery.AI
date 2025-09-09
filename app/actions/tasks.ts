@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "./permissions";
+import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result, CreateTaskData } from "./types";
@@ -12,9 +12,7 @@ import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objec
 export async function createTask(data: CreateTaskData): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("tasks:manage");
-    const currentOrg = await requireCurrentOrganization();
-    const { agentId, name, capabilityName, instructions, createdBy } = data;
+      const { agentId, name, capabilityName, instructions, createdBy } = data;
 
     if (!name || !instructions?.instructions) {
       return {
@@ -23,8 +21,9 @@ export async function createTask(data: CreateTaskData): Promise<Result> {
       };
     }
 
-    // Agent permissions are now enforced at database level via RLS policies
-    // No need for application-level ownership checks
+    // Check resource-specific permission for task assignment to this specific agent
+    const session = await requireResourcePermission("tasks:assign", "agent", agentId);
+    const currentOrg = await requireCurrentOrganization();
 
     // Create task using application service
     const taskApplicationService = getAgentTaskApplicationService();

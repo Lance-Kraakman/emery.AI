@@ -33,24 +33,26 @@ const updateDatabaseSchema = z.object({
 })
 
 export async function getDatabases(searchQuery?: string, hasTables?: boolean): Promise<DatabaseDTO[]> {
-  try {
-    const session = await requirePermission("data:view");
-    const currentOrg = await requireCurrentOrganization();
-    
-    const databaseApplicationService = getDatabaseApplicationService();
-    
-    const filters: DatabaseFilters = {
-      organizationId: currentOrg.id,
-      searchQuery,
-      hasTables
-    };
-    
-    const databases = await databaseApplicationService.getDatabases(filters);
-    return databases.map(DatabaseMapper.toDTO);
-  } catch (error) {
-    console.error('Error fetching databases:', error)
-    throw new Error('Failed to fetch databases')
-  }
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("data:view");
+      const currentOrg = await requireCurrentOrganization();
+      
+      const databaseApplicationService = getDatabaseApplicationService();
+      
+      const filters: DatabaseFilters = {
+        organizationId: currentOrg.id,
+        searchQuery,
+        hasTables
+      };
+      
+      const databases = await databaseApplicationService.getDatabases(filters);
+      return databases.map(DatabaseMapper.toDTO);
+    } catch (error) {
+      console.error('Error fetching databases:', error)
+      throw new Error('Failed to fetch databases')
+    }
+  });
 }
 
 export async function getDatabase(id: number): Promise<DatabaseDTO> {

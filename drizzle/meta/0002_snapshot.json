@@ -1,6 +1,6 @@
 {
-  "id": "e749146f-7090-4788-b2c1-66146f732117",
-  "prevId": "ca55090f-63ce-4cb1-9a39-6202ab573471",
+  "id": "dfd898db-db0f-4e00-b1c6-f268118da1fe",
+  "prevId": "922b71f9-c22d-4f4a-a1bf-a29f1c7573af",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -207,13 +207,6 @@
           "notNull": false,
           "default": "'general'"
         },
-        "task_permissions": {
-          "name": "task_permissions",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'{\"assignment\": {\"allowOrgAdmins\": true}, \"routing\": {\"allowAnyTeamAgent\": true}}'::jsonb"
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -269,7 +262,7 @@
           "to": [
             "public"
           ],
-          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        owner_id = current_setting('app.current_user_id')::uuid\n        OR user_has_permission(\n          current_setting('app.current_user_id')::uuid,\n          'agents:view',\n          organization_id\n        )\n      )"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        owner_id = current_setting('app.current_user_id')::uuid\n        OR user_has_permission(\n          current_setting('app.current_user_id')::uuid,\n          'agents:view',\n          organization_id,\n          'agent',\n          id\n        )\n      )"
         },
         "agents_manage_permission": {
           "name": "agents_manage_permission",
@@ -278,8 +271,8 @@
           "to": [
             "public"
           ],
-          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        owner_id = current_setting('app.current_user_id')::uuid\n        OR user_has_permission(\n          current_setting('app.current_user_id')::uuid,\n          'agents:manage',\n          organization_id\n        )\n      )",
-          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        owner_id = current_setting('app.current_user_id')::uuid\n        OR user_has_permission(\n          current_setting('app.current_user_id')::uuid,\n          'agents:manage',\n          organization_id\n        )\n      )"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        owner_id = current_setting('app.current_user_id')::uuid\n        OR user_has_permission(\n          current_setting('app.current_user_id')::uuid,\n          'agents:manage',\n          organization_id,\n          'agent',\n          id\n        )\n      )",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        owner_id = current_setting('app.current_user_id')::uuid\n        OR user_has_permission(\n          current_setting('app.current_user_id')::uuid,\n          'agents:manage',\n          organization_id,\n          'agent',\n          id\n        )\n      )"
         },
         "agents_create_permission": {
           "name": "agents_create_permission",
@@ -297,7 +290,7 @@
           "to": [
             "public"
           ],
-          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        owner_id = current_setting('app.current_user_id')::uuid\n        OR user_has_permission(\n          current_setting('app.current_user_id')::uuid,\n          'agents:execute',\n          organization_id\n        )\n      )"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        owner_id = current_setting('app.current_user_id')::uuid\n        OR user_has_permission(\n          current_setting('app.current_user_id')::uuid,\n          'agents:execute',\n          organization_id,\n          'agent',\n          id\n        )\n      )"
         }
       },
       "checkConstraints": {},
@@ -1505,6 +1498,25 @@
           "primaryKey": false,
           "notNull": true
         },
+        "resource_type": {
+          "name": "resource_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resource_id": {
+          "name": "resource_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resource_scope": {
+          "name": "resource_scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'all'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -1544,11 +1556,13 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "unique_role_permission": {
-          "name": "unique_role_permission",
+        "unique_role_permission_resource": {
+          "name": "unique_role_permission_resource",
           "columns": [
             "role_id",
-            "permission_id"
+            "permission_id",
+            "resource_type",
+            "resource_id"
           ],
           "nullsNotDistinct": false
         }
@@ -2023,23 +2037,23 @@
           "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'tasks:manage',\n        organization_id\n      )",
           "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'tasks:manage',\n        organization_id\n      )"
         },
-        "tasks_agent_assignment_permissions": {
-          "name": "tasks_agent_assignment_permissions",
+        "tasks_agent_assignment_rbac": {
+          "name": "tasks_agent_assignment_rbac",
           "as": "PERMISSIVE",
           "for": "INSERT",
           "to": [
             "authenticated"
           ],
-          "withCheck": "EXISTS (\n      SELECT 1 FROM agents a\n      WHERE a.id = agent_id\n      AND a.organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        a.owner_id = current_setting('app.current_user_id')::uuid\n        OR\n        (\n          COALESCE(a.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true\n          AND user_has_permission(\n            current_setting('app.current_user_id')::uuid,\n            'tasks:create',\n            a.organization_id\n          )\n        )\n        OR\n        current_setting('app.current_user_id')::uuid::text = ANY(\n          SELECT jsonb_array_elements_text(\n            COALESCE(a.task_permissions->'assignment'->'allowedUsers', '[]'::jsonb)\n          )\n        )\n        OR\n        (\n          COALESCE(a.task_permissions->'assignment'->>'allowTeamMembers', 'false')::boolean = true\n          AND EXISTS (\n            SELECT 1 FROM team_memberships tm1\n            JOIN team_memberships tm2 ON tm1.team_id = tm2.team_id\n            WHERE tm1.user_id = current_setting('app.current_user_id')::uuid AND tm2.user_id = a.owner_id\n          )\n        )\n        OR\n        EXISTS (\n          SELECT 1 FROM agents allowed_agent\n          WHERE allowed_agent.owner_id = current_setting('app.current_user_id')::uuid\n          AND allowed_agent.id::text = ANY(\n            SELECT jsonb_array_elements_text(\n              COALESCE(a.task_permissions->'assignment'->'allowedAgents', '[]'::jsonb)\n            )\n          )\n        )\n      )\n    )"
+          "withCheck": "\n      agent_id IS NULL \n      OR user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'tasks:assign',\n        current_setting('app.current_organization_id')::integer,\n        'agent',\n        agent_id\n      )\n    "
         },
-        "tasks_team_assignment_permissions": {
-          "name": "tasks_team_assignment_permissions",
+        "tasks_team_assignment_rbac": {
+          "name": "tasks_team_assignment_rbac",
           "as": "PERMISSIVE",
           "for": "INSERT",
           "to": [
             "authenticated"
           ],
-          "withCheck": "team_id IS NOT NULL AND EXISTS (\n      SELECT 1 FROM teams t\n      WHERE t.id = team_id\n      AND t.organization_id = current_setting('app.current_organization_id')::integer\n      AND (\n        EXISTS (\n          SELECT 1 FROM team_memberships tm\n          WHERE tm.team_id = t.id AND tm.user_id = current_setting('app.current_user_id')::uuid\n        )\n        OR\n        (\n          COALESCE(t.task_permissions->'assignment'->>'allowOrgAdmins', 'true')::boolean = true\n          AND user_has_permission(\n            current_setting('app.current_user_id')::uuid,\n            'tasks:create',\n            t.organization_id\n          )\n        )\n        OR\n        current_setting('app.current_user_id')::uuid::text = ANY(\n          SELECT jsonb_array_elements_text(\n            COALESCE(t.task_permissions->'assignment'->'allowedUsers', '[]'::jsonb)\n          )\n        )\n      )\n    )"
+          "withCheck": "\n      team_id IS NULL\n      OR user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'tasks:assign',\n        current_setting('app.current_organization_id')::integer,\n        'team',\n        team_id\n      )\n    "
         }
       },
       "checkConstraints": {},
@@ -2188,13 +2202,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "task_permissions": {
-          "name": "task_permissions",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'{\"assignment\": {\"allowOrgAdmins\": true}, \"routing\": {\"allowCrossTeamRouting\": false}}'::jsonb"
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -2229,7 +2236,7 @@
           "to": [
             "public"
           ],
-          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'teams:view',\n        organization_id\n      )"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'teams:view',\n        organization_id,\n        'team',\n        id\n      )"
         },
         "teams_manage_permission": {
           "name": "teams_manage_permission",
@@ -2238,8 +2245,8 @@
           "to": [
             "public"
           ],
-          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'teams:manage',\n        organization_id\n      )",
-          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'teams:manage',\n        organization_id\n      )"
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'teams:manage',\n        organization_id,\n        'team',\n        id\n      )",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'teams:manage',\n        organization_id,\n        'team',\n        id\n      )"
         },
         "teams_create_permission": {
           "name": "teams_create_permission",

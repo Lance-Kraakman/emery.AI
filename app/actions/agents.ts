@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "./permissions";
+import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
@@ -220,7 +220,8 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
         };
       }
 
-      const session = await requirePermission("agents:manage");
+      // Check resource-specific permission for updating this specific agent  
+      const session = await requireResourcePermission("agents:update", "agent", agentId);
     const agentApplicationService = getAgentApplicationService();
     
     const command: UpdateAgentCommand = {

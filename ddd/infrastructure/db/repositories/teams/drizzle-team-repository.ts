@@ -3,7 +3,6 @@
 
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
 import { Team } from '@/ddd/domain/teams/entities/team';
-import type { TeamTaskPermissions } from '@/ddd/application/services/teams/team-permissions-application-service';
 import { OrganizationId, TeamId, AgentId } from '@/ddd/domain/shared/value-objects';
 import { teams } from '@/lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
@@ -152,22 +151,5 @@ export class DrizzleTeamRepository implements ITeamRepository {
       .where(eq(teams.organizationId, organizationId.value));
 
     return result.length;
-  }
-
-  async updateTaskPermissions(id: TeamId, permissions: TeamTaskPermissions): Promise<void> {
-    await this.db
-      .update(teams)
-      .set({ taskPermissions: permissions })
-      .where(eq(teams.id, id.value));
-  }
-
-  async getTaskPermissions(id: TeamId): Promise<TeamTaskPermissions | null> {
-    const [result] = await this.db
-      .select({ taskPermissions: teams.taskPermissions })
-      .from(teams)
-      .where(eq(teams.id, id.value))
-      .limit(1);
-    
-    return result?.taskPermissions || null;
   }
 }

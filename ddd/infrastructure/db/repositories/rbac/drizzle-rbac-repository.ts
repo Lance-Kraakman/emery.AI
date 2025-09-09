@@ -69,6 +69,61 @@ export class DrizzleRBACRepository implements IRBACRepository {
     
     console.log("✅ DrizzleRBACRepository.requirePermission() - ACCESS GRANTED");
   }
+
+  // Resource-specific permission checking
+  async hasResourcePermission(
+    userId: UserId, 
+    permission: Permission, 
+    organizationId: OrganizationId, 
+    resourceType: string, 
+    resourceId?: number
+  ): Promise<boolean> {
+    console.log("🔍 DrizzleRBACRepository.hasResourcePermission() - Checking resource permission:", {
+      userId: userId.value,
+      organizationId: organizationId.value,
+      permission: permission.toString(),
+      resourceType,
+      resourceId
+    });
+
+    // Use the enhanced user_has_permission function from RLS functions
+    const result = await this.db.execute(sql`
+      SELECT user_has_permission(
+        ${userId.value}::uuid, 
+        ${permission.toString()}::text, 
+        ${organizationId.value}::integer,
+        ${resourceType}::text,
+        ${resourceId ?? null}::integer
+      ) as has_permission
+    `);
+
+    const hasPermission = result[0]?.has_permission === true;
+    console.log("🔍 DrizzleRBACRepository.hasResourcePermission() - Result:", {
+      hasPermission,
+      query: "user_has_permission with resource parameters"
+    });
+
+    return hasPermission;
+  }
+
+  async requireResourcePermission(
+    userId: UserId, 
+    permission: Permission, 
+    organizationId: OrganizationId, 
+    resourceType: string, 
+    resourceId?: number
+  ): Promise<void> {
+    console.log("🛡️ DrizzleRBACRepository.requireResourcePermission() - Starting check");
+    
+    const hasAccess = await this.hasResourcePermission(userId, permission, organizationId, resourceType, resourceId);
+    
+    if (!hasAccess) {
+      console.error("🚫 DrizzleRBACRepository.requireResourcePermission() - ACCESS DENIED");
+      throw new Error(`Resource permission denied: ${permission.toString()} for ${resourceType}${resourceId ? `:${resourceId}` : ''}`);
+    }
+    
+    console.log("✅ DrizzleRBACRepository.requireResourcePermission() - ACCESS GRANTED");
+  }
   
   // DEBUG method to show user's roles and permissions
   private async debugUserPermissions(userId: UserId, organizationId: OrganizationId): Promise<void> {
@@ -343,6 +398,82 @@ export class DrizzleRBACRepository implements IRBACRepository {
           })));
       }
     });
+  }
+
+  // Resource-specific permission assignment to roles
+  async assignResourcePermissionToRole(
+    roleId: number, 
+    permission: Permission, 
+    resourceType: string, 
+    resourceScope: 'all' | 'specific' | 'owned' | 'team', 
+    resourceId?: number
+  ): Promise<void> {
+    // First, ensure the base permission exists
+    const existingPermission = await this.db
+      .select({ id: permissions.id })
+      .from(permissions)
+      .where(and(
+        eq(permissions.resource, permission.resource),
+        eq(permissions.action, permission.action)
+      ));
+
+    let permissionId: number;
+    if (existingPermission.length === 0) {
+      // Create the base permission if it doesn't exist
+      const insertResult = await this.db
+        .insert(permissions)
+        .values({
+          resource: permission.resource,
+          action: permission.action
+        })
+        .returning({ id: permissions.id });
+      permissionId = insertResult[0].id;
+    } else {
+      permissionId = existingPermission[0].id;
+    }
+
+    // Now assign the resource-specific permission to the role
+    await this.db
+      .insert(rolePermissions)
+      .values({
+        roleId,
+        permissionId,
+        resourceType,
+        resourceScope,
+        resourceId: resourceScope === 'specific' ? resourceId : null
+      })
+      .onConflictDoNothing(); // Avoid duplicates
+  }
+
+  async removeResourcePermissionFromRole(
+    roleId: number, 
+    permission: Permission, 
+    resourceType: string, 
+    resourceId?: number
+  ): Promise<void> {
+    const permissionRecord = await this.db
+      .select({ id: permissions.id })
+      .from(permissions)
+      .where(and(
+        eq(permissions.resource, permission.resource),
+        eq(permissions.action, permission.action)
+      ));
+
+    if (permissionRecord.length === 0) {
+      return; // Permission doesn't exist, nothing to remove
+    }
+
+    const permissionId = permissionRecord[0].id;
+
+    // Remove the resource-specific role permission
+    await this.db
+      .delete(rolePermissions)
+      .where(and(
+        eq(rolePermissions.roleId, roleId),
+        eq(rolePermissions.permissionId, permissionId),
+        eq(rolePermissions.resourceType, resourceType),
+        resourceId ? eq(rolePermissions.resourceId, resourceId) : sql`resource_id IS NULL`
+      ));
   }
 
   // Permission and role seeding
