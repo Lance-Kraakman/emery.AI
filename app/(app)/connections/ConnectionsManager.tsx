@@ -5,7 +5,7 @@ import { Plus, Trash2, RefreshCw } from 'lucide-react';
 import { getUserOAuthConnections, getAppConnectionUrl, disconnectOAuthAccount } from '@/app/actions/connections';
 import { Button } from '@/components/ui/button';
 
-import { NormalizedConnection as Connection } from '@/lib/pipedream/connection-mapper';
+import { ConnectionDTO as Connection } from '@/app/mappers/connection-mapper';
 
 const AVAILABLE_APPS = [
   { id: 'slack', name: 'Slack', description: 'Send messages, create channels, and more', icon: '/icons/slack.svg' },

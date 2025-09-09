@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { Loading } from '@/components/ui/loading';
 import AgentDetailsView from './AgentDetailsView';
+import AgentCreateView from './AgentCreateView';
 import { getAgents } from '@/app/actions/agents';
 
 // AIDEV-NOTE: Agent dashboard refactored to use consistent design system patterns and improved UX
@@ -26,6 +27,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [isCreateMode, setIsCreateMode] = useState(false);
 
   const refreshAgents = async () => {
     try {
@@ -41,6 +43,15 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCreateAgent = () => {
+    setIsCreateMode(true);
+    setSelectedAgent(null);
+  };
+
+  const handleCancelCreate = () => {
+    setIsCreateMode(false);
   };
 
   const filteredAgents = agents.filter((agent) => {
@@ -88,9 +99,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
               />
             </div>
             <Button
-              onClick={() => {
-                // TODO: Handle agent creation via separate modal/dialog
-              }}
+              onClick={handleCreateAgent}
             >
               <Plus size={16} className="mr-2" />
               New Agent
@@ -123,9 +132,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
                     Create your first agent to get started
                   </p>
                   <Button
-                    onClick={() => {
-                      // TODO: Handle agent creation via separate modal/dialog
-                    }}
+                    onClick={handleCreateAgent}
                   >
                     <Plus size={16} className="mr-2" />
                     Create Agent
@@ -142,6 +149,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
                     }`}
                     onClick={() => {
                       setSelectedAgent(agent);
+                      setIsCreateMode(false); // Exit create mode when selecting an agent
                     }}
                   >
                     <CardContent className="p-3">
@@ -169,11 +177,16 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
         )}
       </div>
 
-      {/* Right Pane: Agent Details or Editor */}
+      {/* Right Pane: Agent Details, Create Form, or Selection Prompt */}
       <div className="flex-1 p-0">
         <Card className="h-full rounded-none border-none">
           <CardContent className="p-6 h-full">
-            {selectedAgent ? (
+            {isCreateMode ? (
+              <AgentCreateView
+                onCancel={handleCancelCreate}
+                onCreated={refreshAgents}
+              />
+            ) : selectedAgent ? (
               <AgentDetailsView
                 agent={selectedAgent}
                 onEdit={() => {
@@ -184,9 +197,16 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
             ) : (
               <div className="text-center p-8 h-full flex flex-col items-center justify-center">
                 <h3 className="text-2xl font-bold text-foreground mb-2">Select an agent</h3>
-                <p className="text-lg text-muted-foreground">
+                <p className="text-lg text-muted-foreground mb-4">
                   Choose an agent from the list to view details and manage capabilities
                 </p>
+                <Button
+                  onClick={handleCreateAgent}
+                  className="mt-2"
+                >
+                  <Plus size={16} className="mr-2" />
+                  Create New Agent
+                </Button>
               </div>
             )}
           </CardContent>

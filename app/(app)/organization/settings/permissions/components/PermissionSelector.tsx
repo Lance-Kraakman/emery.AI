@@ -182,9 +182,7 @@ export function PermissionSelector({
                   </CardTitle>
                   <div className="flex items-center space-x-2">
                     <Checkbox
-                      checked={allSelected}
-                      // @ts-ignore - Shadcn Checkbox supports indeterminate
-                      indeterminate={someSelected && !allSelected}
+                      checked={allSelected ? true : someSelected ? "indeterminate" : false}
                       onCheckedChange={() => handleResourceToggle(permissions)}
                       disabled={disabled}
                     />

@@ -80,6 +80,16 @@ async function seedSystemRoles() {
       // Read-only access
       Permission.ORGANIZATIONS_VIEW, Permission.USERS_VIEW, Permission.TEAMS_VIEW,
       Permission.AGENTS_VIEW, Permission.TASKS_VIEW, Permission.DATA_VIEW
+    ],
+    
+    [SYSTEM_ROLES.SYSTEM_SERVICE]: [
+      // System service permissions for scheduler and other system processes
+      Permission.ORGANIZATIONS_VIEW,
+      Permission.AGENTS_VIEW, Permission.AGENTS_MANAGE, 
+      Permission.TEAMS_VIEW, Permission.TEAMS_MANAGE,
+      Permission.TASKS_VIEW, Permission.TASKS_MANAGE, Permission.TASKS_EXECUTE,
+      Permission.DATA_VIEW, Permission.DATA_MANAGE,
+      Permission.USERS_VIEW // For indexing user data
     ]
   };
 

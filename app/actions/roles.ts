@@ -160,7 +160,13 @@ export async function getRoleDetails(roleId: number): Promise<CustomRole | null>
           and(
             eq(roles.id, roleId),
             // Ensure role belongs to current org (or is system role)
-            eq(roles.organizationId, currentOrg.id)
+            or(
+              eq(roles.organizationId, currentOrg.id),
+              and(
+                eq(roles.isSystem, true),
+                isNull(roles.organizationId)
+              )
+            )
           )
         )
         .limit(1);

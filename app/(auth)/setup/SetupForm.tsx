@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createOrganization } from "@/app/actions/setup";
-import { redirect, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export function SetupForm() {
   const [loading, setLoading] = useState(false);
@@ -17,7 +17,7 @@ export function SetupForm() {
       const result = await createOrganization(formData);
 
       if (result.success) {
-        redirect("/mission-control");
+        router.push("/mission-control");
       } else {
         setError(result.error || "Setup failed");
       }

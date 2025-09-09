@@ -33,7 +33,8 @@ export const SYSTEM_ROLES = {
   ORGANIZATION_ADMIN: 'Organization Admin', 
   TEAM_LEAD: 'Team Lead',
   MEMBER: 'Member',
-  VIEWER: 'Viewer'
+  VIEWER: 'Viewer',
+  SYSTEM_SERVICE: 'System Service'
 } as const;
 
 export type SystemRoleType = typeof SYSTEM_ROLES[keyof typeof SYSTEM_ROLES];

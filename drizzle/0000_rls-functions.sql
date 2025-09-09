@@ -54,13 +54,13 @@ BEGIN
       rp.resource_type IS NULL
       -- OR resource-specific permission
       OR (
-        resource_type IS NOT NULL 
-        AND rp.resource_type = resource_type 
+        user_has_permission.resource_type IS NOT NULL 
+        AND rp.resource_type = user_has_permission.resource_type 
         AND (
           rp.resource_scope = 'all'
-          OR (rp.resource_scope = 'specific' AND rp.resource_id = resource_id)
-          OR (rp.resource_scope = 'owned' AND is_resource_owned_by_user(resource_type, resource_id, check_user_id))
-          OR (rp.resource_scope = 'team' AND is_resource_in_user_teams(resource_type, resource_id, check_user_id))
+          OR (rp.resource_scope = 'specific' AND rp.resource_id = user_has_permission.resource_id)
+          OR (rp.resource_scope = 'owned' AND is_resource_owned_by_user(user_has_permission.resource_type, user_has_permission.resource_id, check_user_id))
+          OR (rp.resource_scope = 'team' AND is_resource_in_user_teams(user_has_permission.resource_type, user_has_permission.resource_id, check_user_id))
         )
       )
     )

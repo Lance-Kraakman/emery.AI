@@ -15,6 +15,7 @@ import {
 } from "@/ddd/application/di/container";
 import { createNotificationClient, rawClient } from "@/lib/db/client";
 import { contextAwareDb } from "@/lib/db/simple-context-proxy";
+import { withSystemContext } from "@/lib/db/system-context";
 import { TaskId } from "@/ddd/domain/tasks/value-objects/task-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 import type { DomainType } from "@/ddd/domain/rag/value-objects";
@@ -95,71 +96,74 @@ class EventDrivenScheduler {
   }
 
   private async handleTaskEvent(event: TaskEvent): Promise<void> {
-    // Process single task immediately
-    if (!event.taskId) {
-      console.warn('⚠️ task_event missing taskId');
-      return;
-    }
+    return withSystemContext(event.organizationId, async () => {
+      if (!event.taskId) {
+        console.warn('⚠️ task_event missing taskId');
+        return;
+      }
 
-    const task = await this.taskRepository.findById(TaskId.fromString(event.taskId));
-    if (task && task.isPending) {
-      await this.agentTaskService.executeTask({ taskId: event.taskId });
-      console.log(`✅ Processed task ${event.taskId}`);
-    } else {
-      console.log(`⏭️ Skipping task ${event.taskId} (not found or not pending)`);
-    }
+      const task = await this.taskRepository.findById(TaskId.fromString(event.taskId));
+      if (task && task.isPending) {
+        await this.agentTaskService.executeTask({ taskId: event.taskId });
+        console.log(`✅ Processed task ${event.taskId}`);
+      } else {
+        console.log(`⏭️ Skipping task ${event.taskId} (not found or not pending)`);
+      }
+    });
   }
 
   private async handleRagReindexEvent(event: RagReindexEvent): Promise<void> {
-    try {
-      const organizationId = OrganizationId.fromNumber(event.organizationId);
-      const domainType = event.domainType as DomainType;
+    return withSystemContext(event.organizationId, async () => {
+      try {
+        const organizationId = OrganizationId.fromNumber(event.organizationId);
+        const domainType = event.domainType as DomainType;
 
-      console.log(`🔄 Queuing reindex for org=${event.organizationId}, type=${event.domainType}`);
+        console.log(`🔄 Queuing reindex for org=${event.organizationId}, type=${event.domainType}`);
 
-      // Get existing indexes for this organization
-      const indexes = await this.ragIndexRepository.findByOrganization(organizationId);
+        // Get existing indexes for this organization
+        const indexes = await this.ragIndexRepository.findByOrganization(organizationId);
 
-      if (indexes.length === 0) {
-        // No indexes exist, create a default index first, then queue initial indexing
-        console.log(`[SCHEDULER] No indexes found for org ${event.organizationId}, creating default index`);
-        
-        try {
-          // Create default index using domain service helper
-          const defaultIndex = await this.createDefaultIndex(organizationId);
+        if (indexes.length === 0) {
+          // No indexes exist, create a default index first, then queue initial indexing
+          console.log(`[SCHEDULER] No indexes found for org ${event.organizationId}, creating default index`);
           
-          // Now queue initial indexing for the newly created index
-          await this.indexingQueueService.enqueue({
-            indexId: defaultIndex.id.value,
-            operation: 'initial',
-            domainType,
-            maxRetries: 3
-          });
+          try {
+            // Create default index using domain service helper
+            const defaultIndex = await this.createDefaultIndex(organizationId);
+            
+            // Now queue initial indexing for the newly created index
+            await this.indexingQueueService.enqueue({
+              indexId: defaultIndex.id.value,
+              operation: 'initial',
+              domainType,
+              maxRetries: 3
+            });
+            
+            console.log(`📥 Created default index and queued initial indexing for org=${event.organizationId}, type=${event.domainType}`);
+          } catch (error) {
+            console.error(`❌ Failed to create default index for org ${event.organizationId}:`, error);
+            return;
+          }
+        } else {
+          // Queue reindex for each existing index
+          console.log(`[SCHEDULER] Found ${indexes.length} indexes for org ${event.organizationId}, queuing reindex operations`);
           
-          console.log(`📥 Created default index and queued initial indexing for org=${event.organizationId}, type=${event.domainType}`);
-        } catch (error) {
-          console.error(`❌ Failed to create default index for org ${event.organizationId}:`, error);
-          return;
+          for (const index of indexes) {
+            await this.indexingQueueService.enqueue({
+              indexId: index.id.value,
+              operation: 'reindex',
+              domainType,
+              maxRetries: 3
+            });
+            console.log(`📥 Queued reindex for index ${index.name} (${index.id.value.substring(0, 8)})`);
+          }
+          
+          console.log(`📥 Queued ${indexes.length} reindex operations for org=${event.organizationId}, type=${event.domainType}`);
         }
-      } else {
-        // Queue reindex for each existing index
-        console.log(`[SCHEDULER] Found ${indexes.length} indexes for org ${event.organizationId}, queuing reindex operations`);
-        
-        for (const index of indexes) {
-          await this.indexingQueueService.enqueue({
-            indexId: index.id.value,
-            operation: 'reindex',
-            domainType,
-            maxRetries: 3
-          });
-          console.log(`📥 Queued reindex for index ${index.name} (${index.id.value.substring(0, 8)})`);
-        }
-        
-        console.log(`📥 Queued ${indexes.length} reindex operations for org=${event.organizationId}, type=${event.domainType}`);
+      } catch (error) {
+        console.error(`❌ Failed to queue reindex operations for org ${event.organizationId}:`, error);
       }
-    } catch (error) {
-      console.error(`❌ Failed to queue reindex operations for org ${event.organizationId}:`, error);
-    }
+    });
   }
 
   /**
@@ -209,12 +213,14 @@ class EventDrivenScheduler {
       console.log(`⏰ Processing ${dueTasks.length} scheduled tasks`);
       
       for (const task of dueTasks) {
-        try {
-          await this.taskRepository.save(task);
-          await this.agentTaskService.executeTask({ taskId: task.id.value });
-        } catch (error) {
-          console.error(`❌ Failed to process scheduled task ${task.id.value}:`, error);
-        }
+        await withSystemContext(task.organizationId, async () => {
+          try {
+            await this.taskRepository.save(task);
+            await this.agentTaskService.executeTask({ taskId: task.id.value });
+          } catch (error) {
+            console.error(`❌ Failed to process scheduled task ${task.id.value}:`, error);
+          }
+        });
       }
     }
   }
@@ -223,11 +229,13 @@ class EventDrivenScheduler {
     const readyTasks = await this.taskQueueService.getReadyTasks(10);
     
     for (const task of readyTasks) {
-      try {
-        await this.agentTaskService.executeTask({ taskId: task.id.value });
-      } catch (error) {
-        console.error(`❌ Failed to process queued task ${task.id.value}:`, error);
-      }
+      await withSystemContext(task.organizationId, async () => {
+        try {
+          await this.agentTaskService.executeTask({ taskId: task.id.value });
+        } catch (error) {
+          console.error(`❌ Failed to process queued task ${task.id.value}:`, error);
+        }
+      });
     }
   }
 
@@ -235,14 +243,16 @@ class EventDrivenScheduler {
     const timedOutTasks = await this.taskQueueService.getTimedOutTasks();
     
     for (const task of timedOutTasks) {
-      try {
-        task.timeout();
-        await this.taskRepository.save(task);
-        await this.taskQueueService.markTaskFailed(task.id, 'Task execution timed out');
-        console.log(`⏱️ Marked task ${task.id.value} as timed out`);
-      } catch (error) {
-        console.error(`❌ Failed to handle timeout for task ${task.id.value}:`, error);
-      }
+      await withSystemContext(task.organizationId, async () => {
+        try {
+          task.timeout();
+          await this.taskRepository.save(task);
+          await this.taskQueueService.markTaskFailed(task.id, 'Task execution timed out');
+          console.log(`⏱️ Marked task ${task.id.value} as timed out`);
+        } catch (error) {
+          console.error(`❌ Failed to handle timeout for task ${task.id.value}:`, error);
+        }
+      });
     }
   }
 
@@ -250,12 +260,14 @@ class EventDrivenScheduler {
     const retryTasks = await this.taskQueueService.getRetryableTasks(3);
     
     for (const task of retryTasks) {
-      try {
-        await this.taskQueueService.enqueue(task, 2); // Higher priority for retries
-        console.log(`🔁 Requeued task ${task.id.value} for retry`);
-      } catch (error) {
-        console.error(`❌ Failed to requeue retry task ${task.id.value}:`, error);
-      }
+      await withSystemContext(task.organizationId, async () => {
+        try {
+          await this.taskQueueService.enqueue(task, 2); // Higher priority for retries
+          console.log(`🔁 Requeued task ${task.id.value} for retry`);
+        } catch (error) {
+          console.error(`❌ Failed to requeue retry task ${task.id.value}:`, error);
+        }
+      });
     }
   }
 
