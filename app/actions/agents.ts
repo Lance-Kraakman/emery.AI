@@ -201,8 +201,8 @@ export async function getAgent(agentId: number) {
       return null;
     }
     
-    // Return domain entity directly - it already has proper defaults and types
-    return domainAgent;
+    // Map domain entity to DTO for client serialization
+    return AgentMapper.toDTO(domainAgent);
   } catch (error) {
       console.error("Error fetching agent:", error);
       throw new Error("Failed to fetch agent");
