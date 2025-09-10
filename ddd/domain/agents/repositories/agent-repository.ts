@@ -2,13 +2,43 @@
 // Defines data access operations for Agent entities
 
 import type { Agent } from '../entities/agent';
-import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import type { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+
+// Data transfer objects for repository operations
+export interface CreateAgentData {
+  name: string;
+  type: string;
+  description?: string | null;
+  instructions?: any | null;
+  capabilities?: string[] | null;
+  organizationId: number;
+  ownerId: string;
+  isActive?: boolean;
+  trigger?: any | null;
+}
+
+export interface UpdateAgentData {
+  name?: string;
+  type?: string;
+  description?: string | null;
+  instructions?: any | null;
+  capabilities?: string[] | null;
+  isActive?: boolean;
+  trigger?: any | null;
+  apiKey?: string;
+  status?: string;
+}
 
 export interface IAgentRepository {
   /**
-   * Find agents by organization ID
+   * Create a new agent
    */
-  findByOrganization(organizationId: OrganizationId): Promise<Agent[]>;
+  create(data: CreateAgentData): Promise<Agent>;
+
+  /**
+   * Update an existing agent
+   */
+  update(id: AgentId, data: UpdateAgentData): Promise<Agent>;
 
   /**
    * Find agent by ID
@@ -16,9 +46,14 @@ export interface IAgentRepository {
   findById(id: AgentId): Promise<Agent | null>;
 
   /**
-   * Find agents by owner ID
+   * Find agents by organization
    */
-  findByOwner(ownerId: UserId): Promise<Agent[]>;
+  findByOrganization(organizationId: OrganizationId): Promise<Agent[]>;
+
+  /**
+   * Find agents by owner
+   */
+  findByOwner(ownerId: UserId, organizationId?: OrganizationId): Promise<Agent[]>;
 
   /**
    * Find active agents by organization
@@ -26,9 +61,9 @@ export interface IAgentRepository {
   findActiveByOrganization(organizationId: OrganizationId): Promise<Agent[]>;
 
   /**
-   * Save agent (returns the saved agent with updated ID for new entities)
+   * Check if agent name is unique within organization
    */
-  save(agent: Agent): Promise<Agent>;
+  isNameUnique(organizationId: OrganizationId, name: string, excludeId?: AgentId): Promise<boolean>;
 
   /**
    * Delete agent
@@ -49,4 +84,5 @@ export interface IAgentRepository {
    * Find all agents with trigger configurations (active and inactive)
    */
   findAgentsWithTriggers(organizationId?: OrganizationId): Promise<Agent[]>;
+
 }

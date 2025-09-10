@@ -2,9 +2,34 @@
 // Defines data access operations for Database entities
 
 import type { Database } from '../entities/database';
-import type { DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import type { DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+
+// Data transfer objects for repository operations
+export interface CreateDatabaseData {
+  name: string;
+  slug: string;
+  metadata?: Record<string, any> | null;
+  organizationId: number;
+  createdBy: string;
+}
+
+export interface UpdateDatabaseData {
+  name?: string;
+  slug?: string;
+  metadata?: Record<string, any> | null;
+}
 
 export interface IDatabaseRepository {
+  /**
+   * Create a new database
+   */
+  create(data: CreateDatabaseData): Promise<Database>;
+
+  /**
+   * Update an existing database
+   */
+  update(id: DatabaseId, data: UpdateDatabaseData): Promise<Database>;
+
   /**
    * Find databases by organization ID
    */
@@ -24,11 +49,6 @@ export interface IDatabaseRepository {
    * Check if slug is unique within organization
    */
   isSlugUnique(organizationId: OrganizationId, slug: string, excludeId?: DatabaseId): Promise<boolean>;
-
-  /**
-   * Save database
-   */
-  save(database: Database): Promise<Database>;
 
   /**
    * Delete database

@@ -944,7 +944,7 @@ Context: This task execution record contains valuable information about agent ca
 
     // Safe to call startIndexing - only queue calls this method
     index.startIndexing();
-    await this.indexRepository.save(index);
+    await this.indexRepository.update(indexId, { status: index.status });
 
     try {
       // Perform the actual indexing work
@@ -977,7 +977,7 @@ Context: This task execution record contains valuable information about agent ca
 
       // Complete indexing successfully
       index.completeIndexing(totalAdded);
-      await this.indexRepository.save(index);
+      await this.indexRepository.update(indexId, { status: index.status });
 
       console.log(`[RAG-INDEXING-DOMAIN] Initial indexing completed for ${index.name} - ${totalAdded} documents processed`);
 
@@ -989,7 +989,7 @@ Context: This task execution record contains valuable information about agent ca
     } catch (error) {
       // Mark index as failed
       index.failIndexing();
-      await this.indexRepository.save(index);
+      await this.indexRepository.update(indexId, { status: index.status });
       
       console.error(`[RAG-INDEXING-DOMAIN] Initial indexing failed for ${index.name}:`, error);
       throw error;
@@ -1009,7 +1009,7 @@ Context: This task execution record contains valuable information about agent ca
 
     // Safe to call startIndexing - only queue calls this method
     index.startIndexing();
-    await this.indexRepository.save(index);
+    await this.indexRepository.update(indexId, { status: index.status });
 
     try {
       let totalProcessed = 0;
@@ -1052,7 +1052,7 @@ Context: This task execution record contains valuable information about agent ca
       // Complete reindexing
       const currentDocCount = await this.documentRepository.countByIndexId(index.id);
       index.completeIndexing(currentDocCount);
-      await this.indexRepository.save(index);
+      await this.indexRepository.update(indexId, { status: index.status });
 
       console.log(`[RAG-INDEXING-DOMAIN] Reindex completed for ${index.name} - ${totalAdded} added, ${totalDeleted} removed`);
 
@@ -1064,7 +1064,7 @@ Context: This task execution record contains valuable information about agent ca
     } catch (error) {
       // Mark index as failed
       index.failIndexing();
-      await this.indexRepository.save(index);
+      await this.indexRepository.update(indexId, { status: index.status });
       
       console.error(`[RAG-INDEXING-DOMAIN] Reindex failed for ${index.name}:`, error);
       throw error;
@@ -1140,7 +1140,7 @@ Context: This task execution record contains valuable information about agent ca
       // Update last indexed time
       const currentDocCount = await this.documentRepository.countByIndexId(index.id);
       index.completeIndexing(currentDocCount);
-      await this.indexRepository.save(index);
+      await this.indexRepository.update(indexId, { status: index.status });
 
       console.log(`[RAG-INDEXING-DOMAIN] Data change processing completed for ${domainType}:${sourceId} in ${index.name}`);
 
@@ -1226,7 +1226,20 @@ Context: This task execution record contains valuable information about agent ca
     console.log(`[RAG-INDEXING-DOMAIN] Creating default RAG index for organization ${organizationId.value}`);
     
     try {
-      await this.indexRepository.save(defaultIndex);
+      const createData = {
+        id: defaultIndex.id.value,
+        organizationId: defaultIndex.organizationId.value,
+        name: defaultIndex.name,
+        description: defaultIndex.description,
+        domainTypes: defaultIndex.domainTypes,
+        domainFilters: defaultIndex.domainFilters || {},
+        embeddingModel: defaultIndex.embeddingModel,
+        embeddingDimensions: defaultIndex.embeddingDimensions,
+        status: defaultIndex.status,
+        documentCount: defaultIndex.documentCount || 0,
+        createdAt: defaultIndex.createdAt || new Date()
+      };
+      await this.indexRepository.create(createData);
       console.log(`[RAG-INDEXING-DOMAIN] Default index created successfully: ${defaultIndex.name} (${defaultIndex.id.value})`);
       return defaultIndex;
     } catch (error) {

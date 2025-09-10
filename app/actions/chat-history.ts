@@ -10,14 +10,15 @@
 import { auth } from '@/lib/auth'
 import { getChatApplicationService } from '@/ddd/application/di/container'
 import { OrganizationId, UserId, ChatId } from '@/ddd/domain/shared/value-objects'
-import type { 
-  ChatContextDTO, 
-  ChatSessionDTO, 
-  ChatMessageDTO,
-  ChatWithMessagesDTO,
-  ChatActionResult,
-  CreateChatSessionDTO
-} from '@/components/chat/types/chat-dtos'
+import { 
+  ChatMapper,
+  type ChatContextDTO, 
+  type ChatSessionDTO, 
+  type ChatMessageDTO,
+  type ChatWithMessagesDTO,
+  type ChatActionResult,
+  type CreateChatSessionDTO
+} from '@/app/mappers/chat-mapper'
 import { ChatUtils } from '@/ddd/domain/chat/entities/chat'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
 
@@ -72,18 +73,8 @@ export async function getChatSessions(context: ChatContextDTO): Promise<ChatActi
       })
     }
 
-    // Convert to DTOs
-    const chatDTOs: ChatSessionDTO[] = chats.map(chat => ({
-      id: chat.id.value,
-      title: chat.title,
-      description: chat.description,
-      status: chat.status,
-      messageCount: chat.messageCount,
-      lastMessageAt: chat.lastMessageAt,
-      createdAt: chat.createdAt,
-      updatedAt: chat.updatedAt,
-      contextMetadata: chat.contextMetadata
-    }))
+    // Convert to DTOs using ChatMapper
+    const chatDTOs = chats.map(chat => ChatMapper.toSessionDTO(chat));
 
     return { success: true, data: chatDTOs }
 
@@ -129,35 +120,16 @@ export async function loadChatWithFullHistory(chatId: string): Promise<ChatActio
       return { success: false, error: 'Chat not found' }
     }
 
-    // Convert to DTOs
-    const sessionDTO: ChatSessionDTO = {
-      id: chatData.chat.id.value,
-      title: chatData.chat.title,
-      description: chatData.chat.description,
-      status: chatData.chat.status,
-      messageCount: chatData.chat.messageCount,
-      lastMessageAt: chatData.chat.lastMessageAt,
-      createdAt: chatData.chat.createdAt,
-      updatedAt: chatData.chat.updatedAt,
-      contextMetadata: chatData.chat.contextMetadata
-    }
-
-    const messageDTOs: ChatMessageDTO[] = (chatData.messages || []).map(message => ({
-      id: message.id.value,
-      chatId: message.chatId.value,
-      content: message.content,
-      role: message.role,
-      createdAt: message.createdAt,
-      metadata: message.metadata
-    }))
+    // Convert to DTOs using ChatMapper
+    const chatWithMessages = ChatMapper.toChatWithMessagesDTO(
+      chatData.chat, 
+      chatData.messages || [], 
+      chatData.chat.messageCount
+    );
 
     return {
       success: true,
-      data: {
-        session: sessionDTO,
-        messages: messageDTOs,
-        totalMessages: chatData.chat.messageCount
-      }
+      data: chatWithMessages
     }
 
   } catch (error) {
@@ -213,18 +185,8 @@ export async function createNewChatSession(request: CreateChatSessionDTO): Promi
       return { success: false, error: result.error || 'Failed to create chat session' }
     }
 
-    // Convert to DTO
-    const chatDTO: ChatSessionDTO = {
-      id: result.data!.id.value,
-      title: result.data!.title,
-      description: result.data!.description,
-      status: result.data!.status,
-      messageCount: result.data!.messageCount,
-      lastMessageAt: result.data!.lastMessageAt,
-      createdAt: result.data!.createdAt,
-      updatedAt: result.data!.updatedAt,
-      contextMetadata: result.data!.contextMetadata
-    }
+    // Convert to DTO using ChatMapper
+    const chatDTO = ChatMapper.toSessionDTO(result.data!);
 
     return { success: true, data: chatDTO }
 

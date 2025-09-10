@@ -2,16 +2,20 @@ import { eq, ilike, and, count } from 'drizzle-orm';
 import type postgres from 'postgres';
 
 import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
 import type { DbClient } from '@/lib/db/client';
 import { organizations, users, userOrganizations, roles, userRoles } from '@/lib/db/schema';
 import { OrganizationId, UserId, OrganizationName, EmailAddress } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 
-export class DrizzleOrganizationRepository implements IOrganizationRepository {
-  constructor(
-    private db: DbClient,
-  ) {}
+export class DrizzleOrganizationRepository 
+  extends DrizzleBaseRepository<Organization, OrganizationId, CreateOrganizationData, UpdateOrganizationData, any>
+  implements IOrganizationRepository {
+  
+  protected readonly table = organizations;
+  protected readonly idColumn = organizations.id;
+  protected readonly organizationColumn = undefined; // Organizations are not org-scoped
 
   /**
    * Generate URL-safe slug from organization name
@@ -25,15 +29,7 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
       .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
   }
 
-  async findById(id: OrganizationId): Promise<Organization | null> {
-    const result = await this.db.query.organizations.findFirst({
-      where: eq(organizations.id, id.value)
-    });
-
-    if (!result) return null;
-
-    return this.mapToEntity(result);
-  }
+  // findById inherited from DrizzleBaseRepository
 
   async findByUserId(userId: UserId): Promise<Organization[]> {
     const result = await this.db
@@ -56,7 +52,7 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
       .innerJoin(userOrganizations, eq(organizations.id, userOrganizations.organizationId))
       .where(eq(userOrganizations.userId, userId.value));
 
-    return result.map(org => this.mapToEntity(org));
+    return result.map(org => this.fromPersistence(org));
   }
 
   async findByIdWithMembers(id: OrganizationId): Promise<OrganizationWithMembers | null> {
@@ -100,7 +96,7 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
       .values(dbData)
       .returning();
 
-    return this.mapToEntity(result);
+    return this.fromPersistence(result);
   }
 
   async createWithOwner(data: CreateOrganizationData, ownerId: UserId): Promise<Organization> {
@@ -166,7 +162,7 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
       console.error(`⚠️ System role 'Organization Owner' not found during organization creation. Run RBAC seed first.`);
     }
 
-    return this.mapToEntity(org);
+    return this.fromPersistence(org);
   }
 
   async update(id: OrganizationId, data: UpdateOrganizationData): Promise<Organization> {
@@ -186,7 +182,7 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
       throw new Error(`Organization with id ${id.value} not found`);
     }
 
-    return this.mapToEntity(result);
+    return this.fromPersistence(result);
   }
 
   async delete(id: OrganizationId): Promise<void> {
@@ -264,7 +260,7 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
         where: ilike(organizations.name, `%${name}%`),
         limit
       });
-      return result.map(org => this.mapToEntity(org));
+      return result.map(org => this.fromPersistence(org));
     } catch (error) {
       console.log("error finding org", error);
     } finally {
@@ -273,7 +269,7 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
   }
 
   // AIDEV-NOTE: Boundary conversion - maps database primitives to domain Value Objects
-  private mapToEntity(data: any): Organization {
+  protected fromPersistence(data: any): Organization {
     return {
       id: new OrganizationId(data.id),
       name: new OrganizationName(data.name),
@@ -289,6 +285,25 @@ export class DrizzleOrganizationRepository implements IOrganizationRepository {
       stripeSubscriptionId: data.stripeSubscriptionId,
       stripeSubscriptionStatus: data.stripeSubscriptionStatus,
       createdAt: data.createdAt
+    };
+  }
+  
+  protected toPersistence(organization: Organization): any {
+    return {
+      id: organization.id.value,
+      name: organization.name.value,
+      slug: organization.slug,
+      mission: organization.mission,
+      sharedTools: organization.sharedTools,
+      sharedServers: organization.sharedServers,
+      databaseId: organization.databaseId,
+      viewConfig: organization.viewConfig,
+      analysisCapabilities: organization.analysisCapabilities,
+      plan: organization.plan,
+      stripeCustomerId: organization.stripeCustomerId,
+      stripeSubscriptionId: organization.stripeSubscriptionId,
+      stripeSubscriptionStatus: organization.stripeSubscriptionStatus,
+      createdAt: organization.createdAt
     };
   }
 }

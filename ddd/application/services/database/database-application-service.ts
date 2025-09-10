@@ -84,8 +84,15 @@ export class DatabaseApplicationService {
         createdBy: command.createdBy
       });
 
-      // Save to repository and get the created entity with ID
-      const savedDatabase = await this.databaseRepository.save(database);
+      // Create database using repository
+      const createData = {
+        name: database.name,
+        slug: database.slug,
+        metadata: database.metadata,
+        organizationId: database.organizationId.value,
+        createdBy: database.createdBy.value
+      };
+      const savedDatabase = await this.databaseRepository.create(createData);
 
       return {
         success: true,
@@ -106,7 +113,7 @@ export class DatabaseApplicationService {
   async updateDatabase(command: UpdateDatabaseCommand): Promise<DatabaseApplicationResult<Database>> {
     try {
       // Load existing database
-      const existingDatabase = await this.databaseRepository.findById(command.databaseId);
+      const existingDatabase = await this.databaseRepository.findById(command.databaseId as any);
       if (!existingDatabase) {
         return {
           success: false,
@@ -144,12 +151,16 @@ export class DatabaseApplicationService {
         updatedAt: new Date()
       });
 
-      // Save updated database
-      await this.databaseRepository.save(updatedDatabase);
+      // Update database using repository
+      const updateData = {
+        name: command.name,
+        metadata: metadata
+      };
+      const savedDatabase = await this.databaseRepository.update(command.databaseId as any, updateData);
 
       return {
         success: true,
-        data: updatedDatabase
+        data: savedDatabase
       };
     } catch (error) {
       console.error("Error updating database:", error);

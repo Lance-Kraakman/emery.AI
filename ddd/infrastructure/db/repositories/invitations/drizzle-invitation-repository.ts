@@ -4,6 +4,7 @@
 import type { DbClient } from '@/lib/db/client';
 import { eq, and, lt, gte, desc, sql, inArray } from 'drizzle-orm';
 import { invitations, users, organizations, userOrganizations, roles } from '@/lib/db/schema';
+import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import type { 
   IInvitationRepository,
 } from '@/ddd/domain/invitations/repositories/invitation-repository';
@@ -24,8 +25,22 @@ import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 import { InvitationId, InvitationToken } from '@/ddd/domain/shared/value-objects';
 import type { InvitationRow } from '@/types/db';
 
-export class DrizzleInvitationRepository implements IInvitationRepository {
-  constructor(private readonly db: DbClient) {}
+export class DrizzleInvitationRepository 
+  extends DrizzleBaseRepository<Invitation, InvitationId, CreateInvitationData, UpdateInvitationData, any>
+  implements IInvitationRepository {
+  
+  protected readonly table = invitations;
+  protected readonly idColumn = invitations.id;
+  protected readonly organizationColumn = invitations.organizationId;
+
+  protected fromPersistence(record: any): Invitation {
+    return this.mapToEntity(record);
+  }
+
+  protected toPersistence(entity: Invitation): Partial<any> {
+    // This method is not used in the current implementation
+    throw new Error('toPersistence not implemented for Invitation entity');
+  }
 
   // Basic CRUD operations
   async findById(id: InvitationId): Promise<Invitation | null> {
@@ -141,11 +156,7 @@ export class DrizzleInvitationRepository implements IInvitationRepository {
     });
   }
 
-  async delete(id: InvitationId): Promise<void> {
-    await this.db
-      .delete(invitations)
-      .where(eq(invitations.id, id.value));
-  }
+  // delete() method inherited from DrizzleBaseRepository
 
   // Query operations
   async findByOrganization(organizationId: OrganizationId): Promise<Invitation[]> {

@@ -1,6 +1,9 @@
 // AIDEV-NOTE: Shared domain Value Objects for type-safe entity identification
 // All domain concepts should use these Value Objects instead of primitive types
 
+// Base ID class for all Value Object IDs
+export { BaseId } from './base-id';
+
 // ID Value Objects
 export { AgentId } from './agent-id';
 export { UserId } from './user-id';

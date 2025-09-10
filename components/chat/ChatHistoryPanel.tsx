@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ChatSessionItem } from './ChatSessionItem'
 import { getChatSessions, createNewChatSession } from '@/app/actions/chat-history'
-import type { ChatSessionDTO, ChatContextDTO } from '@/components/chat/types/chat-dtos'
+import type { ChatSessionDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
 
 interface ChatHistoryPanelProps {

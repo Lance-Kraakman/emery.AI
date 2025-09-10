@@ -50,7 +50,7 @@ export interface IChatMessageRepository {
   /**
    * Delete a message
    */
-  delete(id: ChatMessageId): Promise<boolean>;
+  delete(id: ChatMessageId): Promise<void>;
 
   /**
    * Get the next message index for a chat
