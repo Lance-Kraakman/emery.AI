@@ -103,8 +103,22 @@ export class AgentTaskApplicationService {
       status: TaskStatus.pending()
     });
 
-    // 4. Save task
-    await this.taskRepository.save(task);
+    // 4. Save task using create method
+    const taskData = {
+      id: task.id.value,
+      agentId: task.agentId.value,
+      organizationId: task.organizationId.value,
+      name: task.name,
+      capabilityName: task.capabilityName || null,
+      instructions: task.instructions,
+      status: task.status.value,
+      createdBy: task.createdBy?.value || null,
+      createdAt: task.createdAt
+    };
+    const savedTask = await this.taskRepository.create(taskData);
+    
+    // Update the task object with the saved version
+    Object.assign(task, savedTask);
 
     console.log(`[AGENT-TASK-SERVICE] Created task ${task.id.value.toString().substring(0, 8)} for ${request.agentId ? `agent ${request.agentId.value}` : `team ${request.teamId?.value}`}`);
     return task;
@@ -141,7 +155,10 @@ export class AgentTaskApplicationService {
     try {
       // 3. Start task execution (domain logic)
       task.start();
-      await this.taskRepository.save(task);
+      await this.taskRepository.update(task.id, {
+        status: task.status.value,
+        startedAt: task.startedAt
+      });
 
       // 4. Execute via execution repository
       const executionRequest: AgentExecutionRequest = {
@@ -169,7 +186,12 @@ export class AgentTaskApplicationService {
       }
 
       // 7. Save final task state
-      await this.taskRepository.save(task);
+      await this.taskRepository.update(task.id, {
+        status: task.status.value,
+        result: task.result,
+        completedAt: task.completedAt,
+        error: task.error
+      });
 
       console.log(`[AGENT-TASK-SERVICE] Completed task ${taskId.substring(0, 8)}: ${executionResult.success ? 'SUCCESS' : 'FAILED'}`);
 
@@ -183,7 +205,11 @@ export class AgentTaskApplicationService {
       
       // Mark task as failed (domain logic)
       task.fail(error instanceof Error ? error.message : String(error));
-      await this.taskRepository.save(task);
+      await this.taskRepository.update(task.id, {
+        status: task.status.value,
+        error: task.error,
+        completedAt: task.completedAt
+      });
 
       throw error;
     }
@@ -222,7 +248,11 @@ export class AgentTaskApplicationService {
 
     // 3. Update task status (domain logic)
     task.cancel(reason);
-    await this.taskRepository.save(task);
+    await this.taskRepository.update(task.id, {
+      status: task.status.value,
+      error: task.error,
+      completedAt: task.completedAt
+    });
 
     console.log(`[AGENT-TASK-SERVICE] Cancelled task ${taskId.substring(0, 8)}`);
   }

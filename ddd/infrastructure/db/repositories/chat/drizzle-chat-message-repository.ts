@@ -14,9 +14,39 @@ import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat
 import type { ChatMessage, CreateChatMessageData, UpdateChatMessageData } from '@/ddd/domain/chat/entities/chat-message';
 import { ChatId, ChatMessageId } from '@/ddd/domain/shared/value-objects';
 import type { DbClient } from '@/lib/db/client';
+import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 
-export class DrizzleChatMessageRepository implements IChatMessageRepository {
-  constructor(private readonly db: DbClient) {}
+export class DrizzleChatMessageRepository extends DrizzleBaseRepository<
+  ChatMessage,
+  ChatMessageId,
+  CreateChatMessageData,
+  UpdateChatMessageData,
+  any
+> implements IChatMessageRepository {
+  protected readonly table = chatMessages;
+  protected readonly idColumn = chatMessages.id;
+  protected readonly organizationColumn = undefined; // Chat messages are scoped by chatId, not organizationId
+
+  constructor(db: DbClient) {
+    super(db);
+  }
+
+  protected fromPersistence(record: any): ChatMessage {
+    return this.mapToChatMessage(record);
+  }
+
+  protected toPersistence(entity: ChatMessage): Partial<any> {
+    return {
+      id: entity.id,
+      chatId: entity.chatId,
+      role: entity.role,
+      content: entity.content,
+      metadata: entity.metadata,
+      messageIndex: entity.messageIndex,
+      parentMessageId: entity.parentMessageId,
+      createdAt: entity.createdAt
+    };
+  }
 
   /**
    * Create a new chat message
@@ -34,17 +64,7 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
     return this.mapToChatMessage(message);
   }
 
-  /**
-   * Find a message by ID
-   */
-  async findById(id: ChatMessageId): Promise<ChatMessage | null> {
-    const [message] = await this.db
-      .select()
-      .from(chatMessages)
-      .where(eq(chatMessages.id, id.value));
-
-    return message ? this.mapToChatMessage(message) : null;
-  }
+  // findById is inherited from DrizzleBaseRepository
 
   /**
    * Find all messages for a chat, ordered by message index
@@ -109,7 +129,7 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
   /**
    * Update a message
    */
-  async update(id: ChatMessageId, data: UpdateChatMessageData): Promise<ChatMessage | null> {
+  async update(id: ChatMessageId, data: UpdateChatMessageData): Promise<ChatMessage> {
     const updateData: any = {};
 
     if (data.content !== undefined) updateData.content = data.content;
@@ -121,20 +141,14 @@ export class DrizzleChatMessageRepository implements IChatMessageRepository {
       .where(eq(chatMessages.id, id.value))
       .returning();
 
-    return updatedMessage ? this.mapToChatMessage(updatedMessage) : null;
+    if (!updatedMessage) {
+      throw new Error(`ChatMessage with id ${id.value} not found`);
+    }
+
+    return this.mapToChatMessage(updatedMessage);
   }
 
-  /**
-   * Delete a message
-   */
-  async delete(id: ChatMessageId): Promise<boolean> {
-    const result = await this.db
-      .delete(chatMessages)
-      .where(eq(chatMessages.id, id.value))
-      .returning({ id: chatMessages.id });
-
-    return result.length > 0;
-  }
+  // delete is inherited from DrizzleBaseRepository
 
   /**
    * Get the next message index for a chat

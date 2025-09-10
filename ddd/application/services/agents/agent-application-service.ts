@@ -112,29 +112,24 @@ export class AgentApplicationService {
       // Apply defaults and add generated fields
       const agentWithDefaults = createAgentDefaults(agentData);
 
-      // Create agent entity object, then save via repository
-      const newAgent: Agent = {
-        id: AgentId.newEntity(), // New agent starts with ID 0
+      // Create agent via repository
+      const createData = {
         name: agentWithDefaults.name,
-        role: agentWithDefaults.role,
+        type: agentWithDefaults.role,
         description: agentWithDefaults.description,
-        persona: agentWithDefaults.persona,
-        tools: agentWithDefaults.tools,
-        servers: agentWithDefaults.servers,
-        trigger: agentWithDefaults.trigger,
-        capabilities: agentWithDefaults.capabilities,
-        databaseId: agentWithDefaults.databaseId,
-        status: agentWithDefaults.status,
-        organizationId: command.organizationId,
-        ownerId: command.ownerId,
-        agentType: agentWithDefaults.agentType,
-        specialization: agentWithDefaults.specialization,
-        apiKey: apiKey,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        instructions: {
+          persona: agentWithDefaults.persona,
+          tools: agentWithDefaults.tools,
+          servers: agentWithDefaults.servers
+        },
+        capabilities: agentWithDefaults.capabilities?.map(c => c.name) || null,
+        organizationId: command.organizationId.value,
+        ownerId: command.ownerId.value,
+        isActive: true,
+        trigger: agentWithDefaults.trigger
       };
       
-      const savedAgent = await this.agentRepository.save(newAgent);
+      const savedAgent = await this.agentRepository.create(createData);
 
       return {
         success: true,
@@ -165,28 +160,21 @@ export class AgentApplicationService {
 
       // Role validation removed - using simplified 3-role system
 
-      // Create updated agent with existing values as defaults
-      const updatedAgent: Agent = {
-        id: existingAgent.id,
-        name: command.name !== undefined ? command.name : existingAgent.name,
-        role: command.role !== undefined ? command.role : existingAgent.role,
-        description: command.description !== undefined ? command.description : existingAgent.description,
-        persona: command.persona !== undefined ? command.persona : existingAgent.persona,
-        tools: command.tools !== undefined ? command.tools : existingAgent.tools,
-        servers: command.servers !== undefined ? command.servers : existingAgent.servers,
-        trigger: command.trigger !== undefined ? command.trigger : existingAgent.trigger,
-        capabilities: command.capabilities !== undefined ? command.capabilities : existingAgent.capabilities,
-        status: command.status !== undefined ? AgentStatus.fromString(command.status) : existingAgent.status,
-        organizationId: existingAgent.organizationId,
-        ownerId: existingAgent.ownerId,
-        databaseId: existingAgent.databaseId,
-        apiKey: existingAgent.apiKey,
-        createdAt: existingAgent.createdAt,
-        updatedAt: new Date()
-      };
+      // Build update data with only changed fields
+      const updateData: any = {};
+      
+      if (command.name !== undefined) updateData.name = command.name;
+      if (command.role !== undefined) updateData.role = command.role;
+      if (command.description !== undefined) updateData.description = command.description;
+      if (command.persona !== undefined) updateData.persona = command.persona;
+      if (command.tools !== undefined) updateData.tools = command.tools;
+      if (command.servers !== undefined) updateData.servers = command.servers;
+      if (command.trigger !== undefined) updateData.trigger = command.trigger;
+      if (command.capabilities !== undefined) updateData.capabilities = command.capabilities;
+      if (command.status !== undefined) updateData.status = command.status;
 
-      // Save updated agent
-      const savedAgent = await this.agentRepository.save(updatedAgent);
+      // Update agent via repository
+      const savedAgent = await this.agentRepository.update(command.agentId, updateData);
 
       return {
         success: true,
@@ -315,14 +303,10 @@ export class AgentApplicationService {
       const existingCapabilities = existingAgent.capabilities || [];
       const updatedCapabilities = [...existingCapabilities, capability];
 
-      // Create updated agent with new capability
-      const updatedAgent: Agent = {
-        ...existingAgent,
-        capabilities: updatedCapabilities,
-        updatedAt: new Date()
-      };
-
-      const savedAgent = await this.agentRepository.save(updatedAgent);
+      // Update agent with new capability
+      const savedAgent = await this.agentRepository.update(agentId, {
+        capabilities: updatedCapabilities.map(c => c.name)
+      });
 
       return {
         success: true,
@@ -353,14 +337,10 @@ export class AgentApplicationService {
       // Generate new API key
       const newApiKey = ApiKey.generate();
       
-      // Create updated agent with new API key
-      const updatedAgent: Agent = {
-        ...existingAgent,
-        apiKey: newApiKey,
-        updatedAt: new Date()
-      };
-      
-      const savedAgent = await this.agentRepository.save(updatedAgent);
+      // Update agent with new API key
+      const savedAgent = await this.agentRepository.update(AgentId.fromNumber(agentId), {
+        apiKey: newApiKey.value
+      });
 
       return {
         success: true,
@@ -395,16 +375,12 @@ export class AgentApplicationService {
         };
       }
 
-      const newStatus = existingAgent.status.value === 'active' ? AgentStatus.inactive() : AgentStatus.active();
+      const newStatus = existingAgent.status.value === 'active' ? 'inactive' : 'active';
       
-      // Create updated agent with new status
-      const updatedAgent: Agent = {
-        ...existingAgent,
-        status: newStatus,
-        updatedAt: new Date()
-      };
-      
-      const savedAgent = await this.agentRepository.save(updatedAgent);
+      // Update agent with new status
+      const savedAgent = await this.agentRepository.update(AgentId.fromNumber(agentId), {
+        status: newStatus
+      });
 
       return {
         success: true,

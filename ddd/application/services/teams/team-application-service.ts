@@ -88,8 +88,18 @@ export class TeamApplicationService {
         organizationId: command.organizationId
       });
 
-      // Save to repository - get saved team with real database ID
-      const savedTeam = await this.teamRepository.save(team);
+      // Create team via repository
+      const createData = {
+        name: command.name,
+        purpose: command.purpose || null,
+        description: command.description || null,
+        responsibilities: command.responsibilities || null,
+        goals: command.goals || null,
+        agentIds: command.agentIds ? command.agentIds.map(id => id.toString()) : null,
+        databaseId: command.databaseId || null,
+        organizationId: command.organizationId
+      };
+      const savedTeam = await this.teamRepository.create(createData);
 
       return {
         success: true,
@@ -147,8 +157,15 @@ export class TeamApplicationService {
         createdAt: existingTeam.createdAt
       });
 
-      // Save updated team
-      const savedTeam = await this.teamRepository.save(updatedTeam);
+      // Update team via repository
+      const updateData = {
+        name: command.name,
+        purpose: command.purpose,
+        description: command.description,
+        responsibilities: command.responsibilities,
+        goals: command.goals
+      };
+      const savedTeam = await this.teamRepository.update(TeamId.fromNumber(command.teamId), updateData);
 
       return {
         success: true,
@@ -286,7 +303,7 @@ export class TeamApplicationService {
         createdAt: existingTeam.createdAt
       });
 
-      const savedTeam = await this.teamRepository.save(updatedTeam);
+      const savedTeam = await this.teamRepository.update(TeamId.fromNumber(teamId), { agentIds: updatedAgentIds });
 
       return {
         success: true,
@@ -337,7 +354,7 @@ export class TeamApplicationService {
         createdAt: existingTeam.createdAt
       });
 
-      const savedTeam = await this.teamRepository.save(updatedTeam);
+      const savedTeam = await this.teamRepository.update(TeamId.fromNumber(teamId), { agentIds: updatedAgentIds });
 
       return {
         success: true,
@@ -404,7 +421,7 @@ export class TeamApplicationService {
         createdAt: existingTeam.createdAt
       });
 
-      const savedTeam = await this.teamRepository.save(updatedTeam);
+      const savedTeam = await this.teamRepository.update(teamId, { agentIds: agentIds.map(id => id.toString()) });
 
       return {
         success: true,

@@ -7,6 +7,7 @@ import type postgres from 'postgres';
 
 import { users, userOrganizations, organizations } from '@/lib/db/schema';
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
+import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import type { 
   User, 
   CreateUserData, 
@@ -19,22 +20,16 @@ import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationName } from '
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 import type { DbClient } from '@/lib/db/client';
 
-export class DrizzleUserRepository implements IUserRepository {
-  constructor(
-    private db: DbClient,
-  ) {}
+export class DrizzleUserRepository 
+  extends DrizzleBaseRepository<User, UserId, CreateUserData, UpdateUserData, any>
+  implements IUserRepository {
+  
+  protected readonly table = users;
+  protected readonly idColumn = users.id;
+  protected readonly organizationColumn = undefined; // Users are not org-scoped directly
 
 
-  // Basic CRUD operations
-  async findById(id: UserId): Promise<User | null> {
-    const result = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.id, id.value))
-      .limit(1);
-
-    return result[0] ? this.mapToEntity(result[0]) : null;
-  }
+  // Basic CRUD operations - findById inherited from DrizzleBaseRepository
 
   async findByEmail(email: EmailAddress): Promise<User | null> {
     const result = await this.db
@@ -43,7 +38,7 @@ export class DrizzleUserRepository implements IUserRepository {
       .where(eq(users.email, email.value))
       .limit(1);
 
-    return result[0] ? this.mapToEntity(result[0]) : null;
+    return result[0] ? this.fromPersistence(result[0]) : null;
   }
 
   async create(data: CreateUserData): Promise<User> {
@@ -68,7 +63,7 @@ export class DrizzleUserRepository implements IUserRepository {
       throw new Error('Failed to create user');
     }
 
-    return this.mapToEntity(newUser);
+    return this.fromPersistence(newUser);
   }
 
   async update(id: UserId, data: UpdateUserData): Promise<User> {
@@ -94,7 +89,7 @@ export class DrizzleUserRepository implements IUserRepository {
       throw new Error(`User with id ${id.value} not found or could not be updated`);
     }
 
-    return this.mapToEntity(updatedUser);
+    return this.fromPersistence(updatedUser);
   }
 
   async delete(id: UserId): Promise<void> {
@@ -139,7 +134,7 @@ export class DrizzleUserRepository implements IUserRepository {
       .where(eq(users.apiKey, apiKey.value))
       .limit(1);
 
-    return result[0] ? this.mapToEntity(result[0]) : null;
+    return result[0] ? this.fromPersistence(result[0]) : null;
   }
 
   async revokeApiKey(userId: UserId): Promise<void> {
@@ -276,7 +271,7 @@ export class DrizzleUserRepository implements IUserRepository {
       .innerJoin(users, eq(userOrganizations.userId, users.id))
       .where(eq(userOrganizations.organizationId, organizationId.value));
 
-    return result.map(r => this.mapToEntity(r.user));
+    return result.map(r => this.fromPersistence(r.user));
   }
 
   async findByRole(organizationId: OrganizationId, role: string): Promise<User[]> {
@@ -293,7 +288,7 @@ export class DrizzleUserRepository implements IUserRepository {
         )
       );
 
-    return result.map(r => this.mapToEntity(r.user));
+    return result.map(r => this.fromPersistence(r.user));
   }
 
   // Business logic operations
@@ -308,7 +303,7 @@ export class DrizzleUserRepository implements IUserRepository {
       throw new Error(`User with id ${userId.value} not found`);
     }
 
-    return this.mapToEntity(verifiedUser);
+    return this.fromPersistence(verifiedUser);
   }
 
 
@@ -344,7 +339,7 @@ export class DrizzleUserRepository implements IUserRepository {
       }));
 
       return {
-        ...this.mapToEntity(user),
+        ...this.fromPersistence(user),
         organizations: userOrgs,
       };
     });
@@ -367,8 +362,8 @@ export class DrizzleUserRepository implements IUserRepository {
     return result[0] ? 'member' : null;
   }
 
-  // AIDEV-NOTE: Boundary conversion - maps database primitives to domain Value Objects
-  private mapToEntity(data: any): User {
+  // AIDEV-NOTE: Base repository interface - maps database primitives to domain Value Objects
+  protected fromPersistence(data: any): User {
     return {
       id: UserId.fromString(data.id),
       name: data.name,
@@ -379,6 +374,20 @@ export class DrizzleUserRepository implements IUserRepository {
       // organizationRole removed in RBAC system
       apiKey: data.apiKey ? ApiKey.fromString(data.apiKey) : null,
       createdAt: data.createdAt
+    };
+  }
+  
+  // AIDEV-NOTE: Base repository interface - maps domain objects to database primitives
+  protected toPersistence(user: User): any {
+    return {
+      id: user.id.value,
+      name: user.name,
+      email: user.email?.value || null,
+      emailVerified: user.emailVerified,
+      image: user.image,
+      currentOrganizationId: user.currentOrganizationId?.value || null,
+      apiKey: user.apiKey?.value || null,
+      createdAt: user.createdAt
     };
   }
 }

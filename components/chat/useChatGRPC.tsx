@@ -8,7 +8,7 @@ import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import { useLayout } from '@/components/layout/LayoutProvider'
 import { createChatStreamRequest, type ChatContextOptions } from './types/chat-requests'
 import { loadChatWithFullHistory, getCurrentChatSession } from '@/app/actions/chat-history'
-import type { ChatMessageDTO, ChatContextDTO } from './types/chat-dtos'
+import type { ChatMessageDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
 
 interface ChatMessage extends Message {
   id: string

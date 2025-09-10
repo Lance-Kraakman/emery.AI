@@ -78,6 +78,77 @@ export interface Agent {
   updatedAt?: Date | null;
 }
 
+// Persistence record type for database operations
+export interface AgentPersistenceRecord {
+  id: number;
+  name: string;
+  role: string;
+  description: string;
+  persona: string;
+  tools: any;
+  servers: any;
+  trigger?: any;
+  capabilities: any;
+  databaseId?: string | null;
+  status: string;
+  organizationId: number;
+  ownerId: string;
+  apiKey?: string | null;
+  agentType?: string;
+  specialization?: any;
+  createdAt?: Date | null;
+  updatedAt?: Date | null;
+}
+
+// Static factory pattern for creating Agent from persistence
+export class AgentFactory {
+  static fromPersistence(record: AgentPersistenceRecord): Agent {
+    return {
+      id: AgentId.fromNumber(record.id),
+      name: record.name,
+      role: record.role,
+      description: record.description,
+      persona: record.persona,
+      tools: record.tools || [],
+      servers: record.servers || [],
+      trigger: record.trigger,
+      capabilities: record.capabilities || [],
+      databaseId: record.databaseId,
+      status: AgentStatus.fromString(record.status),
+      organizationId: OrganizationId.fromNumber(record.organizationId),
+      ownerId: UserId.fromString(record.ownerId),
+      apiKey: record.apiKey ? ApiKey.fromString(record.apiKey) : null,
+      agentType: record.agentType as AgentType | undefined,
+      specialization: record.specialization,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt
+    };
+  }
+
+  static toPersistence(agent: Agent): AgentPersistenceRecord {
+    return {
+      id: agent.id.value,
+      name: agent.name,
+      role: agent.role,
+      description: agent.description,
+      persona: agent.persona,
+      tools: agent.tools,
+      servers: agent.servers,
+      trigger: agent.trigger,
+      capabilities: agent.capabilities,
+      databaseId: agent.databaseId,
+      status: agent.status.value,
+      organizationId: agent.organizationId.value,
+      ownerId: agent.ownerId.value,
+      apiKey: agent.apiKey?.value || null,
+      agentType: agent.agentType,
+      specialization: agent.specialization,
+      createdAt: agent.createdAt,
+      updatedAt: agent.updatedAt
+    };
+  }
+}
+
 export interface CreateAgentData {
   name: string;
   role?: string;                           // defaults to 'assistant'

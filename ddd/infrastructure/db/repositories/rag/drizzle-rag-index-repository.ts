@@ -1,40 +1,68 @@
 // AIDEV-NOTE: Drizzle implementation of RagIndexRepository
 // Provides concrete database operations using existing schema
 
-import { eq, and, inArray, sql, desc } from 'drizzle-orm';
+import { eq, and, inArray, sql, desc, ne } from 'drizzle-orm';
 import { ragIndexes } from '@/lib/db/schema';
-
-
 import { RagIndex } from '@/ddd/domain/rag/entities';
 import { RagIndexId, OrganizationId, type DomainType, type IndexStatus } from '@/ddd/domain/rag/value-objects';
-import { RagIndexRepository } from '@/ddd/domain/rag';
-import { RagIndexFilters } from '@/ddd/domain/rag/repositories/rag-index-repository';
+import type { RagIndexRepository, CreateRagIndexData, UpdateRagIndexData, RagIndexFilters } from '@/ddd/domain/rag/repositories/rag-index-repository';
+import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import type { DbClient } from '@/lib/db/client';
 
-export class DrizzleRagIndexRepository implements RagIndexRepository {
-  constructor(private readonly db: DbClient) {}
+export class DrizzleRagIndexRepository 
+  extends DrizzleBaseRepository<RagIndex, RagIndexId, CreateRagIndexData, UpdateRagIndexData, any>
+  implements RagIndexRepository {
+  
+  protected readonly table = ragIndexes;
+  protected readonly idColumn = ragIndexes.id;
+  protected readonly organizationColumn = ragIndexes.organizationId;
 
-  async findById(id: RagIndexId): Promise<RagIndex | null> {
+  async create(data: CreateRagIndexData): Promise<RagIndex> {
     const [record] = await this.db
-      .select()
-      .from(ragIndexes)
+      .insert(ragIndexes)
+      .values({
+        id: data.id,
+        name: data.name,
+        description: data.description,
+        organizationId: data.organizationId,
+        agentId: data.agentId,
+        domainTypes: data.domainTypes,
+        domainFilters: data.domainFilters,
+        embeddingModel: data.embeddingModel,
+        embeddingDimensions: data.embeddingDimensions,
+        status: data.status,
+        documentCount: data.documentCount,
+        createdAt: data.createdAt,
+        lastIndexedAt: data.lastIndexedAt,
+        updatedAt: new Date()
+      })
+      .returning();
+    
+    return this.fromPersistence(record);
+  }
+  
+  async update(id: RagIndexId, data: UpdateRagIndexData): Promise<RagIndex> {
+    const updateData = {
+      ...data,
+      updatedAt: new Date()
+    };
+    
+    const [record] = await this.db
+      .update(ragIndexes)
+      .set(updateData)
       .where(eq(ragIndexes.id, id.value))
-      .limit(1);
-
-    if (!record) return null;
-
-    return this.mapToDomainEntity(record);
+      .returning();
+    
+    if (!record) {
+      throw new Error(`RagIndex with id ${id.value} not found`);
+    }
+    
+    return this.fromPersistence(record);
   }
 
-  async findByOrganization(organizationId: OrganizationId): Promise<RagIndex[]> {
-    const records = await this.db
-      .select()
-      .from(ragIndexes)
-      .where(eq(ragIndexes.organizationId, organizationId.value))
-      .orderBy(desc(ragIndexes.createdAt));
-
-    return records.map(record => this.mapToDomainEntity(record));
-  }
+  // Inherits findById from base class
+  // Inherits findByOrganization from base class
+  // Inherits delete from base class
 
   async findByAgent(agentId: number): Promise<RagIndex[]> {
     const records = await this.db
@@ -43,7 +71,7 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
       .where(eq(ragIndexes.agentId, agentId))
       .orderBy(desc(ragIndexes.createdAt));
 
-    return records.map(record => this.mapToDomainEntity(record));
+    return records.map(record => this.fromPersistence(record));
   }
 
   async findByFilters(filters: RagIndexFilters): Promise<RagIndex[]> {
@@ -74,7 +102,7 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(ragIndexes.createdAt));
 
-    return records.map(record => this.mapToDomainEntity(record));
+    return records.map(record => this.fromPersistence(record));
   }
 
   async exists(id: RagIndexId): Promise<boolean> {
@@ -98,7 +126,7 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
     ];
 
     if (excludeId) {
-      conditions.push(sql`${ragIndexes.id} != ${excludeId.value}`);
+      conditions.push(ne(ragIndexes.id, excludeId.value));
     }
 
     const [record] = await this.db
@@ -110,6 +138,7 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
     return !record; // Name is unique if no record found
   }
 
+  // Legacy save method - kept for backward compatibility during transition
   async save(index: RagIndex): Promise<void> {
     const persistence = index.toPersistence();
     
@@ -144,11 +173,6 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
     });
   }
 
-  async delete(id: RagIndexId): Promise<void> {
-    await this.db
-      .delete(ragIndexes)
-      .where(eq(ragIndexes.id, id.value));
-  }
 
   async countByOrganization(organizationId: OrganizationId): Promise<number> {
     const [result] = await this.db
@@ -166,11 +190,10 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
       .where(inArray(ragIndexes.status, ['error', 'created']))
       .orderBy(desc(ragIndexes.createdAt));
 
-    return records.map(record => this.mapToDomainEntity(record));
+    return records.map(record => this.fromPersistence(record));
   }
 
-  // Private mapping methods
-  private mapToDomainEntity(record: any): RagIndex {
+  protected fromPersistence(record: any): RagIndex {
     return RagIndex.fromPersistence({
       id: record.id,
       organizationId: record.organizationId,
@@ -186,5 +209,9 @@ export class DrizzleRagIndexRepository implements RagIndexRepository {
       createdAt: record.createdAt,
       lastIndexedAt: record.lastIndexedAt
     });
+  }
+  
+  protected toPersistence(ragIndex: RagIndex): any {
+    return ragIndex.toPersistence();
   }
 }

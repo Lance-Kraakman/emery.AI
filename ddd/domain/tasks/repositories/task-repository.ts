@@ -7,14 +7,40 @@
 import type { Task } from '../entities/task';
 import type { TaskId } from '../value-objects/task-id';
 import type { TaskStatus } from '../value-objects/task-status';
-import type { AgentId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import type { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+
+// Data transfer objects for repository operations
+export interface CreateTaskData {
+  id?: string;
+  agentId: number;
+  organizationId: number;
+  name: string;
+  capabilityName?: string | null;
+  instructions: any; // JSONB from database
+  status?: string;
+  result?: any;
+  error?: string | null;
+  startedAt?: Date | null;
+  completedAt?: Date | null;
+  createdBy?: string | null;
+  createdAt?: Date;
+}
+
+export interface UpdateTaskData {
+  status?: string;
+  result?: any;
+  error?: string | null;
+  startedAt?: Date | null;
+  completedAt?: Date | null;
+}
 
 export interface ITaskRepository {
   // Basic CRUD operations
+  create(data: CreateTaskData): Promise<Task>;
+  update(id: TaskId, data: UpdateTaskData): Promise<Task>;
   findById(id: TaskId): Promise<Task | null>;
   findByAgentId(agentId: AgentId): Promise<Task[]>;
   findByOrganization(organizationId: OrganizationId): Promise<Task[]>;
-  save(task: Task): Promise<void>;
   delete(id: TaskId): Promise<void>;
   
   // Scheduling-specific queries

@@ -130,6 +130,38 @@ export class Task {
     );
   }
 
+  toPersistence(): {
+    id: string;
+    agentId: number;
+    organizationId: number;
+    name: string;
+    capabilityName: string | null;
+    instructions: any;
+    status: string;
+    result: any;
+    error: string | null;
+    startedAt: Date | null;
+    completedAt: Date | null;
+    createdBy: string | null;
+    createdAt: Date;
+  } {
+    return {
+      id: this.id.value,
+      agentId: this.agentId.value,
+      organizationId: this.organizationId.value,
+      name: this.name,
+      capabilityName: this.capabilityName,
+      instructions: this.instructions,
+      status: this._status.value,
+      result: this._result,
+      error: this._error,
+      startedAt: this._startedAt,
+      completedAt: this._completedAt,
+      createdBy: this.createdBy?.value || null,
+      createdAt: this.createdAt
+    };
+  }
+
   // Getters
   get status(): TaskStatus { return this._status; }
   get result(): any | null { return this._result; }

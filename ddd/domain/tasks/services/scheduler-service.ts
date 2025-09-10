@@ -68,8 +68,9 @@ export class SchedulerService implements ISchedulerService {
     // This will be handled by the agent repository in the infrastructure layer
     const agent = await this.agentRepository.findById(request.agentId);
     if (agent) {
-      agent.trigger = request.trigger
-      await this.agentRepository.save(agent);
+      await this.agentRepository.update(request.agentId, {
+        trigger: request.trigger
+      });
     }
   }
 

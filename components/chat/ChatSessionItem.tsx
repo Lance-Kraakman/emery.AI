@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import type { ChatSessionDTO } from '@/components/chat/types/chat-dtos'
+import type { ChatSessionDTO } from '@/app/mappers/chat-mapper'
 import { archiveChatSession } from '@/app/actions/chat-history'
 
 interface ChatSessionItemProps {

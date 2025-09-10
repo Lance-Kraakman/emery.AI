@@ -1,39 +1,49 @@
 // AIDEV-NOTE: Drizzle implementation of Agent repository
 // Handles data persistence for Agent domain entities
 
-import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import type { IAgentRepository, CreateAgentData, UpdateAgentData } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import { AgentFactory } from '@/ddd/domain/agents/entities/agent';
+import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { agents } from '@/lib/db/schema';
-import { eq, and, isNotNull, sql } from 'drizzle-orm';
-import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
+import { eq, and, isNotNull, sql, ne } from 'drizzle-orm';
+import { AgentId, OrganizationId, UserId, AgentStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
 import type { DbClient } from '@/lib/db/client';
 
-export class DrizzleAgentRepository implements IAgentRepository {
-  constructor(private readonly db: DbClient) {}
+export class DrizzleAgentRepository 
+  extends DrizzleBaseRepository<Agent, AgentId, CreateAgentData, UpdateAgentData, any>
+  implements IAgentRepository {
+  
+  protected readonly table = agents;
+  protected readonly idColumn = agents.id;
+  protected readonly organizationColumn = agents.organizationId;
 
-  async findByOrganization(organizationId: OrganizationId): Promise<Agent[]> {
-    const results = await this.db
-      .select()
-      .from(agents)
-      .where(eq(agents.organizationId, organizationId.value));
-
-    return results.map(result => this.mapToEntity(result));
+  async create(data: CreateAgentData): Promise<Agent> {
+    const [record] = await this.db
+      .insert(agents)
+      .values(data)
+      .returning();
+    
+    return this.fromPersistence(record);
   }
-
-  async findById(id: AgentId): Promise<Agent | null> {
-    const results = await this.db
-      .select()
-      .from(agents)
+  
+  async update(id: AgentId, data: UpdateAgentData): Promise<Agent> {
+    const [record] = await this.db
+      .update(agents)
+      .set(data)
       .where(eq(agents.id, id.value))
-      .limit(1);
-
-    if (results.length === 0) {
-      return null;
+      .returning();
+    
+    if (!record) {
+      throw new Error(`Agent with id ${id.value} not found`);
     }
-
-    const result = results[0];
-    return this.mapToEntity(result);
+    
+    return this.fromPersistence(record);
   }
+
+  // Inherits findById from base class
+  // Inherits findByOrganization from base class
+  // Inherits delete from base class
 
   async findByOwner(ownerId: UserId): Promise<Agent[]> {
     const results = await this.db
@@ -41,7 +51,7 @@ export class DrizzleAgentRepository implements IAgentRepository {
       .from(agents)
       .where(eq(agents.ownerId, ownerId.value));
 
-    return results.map(result => this.mapToEntity(result));
+    return results.map(result => this.fromPersistence(result));
   }
 
   async findActiveByOrganization(organizationId: OrganizationId): Promise<Agent[]> {
@@ -55,57 +65,7 @@ export class DrizzleAgentRepository implements IAgentRepository {
         )
       );
 
-    return results.map(result => this.mapToEntity(result));
-  }
-
-  async save(agent: Agent): Promise<Agent> {
-    if (agent.id.value === 0) {
-      // Insert new agent
-      const results = await this.db.insert(agents).values({
-        name: agent.name,
-        role: agent.role,
-        description: agent.description,
-        persona: agent.persona,
-        tools: agent.tools,
-        servers: agent.servers,
-        trigger: agent.trigger,
-        capabilities: agent.capabilities,
-        databaseId: agent.databaseId,
-        status: agent.status.value,
-        organizationId: agent.organizationId.value,
-        ownerId: agent.ownerId.value,
-        apiKey: agent.apiKey?.value
-      }).returning();
-      
-      return this.mapToEntity(results[0]);
-    } else {
-      // Update existing agent
-      const results = await this.db
-        .update(agents)
-        .set({
-          name: agent.name,
-          role: agent.role,
-          description: agent.description,
-          persona: agent.persona,
-          tools: agent.tools,
-          servers: agent.servers,
-          trigger: agent.trigger,
-          capabilities: agent.capabilities,
-          databaseId: agent.databaseId,
-          status: agent.status.value,
-          organizationId: agent.organizationId.value,
-          ownerId: agent.ownerId.value,
-          apiKey: agent.apiKey?.value
-        })
-        .where(eq(agents.id, agent.id.value))
-        .returning();
-        
-      return this.mapToEntity(results[0]);
-    }
-  }
-
-  async delete(id: AgentId): Promise<void> {
-    await this.db.delete(agents).where(eq(agents.id, id.value));
+    return results.map(result => this.fromPersistence(result));
   }
 
   async countByOrganization(organizationId: OrganizationId): Promise<number> {
@@ -134,7 +94,7 @@ export class DrizzleAgentRepository implements IAgentRepository {
       .from(agents)
       .where(and(...conditions));
 
-    return results.map(result => this.mapToEntity(result));
+    return results.map(result => this.fromPersistence(result));
   }
 
   async findAgentsWithTriggers(organizationId?: OrganizationId): Promise<Agent[]> {
@@ -153,28 +113,33 @@ export class DrizzleAgentRepository implements IAgentRepository {
       .from(agents)
       .where(and(...conditions));
 
-    return results.map(result => this.mapToEntity(result));
+    return results.map(result => this.fromPersistence(result));
   }
 
-  // Helper method to map database result to domain entity with defaults
-  private mapToEntity(data: any): Agent {
-    return {
-      id: AgentId.fromNumber(data.id),
-      name: data.name,
-      role: data.role || 'assistant',
-      description: data.description || '',
-      persona: data.persona || '',
-      tools: data.tools || {},
-      servers: data.servers || {},
-      trigger: data.trigger || {},
-      capabilities: data.capabilities || {},
-      databaseId: data.databaseId,
-      status: AgentStatus.fromString(data.status || 'active'),
-      organizationId: OrganizationId.fromNumber(data.organizationId),
-      ownerId: UserId.fromString(data.ownerId),
-      apiKey: data.apiKey,
-      createdAt: data.createdAt,
-      updatedAt: data.updatedAt
-    };
+  protected fromPersistence(record: any): Agent {
+    return AgentFactory.fromPersistence(record);
+  }
+  
+  protected toPersistence(agent: Agent): any {
+    return AgentFactory.toPersistence(agent);
+  }
+
+  async isNameUnique(organizationId: OrganizationId, name: string, excludeId?: AgentId): Promise<boolean> {
+    const conditions = [
+      eq(agents.organizationId, organizationId.value),
+      eq(agents.name, name)
+    ];
+
+    if (excludeId) {
+      conditions.push(ne(agents.id, excludeId.value));
+    }
+
+    const [record] = await this.db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(and(...conditions))
+      .limit(1);
+
+    return !record;
   }
 }

@@ -179,7 +179,20 @@ class EventDrivenScheduler {
       domainTypes: ['tables', 'agents', 'teams', 'organizations', 'databases', 'files']
     });
 
-    await this.ragIndexRepository.save(defaultIndex);
+    const createData = {
+      id: defaultIndex.id.value,
+      organizationId: defaultIndex.organizationId.value,
+      name: defaultIndex.name,
+      description: defaultIndex.description,
+      domainTypes: defaultIndex.domainTypes,
+      domainFilters: defaultIndex.domainFilters || {},
+      embeddingModel: defaultIndex.embeddingModel,
+      embeddingDimensions: defaultIndex.embeddingDimensions,
+      status: defaultIndex.status,
+      documentCount: defaultIndex.documentCount || 0,
+      createdAt: defaultIndex.createdAt || new Date()
+    };
+    await this.ragIndexRepository.create(createData);
     console.log(`[SCHEDULER] Created default index "${defaultIndex.name}" for organization ${organizationId.value}`);
     
     return defaultIndex;
@@ -215,7 +228,17 @@ class EventDrivenScheduler {
       for (const task of dueTasks) {
         await withSystemContext(task.organizationId, async () => {
           try {
-            await this.taskRepository.save(task);
+            const createData = {
+              agentId: task.agentId.value,
+              organizationId: task.organizationId.value,
+              name: task.name,
+              capabilityName: task.capabilityName,
+              instructions: task.instructions,
+              status: task.status.value,
+              createdBy: task.createdBy?.value,
+              createdAt: task.createdAt || new Date()
+            };
+            await this.taskRepository.create(createData);
             await this.agentTaskService.executeTask({ taskId: task.id.value });
           } catch (error) {
             console.error(`❌ Failed to process scheduled task ${task.id.value}:`, error);
@@ -246,7 +269,7 @@ class EventDrivenScheduler {
       await withSystemContext(task.organizationId, async () => {
         try {
           task.timeout();
-          await this.taskRepository.save(task);
+          await this.taskRepository.update(task.id, { status: task.status.value });
           await this.taskQueueService.markTaskFailed(task.id, 'Task execution timed out');
           console.log(`⏱️ Marked task ${task.id.value} as timed out`);
         } catch (error) {

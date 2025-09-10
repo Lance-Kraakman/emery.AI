@@ -262,28 +262,22 @@ export async function createTestAgent(
   const random = Math.random().toString(36).substr(2, 5);
   const uniqueName = `${name} ${timestamp}-${random}`;
   
-  const agentEntity: Agent = {
-    id: AgentId.newEntity(), // New entity, ID will be set by repository
+  const createData = {
     name: uniqueName,
-    role: 'assistant',
+    type: 'assistant',
     description: 'Test agent description',
-    persona: 'Test agent persona',
-    tools: [],
-    servers: [],
+    instructions: {
+      persona: 'Test agent persona',
+      tools: [],
+      servers: []
+    },
     capabilities: [],
-    status: AgentStatus.fromString('active'),
-    organizationId,
-    ownerId,
-    databaseId: null,
-    apiKey: null,
-    agentType: 'general',
-    specialization: undefined,
-    trigger: undefined,
-    createdAt: null,
-    updatedAt: null
+    organizationId: organizationId.value,
+    ownerId: ownerId.value,
+    isActive: true
   };
   
-  const agent = await agentRepository.save(agentEntity);
+  const agent = await agentRepository.create(createData);
   
   return {
     id: agent.id,

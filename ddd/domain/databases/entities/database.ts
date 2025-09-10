@@ -58,6 +58,19 @@ export class Database {
     );
   }
 
+  toPersistence(): DatabasePersistenceData {
+    return {
+      id: this.id.value,
+      name: this.name,
+      slug: this.slug,
+      metadata: this.metadata,
+      organizationId: this.organizationId.value,
+      createdBy: this.createdBy.value,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt
+    };
+  }
+
   /**
    * Get database description from metadata
    */

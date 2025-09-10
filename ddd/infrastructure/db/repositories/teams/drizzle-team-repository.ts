@@ -1,61 +1,48 @@
 // AIDEV-NOTE: Drizzle implementation of Team repository
 // Handles data persistence for Team domain entities
 
-import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
+import type { ITeamRepository, CreateTeamData, UpdateTeamData } from '@/ddd/domain/teams/repositories/team-repository';
 import { Team } from '@/ddd/domain/teams/entities/team';
+import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { OrganizationId, TeamId, AgentId } from '@/ddd/domain/shared/value-objects';
 import { teams } from '@/lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import type { DbClient } from '@/lib/db/client';
 
-export class DrizzleTeamRepository implements ITeamRepository {
-  constructor(private readonly db: DbClient) {}
+export class DrizzleTeamRepository 
+  extends DrizzleBaseRepository<Team, TeamId, CreateTeamData, UpdateTeamData, any>
+  implements ITeamRepository {
+  
+  protected readonly table = teams;
+  protected readonly idColumn = teams.id;
+  protected readonly organizationColumn = teams.organizationId;
 
-  async findByOrganization(organizationId: OrganizationId): Promise<Team[]> {
-    const results = await this.db
-      .select()
-      .from(teams)
-      .where(eq(teams.organizationId, organizationId.value));
-
-    return results.map(result => Team.fromPersistence({
-      id: result.id,
-      name: result.name,
-      purpose: result.purpose,
-      description: result.description,
-      responsibilities: result.responsibilities,
-      goals: result.goals,
-      agentIds: result.agentIds,
-      databaseId: result.databaseId,
-      organizationId: result.organizationId,
-      createdAt: result.createdAt
-    }));
+  async create(data: CreateTeamData): Promise<Team> {
+    const [record] = await this.db
+      .insert(teams)
+      .values(data)
+      .returning();
+    
+    return this.fromPersistence(record);
   }
-
-  async findById(id: TeamId): Promise<Team | null> {
-    const results = await this.db
-      .select()
-      .from(teams)
+  
+  async update(id: TeamId, data: UpdateTeamData): Promise<Team> {
+    const [record] = await this.db
+      .update(teams)
+      .set(data)
       .where(eq(teams.id, id.value))
-      .limit(1);
-
-    if (results.length === 0) {
-      return null;
+      .returning();
+    
+    if (!record) {
+      throw new Error(`Team with id ${id.value} not found`);
     }
-
-    const result = results[0];
-    return Team.fromPersistence({
-      id: result.id,
-      name: result.name,
-      purpose: result.purpose,
-      description: result.description,
-      responsibilities: result.responsibilities,
-      goals: result.goals,
-      agentIds: result.agentIds,
-      databaseId: result.databaseId,
-      organizationId: result.organizationId,
-      createdAt: result.createdAt
-    });
+    
+    return this.fromPersistence(record);
   }
+
+  // Inherits findById from base class
+  // Inherits findByOrganization from base class
+  // Inherits delete from base class
 
   async findByAgentId(agentId: AgentId): Promise<Team[]> {
     // Use PostgreSQL array contains operator to find teams that include the agent
@@ -64,84 +51,7 @@ export class DrizzleTeamRepository implements ITeamRepository {
       .from(teams)
       .where(sql`${teams.agentIds} @> ARRAY[${agentId.value}]::text[]`);
 
-    return results.map(result => Team.fromPersistence({
-      id: result.id,
-      name: result.name,
-      purpose: result.purpose,
-      description: result.description,
-      responsibilities: result.responsibilities,
-      goals: result.goals,
-      agentIds: result.agentIds,
-      databaseId: result.databaseId,
-      organizationId: result.organizationId,
-      createdAt: result.createdAt
-    }));
-  }
-
-  async save(team: Team): Promise<Team> {
-    if (team.id.value <= 0) {
-      // Insert new team and return with generated ID
-      const insertResult = await this.db.insert(teams).values({
-        name: team.name,
-        purpose: team.purpose,
-        description: team.description,
-        responsibilities: team.responsibilities,
-        goals: team.goals,
-        agentIds: team.agentIds?.map(id => id.value.toString()) || null,
-        databaseId: team.databaseId,
-        organizationId: team.organizationId.value
-      }).returning({
-        id: teams.id,
-        name: teams.name,
-        purpose: teams.purpose,
-        description: teams.description,
-        responsibilities: teams.responsibilities,
-        goals: teams.goals,
-        agentIds: teams.agentIds,
-        databaseId: teams.databaseId,
-        organizationId: teams.organizationId,
-        createdAt: teams.createdAt
-      });
-
-      if (insertResult.length === 0) {
-        throw new Error('Failed to insert team - no result returned');
-      }
-
-      const result = insertResult[0];
-      return Team.fromPersistence({
-        id: result.id,
-        name: result.name,
-        purpose: result.purpose,
-        description: result.description,
-        responsibilities: result.responsibilities,
-        goals: result.goals,
-        agentIds: result.agentIds,
-        databaseId: result.databaseId,
-        organizationId: result.organizationId,
-        createdAt: result.createdAt
-      });
-    } else {
-      // Update existing team
-      await this.db
-        .update(teams)
-        .set({
-          name: team.name,
-          purpose: team.purpose,
-          description: team.description,
-          responsibilities: team.responsibilities,
-          goals: team.goals,
-          agentIds: team.agentIds?.map(id => id.value.toString()) || null,
-          databaseId: team.databaseId,
-          organizationId: team.organizationId.value
-        })
-        .where(eq(teams.id, team.id.value));
-      
-      return team; // Return the existing team unchanged for updates
-    }
-  }
-
-  async delete(id: TeamId): Promise<void> {
-    await this.db.delete(teams).where(eq(teams.id, id.value));
+    return results.map(result => this.fromPersistence(result));
   }
 
   async countByOrganization(organizationId: OrganizationId): Promise<number> {
@@ -151,5 +61,37 @@ export class DrizzleTeamRepository implements ITeamRepository {
       .where(eq(teams.organizationId, organizationId.value));
 
     return result.length;
+  }
+
+  protected fromPersistence(record: any): Team {
+    return Team.fromPersistence({
+      id: record.id,
+      name: record.name,
+      purpose: record.purpose,
+      description: record.description,
+      responsibilities: record.responsibilities,
+      goals: record.goals,
+      agentIds: record.agentIds,
+      databaseId: record.databaseId,
+      organizationId: record.organizationId,
+      createdAt: record.createdAt
+    });
+  }
+  
+  protected toPersistence(team: Team): any {
+    // Team entity doesn't have a toPersistence method yet, 
+    // but we can extract the data from the entity
+    return {
+      id: team.id.value,
+      name: team.name,
+      purpose: team.purpose,
+      description: team.description,
+      responsibilities: team.responsibilities,
+      goals: team.goals,
+      agentIds: team.agentIds?.map(id => id.value.toString()) || null,
+      databaseId: team.databaseId,
+      organizationId: team.organizationId.value,
+      createdAt: team.createdAt
+    };
   }
 }

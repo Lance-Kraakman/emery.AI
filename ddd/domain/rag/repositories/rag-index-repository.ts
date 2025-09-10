@@ -2,7 +2,7 @@
 // Defines data access patterns without implementation details
 
 import { RagIndex } from '../entities';
-import { RagIndexId, OrganizationId } from '../value-objects';
+import { RagIndexId, OrganizationId, type DomainType, type IndexStatus } from '../value-objects';
 
 export interface RagIndexFilters {
   organizationId?: OrganizationId;
@@ -11,7 +11,44 @@ export interface RagIndexFilters {
   domainTypes?: string[];
 }
 
+// Data transfer objects for repository operations
+export interface CreateRagIndexData {
+  id: string;
+  organizationId: number;
+  name: string;
+  description?: string;
+  agentId?: number;
+  domainTypes: DomainType[];
+  domainFilters?: Record<string, any>;
+  embeddingModel: string;
+  embeddingDimensions: number;
+  status: IndexStatus;
+  documentCount: number;
+  createdAt: Date;
+  lastIndexedAt?: Date;
+}
+
+export interface UpdateRagIndexData {
+  name?: string;
+  description?: string;
+  domainTypes?: DomainType[];
+  domainFilters?: Record<string, any>;
+  status?: IndexStatus;
+  documentCount?: number;
+  lastIndexedAt?: Date;
+}
+
 export interface RagIndexRepository {
+  /**
+   * Create a new RAG index
+   */
+  create(data: CreateRagIndexData): Promise<RagIndex>;
+
+  /**
+   * Update an existing RAG index
+   */
+  update(id: RagIndexId, data: UpdateRagIndexData): Promise<RagIndex>;
+
   /**
    * Find a RAG index by its unique identifier
    */
@@ -43,14 +80,10 @@ export interface RagIndexRepository {
   isNameUnique(organizationId: OrganizationId, name: string, excludeId?: RagIndexId): Promise<boolean>;
 
   /**
-   * Save a RAG index (create or update)
-   */
-  save(index: RagIndex): Promise<void>;
-
-  /**
    * Delete a RAG index
    */
   delete(id: RagIndexId): Promise<void>;
+
 
   /**
    * Get total count of indexes for an organization
