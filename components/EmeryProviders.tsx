@@ -1,6 +1,7 @@
 'use client'
 
 import { Suspense } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { DataDialogsProvider } from '@/contexts/DataDialogsContext'
 import { EmeryProvider } from '@/contexts/EmeryContext'
 import { CreateDatabaseDialog } from '@/app/(app)/data/components/CreateDatabaseDialog'
@@ -10,6 +11,16 @@ import { useEmery } from '@/contexts/EmeryContext'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { LayoutProvider } from '@/components/layout/LayoutProvider'
 import { EmeryLayout } from '@/components/layout/EmeryLayout'
+
+// Create a client instance
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 10, // 10 minutes
+    },
+  },
+})
 
 function DataDialogs() {
   const { 
@@ -66,22 +77,24 @@ export function EmeryProviders({
   const { createChatContextForPage } = require('@/components/layout/types')
   const effectiveChatContext = chatContext || (pageName ? createChatContextForPage(pageName) : undefined)
   return (
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="system"
-      enableSystem
-      disableTransitionOnChange
-    >
-      <EmeryProvider>
-        <DataDialogsProvider>
-          <LayoutProvider>
-            <EmeryLayout enableChat={enableChat} chatContext={effectiveChatContext}>
-              {children}
-            </EmeryLayout>
-            <DataDialogs />
-          </LayoutProvider>
-        </DataDialogsProvider>
-      </EmeryProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
+      >
+        <EmeryProvider>
+          <DataDialogsProvider>
+            <LayoutProvider>
+              <EmeryLayout enableChat={enableChat} chatContext={effectiveChatContext}>
+                {children}
+              </EmeryLayout>
+              <DataDialogs />
+            </LayoutProvider>
+          </DataDialogsProvider>
+        </EmeryProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   )
 }

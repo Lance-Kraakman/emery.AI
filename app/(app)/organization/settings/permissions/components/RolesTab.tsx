@@ -1,6 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { 
+  useReactTable, 
+  getCoreRowModel, 
+  getSortedRowModel, 
+  createColumnHelper,
+  flexRender,
+  type ColumnDef
+} from '@tanstack/react-table';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -118,8 +126,97 @@ export function RolesTab() {
     );
   }
 
-  const systemRoles = roles.filter(role => role.isSystem);
-  const customRoles = roles.filter(role => !role.isSystem);
+  const columnHelper = createColumnHelper<CustomRole>();
+
+  const columns = useMemo(() => [
+    columnHelper.accessor('name', {
+      header: 'Role',
+      cell: ({ row }) => {
+        const role = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            <Badge variant={getRoleBadgeVariant(role)} className="flex items-center gap-1 w-fit">
+              {getRoleIcon(role)}
+              {role.name}
+            </Badge>
+            {role.isSystem && (
+              <Badge variant="secondary" className="text-xs">
+                System
+              </Badge>
+            )}
+          </div>
+        );
+      },
+    }),
+    columnHelper.accessor('description', {
+      header: 'Description',
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {row.original.description || (row.original.isSystem ? 'System-defined role' : 'Custom role')}
+        </span>
+      ),
+    }),
+    columnHelper.accessor('permissionCount', {
+      header: 'Permissions',
+      cell: ({ getValue }) => (
+        <span className="text-sm font-medium">
+          {getValue()} permissions
+        </span>
+      ),
+    }),
+    columnHelper.accessor('userCount', {
+      header: 'Users',
+      cell: ({ getValue }) => (
+        <div className="flex items-center gap-1">
+          <Users className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm">{getValue()} users</span>
+        </div>
+      ),
+    }),
+    columnHelper.accessor('createdAt', {
+      header: 'Created',
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {row.original.isSystem ? 'Built-in' : new Date(row.original.createdAt).toLocaleDateString()}
+        </span>
+      ),
+    }),
+    columnHelper.display({
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => {
+        const role = row.original;
+        return role.isSystem ? (
+          <span className="text-sm text-muted-foreground">Not editable</span>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleEditRole(role)}
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleDeleteRole(role)}
+              className="text-red-600 hover:text-red-700"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        );
+      },
+    }),
+  ], [handleEditRole, handleDeleteRole, getRoleIcon, getRoleBadgeVariant]);
+
+  const table = useReactTable({
+    data: roles,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
 
   return (
     <div className="space-y-6">
@@ -150,75 +247,29 @@ export function RolesTab() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Permissions</TableHead>
-                  <TableHead>Users</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <TableHead key={header.id}>
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                ))}
               </TableHeader>
               <TableBody>
-                {roles.map((role) => (
-                  <TableRow key={role.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={getRoleBadgeVariant(role)} className="flex items-center gap-1 w-fit">
-                          {getRoleIcon(role)}
-                          {role.name}
-                        </Badge>
-                        {role.isSystem && (
-                          <Badge variant="secondary" className="text-xs">
-                            System
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground">
-                        {role.description || (role.isSystem ? 'System-defined role' : 'Custom role')}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm font-medium">
-                        {role.permissionCount} permissions
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Users className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm">{role.userCount} users</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground">
-                        {role.isSystem ? 'Built-in' : new Date(role.createdAt).toLocaleDateString()}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {role.isSystem ? (
-                        <span className="text-sm text-muted-foreground">Not editable</span>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEditRole(role)}
-                          >
-                            <Settings className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteRole(role)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </TableCell>
+                {table.getRowModel().rows.map((row) => (
+                  <TableRow key={row.id}>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
                   </TableRow>
                 ))}
               </TableBody>
