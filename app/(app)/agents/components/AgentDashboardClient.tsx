@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect } from 'react';
+import { useStore } from '@tanstack/react-store';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { TeamDTO } from '@/app/mappers/team-mapper';
 import { Search, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -11,62 +12,47 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Loading } from '@/components/ui/loading';
 import AgentDetailsView from './AgentDetailsView';
 import AgentCreateView from './AgentCreateView';
-import { getAgents } from '@/app/actions/agents';
+import { agentsStore, agentsSelectors } from '@/stores/agents.store';
+import { storeActions } from '@/stores/actions';
 
-// AIDEV-NOTE: Agent dashboard refactored to use consistent design system patterns and improved UX
+// AIDEV-NOTE: Agent dashboard migrated to TanStack Store for better state management and performance
 interface AgentDashboardClientProps {
   initialAgents: AgentDTO[];
   teams: TeamDTO[];
 }
 
 export default function AgentDashboardClient({ initialAgents, teams }: AgentDashboardClientProps) {
-  const [agents, setAgents] = useState<AgentDTO[]>(initialAgents);
-  const [selectedAgent, setSelectedAgent] = useState<AgentDTO | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTeam, setSelectedTeam] = useState<string>('all');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
-  const [isCreateMode, setIsCreateMode] = useState(false);
+  // Use TanStack Store with fine-grained subscriptions
+  const agents = useStore(agentsStore, agentsSelectors.agents);
+  const selectedAgent = useStore(agentsStore, agentsSelectors.selectedAgent);
+  const searchQuery = useStore(agentsStore, agentsSelectors.searchQuery);
+  const selectedTeam = useStore(agentsStore, agentsSelectors.selectedTeam);
+  const loading = useStore(agentsStore, agentsSelectors.loading);
+  const error = useStore(agentsStore, agentsSelectors.error);
+  const isPanelCollapsed = useStore(agentsStore, agentsSelectors.isPanelCollapsed);
+  const isCreateMode = useStore(agentsStore, agentsSelectors.isCreateMode);
+  
+  // Initialize store with initial data
+  useEffect(() => {
+    storeActions.agentsActions.setAgents(initialAgents);
+  }, [initialAgents]);
 
   const refreshAgents = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const fetchedAgents = await getAgents({
-        teamId: selectedTeam,
-        searchQuery: searchQuery,
-      });
-      setAgents(fetchedAgents);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load agents');
-    } finally {
-      setLoading(false);
-    }
+    await storeActions.refreshAgents();
   };
 
   const handleCreateAgent = () => {
-    setIsCreateMode(true);
-    setSelectedAgent(null);
+    storeActions.openAgentCreateForm();
   };
 
   const handleCancelCreate = () => {
-    setIsCreateMode(false);
+    storeActions.closeAgentCreateForm();
   };
 
-  const filteredAgents = agents.filter((agent) => {
-    const matchesSearch = agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         agent.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    // Check if agent belongs to selected team (teams have agentIds array)
-    let matchesTeam = selectedTeam === 'all';
-    if (selectedTeam !== 'all') {
-      const team = teams.find(t => t.id.toString() === selectedTeam);
-      matchesTeam = team?.agentIds?.some(agentId => agentId === agent.id.toString()) || false;
-    }
-    
-    return matchesSearch && matchesTeam;
-  });
+  // Use store selector for filtered agents
+  const filteredAgents = useStore(agentsStore, (state) => 
+    agentsSelectors.filteredAgents(teams)(state)
+  );
 
   return (
     <div className="flex h-full">
@@ -81,7 +67,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setIsPanelCollapsed(!isPanelCollapsed)}
+            onClick={() => storeActions.agentsActions.togglePanelCollapsed()}
             className="ml-auto"
           >
             {isPanelCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -94,7 +80,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
               <Input
                 placeholder="Search agents..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => storeActions.agentsActions.setSearchQuery(e.target.value)}
                 className="pl-9"
               />
             </div>
@@ -104,7 +90,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
               <Plus size={16} className="mr-2" />
               New Agent
             </Button>
-            <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+            <Select value={selectedTeam} onValueChange={(value) => storeActions.agentsActions.setSelectedTeam(value)}>
               <SelectTrigger>
                 <SelectValue placeholder="All Teams" />
               </SelectTrigger>
@@ -148,8 +134,8 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
                         : ''
                     }`}
                     onClick={() => {
-                      setSelectedAgent(agent);
-                      setIsCreateMode(false); // Exit create mode when selecting an agent
+                      storeActions.agentsActions.setSelectedAgent(agent);
+                      storeActions.agentsActions.setCreateMode(false);
                     }}
                   >
                     <CardContent className="p-3">

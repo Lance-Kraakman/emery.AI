@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
+import { useStore } from '@tanstack/react-store';
 import { 
   ReactFlow, 
   Node, 
@@ -30,9 +31,11 @@ import { Task } from '@/app/actions/types';
 import TeamNode from './TeamNode';
 import AgentNode from './AgentNode';
 import ActivityPanel from './ActivityPanel';
-import { useEmery } from '@/contexts/EmeryContext';
+import { useEmeryStore } from '@/contexts/EmeryStoreProvider';
 import { Loading } from '@/components/ui/loading';
 import { useOrganizationViewConfig } from '@/hooks/useOrganizationViewConfig';
+import { orgChartStore, orgChartSelectors } from '@/stores/organization-chart.store';
+import { storeActions } from '@/stores/actions';
 
 // Define custom node types
 const nodeTypes = {
@@ -41,36 +44,38 @@ const nodeTypes = {
 };
 
 export default function OrganizationChartClient() {
-  const { data, currentOrganization, isLoading } = useEmery();
+  const { data, currentOrganization, isLoading } = useEmeryStore();
   const { agents, teams } = data;
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [isTasksLoading, setIsTasksLoading] = useState(true);
-  const [isClient, setIsClient] = useState(false);
+  
+  // Use TanStack Store for organization chart state
+  const tasks = useStore(orgChartStore, orgChartSelectors.tasks);
+  const isTasksLoading = useStore(orgChartStore, orgChartSelectors.isTasksLoading);
+  const isClient = useStore(orgChartStore, orgChartSelectors.isClient);
 
   // Handle client-side hydration
   useEffect(() => {
-    setIsClient(true);
+    storeActions.orgChartActions.setIsClient(true);
   }, []);
 
   useEffect(() => {
-    setIsTasksLoading(true);
+    storeActions.orgChartActions.setIsTasksLoading(true);
     getTasks().then(result => {
       if (result.success) {
-        setTasks(result.data);
+        storeActions.orgChartActions.setTasks(result.data);
       }
     }).finally(() => {
-      setIsTasksLoading(false);
+      storeActions.orgChartActions.setIsTasksLoading(false);
     });
   }, []);
   
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
-  const [isConfiguring, setIsConfiguring] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
-  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
-  const [showResetNotification, setShowResetNotification] = useState(false);
+  const selectedNodes = useStore(orgChartStore, orgChartSelectors.selectedNodes);
+  const isConfiguring = useStore(orgChartStore, orgChartSelectors.isConfiguring);
+  const searchTerm = useStore(orgChartStore, orgChartSelectors.searchTerm);
+  const isSearchExpanded = useStore(orgChartStore, orgChartSelectors.isSearchExpanded);
+  const isPanelCollapsed = useStore(orgChartStore, orgChartSelectors.isPanelCollapsed);
+  const showResetNotification = useStore(orgChartStore, orgChartSelectors.showResetNotification);
 
   // Initialize auto-save hook
   const { saveViewConfig, loadViewConfig, isSaving } = useOrganizationViewConfig({
@@ -184,11 +189,11 @@ export default function OrganizationChartClient() {
       generateNodesAndEdges();
       
       // Clear selected nodes since positions are changing
-      setSelectedNodes([]);
+      storeActions.orgChartActions.setSelectedNodes([]);
       
       // Show reset notification briefly
-      setShowResetNotification(true);
-      setTimeout(() => setShowResetNotification(false), 3000);
+      storeActions.orgChartActions.setShowResetNotification(true);
+      setTimeout(() => storeActions.orgChartActions.setShowResetNotification(false), 3000);
     }
   }, [generateNodesAndEdges]);
 
@@ -224,16 +229,16 @@ export default function OrganizationChartClient() {
       
       if (result.viewState) {
         if (Array.isArray(result.viewState.selectedNodes)) {
-          setSelectedNodes(result.viewState.selectedNodes);
+          storeActions.orgChartActions.setSelectedNodes(result.viewState.selectedNodes);
         }
         if (typeof result.viewState.searchTerm === 'string') {
-          setSearchTerm(result.viewState.searchTerm);
+          storeActions.orgChartActions.setSearchTerm(result.viewState.searchTerm);
         }
         if (typeof result.viewState.isPanelCollapsed === 'boolean') {
-          setIsPanelCollapsed(result.viewState.isPanelCollapsed);
+          storeActions.orgChartActions.setIsPanelCollapsed(result.viewState.isPanelCollapsed);
         }
         if (typeof result.viewState.isConfiguring === 'boolean') {
-          setIsConfiguring(result.viewState.isConfiguring);
+          storeActions.orgChartActions.setIsConfiguring(result.viewState.isConfiguring);
         }
       }
     }
@@ -254,18 +259,19 @@ export default function OrganizationChartClient() {
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
     const isCtrlPressed = event.ctrlKey || event.metaKey;
     
-    setSelectedNodes(prevSelected => {
-      if (isCtrlPressed) {
-        return prevSelected.includes(node.id)
-          ? prevSelected.filter(id => id !== node.id)
-          : [...prevSelected, node.id];
-      } else {
-        return prevSelected.includes(node.id) && prevSelected.length === 1
-          ? []
-          : [node.id];
-      }
-    });
-  }, []);
+    const prevSelected = selectedNodes;
+    if (isCtrlPressed) {
+      const newSelected = prevSelected.includes(node.id)
+        ? prevSelected.filter(id => id !== node.id)
+        : [...prevSelected, node.id];
+      storeActions.orgChartActions.setSelectedNodes(newSelected);
+    } else {
+      const newSelected = prevSelected.includes(node.id) && prevSelected.length === 1
+        ? []
+        : [node.id];
+      storeActions.orgChartActions.setSelectedNodes(newSelected);
+    }
+  }, [selectedNodes]);
 
   // Filter nodes based on search term
   const filteredNodes = useMemo(() => {
@@ -338,8 +344,8 @@ export default function OrganizationChartClient() {
                 <ActivityPanel 
                   activities={filteredActivities}
                   selectedNodes={selectedNodes}
-                  onClearSelection={() => setSelectedNodes([])}
-                  onCollapse={() => setIsPanelCollapsed(true)}
+                  onClearSelection={() => storeActions.orgChartActions.setSelectedNodes([])}
+                  onCollapse={() => storeActions.orgChartActions.setIsPanelCollapsed(true)}
                 />
               </Panel>
               
@@ -353,7 +359,7 @@ export default function OrganizationChartClient() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setIsPanelCollapsed(false)}
+                  onClick={() => storeActions.orgChartActions.setIsPanelCollapsed(false)}
                   className="absolute top-4 left-4 z-10 bg-background shadow-lg"
                 >
                   <Activity className="w-4 h-4 mr-2" />
@@ -380,7 +386,7 @@ export default function OrganizationChartClient() {
                     <Button
                       size="sm"
                       variant={isConfiguring ? "default" : "outline"}
-                      onClick={() => setIsConfiguring(!isConfiguring)}
+                      onClick={() => storeActions.orgChartActions.setIsConfiguring(!isConfiguring)}
                     >
                       {isConfiguring ? (
                         <>
@@ -418,7 +424,7 @@ export default function OrganizationChartClient() {
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      onClick={() => setIsSearchExpanded(!isSearchExpanded)}
+                      onClick={() => storeActions.orgChartActions.setIsSearchExpanded(!isSearchExpanded)}
                       className="z-10 bg-background"
                     >
                       <Search className="w-4 h-4" />
@@ -426,7 +432,7 @@ export default function OrganizationChartClient() {
                     <Input
                       placeholder="Search teams or agents..."
                       value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onChange={(e) => storeActions.orgChartActions.setSearchTerm(e.target.value)}
                       className={`pl-10 absolute top-0 left-0 h-full transition-all duration-300 bg-background ${
                         isSearchExpanded ? 'w-full opacity-100' : 'w-0 opacity-0'
                       }`}

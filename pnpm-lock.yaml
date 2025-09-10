@@ -140,6 +140,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.87.1
         version: 5.87.1(react@18.3.1)
+      '@tanstack/react-store':
+        specifier: ^0.7.5
+        version: 0.7.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@tanstack/react-table':
         specifier: ^8.21.3
         version: 8.21.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

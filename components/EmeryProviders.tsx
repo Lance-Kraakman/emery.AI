@@ -2,12 +2,13 @@
 
 import { Suspense } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { DataDialogsProvider } from '@/contexts/DataDialogsContext'
-import { EmeryProvider } from '@/contexts/EmeryContext'
+import { EmeryStoreProvider } from '@/contexts/EmeryStoreProvider'
 import { CreateDatabaseDialog } from '@/app/(app)/data/components/CreateDatabaseDialog'
 import { CreateTableDialog } from '@/app/(app)/data/components/CreateTableDialog'
-import { useDataDialogs } from '@/contexts/DataDialogsContext'
-import { useEmery } from '@/contexts/EmeryContext'
+import { useEmeryStore } from '@/contexts/EmeryStoreProvider'
+import { useStore } from '@tanstack/react-store'
+import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
+import { storeActions } from '@/stores/actions'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { LayoutProvider } from '@/components/layout/LayoutProvider'
 import { EmeryLayout } from '@/components/layout/EmeryLayout'
@@ -23,15 +24,11 @@ const queryClient = new QueryClient({
 })
 
 function DataDialogs() {
-  const { 
-    isCreateDatabaseOpen, 
-    setIsCreateDatabaseOpen,
-    isCreateTableOpen, 
-    setIsCreateTableOpen,
-    selectedDatabaseForTable,
-    setSelectedDatabaseForTable 
-  } = useDataDialogs()
-  const { refetch } = useEmery()
+  // Use TanStack Store selectors for UI state
+  const isCreateDatabaseOpen = useStore(uiStateStore, uiStateSelectors.isCreateDatabaseOpen)
+  const isCreateTableOpen = useStore(uiStateStore, uiStateSelectors.isCreateTableOpen) 
+  const selectedDatabaseForTable = useStore(uiStateStore, uiStateSelectors.selectedDatabaseForTable)
+  const { refetch } = useEmeryStore()
   
   const handleDataStructureCreated = () => {
     refetch()
@@ -41,16 +38,13 @@ function DataDialogs() {
     <>
       <CreateDatabaseDialog
         isOpen={isCreateDatabaseOpen}
-        onClose={() => setIsCreateDatabaseOpen(false)}
+        onClose={() => storeActions.closeTableForm()}
         onDatabaseCreated={handleDataStructureCreated}
       />
       
       <CreateTableDialog
         isOpen={isCreateTableOpen}
-        onClose={() => {
-          setIsCreateTableOpen(false)
-          setSelectedDatabaseForTable(undefined)
-        }}
+        onClose={() => storeActions.closeTableForm()}
         onTableCreated={handleDataStructureCreated}
         selectedDatabaseId={selectedDatabaseForTable}
       />
@@ -84,16 +78,14 @@ export function EmeryProviders({
         enableSystem
         disableTransitionOnChange
       >
-        <EmeryProvider>
-          <DataDialogsProvider>
-            <LayoutProvider>
-              <EmeryLayout enableChat={enableChat} chatContext={effectiveChatContext}>
-                {children}
-              </EmeryLayout>
-              <DataDialogs />
-            </LayoutProvider>
-          </DataDialogsProvider>
-        </EmeryProvider>
+        <EmeryStoreProvider>
+          <LayoutProvider>
+            <EmeryLayout enableChat={enableChat} chatContext={effectiveChatContext}>
+              {children}
+            </EmeryLayout>
+            <DataDialogs />
+          </LayoutProvider>
+        </EmeryStoreProvider>
       </ThemeProvider>
     </QueryClientProvider>
   )
