@@ -22,6 +22,12 @@ import { RagDocument, type DocumentMetadata } from '@/ddd/domain/rag/entities';
 import { DocumentId, RagIndexId, type DomainType } from '@/ddd/domain/rag/value-objects';
 import type { DbClient } from '@/lib/db/client';
 
+// AIDEV-NOTE: This repository does NOT extend DrizzleBaseRepository due to architectural differences:
+// 1. RAG repository uses save(entity) and update(entity) patterns instead of create(data)/update(id,data)
+// 2. Vector search operations require specialized SQL and pgvector functionality
+// 3. Bulk operations (saveMany, synchronizeDocuments) are RAG-specific
+// This is an intentional architectural decision for the RAG domain's unique requirements.
+
 export class DrizzleRagDocumentRepository implements RagDocumentRepository {
   private readonly sqlExecutor: SqlExecutor;
 

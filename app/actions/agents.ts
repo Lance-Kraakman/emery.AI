@@ -225,7 +225,7 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       }
 
       // Check resource-specific permission for updating this specific agent  
-      const session = await requireResourcePermission("agents:update", "agent", agentId);
+      const session = await requireResourcePermission("agents:manage", "agent", agentId);
     const agentApplicationService = getAgentApplicationService();
     
     const command: UpdateAgentCommand = {
