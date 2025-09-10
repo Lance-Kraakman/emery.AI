@@ -1,6 +1,18 @@
 'use client'
 
+import { useMemo } from 'react';
 import { Edit, Trash2, Save, X } from 'lucide-react';
+import { 
+  useReactTable, 
+  getCoreRowModel, 
+  getSortedRowModel, 
+  getFilteredRowModel,
+  createColumnHelper,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+  type ColumnFiltersState
+} from '@tanstack/react-table';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { Row } from '@/ddd/domain/tables/value-objects/row';
 import { Button } from '@/components/ui/button';
@@ -37,6 +49,106 @@ export default function RowTable({
   tableId,
   organizationId
 }: RowTableProps) {
+  const columnHelper = createColumnHelper<Row>();
+
+  const columns = useMemo<ColumnDef<Row>[]>(() => [
+    ...fields.map((field) =>
+      columnHelper.accessor((row) => row.toPlainObject()[`field_${field.id}`], {
+        id: field.id.toString(),
+        header: () => (
+          <>
+            {field.name}
+            {field.required && <span className="text-destructive ml-1">*</span>}
+          </>
+        ),
+        cell: ({ row: tableRow }) => {
+          const row = tableRow.original;
+          const rowData = row.toPlainObject();
+          
+          return editingRow === row.id.value ? (
+            <FieldInput
+              field={field}
+              value={editRowData[field.name]}
+              onChange={(value) => onFieldChange(field.name, value)}
+              disabled={isPending}
+              organizationId={organizationId}
+              tableId={tableId}
+            />
+          ) : (
+            <CellRenderer 
+              field={field} 
+              value={rowData[`field_${field.id}`]} 
+            />
+          );
+        },
+        maxSize: 300,
+      })
+    ),
+    columnHelper.display({
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row: tableRow }) => {
+        const row = tableRow.original;
+        
+        return (
+          <div className="flex gap-1">
+            {editingRow === row.id.value ? (
+              <>
+                <Button
+                  onClick={() => onUpdateRow(row.id.value)}
+                  disabled={isPending}
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-green-600 hover:text-green-800"
+                >
+                  <Save size={16} />
+                </Button>
+                <Button
+                  onClick={onCancelEdit}
+                  disabled={isPending}
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                >
+                  <X size={16} />
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  onClick={() => onStartEdit(row)}
+                  disabled={isPending}
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                >
+                  <Edit size={16} />
+                </Button>
+                <Button
+                  onClick={() => onDeleteRow(row.id.value)}
+                  disabled={isPending}
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 size={16} />
+                </Button>
+              </>
+            )}
+          </div>
+        );
+      },
+    }),
+  ], [fields, editingRow, editRowData, onStartEdit, onCancelEdit, onUpdateRow, onDeleteRow, onFieldChange, isPending, tableId, organizationId]);
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+
   if (fields.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/50">
@@ -57,90 +169,31 @@ export default function RowTable({
     <div className="rounded-md border">
       <Table>
         <TableHeader>
-          <TableRow>
-            {fields.map((field) => (
-              <TableHead key={field.id}>
-                {field.name}
-                {field.required && <span className="text-destructive ml-1">*</span>}
-              </TableHead>
-            ))}
-            <TableHead>Actions</TableHead>
-          </TableRow>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <TableRow key={headerGroup.id}>
+              {headerGroup.headers.map((header) => (
+                <TableHead key={header.id}>
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(
+                        header.column.columnDef.header,
+                        header.getContext()
+                      )}
+                </TableHead>
+              ))}
+            </TableRow>
+          ))}
         </TableHeader>
         <TableBody>
-          {rows.map((row) => {
-            const rowData = row.toPlainObject(); // Convert Row to RowData for UI binding
-            return (
-              <TableRow key={row.id.value}>
-                {fields.map((field) => (
-                  <TableCell key={field.id} className="max-w-xs">
-                    {editingRow === row.id.value ? (
-                      <FieldInput
-                        field={field}
-                        value={editRowData[field.name]}
-                        onChange={(value) => onFieldChange(field.name, value)}
-                        disabled={isPending}
-                        organizationId={organizationId}
-                        tableId={tableId}
-                      />
-                    ) : (
-                      <CellRenderer 
-                        field={field} 
-                        value={rowData[`field_${field.id}`]} 
-                      />
-                    )}
-                  </TableCell>
-                ))}
-                <TableCell>
-                  <div className="flex gap-1">
-                    {editingRow === row.id.value ? (
-                    <>
-                      <Button
-                        onClick={() => onUpdateRow(row.id.value)}
-                        disabled={isPending}
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-green-600 hover:text-green-800"
-                      >
-                        <Save size={16} />
-                      </Button>
-                      <Button
-                        onClick={onCancelEdit}
-                        disabled={isPending}
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                      >
-                        <X size={16} />
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        onClick={() => onStartEdit(row)}
-                        disabled={isPending}
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                      >
-                        <Edit size={16} />
-                      </Button>
-                      <Button
-                        onClick={() => onDeleteRow(row.id.value)}
-                        disabled={isPending}
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 size={16} />
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </TableCell>
+          {table.getRowModel().rows.map((row) => (
+            <TableRow key={row.id}>
+              {row.getVisibleCells().map((cell) => (
+                <TableCell key={cell.id} className="max-w-xs">
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </TableCell>
+              ))}
             </TableRow>
-            );
-          })}
+          ))}
         </TableBody>
       </Table>
     </div>

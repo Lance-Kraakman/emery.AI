@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,6 +19,7 @@ import type { RowDTO } from "@/app/mappers/row-mapper"
 
 export function DataViewsClientSimplified() {
   const searchParams = useSearchParams()
+  const queryClient = useQueryClient()
   const { data, isLoading: dataLoading, error: dataError } = useEmeryData()
   
   const tableIdParam = searchParams.get("tableId")
@@ -35,14 +37,7 @@ export function DataViewsClientSimplified() {
   // UI state
   const [selectedTableId, setSelectedTableId] = useState<number | undefined>(initialTableId)
   const [isFieldManagerOpen, setIsFieldManagerOpen] = useState(false)
-  // Dialog states now handled globally
   const [searchTerm, setSearchTerm] = useState("")
-  
-  // Table data state
-  const [fields, setFields] = useState<FieldDTO[]>([])
-  const [rows, setRows] = useState<RowDTO[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const selectedTable = selectedTableId ? findTableById(selectedTableId) : undefined
 
@@ -52,59 +47,62 @@ export function DataViewsClientSimplified() {
     setSelectedTableId(tableId);
   }, [tableIdParam]);
 
-  // Load table data when table is selected
-  useEffect(() => {
-    if (selectedTableId) {
-      loadTableData(selectedTableId)
-    }
-  }, [selectedTableId])
+  // TanStack Query for fields
+  const fieldsQuery = useQuery({
+    queryKey: ['fields', selectedTableId],
+    queryFn: () => selectedTableId ? getFields(selectedTableId) : Promise.resolve([]),
+    enabled: !!selectedTableId,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  })
 
-  const loadTableData = async (tableId: number) => {
-    try {
-      setLoading(true)
-      setError(null)
+  // TanStack Query for rows  
+  const rowsQuery = useQuery({
+    queryKey: ['rows', selectedTableId],
+    queryFn: () => selectedTableId ? getRowsData(selectedTableId, 1000) : Promise.resolve([]),
+    enabled: !!selectedTableId,
+    staleTime: 1000 * 60 * 2, // 2 minutes
+  })
+
+  const fields = fieldsQuery.data || []
+  const rows = rowsQuery.data || []
+  const loading = fieldsQuery.isLoading || rowsQuery.isLoading
+  const error = fieldsQuery.error || rowsQuery.error
+
+  // TanStack Mutations for optimistic updates
+  const updateRowMutation = useMutation({
+    mutationFn: async ({ rowId, fieldId, value }: { rowId: string, fieldId: number, value: any }) => {
+      if (!selectedTableId) throw new Error('No table selected')
       
-      const [fieldList, rowList] = await Promise.all([
-        getFields(tableId),
-        getRowsData(tableId, 1000)
-      ])
-      
-      setFields(fieldList)
-      setRows(rowList)
-    } catch (err) {
-      console.error('Error loading table data:', err)
-      setError(err instanceof Error ? err.message : "Failed to load table data")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleUpdateRow = async (rowId: string, fieldId: number, value: any) => {
-    if (!selectedTableId) return
-
-    try {
-      // Find the field to get its slug
       const field = fields.find(f => f.id === fieldId)
-      if (!field) {
-        console.error('Field not found for fieldId:', fieldId)
-        return
-      }
+      if (!field) throw new Error('Field not found')
 
-      await updateRowData({
+      return updateRowData({
         tableId: selectedTableId,
         rowId,
         data: { [field.name]: value },
       });
-      setRows(prevRows =>
-        prevRows.map(row => {
+    },
+    onMutate: async ({ rowId, fieldId, value }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['rows', selectedTableId] })
+      
+      // Snapshot the previous value
+      const previousRows = queryClient.getQueryData(['rows', selectedTableId])
+      
+      // Find the field to get its info
+      const field = fields.find(f => f.id === fieldId)
+      if (!field) return { previousRows }
+
+      // Optimistically update the cache
+      queryClient.setQueryData(['rows', selectedTableId], (oldRows: RowDTO[] | undefined) => {
+        if (!oldRows) return []
+        return oldRows.map(row => {
           if (row.id === rowId) {
-            // Create a new RowDTO with updated field value
             const updatedFieldValues = [...row.fieldValues].map(fv =>
               fv.fieldSlug === field.name 
                 ? { fieldSlug: field.name, value, fieldType: field.type }
                 : fv
             );
-            // Add field if it doesn't exist
             const hasField = row.fieldValues.some(fv => fv.fieldSlug === field.name);
             if (!hasField) {
               updatedFieldValues.push({ fieldSlug: field.name, value, fieldType: field.type });
@@ -113,18 +111,28 @@ export function DataViewsClientSimplified() {
           }
           return row;
         })
-      );
-    } catch (err) {
+      })
+
+      return { previousRows }
+    },
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousRows) {
+        queryClient.setQueryData(['rows', selectedTableId], context.previousRows)
+      }
       console.error("Failed to update row:", err)
-    }
-  }
+    },
+    onSettled: () => {
+      // Refetch after mutation
+      queryClient.invalidateQueries({ queryKey: ['rows', selectedTableId] })
+    },
+  })
 
-  const handleAddRow = async () => {
-    if (!selectedTableId) return
-
-    try {
-      const rowData: Record<string, any> = {}
+  const addRowMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedTableId) throw new Error('No table selected')
       
+      const rowData: Record<string, any> = {}
       fields.forEach(field => {
         if (field.required || field.type === 'text') {
           switch (field.type) {
@@ -143,32 +151,63 @@ export function DataViewsClientSimplified() {
         }
       })
 
-      const result = await createRow({ tableId: selectedTableId, data: rowData })
-      
+      return createRow({ tableId: selectedTableId, data: rowData })
+    },
+    onSuccess: (result) => {
       if (result.success && result.data) {
-        setRows(prevRows => [...prevRows, result.data])
+        queryClient.setQueryData(['rows', selectedTableId], (oldRows: RowDTO[] | undefined) => {
+          return oldRows ? [...oldRows, result.data] : [result.data]
+        })
       }
-    } catch (err) {
+    },
+    onError: (err) => {
       console.error("Failed to add row:", err)
-    }
-  }
+    },
+  })
 
-  const handleDeleteRow = async (rowId: string) => {
-    if (!selectedTableId) return
+  const deleteRowMutation = useMutation({
+    mutationFn: async (rowId: string) => {
+      if (!selectedTableId) throw new Error('No table selected')
+      return deleteRowData(selectedTableId, rowId)
+    },
+    onMutate: async (rowId) => {
+      await queryClient.cancelQueries({ queryKey: ['rows', selectedTableId] })
+      const previousRows = queryClient.getQueryData(['rows', selectedTableId])
+      
+      queryClient.setQueryData(['rows', selectedTableId], (oldRows: RowDTO[] | undefined) => {
+        return oldRows ? oldRows.filter(row => row.id !== rowId) : []
+      })
 
-    try {
-      await deleteRowData(selectedTableId, rowId)
-      setRows(prevRows => prevRows.filter(row => row.id !== rowId))
-    } catch (err) {
+      return { previousRows }
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousRows) {
+        queryClient.setQueryData(['rows', selectedTableId], context.previousRows)
+      }
       console.error("Failed to delete row:", err)
-    }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['rows', selectedTableId] })
+    },
+  })
+
+  const handleUpdateRow = (rowId: string, fieldId: number, value: any) => {
+    updateRowMutation.mutate({ rowId, fieldId, value })
   }
 
-  // Data structure creation handled globally
+  const handleAddRow = () => {
+    addRowMutation.mutate()
+  }
 
-  const refreshTableData = async () => {
+  const handleDeleteRow = (rowId: string) => {
+    deleteRowMutation.mutate(rowId)
+  }
+
+  // Refresh data using TanStack Query invalidation
+  const refreshTableData = () => {
     if (selectedTableId) {
-      await loadTableData(selectedTableId)
+      queryClient.invalidateQueries({ queryKey: ['fields', selectedTableId] })
+      queryClient.invalidateQueries({ queryKey: ['rows', selectedTableId] })
     }
   }
 
@@ -220,7 +259,12 @@ export function DataViewsClientSimplified() {
       <Card className="w-full max-w-md text-center">
         <CardHeader>
           <CardTitle className="text-destructive">Error</CardTitle>
-          <CardDescription>{dataError || error}</CardDescription>
+          <CardDescription>
+            {typeof dataError === 'object' && dataError && 'message' in dataError ? (dataError as Error).message : 
+             typeof dataError === 'string' ? dataError :
+             typeof error === 'object' && error && 'message' in error ? (error as Error).message :
+             typeof error === 'string' ? error : 'An error occurred'}
+          </CardDescription>
         </CardHeader>
       </Card>
     </div>

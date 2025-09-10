@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useForm } from '@tanstack/react-form';
 import { Save, X, Loader2, Plus, Trash2, ChevronDown, ChevronRight, Cog, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,127 +30,102 @@ type CreateFormData = CreateAgentClientData;
 
 export default function AgentCreateView({ onCancel, onCreated }: AgentCreateViewProps) {
   const [isSaving, setIsSaving] = useState(false);
-  const [formData, setFormData] = useState<CreateFormData>({
-    name: '',
-    role: '',
-    description: '',
-    persona: '',
-    status: 'active',
-    tools: [],
-    servers: [],
-    capabilities: [],
-    trigger: TriggerConfigs.manual(),
-    organizationId: undefined,
-    roleId: undefined
-  });
-  
   const [error, setError] = useState<string | null>(null);
   
   // Collapsible section states
   const [isCapabilitiesOpen, setIsCapabilitiesOpen] = useState(false);
   const [isTriggerConfigOpen, setIsTriggerConfigOpen] = useState(false);
 
-  const handleSave = async () => {
-    try {
-      setIsSaving(true);
-      setError(null);
-      
-      if (!formData.name.trim()) {
-        setError('Agent name is required');
-        return;
+  const form = useForm({
+    defaultValues: {
+      name: '',
+      role: '',
+      description: '',
+      persona: '',
+      status: 'active',
+      tools: [],
+      servers: [],
+      capabilities: [],
+      trigger: TriggerConfigs.manual(),
+      organizationId: undefined,
+      roleId: undefined
+    } as CreateFormData,
+    onSubmit: async ({ value }: { value: CreateFormData }) => {
+      try {
+        setIsSaving(true);
+        setError(null);
+        
+        const result = await createAgentFromClient({
+          name: value.name.trim(),
+          role: value.role?.trim(),
+          description: value.description?.trim(),
+          persona: value.persona?.trim(),
+          status: value.status,
+          tools: value.tools || [],
+          servers: value.servers || [],
+          capabilities: value.capabilities || [],
+          trigger: value.trigger,
+          organizationId: value.organizationId,
+          roleId: value.roleId
+        });
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to create agent');
+        }
+        
+        onCreated?.();
+        onCancel(); // Close create view after successful creation
+        
+      } catch (error) {
+        console.error('Error creating agent:', error);
+        setError(error instanceof Error ? error.message : 'An error occurred while creating the agent');
+      } finally {
+        setIsSaving(false);
       }
+    },
+  });
 
-      const result = await createAgentFromClient({
-        name: formData.name.trim(),
-        role: formData.role?.trim(),
-        description: formData.description?.trim(),
-        persona: formData.persona?.trim(),
-        status: formData.status,
-        tools: formData.tools || [],
-        servers: formData.servers || [],
-        capabilities: formData.capabilities || [],
-        trigger: formData.trigger,
-        organizationId: formData.organizationId,
-        roleId: formData.roleId
-      });
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to create agent');
-      }
-      
-      onCreated?.();
-      onCancel(); // Close create view after successful creation
-      
-    } catch (error) {
-      console.error('Error creating agent:', error);
-      setError(error instanceof Error ? error.message : 'An error occurred while creating the agent');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleInputChange = (field: keyof CreateFormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
-    if (error && field === 'name' && value.trim()) {
-      setError(null);
-    }
-  };
-
-  // Simple validation: button enabled if name has content
-  const isFormValid = formData.name.trim().length > 0;
+  const handleSave = form.handleSubmit;
 
   // Helper functions for managing tools and servers
   const addTool = () => {
     const newTool: ToolConfig = { name: '', version: undefined, config: undefined };
-    setFormData(prev => ({
-      ...prev,
-      tools: [...(prev.tools || []), newTool]
-    }));
+    form.setFieldValue('tools', [...(form.getFieldValue('tools') || []), newTool]);
   };
 
   const removeTool = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      tools: prev.tools?.filter((_, i) => i !== index) || []
-    }));
+    const tools = form.getFieldValue('tools') || [];
+    form.setFieldValue('tools', tools.filter((_, i) => i !== index));
   };
 
   const updateTool = (index: number, field: keyof ToolConfig, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      tools: prev.tools?.map((tool, i) => 
-        i === index 
-          ? { ...tool, [field]: value || undefined }
-          : tool
-      ) || []
-    }));
+    const tools = form.getFieldValue('tools') || [];
+    const updatedTools = tools.map((tool, i) => 
+      i === index 
+        ? { ...tool, [field]: value || undefined }
+        : tool
+    );
+    form.setFieldValue('tools', updatedTools);
   };
 
   const addServer = () => {
     const newServer: ServerConfig = { name: '', endpoint: undefined, config: undefined };
-    setFormData(prev => ({
-      ...prev,
-      servers: [...(prev.servers || []), newServer]
-    }));
+    form.setFieldValue('servers', [...(form.getFieldValue('servers') || []), newServer]);
   };
 
   const removeServer = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      servers: prev.servers?.filter((_, i) => i !== index) || []
-    }));
+    const servers = form.getFieldValue('servers') || [];
+    form.setFieldValue('servers', servers.filter((_, i) => i !== index));
   };
 
   const updateServer = (index: number, field: keyof ServerConfig, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      servers: prev.servers?.map((server, i) => 
-        i === index 
-          ? { ...server, [field]: value || undefined }
-          : server
-      ) || []
-    }));
+    const servers = form.getFieldValue('servers') || [];
+    const updatedServers = servers.map((server, i) => 
+      i === index 
+        ? { ...server, [field]: value || undefined }
+        : server
+    );
+    form.setFieldValue('servers', updatedServers);
   };
 
   const handleTriggerTypeChange = (triggerType: TriggerType) => {
@@ -175,14 +151,12 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
         newTrigger = TriggerConfigs.manual();
     }
     
-    setFormData(prev => ({ ...prev, trigger: newTrigger }));
+    form.setFieldValue('trigger', newTrigger);
   };
 
   const handleTriggerConfigChange = (config: Partial<TriggerConfig>) => {
-    setFormData(prev => ({
-      ...prev,
-      trigger: { ...prev.trigger, ...config }
-    }));
+    const currentTrigger = form.getFieldValue('trigger');
+    form.setFieldValue('trigger', { ...currentTrigger, ...config } as TriggerConfig);
   };
 
   return (
@@ -190,30 +164,51 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
       {/* Header */}
       <div className="flex justify-between items-start sticky top-0 bg-background z-10 pb-2">
         <div className="flex-1 mr-4">
-          <Input
-            value={formData.name}
-            onChange={(e) => handleInputChange('name', e.target.value)}
-            className="text-2xl font-bold h-auto p-2 border-none shadow-none bg-transparent mb-2 focus:outline-none focus:ring-2 focus:ring-primary/20 rounded"
-            placeholder="Agent name"
-            autoFocus
-          />
+          <form.Field
+            name="name"
+            validators={{
+              onChange: ({ value }) => !value ? 'Agent name is required' : undefined
+            }}
+          >
+            {(field) => (
+              <Input
+                name={field.name}
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+                className="text-2xl font-bold h-auto p-2 border-none shadow-none bg-transparent mb-2 focus:outline-none focus:ring-2 focus:ring-primary/20 rounded"
+                placeholder="Agent name"
+                autoFocus
+              />
+            )}
+          </form.Field>
           <div className="flex gap-2">
-            <Input
-              value={formData.role}
-              onChange={(e) => handleInputChange('role', e.target.value)}
-              className="text-muted-foreground h-auto p-2 border-none shadow-none bg-transparent flex-1 focus:outline-none focus:ring-2 focus:ring-primary/20 rounded"
-              placeholder="Role"
-            />
-            <Select value={formData.status} onValueChange={(value) => handleInputChange('status', value)}>
-              <SelectTrigger className="w-32 h-auto p-2 border-none shadow-none bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/20 rounded">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-                <SelectItem value="disabled">Disabled</SelectItem>
-              </SelectContent>
-            </Select>
+            <form.Field name="role">
+              {(field) => (
+                <Input
+                  name={field.name}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  className="text-muted-foreground h-auto p-2 border-none shadow-none bg-transparent flex-1 focus:outline-none focus:ring-2 focus:ring-primary/20 rounded"
+                  placeholder="Role"
+                />
+              )}
+            </form.Field>
+            <form.Field name="status">
+              {(field) => (
+                <Select value={field.state.value} onValueChange={field.handleChange}>
+                  <SelectTrigger className="w-32 h-auto p-2 border-none shadow-none bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/20 rounded">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="disabled">Disabled</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </form.Field>
           </div>
         </div>
         <div className="flex gap-2">
@@ -229,7 +224,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
           <Button
             onClick={handleSave}
             size="sm"
-            disabled={isSaving || !isFormValid}
+            disabled={isSaving || !form.state.canSubmit}
           >
             {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
             Create Agent
@@ -245,7 +240,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
       )}
 
       {/* Overview Section */}
-      <Card className={isFormValid ? 'ring-2 ring-primary/20' : ''}>
+      <Card className={form.state.canSubmit ? 'ring-2 ring-primary/20' : ''}>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Overview</CardTitle>
         </CardHeader>
@@ -254,8 +249,8 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
             <div>
               <h4 className="font-medium text-foreground mb-1 text-sm">Description</h4>
               <Textarea
-                value={formData.description}
-                onChange={(e) => handleInputChange('description', e.target.value)}
+                value={form.getFieldValue('description')}
+                onChange={(e) => form.setFieldValue('description', e.target.value)}
                 className="text-sm"
                 placeholder="Agent description"
                 rows={2}
@@ -265,8 +260,8 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
             <div>
               <h4 className="font-medium text-foreground mb-1 text-sm">Persona</h4>
               <Textarea
-                value={formData.persona}
-                onChange={(e) => handleInputChange('persona', e.target.value)}
+                value={form.getFieldValue('persona')}
+                onChange={(e) => form.setFieldValue('persona', e.target.value)}
                 className="text-sm"
                 placeholder="Agent persona and communication style"
                 rows={2}
@@ -291,7 +286,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                 </Button>
               </div>
               <div className="space-y-2">
-                {formData.tools?.map((tool, index) => (
+                {form.getFieldValue('tools')?.map((tool, index) => (
                   <div key={index} className="space-y-1 p-2 border rounded-md bg-muted/20">
                     <div className="flex gap-2">
                       <Input
@@ -320,7 +315,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                     </div>
                   </div>
                 )) || []}
-                {(!formData.tools || formData.tools.length === 0) && (
+                {(!form.getFieldValue('tools') || form.getFieldValue('tools')?.length === 0) && (
                   <p className="text-sm text-muted-foreground">No tools configured</p>
                 )}
               </div>
@@ -341,7 +336,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                 </Button>
               </div>
               <div className="space-y-2">
-                {formData.servers?.map((server, index) => (
+                {form.getFieldValue('servers')?.map((server, index) => (
                   <div key={index} className="space-y-1 p-2 border rounded-md bg-muted/20">
                     <div className="flex gap-2">
                       <Input
@@ -370,7 +365,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                     </div>
                   </div>
                 )) || []}
-                {(!formData.servers || formData.servers.length === 0) && (
+                {(!form.getFieldValue('servers') || form.getFieldValue('servers')?.length === 0) && (
                   <p className="text-sm text-muted-foreground">No servers configured</p>
                 )}
               </div>
@@ -397,10 +392,10 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
           <CollapsibleContent>
             <div className="px-3 pb-3">
               <CapabilityManager 
-                capabilities={formData.capabilities || []}
+                capabilities={form.getFieldValue('capabilities') || []}
                 isEditable={true}
                 onCapabilitiesChange={(capabilities) => {
-                  setFormData(prev => ({ ...prev, capabilities }));
+                  form.setFieldValue('capabilities', capabilities);
                 }}
               />
             </div>
@@ -427,7 +422,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
             <div className="px-3 pb-3 space-y-3">
               <div>
                 <h4 className="font-medium text-foreground mb-2 text-sm">Trigger Type</h4>
-                <Select value={formData.trigger?.type || 'MANUAL'} onValueChange={handleTriggerTypeChange}>
+                <Select value={form.getFieldValue('trigger')?.type || 'MANUAL'} onValueChange={handleTriggerTypeChange}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
@@ -442,7 +437,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
               </div>
 
               {/* Trigger Type Specific Configuration */}
-              {formData.trigger?.type === 'MANUAL' && (
+              {form.getFieldValue('trigger')?.type === 'MANUAL' && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
                     Agent will execute only when manually triggered by users.
@@ -450,13 +445,13 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                 </div>
               )}
 
-              {formData.trigger?.type === 'CALENDAR' && (
+              {form.getFieldValue('trigger')?.type === 'CALENDAR' && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
                     Configure recurring schedules using the calendar interface.
                   </p>
                   <ScheduleManager 
-                    initialRRule={getCalendarRRule(formData.trigger)}
+                    initialRRule={getCalendarRRule(form.getFieldValue('trigger') || TriggerConfigs.manual())}
                     onScheduleChange={(rrule) => {
                       handleTriggerConfigChange({ rrule });
                     }}
@@ -465,7 +460,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                 </div>
               )}
 
-              {formData.trigger?.type === 'DATABASE_EVENT' && (
+              {form.getFieldValue('trigger')?.type === 'DATABASE_EVENT' && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
                     Trigger agent execution when database changes occur.
@@ -477,9 +472,9 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                         <label key={op} className="flex items-center gap-1">
                           <input 
                             type="checkbox" 
-                            checked={(formData.trigger as any)?.operations?.includes(op) || false}
+                            checked={(form.getFieldValue('trigger') as any)?.operations?.includes(op) || false}
                             onChange={(e) => {
-                              const current = (formData.trigger as any)?.operations || [];
+                              const current = (form.getFieldValue('trigger') as any)?.operations || [];
                               const newOps = e.target.checked 
                                 ? [...current, op]
                                 : current.filter((o: string) => o !== op);
@@ -494,7 +489,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                 </div>
               )}
 
-              {formData.trigger?.type === 'RAG_REINDEX' && (
+              {form.getFieldValue('trigger')?.type === 'RAG_REINDEX' && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
                     Trigger agent execution when RAG data needs reindexing.
@@ -503,7 +498,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                     <h5 className="font-medium text-sm mb-1">Debounce Delay (ms)</h5>
                     <Input
                       type="number"
-                      value={(formData.trigger as any)?.debounceMs || 5000}
+                      value={(form.getFieldValue('trigger') as any)?.debounceMs || 5000}
                       onChange={(e) => handleTriggerConfigChange({ debounceMs: parseInt(e.target.value) })}
                       className="text-sm"
                     />
@@ -511,7 +506,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                 </div>
               )}
 
-              {formData.trigger?.type === 'WEBHOOK' && (
+              {form.getFieldValue('trigger')?.type === 'WEBHOOK' && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
                     Trigger agent execution via webhook HTTP calls.
@@ -521,7 +516,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                       <h5 className="font-medium text-sm mb-1">Webhook Secret</h5>
                       <Input
                         type="password"
-                        value={(formData.trigger as any)?.webhookSecret || ''}
+                        value={(form.getFieldValue('trigger') as any)?.webhookSecret || ''}
                         onChange={(e) => handleTriggerConfigChange({ webhookSecret: e.target.value })}
                         placeholder="Optional security secret"
                         className="text-sm"
@@ -530,7 +525,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                     <label className="flex items-center gap-2 text-xs">
                       <input 
                         type="checkbox" 
-                        checked={(formData.trigger as any)?.requiresSignature || false}
+                        checked={(form.getFieldValue('trigger') as any)?.requiresSignature || false}
                         onChange={(e) => handleTriggerConfigChange({ requiresSignature: e.target.checked })}
                       />
                       <span>Require HMAC signature verification</span>

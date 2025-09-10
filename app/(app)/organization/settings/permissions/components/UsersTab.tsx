@@ -1,6 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { 
+  useReactTable, 
+  getCoreRowModel, 
+  getSortedRowModel, 
+  createColumnHelper,
+  flexRender,
+  type ColumnDef
+} from '@tanstack/react-table';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -212,79 +220,13 @@ export function UsersTab() {
               No members found. Invite some users to get started!
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Teams</TableHead>
-                  <TableHead>Last Active</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {members.map((member) => (
-                  <TableRow key={member.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{member.name || 'Unnamed User'}</div>
-                        <div className="text-sm text-muted-foreground">{member.email}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {member.hasRoleError ? (
-                        <Badge variant="destructive" className="flex items-center gap-1 w-fit">
-                          <span className="text-xs">⚠️</span>
-                          Error loading role
-                        </Badge>
-                      ) : (
-                        <Badge variant={getRoleBadgeVariant(member.systemRole)} className="flex items-center gap-1 w-fit">
-                          {getRoleIcon(member.systemRole)}
-                          {member.systemRole}
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1 flex-wrap">
-                        {member.teams?.map((team) => (
-                          <Badge key={team} variant="outline" className="text-xs">
-                            {team}
-                          </Badge>
-                        )) || (
-                          <span className="text-muted-foreground text-sm">No teams</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground">
-                        {member.lastActive ? new Date(member.lastActive).toLocaleDateString() : 'Never'}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={member.systemRole}
-                        onValueChange={(newRole) => handleRoleChange(member.id, newRole as SystemRoleType)}
-                        disabled={roleUpdating === member.id}
-                      >
-                        <SelectTrigger className="w-[140px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={SYSTEM_ROLES.VIEWER}>Viewer</SelectItem>
-                          <SelectItem value={SYSTEM_ROLES.MEMBER}>Member</SelectItem>
-                          <SelectItem value={SYSTEM_ROLES.TEAM_LEAD}>Team Lead</SelectItem>
-                          <SelectItem value={SYSTEM_ROLES.ORGANIZATION_ADMIN}>Organization Admin</SelectItem>
-                          <SelectItem value={SYSTEM_ROLES.ORGANIZATION_OWNER}>Organization Owner</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {roleUpdating === member.id && (
-                        <Loader2 className="w-4 h-4 animate-spin ml-2" />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <MembersTable 
+              members={members}
+              roleUpdating={roleUpdating}
+              onRoleChange={handleRoleChange}
+              getRoleIcon={getRoleIcon}
+              getRoleBadgeVariant={getRoleBadgeVariant}
+            />
           )}
         </CardContent>
       </Card>
@@ -315,5 +257,138 @@ export function UsersTab() {
         </Card>
       )}
     </div>
+  );
+}
+
+// TanStack Table component for members
+interface MembersTableProps {
+  members: OrganizationMemberDTO[];
+  roleUpdating: string | null;
+  onRoleChange: (userId: string, newRole: SystemRoleType) => void;
+  getRoleIcon: (role: SystemRoleType | string) => JSX.Element;
+  getRoleBadgeVariant: (role: SystemRoleType | string) => 'default' | 'secondary' | 'destructive' | 'outline';
+}
+
+function MembersTable({ members, roleUpdating, onRoleChange, getRoleIcon, getRoleBadgeVariant }: MembersTableProps) {
+  const columnHelper = createColumnHelper<OrganizationMemberDTO>();
+
+  const columns = useMemo(() => [
+    columnHelper.accessor('name', {
+      header: 'User',
+      cell: ({ row }) => (
+        <div>
+          <div className="font-medium">{row.original.name || 'Unnamed User'}</div>
+          <div className="text-sm text-muted-foreground">{row.original.email}</div>
+        </div>
+      ),
+    }),
+    columnHelper.accessor('systemRole', {
+      header: 'Role',
+      cell: ({ row }) => {
+        const member = row.original;
+        return member.hasRoleError ? (
+          <Badge variant="destructive" className="flex items-center gap-1 w-fit">
+            <span className="text-xs">⚠️</span>
+            Error loading role
+          </Badge>
+        ) : (
+          <Badge variant={getRoleBadgeVariant(member.systemRole)} className="flex items-center gap-1 w-fit">
+            {getRoleIcon(member.systemRole)}
+            {member.systemRole}
+          </Badge>
+        );
+      },
+    }),
+    columnHelper.accessor('teams', {
+      header: 'Teams',
+      cell: ({ getValue }) => (
+        <div className="flex gap-1 flex-wrap">
+          {getValue()?.map((team) => (
+            <Badge key={team} variant="outline" className="text-xs">
+              {team}
+            </Badge>
+          )) || (
+            <span className="text-muted-foreground text-sm">No teams</span>
+          )}
+        </div>
+      ),
+    }),
+    columnHelper.accessor('lastActive', {
+      header: 'Last Active',
+      cell: ({ getValue }) => (
+        <span className="text-sm text-muted-foreground">
+          {getValue() ? new Date(getValue()!).toLocaleDateString() : 'Never'}
+        </span>
+      ),
+    }),
+    columnHelper.display({
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => {
+        const member = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            <Select
+              value={member.systemRole}
+              onValueChange={(newRole) => onRoleChange(member.id, newRole as SystemRoleType)}
+              disabled={roleUpdating === member.id}
+            >
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SYSTEM_ROLES.VIEWER}>Viewer</SelectItem>
+                <SelectItem value={SYSTEM_ROLES.MEMBER}>Member</SelectItem>
+                <SelectItem value={SYSTEM_ROLES.TEAM_LEAD}>Team Lead</SelectItem>
+                <SelectItem value={SYSTEM_ROLES.ORGANIZATION_ADMIN}>Organization Admin</SelectItem>
+                <SelectItem value={SYSTEM_ROLES.ORGANIZATION_OWNER}>Organization Owner</SelectItem>
+              </SelectContent>
+            </Select>
+            {roleUpdating === member.id && (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            )}
+          </div>
+        );
+      },
+    }),
+  ], [roleUpdating, onRoleChange, getRoleIcon, getRoleBadgeVariant]);
+
+  const table = useReactTable({
+    data: members,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
+  return (
+    <Table>
+      <TableHeader>
+        {table.getHeaderGroups().map((headerGroup) => (
+          <TableRow key={headerGroup.id}>
+            {headerGroup.headers.map((header) => (
+              <TableHead key={header.id}>
+                {header.isPlaceholder
+                  ? null
+                  : flexRender(
+                      header.column.columnDef.header,
+                      header.getContext()
+                    )}
+              </TableHead>
+            ))}
+          </TableRow>
+        ))}
+      </TableHeader>
+      <TableBody>
+        {table.getRowModel().rows.map((row) => (
+          <TableRow key={row.id}>
+            {row.getVisibleCells().map((cell) => (
+              <TableCell key={cell.id}>
+                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+              </TableCell>
+            ))}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

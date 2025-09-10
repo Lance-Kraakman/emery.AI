@@ -1,5 +1,6 @@
 'use client';
 
+import { useForm } from '@tanstack/react-form';
 import { useState } from 'react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { TeamDTO } from '@/app/mappers/team-mapper';
@@ -44,56 +45,64 @@ function FormField({ label, required, description, children }: FormFieldProps) {
 }
 
 export default function TeamFormDialog({ isOpen, onClose, team, agents, onUpdate }: TeamFormDialogProps) {
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>(team?.agentIds || []);
 
-  const handleSubmit = async (formData: FormData) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Add agent IDs to form data
-      formData.append('agentIds', selectedAgentIds.join(','));
-
-      let result;
-      if (team) {
-        // Update existing team
-        const data = {
-          name: formData.get('name') as string,
-          purpose: formData.get('purpose') as string,
-          description: formData.get('description') as string,
-          responsibilities: (formData.get('responsibilities') as string)?.split(',').map(r => r.trim()).filter(r => r),
-          goals: (formData.get('goals') as string)?.split(',').map(g => g.trim()).filter(g => g),
-          agentIds: selectedAgentIds,
-        };
+  const form = useForm({
+    defaultValues: {
+      name: team?.name || '',
+      purpose: team?.purpose || '',
+      description: team?.description || '',
+      responsibilities: team?.responsibilities?.join(', ') || '',
+      goals: team?.goals?.join(', ') || '',
+      agentIds: team?.agentIds || [],
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        setError(null);
         
-        result = await updateTeam(team.id, data);
-      } else {
-        // Create new team
-        result = await createTeamAction(formData);
+        let result;
+        if (team) {
+          // Update existing team
+          const data = {
+            name: value.name,
+            purpose: value.purpose,
+            description: value.description,
+            responsibilities: value.responsibilities?.split(',').map(r => r.trim()).filter(r => r) || [],
+            goals: value.goals?.split(',').map(g => g.trim()).filter(g => g) || [],
+            agentIds: value.agentIds,
+          };
+          
+          result = await updateTeam(team.id, data);
+        } else {
+          // Create new team - convert to FormData for server action
+          const formData = new FormData();
+          formData.append('name', value.name);
+          formData.append('purpose', value.purpose);
+          formData.append('description', value.description);
+          formData.append('responsibilities', value.responsibilities);
+          formData.append('goals', value.goals);
+          formData.append('agentIds', value.agentIds.join(','));
+          
+          result = await createTeamAction(formData);
+        }
+        
+        if (!result.success) {
+          setError(result.error || 'Failed to save team');
+          return;
+        }
+        
+        onUpdate();
+        onClose();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to save team');
       }
-      
-      if (!result.success) {
-        setError(result.error || 'Failed to save team');
-        return;
-      }
-      
-      onUpdate();
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save team');
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
-  const toggleAgentSelection = (agentId: string) => {
-    setSelectedAgentIds(prev => 
-      prev.includes(agentId) 
-        ? prev.filter(id => id !== agentId)
-        : [...prev, agentId]
-    );
+  const toggleAgentSelection = (agentId: string, currentValue: string[]) => {
+    return currentValue.includes(agentId) 
+      ? currentValue.filter(id => id !== agentId)
+      : [...currentValue, agentId];
   };
 
   return (
@@ -102,100 +111,139 @@ export default function TeamFormDialog({ isOpen, onClose, team, agents, onUpdate
         <DialogHeader>
           <DialogTitle>{team ? 'Edit Team' : 'Create New Team'}</DialogTitle>
         </DialogHeader>
-        <form action={handleSubmit} className="space-y-4">
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }} className="space-y-4">
           {error && (
             <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
               {error}
             </div>
           )}
           
-          <FormField label="Name" required>
-            <Input
-              name="name"
-              required
-              defaultValue={team?.name}
-              placeholder="e.g., Sales Team"
-              disabled={loading}
-            />
-          </FormField>
-          
-          <FormField label="Purpose">
-            <Input
-              name="purpose"
-              defaultValue={team?.purpose ?? ''}
-              placeholder="e.g., Drive revenue growth"
-              disabled={loading}
-            />
-          </FormField>
-          
-          <FormField label="Description">
-            <Textarea
-              name="description"
-              rows={3}
-              defaultValue={team?.description ?? ''}
-              placeholder="Provide a detailed description of the team..."
-              disabled={loading}
-            />
-          </FormField>
-          
-          <FormField 
-            label="Responsibilities"
-            description="Separate multiple responsibilities with commas"
+          <form.Field
+            name="name"
+            validators={{
+              onChange: ({ value }) => !value || value.trim() === '' ? 'Name is required' : undefined,
+            }}
           >
-            <Textarea
-              name="responsibilities"
-              rows={2}
-              defaultValue={team?.responsibilities?.join(', ') ?? ''}
-              placeholder="e.g., Lead generation, Customer outreach, Sales reporting"
-              disabled={loading}
-            />
-          </FormField>
+            {(field) => (
+              <FormField label="Name" required>
+                <Input
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="e.g., Sales Team"
+                  disabled={form.state.isSubmitting}
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <div className="text-sm text-destructive">
+                    {field.state.meta.errors[0]}
+                  </div>
+                )}
+              </FormField>
+            )}
+          </form.Field>
           
-          <FormField 
-            label="Goals"
-            description="Separate multiple goals with commas"
-          >
-            <Textarea
-              name="goals"
-              rows={2}
-              defaultValue={team?.goals?.join(', ') ?? ''}
-              placeholder="e.g., Increase revenue by 20%, Improve customer satisfaction"
-              disabled={loading}
-            />
-          </FormField>
+          <form.Field name="purpose">
+            {(field) => (
+              <FormField label="Purpose">
+                <Input
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="e.g., Drive revenue growth"
+                  disabled={form.state.isSubmitting}
+                />
+              </FormField>
+            )}
+          </form.Field>
           
-          <FormField 
-            label="Team Agents"
-            description={`Selected: ${selectedAgentIds.length} agent${selectedAgentIds.length !== 1 ? 's' : ''}`}
-          >
-            <ScrollArea className="h-40 border rounded-md p-3">
-              {agents.length > 0 ? (
-                <div className="space-y-3">
-                  {agents.map((agent) => (
-                    <div key={agent.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`agent-${agent.id}`}
-                        checked={selectedAgentIds.includes(agent.id.toString())}
-                        onCheckedChange={() => toggleAgentSelection(agent.id.toString())}
-                        disabled={loading}
-                      />
-                      <label
-                        htmlFor={`agent-${agent.id}`}
-                        className="text-sm cursor-pointer flex-1"
-                      >
-                        <span className="font-medium">{agent.name}</span>
-                        {agent.role && (
-                          <span className="text-muted-foreground"> - {agent.role}</span>
-                        )}
-                      </label>
+          <form.Field name="description">
+            {(field) => (
+              <FormField label="Description">
+                <Textarea
+                  rows={3}
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="Provide a detailed description of the team..."
+                  disabled={form.state.isSubmitting}
+                />
+              </FormField>
+            )}
+          </form.Field>
+          
+          <form.Field name="responsibilities">
+            {(field) => (
+              <FormField 
+                label="Responsibilities"
+                description="Separate multiple responsibilities with commas"
+              >
+                <Textarea
+                  rows={2}
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="e.g., Lead generation, Customer outreach, Sales reporting"
+                  disabled={form.state.isSubmitting}
+                />
+              </FormField>
+            )}
+          </form.Field>
+          
+          <form.Field name="goals">
+            {(field) => (
+              <FormField 
+                label="Goals"
+                description="Separate multiple goals with commas"
+              >
+                <Textarea
+                  rows={2}
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="e.g., Increase revenue by 20%, Improve customer satisfaction"
+                  disabled={form.state.isSubmitting}
+                />
+              </FormField>
+            )}
+          </form.Field>
+          
+          <form.Field name="agentIds">
+            {(field) => (
+              <FormField 
+                label="Team Agents"
+                description={`Selected: ${field.state.value.length} agent${field.state.value.length !== 1 ? 's' : ''}`}
+              >
+                <ScrollArea className="h-40 border rounded-md p-3">
+                  {agents.length > 0 ? (
+                    <div className="space-y-3">
+                      {agents.map((agent) => (
+                        <div key={agent.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`agent-${agent.id}`}
+                            checked={field.state.value.includes(agent.id.toString())}
+                            onCheckedChange={() => field.handleChange(
+                              toggleAgentSelection(agent.id.toString(), field.state.value)
+                            )}
+                            disabled={form.state.isSubmitting}
+                          />
+                          <label
+                            htmlFor={`agent-${agent.id}`}
+                            className="text-sm cursor-pointer flex-1"
+                          >
+                            <span className="font-medium">{agent.name}</span>
+                            {agent.role && (
+                              <span className="text-muted-foreground"> - {agent.role}</span>
+                            )}
+                          </label>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No agents available</p>
-              )}
-            </ScrollArea>
-          </FormField>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No agents available</p>
+                  )}
+                </ScrollArea>
+              </FormField>
+            )}
+          </form.Field>
 
           
           <div className="flex justify-end space-x-2 pt-4">
@@ -203,15 +251,15 @@ export default function TeamFormDialog({ isOpen, onClose, team, agents, onUpdate
               type="button"
               variant="outline"
               onClick={onClose}
-              disabled={loading}
+              disabled={form.state.isSubmitting}
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={loading}
+              disabled={form.state.isSubmitting}
             >
-              {loading ? 'Saving...' : (team ? 'Update Team' : 'Create Team')}
+              {form.state.isSubmitting ? 'Saving...' : (team ? 'Update Team' : 'Create Team')}
             </Button>
           </div>
         </form>

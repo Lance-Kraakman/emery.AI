@@ -1,6 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
+import { 
+  useReactTable, 
+  getCoreRowModel, 
+  getSortedRowModel, 
+  createColumnHelper,
+  flexRender,
+  type ColumnDef
+} from '@tanstack/react-table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -118,7 +126,64 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
   }
 
   // Sort fields by orderIndex
-  const sortedFields = [...fields].sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0))
+  const sortedFields = useMemo(() => 
+    [...fields].sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0)), 
+    [fields]
+  );
+
+  const columnHelper = createColumnHelper<FieldDTO>();
+
+  const columns = useMemo(() => [
+    columnHelper.accessor('name', {
+      header: 'Name',
+      cell: ({ getValue }) => (
+        <span className="font-medium">{getValue()}</span>
+      ),
+    }),
+    columnHelper.accessor('type', {
+      header: 'Type',
+      cell: ({ getValue }) => (
+        <Badge variant="outline" className="capitalize">
+          {getValue()}
+        </Badge>
+      ),
+    }),
+    columnHelper.accessor('required', {
+      header: 'Required',
+      cell: ({ getValue }) => (
+        getValue() ? <Badge variant="destructive" className="text-xs">Required</Badge> : null
+      ),
+    }),
+    columnHelper.accessor('orderIndex', {
+      header: 'Order',
+      cell: ({ getValue }) => (
+        <span className="text-sm text-muted-foreground">{getValue()}</span>
+      ),
+    }),
+    columnHelper.display({
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handleDeleteField(row.original.name)}
+          disabled={loading}
+          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      ),
+      maxSize: 80,
+    }),
+  ], [handleDeleteField, loading]);
+
+  const table = useReactTable({
+    data: sortedFields,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -137,45 +202,35 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
             <div className="border rounded-md">
               <UITable>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Required</TableHead>
-                    <TableHead>Order</TableHead>
-                    <TableHead className="w-20">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedFields.map((field) => (
-                    <TableRow key={field.id}>
-                      <TableCell className="font-medium">{field.name}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {field.type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {field.required && <Badge variant="destructive" className="text-xs">Required</Badge>}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {field.orderIndex}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteField(field.name)}
-                          disabled={loading}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead key={header.id} className={header.id === 'actions' ? "w-20" : ""}>
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext()
+                              )}
+                        </TableHead>
+                      ))}
                     </TableRow>
                   ))}
-                  {sortedFields.length === 0 && (
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows?.length ? (
+                    table.getRowModel().rows.map((row) => (
+                      <TableRow key={row.id}>
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id}>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
+                      <TableCell colSpan={columns.length} className="text-center text-muted-foreground py-6">
                         No fields created yet. Add your first field below.
                       </TableCell>
                     </TableRow>
