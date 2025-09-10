@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { useStore } from '@tanstack/react-store';
 import { Search, Plus, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { TeamDTO } from '@/app/mappers/team-mapper';
@@ -12,10 +13,11 @@ import { Loading } from '@/components/ui/loading';
 import { Badge } from '@/components/ui/badge';
 import TeamDetailsView from './TeamDetailsView';
 import TeamFormDialog from './TeamFormDialog';
-import { getTeams } from '@/app/actions/teams';
-import { useEmery } from '@/contexts/EmeryContext';
+import { teamsStore, teamsSelectors } from '@/stores/teams.store';
+import { useEmeryOrganization } from '@/contexts/EmeryStoreProvider';
+import { storeActions } from '@/stores/actions';
 
-// AIDEV-NOTE: Teams dashboard refactored to use consistent design system patterns
+// AIDEV-NOTE: Teams dashboard migrated to TanStack Store for better state management and performance
 
 interface TeamDashboardClientProps {
   initialTeams: TeamDTO[];
@@ -23,35 +25,31 @@ interface TeamDashboardClientProps {
 }
 
 export default function TeamDashboardClient({ initialTeams, agents }: TeamDashboardClientProps) {
-  const { currentOrganization } = useEmery();
-  const [teams, setTeams] = useState<TeamDTO[]>(initialTeams);
-  const [selectedTeam, setSelectedTeam] = useState<TeamDTO | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
-  const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
-  const [editingTeam, setEditingTeam] = useState<TeamDTO | null>(null);
+  const currentOrganization = useEmeryOrganization();
+  
+  // Use TanStack Store with fine-grained subscriptions
+  const teams = useStore(teamsStore, teamsSelectors.teams);
+  const selectedTeam = useStore(teamsStore, teamsSelectors.selectedTeam);
+  const searchQuery = useStore(teamsStore, teamsSelectors.searchQuery);
+  const loading = useStore(teamsStore, teamsSelectors.loading);
+  const error = useStore(teamsStore, teamsSelectors.error);
+  const isPanelCollapsed = useStore(teamsStore, teamsSelectors.isPanelCollapsed);
+  const isFormDialogOpen = useStore(teamsStore, teamsSelectors.isFormDialogOpen);
+  const editingTeam = useStore(teamsStore, teamsSelectors.editingTeam);
+  
+  // Initialize store with initial data
+  useEffect(() => {
+    storeActions.teamsActions.setTeams(initialTeams);
+  }, [initialTeams]);
 
   const refreshTeams = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const fetchedTeams = await getTeams(currentOrganization?.id);
-      setTeams(fetchedTeams);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load teams');
-    } finally {
-      setLoading(false);
+    if (currentOrganization?.id) {
+      await storeActions.refreshTeams(currentOrganization.id);
     }
   };
 
-  // Filter teams based on search query
-  const filteredTeams = teams.filter(team => 
-    team.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (team.purpose && team.purpose.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (team.description && team.description.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  // Use store selector for filtered teams
+  const filteredTeams = useStore(teamsStore, teamsSelectors.filteredTeams);
 
   return (
     <div className="flex h-full">
@@ -66,7 +64,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setIsPanelCollapsed(!isPanelCollapsed)}
+            onClick={() => storeActions.teamsActions.togglePanelCollapsed()}
             className="ml-auto"
           >
             {isPanelCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -79,12 +77,12 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
               <Input
                 placeholder="Search teams..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => storeActions.teamsActions.setSearchQuery(e.target.value)}
                 className="pl-9"
               />
             </div>
             <Button
-              onClick={() => setIsFormDialogOpen(true)}
+              onClick={() => storeActions.openTeamForm()}
               variant="default"
               size="sm"
             >
@@ -106,7 +104,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
               description="Create your first team to get started"
               action={{
                 label: "Create Team",
-                onClick: () => setIsFormDialogOpen(true)
+                onClick: () => storeActions.openTeamForm()
               }}
             />
           ) : (
@@ -119,7 +117,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
                     : ''
                 }`}
                 onClick={() => {
-                  setSelectedTeam(team);
+                  storeActions.teamsActions.setSelectedTeam(team);
                 }}
               >
                 <CardContent className="p-3">
@@ -157,8 +155,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
                 team={selectedTeam}
                 agents={agents}
                 onEdit={() => {
-                  setEditingTeam(selectedTeam);
-                  setIsFormDialogOpen(true);
+                  storeActions.openTeamForm(selectedTeam);
                 }}
                 onUpdate={refreshTeams}
               />
@@ -177,8 +174,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
       <TeamFormDialog
         isOpen={isFormDialogOpen}
         onClose={() => {
-          setIsFormDialogOpen(false);
-          setEditingTeam(null);
+          storeActions.closeTeamForm();
         }}
         team={editingTeam}
         agents={agents}

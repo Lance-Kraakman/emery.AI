@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useStore } from '@tanstack/react-store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +12,8 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { DynamicDataTable } from "./components/DynamicDataTable"
 import { FieldManagerDialog } from "./components/FieldManagerDialog"
 import { useEmeryData } from "@/hooks/useEmeryData"
+import { dataStore, dataSelectors } from '@/stores/data-management.store'
+import { storeActions } from '@/stores/actions'
 import type { TableDTO } from "@/app/mappers/table-mapper"
 import { getFields } from "@/app/actions/fields"
 import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
@@ -34,17 +37,24 @@ export function DataViewsClientSimplified() {
     return undefined
   }
 
-  // UI state
-  const [selectedTableId, setSelectedTableId] = useState<number | undefined>(initialTableId)
-  const [isFieldManagerOpen, setIsFieldManagerOpen] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
+  // Use TanStack Store for data management state
+  const selectedTableId = useStore(dataStore, dataSelectors.selectedTableId)
+  const isFieldManagerOpen = useStore(dataStore, dataSelectors.isFieldManagerOpen)
+  const searchTerm = useStore(dataStore, dataSelectors.searchTerm)
+  
+  // Initialize with URL parameter
+  useEffect(() => {
+    if (initialTableId && !selectedTableId) {
+      storeActions.dataActions.setSelectedTableId(initialTableId)
+    }
+  }, [initialTableId, selectedTableId])
 
   const selectedTable = selectedTableId ? findTableById(selectedTableId) : undefined
 
   // Update selected table when URL changes
   useEffect(() => {
     const tableId = tableIdParam ? parseInt(tableIdParam) : undefined;
-    setSelectedTableId(tableId);
+    storeActions.dataActions.setSelectedTableId(tableId);
   }, [tableIdParam]);
 
   // TanStack Query for fields
@@ -294,7 +304,7 @@ export function DataViewsClientSimplified() {
                 <Input
                   placeholder="Search in table..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => storeActions.dataActions.setSearchTerm(e.target.value)}
                   className="pl-10 bg-transparent"
                 />
               </div>
@@ -307,7 +317,7 @@ export function DataViewsClientSimplified() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => setIsFieldManagerOpen(true)}>
+                  <DropdownMenuItem onClick={() => storeActions.dataActions.setFieldManagerOpen(true)}>
                     <Settings className="h-4 w-4 mr-2" />
                     Manage Fields
                   </DropdownMenuItem>
@@ -359,7 +369,7 @@ export function DataViewsClientSimplified() {
       {selectedTable && (
         <FieldManagerDialog
           isOpen={isFieldManagerOpen}
-          onClose={() => setIsFieldManagerOpen(false)}
+          onClose={() => storeActions.dataActions.setFieldManagerOpen(false)}
           tableId={selectedTable.id}
           fields={fields}
           onFieldsUpdated={refreshTableData}

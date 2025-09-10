@@ -27,8 +27,10 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { EmeryOrganizationModal } from "./EmeryOrganizationModal"
-import { useEmery } from "@/contexts/EmeryContext"
-import { useDataDialogs } from "@/contexts/DataDialogsContext"
+import { useEmeryStore } from "@/contexts/EmeryStoreProvider"
+import { useStore } from '@tanstack/react-store'
+import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
+import { storeActions } from '@/stores/actions'
 import { useLayout } from "@/components/layout/LayoutProvider"
 
 const navItems = [
@@ -65,10 +67,12 @@ export function EmerySidebar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { data: sessionData } = useSession()
-  const { data, isLoading } = useEmery()
-  const { setIsCreateDatabaseOpen, setIsCreateTableOpen, setSelectedDatabaseForTable } = useDataDialogs()
+  const { data, isLoading } = useEmeryStore()
+  // Use TanStack Store for collapsible state management
+  const globalOpenCollapsibles = useStore(uiStateStore, uiStateSelectors.openCollapsibles)
   const { sidebarState, toggleSidebar, isMobile } = useLayout()
-  const [openCollapsibles, setOpenCollapsibles] = useState<string[]>([])
+  // Use store state instead of local state
+  const openCollapsibles = globalOpenCollapsibles
   
   // Determine if sidebar is collapsed based on layout state
   const isCollapsed = sidebarState === 'collapsed'
@@ -78,13 +82,13 @@ export function EmerySidebar() {
     const settingsPaths = settingsNavItems.map(item => item.href)
 
     if (orchestrationPaths.includes(pathname)) {
-      setOpenCollapsibles(["Orchestration"])
+      storeActions.uiStateActions.setOpenCollapsibles(["Orchestration"])
     } else if (settingsPaths.includes(pathname)) {
-      setOpenCollapsibles(["Settings"])
+      storeActions.uiStateActions.setOpenCollapsibles(["Settings"])
     } else if (pathname.startsWith("/data")) {
-      setOpenCollapsibles(["Data", ...data.databases.map(db => db.id.toString())])
+      storeActions.uiStateActions.setOpenCollapsibles(["Data", ...data.databases.map(db => db.id.toString())])
     } else {
-      setOpenCollapsibles([])
+      storeActions.uiStateActions.setOpenCollapsibles([])
     }
   }, [pathname, data.databases])
 
@@ -94,16 +98,19 @@ export function EmerySidebar() {
     // Don't allow collapsible toggling when sidebar is collapsed or on mobile
     if (isCollapsed || isMobile) return
     
-    setOpenCollapsibles(prev => {
-      const isOpen = prev.includes(id)
-      if (id === "Data") {
-        const dbIds = data.databases.map(db => db.id.toString())
-        return isOpen
-          ? prev.filter(item => item !== id && !dbIds.includes(item))
-          : [...prev, id, ...dbIds]
-      }
-      return isOpen ? prev.filter(item => item !== id) : [...prev, id]
-    })
+    const isOpen = openCollapsibles.includes(id)
+    if (id === "Data") {
+      const dbIds = data.databases.map(db => db.id.toString())
+      const newCollapsibles = isOpen
+        ? openCollapsibles.filter(item => item !== id && !dbIds.includes(item))
+        : [...openCollapsibles, id, ...dbIds]
+      storeActions.uiStateActions.setOpenCollapsibles(newCollapsibles)
+    } else {
+      const newCollapsibles = isOpen 
+        ? openCollapsibles.filter(item => item !== id) 
+        : [...openCollapsibles, id]
+      storeActions.uiStateActions.setOpenCollapsibles(newCollapsibles)
+    }
   }
 
   return (
@@ -230,10 +237,7 @@ export function EmerySidebar() {
                                     ))}
                                     {/* Add Table button at the bottom of each database */}
                                     <button
-                                      onClick={() => {
-                                        setSelectedDatabaseForTable(db.id)
-                                        setIsCreateTableOpen(true)
-                                      }}
+                                      onClick={() => storeActions.openTableForm(db.id)}
                                       className="flex items-center justify-center w-full rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted"
                                       title="Add Table"
                                     >
@@ -245,7 +249,7 @@ export function EmerySidebar() {
                             )}
                             {/* Add Database button at the bottom */}
                             <button
-                              onClick={() => setIsCreateDatabaseOpen(true)}
+                              onClick={() => storeActions.uiStateActions.setCreateDatabaseOpen(true)}
                               className="flex items-center justify-center w-full rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted mt-2"
                               title="Add Database"
                             >

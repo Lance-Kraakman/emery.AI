@@ -1,79 +1,36 @@
 'use client'
 
-import { createContext, useContext, useReducer, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
+import { useStore } from '@tanstack/react-store'
 import type { 
-  LayoutState, 
-  LayoutAction, 
   LayoutProviderProps, 
   LayoutBreakpoint,
   PanelState,
   ChatContextConfig 
 } from './types'
-import { DEFAULT_LAYOUT_STATE, LAYOUT_BREAKPOINTS } from './types'
+import { LAYOUT_BREAKPOINTS } from './types'
+import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
+import { storeActions } from '@/stores/actions'
 
 /**
- * Layout Context Provider - Client Component for Layout State Management
+ * Layout Context Provider - TanStack Store-based Layout State Management
  * 
- * Manages global layout state including:
- * - Panel states (sidebar, chat)
- * - Responsive breakpoints
- * - Chat context configuration
- * - Persistence in localStorage
+ * Migrated to use TanStack Store for better performance and consistency.
+ * Maintains the same API for backwards compatibility.
  * 
- * AIDEV-NOTE: Client component that provides layout state management with 
- * persistence and responsive behavior. Uses domain types for type safety.
+ * AIDEV-NOTE: Migrated from useReducer to TanStack Store for fine-grained
+ * reactivity and consistent state management across the application.
  */
 
-// Layout reducer
-function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
-  switch (action.type) {
-    case 'SET_SIDEBAR_STATE':
-      return { ...state, sidebarState: action.state }
-    
-    case 'SET_CHAT_STATE':
-      return { ...state, chatState: action.state }
-    
-    case 'SET_CANVAS_STATE':
-      return { ...state, canvasState: action.state }
-    
-    case 'SET_BREAKPOINT':
-      return { 
-        ...state, 
-        breakpoint: action.breakpoint,
-        isMobile: action.breakpoint === 'mobile'
-      }
-    
-    case 'SET_CHAT_CONTEXT':
-      return { ...state, chatContext: action.context }
-    
-    case 'TOGGLE_SIDEBAR':
-      return { 
-        ...state, 
-        sidebarState: state.sidebarState === 'expanded' ? 'collapsed' : 'expanded' 
-      }
-    
-    case 'TOGGLE_CHAT':
-      return { 
-        ...state, 
-        chatState: state.chatState === 'expanded' ? 'collapsed' : 'expanded' 
-      }
-    
-    case 'TOGGLE_CANVAS':
-      return { 
-        ...state, 
-        canvasState: state.canvasState === 'expanded' ? 'collapsed' : 'expanded' 
-      }
-    
-    case 'RESET_LAYOUT':
-      return DEFAULT_LAYOUT_STATE
-    
-    default:
-      return state
-  }
-}
-
-// Context interface
-interface LayoutContextValue extends LayoutState {
+// Context interface - maintains backwards compatibility
+interface LayoutContextValue {
+  // State
+  sidebarState: PanelState
+  chatState: PanelState
+  canvasState: PanelState
+  breakpoint: LayoutBreakpoint
+  isMobile: boolean
+  chatContext?: ChatContextConfig
   // Actions
   setSidebarState: (state: PanelState) => void
   setChatState: (state: PanelState) => void
@@ -106,145 +63,109 @@ function getCurrentBreakpoint(): LayoutBreakpoint {
   return 'desktop'
 }
 
-// Utility to load state from localStorage
-function loadPersistedState(): Partial<LayoutState> {
-  if (typeof window === 'undefined') return {}
-  
-  try {
-    const saved = localStorage.getItem('emery-layout-state')
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      // Only restore panel states, not responsive/context state
-      return {
-        sidebarState: parsed.sidebarState || 'expanded',
-        chatState: parsed.chatState || 'expanded',
-        canvasState: parsed.canvasState || 'collapsed'
-      }
-    }
-  } catch (error) {
-    console.warn('Failed to load layout state from localStorage:', error)
-  }
-  
-  return {}
-}
-
-// Utility to save state to localStorage
-function persistState(state: LayoutState): void {
-  if (typeof window === 'undefined') return
-  
-  try {
-    // Only persist panel states, not responsive/context state
-    const toSave = {
-      sidebarState: state.sidebarState,
-      chatState: state.chatState,
-      canvasState: state.canvasState
-    }
-    localStorage.setItem('emery-layout-state', JSON.stringify(toSave))
-  } catch (error) {
-    console.warn('Failed to save layout state to localStorage:', error)
-  }
-}
+// Store persistence is now handled by the store itself
+// AIDEV-NOTE: Persistence logic moved to ui-state.store.ts for centralized management
 
 export function LayoutProvider({ children, initialState = {} }: LayoutProviderProps) {
   const [isClient, setIsClient] = useState(false)
   
-  // Initialize state with persistence and responsive detection
-  const [state, dispatch] = useReducer(layoutReducer, {
-    ...DEFAULT_LAYOUT_STATE,
-    ...initialState,
-    breakpoint: 'desktop', // Safe default
-    isMobile: false
-  })
+  // Use TanStack Store with fine-grained subscriptions
+  const sidebarState = useStore(uiStateStore, uiStateSelectors.sidebarState)
+  const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
+  const canvasState = useStore(uiStateStore, uiStateSelectors.canvasState)
+  const breakpoint = useStore(uiStateStore, uiStateSelectors.breakpoint)
+  const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
+  const chatContext = useStore(uiStateStore, uiStateSelectors.chatContext)
 
   // Client-side initialization effect
   useEffect(() => {
     setIsClient(true)
     
-    // Load persisted state and set responsive breakpoint
-    const persistedState = loadPersistedState()
+    // Set initial breakpoint and load persisted state
     const currentBreakpoint = getCurrentBreakpoint()
+    storeActions.uiStateActions.setBreakpoint(currentBreakpoint)
     
-    // Update with persisted state
-    if (persistedState.sidebarState) {
-      dispatch({ type: 'SET_SIDEBAR_STATE', state: persistedState.sidebarState })
+    // Apply any initial state overrides
+    if (initialState.sidebarState) {
+      storeActions.uiStateActions.setSidebarState(initialState.sidebarState)
     }
-    if (persistedState.chatState) {
-      dispatch({ type: 'SET_CHAT_STATE', state: persistedState.chatState })
+    if (initialState.chatState) {
+      storeActions.uiStateActions.setChatState(initialState.chatState)
     }
-    if (persistedState.canvasState) {
-      dispatch({ type: 'SET_CANVAS_STATE', state: persistedState.canvasState })
+    if (initialState.canvasState) {
+      storeActions.uiStateActions.setCanvasState(initialState.canvasState)
     }
-    
-    // Set responsive breakpoint
-    dispatch({ type: 'SET_BREAKPOINT', breakpoint: currentBreakpoint })
+    if (initialState.chatContext) {
+      storeActions.uiStateActions.setChatContext(initialState.chatContext)
+    }
   }, [])
 
   // Handle window resize for responsive behavior
   useEffect(() => {
     function handleResize() {
-      const breakpoint = getCurrentBreakpoint()
-      dispatch({ type: 'SET_BREAKPOINT', breakpoint })
+      const newBreakpoint = getCurrentBreakpoint()
+      storeActions.uiStateActions.setBreakpoint(newBreakpoint)
       
       // Auto-collapse panels on mobile
-      if (breakpoint === 'mobile') {
-        if (state.sidebarState === 'expanded') {
-          dispatch({ type: 'SET_SIDEBAR_STATE', state: 'collapsed' })
+      if (newBreakpoint === 'mobile') {
+        if (sidebarState === 'expanded') {
+          storeActions.uiStateActions.setSidebarState('collapsed')
         }
-        if (state.chatState === 'expanded') {
-          dispatch({ type: 'SET_CHAT_STATE', state: 'collapsed' })
+        if (chatState === 'expanded') {
+          storeActions.uiStateActions.setChatState('collapsed')
         }
-        if (state.canvasState === 'expanded') {
-          dispatch({ type: 'SET_CANVAS_STATE', state: 'collapsed' })
+        if (canvasState === 'expanded') {
+          storeActions.uiStateActions.setCanvasState('collapsed')
         }
       }
     }
 
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [state.sidebarState, state.chatState, state.canvasState])
-
-  // Persist state changes (client-side only)
-  useEffect(() => {
     if (isClient) {
-      persistState(state)
+      window.addEventListener('resize', handleResize)
+      return () => window.removeEventListener('resize', handleResize)
     }
-  }, [state.sidebarState, state.chatState, state.canvasState, isClient])
+  }, [sidebarState, chatState, canvasState, isClient])
 
-  // Action handlers
+  // Action handlers - delegate to store actions
   const setSidebarState = (panelState: PanelState) => {
-    dispatch({ type: 'SET_SIDEBAR_STATE', state: panelState })
+    storeActions.uiStateActions.setSidebarState(panelState)
   }
 
   const setChatState = (panelState: PanelState) => {
-    dispatch({ type: 'SET_CHAT_STATE', state: panelState })
+    storeActions.uiStateActions.setChatState(panelState)
   }
 
   const setCanvasState = (panelState: PanelState) => {
-    dispatch({ type: 'SET_CANVAS_STATE', state: panelState })
+    storeActions.uiStateActions.setCanvasState(panelState)
   }
 
   const setChatContext = (context: ChatContextConfig) => {
-    dispatch({ type: 'SET_CHAT_CONTEXT', context })
+    storeActions.uiStateActions.setChatContext(context)
   }
 
   const toggleSidebar = () => {
-    dispatch({ type: 'TOGGLE_SIDEBAR' })
+    storeActions.uiStateActions.toggleSidebar()
   }
 
   const toggleChat = () => {
-    dispatch({ type: 'TOGGLE_CHAT' })
+    storeActions.uiStateActions.toggleChat()
   }
 
   const toggleCanvas = () => {
-    dispatch({ type: 'TOGGLE_CANVAS' })
+    storeActions.uiStateActions.toggleCanvas()
   }
 
   const resetLayout = () => {
-    dispatch({ type: 'RESET_LAYOUT' })
+    storeActions.uiStateActions.resetLayout()
   }
 
   const contextValue: LayoutContextValue = {
-    ...state,
+    sidebarState,
+    chatState,
+    canvasState,
+    breakpoint,
+    isMobile,
+    chatContext,
     setSidebarState,
     setChatState,
     setCanvasState,
