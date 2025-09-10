@@ -18,6 +18,7 @@ export function SetupForm() {
 
       if (result.success) {
         router.push("/mission-control");
+        window.location.reload(); // hardcore
       } else {
         setError(result.error || "Setup failed");
       }
