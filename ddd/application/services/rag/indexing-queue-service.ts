@@ -4,6 +4,8 @@
 
 import { DomainType, RagIndexId } from '@/ddd/domain/rag/value-objects';
 import { getIndexingDomainService } from '../../di/container';
+import { withSystemContext } from '@/lib/db/system-context';
+import { getRagIndexRepository } from '../../di/container';
 
 
 export interface QueueEntry {
@@ -276,28 +278,40 @@ export class IndexingQueueService {
    */
   private async executeOperation(entry: QueueEntry): Promise<void> {
     const indexingService = getIndexingDomainService();
+    const indexRepository = getRagIndexRepository();
     
     // Convert string indexId to RagIndexId value object
     const indexId = RagIndexId.fromString(entry.indexId);
     
-    switch (entry.operation) {
-      case 'initial':
-        await indexingService.executeInitialIndexing(indexId);
-        break;
-      case 'reindex':
-        await indexingService.executeReindex(indexId, entry.domainType);
-        break;
-      case 'data-change':
-        await indexingService.executeDataChange(
-          indexId, 
-          entry.domainType!, 
-          entry.sourceId!,
-          entry.changeType || 'UPDATE'
-        );
-        break;
-      default:
-        throw new Error(`Unknown operation type: ${(entry as any).operation}`);
+    // CRITICAL FIX: Get the index to determine the organization context
+    const index = await indexRepository.findById(indexId);
+    if (!index) {
+      throw new Error(`Index ${indexId.value} not found`);
     }
+    
+    // CRITICAL FIX: Set the system context for the organization
+    // This ensures all database operations have the correct system-level security context
+    // consistent with other RAG operations (scheduler, etc.)
+    await withSystemContext(index.organizationId, async () => {
+      switch (entry.operation) {
+        case 'initial':
+          await indexingService.executeInitialIndexing(indexId);
+          break;
+        case 'reindex':
+          await indexingService.executeReindex(indexId, entry.domainType);
+          break;
+        case 'data-change':
+          await indexingService.executeDataChange(
+            indexId, 
+            entry.domainType!, 
+            entry.sourceId!,
+            entry.changeType || 'UPDATE'
+          );
+          break;
+        default:
+          throw new Error(`Unknown operation type: ${(entry as any).operation}`);
+      }
+    });
   }
 
   /**

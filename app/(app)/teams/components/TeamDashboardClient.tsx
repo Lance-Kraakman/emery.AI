@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Loading } from '@/components/ui/loading';
 import { Badge } from '@/components/ui/badge';
 import TeamDetailsView from './TeamDetailsView';
+import TeamFormDialog from './TeamFormDialog';
 import { getTeams } from '@/app/actions/teams';
 import { useEmery } from '@/contexts/EmeryContext';
 
@@ -29,6 +30,8 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<TeamDTO | null>(null);
 
   const refreshTeams = async () => {
     try {
@@ -81,9 +84,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
               />
             </div>
             <Button
-              onClick={() => {
-                // TODO: Handle team creation via separate modal/dialog
-              }}
+              onClick={() => setIsFormDialogOpen(true)}
               variant="default"
               size="sm"
             >
@@ -105,9 +106,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
               description="Create your first team to get started"
               action={{
                 label: "Create Team",
-                onClick: () => {
-                  // TODO: Handle team creation via separate modal/dialog
-                }
+                onClick: () => setIsFormDialogOpen(true)
               }}
             />
           ) : (
@@ -158,7 +157,8 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
                 team={selectedTeam}
                 agents={agents}
                 onEdit={() => {
-                  // This is now handled inline within TeamDetailsView
+                  setEditingTeam(selectedTeam);
+                  setIsFormDialogOpen(true);
                 }}
                 onUpdate={refreshTeams}
               />
@@ -173,6 +173,17 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
         </Card>
       </div>
 
+      {/* Team Form Dialog */}
+      <TeamFormDialog
+        isOpen={isFormDialogOpen}
+        onClose={() => {
+          setIsFormDialogOpen(false);
+          setEditingTeam(null);
+        }}
+        team={editingTeam}
+        agents={agents}
+        onUpdate={refreshTeams}
+      />
     </div>
   );
 }
