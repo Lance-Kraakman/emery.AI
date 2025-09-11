@@ -7,6 +7,7 @@ import { getAgentApplicationService } from '@/ddd/application/di/container';
 import { getAgentTypeConfig, getDefaultToolsForType, getDefaultSpecializationForType } from '@/lib/agents/agent-type-configs';
 import type { AgentType } from '@/ddd/domain/agents/entities/agent';
 import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { TriggerConfigs } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export const dynamic = 'force-dynamic';
@@ -254,35 +255,26 @@ export async function PATCH(
 function createTriggerConfig(schedule: string): TriggerConfig {
   switch (schedule) {
     case 'daily':
-      return {
-        type: 'CALENDAR',
-        enabled: true,
-        rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0', // 9 AM daily
+      return TriggerConfigs.calendar('FREQ=DAILY;BYHOUR=9;BYMINUTE=0', {
         timezone: 'UTC',
-        startDate: new Date()
-      };
+        startDate: new Date(),
+        enabled: true
+      });
     case 'weekly':
-      return {
-        type: 'CALENDAR', 
-        enabled: true,
-        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0', // Monday 9 AM weekly
+      return TriggerConfigs.calendar('FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0', {
         timezone: 'UTC',
-        startDate: new Date()
-      };
+        startDate: new Date(),
+        enabled: true
+      });
     case 'monthly':
-      return {
-        type: 'CALENDAR',
-        enabled: true,
-        rrule: 'FREQ=MONTHLY;BYMONTHDAY=1;BYHOUR=9;BYMINUTE=0', // 1st of month 9 AM
-        timezone: 'UTC', 
-        startDate: new Date()
-      };
+      return TriggerConfigs.calendar('FREQ=MONTHLY;BYMONTHDAY=1;BYHOUR=9;BYMINUTE=0', {
+        timezone: 'UTC',
+        startDate: new Date(),
+        enabled: true
+      });
     case 'manual':
     default:
-      return {
-        type: 'MANUAL',
-        enabled: true,
-      };
+      return TriggerConfigs.manual(true);
   }
 }
 

@@ -278,7 +278,8 @@ function getCategoryBoost(category: MentionCategory, query: string): number {
     agents: ['agent', 'bot', 'ai', 'assistant'],
     teams: ['team', 'group', 'member', 'collab'],
     data: ['data', 'table', 'database', 'db'],
-    settings: ['setting', 'config', 'preference', 'option']
+    settings: ['setting', 'config', 'preference', 'option'],
+    documents: ['doc', 'document', 'tiptap', 'editor']
   }
 
   const keywords = categoryKeywords[category] || []

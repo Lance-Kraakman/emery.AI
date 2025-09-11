@@ -41,6 +41,7 @@ const FIELD_TYPES = [
   { value: "date", label: "Date" },
   { value: "relation", label: "Relation" },
   { value: "file", label: "File" },
+  { value: "document", label: "Document" },
 ]
 
 export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsUpdated }: FieldManagerDialogProps) {

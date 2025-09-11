@@ -16,7 +16,8 @@ export type FieldType =
   | 'boolean' 
   | 'date' 
   | 'relation' 
-  | 'file';
+  | 'file'
+  | 'document';
 
 export interface CreateTableFieldData {
   name: string;
@@ -151,14 +152,15 @@ export class TableField {
       'boolean': 'BOOLEAN',
       'date': 'TIMESTAMP WITH TIME ZONE',
       'relation': 'JSONB',
-      'file': 'JSONB'
+      'file': 'JSONB',
+      'document': 'JSONB'
     };
     
     return typeMapping[this._type];
   }
 
   requiresGinIndex(): boolean {
-    const complexTypes: FieldType[] = ['relation', 'file'];
+    const complexTypes: FieldType[] = ['relation', 'file', 'document'];
     return complexTypes.includes(this._type);
   }
 
@@ -300,6 +302,9 @@ export class TableField {
 
       case 'file':
         return this.validateFileArray(value);
+
+      case 'document':
+        return this.validateFileArray(value); // Documents use same validation as files
 
       case 'relation':
         return this.validateRelationArray(value);

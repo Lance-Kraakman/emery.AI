@@ -1,6 +1,7 @@
 'use client'
 
-import { ChatCanvas as LlamaIndexChatCanvas, useChatCanvas } from '@llamaindex/chat-ui'
+// AIDEV-NOTE: Temporarily commented out LlamaIndex imports to fix build issues
+// import { ChatCanvas as LlamaIndexChatCanvas, useChatCanvas } from '@llamaindex/chat-ui'
 import { X, Code, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -14,90 +15,18 @@ import { Button } from '@/components/ui/button'
  */
 
 export function ChatCanvas() {
-  try {
-    const canvasContext = useChatCanvas()
-    
-    // Check if canvas context is available and has the expected properties
-    // Different LlamaIndex versions might have different API shapes
-    const hasArtifact = canvasContext && 
-                       typeof canvasContext === 'object' && 
-                       ('currentArtifact' in canvasContext || 'isVisible' in canvasContext)
-    
-    if (!hasArtifact) {
-      // Fallback to simple canvas when no artifact context available
-      return (
-        <div className="flex-1 border-l border-border">
-          <LlamaIndexChatCanvas className="h-full w-full" />
-        </div>
-      )
-    }
-
-    // Type assertion for known properties (defensive)
-    const context = canvasContext as any
-    const currentArtifact = context.currentArtifact
-    const isVisible = context.isVisible
-    const hideCanvas = context.hideCanvas
-
-    // Only render enhanced version when there's a visible artifact
-    if (!isVisible || !currentArtifact) {
-      return (
-        <div className="flex-1 border-l border-border">
-          <LlamaIndexChatCanvas className="h-full w-full" />
-        </div>
-      )
-    }
-
-    // Enhanced canvas with header and artifact information
-    return (
-      <div className="flex-1 border-l border-border flex flex-col bg-card">
-        {/* Canvas Header with Artifact Info */}
-        <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            {currentArtifact.type === 'code' ? (
-              <Code className="h-4 w-4 text-primary flex-shrink-0" />
-            ) : (
-              <FileText className="h-4 w-4 text-primary flex-shrink-0" />
-            )}
-            <div className="min-w-0 flex-1">
-              <h3 className="font-medium text-sm truncate">
-                {currentArtifact.title || 
-                 (currentArtifact.type === 'code' ? 'Code Editor' : 'Document')}
-              </h3>
-              {currentArtifact.type === 'code' && currentArtifact.data?.language && (
-                <p className="text-xs text-muted-foreground">
-                  {currentArtifact.data.language}
-                </p>
-              )}
-            </div>
-          </div>
-          
-          {hideCanvas && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={hideCanvas}
-              className="h-7 w-7 p-0 flex-shrink-0"
-              title="Close canvas"
-            >
-              <X className="h-3 w-3" />
-            </Button>
-          )}
-        </div>
-
-        {/* LlamaIndex Canvas Content */}
-        <div className="flex-1 overflow-hidden">
-          <LlamaIndexChatCanvas className="h-full w-full border-0" />
+  // AIDEV-NOTE: Placeholder component - LlamaIndex temporarily disabled
+  return (
+    <div className="flex-1 border-l border-border">
+      <div className="h-full w-full flex items-center justify-center">
+        <div className="text-center text-muted-foreground p-8">
+          <Code className="h-16 w-16 mx-auto mb-4" />
+          <h3 className="text-lg font-medium mb-2">Canvas Temporarily Disabled</h3>
+          <p className="text-sm">
+            Chat canvas functionality is currently disabled
+          </p>
         </div>
       </div>
-    )
-  } catch (error) {
-    // Fallback: If useChatCanvas fails, render basic canvas
-    // This prevents the "must be used within ChatCanvasProvider" error
-    console.warn('[ChatCanvas] useChatCanvas hook not available, using fallback:', error)
-    return (
-      <div className="flex-1 border-l border-border">
-        <LlamaIndexChatCanvas className="h-full w-full" />
-      </div>
-    )
-  }
+    </div>
+  )
 }

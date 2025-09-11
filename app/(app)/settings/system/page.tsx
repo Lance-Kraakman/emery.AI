@@ -2,6 +2,9 @@
 
 import { ThemeToggle } from "./ThemeToggle"
 
+// AIDEV-NOTE: Force server-side rendering to prevent LlamaIndex static generation issues  
+export const dynamic = 'force-dynamic';
+
 export default function SystemSettingsPage() {
   return (
     <div className="flex justify-center items-center h-full">

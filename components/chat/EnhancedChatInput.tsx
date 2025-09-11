@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { ChatInput } from '@llamaindex/chat-ui'
+// AIDEV-NOTE: Temporarily commented out LlamaIndex imports to fix build issues
+// import { ChatInput } from '@llamaindex/chat-ui'
 import { Send } from 'lucide-react'
 import { useAtMentions } from './useAtMentions'
 import { useChatMentions } from './useChatMentions'
@@ -169,21 +170,21 @@ export function EnhancedChatInput({
   return (
     <div ref={containerRef} className={`relative ${className}`}>
       {/* Custom input wrapper to access the underlying textarea */}
-      <ChatInput 
-        className="bg-transparent border-0 shadow-none p-0"
-      >
-        <ChatInput.Form className="relative flex items-end gap-3 bg-transparent">
+      <div className="bg-transparent border-0 shadow-none p-0">
+        {/* AIDEV-NOTE: ChatInput placeholder - LlamaIndex temporarily disabled */}
+        <div className="relative flex items-end gap-3 bg-transparent">
           <div className="relative flex-1">
-            <ChatInput.Field
+            <textarea
               className="w-full resize-none rounded-xl border border-input bg-background px-4 py-3 pr-14 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground min-h-[44px] max-h-32"
               placeholder={placeholder}
+              disabled
             />
-            <ChatInput.Submit className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm">
+            <button className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm" disabled>
               <Send className="h-4 w-4" />
-            </ChatInput.Submit>
+            </button>
           </div>
-        </ChatInput.Form>
-      </ChatInput>
+        </div>
+      </div>
 
       {/* @ Mention Dropdown */}
       {showMentionDropdown && shouldShowAtDropdown && (

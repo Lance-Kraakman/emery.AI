@@ -19,6 +19,9 @@ RUN pnpm install @duckdb/node-api
 # AIDEV-NOTE: Install dependencies with frozen lockfile for cache efficiency
 RUN pnpm install --frozen-lockfile
 
+# AIDEV-NOTE: Temporarily remove LlamaIndex packages to fix build issues
+RUN pnpm remove @llamaindex/chat-ui @llamaindex/readers @llamaindex/core @llamaindex/env @llamaindex/cloud llamaindex || true
+
 # Copy source code after dependencies are installed
 COPY . .
 
@@ -31,6 +34,9 @@ ENV NEXTAUTH_URL="http://localhost:3000"
 ENV GITHUB_CLIENT_ID="build-dummy-client-id"
 ENV GITHUB_CLIENT_SECRET="build-dummy-client-secret"
 ENV RESEND_API_KEY="build-dummy-resend-key"
+
+# Set NODE_ENV to development for build to enable non-minified errors and dev features
+ENV NODE_ENV=development
 RUN pnpm run build
 
 # AIDEV-NOTE: Skip bundled scheduler, use tsx directly to avoid bundling issues

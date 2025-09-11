@@ -2,7 +2,20 @@
 
 import { generateId } from 'ai'
 import { useState, useEffect, useRef } from 'react'
-import { ChatHandler, Message } from '@llamaindex/chat-ui'
+// AIDEV-NOTE: Temporarily commented out LlamaIndex imports to fix build issues
+// import { ChatHandler, Message } from '@llamaindex/chat-ui'
+
+// Temporary type definitions to maintain functionality
+interface Message {
+  id: string;
+  content: string;
+  role: 'user' | 'assistant';
+}
+
+interface ChatHandler {
+  messages: Message[];
+  scrollRef?: React.RefObject<HTMLDivElement>;
+}
 
 interface ChatMessage extends Message {
   id: string
@@ -10,6 +23,11 @@ interface ChatMessage extends Message {
 
 // Extended ChatHandler interface with scroll functionality
 interface ExtendedChatHandler extends ChatHandler {
+  input?: string;
+  setInput?: (value: string) => void;
+  isLoading?: boolean;
+  append?: (message: Message) => void;
+  setMessages?: (messages: Message[]) => void;
   scrollRef?: React.RefObject<HTMLDivElement>
   scrollToBottom?: () => void
 }

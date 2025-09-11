@@ -85,10 +85,10 @@ export class FileUseCases {
       // Field belongs to table by definition since we got it from table.getFieldById()
       // No need to validate tableId separately
 
-      if (field.type !== 'file') {
+      if (field.type !== 'file' && field.type !== 'document') {
         return {
           success: false,
-          error: `Field ${field.name} is not a file field`
+          error: `Field ${field.name} is not a file or document field`
         };
       }
 

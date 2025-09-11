@@ -7,6 +7,9 @@ import { TableId } from '@/ddd/domain/shared/value-objects';
 // AIDEV-NOTE: Field types support text, number, boolean, date, file, relation (no email/url)
 import type { CreateFieldCommand } from '@/ddd/application/services/tables/table-application-service';
 
+// AIDEV-NOTE: Force server-side rendering to prevent LlamaIndex static generation issues
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     // Authenticate the request

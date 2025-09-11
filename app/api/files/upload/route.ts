@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, hasPermission } from "@/lib/auth";
-import { getFileApplicationService, getTableApplicationService } from "@/ddd/application/di/container";
+import { getFileApplicationService, getTableApplicationService, getDocumentApplicationService } from "@/ddd/application/di/container";
 import { FieldId, OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
 import type { UploadFileCommand } from "@/ddd/application/services/tables/file-application-service";
+import type { CreateTiptapDocumentCommand } from "@/ddd/application/services/tables/document-application-service";
 import { withAuthContext } from '@/lib/auth/with-context';
+
+// AIDEV-NOTE: Force server-side rendering to prevent LlamaIndex static generation issues
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   return withAuthContext(async () => {
@@ -31,14 +35,13 @@ export async function POST(request: NextRequest) {
     const organizationId = parseInt(formData.get('organizationId') as string);
     const tableId = parseInt(formData.get('tableId') as string);
     const fieldName = formData.get('fieldName') as string;
+    
+    // Document-specific form fields
+    const documentTitle = formData.get('documentTitle') as string | null;
+    const documentType = formData.get('documentType') as 'tiptap' | 'file' | null;
+    const initialContent = formData.get('initialContent') as string | null;
 
-    if (!file) {
-      return NextResponse.json(
-        { error: "No file provided" },
-        { status: 400 }
-      );
-    }
-
+    // Validate common required fields
     if (!organizationId || !tableId || !fieldName) {
       return NextResponse.json(
         { error: "organizationId, tableId, and fieldName are required" },
@@ -46,24 +49,70 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate based on request type
+    const isTiptapDocumentRequest = documentType === 'tiptap' && documentTitle;
+    
+    if (!isTiptapDocumentRequest && !file) {
+      return NextResponse.json(
+        { error: "Either file or document creation parameters (documentTitle, documentType) must be provided" },
+        { status: 400 }
+      );
+    }
+
     // Use TableApplicationService to find field by name and get its ID
-      const tableApplicationService = getTableApplicationService();
-      const table = await tableApplicationService.getTable(TableId.fromNumber(tableId));
-      if (!table) {
+    const tableApplicationService = getTableApplicationService();
+    const table = await tableApplicationService.getTable(TableId.fromNumber(tableId));
+    if (!table) {
+      return NextResponse.json(
+        { error: "Table not found" },
+        { status: 404 }
+      );
+    }
+    const field = table.getField(fieldName);
+    if (!field) {
+      return NextResponse.json(
+        { error: `Field '${fieldName}' not found in table` },
+        { status: 404 }
+      );
+    }
+
+    // Route to appropriate service based on request type
+    if (isTiptapDocumentRequest) {
+      // Use DocumentApplicationService for TipTap document creation
+      const documentApplicationService = getDocumentApplicationService();
+      
+      const command: CreateTiptapDocumentCommand = {
+        organizationId: OrganizationId.fromNumber(organizationId),
+        tableId: TableId.fromNumber(tableId),
+        fieldId: field.id,
+        title: documentTitle,
+        initialContent: initialContent ? JSON.parse(initialContent) : undefined,
+        createdBy: UserId.fromString(session.user.id)
+      };
+
+      const result = await documentApplicationService.createTiptapDocument(command);
+
+      if (!result.success) {
         return NextResponse.json(
-          { error: "Table not found" },
-          { status: 404 }
-        );
-      }
-      const field = table.getField(fieldName);
-      if (!field) {
-        return NextResponse.json(
-          { error: `Field '${fieldName}' not found in table` },
-          { status: 404 }
+          { error: result.error || 'Failed to create TipTap document' },
+          { status: 400 }
         );
       }
 
-      // Use FileApplicationService for file upload
+      if (!result.data) {
+        return NextResponse.json(
+          { error: "No document metadata returned" },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        data: result.data,
+        warnings: result.warnings
+      }, { status: 201 });
+
+    } else {
+      // Use FileApplicationService for regular file upload
       const fileApplicationService = getFileApplicationService();
       
       const buffer = Buffer.from(await file.arrayBuffer());
@@ -95,13 +144,14 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json({
-        ...result.data,
+        data: result.data,
         warnings: result.warnings
       }, { status: 201 });
+    }
   } catch (error) {
-    console.error("Error uploading file:", error);
+    console.error("Error uploading file or creating document:", error);
       return NextResponse.json(
-        { error: "Failed to upload file" },
+        { error: "Failed to upload file or create document" },
         { status: 500 }
       );
     }
