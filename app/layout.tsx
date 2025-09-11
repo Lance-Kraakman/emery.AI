@@ -2,8 +2,9 @@ import './globals.css'
 import AuthProvider from '@/components/AuthProvider'
 import { Metadata } from 'next'
 
-// AIDEV-NOTE: Force dynamic rendering to prevent Html import issues
+// AIDEV-NOTE: Force dynamic rendering to prevent Html import issues during Docker builds
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export const metadata: Metadata = {
   title: 'Emery - Dynamic Database Builder',

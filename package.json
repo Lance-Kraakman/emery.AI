@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:prod": "pnpm build && pnpm start",
-    "build": "next build --no-lint",
+    "build": "NEXT_EXPORT=false next build --no-lint",
     "start": "next start",
     "lint": "next lint",
     "lint:fix": "next lint --fix",

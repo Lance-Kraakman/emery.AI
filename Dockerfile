@@ -1,5 +1,5 @@
 # 1. Build the application - using Debian for native module compatibility
-FROM node:20-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
 # Copy package files first for better caching
@@ -42,7 +42,7 @@ RUN pnpm run build
 # AIDEV-NOTE: Skip bundled scheduler, use tsx directly to avoid bundling issues
 
 # 2. Production image - using Debian for native module compatibility
-FROM node:20-bookworm-slim AS runner
+FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
