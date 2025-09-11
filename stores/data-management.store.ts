@@ -12,8 +12,7 @@
 import { Store } from '@tanstack/react-store'
 import type { TableDTO } from '@/app/mappers/table-mapper'
 import type { FieldDTO } from '@/app/mappers/field-mapper'
-import type { RowDTO } from '@/app/mappers/row-mapper'
-import type { Row } from '@/ddd/domain/tables/value-objects/row'
+import type { RowDTO, FieldValueDTO } from '@/app/mappers/row-mapper'
 
 export interface DataState {
   // Current selection
@@ -22,7 +21,7 @@ export interface DataState {
   
   // Table and field data
   fields: FieldDTO[]
-  rows: Row[]
+  rows: RowDTO[]
   availableTables: Array<{ id: number; name: string }>
   
   // Search and filtering
@@ -234,7 +233,7 @@ export const dataActions = {
     dataStore.setState((state) => ({ ...state, fields, fieldsLoading: false }))
   },
 
-  setRows: (rows: Row[], totalRows?: number) => {
+  setRows: (rows: RowDTO[], totalRows?: number) => {
     dataStore.setState((state) => ({ 
       ...state, 
       rows,
@@ -502,7 +501,7 @@ export const dataActions = {
     dataStore.setState((state) => ({ ...state, validationErrors: errors }))
   },
 
-  addRow: (row: Row) => {
+  addRow: (row: RowDTO) => {
     dataStore.setState((state) => ({
       ...state,
       rows: [...state.rows, row],
@@ -510,7 +509,7 @@ export const dataActions = {
     }))
   },
 
-  updateRow: (rowId: string, updates: Partial<Row>) => {
+  updateRow: (rowId: string, updates: Partial<RowDTO>) => {
     dataStore.setState((state) => ({
       ...state,
       rows: state.rows.map(row => 

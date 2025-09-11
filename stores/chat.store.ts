@@ -269,7 +269,7 @@ export const chatActions = {
         [sessionId]: session
       },
       messages: [],
-      context
+      context: context || null
     }))
 
     return sessionId

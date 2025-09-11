@@ -19,11 +19,9 @@ import ScheduleManager from './ScheduleManager';
 import { 
   isCalendarTrigger, 
   isDatabaseEventTrigger, 
-  isRagReindexTrigger, 
   isWebhookTrigger,
   getCalendarRRule,
   getDatabaseEventOperations,
-  getRagReindexDebounceMs,
   getWebhookSecret,
   getWebhookRequiresSignature,
   getTriggerTypeLabel
@@ -150,9 +148,6 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       case 'DATABASE_EVENT':
         newTrigger = TriggerConfigs.databaseEvent(['INSERT', 'UPDATE']);
         break;
-      case 'RAG_REINDEX':
-        newTrigger = TriggerConfigs.ragReindex();
-        break;
       case 'WEBHOOK':
         newTrigger = TriggerConfigs.webhook();
         break;
@@ -172,26 +167,67 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
         // If changing trigger type, use factory function to create new trigger
         switch (config.type) {
           case 'MANUAL':
-            updatedTrigger = TriggerConfigs.manual({ ...config });
+            updatedTrigger = TriggerConfigs.manual(config.enabled, config.description);
             break;
           case 'CALENDAR':
-            updatedTrigger = TriggerConfigs.calendar('FREQ=DAILY;INTERVAL=1', { ...config });
+            updatedTrigger = TriggerConfigs.calendar('FREQ=DAILY;INTERVAL=1', {
+              enabled: config.enabled,
+              description: config.description
+            });
             break;
           case 'DATABASE_EVENT':
-            updatedTrigger = TriggerConfigs.databaseEvent(['INSERT', 'UPDATE'], { ...config });
-            break;
-          case 'RAG_REINDEX':
-            updatedTrigger = TriggerConfigs.ragReindex({ ...config });
+            updatedTrigger = TriggerConfigs.databaseEvent(['INSERT', 'UPDATE'], {
+              enabled: config.enabled,
+              description: config.description
+            });
             break;
           case 'WEBHOOK':
-            updatedTrigger = TriggerConfigs.webhook({ ...config });
+            updatedTrigger = TriggerConfigs.webhook({
+              enabled: config.enabled,
+              description: config.description
+            });
             break;
           default:
             updatedTrigger = prev.trigger;
         }
       } else {
-        // Same type, safe to merge properties
-        updatedTrigger = { ...prev.trigger, ...config } as TriggerConfig;
+        // Same type, create new instance with updated values
+        const currentTrigger = prev.trigger;
+        
+        if (currentTrigger instanceof TriggerConfigs.manual().constructor) {
+          updatedTrigger = TriggerConfigs.manual(
+            config.enabled !== undefined ? config.enabled : currentTrigger.enabled,
+            config.description !== undefined ? config.description : currentTrigger.description
+          );
+        } else if (currentTrigger instanceof TriggerConfigs.calendar('FREQ=DAILY').constructor) {
+          const current = currentTrigger as any;
+          updatedTrigger = TriggerConfigs.calendar(current.rrule, {
+            timezone: current.timezone,
+            startDate: current.startDate,
+            endDate: current.endDate,
+            enabled: config.enabled !== undefined ? config.enabled : current.enabled,
+            description: config.description !== undefined ? config.description : current.description
+          });
+        } else if (currentTrigger instanceof TriggerConfigs.databaseEvent(['INSERT']).constructor) {
+          const current = currentTrigger as any;
+          updatedTrigger = TriggerConfigs.databaseEvent(current.operations, {
+            tableId: current.tableId,
+            conditions: current.conditions,
+            enabled: config.enabled !== undefined ? config.enabled : current.enabled,
+            description: config.description !== undefined ? config.description : current.description
+          });
+        } else if (currentTrigger instanceof TriggerConfigs.webhook().constructor) {
+          const current = currentTrigger as any;
+          updatedTrigger = TriggerConfigs.webhook({
+            webhookSecret: current.webhookSecret,
+            allowedOrigins: current.allowedOrigins,
+            requiresSignature: current.requiresSignature,
+            enabled: config.enabled !== undefined ? config.enabled : current.enabled,
+            description: config.description !== undefined ? config.description : current.description
+          });
+        } else {
+          updatedTrigger = currentTrigger;
+        }
       }
       
       return { ...prev, trigger: updatedTrigger };
@@ -612,14 +648,6 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                     </div>
                   )}
                   
-                  {agent.trigger && isRagReindexTrigger(agent.trigger) && (
-                    <div>
-                      <h5 className="font-medium text-sm mb-1">Debounce Delay</h5>
-                      <p className="text-xs text-muted-foreground">
-                        {agent.trigger.debounceMs || 5000}ms
-                      </p>
-                    </div>
-                  )}
                   
                   {agent.trigger && isWebhookTrigger(agent.trigger) && (
                     <div className="space-y-1">
@@ -645,7 +673,6 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                         <SelectItem value="MANUAL">Manual Execution</SelectItem>
                         <SelectItem value="CALENDAR">Scheduled/Calendar</SelectItem>
                         <SelectItem value="DATABASE_EVENT">Database Changes</SelectItem>
-                        <SelectItem value="RAG_REINDEX">RAG Reindexing</SelectItem>
                         <SelectItem value="WEBHOOK">Webhook Trigger</SelectItem>
                       </SelectContent>
                     </Select>
@@ -704,22 +731,6 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                     </div>
                   )}
 
-                  {editFormData.trigger?.type === 'RAG_REINDEX' && (
-                    <div className="space-y-2">
-                      <p className="text-xs text-muted-foreground">
-                        Trigger agent execution when RAG data needs reindexing.
-                      </p>
-                      <div>
-                        <h5 className="font-medium text-sm mb-1">Debounce Delay (ms)</h5>
-                        <Input
-                          type="number"
-                          value={getRagReindexDebounceMs(editFormData.trigger) || 5000}
-                          onChange={(e) => handleTriggerConfigChange({ debounceMs: parseInt(e.target.value) })}
-                          className="text-sm"
-                        />
-                      </div>
-                    </div>
-                  )}
 
                   {editFormData.trigger?.type === 'WEBHOOK' && (
                     <div className="space-y-2">

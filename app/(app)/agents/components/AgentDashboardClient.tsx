@@ -13,7 +13,7 @@ import { Loading } from '@/components/ui/loading';
 import AgentDetailsView from './AgentDetailsView';
 import AgentCreateView from './AgentCreateView';
 import { agentsStore, agentsSelectors } from '@/stores/agents.store';
-import { storeActions } from '@/stores/actions';
+import { storeActions, agentsActions } from '@/stores/actions';
 
 // AIDEV-NOTE: Agent dashboard migrated to TanStack Store for better state management and performance
 interface AgentDashboardClientProps {
@@ -34,7 +34,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
   
   // Initialize store with initial data
   useEffect(() => {
-    storeActions.agentsActions.setAgents(initialAgents);
+    agentsActions.setAgents(initialAgents);
   }, [initialAgents]);
 
   const refreshAgents = async () => {
@@ -67,7 +67,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => storeActions.agentsActions.togglePanelCollapsed()}
+            onClick={() => agentsActions.togglePanelCollapsed()}
             className="ml-auto"
           >
             {isPanelCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -80,7 +80,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
               <Input
                 placeholder="Search agents..."
                 value={searchQuery}
-                onChange={(e) => storeActions.agentsActions.setSearchQuery(e.target.value)}
+                onChange={(e) => agentsActions.setSearchQuery(e.target.value)}
                 className="pl-9"
               />
             </div>
@@ -90,7 +90,7 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
               <Plus size={16} className="mr-2" />
               New Agent
             </Button>
-            <Select value={selectedTeam} onValueChange={(value) => storeActions.agentsActions.setSelectedTeam(value)}>
+            <Select value={selectedTeam} onValueChange={(value) => agentsActions.setSelectedTeam(value)}>
               <SelectTrigger>
                 <SelectValue placeholder="All Teams" />
               </SelectTrigger>
@@ -134,8 +134,8 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
                         : ''
                     }`}
                     onClick={() => {
-                      storeActions.agentsActions.setSelectedAgent(agent);
-                      storeActions.agentsActions.setCreateMode(false);
+                      agentsActions.setSelectedAgent(agent);
+                      agentsActions.setCreateMode(false);
                     }}
                   >
                     <CardContent className="p-3">

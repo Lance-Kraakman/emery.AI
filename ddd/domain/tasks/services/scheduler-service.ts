@@ -11,6 +11,7 @@
 import { Task } from '../entities/task';
 import type { AgentId } from '@/ddd/domain/shared/value-objects';
 import type { TriggerConfig, TriggerType, ScheduledTask, ScheduleTaskRequest } from '@/ddd/domain/scheduling';
+import { CalendarTriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { IAgentRepository } from '../../agents/repositories/agent-repository';
 
 /**
@@ -110,63 +111,42 @@ export class SchedulerService implements ISchedulerService {
   }
 
   calculateNextExecution(trigger: TriggerConfig, lastExecution?: Date): Date | null {
-    if (trigger.type !== 'CALENDAR' || !trigger.rrule) {
+    if (!(trigger instanceof CalendarTriggerConfig)) {
       return null;
     }
 
-    // Basic RRule parsing - in real implementation, use rrule.js library
+    // Use the proper RRule library through the Value Object
     const baseTime = lastExecution || new Date();
     
-    // For now, parse simple RRule patterns
-    // Example: FREQ=HOURLY;INTERVAL=1 (every hour)
-    // Example: FREQ=DAILY;BYHOUR=9 (daily at 9 AM)
     try {
-      const rrule = trigger.rrule.toUpperCase();
+      // Use the CalendarTriggerConfig's built-in RRule processing
+      const nextOccurrence = trigger.getNextOccurrence(baseTime);
       
-      if (rrule.includes('FREQ=HOURLY')) {
-        const intervalMatch = rrule.match(/INTERVAL=(\d+)/);
-        const interval = intervalMatch ? parseInt(intervalMatch[1]) : 1;
+      if (nextOccurrence) {
+        // Ensure the next occurrence respects the trigger's start/end dates
+        if (trigger.endDate && nextOccurrence > trigger.endDate) {
+          return null; // Schedule has ended
+        }
         
-        const nextTime = new Date(baseTime);
-        nextTime.setHours(nextTime.getHours() + interval);
-        nextTime.setMinutes(0);
-        nextTime.setSeconds(0);
-        nextTime.setMilliseconds(0);
-        return nextTime;
-      }
-      
-      if (rrule.includes('FREQ=DAILY')) {
-        const hourMatch = rrule.match(/BYHOUR=(\d+)/);
-        const hour = hourMatch ? parseInt(hourMatch[1]) : 9; // Default to 9 AM
+        if (nextOccurrence < trigger.startDate) {
+          // If next occurrence is before start date, get first occurrence after start date
+          return trigger.getNextOccurrence(trigger.startDate);
+        }
         
-        const nextTime = new Date(baseTime);
-        nextTime.setDate(nextTime.getDate() + 1); // Next day
-        nextTime.setHours(hour);
-        nextTime.setMinutes(0);
-        nextTime.setSeconds(0);
-        nextTime.setMilliseconds(0);
-        return nextTime;
+        return nextOccurrence;
       }
       
-      if (rrule.includes('FREQ=WEEKLY')) {
-        const nextTime = new Date(baseTime);
-        nextTime.setDate(nextTime.getDate() + 7); // Next week
-        nextTime.setHours(9); // Default to 9 AM
-        nextTime.setMinutes(0);
-        nextTime.setSeconds(0);
-        nextTime.setMilliseconds(0);
-        return nextTime;
-      }
+      return null;
     } catch (error) {
-      console.warn('Failed to parse RRule:', trigger.rrule, error);
+      console.warn('Failed to calculate next execution for trigger:', error);
+      
+      // Fallback: execute in 1 hour if RRule parsing fails
+      const nextTime = new Date(baseTime);
+      nextTime.setHours(nextTime.getHours() + 1);
+      nextTime.setMinutes(0);
+      nextTime.setSeconds(0);
+      nextTime.setMilliseconds(0);
+      return nextTime;
     }
-
-    // Fallback: execute in 1 hour
-    const nextTime = new Date(baseTime);
-    nextTime.setHours(nextTime.getHours() + 1);
-    nextTime.setMinutes(0);
-    nextTime.setSeconds(0);
-    nextTime.setMilliseconds(0);
-    return nextTime;
   }
 }

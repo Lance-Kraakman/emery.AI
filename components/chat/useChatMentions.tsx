@@ -13,7 +13,7 @@ import {
   Monitor
 } from 'lucide-react'
 import { PREDEFINED_TOOLS, getAvailableToolsForUser } from '@/lib/agents/tools-registry'
-import { useEmery } from '@/contexts/EmeryContext'
+import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { getUserOAuthConnections } from '@/app/actions/connections'
 import type { ConnectionDTO } from '@/app/mappers/connection-mapper'
 import type {

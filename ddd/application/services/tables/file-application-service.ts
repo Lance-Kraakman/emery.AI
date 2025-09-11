@@ -8,12 +8,12 @@
  * AIDEV-NOTE: Application service for file management - coordinates between
  * FileFieldService, storage repositories, and business rules for files connected to dynamic tables
  */
-import type { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
+import type { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import type { Result } from '@/ddd/domain/shared/result';
 import { FieldId, OrganizationId, TableId } from '@/ddd/domain/shared/value-objects';
 import type { FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
-import { FileKey } from '@/ddd/domain/files/entities/file-storage';
+import { FileKey } from '@/ddd/domain/tables/entities/file-storage';
 
 export interface UploadFileCommand {
   organizationId: OrganizationId;

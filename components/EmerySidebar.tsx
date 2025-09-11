@@ -30,7 +30,7 @@ import { EmeryOrganizationModal } from "./EmeryOrganizationModal"
 import { useEmeryStore } from "@/contexts/EmeryStoreProvider"
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
-import { storeActions } from '@/stores/actions'
+import { storeActions, uiStateActions } from '@/stores/actions'
 import { useLayout } from "@/components/layout/LayoutProvider"
 
 const navItems = [
@@ -82,13 +82,13 @@ export function EmerySidebar() {
     const settingsPaths = settingsNavItems.map(item => item.href)
 
     if (orchestrationPaths.includes(pathname)) {
-      storeActions.uiStateActions.setOpenCollapsibles(["Orchestration"])
+      uiStateActions.setOpenCollapsibles(["Orchestration"])
     } else if (settingsPaths.includes(pathname)) {
-      storeActions.uiStateActions.setOpenCollapsibles(["Settings"])
+      uiStateActions.setOpenCollapsibles(["Settings"])
     } else if (pathname.startsWith("/data")) {
-      storeActions.uiStateActions.setOpenCollapsibles(["Data", ...data.databases.map(db => db.id.toString())])
+      uiStateActions.setOpenCollapsibles(["Data", ...data.databases.map(db => db.id.toString())])
     } else {
-      storeActions.uiStateActions.setOpenCollapsibles([])
+      uiStateActions.setOpenCollapsibles([])
     }
   }, [pathname, data.databases])
 
@@ -104,12 +104,12 @@ export function EmerySidebar() {
       const newCollapsibles = isOpen
         ? openCollapsibles.filter(item => item !== id && !dbIds.includes(item))
         : [...openCollapsibles, id, ...dbIds]
-      storeActions.uiStateActions.setOpenCollapsibles(newCollapsibles)
+      uiStateActions.setOpenCollapsibles(newCollapsibles)
     } else {
       const newCollapsibles = isOpen 
         ? openCollapsibles.filter(item => item !== id) 
         : [...openCollapsibles, id]
-      storeActions.uiStateActions.setOpenCollapsibles(newCollapsibles)
+      uiStateActions.setOpenCollapsibles(newCollapsibles)
     }
   }
 
@@ -249,7 +249,7 @@ export function EmerySidebar() {
                             )}
                             {/* Add Database button at the bottom */}
                             <button
-                              onClick={() => storeActions.uiStateActions.setCreateDatabaseOpen(true)}
+                              onClick={() => uiStateActions.setCreateDatabaseOpen(true)}
                               className="flex items-center justify-center w-full rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted mt-2"
                               title="Add Database"
                             >

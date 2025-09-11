@@ -8,6 +8,7 @@ import type { Result, CreateTaskData } from "./types";
 import { getAgentTaskApplicationService, getAgentApplicationService } from "@/ddd/application/di/container";
 import type { CreateTaskRequest } from "@/ddd/application/services/agents/agent-task-application-service";
 import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { taskToDTO, tasksToDTO } from '@/app/mappers/task-mapper';
 
 export async function createTask(data: CreateTaskData): Promise<Result> {
   return withAuthContext(async () => {
@@ -38,22 +39,8 @@ export async function createTask(data: CreateTaskData): Promise<Result> {
 
     const task = await taskApplicationService.createTask(createRequest);
 
-    // Convert domain entity to database schema type for frontend compatibility
-    const convertedTask = {
-      id: task.id,
-      agentId: task.agentId,
-      organizationId: task.organizationId,
-      name: task.name,
-      capabilityName: task.capabilityName,
-      instructions: task.instructions,
-      status: task.status,
-      result: task.result,
-      error: task.error,
-      startedAt: task.startedAt,
-      completedAt: task.completedAt,
-      createdBy: task.createdBy,
-      createdAt: task.createdAt
-    };
+    // Convert domain entity to frontend DTO
+    const convertedTask = taskToDTO(task);
 
     revalidatePath('/dashboard');
     
@@ -86,22 +73,8 @@ export async function getTasks(agentId?: number, limit = 50): Promise<Result> {
       domainTasks = await taskApplicationService.getRecentTasksForOrganization(currentOrg.id, limit);
     }
 
-    // Convert domain entities to database schema types for frontend compatibility
-    const convertedTasks = domainTasks.map(task => ({
-      id: task.id,
-      agentId: task.agentId,
-      organizationId: task.organizationId,
-      name: task.name,
-      capabilityName: task.capabilityName,
-      instructions: task.instructions,
-      status: task.status,
-      result: task.result,
-      error: task.error,
-      startedAt: task.startedAt,
-      completedAt: task.completedAt,
-      createdBy: task.createdBy,
-      createdAt: task.createdAt
-    }));
+    // Convert domain entities to frontend DTOs
+    const convertedTasks = tasksToDTO(domainTasks);
 
     return {
       success: true,
@@ -132,22 +105,8 @@ export async function getTask(taskId: string): Promise<Result> {
       };
     }
 
-    // Convert domain entity to database schema type for frontend compatibility
-    const convertedTask = {
-      id: domainTask.id,
-      agentId: domainTask.agentId,
-      organizationId: domainTask.organizationId,
-      name: domainTask.name,
-      capabilityName: domainTask.capabilityName,
-      instructions: domainTask.instructions,
-      status: domainTask.status,
-      result: domainTask.result,
-      error: domainTask.error,
-      startedAt: domainTask.startedAt,
-      completedAt: domainTask.completedAt,
-      createdBy: domainTask.createdBy,
-      createdAt: domainTask.createdAt
-    };
+    // Convert domain entity to frontend DTO
+    const convertedTask = taskToDTO(domainTask);
 
     return {
       success: true,
@@ -235,22 +194,8 @@ export async function updateTaskStatus(
       };
     }
 
-    // Convert domain entity to database schema type for frontend compatibility
-    const convertedTask = {
-      id: updatedDomainTask.id,
-      agentId: updatedDomainTask.agentId,
-      organizationId: updatedDomainTask.organizationId,
-      name: updatedDomainTask.name,
-      capabilityName: updatedDomainTask.capabilityName,
-      instructions: updatedDomainTask.instructions,
-      status: updatedDomainTask.status,
-      result: updatedDomainTask.result,
-      error: updatedDomainTask.error,
-      startedAt: updatedDomainTask.startedAt,
-      completedAt: updatedDomainTask.completedAt,
-      createdBy: updatedDomainTask.createdBy,
-      createdAt: updatedDomainTask.createdAt
-    };
+    // Convert domain entity to frontend DTO
+    const convertedTask = taskToDTO(updatedDomainTask);
 
     revalidatePath('/dashboard');
     

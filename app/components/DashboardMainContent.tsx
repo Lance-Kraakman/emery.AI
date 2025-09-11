@@ -1,13 +1,13 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { useEmeryData } from '@/hooks/useEmeryData'
+import { useEmery } from '@/contexts/EmeryStoreProvider'
 import TableEditorClient from './TableEditorClient'
 
 export default function DashboardMainContent() {
   const searchParams = useSearchParams()
   const tableId = searchParams.get('tableId')
-  const { data, isLoading } = useEmeryData()
+  const { data, isLoading } = useEmery()
   
   // Find the selected table
   const selectedTable = tableId 

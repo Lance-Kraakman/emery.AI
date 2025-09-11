@@ -20,6 +20,8 @@ import { TaskId } from "@/ddd/domain/tasks/value-objects/task-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 import type { DomainType } from "@/ddd/domain/rag/value-objects";
 import type { RagReindexEvent, TaskEvent } from "@/ddd/domain/scheduling";
+import { DatabaseEventTriggerConfig, TriggerConfigFromJSON } from "@/ddd/domain/scheduling/value-objects/trigger-config";
+import { getAgentRepository } from "@/ddd/application/di/container";
 import postgres from "postgres";
 
 /**
@@ -102,14 +104,89 @@ class EventDrivenScheduler {
         return;
       }
 
-      const task = await this.taskRepository.findById(TaskId.fromString(event.taskId));
-      if (task && task.isPending) {
-        await this.agentTaskService.executeTask({ taskId: event.taskId });
-        console.log(`✅ Processed task ${event.taskId}`);
+      // Check if this is a manual task execution or database event
+      if (event.tableId && event.operation) {
+        // This is a database event - find agents with matching DATABASE_EVENT triggers
+        await this.handleDatabaseEvent(event);
       } else {
-        console.log(`⏭️ Skipping task ${event.taskId} (not found or not pending)`);
+        // This is a manual task execution
+        const task = await this.taskRepository.findById(TaskId.fromString(event.taskId));
+        if (task && task.isPending) {
+          await this.agentTaskService.executeTask({ taskId: event.taskId });
+          console.log(`✅ Processed task ${event.taskId}`);
+        } else {
+          console.log(`⏭️ Skipping task ${event.taskId} (not found or not pending)`);
+        }
       }
     });
+  }
+
+  private async handleDatabaseEvent(event: TaskEvent & { tableId: string; operation: string }): Promise<void> {
+    try {
+      const agentRepository = getAgentRepository();
+      const organizationId = OrganizationId.fromNumber(event.organizationId);
+      
+      // Get all agents for this organization
+      const agents = await agentRepository.findByOrganization(organizationId);
+      
+      // Filter agents that have DATABASE_EVENT triggers matching this event
+      const matchingAgents = agents.filter(agent => {
+        if (!agent.trigger) return false;
+        
+        try {
+          const triggerConfig = TriggerConfigFromJSON(agent.trigger);
+          
+          if (!(triggerConfig instanceof DatabaseEventTriggerConfig)) {
+            return false;
+          }
+          
+          if (!triggerConfig.isEnabled()) {
+            return false;
+          }
+          
+          // Check if trigger matches the operation and table
+          const matchesOperation = triggerConfig.matchesOperation(event.operation as any);
+          const matchesTable = triggerConfig.matchesTable(event.tableId);
+          
+          return matchesOperation && matchesTable;
+        } catch (error) {
+          console.warn(`Failed to parse trigger config for agent ${agent.id.value}:`, error);
+          return false;
+        }
+      });
+      
+      console.log(`🔍 Found ${matchingAgents.length} agents with matching DATABASE_EVENT triggers for table ${event.tableId}, operation ${event.operation}`);
+      
+      // Create and execute tasks for matching agents
+      for (const agent of matchingAgents) {
+        try {
+          const createData = {
+            agentId: agent.id.value,
+            organizationId: agent.organizationId.value,
+            name: `Database Event: ${event.operation} on ${event.tableId}`,
+            capabilityName: null,
+            instructions: {
+              message: `Database event detected: ${event.operation} operation on table ${event.tableId}`,
+              input: event.data || {}
+            },
+            status: 'pending',
+            createdBy: null,
+            createdAt: new Date()
+          };
+          
+          await this.taskRepository.create(createData);
+          console.log(`📝 Created database event task for agent ${agent.name} (${agent.id.value})`);
+          
+          // Execute the task immediately
+          await this.agentTaskService.executeTask({ taskId: createData.id || event.taskId });
+          console.log(`✅ Executed database event task for agent ${agent.name}`);
+        } catch (error) {
+          console.error(`❌ Failed to create/execute database event task for agent ${agent.id.value}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error handling database event:', error);
+    }
   }
 
   private async handleRagReindexEvent(event: RagReindexEvent): Promise<void> {

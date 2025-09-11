@@ -11,23 +11,11 @@
 
 import { Store } from '@tanstack/react-store'
 
-export interface Task {
-  id: string
-  title: string
-  status: 'pending' | 'in-progress' | 'completed' | 'failed'
-  assignedTo?: string
-  assignedToType?: 'agent' | 'team'
-  description?: string
-  priority: 'low' | 'medium' | 'high' | 'urgent'
-  dueDate?: Date
-  createdAt: Date
-  updatedAt: Date
-  tags: string[]
-  dependencies: string[]
-  progress: number
-  estimatedHours?: number
-  actualHours?: number
-}
+// Import the proper task type from our mapper
+import type { TaskDTO } from '@/app/mappers/task-mapper'
+
+// Use TaskDTO as Task for organization chart store
+export type Task = TaskDTO
 
 export interface NodePosition {
   x: number
@@ -639,8 +627,8 @@ export const orgChartSelectors = {
   tasksError: (state: OrgChartState) => state.tasksError,
   tasksByStatus: (status: Task['status']) => (state: OrgChartState) =>
     state.tasks.filter(task => task.status === status),
-  tasksByPriority: (priority: Task['priority']) => (state: OrgChartState) =>
-    state.tasks.filter(task => task.priority === priority),
+  // Note: Priority field not available in TaskDTO
+  // tasksByPriority selector removed until priority is added to TaskDTO
 
   // Chart data selectors
   nodes: (state: OrgChartState) => state.nodes,

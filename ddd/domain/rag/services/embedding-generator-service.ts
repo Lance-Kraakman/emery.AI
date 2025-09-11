@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Domain interface for content processing operations
 // Defines contract for processing files and generating embeddings
 
-import type { StoredFile } from '@/ddd/domain/files/entities/file-storage';
+import type { StoredFile } from '@/ddd/domain/tables/entities/file-storage';
 import type { DocumentMetadata } from '../entities';
 
 /**

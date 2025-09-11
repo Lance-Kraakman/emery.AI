@@ -8,11 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Users, Activity, Clock } from 'lucide-react';
 import { Team } from '@/types/db';
-import { Task } from '@/app/actions/types';
+import type { TaskDTO } from '@/app/mappers/task-mapper';
 
 interface TeamNodeData extends Team {
   type: 'team';
-  tasks: Task[];
+  tasks: TaskDTO[];
 }
 
 interface TeamNodeProps {
@@ -21,9 +21,9 @@ interface TeamNodeProps {
 }
 
 export default function TeamNode({ data, selected }: TeamNodeProps) {
-  const activeTasks = data.tasks?.filter(task => task.status?.value === 'in_progress') || [];
-  const pendingTasks = data.tasks?.filter(task => task.status?.value === 'pending') || [];
-  const completedTasks = data.tasks?.filter(task => task.status?.value === 'completed') || [];
+  const activeTasks = data.tasks?.filter(task => task.status === 'in_progress') || [];
+  const pendingTasks = data.tasks?.filter(task => task.status === 'pending') || [];
+  const completedTasks = data.tasks?.filter(task => task.status === 'completed') || [];
 
   return (
     <div className="relative">

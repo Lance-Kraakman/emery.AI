@@ -13,7 +13,6 @@ export type {
   ManualTriggerConfig, 
   CalendarTriggerConfig, 
   DatabaseEventTriggerConfig, 
-  RagReindexTriggerConfig, 
   WebhookTriggerConfig 
 } from './value-objects/trigger-config';
 

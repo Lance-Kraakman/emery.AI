@@ -226,7 +226,7 @@ export const appStateActions = {
   },
 
   // Update existing items
-  updateAgent: (agentId: string, updates: Partial<AgentDTO>) => {
+  updateAgent: (agentId: number, updates: Partial<AgentDTO>) => {
     appStateStore.setState((state) => ({
       ...state,
       agents: state.agents.map(agent => 
@@ -266,7 +266,7 @@ export const appStateActions = {
   },
 
   // Remove items
-  removeAgent: (agentId: string) => {
+  removeAgent: (agentId: number) => {
     appStateStore.setState((state) => ({
       ...state,
       agents: state.agents.filter(agent => agent.id !== agentId)
@@ -317,7 +317,7 @@ export const appStateSelectors = {
   
   // Derived data selectors
   allTables: (state: AppState) => state.databases.flatMap(db => db.tables),
-  getAgentById: (agentId: string) => (state: AppState) => 
+  getAgentById: (agentId: number) => (state: AppState) => 
     state.agents.find(agent => agent.id === agentId),
   getTeamById: (teamId: number) => (state: AppState) => 
     state.teams.find(team => team.id === teamId),
