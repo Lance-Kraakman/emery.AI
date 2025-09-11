@@ -81,6 +81,11 @@ export function EmerySidebar() {
     const orchestrationPaths = orchestrationNavItems.map(item => item.href)
     const settingsPaths = settingsNavItems.map(item => item.href)
 
+    if (!pathname) {
+      uiStateActions.setOpenCollapsibles([])
+      return
+    }
+
     if (orchestrationPaths.includes(pathname)) {
       uiStateActions.setOpenCollapsibles(["Orchestration"])
     } else if (settingsPaths.includes(pathname)) {
@@ -131,7 +136,7 @@ export function EmerySidebar() {
         <ScrollArea className="flex-1 py-2">
           <nav className="grid items-start text-sm font-medium">
             {navItems.map(({ href, label, icon: Icon }) => {
-              const isActive = pathname === href || (href !== '/mission-control' && pathname.startsWith(href))
+              const isActive = pathname === href || (href !== '/mission-control' && pathname?.startsWith(href))
               
               const renderSeparator = () => {
                 if (label === "Orchestration") {
@@ -181,7 +186,7 @@ export function EmerySidebar() {
                     <div>
                       <Separator className="my-2" />
                       <Collapsible 
-                        defaultOpen={pathname.startsWith("/mission-control") && searchParams?.has('tableId')} 
+                        defaultOpen={pathname?.startsWith("/mission-control") && searchParams?.has('tableId')} 
                         open={!isCollapsed && openCollapsibles.includes("Data")} 
                         onOpenChange={() => toggleCollapsible("Data")}
                       >
@@ -189,7 +194,7 @@ export function EmerySidebar() {
                           <Link
                             href="/data"
                             className={`flex items-center w-full gap-3 rounded-lg px-3 py-2 text-foreground/70 transition-all hover:text-primary hover:bg-muted ${
-                              pathname.startsWith("/data") ? "bg-muted text-primary" : ""
+                              pathname?.startsWith("/data") ? "bg-muted text-primary" : ""
                             } ${isCollapsed ? "justify-center" : "justify-between"}`}
                           >
                             <div className="flex items-center gap-3">
@@ -209,7 +214,7 @@ export function EmerySidebar() {
                               data.databases.map(db => (
                                 <Collapsible 
                                   key={db.id} 
-                                  defaultOpen={pathname.startsWith("/mission-control") && searchParams?.has('tableId')} 
+                                  defaultOpen={pathname?.startsWith("/mission-control") && searchParams?.has('tableId')} 
                                   open={openCollapsibles.includes(db.id.toString())} 
                                   onOpenChange={() => toggleCollapsible(db.id.toString())}
                                 >
@@ -228,7 +233,7 @@ export function EmerySidebar() {
                                         key={table.id}
                                         href={`/data?tableId=${table.id}`}
                                         className={`flex items-center gap-2 rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted ${
-                                          pathname === "/data" && searchParams.get('tableId') === table.id.toString() ? "bg-accent text-accent-foreground" : ""
+                                          pathname === "/data" && searchParams?.get('tableId') === table.id.toString() ? "bg-accent text-accent-foreground" : ""
                                         }`}
                                       >
                                         <Table className="h-3 w-3" />

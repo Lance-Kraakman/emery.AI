@@ -3,14 +3,17 @@ const nextConfig = {
   // AIDEV-NOTE: Force standalone mode to prevent static generation
   output: 'standalone',
   
-  // AIDEV-NOTE: Completely disable static generation
+  // AIDEV-NOTE: Completely disable static generation and 404 prerendering
   trailingSlash: false,
   generateBuildId: () => 'build',
   
-  // Disable all static optimization
+  // Disable all static optimization and prerendering
   experimental: {
     esmExternals: 'loose', // Handle ESM imports better
   },
+  
+  // AIDEV-NOTE: Try to disable static generation completely
+  generateStaticParams: false,
   
   // Modern Next.js approach for native modules - replaces complex webpack externals
   serverExternalPackages: [

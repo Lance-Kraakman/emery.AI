@@ -217,21 +217,21 @@ export function EmeryChat() {
   useEffect(() => {
     if (!chatContext) {
       // Extract page name from pathname
-      const pageName = pathname.split('/')[1] || 'mission-control'
+      const pageName = pathname?.split('/')[1] || 'mission-control'
       
       // Extract domain ID from search params or pathname segments
       let domainId: number | undefined
       let domainName: string | undefined
       
-      if (searchParams.has('tableId')) {
+      if (searchParams?.has('tableId')) {
         domainId = parseInt(searchParams.get('tableId')!)
-      } else if (searchParams.has('agentId')) {
+      } else if (searchParams?.has('agentId')) {
         domainId = parseInt(searchParams.get('agentId')!)
-      } else if (searchParams.has('teamId')) {
+      } else if (searchParams?.has('teamId')) {
         domainId = parseInt(searchParams.get('teamId')!)
       } else {
         // Try to extract from URL segments like /agents/123
-        const segments = pathname.split('/').filter(Boolean)
+        const segments = pathname?.split('/').filter(Boolean) || []
         if (segments.length >= 2 && !isNaN(parseInt(segments[1]))) {
           domainId = parseInt(segments[1])
         }
