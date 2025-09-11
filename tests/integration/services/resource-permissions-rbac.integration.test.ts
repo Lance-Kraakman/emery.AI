@@ -195,11 +195,10 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Update agent permissions to allow specific user
       await testClient.db.update(agents)
         .set({
-          status: 'active'
-            assignment: {
-              allowedUsers: [otherUserId],
-              allowOrgAdmins: true
-            }
+          status: 'active',
+          assignment: {
+            allowedUsers: [otherUserId],
+            allowOrgAdmins: true
           }
         })
         .where(eq(agents.id, ownerAgentId));
@@ -225,11 +224,10 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Update agent permissions to allow team members
       await testClient.db.update(agents)
         .set({
-          status: 'active'
-            assignment: {
-              allowTeamMembers: true,
-              allowOrgAdmins: true
-            }
+          status: 'active',
+          assignment: {
+            allowTeamMembers: true,
+            allowOrgAdmins: true
           }
         })
         .where(eq(agents.id, ownerAgentId));
@@ -258,12 +256,11 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Update agent permissions to disable org admin access and team member access
       await testClient.db.update(agents)
         .set({
-          status: 'active'
-            assignment: {
-              allowOrgAdmins: false, // Explicitly disable admin access
-              allowTeamMembers: false, // Also disable team member access for clean test
-              allowedUsers: [] // Empty allowed users list
-            }
+          status: 'active',
+          assignment: {
+            allowOrgAdmins: false, // Explicitly disable admin access
+            allowTeamMembers: false, // Also disable team member access for clean test
+            allowedUsers: [] // Empty allowed users list
           }
         })
         .where(eq(agents.id, ownerAgentId));
@@ -347,11 +344,10 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Update team permissions to allow specific user
       await testClient.db.update(teams)
         .set({
-          status: 'active'
-            assignment: {
-              allowedUsers: [outsiderUser.id],
-              allowOrgAdmins: true
-            }
+          status: 'active',
+          assignment: {
+            allowedUsers: [outsiderUser.id],
+            allowOrgAdmins: true
           }
         })
         .where(eq(teams.id, teamId));
@@ -378,11 +374,10 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Update target agent to allow tasks from source agent
       await testClient.db.update(agents)
         .set({
-          status: 'active'
-            assignment: {
-              allowedAgents: [otherUserAgentId], // Allow otherUserAgent to assign
-              allowOrgAdmins: true
-            }
+          status: 'active',
+          assignment: {
+            allowedAgents: [otherUserAgentId], // Allow otherUserAgent to assign
+            allowOrgAdmins: true
           }
         })
         .where(eq(agents.id, ownerAgentId));
@@ -421,13 +416,12 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Update source agent's routing permissions
       await testClient.db.update(agents)
         .set({
-          status: 'active'
-            assignment: { allowOrgAdmins: true },
-            routing: {
-              allowedAgents: [otherUserAgentId], // Can route to specific agent
-              allowAnyTeamAgent: false,
-              allowAnyOrgAgent: false
-            }
+          status: 'active',
+          assignment: { allowOrgAdmins: true },
+          routing: {
+            allowedAgents: [otherUserAgentId], // Can route to specific agent
+            allowAnyTeamAgent: false,
+            allowAnyOrgAgent: false
           }
         })
         .where(eq(agents.id, ownerAgentId));

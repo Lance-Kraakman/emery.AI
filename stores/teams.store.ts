@@ -391,7 +391,7 @@ export const teamsActions = {
     }))
   },
 
-  unassignAgentFromTeam: (teamId: number, agentId: string) => {
+  unassignAgentFromTeam: (teamId: number, agentId: number) => {
     teamsStore.setState((state) => ({
       ...state,
       teamAgents: {

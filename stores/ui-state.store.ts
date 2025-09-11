@@ -11,15 +11,11 @@
 import { Store } from '@tanstack/react-store'
 import { persistence } from './utils'
 
-export type PanelState = 'expanded' | 'collapsed'
+export type PanelState = 'expanded' | 'collapsed' | 'hidden'
 export type LayoutBreakpoint = 'mobile' | 'tablet' | 'desktop'
 
-export interface ChatContextConfig {
-  chatId?: string
-  domainType?: string
-  domainId?: number
-  tableId?: number
-}
+// Import ChatContextConfig from layout types to avoid duplication
+import type { ChatContextConfig } from '@/components/layout/types'
 
 export interface UIState {
   // Layout state (from LayoutProvider)
@@ -30,7 +26,7 @@ export interface UIState {
   isMobile: boolean
   
   // Chat context
-  chatContext: ChatContextConfig | null
+  chatContext: ChatContextConfig | undefined
   
   // Dialog states (from DataDialogsContext)
   isCreateDatabaseOpen: boolean
@@ -103,7 +99,7 @@ const initialState: UIState = {
   isMobile: false,
   
   // Chat context
-  chatContext: null,
+  chatContext: undefined,
   
   // Dialog states
   isCreateDatabaseOpen: false,
@@ -233,7 +229,7 @@ export const uiStateActions = {
   },
 
   // Chat context actions
-  setChatContext: (context: ChatContextConfig | null) => {
+  setChatContext: (context: ChatContextConfig | undefined) => {
     uiStateStore.setState((state) => ({ ...state, chatContext: context }))
   },
 

@@ -75,7 +75,7 @@ export function EmeryStoreProvider({ children }: { children: ReactNode }) {
         id: session.user.id || '',
         email: session.user.email || '',
         name: session.user.name || '',
-        currentOrganizationId: session.user.currentOrganizationId,
+        currentOrganizationId: session.user.currentOrganizationId || undefined,
         needsSetup: session.user.needsSetup || false,
         availableOrganizations: session.user.availableOrganizations || []
       }
@@ -157,7 +157,7 @@ export function useEmeryTable(tableId: number) {
   )
 }
 
-export function useEmeryAgent(agentId: string) {
+export function useEmeryAgent(agentId: number) {
   return useStore(appStateStore, (state) => 
     appStateSelectors.getAgentById(agentId)(state)
   )

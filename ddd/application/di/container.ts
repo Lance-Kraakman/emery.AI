@@ -12,7 +12,7 @@ import { DynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tab
 import { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
 import { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
 import { DuckDBTableQueryService } from '@/ddd/infrastructure/data/duckdb-table-query-service';
-import { IFileStorageRepository } from '@/ddd/domain/files/repositories/file-storage-repository';
+import { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
 import { S3FileStorageRepository } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
 
 // Agent domain imports

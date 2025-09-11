@@ -10,7 +10,7 @@ import type {
 } from './types'
 import { LAYOUT_BREAKPOINTS } from './types'
 import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
-import { storeActions } from '@/stores/actions'
+import { storeActions, uiStateActions } from '@/stores/actions'
 
 /**
  * Layout Context Provider - TanStack Store-based Layout State Management
@@ -83,20 +83,20 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
     
     // Set initial breakpoint and load persisted state
     const currentBreakpoint = getCurrentBreakpoint()
-    storeActions.uiStateActions.setBreakpoint(currentBreakpoint)
+    uiStateActions.setBreakpoint(currentBreakpoint)
     
     // Apply any initial state overrides
     if (initialState.sidebarState) {
-      storeActions.uiStateActions.setSidebarState(initialState.sidebarState)
+      uiStateActions.setSidebarState(initialState.sidebarState)
     }
     if (initialState.chatState) {
-      storeActions.uiStateActions.setChatState(initialState.chatState)
+      uiStateActions.setChatState(initialState.chatState)
     }
     if (initialState.canvasState) {
-      storeActions.uiStateActions.setCanvasState(initialState.canvasState)
+      uiStateActions.setCanvasState(initialState.canvasState)
     }
     if (initialState.chatContext) {
-      storeActions.uiStateActions.setChatContext(initialState.chatContext)
+      uiStateActions.setChatContext(initialState.chatContext)
     }
   }, [])
 
@@ -104,18 +104,18 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
   useEffect(() => {
     function handleResize() {
       const newBreakpoint = getCurrentBreakpoint()
-      storeActions.uiStateActions.setBreakpoint(newBreakpoint)
+      uiStateActions.setBreakpoint(newBreakpoint)
       
       // Auto-collapse panels on mobile
       if (newBreakpoint === 'mobile') {
         if (sidebarState === 'expanded') {
-          storeActions.uiStateActions.setSidebarState('collapsed')
+          uiStateActions.setSidebarState('collapsed')
         }
         if (chatState === 'expanded') {
-          storeActions.uiStateActions.setChatState('collapsed')
+          uiStateActions.setChatState('collapsed')
         }
         if (canvasState === 'expanded') {
-          storeActions.uiStateActions.setCanvasState('collapsed')
+          uiStateActions.setCanvasState('collapsed')
         }
       }
     }
@@ -128,35 +128,35 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
 
   // Action handlers - delegate to store actions
   const setSidebarState = (panelState: PanelState) => {
-    storeActions.uiStateActions.setSidebarState(panelState)
+    uiStateActions.setSidebarState(panelState)
   }
 
   const setChatState = (panelState: PanelState) => {
-    storeActions.uiStateActions.setChatState(panelState)
+    uiStateActions.setChatState(panelState)
   }
 
   const setCanvasState = (panelState: PanelState) => {
-    storeActions.uiStateActions.setCanvasState(panelState)
+    uiStateActions.setCanvasState(panelState)
   }
 
   const setChatContext = (context: ChatContextConfig) => {
-    storeActions.uiStateActions.setChatContext(context)
+    uiStateActions.setChatContext(context)
   }
 
   const toggleSidebar = () => {
-    storeActions.uiStateActions.toggleSidebar()
+    uiStateActions.toggleSidebar()
   }
 
   const toggleChat = () => {
-    storeActions.uiStateActions.toggleChat()
+    uiStateActions.toggleChat()
   }
 
   const toggleCanvas = () => {
-    storeActions.uiStateActions.toggleCanvas()
+    uiStateActions.toggleCanvas()
   }
 
   const resetLayout = () => {
-    storeActions.uiStateActions.resetLayout()
+    uiStateActions.resetLayout()
   }
 
   const contextValue: LayoutContextValue = {

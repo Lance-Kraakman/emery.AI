@@ -58,7 +58,7 @@ export interface AgentsState {
   agentCapabilities: Record<string, AgentCapability[]>
   
   // Bulk operations
-  selectedAgentIds: string[]
+  selectedAgentIds: number[]
   bulkOperationInProgress: boolean
   
   // Activity panel state
@@ -171,7 +171,7 @@ export const agentsActions = {
     }))
   },
 
-  updateAgent: (agentId: string, updates: Partial<AgentDTO>) => {
+  updateAgent: (agentId: number, updates: Partial<AgentDTO>) => {
     agentsStore.setState((state) => ({
       ...state,
       agents: state.agents.map(agent => 
@@ -183,7 +183,7 @@ export const agentsActions = {
     }))
   },
 
-  removeAgent: (agentId: string) => {
+  removeAgent: (agentId: number) => {
     agentsStore.setState((state) => ({
       ...state,
       agents: state.agents.filter(agent => agent.id !== agentId),
@@ -330,11 +330,11 @@ export const agentsActions = {
   },
 
   // Bulk operations
-  setSelectedAgentIds: (agentIds: string[]) => {
+  setSelectedAgentIds: (agentIds: number[]) => {
     agentsStore.setState((state) => ({ ...state, selectedAgentIds: agentIds }))
   },
 
-  toggleAgentSelection: (agentId: string) => {
+  toggleAgentSelection: (agentId: number) => {
     agentsStore.setState((state) => ({
       ...state,
       selectedAgentIds: state.selectedAgentIds.includes(agentId)
@@ -410,11 +410,11 @@ export const agentsSelectors = {
   // Data selectors
   agents: (state: AgentsState) => state.agents,
   selectedAgent: (state: AgentsState) => state.selectedAgent,
-  getAgentById: (agentId: string) => (state: AgentsState) => 
+  getAgentById: (agentId: number) => (state: AgentsState) => 
     state.agents.find(agent => agent.id === agentId),
   
   // Filtered data selectors
-  filteredAgents: (teams: Array<{id: number, agentIds?: string[]}> = []) => (state: AgentsState) => {
+  filteredAgents: (teams: Array<{id: number, agentIds?: string[] | null}> = []) => (state: AgentsState) => {
     let filtered = state.agents
 
     // Apply search filter
@@ -429,7 +429,7 @@ export const agentsSelectors = {
     if (state.selectedTeam !== 'all') {
       const team = teams.find(t => t.id.toString() === state.selectedTeam)
       if (team?.agentIds) {
-        filtered = filtered.filter(agent => team.agentIds?.includes(agent.id))
+        filtered = filtered.filter(agent => team.agentIds?.includes(agent.id.toString()))
       }
     }
 
@@ -450,7 +450,7 @@ export const agentsSelectors = {
           compareResult = new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
           break
         case 'lastActive':
-          compareResult = new Date(a.lastActiveAt || 0).getTime() - new Date(b.lastActiveAt || 0).getTime()
+          compareResult = new Date(a.updatedAt || 0).getTime() - new Date(b.updatedAt || 0).getTime()
           break
       }
 

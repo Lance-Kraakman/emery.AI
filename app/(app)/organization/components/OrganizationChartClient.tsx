@@ -27,7 +27,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { getTasks } from '@/app/actions/tasks';
-import { Task } from '@/app/actions/types';
+import type { TaskDTO } from '@/app/mappers/task-mapper';
 import TeamNode from './TeamNode';
 import AgentNode from './AgentNode';
 import ActivityPanel from './ActivityPanel';
@@ -35,7 +35,7 @@ import { useEmeryStore } from '@/contexts/EmeryStoreProvider';
 import { Loading } from '@/components/ui/loading';
 import { useOrganizationViewConfig } from '@/hooks/useOrganizationViewConfig';
 import { orgChartStore, orgChartSelectors } from '@/stores/organization-chart.store';
-import { storeActions } from '@/stores/actions';
+import { storeActions, orgChartActions } from '@/stores/actions';
 
 // Define custom node types
 const nodeTypes = {
@@ -54,17 +54,17 @@ export default function OrganizationChartClient() {
 
   // Handle client-side hydration
   useEffect(() => {
-    storeActions.orgChartActions.setIsClient(true);
+    orgChartActions.setIsClient(true);
   }, []);
 
   useEffect(() => {
-    storeActions.orgChartActions.setIsTasksLoading(true);
+    orgChartActions.setTasksLoading(true);
     getTasks().then(result => {
       if (result.success) {
-        storeActions.orgChartActions.setTasks(result.data);
+        orgChartActions.setTasks(result.data);
       }
     }).finally(() => {
-      storeActions.orgChartActions.setIsTasksLoading(false);
+      orgChartActions.setTasksLoading(false);
     });
   }, []);
   
@@ -94,15 +94,13 @@ export default function OrganizationChartClient() {
       const teamX = 300 + (index + 1) * 20; // Same position with 20px offset (1-based)
       const teamY = 150 + (index + 1) * 20; // Same position with 20px offset (1-based)
 
-      // Filter tasks for this team (safely handle missing agentIds)
-      const teamTasks = (team.agentIds && team.agentIds.length > 0) 
-        ? tasks.filter(task => 
-            (team.agentIds as any[])!.some(agentId => {
-              const agentIdValue = agentId?.value || agentId;
-              return agents.some(agent => agent.id === agentIdValue && agent.id === task.agentId?.value);
-            })
-          )
-        : [];
+      const teamTasks = tasks.filter(task => {
+        // Check if any agent in this team matches the task's agentId
+        const teamAgents = agents.filter(agent => 
+          team.agentIds?.includes(agent.id.toString())
+        );
+        return teamAgents.some(agent => task.agentId === agent.id);
+      });
 
       newNodes.push({
         id: `team-${team.id}`,
@@ -125,7 +123,7 @@ export default function OrganizationChartClient() {
         const agentX = teamX + (agentIndex % 2) * 200 - 50;
         const agentY = teamY + 150 + Math.floor(agentIndex / 2) * 120;
 
-        const agentTasks = tasks.filter(task => task.agentId?.value === agent.id);
+        const agentTasks = tasks.filter(task => task.agentId === agent.id);
 
         newNodes.push({
           id: `agent-${agent.id}`,
@@ -158,7 +156,7 @@ export default function OrganizationChartClient() {
     );
 
     unassignedAgents.forEach((agent, index) => {
-      const agentTasks = tasks.filter(task => task.agentId?.value === agent.id);
+      const agentTasks = (tasks as TaskDTO[]).filter(task => task.agentId === agent.id);
 
       newNodes.push({
         id: `agent-${agent.id}`,
@@ -189,11 +187,11 @@ export default function OrganizationChartClient() {
       generateNodesAndEdges();
       
       // Clear selected nodes since positions are changing
-      storeActions.orgChartActions.setSelectedNodes([]);
+      orgChartActions.setSelectedNodes([]);
       
       // Show reset notification briefly
-      storeActions.orgChartActions.setShowResetNotification(true);
-      setTimeout(() => storeActions.orgChartActions.setShowResetNotification(false), 3000);
+      orgChartActions.setShowResetNotification(true);
+      setTimeout(() => orgChartActions.setShowResetNotification(false), 3000);
     }
   }, [generateNodesAndEdges]);
 
@@ -229,16 +227,16 @@ export default function OrganizationChartClient() {
       
       if (result.viewState) {
         if (Array.isArray(result.viewState.selectedNodes)) {
-          storeActions.orgChartActions.setSelectedNodes(result.viewState.selectedNodes);
+          orgChartActions.setSelectedNodes(result.viewState.selectedNodes);
         }
         if (typeof result.viewState.searchTerm === 'string') {
-          storeActions.orgChartActions.setSearchTerm(result.viewState.searchTerm);
+          orgChartActions.setSearchTerm(result.viewState.searchTerm);
         }
         if (typeof result.viewState.isPanelCollapsed === 'boolean') {
-          storeActions.orgChartActions.setIsPanelCollapsed(result.viewState.isPanelCollapsed);
+          orgChartActions.setPanelCollapsed(result.viewState.isPanelCollapsed);
         }
         if (typeof result.viewState.isConfiguring === 'boolean') {
-          storeActions.orgChartActions.setIsConfiguring(result.viewState.isConfiguring);
+          orgChartActions.setConfiguring(result.viewState.isConfiguring);
         }
       }
     }
@@ -264,12 +262,12 @@ export default function OrganizationChartClient() {
       const newSelected = prevSelected.includes(node.id)
         ? prevSelected.filter(id => id !== node.id)
         : [...prevSelected, node.id];
-      storeActions.orgChartActions.setSelectedNodes(newSelected);
+      orgChartActions.setSelectedNodes(newSelected);
     } else {
       const newSelected = prevSelected.includes(node.id) && prevSelected.length === 1
         ? []
         : [node.id];
-      storeActions.orgChartActions.setSelectedNodes(newSelected);
+      orgChartActions.setSelectedNodes(newSelected);
     }
   }, [selectedNodes]);
 
@@ -308,14 +306,14 @@ export default function OrganizationChartClient() {
     return tasks.filter(task => {
       // Check if task belongs to any selected agent
       const directAgentMatch = selectedNodeIds.some(nodeId => 
-        nodeId?.type === 'agent' && nodeId.id === task.agentId?.value
+        nodeId?.type === 'agent' && nodeId.id === task.agentId
       );
 
       // Check if task belongs to agent in selected team
       const teamAgentMatch = selectedNodeIds.some(nodeId => {
         if (nodeId?.type === 'team') {
           const team = teams.find(t => t.id === nodeId.id);
-          const taskAgent = agents.find(a => a.id === task.agentId?.value);
+          const taskAgent = agents.find(a => a.id === task.agentId);
           return team && taskAgent && team.agentIds?.includes(taskAgent.id.toString());
         }
         return false;
@@ -344,8 +342,8 @@ export default function OrganizationChartClient() {
                 <ActivityPanel 
                   activities={filteredActivities}
                   selectedNodes={selectedNodes}
-                  onClearSelection={() => storeActions.orgChartActions.setSelectedNodes([])}
-                  onCollapse={() => storeActions.orgChartActions.setIsPanelCollapsed(true)}
+                  onClearSelection={() => orgChartActions.setSelectedNodes([])}
+                  onCollapse={() => orgChartActions.setPanelCollapsed(true)}
                 />
               </Panel>
               
@@ -359,7 +357,7 @@ export default function OrganizationChartClient() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => storeActions.orgChartActions.setIsPanelCollapsed(false)}
+                  onClick={() => orgChartActions.setPanelCollapsed(false)}
                   className="absolute top-4 left-4 z-10 bg-background shadow-lg"
                 >
                   <Activity className="w-4 h-4 mr-2" />
@@ -386,7 +384,7 @@ export default function OrganizationChartClient() {
                     <Button
                       size="sm"
                       variant={isConfiguring ? "default" : "outline"}
-                      onClick={() => storeActions.orgChartActions.setIsConfiguring(!isConfiguring)}
+                      onClick={() => orgChartActions.setConfiguring(!isConfiguring)}
                     >
                       {isConfiguring ? (
                         <>
@@ -424,7 +422,7 @@ export default function OrganizationChartClient() {
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      onClick={() => storeActions.orgChartActions.setIsSearchExpanded(!isSearchExpanded)}
+                      onClick={() => orgChartActions.setSearchExpanded(!isSearchExpanded)}
                       className="z-10 bg-background"
                     >
                       <Search className="w-4 h-4" />
@@ -432,7 +430,7 @@ export default function OrganizationChartClient() {
                     <Input
                       placeholder="Search teams or agents..."
                       value={searchTerm}
-                      onChange={(e) => storeActions.orgChartActions.setSearchTerm(e.target.value)}
+                      onChange={(e) => orgChartActions.setSearchTerm(e.target.value)}
                       className={`pl-10 absolute top-0 left-0 h-full transition-all duration-300 bg-background ${
                         isSearchExpanded ? 'w-full opacity-100' : 'w-0 opacity-0'
                       }`}

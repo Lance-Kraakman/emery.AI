@@ -15,7 +15,7 @@ import TeamDetailsView from './TeamDetailsView';
 import TeamFormDialog from './TeamFormDialog';
 import { teamsStore, teamsSelectors } from '@/stores/teams.store';
 import { useEmeryOrganization } from '@/contexts/EmeryStoreProvider';
-import { storeActions } from '@/stores/actions';
+import { storeActions, teamsActions } from '@/stores/actions';
 
 // AIDEV-NOTE: Teams dashboard migrated to TanStack Store for better state management and performance
 
@@ -39,7 +39,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
   
   // Initialize store with initial data
   useEffect(() => {
-    storeActions.teamsActions.setTeams(initialTeams);
+    teamsActions.setTeams(initialTeams);
   }, [initialTeams]);
 
   const refreshTeams = async () => {
@@ -64,7 +64,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => storeActions.teamsActions.togglePanelCollapsed()}
+            onClick={() => teamsActions.togglePanelCollapsed()}
             className="ml-auto"
           >
             {isPanelCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -77,7 +77,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
               <Input
                 placeholder="Search teams..."
                 value={searchQuery}
-                onChange={(e) => storeActions.teamsActions.setSearchQuery(e.target.value)}
+                onChange={(e) => teamsActions.setSearchQuery(e.target.value)}
                 className="pl-9"
               />
             </div>
@@ -117,7 +117,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
                     : ''
                 }`}
                 onClick={() => {
-                  storeActions.teamsActions.setSelectedTeam(team);
+                  teamsActions.setSelectedTeam(team);
                 }}
               >
                 <CardContent className="p-3">

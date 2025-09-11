@@ -11,9 +11,9 @@ import { Settings, Plus, Search, TableIcon as Table, Database } from "lucide-rea
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { DynamicDataTable } from "./components/DynamicDataTable"
 import { FieldManagerDialog } from "./components/FieldManagerDialog"
-import { useEmeryData } from "@/hooks/useEmeryData"
+import { useEmery } from "@/contexts/EmeryStoreProvider"
 import { dataStore, dataSelectors } from '@/stores/data-management.store'
-import { storeActions } from '@/stores/actions'
+import { storeActions, dataActions } from '@/stores/actions'
 import type { TableDTO } from "@/app/mappers/table-mapper"
 import { getFields } from "@/app/actions/fields"
 import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
@@ -23,7 +23,7 @@ import type { RowDTO } from "@/app/mappers/row-mapper"
 export function DataViewsClientSimplified() {
   const searchParams = useSearchParams()
   const queryClient = useQueryClient()
-  const { data, isLoading: dataLoading, error: dataError } = useEmeryData()
+  const { data, isLoading: dataLoading, error: dataError } = useEmery()
   
   const tableIdParam = searchParams.get("tableId")
   const initialTableId = tableIdParam ? parseInt(tableIdParam) : undefined
@@ -45,7 +45,7 @@ export function DataViewsClientSimplified() {
   // Initialize with URL parameter
   useEffect(() => {
     if (initialTableId && !selectedTableId) {
-      storeActions.dataActions.setSelectedTableId(initialTableId)
+      dataActions.setSelectedTable(initialTableId)
     }
   }, [initialTableId, selectedTableId])
 
@@ -54,7 +54,7 @@ export function DataViewsClientSimplified() {
   // Update selected table when URL changes
   useEffect(() => {
     const tableId = tableIdParam ? parseInt(tableIdParam) : undefined;
-    storeActions.dataActions.setSelectedTableId(tableId);
+    dataActions.setSelectedTable(tableId);
   }, [tableIdParam]);
 
   // TanStack Query for fields
@@ -304,7 +304,7 @@ export function DataViewsClientSimplified() {
                 <Input
                   placeholder="Search in table..."
                   value={searchTerm}
-                  onChange={(e) => storeActions.dataActions.setSearchTerm(e.target.value)}
+                  onChange={(e) => dataActions.setSearchTerm(e.target.value)}
                   className="pl-10 bg-transparent"
                 />
               </div>
@@ -317,7 +317,7 @@ export function DataViewsClientSimplified() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => storeActions.dataActions.setFieldManagerOpen(true)}>
+                  <DropdownMenuItem onClick={() => dataActions.setFieldManagerOpen(true)}>
                     <Settings className="h-4 w-4 mr-2" />
                     Manage Fields
                   </DropdownMenuItem>
@@ -369,7 +369,7 @@ export function DataViewsClientSimplified() {
       {selectedTable && (
         <FieldManagerDialog
           isOpen={isFieldManagerOpen}
-          onClose={() => storeActions.dataActions.setFieldManagerOpen(false)}
+          onClose={() => dataActions.setFieldManagerOpen(false)}
           tableId={selectedTable.id}
           fields={fields}
           onFieldsUpdated={refreshTableData}

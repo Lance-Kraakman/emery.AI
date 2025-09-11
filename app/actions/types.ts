@@ -124,9 +124,11 @@ import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 
 export type {
   TaskStatus,
-  TaskInstructions,
-  TaskConfig as Task
+  TaskInstructions
 } from '@/ddd/domain/tasks/entities/task';
+
+// Import the proper DTO type for frontend use
+export type { TaskDTO as Task } from '@/app/mappers/task-mapper';
 
 // Server Action interface for task creation (uses primitives, converted to Value Objects in Application layer)
 export interface CreateTaskData {

@@ -16,7 +16,7 @@ import {
   Bot,
   ChevronLeft
 } from 'lucide-react';
-import { Task } from '@/app/actions/types';
+import { TaskDTO as Task } from '@/app/mappers/task-mapper';
 import { format, formatDistanceToNow } from 'date-fns';
 
 interface ActivityPanelProps {
@@ -79,7 +79,7 @@ export default function ActivityPanel({
   // Group activities by status
   const groupedActivities = useMemo(() => {
     return sortedActivities.reduce((acc, activity) => {
-      const status = activity.status?.value || 'unknown';
+      const status = activity.status || 'unknown';
       if (!acc[status]) {
         acc[status] = [];
       }
@@ -91,10 +91,10 @@ export default function ActivityPanel({
   const activityCounts = useMemo(() => {
     return {
       total: activities.length,
-      active: activities.filter(a => a.status?.value === 'in_progress').length,
-      pending: activities.filter(a => a.status?.value === 'pending').length,
-      completed: activities.filter(a => a.status?.value === 'completed').length,
-      failed: activities.filter(a => a.status?.value === 'failed').length,
+      active: activities.filter(a => a.status === 'in_progress').length,
+      pending: activities.filter(a => a.status === 'pending').length,
+      completed: activities.filter(a => a.status === 'completed').length,
+      failed: activities.filter(a => a.status === 'failed').length,
     };
   }, [activities]);
 
@@ -185,7 +185,7 @@ export default function ActivityPanel({
                 </div>
                 
                 {(statusActivities as Task[]).map((activity) => (
-                  <Card key={activity.id?.value || Math.random().toString()} className="shadow-sm hover:shadow-md transition-shadow min-w-0 w-full">
+                  <Card key={activity.id || Math.random().toString()} className="shadow-sm hover:shadow-md transition-shadow min-w-0 w-full">
                     <CardContent className="p-3 min-w-0 w-full">
                       <div className="flex items-start justify-between mb-2 min-w-0">
                         <div className="flex-1 min-w-0 pr-1 overflow-hidden">
@@ -198,16 +198,16 @@ export default function ActivityPanel({
                         </div>
                         <Badge 
                           variant="secondary" 
-                          className={`text-xs shrink-0 ml-1 ${getStatusColor(activity.status?.value || 'unknown')}`}
+                          className={`text-xs shrink-0 ml-1 ${getStatusColor(activity.status || 'unknown')}`}
                         >
-                          {(activity.status?.value || 'unknown').replace('_', ' ')}
+                          {(activity.status || 'unknown').replace('_', ' ')}
                         </Badge>
                       </div>
                       
                       <div className="flex flex-col gap-1 text-xs text-muted-foreground min-w-0">
                         <div className="flex items-center gap-1 min-w-0 overflow-hidden">
                           <Bot className="w-3 h-3 shrink-0" />
-                          <span className="truncate">Agent {activity.agentId.value}</span>
+                          <span className="truncate">Agent {activity.agentId}</span>
                         </div>
                         <div className="flex items-center gap-1 min-w-0 overflow-hidden">
                           <Calendar className="w-3 h-3 shrink-0" />
@@ -224,7 +224,7 @@ export default function ActivityPanel({
                         </div>
                       )}
 
-                      {activity.result && activity.status?.value === 'completed' && (
+                      {activity.result && activity.status === 'completed' && (
                         <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-xs">
                           <p className="text-green-800 font-medium">Result available</p>
                         </div>

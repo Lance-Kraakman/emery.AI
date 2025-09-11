@@ -8,12 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Bot, User, Activity, CheckCircle, Clock, XCircle } from 'lucide-react';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import type { Task } from '@/ddd/domain/tasks/entities/task';
+import type { TaskDTO } from '@/app/mappers/task-mapper';
 
 interface AgentNodeData extends Agent {
   type: 'agent';
   teamId?: number;
-  tasks: Task[];
+  tasks: TaskDTO[];
 }
 
 interface AgentNodeProps {
@@ -22,10 +22,10 @@ interface AgentNodeProps {
 }
 
 export default function AgentNode({ data, selected }: AgentNodeProps) {
-  const activeTasks = data.tasks?.filter(task => task.status?.value === 'in_progress') || [];
-  const pendingTasks = data.tasks?.filter(task => task.status?.value === 'pending') || [];
-  const completedTasks = data.tasks?.filter(task => task.status?.value === 'completed') || [];
-  const failedTasks = data.tasks?.filter(task => task.status?.value === 'failed') || [];
+  const activeTasks = data.tasks?.filter(task => task.status === 'in_progress') || [];
+  const pendingTasks = data.tasks?.filter(task => task.status === 'pending') || [];
+  const completedTasks = data.tasks?.filter(task => task.status === 'completed') || [];
+  const failedTasks = data.tasks?.filter(task => task.status === 'failed') || [];
 
   const renderPersona = (): React.ReactNode => {
     if (!data.persona) return null;

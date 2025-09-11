@@ -15,7 +15,7 @@ import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/ddd/doma
 import { type ToolConfig, type ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import CapabilityManager from './CapabilityManager';
 import ScheduleManager from './ScheduleManager';
-import { getCalendarRRule, getDatabaseEventOperations, getRagReindexDebounceMs, getWebhookSecret, getWebhookRequiresSignature } from './trigger-utils';
+import { getCalendarRRule, getDatabaseEventOperations, getWebhookSecret, getWebhookRequiresSignature } from './trigger-utils';
 
 // AIDEV-NOTE: Agent create view using the same inline edit pattern as AgentDetailsView
 // Uses proper DTOs for consistency with the rest of the application
@@ -140,9 +140,6 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
         break;
       case 'DATABASE_EVENT':
         newTrigger = TriggerConfigs.databaseEvent(['INSERT', 'UPDATE']);
-        break;
-      case 'RAG_REINDEX':
-        newTrigger = TriggerConfigs.ragReindex();
         break;
       case 'WEBHOOK':
         newTrigger = TriggerConfigs.webhook();
@@ -430,7 +427,6 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                     <SelectItem value="MANUAL">Manual Execution</SelectItem>
                     <SelectItem value="CALENDAR">Scheduled/Calendar</SelectItem>
                     <SelectItem value="DATABASE_EVENT">Database Changes</SelectItem>
-                    <SelectItem value="RAG_REINDEX">RAG Reindexing</SelectItem>
                     <SelectItem value="WEBHOOK">Webhook Trigger</SelectItem>
                   </SelectContent>
                 </Select>
@@ -489,22 +485,6 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                 </div>
               )}
 
-              {form.getFieldValue('trigger')?.type === 'RAG_REINDEX' && (
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">
-                    Trigger agent execution when RAG data needs reindexing.
-                  </p>
-                  <div>
-                    <h5 className="font-medium text-sm mb-1">Debounce Delay (ms)</h5>
-                    <Input
-                      type="number"
-                      value={(form.getFieldValue('trigger') as any)?.debounceMs || 5000}
-                      onChange={(e) => handleTriggerConfigChange({ debounceMs: parseInt(e.target.value) })}
-                      className="text-sm"
-                    />
-                  </div>
-                </div>
-              )}
 
               {form.getFieldValue('trigger')?.type === 'WEBHOOK' && (
                 <div className="space-y-2">
