@@ -9,17 +9,18 @@ import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { FileMetadata } from "@/types/db"
+import type { FieldValueDTO, DocumentArrayFieldValueDTO } from "@/app/mappers/row-mapper"
+import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field"
 import { uploadFileAction } from "@/app/actions/files"
 import { PlusCircle, ExternalLink } from "lucide-react"
 import { DocumentFieldCell } from "./DocumentFieldCell"
-import type { DocumentArrayFieldValueDTO } from "@/app/mappers/row-mapper"
 import { useLayout } from "@/components/layout/LayoutProvider"
 import { FileTypeDetector } from "@/ddd/domain/tables/services/file-type-detector"
 import { DOCUMENT_TYPES } from "@/ddd/domain/tables/value-objects/file-viewer-types"
 
 interface EditableCellProps {
   field: FieldDTO;
-  value: any;
+  value: any; // Keep flexible for now - DTOs provide type safety at the data layer
   organizationId: number;
   tableId: number;
   onSave?: (value: any) => void;
@@ -27,8 +28,8 @@ interface EditableCellProps {
 }
 
 export function EditableCell({ field, value, organizationId, tableId, onSave, onCancel }: EditableCellProps) {
-  // Handle document fields completely separately - they manage their own state
-  if (field.type === "document" && Array.isArray(value)) {
+  // Handle document fields completely separately - they manage their own state  
+  if (field.type === "document") {
     return (
       <DocumentFieldCell
         field={field}
@@ -271,18 +272,15 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         return <span className="text-muted-foreground italic text-xs">No files</span>
       case "document":
         // Handle document fields - delegate to DocumentFieldCell
-        if (field && field.name && Array.isArray(value)) {
-          return (
-            <DocumentFieldCell
-              field={field}
-              value={value as DocumentArrayFieldValueDTO}
-              organizationId={organizationId}
-              tableId={tableId}
-              onSave={onSave || (() => {})}
-            />
-          )
-        }
-        return <span className="text-muted-foreground italic text-xs">No document</span>
+        return (
+          <DocumentFieldCell
+            field={field}
+            value={value as DocumentArrayFieldValueDTO}
+            organizationId={organizationId}
+            tableId={tableId}
+            onSave={onSave || (() => {})}
+          />
+        )
       default:
         const strValue = String(value)
         return (
@@ -304,7 +302,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
     )
   }
 
-  switch (field.type) {
+  switch (field.type as FieldType) {
     case "boolean":
       return (
         <div className="p-1">
@@ -407,19 +405,16 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
       )
 
     case "document":
-      // Document fields use DocumentFieldCell component - no edit mode needed
-      if (field && field.name && Array.isArray(value)) {
-        return (
-          <DocumentFieldCell
-            field={field}
-            value={value as DocumentArrayFieldValueDTO}
-            organizationId={organizationId}
-            tableId={tableId}
-            onSave={onSave || (() => {})}
-          />
-        )
-      }
-      return <span className="text-muted-foreground italic text-xs">Invalid document field</span>
+      // Document fields use DocumentFieldCell component - no separate edit mode needed
+      return (
+        <DocumentFieldCell
+          field={field}
+          value={value as DocumentArrayFieldValueDTO}
+          organizationId={organizationId}
+          tableId={tableId}
+          onSave={onSave || (() => {})}
+        />
+      )
 
     default:
       return (

@@ -8,7 +8,7 @@ import { useLayout } from '@/components/layout/LayoutProvider';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { DocumentFieldValueDTO, DocumentArrayFieldValueDTO } from '@/app/mappers/row-mapper';
 import { DocumentField } from '@/ddd/domain/tables/entities/document-field-entity';
-import { OrganizationId, TableId, FieldId, UserId } from '@/ddd/domain/shared/value-objects';
+import { OrganizationId, TableId, FieldId } from '@/ddd/domain/shared/value-objects';
 import { DocumentCreationDialog } from './DocumentCreationDialog';
 
 interface DocumentFieldCellProps {
@@ -35,6 +35,7 @@ export function DocumentFieldCell({
   const documents = value || [];
 
   const openDocumentInCanvas = (documentValue: DocumentFieldValueDTO, mode: 'view' | 'edit' = 'view') => {
+    // Create domain entity only when needed for canvas context (which still expects it)
     const documentField = DocumentField.fromFieldValue(
       documentValue,
       OrganizationId.fromNumber(organizationId),
@@ -47,22 +48,14 @@ export function DocumentFieldCell({
       tableId,
       fieldId: field.id,
       documentField: documentField,
-      mode: documentField.isTiptapDocument() && mode === 'edit' ? 'edit' : 'view'
+      mode: mode // Document fields are always editable
     });
     setCanvasState('expanded');
   };
 
   const handleQuickOpen = (documentValue: DocumentFieldValueDTO) => {
-    const documentField = DocumentField.fromFieldValue(
-      documentValue,
-      OrganizationId.fromNumber(organizationId),
-      TableId.fromNumber(tableId),
-      FieldId.fromNumber(field.id)
-    );
-    
-    // Smart opening: TipTap docs open in edit mode, files open in view mode
-    const mode = documentField.isTiptapDocument() ? 'edit' : 'view';
-    openDocumentInCanvas(documentValue, mode);
+    // Document fields are always TipTap documents - always open in edit mode
+    openDocumentInCanvas(documentValue, 'edit');
   };
 
   const handleDocumentCreated = (document: DocumentFieldValueDTO, shouldOpen: boolean) => {
@@ -178,12 +171,8 @@ export function DocumentFieldCell({
     <div className="document-field-cell">
       <div className="flex flex-wrap gap-1">
         {documents.slice(0, 2).map((doc, idx) => {
-          const documentField = DocumentField.fromFieldValue(
-            doc,
-            OrganizationId.fromNumber(organizationId),
-            TableId.fromNumber(tableId),
-            FieldId.fromNumber(field.id)
-          );
+          // Document fields are always TipTap documents - no need for complex detection
+          const displayName = doc.documentMetadata?.title || doc.name;
           
           return (
             <div 
@@ -198,13 +187,10 @@ export function DocumentFieldCell({
               }}
             >
               <div className="flex items-center gap-1 p-1 border rounded text-xs bg-blue-50 border-blue-200">
-                {documentField.isTiptapDocument() ? (
-                  <Edit3 className="w-3 h-3 text-blue-600 flex-shrink-0" />
-                ) : (
-                  <FileText className="w-3 h-3 text-gray-600 flex-shrink-0" />
-                )}
+                {/* Document fields are always TipTap - always show edit icon */}
+                <Edit3 className="w-3 h-3 text-blue-600 flex-shrink-0" />
                 <span className="truncate max-w-[120px]">
-                  {documentField.getDisplayName()}
+                  {displayName}
                 </span>
               </div>
               
@@ -214,7 +200,7 @@ export function DocumentFieldCell({
                   size="sm"
                   onClick={() => handleQuickOpen(doc)}
                   className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-white shadow-sm border-gray-200 hover:bg-gray-50 z-10"
-                  title={documentField.isTiptapDocument() ? "Open for editing" : "Open for viewing"}
+                  title="Open for editing"
                 >
                   <ExternalLink className="w-3 h-3" />
                 </Button>
