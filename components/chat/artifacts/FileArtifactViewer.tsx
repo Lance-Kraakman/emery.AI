@@ -24,9 +24,11 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCw,
+  AtSign,
 } from 'lucide-react'
 import type { FileArtifact } from '../types/chat-artifacts'
 import { getFileDisplayInfo } from '../types/chat-artifacts'
+import { referenceSearchActions } from '@/stores/reference-search.store'
 
 interface FileArtifactViewerProps {
   artifact: FileArtifact
@@ -277,6 +279,24 @@ export function FileArtifactViewer({
             >
               <ExternalLink className="w-3 h-3 mr-1" />
               External
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                // Insert file reference into chat
+                const fileName = artifact.data.fileField.name
+                const referenceText = `@file:${fileName}`
+                
+                // TODO: Implement reference button functionality with new architecture
+                referenceSearchActions.setQuery(fileName)
+              }}
+              className="text-xs"
+              title="Add file reference to chat"
+            >
+              <AtSign className="w-3 h-3 mr-1" />
+              Reference
             </Button>
           </div>
         </div>

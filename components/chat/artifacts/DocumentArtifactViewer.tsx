@@ -30,10 +30,12 @@ import {
   Clock, 
   User,
   Calendar,
-  Hash
+  Hash,
+  AtSign
 } from 'lucide-react'
 import type { DocumentArtifact } from '../types/chat-artifacts'
 import { getDocumentDisplayInfo } from '../types/chat-artifacts'
+import { referenceSearchActions } from '@/stores/reference-search.store'
 
 interface DocumentArtifactViewerProps {
   artifact: DocumentArtifact
@@ -175,6 +177,25 @@ export function DocumentArtifactViewer({
                 Edit
               </>
             )}
+          </Button>
+          
+          {/* Reference button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              // Insert document reference into chat
+              const docName = artifact.data.documentField.name
+              const referenceText = `@doc:${docName}`
+              
+              // TODO: Implement reference button functionality with new architecture
+              referenceSearchActions.setQuery(docName)
+            }}
+            className="text-xs"
+            title="Add document reference to chat"
+          >
+            <AtSign className="w-3 h-3 mr-1" />
+            Reference
           </Button>
           
           {/* Save button */}
