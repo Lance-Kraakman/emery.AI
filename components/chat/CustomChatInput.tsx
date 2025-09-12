@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button'
 import { ChatPlusButton } from './ChatPlusButton'
 import { ChatMentionDropdown } from './ChatMentionDropdown'
 import { useChatMentions } from './useChatMentions'
-import type { DropdownPosition, MentionCategory } from './types/chat-mentions'
+import { useLayout } from '@/components/layout/LayoutProvider'
+import { OrganizationId, TableId, FieldId, UserId } from '@/ddd/domain/shared/value-objects'
+import type { DropdownPosition, MentionCategory, DocumentMentionItem, AnyMentionItem } from './types/chat-mentions'
 
 /**
  * CustomChatInput - Controlled chat input with @ mention support
@@ -62,6 +64,9 @@ export function CustomChatInput({
     goBackToMain,
     handlers
   } = useChatMentions()
+  
+  // Use layout context for canvas control
+  const { setCanvasType, setCanvasState, setDocumentContext } = useLayout()
 
   // Handle textarea changes
   const handleInputChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -172,14 +177,74 @@ export function CustomChatInput({
     }, 0)
   }, [inputValue, showAtMentionDropdown, atMentionPosition, cursorPosition, closeDropdown])
 
-  // Handle + button mention insertion
-  const handlePlusButtonInsert = (text: string) => {
+  // Handle + button mention insertion with canvas integration
+  const handlePlusButtonInsert = (text: string, item?: AnyMentionItem) => {
     insertTextAtCursor(text + ' ')
+    
+    // If it's a document mention, open the document canvas
+    if (item && item.category === 'documents') {
+      openDocumentCanvas(item as DocumentMentionItem)
+    }
   }
 
-  // Handle @ mention selection
-  const handleAtMentionSelect = (text: string) => {
+  // Handle @ mention selection with canvas integration
+  const handleAtMentionSelect = (text: string, item?: AnyMentionItem) => {
     insertTextAtCursor(text + ' ')
+    
+    // If it's a document mention, open the document canvas
+    if (item && item.category === 'documents') {
+      openDocumentCanvas(item as DocumentMentionItem)
+    }
+  }
+  
+  // Open document canvas helper
+  const openDocumentCanvas = (documentItem: DocumentMentionItem) => {
+    // Create a mock document context for testing the canvas integration
+    // TODO: In production, this would fetch the actual DocumentField entity from the backend
+    
+    try {
+      // Create mock value objects for the document field
+      const organizationId = OrganizationId.fromNumber(1) // Mock org ID
+      const tableId = TableId.fromNumber(documentItem.tableId || 1)
+      const fieldId = FieldId.fromNumber(documentItem.fieldId || 1)
+      const userId = UserId.fromString('demo-user')
+      
+      // For now, create a simplified document context that the canvas can handle
+      // This bypasses the complex DocumentField entity creation
+      const documentContext = {
+        tableId: documentItem.tableId || 1,
+        fieldId: documentItem.fieldId || 1,
+        // Use 'as any' to bypass strict typing for testing purposes
+        documentField: {
+          id: documentItem.documentId || documentItem.id,
+          title: documentItem.displayName,
+          version: 1,
+          documentType: documentItem.documentType,
+          metadata: {
+            title: documentItem.displayName,
+            documentType: documentItem.documentType,
+            version: 1,
+            ...documentItem.metadata
+          },
+          // Methods needed by DocumentCanvas
+          isTiptapDocument: () => documentItem.documentType === 'tiptap',
+          getDisplayName: () => documentItem.displayName,
+          getWordCount: () => 0,
+          getEstimatedReadTime: () => 1,
+          updateContent: () => {},
+          updateTitle: () => {},
+          updateTiptapMetadata: () => {}
+        } as any, // Temporary bypass for testing
+        mode: documentItem.documentType === 'tiptap' ? 'edit' as const : 'view' as const
+      }
+      
+      setDocumentContext(documentContext)
+      setCanvasType('document')
+      setCanvasState('expanded')
+    } catch (error) {
+      console.error('Error opening document canvas:', error)
+      // Fallback: just insert the text without opening canvas
+    }
   }
 
   // Handle keyboard events

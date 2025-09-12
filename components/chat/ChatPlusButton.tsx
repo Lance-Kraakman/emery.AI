@@ -5,7 +5,7 @@ import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ChatMentionDropdown } from './ChatMentionDropdown'
 import { useChatMentions } from './useChatMentions'
-import type { DropdownPosition } from './types/chat-mentions'
+import type { DropdownPosition, AnyMentionItem } from './types/chat-mentions'
 
 /**
  * ChatPlusButton - + button for inserting contextual references
@@ -20,7 +20,7 @@ import type { DropdownPosition } from './types/chat-mentions'
  */
 
 interface ChatPlusButtonProps {
-  onItemInsert: (text: string) => void
+  onItemInsert: (text: string, item?: AnyMentionItem) => void
   disabled?: boolean
   className?: string
 }
@@ -116,8 +116,8 @@ export function ChatPlusButton({
     }
   }
 
-  const handleItemSelect = (insertText: string) => {
-    onItemInsert(insertText)
+  const handleItemSelect = (insertText: string, item: AnyMentionItem) => {
+    onItemInsert(insertText, item)
     closeDropdown()
   }
 

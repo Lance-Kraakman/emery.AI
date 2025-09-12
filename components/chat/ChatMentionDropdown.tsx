@@ -47,7 +47,7 @@ interface ChatMentionDropdownProps {
   state: MentionDropdownState
   items: Record<MentionCategory, AnyMentionItem[]>
   categories: CategoryConfig[]
-  onItemSelect: (insertText: string) => void
+  onItemSelect: (insertText: string, item: AnyMentionItem) => void
   onCategorySelect: (category: MentionCategory) => void
   onClose: () => void
   position: DropdownPosition
@@ -207,7 +207,7 @@ export function ChatMentionDropdown({
   const handleItemClick = (item: AnyMentionItem) => {
     // Track usage for ML suggestions
     smartSuggestionsEngine.trackUsage(item, searchTerm)
-    onItemSelect(item.insertText)
+    onItemSelect(item.insertText, item)
   }
 
   const handleItemPreview = (item: AnyMentionItem) => {
