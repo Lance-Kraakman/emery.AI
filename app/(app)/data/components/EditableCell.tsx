@@ -14,9 +14,8 @@ import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field"
 import { uploadFileAction } from "@/app/actions/files"
 import { PlusCircle, ExternalLink } from "lucide-react"
 import { DocumentFieldCell } from "./DocumentFieldCell"
-import { useLayout } from "@/components/layout/LayoutProvider"
 import { FileTypeDetector } from "@/ddd/domain/tables/services/file-type-detector"
-import { DOCUMENT_TYPES } from "@/ddd/domain/tables/value-objects/file-viewer-types"
+import { createFileArtifact, createDocumentArtifact } from "@/components/chat/types/chat-artifacts"
 
 interface EditableCellProps {
   field: FieldDTO;
@@ -41,7 +40,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
     )
   }
 
-  const { setCanvasType, setCanvasState, setFileViewerContext, setDocumentContext } = useLayout()
+  // AIDEV-NOTE: Canvas integration will be replaced with LlamaIndex chat-ui artifacts
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(value)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -61,61 +60,48 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
       
       console.log('Opening file:', { fileName, fileUrl, mimeType, file })
       
-      // Check if this is a TipTap document (should route to document canvas)
+      // Create appropriate artifact using LlamaIndex chat-ui system
       if (FileTypeDetector.isTiptapDocument(mimeType)) {
-        console.log('TipTap document detected - routing to document canvas:', file)
+        console.log('Creating TipTap document artifact for:', fileName)
         
-        // For TipTap documents, we should create a document context
-        // This is similar to what DocumentFieldCell does but for file-based TipTap docs
-        const documentContext = {
-          tableId,
-          fieldId: field.id || 0,
-          documentField: {
-            id: file.id,
+        // Create document artifact from file
+        const documentFieldValue = {
+          ...file,
+          documentMetadata: {
             title: fileName.replace('.tiptap.json', ''),
             version: 1,
-            documentType: 'tiptap',
-            metadata: {
-              title: fileName.replace('.tiptap.json', ''),
-              documentType: 'tiptap',
-              version: 1
-            },
-            isTiptapDocument: () => true,
-            getDisplayName: () => fileName.replace('.tiptap.json', ''),
-            getWordCount: () => 0,
-            getEstimatedReadTime: () => 1,
-            updateContent: () => {},
-            updateTitle: () => {},
-            updateTiptapMetadata: () => {}
-          } as any, // Bypass strict typing for file-based documents
-          mode: 'edit' as const
+            documentType: 'tiptap' as const
+          }
         }
         
-        setDocumentContext(documentContext)
-        setCanvasType('document')
-        setCanvasState('expanded')
-        return
+        const documentArtifact = createDocumentArtifact(
+          documentFieldValue,
+          tableId,
+          field.id || 0,
+          'edit', // TipTap documents are editable
+          fileUrl
+        )
+        
+        console.log('Created document artifact:', documentArtifact)
+        // AIDEV-TODO: Show artifact in LlamaIndex canvas programmatically
+        // For now, artifacts are created but need to be shown via chat interaction
+        
+      } else {
+        const viewerType = FileTypeDetector.detectViewerType(fileName, mimeType)
+        console.log('Creating file viewer artifact for:', { viewerType, fileName, fileUrl })
+        
+        const fileArtifact = createFileArtifact(
+          file,
+          tableId,
+          field.id || 0,
+          viewerType,
+          fileUrl
+        )
+        
+        console.log('Created file artifact:', fileArtifact)
+        // AIDEV-TODO: Show artifact in LlamaIndex canvas programmatically
+        // For now, artifacts are created but need to be shown via chat interaction
       }
-      
-      // For all other files, use file viewer canvas
-      const viewerType = FileTypeDetector.detectViewerType(fileName, mimeType)
-      
-      console.log('Setting up file viewer context:', { viewerType, fileName, fileUrl })
-      
-      // Set up file viewer context
-      const fileViewerContext = {
-        tableId,
-        fieldId: field.id || 0,
-        fileField: file,
-        viewerType,
-        fileName,
-        fileUrl
-      }
-      
-      // Switch to file viewer canvas
-      setFileViewerContext(fileViewerContext)
-      setCanvasType('file-viewer')
-      setCanvasState('expanded')
       
     } catch (error) {
       console.error('Error opening file:', error, file)

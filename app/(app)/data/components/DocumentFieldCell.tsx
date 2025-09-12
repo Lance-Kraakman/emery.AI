@@ -5,12 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Edit3, Eye, FileText, Plus, Upload, Loader, ExternalLink, PlusCircle } from 'lucide-react';
-import { useLayout } from '@/components/layout/LayoutProvider';
+// AIDEV-NOTE: Layout system removed - using chat-ui artifacts only
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { DocumentFieldValue, DocumentArrayFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
-import { DocumentField } from '@/ddd/domain/tables/entities/document-field-entity';
-import { OrganizationId, TableId, FieldId } from '@/ddd/domain/shared/value-objects';
+// AIDEV-NOTE: DocumentField entity removed - using DTOs directly for artifacts
 import { DocumentCreationDialog } from './DocumentCreationDialog';
+import { createDocumentArtifact } from '@/components/chat/types/chat-artifacts';
 
 interface DocumentFieldCellProps {
   field: FieldDTO;
@@ -27,7 +27,6 @@ export function DocumentFieldCell({
   tableId, 
   onSave 
 }: DocumentFieldCellProps) {
-  const { setCanvasType, setDocumentContext, setCanvasState } = useLayout();
   const [isCreating, setIsCreating] = useState(false);
   const [hoveredDocumentIndex, setHoveredDocumentIndex] = useState<number | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -35,28 +34,25 @@ export function DocumentFieldCell({
   // Handle document array - now properly typed!
   const documents = value || [];
 
-  const openDocumentInCanvas = (documentValue: DocumentFieldValue, mode: 'view' | 'edit' = 'view') => {
-    // Create domain entity only when needed for canvas context (which still expects it)
-    const documentField = DocumentField.fromFieldValue(
-      documentValue,
-      OrganizationId.fromNumber(organizationId),
-      TableId.fromNumber(tableId),
-      FieldId.fromNumber(field.id)
-    );
-
-    setCanvasType('document');
-    setDocumentContext({
-      tableId,
-      fieldId: field.id,
-      documentField: documentField,
-      mode: mode // Document fields are always editable
-    });
-    setCanvasState('expanded');
-  };
+  // AIDEV-NOTE: Old canvas system removed - now using chat-ui artifacts only
 
   const handleQuickOpen = (documentValue: DocumentFieldValue) => {
-    // Document fields are always TipTap documents - always open in edit mode
-    openDocumentInCanvas(documentValue, 'edit');
+    // Create artifact for the document
+    console.log('Creating document artifact for:', documentValue.name)
+    
+    const documentArtifact = createDocumentArtifact(
+      documentValue,
+      tableId,
+      field.id,
+      'edit' // Document fields are always editable
+    )
+    
+    console.log('Created document artifact:', documentArtifact)
+    // AIDEV-TODO: Show artifact in LlamaIndex canvas programmatically
+    // For now, artifacts are created but need to be shown via chat interaction
+    
+    // No fallback to old canvas system - clean architecture only
+    // Future: Will show artifact in chat canvas directly
   };
 
   const handleDocumentCreated = (document: DocumentFieldValue, shouldOpen: boolean) => {
@@ -64,9 +60,9 @@ export function DocumentFieldCell({
     const newDocuments = [...documents, document];
     onSave(newDocuments);
     
-    // Open in canvas if requested
+    // Create artifact if requested to open
     if (shouldOpen) {
-      openDocumentInCanvas(document, 'edit');
+      handleQuickOpen(document);
     }
   };
 

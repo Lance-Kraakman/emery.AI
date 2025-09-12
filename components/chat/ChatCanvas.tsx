@@ -3,6 +3,12 @@
 import { ChatCanvas as LlamaIndexChatCanvas, useChatCanvas } from '@llamaindex/chat-ui'
 import { X, Code, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { DocumentArtifactViewer, FileArtifactViewer } from './artifacts'
+import { 
+  isDocumentArtifact, 
+  isFileArtifact, 
+  isEmeryArtifact 
+} from './types/chat-artifacts'
 
 /**
  * ChatCanvas - Proper LlamaIndex ChatCanvas implementation
@@ -47,7 +53,68 @@ export function ChatCanvas() {
       )
     }
 
-    // Enhanced canvas with header and artifact information
+    // Check if this is a custom Emery artifact
+    const isCustomArtifact = isEmeryArtifact(currentArtifact)
+    
+    if (isCustomArtifact) {
+      // Render custom artifact viewer instead of LlamaIndex canvas
+      return (
+        <div className="flex-1 border-l border-border flex flex-col bg-card">
+          {/* Custom Artifact Header */}
+          <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {isDocumentArtifact(currentArtifact) ? (
+                <FileText className="h-4 w-4 text-blue-600 flex-shrink-0" />
+              ) : (
+                <FileText className="h-4 w-4 text-green-600 flex-shrink-0" />
+              )}
+              <div className="min-w-0 flex-1">
+                <h3 className="font-medium text-sm truncate">
+                  {isDocumentArtifact(currentArtifact) 
+                    ? currentArtifact.data.documentField.documentMetadata?.title || currentArtifact.data.documentField.name
+                    : isFileArtifact(currentArtifact)
+                    ? currentArtifact.data.fileField.name
+                    : 'Artifact'
+                  }
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {isDocumentArtifact(currentArtifact) ? 'Document' : 'File'}
+                </p>
+              </div>
+            </div>
+            
+            {hideCanvas && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={hideCanvas}
+                className="h-7 w-7 p-0 flex-shrink-0"
+                title="Close canvas"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+
+          {/* Custom Artifact Content */}
+          <div className="flex-1 overflow-auto p-4">
+            {isDocumentArtifact(currentArtifact) ? (
+              <DocumentArtifactViewer 
+                artifact={currentArtifact}
+                className="h-full"
+              />
+            ) : isFileArtifact(currentArtifact) ? (
+              <FileArtifactViewer 
+                artifact={currentArtifact}
+                className="h-full"
+              />
+            ) : null}
+          </div>
+        </div>
+      )
+    }
+
+    // Enhanced canvas with header and artifact information for standard artifacts
     return (
       <div className="flex-1 border-l border-border flex flex-col bg-card">
         {/* Canvas Header with Artifact Info */}
