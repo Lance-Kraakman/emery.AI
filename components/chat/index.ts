@@ -10,11 +10,9 @@ export { useChatGRPC, useChatForPage } from './useChatGRPC'
 
 // Chat Mention System (+ button and @ mentions)
 export { ChatPlusButton } from './ChatPlusButton'
-export { ChatMentionDropdown } from './ChatMentionDropdown'
 export { CustomChatInput } from './CustomChatInput'
 
-// Mention hooks
-export { useChatMentions } from './useChatMentions'
+// Mention hooks (deprecated - now using TanStack Store)
 export { useAtMentions, getCursorCoordinates } from './useAtMentions'
 
 // Mention types

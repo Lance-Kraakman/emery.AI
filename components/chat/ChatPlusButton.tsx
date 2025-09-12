@@ -1,22 +1,27 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { Plus } from 'lucide-react'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import { Plus, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ChatMentionDropdown } from './ChatMentionDropdown'
-import { useChatMentions } from './useChatMentions'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { useStore } from '@tanstack/react-store'
+import { referenceSearchStore, referenceSearchActions, referenceSearchUtils } from '@/stores/reference-search.store'
+import { searchReferences } from '@/app/actions/reference-search'
+import { useEmery } from '@/contexts/EmeryStoreProvider'
 import type { DropdownPosition, AnyMentionItem } from './types/chat-mentions'
+import { getCategoryIcon, getCategoryDisplayName } from './utils/search-display-utils'
 
 /**
- * ChatPlusButton - + button for inserting contextual references
+ * ChatPlusButton - Direct search interface with TanStack Store
  * 
  * Features:
- * - Positioned left of chat input field
- * - Opens hierarchical dropdown menu on click
- * - Smart positioning (above input, aligned left)
- * - Keyboard accessible (Tab, Enter, Escape)
+ * - Click + button → immediate search input (no categories)
+ * - Real-time unified search across all domains
+ * - Flat results list with category badges
+ * - Direct TanStack Store integration
  * 
- * AIDEV-NOTE: Main entry point for chat contextual references system
+ * AIDEV-NOTE: Completely replaced hierarchical system with unified search
  */
 
 interface ChatPlusButtonProps {
@@ -30,6 +35,20 @@ export function ChatPlusButton({
   disabled = false, 
   className = '' 
 }: ChatPlusButtonProps) {
+  // Store integration - using selectors for proper reactivity
+  const isOpen = useStore(referenceSearchStore, (state) => state.isOpen)
+  const query = useStore(referenceSearchStore, (state) => state.query)
+  const results = useStore(referenceSearchStore, (state) => state.results)
+  const loading = useStore(referenceSearchStore, (state) => state.loading)
+  const error = useStore(referenceSearchStore, (state) => state.error)
+  const selectedIndex = useStore(referenceSearchStore, (state) => state.selectedIndex)
+  const searchDebounceMs = useStore(referenceSearchStore, (state) => state.searchDebounceMs)
+  const { data: emeryData } = useEmery()
+  
+  // Debug store state changes
+  console.log('[ChatPlusButton] Store state:', { isOpen, query, resultsCount: results.length })
+  
+  // Local UI state
   const [dropdownPosition, setDropdownPosition] = useState<DropdownPosition>({
     left: 0,
     bottom: 0,
@@ -38,26 +57,52 @@ export function ChatPlusButton({
   })
   
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const {
-    dropdownState,
-    availableItems,
-    categories,
-    openDropdown,
-    closeDropdown,
-    selectCategory,
-    selectItem,
-    handlers
-  } = useChatMentions()
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  
+  // Debounced search function
+  const debouncedSearch = useMemo(
+    () => referenceSearchUtils.debounce(async (query: string) => {
+      if (referenceSearchUtils.isValidQuery(query)) {
+        referenceSearchActions.setLoading(true)
+        try {
+          const result = await searchReferences(query, emeryData)
+          if (result.success && result.data) {
+            referenceSearchActions.setResults(result.data)
+          } else {
+            referenceSearchActions.setError(result.error || 'Search failed')
+          }
+        } catch (error) {
+          referenceSearchActions.setError('Search request failed')
+        }
+      } else {
+        // Clear results for invalid queries
+        referenceSearchActions.setResults({
+          results: [],
+          totalCount: 0,
+          searchTime: 0,
+          query: ''
+        })
+      }
+    }, searchDebounceMs),
+    [emeryData, searchDebounceMs]
+  )
+
+  // Trigger search when query changes
+  useEffect(() => {
+    if (isOpen && query.trim() !== '') {
+      debouncedSearch(query)
+    }
+  }, [query, isOpen, debouncedSearch])
 
   // Calculate dropdown position when opened
   useEffect(() => {
-    if (dropdownState.isOpen && buttonRef.current) {
+    if (isOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
       const viewportHeight = window.innerHeight
       const spaceAbove = rect.top
       const spaceBelow = viewportHeight - rect.bottom
       
-      // Prefer showing above the input (more space typically)
+      // Prefer showing above the input
       const showAbove = spaceAbove > 320 || spaceAbove > spaceBelow
       
       setDropdownPosition({
@@ -68,26 +113,32 @@ export function ChatPlusButton({
         maxHeight: Math.max(200, showAbove ? spaceAbove - 20 : spaceBelow - 20),
         direction: showAbove ? 'up' : 'down'
       })
+      
+      // Focus search input when dropdown opens
+      setTimeout(() => {
+        searchInputRef.current?.focus()
+      }, 100)
     }
-  }, [dropdownState.isOpen])
+  }, [isOpen])
 
   // Close dropdown when clicking outside
   useEffect(() => {
-    if (!dropdownState.isOpen) return
+    if (!isOpen) return
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
-        // Check if click is inside dropdown (handled by dropdown component)
-        const dropdownEl = document.querySelector('[data-chat-mention-dropdown]')
-        if (!dropdownEl || !dropdownEl.contains(event.target as Node)) {
-          closeDropdown()
+      const target = event.target as Node
+      if (buttonRef.current && !buttonRef.current.contains(target)) {
+        // Check if click is inside dropdown
+        const dropdownEl = document.querySelector('[data-chat-search-dropdown]')
+        if (!dropdownEl || !dropdownEl.contains(target)) {
+          referenceSearchActions.setIsOpen(false)
         }
       }
     }
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        closeDropdown()
+        referenceSearchActions.setIsOpen(false)
       }
     }
 
@@ -98,91 +149,205 @@ export function ChatPlusButton({
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('keydown', handleEscape)
     }
-  }, [dropdownState.isOpen, closeDropdown])
+  }, [isOpen])
 
   const handleButtonClick = () => {
-    if (dropdownState.isOpen) {
-      closeDropdown()
+    console.log('[ChatPlusButton] Button clicked, current state:', { isOpen })
+    if (isOpen) {
+      console.log('[ChatPlusButton] Closing dropdown')
+      referenceSearchActions.setIsOpen(false)
     } else {
-      // Open dropdown at button position (cursor position doesn't matter for + button)
-      openDropdown('plus', 0)
+      console.log('[ChatPlusButton] Opening dropdown')
+      referenceSearchActions.setIsOpen(true, 'plus')
+      referenceSearchActions.clear() // Clear previous search
     }
+  }
+
+  const handleSearchChange = (value: string) => {
+    referenceSearchActions.setQuery(value)
+  }
+
+  const handleItemSelect = (result: any) => {
+    // Convert store result to compatible format for onItemInsert
+    const compatItem = {
+      id: result.id,
+      name: result.name,
+      displayName: result.displayName,
+      description: result.description,
+      category: result.category,
+      insertText: result.insertText,
+      available: result.available,
+      icon: getCategoryIcon(result.category)
+    } as AnyMentionItem
+    
+    onItemInsert(result.insertText, compatItem)
+    referenceSearchActions.setIsOpen(false)
   }
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      handleButtonClick()
+    switch (event.key) {
+      case 'ArrowUp':
+        event.preventDefault()
+        referenceSearchActions.navigateSelection('up')
+        break
+      case 'ArrowDown':
+        event.preventDefault()
+        referenceSearchActions.navigateSelection('down')
+        break
+      case 'Enter':
+        event.preventDefault()
+        const selectedResult = results[selectedIndex]
+        if (selectedResult && selectedResult.available) {
+          handleItemSelect(selectedResult)
+        }
+        break
+      case 'Escape':
+        event.preventDefault()
+        referenceSearchActions.setIsOpen(false)
+        break
     }
   }
 
-  const handleItemSelect = (insertText: string, item: AnyMentionItem) => {
-    onItemInsert(insertText, item)
-    closeDropdown()
-  }
+  const renderSearchDropdown = () => {
+    console.log('[ChatPlusButton] Render dropdown check:', { isOpen })
+    if (!isOpen) return null
 
-  const handleCategorySelect = (category: any) => {
-    selectCategory(category)
+    return (
+      <div
+        data-chat-search-dropdown
+        className="fixed bg-background border border-border rounded-xl shadow-lg min-w-[320px] max-w-[400px] overflow-hidden z-50"
+        style={{
+          left: dropdownPosition.left,
+          ...(dropdownPosition.direction === 'up' 
+            ? { bottom: dropdownPosition.bottom }
+            : { top: dropdownPosition.top }),
+          maxHeight: dropdownPosition.maxHeight
+        }}
+        onKeyDown={handleKeyDown}
+        tabIndex={-1}
+      >
+        <div className="p-2">
+          {/* Search Header */}
+          <div className="flex items-center gap-2 mb-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                ref={searchInputRef}
+                placeholder="Search mentions..."
+                value={query}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="pl-9 h-9 text-sm"
+              />
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              onClick={() => referenceSearchActions.setIsOpen(false)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Loading State */}
+          {loading && (
+            <div className="text-center py-6 text-muted-foreground">
+              <div className="text-sm">Searching...</div>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && !loading && (
+            <div className="text-center py-6 text-red-600">
+              <div className="text-sm font-medium">Search Error</div>
+              <div className="text-xs mt-1">{error}</div>
+            </div>
+          )}
+
+          {/* Search Results */}
+          {!loading && !error && (
+            <ScrollArea className="max-h-64">
+              <div className="space-y-1">
+                {results.length > 0 ? (
+                  results.map((result, index) => {
+                    const isSelected = selectedIndex === index
+                    const isUnavailable = !result.available
+
+                    return (
+                      <button
+                        key={`${result.category}-${result.id}`}
+                        className={`
+                          group w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors
+                          ${isSelected 
+                            ? 'bg-primary/10 text-primary' 
+                            : isUnavailable 
+                              ? 'hover:bg-muted/50 text-muted-foreground cursor-not-allowed' 
+                              : 'hover:bg-muted text-foreground'
+                          }
+                        `}
+                        onClick={() => !isUnavailable && handleItemSelect(result)}
+                        onMouseEnter={() => referenceSearchActions.setSelectedIndex(index)}
+                        disabled={isUnavailable}
+                      >
+                        {getCategoryIcon(result.category, 'h-4 w-4')}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`font-medium text-sm truncate ${isUnavailable ? 'opacity-50' : ''}`}>
+                              {result.displayName}
+                            </span>
+                            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
+                              {getCategoryDisplayName(result.category)}
+                            </span>
+                          </div>
+                          {result.description && (
+                            <div className={`text-xs text-muted-foreground truncate ${isUnavailable ? 'opacity-50' : ''}`}>
+                              {result.description}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })
+                ) : query.trim() !== '' ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <div className="text-sm font-medium">No matches found</div>
+                    <div className="text-xs">No results for "{query}"</div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <div className="text-sm font-medium">Start typing to search</div>
+                    <div className="text-xs">Search across tools, agents, teams, data, settings, and documents</div>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="relative">
-      {/* + Button */}
+    <>
       <Button
         ref={buttonRef}
-        variant="ghost"
         size="icon"
-        onClick={handleButtonClick}
-        onKeyDown={handleKeyDown}
+        variant="ghost"
         disabled={disabled}
-        className={`
-          h-10 w-10 rounded-xl flex-shrink-0 transition-all duration-200
-          border shadow-sm backdrop-blur-sm
-          ${dropdownState.isOpen 
-            ? 'bg-primary/15 text-primary border-primary/30 shadow-primary/20 shadow-md' 
-            : 'bg-background/80 border-border/60 hover:bg-accent hover:border-accent-foreground/20 text-muted-foreground hover:text-foreground'
-          }
-          ${className}
-        `}
-        title="Insert reference to tools, agents, teams, or data"
-        aria-label="Open contextual reference menu"
-        aria-expanded={dropdownState.isOpen}
-        aria-haspopup="menu"
+        onClick={handleButtonClick}
+        className={`h-9 w-9 ${className}`}
+        aria-label="Insert reference"
       >
-        <Plus 
-          className={`h-4 w-4 transition-transform duration-150 ${
-            dropdownState.isOpen ? 'rotate-45' : 'rotate-0'
-          }`} 
-        />
+        <Plus className="h-4 w-4" />
       </Button>
-
-      {/* Dropdown Menu */}
-      {dropdownState.isOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            left: dropdownPosition.left,
-            [dropdownPosition.direction === 'up' ? 'bottom' : 'top']: 
-              dropdownPosition.direction === 'up' ? dropdownPosition.bottom : dropdownPosition.top,
-            zIndex: 50,
-            maxHeight: dropdownPosition.maxHeight
-          }}
-        >
-          <ChatMentionDropdown
-            state={dropdownState}
-            items={availableItems}
-            categories={categories}
-            onItemSelect={handleItemSelect}
-            onCategorySelect={handleCategorySelect}
-            onClose={closeDropdown}
-            position={dropdownPosition}
-          />
-        </div>
-      )}
-    </div>
+      
+      {renderSearchDropdown()}
+    </>
   )
 }
 
-// AIDEV-NOTE: This component provides the main UI entry point for contextual references
-// AIDEV-NOTE: Handles positioning, keyboard navigation, and state management
-// AIDEV-NOTE: Integrates with useChatMentions hook for business logic
+// AIDEV-NOTE: Complete rewrite using direct TanStack Store integration
+// AIDEV-NOTE: No category selection - immediate unified search experience
+// AIDEV-NOTE: Flat results list with category badges for quick identification
