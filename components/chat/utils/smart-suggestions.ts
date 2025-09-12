@@ -274,7 +274,8 @@ export class SmartSuggestionsEngine {
       agents: ['agent', 'bot', 'ai', 'assistant', 'automate', 'schedule', 'task'],
       teams: ['team', 'group', 'collaborate', 'member', 'assign', 'notify'],
       data: ['data', 'database', 'table', 'query', 'analyze', 'report', 'chart'],
-      settings: ['setting', 'config', 'configure', 'setup', 'permission', 'access']
+      settings: ['setting', 'config', 'configure', 'setup', 'permission', 'access'],
+      documents: ['document', 'tiptap', 'editor', 'write', 'text', 'draft']
     }
     
     return keywordMap[category] || []

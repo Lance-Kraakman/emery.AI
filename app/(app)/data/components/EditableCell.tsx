@@ -10,7 +10,12 @@ import { format } from "date-fns"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { FileMetadata } from "@/types/db"
 import { uploadFileAction } from "@/app/actions/files"
-import { PlusCircle } from "lucide-react"
+import { PlusCircle, ExternalLink } from "lucide-react"
+import { DocumentFieldCell } from "./DocumentFieldCell"
+import { isDocumentFieldValue, isDocumentArray, isDocumentFieldData, normalizeDocumentFieldValue, DocumentArrayFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
+import { useLayout } from "@/components/layout/LayoutProvider"
+import { FileTypeDetector } from "@/ddd/domain/tables/services/file-type-detector"
+import { DOCUMENT_TYPES } from "@/ddd/domain/tables/value-objects/file-viewer-types"
 
 interface EditableCellProps {
   field: FieldDTO;
@@ -22,14 +27,66 @@ interface EditableCellProps {
 }
 
 export function EditableCell({ field, value, organizationId, tableId, onSave, onCancel }: EditableCellProps) {
+  // Handle document fields completely separately - they manage their own state
+  if (field.type === "file" && isDocumentArray(value)) {
+    return (
+      <DocumentFieldCell
+        field={field}
+        value={value}
+        organizationId={organizationId}
+        tableId={tableId}
+        onSave={onSave || (() => {})}
+      />
+    )
+  }
+
+  const { setCanvasType, setCanvasState, setFileViewerContext } = useLayout()
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(value)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const [hoveredFileIndex, setHoveredFileIndex] = useState<number | null>(null)
 
   useEffect(() => {
     setEditValue(value)
   }, [value])
+
+  // File opening logic using domain service
+  const handleFileOpen = (file: any) => {
+    const fileName = file.name || file.filename || 'Unknown File'
+    const fileUrl = file.url || file.downloadUrl
+    const mimeType = file.mimeType || file.contentType
+    
+    // Check if this is a TipTap document (should route to document canvas)
+    if (FileTypeDetector.isTiptapDocument(mimeType)) {
+      // TODO: Route to document canvas once DocumentCanvas is implemented
+      console.log('TipTap document detected - should route to document canvas:', file)
+      // For now, open externally
+      if (fileUrl) {
+        window.open(fileUrl, '_blank')
+      }
+      return
+    }
+    
+    // For all other files, use file viewer canvas
+    const viewerType = FileTypeDetector.detectViewerType(fileName, mimeType)
+    
+    // Set up file viewer context
+    const fileViewerContext = {
+      tableId,
+      fieldId: field.id || 0,
+      fileField: file,
+      viewerType,
+      fileName,
+      fileUrl
+    }
+    
+    // Switch to file viewer canvas
+    setFileViewerContext(fileViewerContext)
+    setCanvasType('file-viewer')
+    setCanvasState('expanded')
+  }
+
 
   const handleSave = () => {
     onSave?.(editValue)
@@ -157,9 +214,27 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
             return (
               <div className="flex flex-wrap gap-1">
                 {value.slice(0, 2).map((file: any, idx: number) => (
-                  <Badge key={idx} variant="outline" className="text-xs">
-                    {file.name || file.filename || "File"}
-                  </Badge>
+                  <div 
+                    key={idx} 
+                    className="relative"
+                    onMouseEnter={() => setHoveredFileIndex(idx)}
+                    onMouseLeave={() => setHoveredFileIndex(null)}
+                  >
+                    <Badge variant="outline" className="text-xs">
+                      {file.name || file.filename || "File"}
+                    </Badge>
+                    {hoveredFileIndex === idx && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleFileOpen(file)}
+                        className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-white shadow-sm border-gray-200 hover:bg-gray-50 z-10"
+                        title="Open file"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
                 ))}
                 {value.length > 2 && (
                   <Badge variant="outline" className="text-xs">
@@ -170,13 +245,46 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
             )
           } else {
             return (
-              <Badge variant="outline" className="text-xs">
-                {value.name || value.filename || "File"}
-              </Badge>
+              <div 
+                className="relative inline-block"
+                onMouseEnter={() => setHoveredFileIndex(0)}
+                onMouseLeave={() => setHoveredFileIndex(null)}
+              >
+                <Badge variant="outline" className="text-xs">
+                  {value.name || value.filename || "File"}
+                </Badge>
+                {hoveredFileIndex === 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleFileOpen(value)}
+                    className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-white shadow-sm border-gray-200 hover:bg-gray-50 z-10"
+                    title="Open file"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                  </Button>
+                )}
+              </div>
             )
           }
         }
         return <span className="text-muted-foreground italic text-xs">No files</span>
+      case "document":
+        // Handle document fields - delegate to DocumentFieldCell
+        if (field && field.name && isDocumentFieldData(value)) {
+          // Normalize to array format for DocumentFieldCell
+          const normalizedValue = isDocumentArray(value) ? value : normalizeDocumentFieldValue(value);
+          return (
+            <DocumentFieldCell
+              field={field}
+              value={normalizedValue}
+              organizationId={organizationId}
+              tableId={tableId}
+              onSave={onSave || (() => {})}
+            />
+          )
+        }
+        return <span className="text-muted-foreground italic text-xs">No document</span>
       default:
         const strValue = String(value)
         return (
@@ -299,6 +407,39 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
           </Button>
         </div>
       )
+
+    case "document":
+      // Document fields use DocumentFieldCell component - no edit mode needed
+      console.log('🔍 Document field validation:', {
+        hasField: !!field,
+        fieldName: field?.name,
+        fieldType: field?.type,
+        value: value,
+        valueType: typeof value,
+        isDocumentFieldData: isDocumentFieldData(value),
+        organizationId,
+        tableId
+      });
+      
+      if (field && field.name && isDocumentFieldData(value)) {
+        // Normalize to array format for DocumentFieldCell
+        const normalizedValue = isDocumentArray(value) ? value : normalizeDocumentFieldValue(value);
+        console.log('✅ Document field validation passed, rendering DocumentFieldCell with:', {
+          normalizedValue,
+          isArray: Array.isArray(normalizedValue)
+        });
+        return (
+          <DocumentFieldCell
+            field={field}
+            value={normalizedValue}
+            organizationId={organizationId}
+            tableId={tableId}
+            onSave={onSave || (() => {})}
+          />
+        )
+      }
+      console.log('❌ Document field validation failed - showing invalid message');
+      return <span className="text-muted-foreground italic text-xs">Invalid document field</span>
 
     default:
       return (

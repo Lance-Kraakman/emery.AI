@@ -5,12 +5,34 @@
 
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import type { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects'
+import type { DocumentField } from '@/ddd/domain/tables/entities/document-field-entity'
 
 // Layout panel states
 export type PanelState = 'expanded' | 'collapsed' | 'hidden'
 
 // Responsive breakpoints
 export type LayoutBreakpoint = 'mobile' | 'tablet' | 'desktop'
+
+// Canvas types
+export type CanvasType = 'chat' | 'document' | 'file-viewer'
+
+// Document context for canvas
+export interface DocumentContextConfig {
+  tableId: number
+  fieldId: number
+  documentField: DocumentField
+  mode: 'view' | 'edit'
+}
+
+// File viewer context for canvas
+export interface FileViewerContextConfig {
+  tableId: number
+  fieldId: number
+  fileField: any // Will be enhanced with FileField entity later
+  viewerType: 'pdf' | 'image' | 'text' | 'office' | 'generic'
+  fileName: string
+  fileUrl?: string
+}
 
 // Chat context for different domain types
 export interface ChatContextConfig {
@@ -31,6 +53,11 @@ export interface LayoutState {
   chatState: PanelState
   canvasState: PanelState // New canvas state
   
+  // Canvas configuration
+  canvasType: CanvasType
+  documentContext?: DocumentContextConfig
+  fileViewerContext?: FileViewerContextConfig
+  
   // Responsive state
   breakpoint: LayoutBreakpoint
   isMobile: boolean
@@ -48,8 +75,11 @@ export type LayoutAction =
   | { type: 'SET_SIDEBAR_STATE'; state: PanelState }
   | { type: 'SET_CHAT_STATE'; state: PanelState }
   | { type: 'SET_CANVAS_STATE'; state: PanelState }
+  | { type: 'SET_CANVAS_TYPE'; canvasType: CanvasType }
   | { type: 'SET_BREAKPOINT'; breakpoint: LayoutBreakpoint }
   | { type: 'SET_CHAT_CONTEXT'; context: ChatContextConfig }
+  | { type: 'SET_DOCUMENT_CONTEXT'; context: DocumentContextConfig }
+  | { type: 'SET_FILE_VIEWER_CONTEXT'; context: FileViewerContextConfig }
   | { type: 'TOGGLE_SIDEBAR' }
   | { type: 'TOGGLE_CHAT' }
   | { type: 'TOGGLE_CANVAS' }
@@ -81,6 +111,7 @@ export const DEFAULT_LAYOUT_STATE: LayoutState = {
   sidebarState: 'expanded',
   chatState: 'expanded',
   canvasState: 'collapsed', // Canvas starts collapsed by default
+  canvasType: 'chat',
   breakpoint: 'desktop',
   isMobile: false
 }

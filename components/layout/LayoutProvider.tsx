@@ -6,7 +6,10 @@ import type {
   LayoutProviderProps, 
   LayoutBreakpoint,
   PanelState,
-  ChatContextConfig 
+  ChatContextConfig,
+  CanvasType,
+  DocumentContextConfig,
+  FileViewerContextConfig
 } from './types'
 import { LAYOUT_BREAKPOINTS } from './types'
 import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
@@ -28,14 +31,20 @@ interface LayoutContextValue {
   sidebarState: PanelState
   chatState: PanelState
   canvasState: PanelState
+  canvasType: CanvasType
   breakpoint: LayoutBreakpoint
   isMobile: boolean
   chatContext?: ChatContextConfig
+  documentContext?: DocumentContextConfig
+  fileViewerContext?: FileViewerContextConfig
   // Actions
   setSidebarState: (state: PanelState) => void
   setChatState: (state: PanelState) => void
   setCanvasState: (state: PanelState) => void
+  setCanvasType: (type: CanvasType) => void
   setChatContext: (context: ChatContextConfig) => void
+  setDocumentContext: (context: DocumentContextConfig) => void
+  setFileViewerContext: (context: FileViewerContextConfig) => void
   toggleSidebar: () => void
   toggleChat: () => void
   toggleCanvas: () => void
@@ -73,9 +82,12 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
   const sidebarState = useStore(uiStateStore, uiStateSelectors.sidebarState)
   const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
   const canvasState = useStore(uiStateStore, uiStateSelectors.canvasState)
+  const canvasType = useStore(uiStateStore, uiStateSelectors.canvasType)
   const breakpoint = useStore(uiStateStore, uiStateSelectors.breakpoint)
   const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
   const chatContext = useStore(uiStateStore, uiStateSelectors.chatContext)
+  const documentContext = useStore(uiStateStore, uiStateSelectors.documentContext)
+  const fileViewerContext = useStore(uiStateStore, uiStateSelectors.fileViewerContext)
 
   // Client-side initialization effect
   useEffect(() => {
@@ -97,6 +109,12 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
     }
     if (initialState.chatContext) {
       uiStateActions.setChatContext(initialState.chatContext)
+    }
+    if (initialState.documentContext) {
+      uiStateActions.setDocumentContext(initialState.documentContext)
+    }
+    if (initialState.fileViewerContext) {
+      uiStateActions.setFileViewerContext(initialState.fileViewerContext)
     }
   }, [])
 
@@ -139,8 +157,20 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
     uiStateActions.setCanvasState(panelState)
   }
 
+  const setCanvasType = (type: CanvasType) => {
+    uiStateActions.setCanvasType(type)
+  }
+
   const setChatContext = (context: ChatContextConfig) => {
     uiStateActions.setChatContext(context)
+  }
+
+  const setDocumentContext = (context: DocumentContextConfig) => {
+    uiStateActions.setDocumentContext(context)
+  }
+
+  const setFileViewerContext = (context: FileViewerContextConfig) => {
+    uiStateActions.setFileViewerContext(context)
   }
 
   const toggleSidebar = () => {
@@ -163,13 +193,19 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
     sidebarState,
     chatState,
     canvasState,
+    canvasType,
     breakpoint,
     isMobile,
     chatContext,
+    documentContext,
+    fileViewerContext,
     setSidebarState,
     setChatState,
     setCanvasState,
+    setCanvasType,
     setChatContext,
+    setDocumentContext,
+    setFileViewerContext,
     toggleSidebar,
     toggleChat,
     toggleCanvas,

@@ -48,6 +48,7 @@ import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/
 // New application services for tables, fields, rows, files, and chat
 import { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
 import { FileUseCases } from '@/ddd/application/services/tables/file-application-service';
+import { DocumentApplicationService } from '@/ddd/application/services/tables/document-application-service';
 import { ChatApplicationService } from '@/ddd/application/services/chat/chat-application-service';
 
 // Domain services
@@ -119,6 +120,7 @@ interface RepositoryRegistry {
   // New application services for data management
   TableApplicationService: TableApplicationService;
   FileApplicationService: FileUseCases;
+  DocumentApplicationService: DocumentApplicationService;
   
   // Domain services
   DynamicTableService: DynamicTableService;
@@ -305,6 +307,11 @@ export class DIContainer {
       dynamicTableService
     );
     
+    // Initialize DocumentApplicationService (extends file system)
+    const documentApplicationService = new DocumentApplicationService(
+      fileApplicationService
+    );
+    
     // Register chat repositories
     const chatRepository = new DrizzleChatRepository(contextAwareDb);
     const chatMessageRepository = new DrizzleChatMessageRepository(contextAwareDb);
@@ -321,6 +328,7 @@ export class DIContainer {
     
     this.repositories.set('TableApplicationService', tableApplicationService);
     this.repositories.set('FileApplicationService', fileApplicationService);
+    this.repositories.set('DocumentApplicationService', documentApplicationService);
     this.repositories.set('ChatApplicationService', chatApplicationService);
 
     // Initialize RAG domain repositories
@@ -465,6 +473,7 @@ type ServiceMap = {
   InvitationApplicationService: InvitationApplicationService;
   TableApplicationService: TableApplicationService;
   FileApplicationService: FileUseCases;
+  DocumentApplicationService: DocumentApplicationService;
   ChatApplicationService: ChatApplicationService;
   
 
@@ -535,6 +544,7 @@ export const getUserRoleApplicationService = createGetter('UserRoleApplicationSe
 export const getInvitationApplicationService = createGetter('InvitationApplicationService');
 export const getTableApplicationService = createGetter('TableApplicationService');
 export const getFileApplicationService = createGetter('FileApplicationService');
+export const getDocumentApplicationService = createGetter('DocumentApplicationService');
 export const getChatApplicationService = createGetter('ChatApplicationService');
 
 // RAG service getters

@@ -10,7 +10,8 @@ import {
   Table,
   Key,
   UserCog,
-  Monitor
+  Monitor,
+  FileText
 } from 'lucide-react'
 import { PREDEFINED_TOOLS, getAvailableToolsForUser } from '@/lib/agents/tools-registry'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
@@ -27,6 +28,7 @@ import type {
   TeamMentionItem,
   DataMentionItem,
   SettingsMentionItem,
+  DocumentMentionItem,
   MentionHandlers
 } from './types/chat-mentions'
 
@@ -49,7 +51,7 @@ const DEFAULT_CONFIG = {
   enableSearch: true,
   maxDropdownHeight: 400,
   searchDebounceMs: 150,
-  categories: ['tools', 'agents', 'teams', 'settings', 'data'] as MentionCategory[]
+  categories: ['tools', 'agents', 'teams', 'settings', 'data', 'documents'] as MentionCategory[]
 }
 
 export function useChatMentions(): ChatMentionsHook {
@@ -123,6 +125,13 @@ export function useChatMentions(): ChatMentionsHook {
       icon: <Settings className="h-4 w-4" />,
       description: 'Link to configuration and settings',
       shortcut: 'S'
+    },
+    {
+      id: 'documents',
+      name: 'Documents',
+      icon: <FileText className="h-4 w-4" />,
+      description: 'Reference documents and files in context',
+      shortcut: 'O'
     }
   ], [])
 
@@ -252,12 +261,37 @@ export function useChatMentions(): ChatMentionsHook {
       }
     ]
 
+    // Document items (TipTap documents only - files go to file-viewer)
+    const documentItems: DocumentMentionItem[] = []
+    
+    emeryData?.databases?.forEach(database => {
+      database.tables?.forEach(table => {
+        // Create document folder references for tables that likely contain documents
+        // TODO: Query actual document field values for individual document mentions
+        // For now, create folder-like references with proper database/table structure
+        documentItems.push({
+          id: `docs_${database.id}_${table.id}`,
+          name: `${database.name}/${table.name}`.toLowerCase().replace(/\s+/g, '-'),
+          displayName: `Documents in ${database.name}/${table.name}`,
+          description: `Access documents from ${table.name} table in ${database.name} database`,
+          icon: <FileText className="h-3 w-3" />,
+          category: 'documents',
+          insertText: `@doc:${database.name}/${table.name}`.toLowerCase().replace(/\s+/g, '-'),
+          available: true,
+          documentType: 'tiptap', // TipTap documents in this table
+          tableId: table.id,
+          parentTable: `${database.name}/${table.name}`
+        })
+      })
+    })
+
     return {
       tools: toolItems,
       agents: agentItems,
       teams: teamItems,
       data: dataItems,
-      settings: settingsItems
+      settings: settingsItems,
+      documents: documentItems
     }
   }, [emeryData, connections])
 
