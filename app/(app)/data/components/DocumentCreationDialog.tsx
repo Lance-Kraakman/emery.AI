@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Edit3, Loader } from 'lucide-react';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
-import type { DocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
+import type { DocumentFieldValueDTO } from '@/app/mappers/row-mapper';
 
 interface DocumentCreationDialogProps {
   isOpen: boolean;
@@ -15,7 +15,7 @@ interface DocumentCreationDialogProps {
   field: FieldDTO;
   organizationId: number;
   tableId: number;
-  onDocumentCreated: (document: DocumentFieldValue, shouldOpen: boolean) => void;
+  onDocumentCreated: (document: DocumentFieldValueDTO, shouldOpen: boolean) => void;
 }
 
 export function DocumentCreationDialog({

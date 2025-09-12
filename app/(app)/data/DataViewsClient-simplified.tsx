@@ -18,7 +18,7 @@ import type { TableDTO } from "@/app/mappers/table-mapper"
 import { getFields } from "@/app/actions/fields"
 import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
-import type { RowDTO } from "@/app/mappers/row-mapper"
+import type { RowDTO, FieldValueDTO } from "@/app/mappers/row-mapper"
 
 export function DataViewsClientSimplified() {
   const searchParams = useSearchParams()
@@ -80,7 +80,7 @@ export function DataViewsClientSimplified() {
 
   // TanStack Mutations for optimistic updates
   const updateRowMutation = useMutation({
-    mutationFn: async ({ rowId, fieldId, value }: { rowId: string, fieldId: number, value: any }) => {
+    mutationFn: async ({ rowId, fieldId, value }: { rowId: string, fieldId: number, value: FieldValueDTO }) => {
       if (!selectedTableId) throw new Error('No table selected')
       
       const field = fields.find(f => f.id === fieldId)
@@ -201,7 +201,7 @@ export function DataViewsClientSimplified() {
     },
   })
 
-  const handleUpdateRow = (rowId: string, fieldId: number, value: any) => {
+  const handleUpdateRow = (rowId: string, fieldId: number, value: FieldValueDTO) => {
     updateRowMutation.mutate({ rowId, fieldId, value })
   }
 

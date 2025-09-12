@@ -75,7 +75,7 @@ export class RowMapper {
       tableId: row.tableId,
       fieldValues: row.fieldValues.map(fv => ({
         fieldSlug: fv.fieldSlug,
-        value: this.domainToDTO(fv.value, fv.fieldType),
+        value: RowMapper.domainToDTO(fv.value, fv.fieldType),
         fieldType: fv.fieldType as TypedFieldValueDTO['fieldType']
       }))
     };
@@ -97,11 +97,16 @@ export class RowMapper {
                value instanceof Date ? value.toISOString() : 
                new Date(value).toISOString();
       case 'file':
-        return Array.isArray(value) ? value.map(this.fileToDTO) : [];
+        return Array.isArray(value) ? value.map(RowMapper.fileToDTO) : [];
       case 'document':
-        return Array.isArray(value) ? value.map(this.documentToDTO) : [];
+        // CRITICAL FIX: Handle case where document field is a string "[object Object]"
+        if (typeof value === 'string' && value === '[object Object]') {
+          console.warn('Document field contains "[object Object]" string - data serialization issue detected');
+          return [];
+        }
+        return Array.isArray(value) ? value.map(RowMapper.documentToDTO) : [];
       case 'relation':
-        return Array.isArray(value) ? value.map(this.relationToDTO) : [];
+        return Array.isArray(value) ? value.map(RowMapper.relationToDTO) : [];
       default:
         console.warn(`Unknown field type: ${fieldType}, returning value as-is`);
         return value;
@@ -121,7 +126,7 @@ export class RowMapper {
 
   private static documentToDTO(doc: any): DocumentFieldValueDTO {
     return {
-      ...this.fileToDTO(doc),
+      ...RowMapper.fileToDTO(doc),
       documentMetadata: doc.documentMetadata ? {
         title: doc.documentMetadata.title,
         version: doc.documentMetadata.version,
@@ -144,7 +149,7 @@ export class RowMapper {
   static fieldValueToDTO(fieldValue: FieldValue): TypedFieldValueDTO {
     return {
       fieldSlug: fieldValue.fieldSlug,
-      value: this.domainToDTO(fieldValue.value, fieldValue.fieldType),
+      value: RowMapper.domainToDTO(fieldValue.value, fieldValue.fieldType),
       fieldType: fieldValue.fieldType as TypedFieldValueDTO['fieldType']
     };
   }
