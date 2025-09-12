@@ -19,14 +19,14 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Trash2 } from "lucide-react"
 import { EditableCell } from "./EditableCell"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
-import type { RowDTO } from "@/app/mappers/row-mapper"
+import type { RowDTO, FieldValueDTO } from "@/app/mappers/row-mapper"
 
 interface DynamicDataTableProps {
   fields: FieldDTO[];
   rows: RowDTO[];
   organizationId: number;
   tableId: number;
-  onUpdateRow: (rowId: string, fieldId: number, value: any) => void;
+  onUpdateRow: (rowId: string, fieldId: number, value: FieldValueDTO) => void;
   onAddRow: () => void;
   onDeleteRow: (rowId: string) => void;
 }

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { FileMetadata } from "@/types/db"
-import type { FieldValueDTO, DocumentArrayFieldValueDTO } from "@/app/mappers/row-mapper"
+import type { FieldValueDTO, DocumentArrayFieldValueDTO, FileFieldValueDTO, FileArrayFieldValueDTO } from "@/app/mappers/row-mapper"
 import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field"
 import { uploadFileAction } from "@/app/actions/files"
 import { PlusCircle, ExternalLink } from "lucide-react"
@@ -20,11 +20,11 @@ import { DOCUMENT_TYPES } from "@/ddd/domain/tables/value-objects/file-viewer-ty
 
 interface EditableCellProps {
   field: FieldDTO;
-  value: any; // Keep flexible for now - DTOs provide type safety at the data layer
+  value: FieldValueDTO;
   organizationId: number;
   tableId: number;
-  onSave?: (value: any) => void;
-  onCancel?: (value: any) => void;
+  onSave?: (value: FieldValueDTO) => void;
+  onCancel?: (value: FieldValueDTO) => void;
 }
 
 export function EditableCell({ field, value, organizationId, tableId, onSave, onCancel }: EditableCellProps) {
@@ -125,9 +125,18 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         throw new Error(result.error || 'Upload failed')
       }
 
-      const newFile = result.data as FileMetadata
-      const updatedFiles = Array.isArray(value) ? [...value, newFile] : [newFile]
-      onSave(updatedFiles)
+      const fileMetadata = result.data as FileMetadata
+      // Convert FileMetadata to FileFieldValueDTO format
+      const newFile: FileFieldValueDTO = {
+        id: fileMetadata.id,
+        name: fileMetadata.name,
+        size: fileMetadata.size,
+        mimeType: fileMetadata.mimeType || 'application/octet-stream', // Provide default if missing
+        s3Key: fileMetadata.s3Key,
+        uploadedAt: fileMetadata.uploadedAt
+      }
+      const updatedFiles = Array.isArray(value) ? [...(value as FileArrayFieldValueDTO), newFile] : [newFile]
+      onSave(updatedFiles as FieldValueDTO)
     } catch (err) {
       console.error(err)
       // TODO: Show error to user
@@ -146,13 +155,17 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         return <Checkbox checked={Boolean(value)} disabled />
       case "date":
         try {
+          // Type narrowing: ensure value is string for date parsing
+          if (typeof value !== 'string') {
+            return <span className="text-muted-foreground italic text-xs">Invalid date</span>
+          }
           const date = new Date(value)
           return format(date, "MMM d, yyyy")
         } catch {
           return <span className="text-muted-foreground italic text-xs">Invalid date</span>
         }
       case "number":
-        return typeof value === "number" ? value.toLocaleString() : value
+        return typeof value === "number" ? value.toLocaleString() : String(value)
       case "text":
         const textValue = String(value);
         // Handle text that looks like URLs or emails
@@ -182,92 +195,59 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         }
         return <span>{textValue}</span>
       case "relation":
-        // Handle relation data
-        if (typeof value === 'object' && value !== null) {
-          if (Array.isArray(value)) {
-            return (
-              <div className="flex flex-wrap gap-1">
-                {value.slice(0, 3).map((item: any, idx: number) => (
-                  <Badge key={idx} variant="secondary" className="text-xs">
-                    {item.title || item.name || item.id || "Related"}
-                  </Badge>
-                ))}
-                {value.length > 3 && (
-                  <Badge variant="outline" className="text-xs">
-                    +{value.length - 3} more
-                  </Badge>
-                )}
-              </div>
-            )
-          } else {
-            return (
-              <Badge variant="secondary" className="text-xs">
-                {value.title || value.name || value.id || "Related"}
-              </Badge>
-            )
-          }
+        // Handle relation data with proper type narrowing
+        if (Array.isArray(value)) {
+          return (
+            <div className="flex flex-wrap gap-1">
+              {value.slice(0, 3).map((item: any, idx: number) => (
+                <Badge key={idx} variant="secondary" className="text-xs">
+                  {item.value || item.title || item.name || item.id || "Related"}
+                </Badge>
+              ))}
+              {value.length > 3 && (
+                <Badge variant="outline" className="text-xs">
+                  +{value.length - 3} more
+                </Badge>
+              )}
+            </div>
+          )
         }
         return <span className="text-muted-foreground italic text-xs">No relation</span>
       case "file":
-        // Handle file data
-        if (typeof value === 'object' && value !== null) {
-          if (Array.isArray(value)) {
-            return (
-              <div className="flex flex-wrap gap-1">
-                {value.slice(0, 2).map((file: any, idx: number) => (
-                  <div 
-                    key={idx} 
-                    className="relative"
-                    onMouseEnter={() => setHoveredFileIndex(idx)}
-                    onMouseLeave={() => setHoveredFileIndex(null)}
-                  >
-                    <Badge variant="outline" className="text-xs">
-                      {file.name || file.filename || "File"}
-                    </Badge>
-                    {hoveredFileIndex === idx && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleFileOpen(file)}
-                        className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-white shadow-sm border-gray-200 hover:bg-gray-50 z-10"
-                        title="Open file"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                {value.length > 2 && (
+        // File fields are always arrays in DTO
+        if (Array.isArray(value)) {
+          return (
+            <div className="flex flex-wrap gap-1">
+              {value.slice(0, 2).map((file: any, idx: number) => (
+                <div 
+                  key={idx} 
+                  className="relative"
+                  onMouseEnter={() => setHoveredFileIndex(idx)}
+                  onMouseLeave={() => setHoveredFileIndex(null)}
+                >
                   <Badge variant="outline" className="text-xs">
-                    +{value.length - 2} more
+                    {file.name || file.filename || "File"}
                   </Badge>
-                )}
-              </div>
-            )
-          } else {
-            return (
-              <div 
-                className="relative inline-block"
-                onMouseEnter={() => setHoveredFileIndex(0)}
-                onMouseLeave={() => setHoveredFileIndex(null)}
-              >
+                  {hoveredFileIndex === idx && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleFileOpen(file)}
+                      className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-white shadow-sm border-gray-200 hover:bg-gray-50 z-10"
+                      title="Open file"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+              {value.length > 2 && (
                 <Badge variant="outline" className="text-xs">
-                  {value.name || value.filename || "File"}
+                  +{value.length - 2} more
                 </Badge>
-                {hoveredFileIndex === 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleFileOpen(value)}
-                    className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-white shadow-sm border-gray-200 hover:bg-gray-50 z-10"
-                    title="Open file"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                  </Button>
-                )}
-              </div>
-            )
-          }
+              )}
+            </div>
+          )
         }
         return <span className="text-muted-foreground italic text-xs">No files</span>
       case "document":
@@ -322,7 +302,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         <div className="p-1">
           <Input
             type="date"
-            value={editValue || ""}
+            value={typeof editValue === 'string' ? editValue : ""}
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={handleSave}
             onKeyDown={handleKeyDown}
@@ -337,7 +317,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         <div className="p-1">
           <Input
             type="number"
-            value={editValue || ""}
+            value={typeof editValue === 'number' ? editValue.toString() : ""}
             onChange={(e) => setEditValue(e.target.value ? Number(e.target.value) : "")}
             onBlur={handleSave}
             onKeyDown={handleKeyDown}
@@ -353,7 +333,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         <div className="p-1">
           <Input
             type="text"
-            value={typeof editValue === 'object' ? JSON.stringify(editValue) : editValue || ""}
+            value={typeof editValue === 'object' && editValue !== null ? JSON.stringify(editValue) : String(editValue || "")}
             onChange={(e) => {
               try {
                 const parsed = JSON.parse(e.target.value)
@@ -421,7 +401,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         <div className="p-1">
           <Input
             type="text"
-            value={editValue || ""}
+            value={typeof editValue === 'string' ? editValue : String(editValue || "")}
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={handleSave}
             onKeyDown={handleKeyDown}

@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Edit3, Eye, FileText, Plus, Upload, Loader, ExternalLink } from 'lucide-react';
+import { Edit3, Eye, FileText, Plus, Upload, Loader, ExternalLink, PlusCircle } from 'lucide-react';
 import { useLayout } from '@/components/layout/LayoutProvider';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { DocumentFieldValueDTO, DocumentArrayFieldValueDTO } from '@/app/mappers/row-mapper';
@@ -110,132 +111,63 @@ export function DocumentFieldCell({
     }
   };
 
-  // No documents - show add button
-  if (documents.length === 0) {
-    return (
-      <div className="document-field-cell-empty">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" disabled={isCreating}>
-              {isCreating ? (
-                <>
-                  <Loader className="w-4 h-4 mr-1 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4 mr-1" />
-                  Add Document
-                </>
-              )}
-            </Button>
-          </DropdownMenuTrigger>
-          {!isCreating && (
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => setShowCreateDialog(true)}>
-                <Edit3 className="w-4 h-4 mr-2" />
-                Add Document
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => document.getElementById(`file-upload-${field.id}`)?.click()}>
-                <Upload className="w-4 h-4 mr-2" />
-                Upload File
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          )}
-        </DropdownMenu>
-        
-        <input
-          id={`file-upload-${field.id}`}
-          type="file"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handleFileUpload(file);
-          }}
-        />
-        
-        <DocumentCreationDialog
-          isOpen={showCreateDialog}
-          onClose={() => setShowCreateDialog(false)}
-          field={field}
-          organizationId={organizationId}
-          tableId={tableId}
-          onDocumentCreated={handleDocumentCreated}
-        />
-      </div>
-    );
-  }
-
-  // Has documents - show document list similar to file list
+  // Always use the same layout whether documents exist or not (matches file field pattern)
   return (
-    <div className="document-field-cell">
-      <div className="flex flex-wrap gap-1">
-        {documents.slice(0, 2).map((doc, idx) => {
-          // Document fields are always TipTap documents - no need for complex detection
-          const displayName = doc.documentMetadata?.title || doc.name;
-          
-          return (
-            <div 
-              key={doc.id || idx}
-              className="relative"
-              onMouseEnter={() => setHoveredDocumentIndex(idx)}
-              onMouseLeave={() => setHoveredDocumentIndex(null)}
-              onDoubleClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleQuickOpen(doc);
-              }}
-            >
-              <div className="flex items-center gap-1 p-1 border rounded text-xs bg-blue-50 border-blue-200">
-                {/* Document fields are always TipTap - always show edit icon */}
-                <Edit3 className="w-3 h-3 text-blue-600 flex-shrink-0" />
-                <span className="truncate max-w-[120px]">
-                  {displayName}
-                </span>
-              </div>
-              
-              {hoveredDocumentIndex === idx && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleQuickOpen(doc)}
-                  className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-white shadow-sm border-gray-200 hover:bg-gray-50 z-10"
-                  title="Open for editing"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                </Button>
-              )}
-            </div>
-          );
-        })}
+    <div className="flex flex-wrap gap-1">
+      {documents.slice(0, 2).map((doc, idx) => {
+        const displayName = doc.documentMetadata?.title || doc.name;
         
-        {documents.length > 2 && (
-          <div className="text-xs text-gray-500 p-1">
-            +{documents.length - 2} more
+        return (
+          <div 
+            key={doc.id || idx}
+            className="relative"
+            onMouseEnter={() => setHoveredDocumentIndex(idx)}
+            onMouseLeave={() => setHoveredDocumentIndex(null)}
+          >
+            <Badge variant="outline" className="text-xs">
+              {displayName}
+            </Badge>
+            {hoveredDocumentIndex === idx && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleQuickOpen(doc)}
+                className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-white shadow-sm border-gray-200 hover:bg-gray-50 z-10"
+                title="Open document"
+              >
+                <ExternalLink className="w-3 h-3" />
+              </Button>
+            )}
           </div>
+        );
+      })}
+      
+      {documents.length > 2 && (
+        <Badge variant="outline" className="text-xs">
+          +{documents.length - 2} more
+        </Badge>
+      )}
+      
+      {/* Add button - uses PlusCircle to match file field exactly */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-6 w-6" disabled={isCreating}>
+            <PlusCircle className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        {!isCreating && (
+          <DropdownMenuContent>
+            <DropdownMenuItem onClick={() => setShowCreateDialog(true)}>
+              <Edit3 className="w-4 h-4 mr-2" />
+              Add Document
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => document.getElementById(`file-upload-${field.id}`)?.click()}>
+              <Upload className="w-4 h-4 mr-2" />
+              Upload File
+            </DropdownMenuItem>
+          </DropdownMenuContent>
         )}
-        
-        {/* Add button */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" disabled={isCreating} className="h-6 px-2">
-              <Plus className="w-3 h-3" />
-            </Button>
-          </DropdownMenuTrigger>
-          {!isCreating && (
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => setShowCreateDialog(true)}>
-                <Edit3 className="w-4 h-4 mr-2" />
-                Add Document
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => document.getElementById(`file-upload-${field.id}`)?.click()}>
-                <Upload className="w-4 h-4 mr-2" />
-                Upload File
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          )}
-        </DropdownMenu>
-      </div>
+      </DropdownMenu>
       
       <input
         id={`file-upload-${field.id}`}
@@ -245,6 +177,15 @@ export function DocumentFieldCell({
           const file = e.target.files?.[0];
           if (file) handleFileUpload(file);
         }}
+      />
+      
+      <DocumentCreationDialog
+        isOpen={showCreateDialog}
+        onClose={() => setShowCreateDialog(false)}
+        field={field}
+        organizationId={organizationId}
+        tableId={tableId}
+        onDocumentCreated={handleDocumentCreated}
       />
     </div>
   );

@@ -63,7 +63,7 @@ export class DrizzleRBACRepository implements IRBACRepository {
     console.log("🛡️ DrizzleRBACRepository.requirePermission() - Starting check");
     
     // DEBUG: Show user's current roles and permissions
-    await this.debugUserPermissions(userId, organizationId);
+    // await this.debugUserPermissions(userId, organizationId);
     
     const hasAccess = await this.hasPermission(userId, permission, organizationId);
     
