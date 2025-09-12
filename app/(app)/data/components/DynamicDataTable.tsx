@@ -66,7 +66,7 @@ export function DynamicDataTable({ fields, rows, organizationId, tableId, onUpda
       size: 40,
     }),
     ...sortedFields.map((field) =>
-      columnHelper.accessor((row) => row.fieldValues.find(fv => fv.fieldSlug === field.name)?.value, {
+      columnHelper.accessor((row) => row.fieldValues.find(fv => fv.fieldSlug === field.name)?.value as unknown, {
         id: field.id.toString(),
         header: () => (
           <div className="flex items-center gap-1.5">

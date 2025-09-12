@@ -6,18 +6,17 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Edit3, Eye, FileText, Plus, Upload, Loader, ExternalLink } from 'lucide-react';
 import { useLayout } from '@/components/layout/LayoutProvider';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
-import type { DocumentFieldValue, DocumentArrayFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
-import { normalizeDocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
+import type { DocumentFieldValueDTO, DocumentArrayFieldValueDTO } from '@/app/mappers/row-mapper';
 import { DocumentField } from '@/ddd/domain/tables/entities/document-field-entity';
 import { OrganizationId, TableId, FieldId, UserId } from '@/ddd/domain/shared/value-objects';
 import { DocumentCreationDialog } from './DocumentCreationDialog';
 
 interface DocumentFieldCellProps {
   field: FieldDTO;
-  value: DocumentArrayFieldValue | null | undefined;
+  value: DocumentArrayFieldValueDTO | null | undefined;
   organizationId: number;
   tableId: number;
-  onSave: (value: DocumentArrayFieldValue) => void;
+  onSave: (value: DocumentArrayFieldValueDTO) => void;
 }
 
 export function DocumentFieldCell({ 
@@ -32,10 +31,10 @@ export function DocumentFieldCell({
   const [hoveredDocumentIndex, setHoveredDocumentIndex] = useState<number | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
-  // Handle document array (using domain function for type safety)
-  const documents = normalizeDocumentFieldValue(value);
+  // Handle document array - now properly typed!
+  const documents = value || [];
 
-  const openDocumentInCanvas = (documentValue: DocumentFieldValue, mode: 'view' | 'edit' = 'view') => {
+  const openDocumentInCanvas = (documentValue: DocumentFieldValueDTO, mode: 'view' | 'edit' = 'view') => {
     const documentField = DocumentField.fromFieldValue(
       documentValue,
       OrganizationId.fromNumber(organizationId),
@@ -53,7 +52,7 @@ export function DocumentFieldCell({
     setCanvasState('expanded');
   };
 
-  const handleQuickOpen = (documentValue: DocumentFieldValue) => {
+  const handleQuickOpen = (documentValue: DocumentFieldValueDTO) => {
     const documentField = DocumentField.fromFieldValue(
       documentValue,
       OrganizationId.fromNumber(organizationId),
@@ -66,7 +65,7 @@ export function DocumentFieldCell({
     openDocumentInCanvas(documentValue, mode);
   };
 
-  const handleDocumentCreated = (document: DocumentFieldValue, shouldOpen: boolean) => {
+  const handleDocumentCreated = (document: DocumentFieldValueDTO, shouldOpen: boolean) => {
     // Add the new document to the array
     const newDocuments = [...documents, document];
     onSave(newDocuments);
@@ -95,7 +94,7 @@ export function DocumentFieldCell({
         const result = await response.json();
         
         // Convert file to document field value
-        const documentFieldValue: DocumentFieldValue = {
+        const documentFieldValue: DocumentFieldValueDTO = {
           ...result.data,
           documentMetadata: {
             title: result.data.name,
