@@ -26,8 +26,11 @@ interface CanvasRendererProps {
 export function CanvasRenderer({ children, fallbackContent }: CanvasRendererProps) {
   const { canvasState, canvasType, documentContext, fileViewerContext } = useLayout()
 
+  console.log('CanvasRenderer - canvasState:', canvasState, 'canvasType:', canvasType)
+
   // When canvas is collapsed, render the fallback content (usually page content)
   if (canvasState !== 'expanded') {
+    console.log('Canvas collapsed, showing fallback content')
     return (
       <div className="h-full w-full">
         {fallbackContent || children}
