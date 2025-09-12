@@ -203,15 +203,15 @@ export class S3FileStorageRepository implements IFileStorageRepository {
     const parts: string[] = [];
     
     if (request.organizationId) {
-      parts.push(`org-${request.organizationId}`);
+      parts.push(`org_${request.organizationId}`);
     }
     
     if (request.tableId) {
-      parts.push(`table-${request.tableId}`);
+      parts.push(`table_${request.tableId}`);
     }
     
     if (request.fieldId) {
-      parts.push(`field-${request.fieldId}`);
+      parts.push(`field_${request.fieldId}`);
     }
     
     // Add year/month for partitioning

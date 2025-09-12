@@ -116,6 +116,10 @@ export interface TaskEvent {
   tools: string[];
   servers: string[];
   userId: string;
+  // Optional properties for database event triggers
+  tableId?: string;
+  operation?: string;
+  data?: any;
 }
 
 /**

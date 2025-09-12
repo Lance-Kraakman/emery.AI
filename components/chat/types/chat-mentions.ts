@@ -14,7 +14,7 @@ import type { TeamDTO } from '@/app/mappers/team-mapper'
 import type { DatabaseWithTables } from '@/stores/app-state.store'
 
 // Main category types for + button menu
-export type MentionCategory = 'tools' | 'agents' | 'teams' | 'settings' | 'data'
+export type MentionCategory = 'tools' | 'agents' | 'teams' | 'settings' | 'data' | 'documents'
 
 // Menu level tracking
 export type MenuLevel = 'main' | 'submenu'
@@ -73,6 +73,18 @@ export interface SettingsMentionItem extends MentionItem {
   route?: string // Navigation route if applicable
 }
 
+// Document mention item
+export interface DocumentMentionItem extends MentionItem {
+  category: 'documents'
+  documentType: 'tiptap' | 'file'
+  tableId?: number
+  fieldId?: number
+  documentId?: string
+  fileUrl?: string
+  mimeType?: string
+  parentTable?: string // Table name for context
+}
+
 // Union type for all mention items
 export type AnyMentionItem = 
   | ToolMentionItem 
@@ -80,6 +92,7 @@ export type AnyMentionItem =
   | TeamMentionItem 
   | DataMentionItem 
   | SettingsMentionItem
+  | DocumentMentionItem
 
 // Main category configuration
 export interface CategoryConfig {
@@ -165,7 +178,8 @@ export const MENTION_TEMPLATES = {
   agents: (name: string) => `@agent:${name}`,
   teams: (name: string) => `@team:${name}`,
   data: (type: 'database' | 'table', name: string) => `@${type}:${name}`,
-  settings: (type: string) => `@setting:${type}`
+  settings: (type: string) => `@setting:${type}`,
+  documents: (name: string) => `@doc:${name}`
 } as const
 
 // Icons for categories (to be imported from lucide-react)
@@ -174,7 +188,8 @@ export const CATEGORY_ICONS = {
   agents: 'Bot', 
   teams: 'Users',
   settings: 'Settings',
-  data: 'Database'
+  data: 'Database',
+  documents: 'FileText'
 } as const
 
 // AIDEV-NOTE: These types provide a comprehensive foundation for the mention system

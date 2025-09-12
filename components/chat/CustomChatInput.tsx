@@ -71,7 +71,7 @@ export function CustomChatInput({
     setInputValue(newValue)
     setCursorPosition(newCursorPos)
     
-    // Check for @ character
+    // Check for @ character (supports @doc, @agent, @tool, etc.)
     if (newCursorPos > 0 && newValue[newCursorPos - 1] === '@') {
       // Show @ mention dropdown
       setShowAtMentionDropdown(true)

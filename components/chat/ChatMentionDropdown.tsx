@@ -7,6 +7,7 @@ import {
   Users, 
   Settings, 
   Database,
+  FileText,
   ChevronLeft,
   Search,
   Check,
@@ -57,7 +58,8 @@ const CATEGORY_ICON_MAP = {
   agents: Bot,
   teams: Users,
   settings: Settings,
-  data: Database
+  data: Database,
+  documents: FileText
 } as const
 
 export function ChatMentionDropdown({

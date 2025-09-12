@@ -14,19 +14,22 @@ import { persistence } from './utils'
 export type PanelState = 'expanded' | 'collapsed' | 'hidden'
 export type LayoutBreakpoint = 'mobile' | 'tablet' | 'desktop'
 
-// Import ChatContextConfig from layout types to avoid duplication
-import type { ChatContextConfig } from '@/components/layout/types'
+// Import ChatContextConfig and canvas types from layout types to avoid duplication
+import type { ChatContextConfig, CanvasType, DocumentContextConfig, FileViewerContextConfig } from '@/components/layout/types'
 
 export interface UIState {
   // Layout state (from LayoutProvider)
   sidebarState: PanelState
   chatState: PanelState
   canvasState: PanelState
+  canvasType: CanvasType
   breakpoint: LayoutBreakpoint
   isMobile: boolean
   
-  // Chat context
+  // Context states
   chatContext: ChatContextConfig | undefined
+  documentContext: DocumentContextConfig | undefined
+  fileViewerContext: FileViewerContextConfig | undefined
   
   // Dialog states (from DataDialogsContext)
   isCreateDatabaseOpen: boolean
@@ -95,11 +98,14 @@ const initialState: UIState = {
   sidebarState: 'expanded',
   chatState: 'collapsed',
   canvasState: 'collapsed',
+  canvasType: 'chat',
   breakpoint: 'desktop',
   isMobile: false,
   
-  // Chat context
+  // Context states
   chatContext: undefined,
+  documentContext: undefined,
+  fileViewerContext: undefined,
   
   // Dialog states
   isCreateDatabaseOpen: false,
@@ -179,7 +185,7 @@ if (typeof window !== 'undefined') {
     {
       key: 'emery-ui-state',
       enabled: true,
-      whitelist: ['sidebarState', 'chatState', 'canvasState', 'openCollapsibles', 'isPanelCollapsed']
+      whitelist: ['sidebarState', 'chatState', 'canvasState', 'canvasType', 'openCollapsibles', 'isPanelCollapsed']
     }
   )
 }
@@ -228,9 +234,22 @@ export const uiStateActions = {
     }))
   },
 
-  // Chat context actions
+  // Canvas type actions
+  setCanvasType: (canvasType: CanvasType) => {
+    uiStateStore.setState((state) => ({ ...state, canvasType }))
+  },
+
+  // Context actions
   setChatContext: (context: ChatContextConfig | undefined) => {
     uiStateStore.setState((state) => ({ ...state, chatContext: context }))
+  },
+
+  setDocumentContext: (context: DocumentContextConfig | undefined) => {
+    uiStateStore.setState((state) => ({ ...state, documentContext: context }))
+  },
+
+  setFileViewerContext: (context: FileViewerContextConfig | undefined) => {
+    uiStateStore.setState((state) => ({ ...state, fileViewerContext: context }))
   },
 
   // Dialog actions
@@ -414,11 +433,14 @@ export const uiStateSelectors = {
   sidebarState: (state: UIState) => state.sidebarState,
   chatState: (state: UIState) => state.chatState,
   canvasState: (state: UIState) => state.canvasState,
+  canvasType: (state: UIState) => state.canvasType,
   breakpoint: (state: UIState) => state.breakpoint,
   isMobile: (state: UIState) => state.isMobile,
   
-  // Chat context selectors
+  // Context selectors
   chatContext: (state: UIState) => state.chatContext,
+  documentContext: (state: UIState) => state.documentContext,
+  fileViewerContext: (state: UIState) => state.fileViewerContext,
   
   // Dialog selectors
   isCreateDatabaseOpen: (state: UIState) => state.isCreateDatabaseOpen,
