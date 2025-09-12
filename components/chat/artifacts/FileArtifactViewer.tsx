@@ -21,11 +21,9 @@ import {
   Image as ImageIcon,
   Calendar,
   HardDrive,
-  Eye,
   ZoomIn,
   ZoomOut,
   RotateCw,
-  Maximize2
 } from 'lucide-react'
 import type { FileArtifact } from '../types/chat-artifacts'
 import { getFileDisplayInfo } from '../types/chat-artifacts'

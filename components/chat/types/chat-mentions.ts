@@ -83,6 +83,14 @@ export interface DocumentMentionItem extends MentionItem {
   fileUrl?: string
   mimeType?: string
   parentTable?: string // Table name for context
+  documentField?: any // AIDEV-TODO: Import DocumentFieldValue type when available
+  metadata?: {
+    databaseName?: string
+    tableName?: string
+    canContainDocuments?: boolean
+    wordCount?: number
+    readTime?: number
+  }
 }
 
 // Union type for all mention items
