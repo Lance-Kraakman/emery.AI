@@ -146,9 +146,9 @@ interface RepositoryRegistry {
   RagSearchApplicationService: RagSearchApplicationService;
   IndexingQueueService: IndexingQueueService;
   
-  // Connection domain services
-  IConnectionRepository: IConnectionRepository;
-  ConnectionApplicationService: ConnectionApplicationService;
+  // Connection domain services (nullable during build when Pipedream not configured)
+  IConnectionRepository: IConnectionRepository | null;
+  ConnectionApplicationService: ConnectionApplicationService | null;
 }
 
 export class DIContainer {
@@ -371,18 +371,22 @@ export class DIContainer {
     
     this.repositories.set('RagSearchApplicationService', ragSearchApplicationService);
 
-    // Register connection services - fail fast if Pipedream client not available
+    // Register connection services - skip if Pipedream client not available during build
     if (!pipedreamClient) {
-      throw new Error('Pipedream client not configured. Please set PIPEDREAM_PROJECT_ID, PIPEDREAM_CLIENT_ID, and PIPEDREAM_CLIENT_SECRET environment variables.');
+      console.warn('⚠️ Pipedream client not configured, skipping connection services registration. Set PIPEDREAM_PROJECT_ID, PIPEDREAM_CLIENT_ID, and PIPEDREAM_CLIENT_SECRET for full functionality.');
+      
+      // Register null services for graceful degradation
+      this.repositories.set('IConnectionRepository', null);
+      this.repositories.set('ConnectionApplicationService', null);
+    } else {
+      const connectionRepository = new PipedreamConnectionRepository();
+      const connectionApplicationService = new ConnectionApplicationService(connectionRepository);
+      
+      this.repositories.set('IConnectionRepository', connectionRepository);
+      this.repositories.set('ConnectionApplicationService', connectionApplicationService);
+      
+      console.log('✅ Connection services registered with Pipedream client');
     }
-    
-    const connectionRepository = new PipedreamConnectionRepository();
-    const connectionApplicationService = new ConnectionApplicationService(connectionRepository);
-    
-    this.repositories.set('IConnectionRepository', connectionRepository);
-    this.repositories.set('ConnectionApplicationService', connectionApplicationService);
-    
-    console.log('✅ Connection services registered with Pipedream client');
 
     
     this.isInitialized = true;
@@ -544,9 +548,22 @@ export const getSearchDomainService = createGetter('SearchDomainService');
 export const getRagSearchApplicationService = createGetter('RagSearchApplicationService');
 export const getIndexingQueueService = createGetter('IndexingQueueService');
 
-// Connection service getters
-export const getConnectionRepository = createGetter('ConnectionRepository');
-export const getConnectionApplicationService = createGetter('ConnectionApplicationService');
+// Connection service getters - handle null gracefully when Pipedream not configured
+export const getConnectionRepository = (): IConnectionRepository => {
+  const service = diContainer.get('IConnectionRepository');
+  if (!service) {
+    throw new Error('Connection services not available. Pipedream client not configured. This is expected during build time.');
+  }
+  return service;
+};
+
+export const getConnectionApplicationService = (): ConnectionApplicationService => {
+  const service = diContainer.get('ConnectionApplicationService');
+  if (!service) {
+    throw new Error('Connection services not available. Pipedream client not configured. This is expected during build time.');
+  }
+  return service;
+};
 
 // RLS context management removed - RLS policies work automatically
 

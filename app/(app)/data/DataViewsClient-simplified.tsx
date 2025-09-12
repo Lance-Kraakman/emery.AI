@@ -25,7 +25,7 @@ export function DataViewsClientSimplified() {
   const queryClient = useQueryClient()
   const { data, isLoading: dataLoading, error: dataError } = useEmery()
   
-  const tableIdParam = searchParams.get("tableId")
+  const tableIdParam = searchParams?.get("tableId")
   const initialTableId = tableIdParam ? parseInt(tableIdParam) : undefined
 
   // Find the initial table across all databases

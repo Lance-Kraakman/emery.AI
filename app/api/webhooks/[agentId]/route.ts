@@ -19,14 +19,15 @@ const webhookPayloadSchema = z.object({
 type WebhookPayload = z.infer<typeof webhookPayloadSchema>;
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     agentId: string;
-  };
+  }>;
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const agentId = AgentId.fromNumber(parseInt(params.agentId));
+    const { agentId: agentIdParam } = await params;
+    const agentId = AgentId.fromNumber(parseInt(agentIdParam));
     const requestHeaders = await headers();
     
     // Extract authorization header
@@ -164,19 +165,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     
     await withSystemContext(agent.organizationId, async () => {
       try {
-        const taskResult = await agentTaskService.createTask({
-          agentId: agent.id.value,
+        const task = await agentTaskService.createTask({
+          agentId: agent.id,
+          organizationId: agent.organizationId,
           name: 'Webhook Trigger',
-          capabilityName: null,
-          instructions: payload.message || 'Webhook triggered task'
+          capabilityName: undefined,
+          instructions: {
+            instructions: payload.message || 'Webhook triggered task',
+            metadata: payload.data
+          }
         });
         
-        if (!taskResult.success) {
-          throw new Error(taskResult.error || 'Failed to create task');
-        }
-        
         // Execute the task immediately
-        await agentTaskService.executeTask({ taskId: taskResult.data!.id });
+        await agentTaskService.executeTask({ taskId: task.id.value });
         
         console.log(`✅ Webhook triggered task for agent ${agent.name} (${agent.id.value})`);
       } catch (error) {
@@ -213,7 +214,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 // GET endpoint to provide webhook information
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const agentId = AgentId.fromNumber(parseInt(params.agentId));
+    const { agentId: agentIdParam } = await params;
+    const agentId = AgentId.fromNumber(parseInt(agentIdParam));
     const agentRepository = getAgentRepository();
     const agent = await agentRepository.findById(agentId);
     

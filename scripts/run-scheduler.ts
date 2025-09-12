@@ -103,20 +103,13 @@ class EventDrivenScheduler {
         console.warn('⚠️ task_event missing taskId');
         return;
       }
-
-      // Check if this is a manual task execution or database event
-      if (event.tableId && event.operation) {
-        // This is a database event - find agents with matching DATABASE_EVENT triggers
-        await this.handleDatabaseEvent(event);
+      // This is a manual task execution
+      const task = await this.taskRepository.findById(TaskId.fromString(event.taskId));
+      if (task && task.isPending) {
+        await this.agentTaskService.executeTask({ taskId: event.taskId });
+        console.log(`✅ Processed task ${event.taskId}`);
       } else {
-        // This is a manual task execution
-        const task = await this.taskRepository.findById(TaskId.fromString(event.taskId));
-        if (task && task.isPending) {
-          await this.agentTaskService.executeTask({ taskId: event.taskId });
-          console.log(`✅ Processed task ${event.taskId}`);
-        } else {
-          console.log(`⏭️ Skipping task ${event.taskId} (not found or not pending)`);
-        }
+        console.log(`⏭️ Skipping task ${event.taskId} (not found or not pending)`);
       }
     });
   }
@@ -167,7 +160,7 @@ class EventDrivenScheduler {
             capabilityName: null,
             instructions: {
               message: `Database event detected: ${event.operation} operation on table ${event.tableId}`,
-              input: event.data || {}
+              input: event.instructions || {}
             },
             status: 'pending',
             createdBy: null,
@@ -178,7 +171,7 @@ class EventDrivenScheduler {
           console.log(`📝 Created database event task for agent ${agent.name} (${agent.id.value})`);
           
           // Execute the task immediately
-          await this.agentTaskService.executeTask({ taskId: createData.id || event.taskId });
+          await this.agentTaskService.executeTask({ taskId: event.taskId });
           console.log(`✅ Executed database event task for agent ${agent.name}`);
         } catch (error) {
           console.error(`❌ Failed to create/execute database event task for agent ${agent.id.value}:`, error);
