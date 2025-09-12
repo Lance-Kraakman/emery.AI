@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { FileMetadata } from "@/types/db"
-import type { FieldValueDTO, DocumentArrayFieldValueDTO, FileFieldValueDTO, FileArrayFieldValueDTO } from "@/app/mappers/row-mapper"
+import type { FieldValue as DomainFieldValue, DocumentArrayFieldValue, FileFieldValue, FileArrayFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field"
 import { uploadFileAction } from "@/app/actions/files"
 import { PlusCircle, ExternalLink } from "lucide-react"
@@ -20,11 +20,11 @@ import { DOCUMENT_TYPES } from "@/ddd/domain/tables/value-objects/file-viewer-ty
 
 interface EditableCellProps {
   field: FieldDTO;
-  value: FieldValueDTO;
+  value: DomainFieldValue;
   organizationId: number;
   tableId: number;
-  onSave?: (value: FieldValueDTO) => void;
-  onCancel?: (value: FieldValueDTO) => void;
+  onSave?: (value: DomainFieldValue) => void;
+  onCancel?: (value: DomainFieldValue) => void;
 }
 
 export function EditableCell({ field, value, organizationId, tableId, onSave, onCancel }: EditableCellProps) {
@@ -33,7 +33,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
     return (
       <DocumentFieldCell
         field={field}
-        value={value as DocumentArrayFieldValueDTO}
+        value={value as DocumentArrayFieldValue}
         organizationId={organizationId}
         tableId={tableId}
         onSave={onSave || (() => {})}
@@ -126,8 +126,8 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
       }
 
       const fileMetadata = result.data as FileMetadata
-      // Convert FileMetadata to FileFieldValueDTO format
-      const newFile: FileFieldValueDTO = {
+      // Convert FileMetadata to FileFieldValue format
+      const newFile: FileFieldValue = {
         id: fileMetadata.id,
         name: fileMetadata.name,
         size: fileMetadata.size,
@@ -135,8 +135,8 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         s3Key: fileMetadata.s3Key,
         uploadedAt: fileMetadata.uploadedAt
       }
-      const updatedFiles = Array.isArray(value) ? [...(value as FileArrayFieldValueDTO), newFile] : [newFile]
-      onSave(updatedFiles as FieldValueDTO)
+      const updatedFiles = Array.isArray(value) ? [...(value as FileArrayFieldValue), newFile] : [newFile]
+      onSave(updatedFiles as DomainFieldValue)
     } catch (err) {
       console.error(err)
       // TODO: Show error to user
@@ -255,7 +255,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         return (
           <DocumentFieldCell
             field={field}
-            value={value as DocumentArrayFieldValueDTO}
+            value={value as DocumentArrayFieldValue}
             organizationId={organizationId}
             tableId={tableId}
             onSave={onSave || (() => {})}
@@ -389,7 +389,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
       return (
         <DocumentFieldCell
           field={field}
-          value={value as DocumentArrayFieldValueDTO}
+          value={value as DocumentArrayFieldValue}
           organizationId={organizationId}
           tableId={tableId}
           onSave={onSave || (() => {})}

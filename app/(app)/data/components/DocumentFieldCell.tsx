@@ -7,17 +7,17 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Edit3, Eye, FileText, Plus, Upload, Loader, ExternalLink, PlusCircle } from 'lucide-react';
 import { useLayout } from '@/components/layout/LayoutProvider';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
-import type { DocumentFieldValueDTO, DocumentArrayFieldValueDTO } from '@/app/mappers/row-mapper';
+import type { DocumentFieldValue, DocumentArrayFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import { DocumentField } from '@/ddd/domain/tables/entities/document-field-entity';
 import { OrganizationId, TableId, FieldId } from '@/ddd/domain/shared/value-objects';
 import { DocumentCreationDialog } from './DocumentCreationDialog';
 
 interface DocumentFieldCellProps {
   field: FieldDTO;
-  value: DocumentArrayFieldValueDTO | null | undefined;
+  value: DocumentArrayFieldValue | null | undefined;
   organizationId: number;
   tableId: number;
-  onSave: (value: DocumentArrayFieldValueDTO) => void;
+  onSave: (value: DocumentArrayFieldValue) => void;
 }
 
 export function DocumentFieldCell({ 
@@ -35,7 +35,7 @@ export function DocumentFieldCell({
   // Handle document array - now properly typed!
   const documents = value || [];
 
-  const openDocumentInCanvas = (documentValue: DocumentFieldValueDTO, mode: 'view' | 'edit' = 'view') => {
+  const openDocumentInCanvas = (documentValue: DocumentFieldValue, mode: 'view' | 'edit' = 'view') => {
     // Create domain entity only when needed for canvas context (which still expects it)
     const documentField = DocumentField.fromFieldValue(
       documentValue,
@@ -54,12 +54,12 @@ export function DocumentFieldCell({
     setCanvasState('expanded');
   };
 
-  const handleQuickOpen = (documentValue: DocumentFieldValueDTO) => {
+  const handleQuickOpen = (documentValue: DocumentFieldValue) => {
     // Document fields are always TipTap documents - always open in edit mode
     openDocumentInCanvas(documentValue, 'edit');
   };
 
-  const handleDocumentCreated = (document: DocumentFieldValueDTO, shouldOpen: boolean) => {
+  const handleDocumentCreated = (document: DocumentFieldValue, shouldOpen: boolean) => {
     // Add the new document to the array
     const newDocuments = [...documents, document];
     onSave(newDocuments);
@@ -88,7 +88,7 @@ export function DocumentFieldCell({
         const result = await response.json();
         
         // Convert file to document field value
-        const documentFieldValue: DocumentFieldValueDTO = {
+        const documentFieldValue: DocumentFieldValue = {
           ...result.data,
           documentMetadata: {
             title: result.data.name,

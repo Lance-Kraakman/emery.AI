@@ -81,7 +81,9 @@ export type FieldValue =
   | DateFieldValue
   | FileArrayFieldValue
   | RelationArrayFieldValue
-  | DocumentArrayFieldValue;
+  | DocumentArrayFieldValue
+  | null
+  | undefined;
 
 // ========================================
 // Type Guard Functions
