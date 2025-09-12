@@ -261,26 +261,31 @@ export function useChatMentions(): ChatMentionsHook {
       }
     ]
 
-    // Document items (TipTap documents only - files go to file-viewer)
+    // Document items - Create mentions for tables that may contain document fields
     const documentItems: DocumentMentionItem[] = []
     
     emeryData?.databases?.forEach(database => {
       database.tables?.forEach(table => {
-        // Create document folder references for tables that likely contain documents
-        // TODO: Query actual document field values for individual document mentions
-        // For now, create folder-like references with proper database/table structure
+        // Create table-level document reference for potential document fields
+        // In a full implementation, we would query the actual field definitions
+        // and document field values to create more specific mentions
         documentItems.push({
           id: `docs_${database.id}_${table.id}`,
           name: `${database.name}/${table.name}`.toLowerCase().replace(/\s+/g, '-'),
-          displayName: `Documents in ${database.name}/${table.name}`,
-          description: `Access documents from ${table.name} table in ${database.name} database`,
+          displayName: `Documents in ${table.name}`,
+          description: `Access documents from ${table.name} table in ${database.name}`,
           icon: <FileText className="h-3 w-3" />,
           category: 'documents',
           insertText: `@doc:${database.name}/${table.name}`.toLowerCase().replace(/\s+/g, '-'),
           available: true,
-          documentType: 'tiptap', // TipTap documents in this table
+          documentType: 'tiptap', // Assume TipTap for demo
           tableId: table.id,
-          parentTable: `${database.name}/${table.name}`
+          parentTable: `${database.name}/${table.name}`,
+          metadata: {
+            databaseName: database.name,
+            tableName: table.name,
+            canContainDocuments: true
+          }
         })
       })
     })
