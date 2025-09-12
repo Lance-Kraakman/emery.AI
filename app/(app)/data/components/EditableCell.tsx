@@ -41,7 +41,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
     )
   }
 
-  const { setCanvasType, setCanvasState, setFileViewerContext } = useLayout()
+  const { setCanvasType, setCanvasState, setFileViewerContext, setDocumentContext } = useLayout()
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(value)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -54,38 +54,80 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
 
   // File opening logic using domain service
   const handleFileOpen = (file: any) => {
-    const fileName = file.name || file.filename || 'Unknown File'
-    const fileUrl = file.url || file.downloadUrl
-    const mimeType = file.mimeType || file.contentType
-    
-    // Check if this is a TipTap document (should route to document canvas)
-    if (FileTypeDetector.isTiptapDocument(mimeType)) {
-      // TODO: Route to document canvas once DocumentCanvas is implemented
-      console.log('TipTap document detected - should route to document canvas:', file)
-      // For now, open externally
+    try {
+      const fileName = file.name || file.filename || 'Unknown File'
+      const fileUrl = file.url || file.downloadUrl
+      const mimeType = file.mimeType || file.contentType
+      
+      console.log('Opening file:', { fileName, fileUrl, mimeType, file })
+      
+      // Check if this is a TipTap document (should route to document canvas)
+      if (FileTypeDetector.isTiptapDocument(mimeType)) {
+        console.log('TipTap document detected - routing to document canvas:', file)
+        
+        // For TipTap documents, we should create a document context
+        // This is similar to what DocumentFieldCell does but for file-based TipTap docs
+        const documentContext = {
+          tableId,
+          fieldId: field.id || 0,
+          documentField: {
+            id: file.id,
+            title: fileName.replace('.tiptap.json', ''),
+            version: 1,
+            documentType: 'tiptap',
+            metadata: {
+              title: fileName.replace('.tiptap.json', ''),
+              documentType: 'tiptap',
+              version: 1
+            },
+            isTiptapDocument: () => true,
+            getDisplayName: () => fileName.replace('.tiptap.json', ''),
+            getWordCount: () => 0,
+            getEstimatedReadTime: () => 1,
+            updateContent: () => {},
+            updateTitle: () => {},
+            updateTiptapMetadata: () => {}
+          } as any, // Bypass strict typing for file-based documents
+          mode: 'edit' as const
+        }
+        
+        setDocumentContext(documentContext)
+        setCanvasType('document')
+        setCanvasState('expanded')
+        return
+      }
+      
+      // For all other files, use file viewer canvas
+      const viewerType = FileTypeDetector.detectViewerType(fileName, mimeType)
+      
+      console.log('Setting up file viewer context:', { viewerType, fileName, fileUrl })
+      
+      // Set up file viewer context
+      const fileViewerContext = {
+        tableId,
+        fieldId: field.id || 0,
+        fileField: file,
+        viewerType,
+        fileName,
+        fileUrl
+      }
+      
+      // Switch to file viewer canvas
+      setFileViewerContext(fileViewerContext)
+      setCanvasType('file-viewer')
+      setCanvasState('expanded')
+      
+    } catch (error) {
+      console.error('Error opening file:', error, file)
+      
+      // Fallback: open file externally if we have a URL
+      const fileUrl = file.url || file.downloadUrl
       if (fileUrl) {
         window.open(fileUrl, '_blank')
+      } else {
+        alert('Unable to open file - no URL available')
       }
-      return
     }
-    
-    // For all other files, use file viewer canvas
-    const viewerType = FileTypeDetector.detectViewerType(fileName, mimeType)
-    
-    // Set up file viewer context
-    const fileViewerContext = {
-      tableId,
-      fieldId: field.id || 0,
-      fileField: file,
-      viewerType,
-      fileName,
-      fileUrl
-    }
-    
-    // Switch to file viewer canvas
-    setFileViewerContext(fileViewerContext)
-    setCanvasType('file-viewer')
-    setCanvasState('expanded')
   }
 
 
