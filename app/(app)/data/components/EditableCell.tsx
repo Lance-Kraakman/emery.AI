@@ -12,7 +12,7 @@ import type { FileMetadata } from "@/types/db"
 import { uploadFileAction } from "@/app/actions/files"
 import { PlusCircle, ExternalLink } from "lucide-react"
 import { DocumentFieldCell } from "./DocumentFieldCell"
-import { isDocumentFieldValue, isDocumentArray, isDocumentFieldData, normalizeDocumentFieldValue, DocumentArrayFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
+import type { DocumentArrayFieldValueDTO } from "@/app/mappers/row-mapper"
 import { useLayout } from "@/components/layout/LayoutProvider"
 import { FileTypeDetector } from "@/ddd/domain/tables/services/file-type-detector"
 import { DOCUMENT_TYPES } from "@/ddd/domain/tables/value-objects/file-viewer-types"
@@ -28,11 +28,11 @@ interface EditableCellProps {
 
 export function EditableCell({ field, value, organizationId, tableId, onSave, onCancel }: EditableCellProps) {
   // Handle document fields completely separately - they manage their own state
-  if (field.type === "file" && isDocumentArray(value)) {
+  if (field.type === "document" && Array.isArray(value)) {
     return (
       <DocumentFieldCell
         field={field}
-        value={value}
+        value={value as DocumentArrayFieldValueDTO}
         organizationId={organizationId}
         tableId={tableId}
         onSave={onSave || (() => {})}
@@ -271,13 +271,11 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         return <span className="text-muted-foreground italic text-xs">No files</span>
       case "document":
         // Handle document fields - delegate to DocumentFieldCell
-        if (field && field.name && isDocumentFieldData(value)) {
-          // Normalize to array format for DocumentFieldCell
-          const normalizedValue = isDocumentArray(value) ? value : normalizeDocumentFieldValue(value);
+        if (field && field.name && Array.isArray(value)) {
           return (
             <DocumentFieldCell
               field={field}
-              value={normalizedValue}
+              value={value as DocumentArrayFieldValueDTO}
               organizationId={organizationId}
               tableId={tableId}
               onSave={onSave || (() => {})}
@@ -410,35 +408,17 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
 
     case "document":
       // Document fields use DocumentFieldCell component - no edit mode needed
-      console.log('🔍 Document field validation:', {
-        hasField: !!field,
-        fieldName: field?.name,
-        fieldType: field?.type,
-        value: value,
-        valueType: typeof value,
-        isDocumentFieldData: isDocumentFieldData(value),
-        organizationId,
-        tableId
-      });
-      
-      if (field && field.name && isDocumentFieldData(value)) {
-        // Normalize to array format for DocumentFieldCell
-        const normalizedValue = isDocumentArray(value) ? value : normalizeDocumentFieldValue(value);
-        console.log('✅ Document field validation passed, rendering DocumentFieldCell with:', {
-          normalizedValue,
-          isArray: Array.isArray(normalizedValue)
-        });
+      if (field && field.name && Array.isArray(value)) {
         return (
           <DocumentFieldCell
             field={field}
-            value={normalizedValue}
+            value={value as DocumentArrayFieldValueDTO}
             organizationId={organizationId}
             tableId={tableId}
             onSave={onSave || (() => {})}
           />
         )
       }
-      console.log('❌ Document field validation failed - showing invalid message');
       return <span className="text-muted-foreground italic text-xs">Invalid document field</span>
 
     default:
