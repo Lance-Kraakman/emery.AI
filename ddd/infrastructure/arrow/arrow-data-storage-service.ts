@@ -39,6 +39,7 @@ const FIELD_TYPE_TO_ARROW_TYPE: Record<string, () => DataType> = {
   'date': () => new Timestamp(TimeUnit.MILLISECOND),
   'relation': () => new Utf8(), // Store as JSON string
   'file': () => new Utf8(),     // Store as JSON string
+  'document': () => new Utf8(), // Store as JSON string (like file fields)
 };
 
 export class ArrowDataStorageService implements DataStorageService {
@@ -210,6 +211,7 @@ export class ArrowDataStorageService implements DataStorageService {
               break;
             case 'relation':
             case 'file':
+            case 'document':
               // Serialize complex types to JSON for Arrow storage
               value = typeof value === 'object' ? JSON.stringify(value) : String(value);
               break;
@@ -256,6 +258,7 @@ export class ArrowDataStorageService implements DataStorageService {
               break;
             case 'relation':
             case 'file':
+            case 'document':
               // Deserialize JSON back to structured data for StorageData
               if (value !== null && value !== undefined && typeof value === 'string') {
                 try {

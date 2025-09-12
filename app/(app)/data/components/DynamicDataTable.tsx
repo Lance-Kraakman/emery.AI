@@ -19,14 +19,15 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Trash2 } from "lucide-react"
 import { EditableCell } from "./EditableCell"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
-import type { RowDTO, FieldValueDTO } from "@/app/mappers/row-mapper"
+import type { RowDTO } from "@/app/mappers/row-mapper"
+import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 
 interface DynamicDataTableProps {
   fields: FieldDTO[];
   rows: RowDTO[];
   organizationId: number;
   tableId: number;
-  onUpdateRow: (rowId: string, fieldId: number, value: FieldValueDTO) => void;
+  onUpdateRow: (rowId: string, fieldId: number, value: DomainFieldValue) => void;
   onAddRow: () => void;
   onDeleteRow: (rowId: string) => void;
 }
@@ -79,10 +80,11 @@ export function DynamicDataTable({ fields, rows, organizationId, tableId, onUpda
         ),
         cell: ({ row }) => {
           const rowData = row.original;
+          const fieldValue = rowData.fieldValues.find(fv => fv.fieldSlug === field.name);
           return (
             <EditableCell
               field={field}
-              value={rowData.fieldValues.find(fv => fv.fieldSlug === field.name)?.value}
+              value={fieldValue?.value ?? null}
               organizationId={organizationId}
               tableId={tableId}
               onSave={(value) => onUpdateRow(rowData.id, field.id, value)}

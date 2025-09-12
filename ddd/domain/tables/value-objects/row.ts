@@ -96,7 +96,20 @@ export class Row {
     };
 
     for (const fieldValue of this.fieldValues) {
-      obj[fieldValue.fieldSlug] = fieldValue.value;
+      // CRITICAL FIX: Ensure complex objects are properly serialized, not stringified
+      const value = fieldValue.value;
+      
+      // For complex field types, ensure they remain as objects/arrays
+      if (fieldValue.fieldType === 'file' || fieldValue.fieldType === 'document' || fieldValue.fieldType === 'relation') {
+        // These should already be plain objects/arrays from domain value objects
+        obj[fieldValue.fieldSlug] = value;
+      } else if (fieldValue.fieldType === 'date' && value instanceof Date) {
+        // Convert Date objects to ISO strings
+        obj[fieldValue.fieldSlug] = value.toISOString();
+      } else {
+        // For primitive types, use as-is
+        obj[fieldValue.fieldSlug] = value;
+      }
     }
 
     return obj;

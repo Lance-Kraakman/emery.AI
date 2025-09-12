@@ -18,7 +18,8 @@ import type { TableDTO } from "@/app/mappers/table-mapper"
 import { getFields } from "@/app/actions/fields"
 import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
-import type { RowDTO, FieldValueDTO } from "@/app/mappers/row-mapper"
+import type { RowDTO } from "@/app/mappers/row-mapper"
+import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 
 export function DataViewsClientSimplified() {
   const searchParams = useSearchParams()
@@ -80,7 +81,7 @@ export function DataViewsClientSimplified() {
 
   // TanStack Mutations for optimistic updates
   const updateRowMutation = useMutation({
-    mutationFn: async ({ rowId, fieldId, value }: { rowId: string, fieldId: number, value: FieldValueDTO }) => {
+    mutationFn: async ({ rowId, fieldId, value }: { rowId: string, fieldId: number, value: DomainFieldValue }) => {
       if (!selectedTableId) throw new Error('No table selected')
       
       const field = fields.find(f => f.id === fieldId)
@@ -201,7 +202,7 @@ export function DataViewsClientSimplified() {
     },
   })
 
-  const handleUpdateRow = (rowId: string, fieldId: number, value: FieldValueDTO) => {
+  const handleUpdateRow = (rowId: string, fieldId: number, value: DomainFieldValue) => {
     updateRowMutation.mutate({ rowId, fieldId, value })
   }
 
