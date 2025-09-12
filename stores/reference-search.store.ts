@@ -16,9 +16,9 @@ import type {
   ReferenceSearchOptions 
 } from '@/ddd/application/services/ui-support/reference-search-application-service'
 
-// Store state interface
+// Store state interface - Data only, no UI state
 export interface ReferenceSearchState {
-  // Current search state
+  // Search data state
   query: string
   results: UnifiedReferenceResult[]
   totalCount: number
@@ -28,14 +28,8 @@ export interface ReferenceSearchState {
   // Performance optimizations
   cache: Map<string, CachedSearchResult>
   lastSearchTime: number
-  searchDebounceMs: number
   
-  // UI state
-  selectedIndex: number
-  isOpen: boolean
-  triggerType: 'plus' | 'at'
-  
-  // Search options
+  // Search configuration
   searchOptions: ReferenceSearchOptions
 }
 
@@ -45,7 +39,7 @@ export interface CachedSearchResult {
   expiresAt: number
 }
 
-// Initial store state
+// Initial store state - Data only
 const initialState: ReferenceSearchState = {
   query: '',
   results: [],
@@ -54,10 +48,6 @@ const initialState: ReferenceSearchState = {
   error: null,
   cache: new Map(),
   lastSearchTime: 0,
-  searchDebounceMs: 300,
-  selectedIndex: 0,
-  isOpen: false,
-  triggerType: 'at',
   searchOptions: {
     limit: 50,
     includeUnavailable: false,
@@ -65,8 +55,25 @@ const initialState: ReferenceSearchState = {
   }
 }
 
-// Create the store
-export const referenceSearchStore = new Store(initialState)
+// Global singleton pattern to prevent multiple store instances from bundle splitting
+declare global {
+  var __referenceSearchStore: Store<ReferenceSearchState> | undefined
+}
+
+// Create or reuse global store instance
+const createOrGetStore = (): Store<ReferenceSearchState> => {
+  if (typeof globalThis !== 'undefined') {
+    if (!globalThis.__referenceSearchStore) {
+      globalThis.__referenceSearchStore = new Store(initialState)
+    }
+    return globalThis.__referenceSearchStore
+  } else {
+    // Fallback for server-side or environments without globalThis
+    return new Store(initialState)
+  }
+}
+
+export const referenceSearchStore = createOrGetStore()
 
 // Store actions
 export const referenceSearchActions = {
@@ -76,8 +83,7 @@ export const referenceSearchActions = {
   setQuery: (query: string) => {
     referenceSearchStore.setState((state) => ({
       ...state,
-      query,
-      selectedIndex: 0 // Reset selection when query changes
+      query
     }))
   },
 
@@ -116,48 +122,6 @@ export const referenceSearchActions = {
     }))
   },
 
-  /**
-   * Navigate selection up/down
-   */
-  navigateSelection: (direction: 'up' | 'down') => {
-    referenceSearchStore.setState((state) => {
-      const maxIndex = state.results.length - 1
-      let newIndex = state.selectedIndex
-
-      if (direction === 'down') {
-        newIndex = newIndex < maxIndex ? newIndex + 1 : 0
-      } else {
-        newIndex = newIndex > 0 ? newIndex - 1 : maxIndex
-      }
-
-      return {
-        ...state,
-        selectedIndex: newIndex
-      }
-    })
-  },
-
-  /**
-   * Set selected index directly
-   */
-  setSelectedIndex: (index: number) => {
-    referenceSearchStore.setState((state) => ({
-      ...state,
-      selectedIndex: Math.max(0, Math.min(index, state.results.length - 1))
-    }))
-  },
-
-  /**
-   * Open/close dropdown
-   */
-  setIsOpen: (isOpen: boolean, triggerType?: 'plus' | 'at') => {
-    referenceSearchStore.setState((state) => ({
-      ...state,
-      isOpen,
-      ...(triggerType && { triggerType }),
-      ...(isOpen && { selectedIndex: 0 }) // Reset selection when opening
-    }))
-  },
 
   /**
    * Update search options
@@ -182,9 +146,7 @@ export const referenceSearchActions = {
       results: [],
       totalCount: 0,
       loading: false,
-      error: null,
-      selectedIndex: 0,
-      isOpen: false
+      error: null
     }))
   },
 
@@ -238,13 +200,6 @@ export const referenceSearchActions = {
 
 // Selectors for computed values
 export const referenceSearchSelectors = {
-  /**
-   * Get current selected result
-   */
-  getSelectedResult: (): UnifiedReferenceResult | null => {
-    const state = referenceSearchStore.state
-    return state.results[state.selectedIndex] || null
-  },
 
   /**
    * Check if search has results

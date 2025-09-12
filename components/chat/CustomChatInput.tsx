@@ -52,14 +52,12 @@ export function CustomChatInput({
   className = "",
   onArtifactCreated
 }: CustomChatInputProps) {
-  // Store integration - using selectors for proper reactivity
-  const isOpen = useStore(referenceSearchStore, (state) => state.isOpen)
+  // Subscribe to search data from store
   const query = useStore(referenceSearchStore, (state) => state.query)
   const results = useStore(referenceSearchStore, (state) => state.results)
   const loading = useStore(referenceSearchStore, (state) => state.loading)
   const error = useStore(referenceSearchStore, (state) => state.error)
-  const selectedIndex = useStore(referenceSearchStore, (state) => state.selectedIndex)
-  const searchDebounceMs = useStore(referenceSearchStore, (state) => state.searchDebounceMs)
+  
   const { data: emeryData } = useEmery()
   
   // Local UI state
@@ -67,6 +65,7 @@ export function CustomChatInput({
   const [cursorPosition, setCursorPosition] = useState(0)
   const [showAtMentionDropdown, setShowAtMentionDropdown] = useState(false)
   const [atMentionPosition, setAtMentionPosition] = useState(0)
+  const [selectedIndex, setSelectedIndex] = useState(0)
   const [dropdownPosition, setDropdownPosition] = useState<DropdownPosition>({
     left: 0,
     bottom: 0,
@@ -105,16 +104,16 @@ export function CustomChatInput({
           query: ''
         })
       }
-    }, searchDebounceMs),
-    [emeryData, searchDebounceMs]
+    }, 300),
+    [emeryData]
   )
 
-  // Trigger search when query changes (for @ mentions)
+  // Trigger search when @ mention dropdown is active
   useEffect(() => {
     if (showAtMentionDropdown && query.trim() !== '') {
       debouncedSearch(query)
     }
-  }, [query, showAtMentionDropdown, debouncedSearch])
+  }, [showAtMentionDropdown, query, debouncedSearch])
 
   // Handle textarea changes
   const handleInputChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -129,7 +128,7 @@ export function CustomChatInput({
       // Show @ mention search
       setShowAtMentionDropdown(true)
       setAtMentionPosition(newCursorPos - 1)
-      referenceSearchActions.setIsOpen(true, 'at')
+      setSelectedIndex(0)
       referenceSearchActions.clear() // Clear previous search
       calculateDropdownPosition()
     } else if (showAtMentionDropdown) {
@@ -140,14 +139,13 @@ export function CustomChatInput({
         // Close if space or certain characters are typed
         if (search.includes(' ') || search.includes('\n')) {
           setShowAtMentionDropdown(false)
-          referenceSearchActions.setIsOpen(false)
         } else {
           referenceSearchActions.setQuery(search)
+          setSelectedIndex(0) // Reset selection when query changes
         }
       } else {
         // Cursor moved before @, close dropdown
         setShowAtMentionDropdown(false)
-        referenceSearchActions.setIsOpen(false)
       }
     }
   }
@@ -201,7 +199,6 @@ export function CustomChatInput({
         const dropdownEl = document.querySelector('[data-at-mention-dropdown]')
         if (!dropdownEl || !dropdownEl.contains(target)) {
           setShowAtMentionDropdown(false)
-          referenceSearchActions.setIsOpen(false)
         }
       }
     }
@@ -214,16 +211,18 @@ export function CustomChatInput({
 
   // Handle keyboard events in the textarea
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (showAtMentionDropdown && isOpen) {
+    if (showAtMentionDropdown) {
       // Delegate keyboard navigation to search dropdown
       switch (e.key) {
         case 'ArrowUp':
           e.preventDefault()
-          referenceSearchActions.navigateSelection('up')
+          const maxIndex = results.length - 1
+          setSelectedIndex(prev => prev > 0 ? prev - 1 : maxIndex)
           return
         case 'ArrowDown':
           e.preventDefault()
-          referenceSearchActions.navigateSelection('down')
+          const maxIdx = results.length - 1
+          setSelectedIndex(prev => prev < maxIdx ? prev + 1 : 0)
           return
         case 'Enter':
           e.preventDefault()
@@ -235,7 +234,6 @@ export function CustomChatInput({
         case 'Escape':
           e.preventDefault()
           setShowAtMentionDropdown(false)
-          referenceSearchActions.setIsOpen(false)
           return
       }
     }
@@ -283,7 +281,6 @@ export function CustomChatInput({
     
     setInputValue(newValue)
     setShowAtMentionDropdown(false)
-    referenceSearchActions.setIsOpen(false)
     
     // Set cursor position after insertion
     const newCursorPos = atMentionPosition + result.insertText.length + 1
@@ -384,7 +381,6 @@ export function CustomChatInput({
     setInputValue('')
     setCursorPosition(0)
     setShowAtMentionDropdown(false)
-    referenceSearchActions.setIsOpen(false)
   }
 
   // Auto-resize textarea
@@ -397,7 +393,7 @@ export function CustomChatInput({
 
   // Render @ mention search dropdown
   const renderAtMentionDropdown = () => {
-    if (!showAtMentionDropdown || !isOpen) return null
+    if (!showAtMentionDropdown) return null
 
     return (
       <div
@@ -430,8 +426,7 @@ export function CustomChatInput({
               className="h-9 w-9"
               onClick={() => {
                 setShowAtMentionDropdown(false)
-                referenceSearchActions.setIsOpen(false)
-              }}
+                    }}
             >
               <X className="h-4 w-4" />
             </Button>
@@ -474,7 +469,7 @@ export function CustomChatInput({
                           }
                         `}
                         onClick={() => !isUnavailable && handleAtMentionSelect(result)}
-                        onMouseEnter={() => referenceSearchActions.setSelectedIndex(index)}
+                        onMouseEnter={() => setSelectedIndex(index)}
                         disabled={isUnavailable}
                       >
                         {getCategoryIcon(result.category, 'h-4 w-4')}
