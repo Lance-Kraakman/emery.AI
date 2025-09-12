@@ -15,7 +15,7 @@ import { MissionControlCanvas } from '@/components/canvas'
 
 function PageContent(): JSX.Element {
   const searchParams = useSearchParams()
-  const tableId = searchParams.get('tableId')
+  const tableId = searchParams?.get('tableId')
   
   // If there's a tableId, show the dashboard content in canvas
   if (tableId) {

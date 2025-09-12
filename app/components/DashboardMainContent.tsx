@@ -6,7 +6,7 @@ import TableEditorClient from './TableEditorClient'
 
 export default function DashboardMainContent() {
   const searchParams = useSearchParams()
-  const tableId = searchParams.get('tableId')
+  const tableId = searchParams?.get('tableId')
   const { data, isLoading } = useEmery()
   
   // Find the selected table

@@ -8,9 +8,9 @@ import { AlertCircle } from "lucide-react"
 
 function AuthErrorContent() {
   const searchParams = useSearchParams()
-  const error = searchParams.get("error")
+  const error = searchParams?.get("error")
 
-  const getErrorMessage = (error: string | null) => {
+  const getErrorMessage = (error: string) => {
     switch (error) {
       case "Configuration":
         return "There was an error with the authentication configuration."
@@ -32,7 +32,7 @@ function AuthErrorContent() {
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Authentication Error</h1>
           <p className="mt-2 text-muted-foreground">
-            {getErrorMessage(error)}
+            {getErrorMessage(error ?? "")}
           </p>
         </div>
         

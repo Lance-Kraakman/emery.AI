@@ -16,6 +16,7 @@ interface ChatMessage extends Message {
 
 // Extended ChatHandler interface with scroll functionality and persistence
 interface ExtendedChatHandler extends ChatHandler {
+  append: (message: Message) => Promise<string>
   scrollRef?: React.RefObject<HTMLDivElement>
   scrollToBottom?: () => void
   clearMessages?: () => void
