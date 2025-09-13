@@ -17,28 +17,36 @@ import { Input } from '@/components/ui/input';
 import { ReferenceDropdown } from './ReferenceDropdown';
 import type { SimpleReference } from '@/ddd/application/services/chat/reference-application-service';
 import { useEmery } from '@/contexts/EmeryStoreProvider';
+import type { ResolvedReference } from '@/lib/chat/reference-resolver';
+
 
 interface CustomChatInputProps {
   onSendMessage: (message: string) => void;
   placeholder?: string;
   className?: string;
   onArtifactCreated?: (artifact: any) => void; // For backward compatibility
+  onReferencesChange?: (references: ResolvedReference[], isLoading: boolean) => void;
 }
 
 export default function CustomChatInput({
   onSendMessage,
   placeholder = "Type your message here...",
   className = "",
-  onArtifactCreated
+  onArtifactCreated,
+  onReferencesChange
 }: CustomChatInputProps) {
   // Basic state
   const [inputValue, setInputValue] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownQuery, setDropdownQuery] = useState('');
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const [resolvedReferences, setResolvedReferences] = useState<ResolvedReference[]>([]);
   
   const inputRef = useRef<HTMLInputElement>(null);
   const { data, currentOrganization } = useEmery();
+
+  // TODO: Add manual reference resolution on message send for manually typed references
+  // (References selected from dropdown are resolved immediately below)
 
   // Detect @ references and show/hide dropdown
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,7 +77,7 @@ export default function CustomChatInput({
     }
   };
 
-  // Handle reference selection
+  // Handle reference selection - directly add to ReferencesPanel
   const handleReferenceSelect = (reference: SimpleReference) => {
     const cursorPos = inputRef.current?.selectionStart || 0;
     const beforeCursor = inputValue.slice(0, cursorPos);
@@ -81,6 +89,25 @@ export default function CustomChatInput({
       const beforeAt = beforeCursor.slice(0, atMatch.index);
       const newValue = beforeAt + reference.insertText + afterCursor;
       setInputValue(newValue);
+      
+      // NEW: Directly add resolved reference to ReferencesPanel
+      const resolvedRef: ResolvedReference = {
+        type: reference.category as 'doc' | 'file' | 'table' | 'agent' | 'tool',
+        fullPath: reference.insertText.replace(/^@\w+:/, ''), // Extract path from insertText
+        originalMatch: reference.insertText,
+        startIndex: beforeAt.length,
+        endIndex: beforeAt.length + reference.insertText.length,
+        data: reference, // Store the reference data itself
+        metadata: {
+          title: reference.displayName,
+          description: reference.description,
+        }
+      };
+      
+      // Add to current resolved references
+      const updatedRefs = [...resolvedReferences, resolvedRef];
+      setResolvedReferences(updatedRefs);
+      onReferencesChange?.(updatedRefs, false);
       
       // Position cursor after inserted text
       const newCursorPos = beforeAt.length + reference.insertText.length;
@@ -116,6 +143,9 @@ export default function CustomChatInput({
       onSendMessage(inputValue.trim());
       setInputValue('');
       setShowDropdown(false);
+      // Clear resolved references after sending
+      setResolvedReferences([]);
+      onReferencesChange?.([], false);
     }
   };
 
