@@ -18,6 +18,8 @@ import { ReferenceDropdown } from './ReferenceDropdown';
 import type { SimpleReference } from '@/ddd/application/services/chat/reference-application-service';
 import { useEmery } from '@/contexts/EmeryStoreProvider';
 import type { ResolvedReference } from '@/lib/chat/reference-resolver';
+import { hasReferences } from '@/lib/chat/reference-patterns';
+import { resolveReferencesAction } from '@/app/actions/resolve-references';
 
 
 interface CustomChatInputProps {
@@ -137,15 +139,48 @@ export default function CustomChatInput({
     }
   };
 
-  // Send message
-  const handleSendMessage = () => {
+  // Send message with manual reference resolution
+  const handleSendMessage = async () => {
     if (inputValue.trim()) {
-      onSendMessage(inputValue.trim());
+      const message = inputValue.trim();
+      
+      // Check for manual references that need resolution
+      if (hasReferences(message) && data) {
+        console.log('[CUSTOM-CHAT-INPUT] Manual references detected, resolving before send:', message);
+        
+        try {
+          const result = await resolveReferencesAction({ message, emeryData: data });
+          console.log('[CUSTOM-CHAT-INPUT] Manual reference resolution result:', result);
+          
+          // Merge with existing dropdown-selected references
+          const allReferences = [...resolvedReferences];
+          
+          // Add new resolved references (avoid duplicates)
+          result.resolvedReferences.forEach(newRef => {
+            const exists = allReferences.some(existing => 
+              existing.originalMatch === newRef.originalMatch
+            );
+            if (!exists) {
+              allReferences.push(newRef);
+            }
+          });
+          
+          // Update panel with all references
+          setResolvedReferences(allReferences);
+          onReferencesChange?.(allReferences, false);
+          
+        } catch (error) {
+          console.error('[CUSTOM-CHAT-INPUT] Error resolving manual references:', error);
+        }
+      }
+      
+      // Send message normally
+      onSendMessage(message);
       setInputValue('');
       setShowDropdown(false);
-      // Clear resolved references after sending
-      setResolvedReferences([]);
-      onReferencesChange?.([], false);
+      
+      // Keep resolved references visible after sending (don't clear them)
+      // They will be useful for the conversation context
     }
   };
 

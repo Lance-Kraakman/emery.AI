@@ -381,6 +381,47 @@ export function EmeryChat() {
     setResolvedReferences(references)
     setIsResolvingReferences(isLoading)
   }
+  
+  // Load references from chat history on mount/message changes
+  useEffect(() => {
+    const loadHistoryReferences = async () => {
+      if (!emeryData || handler.messages.length === 0) return;
+      
+      console.log('[EMERY-CHAT] Loading references from chat history...');
+      const allRefs: ResolvedReference[] = [];
+      
+      // Parse all existing user messages for references
+      for (const message of handler.messages) {
+        if (message.role === 'user' && hasReferences(message.content)) {
+          try {
+            const result = await resolveReferencesAction({
+              message: message.content,
+              emeryData: emeryData
+            });
+            allRefs.push(...result.resolvedReferences);
+          } catch (error) {
+            console.error('[EMERY-CHAT] Error resolving history reference:', error);
+          }
+        }
+      }
+      
+      // Deduplicate references by originalMatch
+      const uniqueRefs = allRefs.filter((ref, index, self) => 
+        index === self.findIndex(r => r.originalMatch === ref.originalMatch)
+      );
+      
+      if (uniqueRefs.length > 0) {
+        console.log('[EMERY-CHAT] Loaded', uniqueRefs.length, 'unique references from history');
+        setResolvedReferences(uniqueRefs);
+        setIsResolvingReferences(false);
+      }
+    };
+    
+    // Only load history references if we don't have any current references
+    if (resolvedReferences.length === 0) {
+      loadHistoryReferences();
+    }
+  }, [handler.messages, emeryData, resolvedReferences.length]);
 
   // Handle reference click to open in canvas
   const handleReferenceClick = (reference: ResolvedReference) => {
@@ -507,10 +548,9 @@ export function EmeryChat() {
               onArtifactHandled={handleArtifactHandled}
             />
             
-            {/* Canvas Section (inside ChatSection for proper provider context) */}
-            {canvasState === 'expanded' && (
-              <ChatCanvas />
-            )}
+            {/* ChatCanvas - renders in chat panel or via portal to main content */}
+            <ChatCanvas />
+            
           </ChatSection>
         </div>
       </div>

@@ -12,6 +12,7 @@ import { storeActions } from '@/stores/actions'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { LayoutProvider } from '@/components/layout/LayoutProvider'
 import { EmeryLayout } from '@/components/layout/EmeryLayout'
+import { ArtifactProvider } from '@/contexts/ArtifactContext'
 
 // Create a client instance
 const queryClient = new QueryClient({
@@ -80,10 +81,12 @@ export function EmeryProviders({
       >
         <EmeryStoreProvider>
           <LayoutProvider>
-            <EmeryLayout enableChat={enableChat} chatContext={effectiveChatContext}>
-              {children}
-            </EmeryLayout>
-            <DataDialogs />
+            <ArtifactProvider>
+              <EmeryLayout enableChat={enableChat} chatContext={effectiveChatContext}>
+                {children}
+              </EmeryLayout>
+              <DataDialogs />
+            </ArtifactProvider>
           </LayoutProvider>
         </EmeryStoreProvider>
       </ThemeProvider>

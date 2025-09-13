@@ -1,9 +1,12 @@
 'use client'
 
+import { createPortal } from 'react-dom'
+import { useEffect, useState } from 'react'
 import { ChatCanvas as LlamaIndexChatCanvas, useChatCanvas } from '@llamaindex/chat-ui'
 import { X, Code, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useLayout } from '@/components/layout/LayoutProvider'
+import { useArtifact } from '@/contexts/ArtifactContext'
 import { DocumentArtifactViewer, FileArtifactViewer } from './artifacts'
 import { 
   isDocumentArtifact, 
@@ -15,13 +18,30 @@ import {
  * ChatCanvas - Proper LlamaIndex ChatCanvas implementation
  * 
  * Uses the useChatCanvas hook to manage canvas state and conditionally render
- * the canvas based on artifact visibility. Must be used within ChatSection.
+ * the canvas based on artifact visibility. Can be used within ChatSection or
+ * in the main layout when artifacts should be displayed as primary content.
  * 
- * AIDEV-NOTE: Fixed to follow LlamaIndex documentation pattern for reliable canvas rendering.
+ * AIDEV-NOTE: Enhanced to work both inside ChatSection and as main content.
  */
 
-export function ChatCanvas() {
+interface ChatCanvasProps {
+  isMainContent?: boolean
+}
+
+export function ChatCanvas({ isMainContent = false }: ChatCanvasProps) {
   const { toggleCanvas } = useLayout()
+  const { shouldShowChatCanvas } = useArtifact()
+  const [portalElement, setPortalElement] = useState<HTMLElement | null>(null)
+  
+  // Find the portal element for main content rendering
+  useEffect(() => {
+    if (shouldShowChatCanvas) {
+      const element = document.getElementById('chat-canvas-portal')
+      setPortalElement(element)
+    } else {
+      setPortalElement(null)
+    }
+  }, [shouldShowChatCanvas])
   
   try {
     const canvasContext = useChatCanvas()
@@ -51,10 +71,9 @@ export function ChatCanvas() {
     // Check if this is a custom Emery artifact
     const isCustomArtifact = isEmeryArtifact(displayedArtifact)
     
-    if (isCustomArtifact) {
-      // Render custom artifact viewer instead of LlamaIndex canvas
-      return (
-        <div className="flex-1 border-l border-border flex flex-col bg-card">
+    // Render the canvas content
+    const canvasContent = isCustomArtifact ? (
+      <div className="flex-1 border-l border-border flex flex-col bg-card">
           {/* Custom Artifact Header */}
           <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
             <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -104,11 +123,7 @@ export function ChatCanvas() {
             ) : null}
           </div>
         </div>
-      )
-    }
-
-    // Enhanced canvas with header and artifact information for standard artifacts
-    return (
+    ) : (
       <div className="flex-1 border-l border-border flex flex-col bg-card">
         {/* Canvas Header with Artifact Info */}
         <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
@@ -148,10 +163,25 @@ export function ChatCanvas() {
         </div>
       </div>
     )
+    
+    // Use portal if should be shown as main content
+    if (shouldShowChatCanvas && portalElement) {
+      return createPortal(canvasContent, portalElement)
+    }
+    
+    // Otherwise render normally in chat panel
+    return canvasContent
+    
   } catch (error) {
     // Fallback: If useChatCanvas fails, render basic canvas
     // This prevents the "must be used within ChatCanvasProvider" error
     console.warn('[ChatCanvas] useChatCanvas hook not available, using fallback:', error)
+    
+    // If should show as main content but no context, don't render
+    if (shouldShowChatCanvas) {
+      return null
+    }
+    
     return (
       <div className="flex-1 border-l border-border">
         <LlamaIndexChatCanvas className="h-full w-full" />
