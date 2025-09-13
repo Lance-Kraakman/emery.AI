@@ -1,27 +1,27 @@
 'use client'
 
-import { BaseCanvas } from './BaseCanvas'
+import { BasePage } from './BasePage'
 import { BarChart, Database, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 /**
- * MissionControlCanvas - Canvas for Mission Control dashboard
+ * MissionControlPage - Page for Mission Control dashboard
  * 
  * Features:
  * - Overview dashboard with key metrics
  * - Quick access to main system areas
  * - Status indicators and recent activity
  * 
- * AIDEV-NOTE: Mission Control page canvas showing dashboard overview.
+ * AIDEV-NOTE: Mission Control page showing dashboard overview.
  */
 
-interface MissionControlCanvasProps {
+interface MissionControlPageProps {
   children?: React.ReactNode
 }
 
-export function MissionControlCanvas({ children }: MissionControlCanvasProps) {
+export function MissionControlPage({ children }: MissionControlPageProps) {
   return (
-    <BaseCanvas
+    <BasePage
       title="Mission Control Dashboard"
       subtitle="System overview and quick actions"
       icon={<BarChart className="h-5 w-5" />}
@@ -88,6 +88,6 @@ export function MissionControlCanvas({ children }: MissionControlCanvasProps) {
           </div>
         </div>
       )}
-    </BaseCanvas>
+    </BasePage>
   )
 }

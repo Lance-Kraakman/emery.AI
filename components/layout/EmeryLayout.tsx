@@ -2,9 +2,7 @@ import React, { Suspense } from 'react'
 import { EmerySidebar } from '@/components/EmerySidebar'
 import { Loading } from '@/components/ui/loading'
 import { EmeryChat } from '@/components/chat/EmeryChat'
-import { MainChatCanvas } from '@/components/chat/MainChatCanvas'
 import { useLayout } from './LayoutProvider'
-import { useArtifact } from '@/contexts/ArtifactContext'
 import type { EmeryLayoutProps, ChatContextConfig } from './types'
 
 /**
@@ -41,7 +39,6 @@ function EmeryLayoutInner({
     setChatState
   } = useLayout()
   
-  const { shouldShowChatCanvas } = useArtifact()
 
   // Set chat context when provided
   React.useEffect(() => {
@@ -57,7 +54,6 @@ function EmeryLayoutInner({
   // Determine layout mode based on canvas state and chat canvas
   const isCanvasMode = canvasState === 'expanded'
   const isChatMainMode = canvasState === 'collapsed'
-  const shouldShowChatCanvasAsMain = shouldShowChatCanvas && enableChat
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -86,27 +82,9 @@ function EmeryLayoutInner({
 
       {/* Main Content Area - Layout changes based on canvas state and chat canvas */}
       <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
-        {/* Chat Canvas Mode: 3-panel (sidebar | chat-canvas | chat) */}
-        {shouldShowChatCanvasAsMain && (
-          <>
-            {/* Center Panel - Chat Canvas as Main Content */}
-            <main className="flex-1 flex flex-col overflow-hidden min-w-0 h-full">
-              <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading canvas...</div>}>
-                <MainChatCanvas />
-              </Suspense>
-            </main>
 
-            {/* Right Panel - Chat Interface */}
-            <div className={`h-full ${getChatWidth(chatState)} ${isMobile ? 'hidden' : 'block'}`}>
-              <Suspense fallback={<ChatSkeleton />}>
-                <EmeryChat />
-              </Suspense>
-            </div>
-          </>
-        )}
-
-        {/* Canvas Mode: Traditional 3-panel (sidebar | canvas | chat) - when no chat canvas */}
-        {!shouldShowChatCanvasAsMain && isCanvasMode && (
+        {/* Canvas Mode: Traditional 3-panel (sidebar | canvas | chat) */}
+        {isCanvasMode && (
           <>
             {/* Center Panel - Canvas/Main Content */}
             <main className="flex-1 flex flex-col overflow-hidden min-w-0 h-full">
@@ -124,8 +102,8 @@ function EmeryLayoutInner({
           </>
         )}
         
-        {/* Chat Main Mode: 2-panel (sidebar | chat-as-main) - when no chat canvas */}
-        {!shouldShowChatCanvasAsMain && isChatMainMode && enableChat && (
+        {/* Chat Main Mode: 2-panel (sidebar | chat-as-main) */}
+        {isChatMainMode && enableChat && (
           <div className="flex-1 flex flex-col overflow-hidden h-screen">
             <Suspense fallback={<ChatSkeleton />}>
               <EmeryChat />
@@ -133,8 +111,8 @@ function EmeryLayoutInner({
           </div>
         )}
         
-        {/* Fallback: Show main content if chat disabled and no chat canvas */}
-        {!shouldShowChatCanvasAsMain && isChatMainMode && !enableChat && (
+        {/* Fallback: Show main content if chat disabled */}
+        {isChatMainMode && !enableChat && (
           <main className="flex-1 flex flex-col overflow-hidden min-w-0">
             {children}
           </main>

@@ -3,7 +3,7 @@ import { getTeams } from '@/app/actions/teams';
 import { getAgents } from '@/app/actions/agents';
 import { Loading } from '@/components/ui/loading';
 import { auth } from '@/lib/auth';
-import { TeamsCanvas } from '@/components/canvas';
+import { TeamsPage as TeamsPageLayout } from '@/components/canvas';
 import TeamDashboardClient from './components/TeamDashboardClient';
 
 // AIDEV-NOTE: Teams page updated to use canvas architecture with collapsible layout
@@ -23,10 +23,10 @@ export default async function TeamsPage() {
   ]);
 
   return (
-    <TeamsCanvas>
+    <TeamsPageLayout>
       <Suspense fallback={<Loading text="Loading teams..." />}>
         <TeamDashboardClient initialTeams={teams} agents={agents} />
       </Suspense>
-    </TeamsCanvas>
+    </TeamsPageLayout>
   );
 }

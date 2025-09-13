@@ -2,12 +2,12 @@
 
 import { useSearchParams } from 'next/navigation'
 import DashboardMainContent from '@/app/components/DashboardMainContent'
-import { MissionControlCanvas } from '@/components/canvas'
+import { MissionControlPage } from '@/components/canvas'
 
 /**
  * MissionControlClient - Mission Control page with canvas structure
  * 
- * Uses MissionControlCanvas to provide collapsible main content.
+ * Uses MissionControlPage to provide collapsible main content.
  * When canvas is collapsed, chat becomes the main view.
  * 
  * AIDEV-NOTE: Updated to use new canvas-based architecture.
@@ -20,14 +20,14 @@ function PageContent(): JSX.Element {
   // If there's a tableId, show the dashboard content in canvas
   if (tableId) {
     return (
-      <MissionControlCanvas>
+      <MissionControlPage>
         <DashboardMainContent />
-      </MissionControlCanvas>
+      </MissionControlPage>
     )
   }
   
-  // Otherwise show the default mission control canvas
-  return <MissionControlCanvas />
+  // Otherwise show the default mission control page
+  return <MissionControlPage />
 }
 
 export default function MissionControlClient(): JSX.Element {

@@ -1,32 +1,32 @@
 'use client'
 
-import { BaseCanvas } from './BaseCanvas'
+import { BasePage } from './BasePage'
 import { Database, Plus, Table } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 /**
- * DataCanvas - Canvas for Data tables management page
+ * DataPage - Page for Data tables management
  * 
  * Features:
  * - Data table listing and management
  * - Table creation and schema editing
  * - Data viewing and editing
  * 
- * AIDEV-NOTE: Data page canvas for managing database tables and data.
+ * AIDEV-NOTE: Data page for managing database tables and data.
  */
 
-interface DataCanvasProps {
+interface DataPageProps {
   tableId?: string
   tableName?: string
   children?: React.ReactNode
 }
 
-export function DataCanvas({ tableId, tableName, children }: DataCanvasProps) {
+export function DataPage({ tableId, tableName, children }: DataPageProps) {
   const title = tableId ? (tableName || 'Data Table') : 'Data Tables'
   const subtitle = tableId ? `Manage table data and schema` : 'Create and manage your data tables'
 
   return (
-    <BaseCanvas
+    <BasePage
       title={title}
       subtitle={subtitle}
       icon={tableId ? <Table className="h-5 w-5" /> : <Database className="h-5 w-5" />}
@@ -54,6 +54,6 @@ export function DataCanvas({ tableId, tableName, children }: DataCanvasProps) {
           </div>
         )}
       </div>
-    </BaseCanvas>
+    </BasePage>
   )
 }

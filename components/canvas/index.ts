@@ -1,15 +1,15 @@
 /**
- * Canvas components for different page types
+ * Page components for different app sections
  * 
- * Each page's main content should be rendered as a canvas that can be collapsed.
- * When collapsed, the chat becomes the main view.
+ * Each page's main content can be collapsed to let chat take full width.
+ * When chat artifacts are displayed, pages can be hidden completely.
  * 
- * AIDEV-NOTE: Canvas system for collapsible page content with chat integration.
+ * AIDEV-NOTE: Page system for collapsible content with chat integration.
  */
 
-export { BaseCanvas } from './BaseCanvas'
-export { MissionControlCanvas } from './MissionControlCanvas'
-export { AgentsCanvas } from './AgentsCanvas'
-export { DataCanvas } from './DataCanvas'
-export { TeamsCanvas } from './TeamsCanvas'
-export { OrganizationCanvas } from './OrganizationCanvas'
+export { BasePage } from './BasePage'
+export { MissionControlPage } from './MissionControlPage'
+export { AgentsPage } from './AgentsPage'
+export { DataPage } from './DataPage'
+export { TeamsPage } from './TeamsPage'
+export { OrganizationPage } from './OrganizationPage'

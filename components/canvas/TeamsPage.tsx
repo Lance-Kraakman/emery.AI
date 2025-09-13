@@ -1,32 +1,32 @@
 'use client'
 
-import { BaseCanvas } from './BaseCanvas'
+import { BasePage } from './BasePage'
 import { Users, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 /**
- * TeamsCanvas - Canvas for Teams management page
+ * TeamsPage - Page for Teams management
  * 
  * Features:
  * - Team listing and management
  * - Team member management
  * - Collaboration tools
  * 
- * AIDEV-NOTE: Teams page canvas for managing teams and collaboration.
+ * AIDEV-NOTE: Teams page for managing teams and collaboration.
  */
 
-interface TeamsCanvasProps {
+interface TeamsPageProps {
   teamId?: string
   teamName?: string
   children?: React.ReactNode
 }
 
-export function TeamsCanvas({ teamId, teamName, children }: TeamsCanvasProps) {
+export function TeamsPage({ teamId, teamName, children }: TeamsPageProps) {
   const title = teamId ? (teamName || 'Team Details') : 'Teams'
   const subtitle = teamId ? `Manage team members and collaboration` : 'Organize your team and manage collaboration'
 
   return (
-    <BaseCanvas
+    <BasePage
       title={title}
       subtitle={subtitle}
       icon={<Users className="h-5 w-5" />}
@@ -48,6 +48,6 @@ export function TeamsCanvas({ teamId, teamName, children }: TeamsCanvasProps) {
           </div>
         )}
       </div>
-    </BaseCanvas>
+    </BasePage>
   )
 }

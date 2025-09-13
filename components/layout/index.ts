@@ -5,7 +5,7 @@
 
 export { EmeryLayout } from './EmeryLayout'
 export { LayoutProvider, useLayout } from './LayoutProvider'
-// CanvasToggle is now handled by BaseCanvas internally
+// CanvasToggle is now handled by BasePage internally
 // EmeryChat is now in @/components/chat
 
 export type {

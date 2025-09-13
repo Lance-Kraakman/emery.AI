@@ -3,7 +3,7 @@ import { getAgents } from '@/app/actions/agents';
 import { getTeams } from '@/app/actions/teams';
 import { Loading } from '@/components/ui/loading';
 import { auth } from '@/lib/auth';
-import { AgentsCanvas } from '@/components/canvas';
+import { AgentsPage as AgentsPageLayout } from '@/components/canvas';
 import AgentDashboardClient from './components/AgentDashboardClient';
 
 // AIDEV-NOTE: Agents page updated to use canvas architecture with collapsible layout
@@ -20,10 +20,10 @@ export default async function AgentsPage() {
   ]);
 
   return (
-    <AgentsCanvas>
+    <AgentsPageLayout>
       <Suspense fallback={<Loading text="Loading agents..." />}>
         <AgentDashboardClient initialAgents={agents} teams={teams} />
       </Suspense>
-    </AgentsCanvas>
+    </AgentsPageLayout>
   );
 }

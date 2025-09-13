@@ -1,28 +1,28 @@
 'use client'
 
-import { BaseCanvas } from './BaseCanvas'
+import { BasePage } from './BasePage'
 import { Building, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 /**
- * OrganizationCanvas - Canvas for Organization settings page
+ * OrganizationPage - Page for Organization settings
  * 
  * Features:
  * - Organization configuration
  * - Member management
  * - Settings and preferences
  * 
- * AIDEV-NOTE: Organization page canvas for managing org settings and members.
+ * AIDEV-NOTE: Organization page for managing org settings and members.
  */
 
-interface OrganizationCanvasProps {
+interface OrganizationPageProps {
   organizationName?: string
   children?: React.ReactNode
 }
 
-export function OrganizationCanvas({ organizationName, children }: OrganizationCanvasProps) {
+export function OrganizationPage({ organizationName, children }: OrganizationPageProps) {
   return (
-    <BaseCanvas
+    <BasePage
       title={organizationName || 'Organization'}
       subtitle="Manage organization settings, members, and configuration"
       icon={<Building className="h-5 w-5" />}
@@ -86,6 +86,6 @@ export function OrganizationCanvas({ organizationName, children }: OrganizationC
           </div>
         )}
       </div>
-    </BaseCanvas>
+    </BasePage>
   )
 }
