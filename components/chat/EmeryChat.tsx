@@ -30,7 +30,6 @@ import { hasReferences } from '@/lib/chat/reference-patterns'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
 import { ReferencesPanel } from './ReferencesPanel'
-import { CanvasArtifactHandler } from './CanvasArtifactHandler'
 import type { ResolvedReference } from '@/lib/chat/reference-resolver'
 
 /**
@@ -247,7 +246,6 @@ export function EmeryChat() {
   const [cursorPosition, setCursorPosition] = useState(0)
   const [resolvedReferences, setResolvedReferences] = useState<ResolvedReference[]>([])
   const [isResolvingReferences, setIsResolvingReferences] = useState(false)
-  const [selectedArtifact, setSelectedArtifact] = useState<any>(null)
   
   // Handle chat history updates (callback for forcing refresh)
   const handleChatHistoryUpdate = () => {
@@ -285,9 +283,9 @@ export function EmeryChat() {
   }, [])
 
   
-  // Don't render if hidden
+  // Don't render if hidden - return hidden div instead of null to avoid hook rule violations
   if (chatState === 'hidden') {
-    return null
+    return <div className="hidden" />
   }
   
   // Get user info for chat history
@@ -451,9 +449,7 @@ export function EmeryChat() {
 
       console.log('[EMERY-CHAT] Created artifact for canvas:', artifact)
       
-      // Store artifact in a way the ChatCanvas can access it
-      // We'll pass it via a ref or context that ChatCanvas can read
-      setSelectedArtifact(artifact)
+      // TODO: Implement direct canvas opening via useChatCanvas hook
       
       // Expand canvas if collapsed
       if (canvasState === 'collapsed') {
@@ -465,10 +461,6 @@ export function EmeryChat() {
     }
   }
 
-  // Handle when artifact has been opened in canvas
-  const handleArtifactHandled = () => {
-    setSelectedArtifact(null)
-  }
 
 
   // Determine layout based on canvas state
@@ -542,11 +534,6 @@ export function EmeryChat() {
               </div>
             </div>
             
-            {/* Artifact Handler - must be inside ChatSection to access useChatCanvas */}
-            <CanvasArtifactHandler
-              selectedArtifact={selectedArtifact}
-              onArtifactHandled={handleArtifactHandled}
-            />
             
             {/* ChatCanvas - renders in chat panel or via portal to main content */}
             <ChatCanvas />

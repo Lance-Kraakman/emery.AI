@@ -31,6 +31,7 @@ ENV NEXTAUTH_URL="http://localhost:3000"
 ENV GITHUB_CLIENT_ID="build-dummy-client-id"
 ENV GITHUB_CLIENT_SECRET="build-dummy-client-secret"
 ENV RESEND_API_KEY="build-dummy-resend-key"
+ENV NODE_ENV=development
 RUN pnpm run build
 
 # AIDEV-NOTE: Skip bundled scheduler, use tsx directly to avoid bundling issues
@@ -45,7 +46,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && npm i -g pnpm
 
-ENV NODE_ENV=production
+ENV NODE_ENV=development 
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # AIDEV-NOTE: Use regular Next.js build with node_modules (faster build time)

@@ -1,31 +1,31 @@
 'use client'
 
-import { BaseCanvas } from './BaseCanvas'
+import { BasePage } from './BasePage'
 import { Bot, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 /**
- * AgentsCanvas - Canvas for Agents management page
+ * AgentsPage - Page for Agents management page
  * 
  * Features:
  * - Agent listing and management
  * - Agent creation and configuration
  * - Performance monitoring
  * 
- * AIDEV-NOTE: Agents page canvas for managing AI agents.
+ * AIDEV-NOTE: Agents page for managing AI agents.
  */
 
-interface AgentsCanvasProps {
+interface AgentsPageProps {
   agentId?: string
   children?: React.ReactNode
 }
 
-export function AgentsCanvas({ agentId, children }: AgentsCanvasProps) {
+export function AgentsPage({ agentId, children }: AgentsPageProps) {
   const title = agentId ? `Agent Configuration` : 'AI Agents'
   const subtitle = agentId ? `Configure agent ${agentId}` : 'Manage and monitor your AI agents'
 
   return (
-    <BaseCanvas
+    <BasePage
       title={title}
       subtitle={subtitle}
       icon={<Bot className="h-5 w-5" />}
@@ -47,6 +47,6 @@ export function AgentsCanvas({ agentId, children }: AgentsCanvasProps) {
           </div>
         )}
       </div>
-    </BaseCanvas>
+    </BasePage>
   )
 }

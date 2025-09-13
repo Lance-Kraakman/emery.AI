@@ -6,17 +6,17 @@ import { ChevronLeft } from 'lucide-react'
 import { useLayout } from '@/components/layout/LayoutProvider'
 
 /**
- * BaseCanvas - Base canvas structure for all page types
+ * BasePage - Base page structure for all page types
  * 
  * Provides:
- * - Common canvas header structure
- * - Canvas collapse functionality
- * - Consistent styling across all canvas types
+ * - Common page header structure
+ * - Page collapse functionality (to let chat take full width)
+ * - Consistent styling across all page types
  * 
- * AIDEV-NOTE: Each page's main content should extend this base canvas structure.
+ * AIDEV-NOTE: Each page's main content should extend this base page structure.
  */
 
-interface BaseCanvasProps {
+interface BasePageProps {
   title: string
   subtitle?: string
   icon?: ReactNode
@@ -25,24 +25,24 @@ interface BaseCanvasProps {
   className?: string
 }
 
-export function BaseCanvas({ 
+export function BasePage({ 
   title, 
   subtitle, 
   icon, 
   children, 
   headerActions,
   className = ''
-}: BaseCanvasProps) {
+}: BasePageProps) {
   const { canvasState, toggleCanvas } = useLayout()
 
-  // Only render when canvas is expanded
+  // Only render when canvas is expanded (page is visible)
   if (canvasState !== 'expanded') {
-    return null
+    return <div className="hidden" />
   }
 
   return (
     <div className={`flex flex-col h-full bg-card ${className}`}>
-      {/* Canvas Header */}
+      {/* Page Header */}
       <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20 relative">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {icon && (
@@ -65,20 +65,20 @@ export function BaseCanvas({
         <div className="flex items-center gap-2 flex-shrink-0">
           {headerActions}
           
-          {/* Canvas Collapse Button */}
+          {/* Page Collapse Button */}
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleCanvas}
             className="h-8 w-8"
-            title="Collapse canvas (make chat main view)"
+            title="Collapse page (make chat main view)"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      {/* Canvas Content */}
+      {/* Page Content */}
       <div className="flex-1 overflow-hidden relative">
         {children}
       </div>

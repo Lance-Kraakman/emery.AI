@@ -11,7 +11,8 @@ const isPipedreamConfigured = typeof window === 'undefined' &&
 
 export const pipedreamClient = isPipedreamConfigured
   ? new PipedreamClient({
-      projectEnvironment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+      // projectEnvironment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+      projectEnvironment: 'production',
       clientId: process.env.PIPEDREAM_CLIENT_ID!,
       clientSecret: process.env.PIPEDREAM_CLIENT_SECRET!,
       projectId: process.env.PIPEDREAM_PROJECT_ID!,
