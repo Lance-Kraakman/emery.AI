@@ -112,6 +112,7 @@ export function createDocumentArtifact(
   // Create artifact-like object for LlamaIndex integration
   // AIDEV-NOTE: Simplified structure that matches expected patterns
   return {
+    created_at: Date.now(),
     type: 'emery-document',
     data: {
       documentField,
@@ -136,6 +137,7 @@ export function createFileArtifact(
   // Create artifact-like object for LlamaIndex integration
   // AIDEV-NOTE: Simplified structure that matches expected patterns
   return {
+    created_at: Date.now(),
     type: 'emery-file',
     data: {
       fileField,

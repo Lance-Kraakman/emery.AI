@@ -28,7 +28,7 @@ import {
 } from 'lucide-react'
 import type { FileArtifact } from '../types/chat-artifacts'
 import { getFileDisplayInfo } from '../types/chat-artifacts'
-import { referenceSearchActions } from '@/stores/reference-search.store'
+// Note: Old reference search store removed in favor of simplified system
 
 interface FileArtifactViewerProps {
   artifact: FileArtifact
@@ -289,8 +289,8 @@ export function FileArtifactViewer({
                 const fileName = artifact.data.fileField.name
                 const referenceText = `@file:${fileName}`
                 
-                // TODO: Implement reference button functionality with new architecture
-                referenceSearchActions.setQuery(fileName)
+                // TODO: Implement reference button functionality with new simplified system
+                console.log('Add reference:', referenceText)
               }}
               className="text-xs"
               title="Add file reference to chat"

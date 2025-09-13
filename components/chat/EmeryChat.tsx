@@ -20,10 +20,14 @@ import { Button } from '@/components/ui/button'
 import { useLayout } from '@/components/layout/LayoutProvider'
 import { useChatGRPC } from './useChatGRPC'
 import { ChatCanvas } from './ChatCanvas'
-import { CustomChatInput } from './CustomChatInput'
+import CustomChatInput from './CustomChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
 import { createChatContextForPage } from '@/components/layout/types'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
+import { resolveReferencesAction } from '@/app/actions/resolve-references'
+import { hasReferences } from '@/lib/chat/reference-patterns'
+import { useEmery } from '@/contexts/EmeryStoreProvider'
+import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
 
 /**
  * EmeryChat - Main chat component with LlamaIndex integration
@@ -195,6 +199,7 @@ export function EmeryChat() {
   const searchParams = useSearchParams()
   const { data: session } = useSession()
   const { chatState, canvasState, chatContext, toggleCanvas, setChatContext } = useLayout()
+  const { data: emeryData } = useEmery()
   
   // Chat session state
   const [currentChatId, setCurrentChatId] = useState<string | undefined>()
@@ -327,6 +332,10 @@ export function EmeryChat() {
   const suggestions = getSuggestionsPrompts(chatContext?.domainType)
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Check if reference dropdown is open to avoid conflicts
+    const referenceDropdownOpen = document.querySelector('[data-chat-search-dropdown]')
+    if (referenceDropdownOpen) return // Let reference dropdown handle navigation
+    
     if (!showSuggestions || suggestions.length === 0) return
     
     if (e.key === 'ArrowUp') {
@@ -385,10 +394,15 @@ export function EmeryChat() {
           >
             <div className="h-full flex flex-col">
               {/* Messages and suggestions container - scrollable */}
-              <div ref={handler.scrollRef} className="flex-1 overflow-y-auto flex flex-col">
+              <div ref={handler.scrollRef} className="flex-1 overflow-y-auto flex flex-col px-1">
                 {/* Messages area */}
                 <div className="flex-1">
-                  <ChatMessages className="bg-transparent px-4 py-2" />
+                  <ChatMessages className="bg-transparent px-3 py-1 text-sm 
+                    [&_*]:text-sm [&_pre]:text-xs [&_code]:text-xs [&_p]:text-sm [&_p]:leading-5
+                    [&_div]:text-sm [&_span]:text-sm [&_li]:text-sm [&_ul]:text-sm [&_ol]:text-sm
+                    [&_button]:text-xs [&_button]:px-2 [&_button]:py-1 [&_button]:float-right [&_button]:ml-2
+                    [&_*]:break-words [&_*]:hyphens-auto [&_div:has(button)]:clear-both
+                  " />
                 </div>
                 
                 {/* Suggestions at bottom of messages area when no messages */}
@@ -406,8 +420,72 @@ export function EmeryChat() {
               {/* Input area - always fixed at very bottom */}
               <div className="flex-shrink-0 p-4 border-t border-border/10 bg-card" onKeyDown={handleKeyDown}>
                 <CustomChatInput 
-                  onSendMessage={(message) => {
-                    handler.append({ content: message, role: 'user' })
+                  onSendMessage={async (message) => {
+                    // Process references if any exist
+                    if (hasReferences(message) && emeryData) {
+                      console.log('[EMERY-CHAT] Processing references in message:', message)
+                      try {
+                        const result = await resolveReferencesAction({ message, emeryData })
+                        console.log('[EMERY-CHAT] References resolved:', result)
+                        
+                        // Send the enriched context instead of original message
+                        handler.append({ content: result.enrichedContext, role: 'user' })
+                        
+                        // If there are document/file references, create artifacts
+                        const docRefs = result.resolvedReferences.filter(ref => 
+                          (ref.type === 'doc' || ref.type === 'file') && ref.data && !ref.metadata?.error
+                        )
+                        if (docRefs.length > 0) {
+                          console.log('[EMERY-CHAT] Creating artifacts for resolved references:', docRefs)
+                          
+                          // Create artifacts for each resolved reference
+                          docRefs.forEach(ref => {
+                            try {
+                              if (ref.type === 'doc' && ref.data) {
+                                const artifact = createDocumentArtifact(
+                                  ref.data,
+                                  1, // TODO: Extract actual tableId from ref
+                                  1, // TODO: Extract actual fieldId from ref  
+                                  'view'
+                                )
+                                console.log('[EMERY-CHAT] Created document artifact:', artifact)
+                                
+                                // Add artifact via LlamaIndex inline annotation system
+                                const title = ref.data.documentMetadata?.title || ref.data.name
+                                handler.append({ 
+                                  content: `📄 Document: ${title}\n\n\`\`\`artifact\n${JSON.stringify(artifact)}\n\`\`\``,
+                                  role: 'assistant'
+                                })
+                              } else if (ref.type === 'file' && ref.data) {
+                                const artifact = createFileArtifact(
+                                  ref.data,
+                                  1, // TODO: Extract actual tableId from ref
+                                  1, // TODO: Extract actual fieldId from ref
+                                  'pdf', // TODO: Determine correct viewer type
+                                  '/api/files/' + ref.data.id // TODO: Generate correct file URL
+                                )
+                                console.log('[EMERY-CHAT] Created file artifact:', artifact)
+                                
+                                // Add artifact via LlamaIndex inline annotation system
+                                handler.append({ 
+                                  content: `📁 File: ${ref.data.name}\n\n\`\`\`artifact\n${JSON.stringify(artifact)}\n\`\`\``,
+                                  role: 'assistant'
+                                })
+                              }
+                            } catch (error) {
+                              console.error('[EMERY-CHAT] Error creating artifact:', error)
+                            }
+                          })
+                        }
+                      } catch (error) {
+                        console.error('[EMERY-CHAT] Error resolving references:', error)
+                        // Send original message if reference resolution fails
+                        handler.append({ content: message, role: 'user' })
+                      }
+                    } else {
+                      // Send message normally if no references
+                      handler.append({ content: message, role: 'user' })
+                    }
                     setShowSuggestions(false)
                   }}
                   placeholder="Ask Emery anything..."
