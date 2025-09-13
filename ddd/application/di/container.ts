@@ -50,6 +50,7 @@ import { TableApplicationService } from '@/ddd/application/services/tables/table
 import { FileUseCases } from '@/ddd/application/services/tables/file-application-service';
 import { DocumentApplicationService } from '@/ddd/application/services/tables/document-application-service';
 import { ChatApplicationService } from '@/ddd/application/services/chat/chat-application-service';
+import { ReferenceApplicationService } from '@/ddd/application/services/chat/reference-application-service';
 
 // Domain services
 import { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
@@ -129,6 +130,7 @@ interface RepositoryRegistry {
   IChatRepository: IChatRepository;
   IChatMessageRepository: IChatMessageRepository;
   ChatApplicationService: ChatApplicationService;
+  ReferenceApplicationService: ReferenceApplicationService;
 
   // RAG domain repositories
   IRagIndexRepository: DrizzleRagIndexRepository;
@@ -325,11 +327,19 @@ export class DIContainer {
       dynamicTableService,
       agentRepository
     );
+
+    // Initialize ReferenceApplicationService with proper dependencies
+    const referenceApplicationService = new ReferenceApplicationService(
+      tableApplicationService,
+      agentApplicationService,
+      databaseApplicationService
+    );
     
     this.repositories.set('TableApplicationService', tableApplicationService);
     this.repositories.set('FileApplicationService', fileApplicationService);
     this.repositories.set('DocumentApplicationService', documentApplicationService);
     this.repositories.set('ChatApplicationService', chatApplicationService);
+    this.repositories.set('ReferenceApplicationService', referenceApplicationService);
 
     // Initialize RAG domain repositories
     const ragIndexRepository = new DrizzleRagIndexRepository(contextAwareDb);
@@ -475,6 +485,7 @@ type ServiceMap = {
   FileApplicationService: FileUseCases;
   DocumentApplicationService: DocumentApplicationService;
   ChatApplicationService: ChatApplicationService;
+  ReferenceApplicationService: ReferenceApplicationService;
   
 
   // RAG Services
@@ -546,6 +557,7 @@ export const getTableApplicationService = createGetter('TableApplicationService'
 export const getFileApplicationService = createGetter('FileApplicationService');
 export const getDocumentApplicationService = createGetter('DocumentApplicationService');
 export const getChatApplicationService = createGetter('ChatApplicationService');
+export const getReferenceApplicationService = createGetter('ReferenceApplicationService');
 
 // RAG service getters
 export const getRagIndexRepository = createGetter('RagIndexRepository');

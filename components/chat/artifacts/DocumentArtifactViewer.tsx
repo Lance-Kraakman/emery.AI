@@ -35,7 +35,7 @@ import {
 } from 'lucide-react'
 import type { DocumentArtifact } from '../types/chat-artifacts'
 import { getDocumentDisplayInfo } from '../types/chat-artifacts'
-import { referenceSearchActions } from '@/stores/reference-search.store'
+// Note: Old reference search store removed in favor of simplified system
 
 interface DocumentArtifactViewerProps {
   artifact: DocumentArtifact
@@ -188,8 +188,8 @@ export function DocumentArtifactViewer({
               const docName = artifact.data.documentField.name
               const referenceText = `@doc:${docName}`
               
-              // TODO: Implement reference button functionality with new architecture
-              referenceSearchActions.setQuery(docName)
+              // TODO: Implement reference button functionality with new simplified system
+              console.log('Add reference:', referenceText)
             }}
             className="text-xs"
             title="Add document reference to chat"

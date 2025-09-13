@@ -40,9 +40,14 @@ export async function getDocumentMentionsForTable(
     
     // First, get field definitions to find document fields
     const fields = await tableAppService.getFieldsForTable(TableId.fromNumber(tableId));
+    console.log(`[DEBUG] Table ${tableId}: Found ${fields.length} total fields`);
+    console.log(`[DEBUG] Field types:`, fields.map(f => ({ name: f.name, type: f.type })));
+    
     const documentFields = fields.filter(field => field.type === 'document');
+    console.log(`[DEBUG] Table ${tableId}: Found ${documentFields.length} document fields`);
     
     if (documentFields.length === 0) {
+      console.log(`[DEBUG] Table ${tableId}: No document fields found, returning empty array`);
       return []; // No document fields in this table
     }
 
@@ -52,15 +57,25 @@ export async function getDocumentMentionsForTable(
       { limit, offset: 0 }
     );
     
+    console.log(`[DEBUG] Table ${tableId}: Found ${rowsData.length} rows`);
+    
     const mentions: DocumentMention[] = [];
     
     // Process rows to extract document field values
     for (const row of rowsData) {
       const rowDTO = RowMapper.toDTO(row);
+      console.log(`[DEBUG] Row ${rowDTO.id}: Has ${rowDTO.fieldValues.length} field values`);
       
       for (const fieldValue of rowDTO.fieldValues) {
+        console.log(`[DEBUG] Field ${fieldValue.fieldSlug}: type=${fieldValue.fieldType}, hasValue=${!!fieldValue.value}`);
+        
         if (fieldValue.fieldType === 'document' && fieldValue.value) {
           const docField = fieldValue.value as unknown as DocumentFieldValue;
+          console.log(`[DEBUG] Document field found:`, { 
+            name: docField.name, 
+            title: docField.documentMetadata?.title,
+            hasMetadata: !!docField.documentMetadata 
+          });
           
           // Skip if no meaningful document data
           if (!docField.name && !docField.documentMetadata?.title) {
