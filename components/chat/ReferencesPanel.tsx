@@ -90,7 +90,6 @@ export function ReferencesPanel({
 }: ReferencesPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
 
-  // Don't render if no references and not loading
   if (!isLoading && resolvedReferences.length === 0) {
     return null
   }
