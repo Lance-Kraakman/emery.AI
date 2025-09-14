@@ -268,16 +268,16 @@ export async function getReferenceSuggestions(
     let query = partialText;
 
     if (partialText.startsWith('@doc:')) {
-      categories = ['doc'];
+      categories = [ReferenceCategory.DOC];
       query = partialText.substring(5);
     } else if (partialText.startsWith('@file:')) {
-      categories = ['file'];
+      categories = [ReferenceCategory.FILE];
       query = partialText.substring(6);
     } else if (partialText.startsWith('@agent:')) {
-      categories = ['agent'];
+      categories = [ReferenceCategory.AGENT];
       query = partialText.substring(7);
     } else if (partialText.startsWith('@table:')) {
-      categories = ['table'];
+      categories = [ReferenceCategory.TABLE];
       query = partialText.substring(7);
     } else if (partialText.startsWith('@')) {
       query = partialText.substring(1);
