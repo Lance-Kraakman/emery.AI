@@ -9,7 +9,8 @@ import { useLayout } from '@/components/layout/LayoutProvider'
 import { createChatStreamRequest, type ChatContextOptions } from './types/chat-requests'
 import { loadChatWithFullHistory, getCurrentChatSession } from '@/app/actions/chat-history'
 import type { ChatMessageDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config'
+import type { ToolDTO } from '@/app/mappers/tool-mapper'
+import { validateToolSelection } from '@/app/actions/tools'
 
 interface ChatMessage extends Message {
   id: string
@@ -26,10 +27,10 @@ interface ExtendedChatHandler extends ChatHandler {
   createNewChat?: () => Promise<void>
   onChatCreated?: (chatId: string) => void
   // Tool management
-  selectedTools: ToolConfig[]
-  availableTools: ToolConfig[]
-  addTool: (tool: ToolConfig) => void
-  removeTool: (toolName: string) => void
+  selectedTools: ToolDTO[]
+  availableTools: ToolDTO[]
+  addTool: (tool: ToolDTO) => void
+  removeTool: (toolId: string) => void
 }
 
 /**
@@ -59,8 +60,8 @@ export function useChatGRPC(
   const { chatContext } = useLayout()
 
   // Tool management state
-  const [selectedTools, setSelectedTools] = useState<ToolConfig[]>([])
-  const [availableTools, setAvailableTools] = useState<ToolConfig[]>([])
+  const [selectedTools, setSelectedTools] = useState<ToolDTO[]>([])
+  const [availableTools, setAvailableTools] = useState<ToolDTO[]>([])
   
   // Generate domain-specific storage key for this chat session
   const chatStorageKey = `emery-chat-${contextOptions?.domainType || chatContext?.domainType || 'general'}-${contextOptions?.domainId || chatContext?.domainId || 'default'}`
@@ -179,7 +180,14 @@ export function useChatGRPC(
       }
 
       // AIDEV-NOTE: Use helper function for consistent request structure with tools
-      const requestBody = createChatStreamRequest(chatMessages, chatContextOptions, currentChatId, selectedTools)
+      // Convert ToolDTOs to legacy ToolConfigs for createChatStreamRequest compatibility
+      const legacyToolConfigs = selectedTools.map(tool => ({
+        name: tool.name,
+        version: tool.version,
+        config: tool.config
+      }));
+
+      const requestBody = createChatStreamRequest(chatMessages, chatContextOptions, currentChatId, legacyToolConfigs)
       
       // Call the gRPC-based streaming chat API
       const response = await fetch('/api/chat/stream-grpc', {
@@ -348,18 +356,42 @@ export function useChatGRPC(
   }
 
   // Tool management functions
-  const addTool = (tool: ToolConfig) => {
-    setSelectedTools(prev => {
-      // Prevent duplicates
-      if (prev.find(t => t.name === tool.name)) {
-        return prev
+  const addTool = async (tool: ToolDTO) => {
+    // Validate tool before adding
+    try {
+      const validationResult = await validateToolSelection([tool])
+      if (validationResult.success && validationResult.data?.valid.length > 0) {
+        setSelectedTools(prev => {
+          // Prevent duplicates
+          if (prev.find(t => t.id === tool.id)) {
+            return prev
+          }
+          return [...prev, tool]
+        })
+      } else {
+        console.warn('Tool validation failed:', tool.name, validationResult.data?.missingConnections)
+        // Still add the tool but user will see connection status
+        setSelectedTools(prev => {
+          if (prev.find(t => t.id === tool.id)) {
+            return prev
+          }
+          return [...prev, tool]
+        })
       }
-      return [...prev, tool]
-    })
+    } catch (error) {
+      console.error('Error validating tool:', error)
+      // Add tool anyway, validation is not critical
+      setSelectedTools(prev => {
+        if (prev.find(t => t.id === tool.id)) {
+          return prev
+        }
+        return [...prev, tool]
+      })
+    }
   }
 
-  const removeTool = (toolName: string) => {
-    setSelectedTools(prev => prev.filter(t => t.name !== toolName))
+  const removeTool = (toolId: string) => {
+    setSelectedTools(prev => prev.filter(t => t.id !== toolId))
   }
 
   return {
