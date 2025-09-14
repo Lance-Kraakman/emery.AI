@@ -1,7 +1,7 @@
 'use client'
 
 import { generateId } from 'ai'
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { ChatHandler, Message } from '@llamaindex/chat-ui'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'

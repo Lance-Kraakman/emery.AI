@@ -74,22 +74,22 @@ export class SqlLogger {
   private static isDevelopment = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
 
   static logQuery(operation: string, query: string, params: any[]): void {
-    if (this.isDevelopment) {
-      console.log(`[SQL ${operation}]`, {
-        query: query.replace(/\s+/g, ' ').trim(),
-        params
-      });
-    }
+    // if (this.isDevelopment) {
+    //   console.log(`[SQL ${operation}]`, {
+    //     query: query.replace(/\s+/g, ' ').trim(),
+    //     params
+    //   });
+    // }
   }
 
   static logError(operation: string, error: Error, query: string, params: any[]): void {
-    if (this.isDevelopment) {
-      console.error(`[SQL ERROR ${operation}]`, {
-        error: error.message,
-        query: query.replace(/\s+/g, ' ').trim(),
-        params
-      });
-    }
+    // if (this.isDevelopment) {
+    //   console.error(`[SQL ERROR ${operation}]`, {
+    //     error: error.message,
+    //     query: query.replace(/\s+/g, ' ').trim(),
+    //     params
+    //   });
+    // }
   }
 }
 

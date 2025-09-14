@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Github } from "lucide-react"

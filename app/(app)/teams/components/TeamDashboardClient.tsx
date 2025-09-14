@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useStore } from '@tanstack/react-store';
 import { Search, Plus, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';

@@ -1,3 +1,4 @@
+import React from 'react'
 import AnimatedBackground from '@/app/components/AnimatedBackground'
 import { EmeryProviders } from '@/components/EmeryProviders'
 

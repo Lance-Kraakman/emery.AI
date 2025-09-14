@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { checkSetupStatus } from "@/app/actions/setup";
 import { redirect } from "next/navigation";
 import MissionControlClient from './MissionControlClient'
-import { Suspense } from "react";
+import React, { Suspense } from "react";
 
 export default async function MissionControlPage() {
   const session = await auth();

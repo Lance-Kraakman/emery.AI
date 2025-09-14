@@ -7,7 +7,7 @@
  * Replaces the sidebar panel with a cleaner dropdown approach.
  */
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { History, Plus, Search, MoreHorizontal, Archive, MessageSquare, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

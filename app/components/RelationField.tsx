@@ -3,7 +3,7 @@
 // AIDEV-NOTE: Relation field component following Baserow's JSON blob pattern
 // AIDEV-TODO: Add search functionality and pagination for large datasets
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Plus, Search } from 'lucide-react';
 import { getRowsData } from '@/app/actions/rows';
 import { getTables } from '@/app/actions/tables';

@@ -1,7 +1,7 @@
 'use client'
 
 import { useSession, signOut } from "next-auth/react"
-import { useState } from "react"
+import React, { useState } from "react"
 
 export default function UserMenu() {
   const { data: session } = useSession()

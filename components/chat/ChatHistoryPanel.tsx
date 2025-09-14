@@ -7,7 +7,7 @@
  * Allows users to switch between previous chats and create new ones.
  */
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Plus, Search, ChevronLeft, ChevronRight, History, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

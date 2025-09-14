@@ -1,3 +1,5 @@
+'use client'
+
 import React, { Suspense } from 'react'
 import { EmerySidebar } from '@/components/EmerySidebar'
 import { Loading } from '@/components/ui/loading'

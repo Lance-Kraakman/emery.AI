@@ -1,6 +1,6 @@
+import React from "react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { EmeryProviders } from '@/components/EmeryProviders';
 import { ConnectionsManager } from "./ConnectionsManager";
 
 export default async function ConnectionsPage() {

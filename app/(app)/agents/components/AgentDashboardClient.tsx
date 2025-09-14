@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useStore } from '@tanstack/react-store';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { TeamDTO } from '@/app/mappers/team-mapper';

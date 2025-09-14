@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { BasePage } from './BasePage'
 import { Database, Plus, Table } from 'lucide-react'
 import { Button } from '@/components/ui/button'

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { Save, X, Loader2, Plus, Trash2, ChevronDown, ChevronRight, Cog, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';

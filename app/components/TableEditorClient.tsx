@@ -3,7 +3,7 @@
 // AIDEV-NOTE: Client component for TableEditor - uses Server Actions for data operations
 // AIDEV-TODO: Add optimistic updates and error boundaries
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { getFields } from '@/app/actions/fields';
 import { getRowsData } from '@/app/actions/rows';

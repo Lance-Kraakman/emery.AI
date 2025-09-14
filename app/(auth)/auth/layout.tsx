@@ -1,3 +1,4 @@
+import React from 'react'
 import { Metadata } from 'next'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import AnimatedBackground from '@/app/components/AnimatedBackground'
