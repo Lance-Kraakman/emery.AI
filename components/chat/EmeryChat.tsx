@@ -198,47 +198,15 @@ function ChatSuggestions({
 }
 
 export function EmeryChat() {
+  // ALL HOOKS MUST BE CALLED FIRST - NO CONDITIONAL RETURNS BEFORE THIS POINT
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { data: session } = useSession()
   const { chatState, canvasState, chatContext, toggleCanvas, setChatContext } = useLayout()
   const { data: emeryData } = useEmery()
-  
+
   // Chat session state
   const [currentChatId, setCurrentChatId] = useState<string | undefined>()
-  
-  // Auto-detect page context if not already set
-  useEffect(() => {
-    if (!chatContext) {
-      // Extract page name from pathname
-      const pageName = pathname?.split('/')[1] || 'mission-control'
-      
-      // Extract domain ID from search params or pathname segments
-      let domainId: number | undefined
-      let domainName: string | undefined
-      
-      if (searchParams?.has('tableId')) {
-        domainId = parseInt(searchParams?.get('tableId')!)
-      } else if (searchParams?.has('agentId')) {
-        domainId = parseInt(searchParams?.get('agentId')!)
-      } else if (searchParams?.has('teamId')) {
-        domainId = parseInt(searchParams?.get('teamId')!)
-      } else {
-        // Try to extract from URL segments like /agents/123
-        const segments = pathname?.split('/').filter(Boolean) ?? []
-        if (segments.length >= 2 && !isNaN(parseInt(segments[1]))) {
-          domainId = parseInt(segments[1])
-        }
-      }
-      
-      console.log('[EMERY-CHAT] Auto-detecting context:', { pathname, pageName, domainId })
-      
-      // Create context based on detected page
-      const detectedContext = createChatContextForPage(pageName, domainId, domainName)
-      setChatContext(detectedContext)
-    }
-  }, [pathname, searchParams, chatContext, setChatContext])
-  
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const [isClient, setIsClient] = useState(false)
@@ -246,7 +214,7 @@ export function EmeryChat() {
   const [cursorPosition, setCursorPosition] = useState(0)
   const [resolvedReferences, setResolvedReferences] = useState<ResolvedReference[]>([])
   const [isResolvingReferences, setIsResolvingReferences] = useState(false)
-  
+
   // Handle chat history updates (callback for forcing refresh)
   const handleChatHistoryUpdate = () => {
     // Trigger refresh of chat history dropdown
@@ -262,13 +230,45 @@ export function EmeryChat() {
     // Trigger refresh of chat history dropdown
     handleChatHistoryUpdate()
   }
-  
+
   const handler = useChatGRPC({
     domainType: chatContext?.domainType,
     domainId: chatContext?.domainId,
     chatId: currentChatId
   }, handleChatCreated)
-  
+
+  // Auto-detect page context if not already set
+  useEffect(() => {
+    if (!chatContext) {
+      // Extract page name from pathname
+      const pageName = pathname?.split('/')[1] || 'mission-control'
+
+      // Extract domain ID from search params or pathname segments
+      let domainId: number | undefined
+      let domainName: string | undefined
+
+      if (searchParams?.has('tableId')) {
+        domainId = parseInt(searchParams?.get('tableId')!)
+      } else if (searchParams?.has('agentId')) {
+        domainId = parseInt(searchParams?.get('agentId')!)
+      } else if (searchParams?.has('teamId')) {
+        domainId = parseInt(searchParams?.get('teamId')!)
+      } else {
+        // Try to extract from URL segments like /agents/123
+        const segments = pathname?.split('/').filter(Boolean) ?? []
+        if (segments.length >= 2 && !isNaN(parseInt(segments[1]))) {
+          domainId = parseInt(segments[1])
+        }
+      }
+
+      console.log('[EMERY-CHAT] Auto-detecting context:', { pathname, pageName, domainId })
+
+      // Create context based on detected page
+      const detectedContext = createChatContextForPage(pageName, domainId, domainName)
+      setChatContext(detectedContext)
+    }
+  }, [pathname, searchParams, chatContext, setChatContext])
+
   // Update currentChatId when handler provides one
   useEffect(() => {
     if (handler.currentChatId && handler.currentChatId !== currentChatId) {
@@ -276,22 +276,48 @@ export function EmeryChat() {
     }
   }, [handler.currentChatId, currentChatId])
 
-  
   // Fix hydration by ensuring client-only rendering of dynamic content
   useEffect(() => {
     setIsClient(true)
   }, [])
 
-  
+  // Load references from chat history on mount/message changes
+  useEffect(() => {
+    const loadHistoryReferences = async () => {
+      if (!emeryData || handler.messages.length === 0) return;
+
+      console.log('[EMERY-CHAT] Loading references from chat history...');
+      const allRefs: ResolvedReference[] = [];
+
+      // Parse all existing user messages for references
+      for (const message of handler.messages) {
+        if (message.role === 'user' && hasReferences(message.content)) {
+          try {
+            const parsedRefs = await parseReferencesWithContext(message.content, emeryData);
+            allRefs.push(...parsedRefs);
+          } catch (error) {
+            console.error('[EMERY-CHAT] Error parsing references from message:', error);
+          }
+        }
+      }
+
+      setResolvedReferences(allRefs);
+    };
+
+    loadHistoryReferences();
+  }, [emeryData, handler.messages])
+
+  // NOW ALL HOOKS ARE CALLED - CONDITIONAL RETURNS ARE SAFE BELOW THIS POINT
+
   // Don't render if hidden - return hidden div instead of null to avoid hook rule violations
   if (chatState === 'hidden') {
     return <div className="hidden" />
   }
-  
+
   // Get user info for chat history
   const userId = session?.user?.id
   const organizationId = session?.user?.currentOrganizationId
-  
+
   // Don't render if user is not authenticated
   if (!userId || !organizationId) {
     return (
@@ -300,7 +326,7 @@ export function EmeryChat() {
       </div>
     )
   }
-  
+
   // Handle chat selection from history
   const handleChatSelect = async (chatId: string) => {
     if (handler.switchToChat) {
@@ -308,7 +334,7 @@ export function EmeryChat() {
       setCurrentChatId(chatId)
     }
   }
-  
+
   // Handle new chat creation
   const handleNewChat = async () => {
     if (handler.createNewChat) {
@@ -380,46 +406,6 @@ export function EmeryChat() {
     setIsResolvingReferences(isLoading)
   }
   
-  // Load references from chat history on mount/message changes
-  useEffect(() => {
-    const loadHistoryReferences = async () => {
-      if (!emeryData || handler.messages.length === 0) return;
-      
-      console.log('[EMERY-CHAT] Loading references from chat history...');
-      const allRefs: ResolvedReference[] = [];
-      
-      // Parse all existing user messages for references
-      for (const message of handler.messages) {
-        if (message.role === 'user' && hasReferences(message.content)) {
-          try {
-            const result = await resolveReferencesAction({
-              message: message.content,
-              emeryData: emeryData
-            });
-            allRefs.push(...result.resolvedReferences);
-          } catch (error) {
-            console.error('[EMERY-CHAT] Error resolving history reference:', error);
-          }
-        }
-      }
-      
-      // Deduplicate references by originalMatch
-      const uniqueRefs = allRefs.filter((ref, index, self) => 
-        index === self.findIndex(r => r.originalMatch === ref.originalMatch)
-      );
-      
-      if (uniqueRefs.length > 0) {
-        console.log('[EMERY-CHAT] Loaded', uniqueRefs.length, 'unique references from history');
-        setResolvedReferences(uniqueRefs);
-        setIsResolvingReferences(false);
-      }
-    };
-    
-    // Only load history references if we don't have any current references
-    if (resolvedReferences.length === 0) {
-      loadHistoryReferences();
-    }
-  }, [handler.messages, emeryData, resolvedReferences.length]);
 
   // Handle reference click to open in canvas
   const handleReferenceClick = (reference: ResolvedReference) => {

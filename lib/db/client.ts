@@ -22,9 +22,15 @@ const connectionString = parseConnectionString(rawConnectionString);
 const isBuildDummyUrl = connectionString.includes('build:build@localhost');
 const connectTimeout = isBuildDummyUrl ? 1 : 30; // 1 second for dummy, 30 for real
 
-export const rawClient = postgres(connectionString, {
+// AIDEV-NOTE: Prevent multiple client instances in development mode (hot reloading)
+declare global {
+  var __emeryDbClient: postgres.Sql | undefined;
+  var __emeryDb: any;
+}
+
+export const rawClient = global.__emeryDbClient || postgres(connectionString, {
   max: 5, // Small pool for container environment
-  idle_timeout: 30, 
+  idle_timeout: 30,
   max_lifetime: 60 * 60,
   connect_timeout: connectTimeout, // Short timeout for build-time dummy URLs
   prepare: false, // Disable prepared statements
@@ -36,7 +42,13 @@ export const rawClient = postgres(connectionString, {
   }
 });
 
-export const db = drizzle(rawClient, { schema });
+export const db = global.__emeryDb || drizzle(rawClient, { schema });
+
+// Store in global for development mode reuse
+if (process.env.NODE_ENV === 'development') {
+  global.__emeryDbClient = rawClient;
+  global.__emeryDb = db;
+}
 
 export type DbClient = typeof db;
 
