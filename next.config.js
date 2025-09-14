@@ -26,18 +26,19 @@ const nextConfig = {
         '@mapbox/node-pre-gyp',
         'mock-aws-s3'
       );
-      
-      // AIDEV-NOTE: Provide React globally to fix "React is not defined" in SSR chunks
-      // This fixes webpack chunks that use React under different aliases (like 'cz')
-      const webpack = require('webpack');
-      config.plugins = config.plugins || [];
-      config.plugins.push(
-        new webpack.ProvidePlugin({
-          React: 'react',
-          cz: 'react'
-        })
-      );
     }
+
+    // AIDEV-NOTE: Provide React globally to fix "React is not defined" in both SSR and client chunks
+    // This fixes webpack chunks that use React under different aliases (like 'cz')
+    const webpack = require('webpack');
+    config.plugins = config.plugins || [];
+    config.plugins.push(
+      new webpack.ProvidePlugin({
+        React: 'react',
+        cz: 'react'
+      })
+    );
+
     return config
   },
   
