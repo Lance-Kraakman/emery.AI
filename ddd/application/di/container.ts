@@ -45,6 +45,13 @@ import { DrizzleRBACRepository } from '@/ddd/infrastructure/db/repositories/rbac
 import { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/databases/drizzle-database-repository';
 
+// Tools domain imports
+import { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
+import { IToolProxyService } from '@/ddd/domain/tools/services/tool-proxy';
+
+// Chat domain imports
+import { IReferenceResolverService } from '@/ddd/domain/chat/services/reference-resolver';
+
 // New application services for tables, fields, rows, files, and chat
 import { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
 import { FileUseCases } from '@/ddd/application/services/tables/file-application-service';
@@ -125,8 +132,13 @@ interface RepositoryRegistry {
   
   // Domain services
   DynamicTableService: DynamicTableService;
-  
+
+  // Tools domain services
+  IToolRegistryService: IToolRegistryService;
+  IToolProxyService: IToolProxyService;
+
   // Chat domain services
+  IReferenceResolverService: IReferenceResolverService;
   IChatRepository: IChatRepository;
   IChatMessageRepository: IChatMessageRepository;
   ChatApplicationService: ChatApplicationService;

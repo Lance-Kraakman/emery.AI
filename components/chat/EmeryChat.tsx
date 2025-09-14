@@ -28,7 +28,7 @@ import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
 import { ToolSelectionPanel } from './ToolSelectionPanel'
-import type { ToolConfig } from '@/lib/grpc/generated/agent_worker'
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config'
 
 /**
  * EmeryChat - Main chat component with LlamaIndex integration
@@ -378,51 +378,27 @@ export function EmeryChat() {
       label: 'References',
       icon: <Database className="h-3 w-3" />,
       tools: [
-        {
-          name: 'document_reader',
-          version: '1.0',
-          config: { title: 'Sales Report Q4', type: 'document' }
-        },
-        {
-          name: 'file_reader',
-          version: '1.0',
-          config: { title: 'Analysis.pdf', type: 'file' }
-        }
-      ] as ToolConfig[]
+        ToolConfig.create('document_reader', '1.0', { title: 'Sales Report Q4', type: 'document' }),
+        ToolConfig.create('file_reader', '1.0', { title: 'Analysis.pdf', type: 'file' })
+      ]
     },
     {
       name: 'apps' as const,
       label: 'Apps',
       icon: <Users className="h-3 w-3" />,
       tools: [
-        {
-          name: 'slack_send_message',
-          version: '1.0',
-          config: { title: 'Send Slack Message', app: 'slack' }
-        },
-        {
-          name: 'pipedream_webhook',
-          version: '1.0',
-          config: { title: 'Trigger Webhook', app: 'pipedream' }
-        }
-      ] as ToolConfig[]
+        ToolConfig.create('slack_send_message', '1.0', { title: 'Send Slack Message', app: 'slack' }),
+        ToolConfig.create('pipedream_webhook', '1.0', { title: 'Trigger Webhook', app: 'pipedream' })
+      ]
     },
     {
       name: 'utilities' as const,
       label: 'Utilities',
       icon: <BarChart className="h-3 w-3" />,
       tools: [
-        {
-          name: 'data_analyzer',
-          version: '1.0',
-          config: { title: 'Analyze Data', type: 'utility' }
-        },
-        {
-          name: 'report_generator',
-          version: '1.0',
-          config: { title: 'Generate Report', type: 'utility' }
-        }
-      ] as ToolConfig[]
+        ToolConfig.create('data_analyzer', '1.0', { title: 'Analyze Data', type: 'utility' }),
+        ToolConfig.create('report_generator', '1.0', { title: 'Generate Report', type: 'utility' })
+      ]
     }
   ], [])
 

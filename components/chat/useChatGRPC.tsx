@@ -9,7 +9,7 @@ import { useLayout } from '@/components/layout/LayoutProvider'
 import { createChatStreamRequest, type ChatContextOptions } from './types/chat-requests'
 import { loadChatWithFullHistory, getCurrentChatSession } from '@/app/actions/chat-history'
 import type { ChatMessageDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
-import type { ToolConfig } from '@/lib/grpc/generated/agent_worker'
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config'
 
 interface ChatMessage extends Message {
   id: string

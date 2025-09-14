@@ -9,6 +9,8 @@
  */
 
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { Reference, referenceToSimple } from '@/ddd/domain/chat/value-objects/reference';
+import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
 import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
 import type { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
@@ -16,6 +18,7 @@ import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persis
 import { RowMapper, type DocumentFieldValue, type FileFieldValue } from '@/app/mappers/row-mapper';
 import { isDocumentArray, isFileArray } from '@/ddd/domain/tables/value-objects/field-values';
 
+// Legacy interface for backward compatibility
 export interface SimpleReference {
   id: string;
   insertText: string;      // "@doc:database/table/document-title"
@@ -26,7 +29,7 @@ export interface SimpleReference {
 
 export interface SearchReferencesOptions {
   query: string;
-  categories?: ('doc' | 'file' | 'agent' | 'table' | 'database')[];
+  categories?: ReferenceCategory[];
   limit?: number;
   offset?: number;
   organizationId: OrganizationId;
@@ -161,13 +164,14 @@ export class ReferenceApplicationService {
     // Apply pagination manually since AgentApplicationService doesn't support offset
     const paginatedAgents = agents.slice(offset, offset + limit);
 
-    return paginatedAgents.map(agent => ({
-      id: `agent-${agent.id.value}`,
-      insertText: `@agent:${agent.name.toLowerCase().replace(/\s+/g, '-')}`,
-      displayName: agent.name,
-      description: `${agent.role || 'Agent'} - ${agent.description || 'No description'}`,
-      category: 'agent' as const
-    }));
+    return paginatedAgents.map(agent => {
+      const reference = Reference.agent(
+        `agent-${agent.id.value}`,
+        agent.name,
+        `${agent.role || 'Agent'} - ${agent.description || 'No description'}`
+      );
+      return referenceToSimple(reference);
+    });
   }
 
   /**
