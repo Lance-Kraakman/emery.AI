@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState } from 'react'
-import { FileText, File, Database, Users, Plus, X, ChevronDown, ChevronUp, Settings, Zap, BarChart, ExternalLink, Eye } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { FileText, File, Database, Users, Plus, X, ChevronDown, ChevronUp, Settings, Zap, BarChart, ExternalLink, Eye, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
-// Reference types for backward compatibility (simplified from old reference-resolver)
+import { getAvailableTools, validateToolSelection } from '@/app/actions/tools'
+import type { ToolDTO, ToolCategoryDTO, ToolSelectionDTO } from '@/app/mappers/tool-mapper'
+// Legacy interface maintained for backward compatibility during migration
 export interface ResolvedReference {
   type: 'doc' | 'file' | 'table' | 'agent' | 'tool'
   fullPath: string
@@ -24,60 +25,59 @@ export interface ResolvedReference {
   }
 }
 
-interface ToolCategory {
-  name: 'references' | 'apps' | 'utilities'
-  label: string
-  icon: React.ReactNode
-  tools: ToolConfig[]
-}
+// Using proper DTOs from mapper
+type ToolCategory = ToolCategoryDTO
 
 interface ToolSelectionPanelProps {
-  availableTools: ToolCategory[]
-  selectedTools: ToolConfig[]
-  onToolSelect: (tool: ToolConfig) => void
-  onToolDeselect: (tool: ToolConfig) => void
+  selectedTools: ToolDTO[]
+  onToolSelect: (tool: ToolDTO) => void
+  onToolDeselect: (tool: ToolDTO) => void
   onOpenArtifact?: (artifact: any) => void // For opening doc/file artifacts
   className?: string
 }
 
 interface ToolCardProps {
-  tool: ToolConfig
+  tool: ToolDTO
   isSelected: boolean
   onToggle: () => void
   onOpenArtifact?: (artifact: any) => void
-  canOpenArtifact: boolean
 }
 
-function ToolCard({ tool, isSelected, onToggle, onOpenArtifact, canOpenArtifact }: ToolCardProps) {
-  // Determine icon based on tool name/type
+function ToolCard({ tool, isSelected, onToggle, onOpenArtifact }: ToolCardProps) {
+  // Determine icon based on tool type from DTO
   const getIcon = () => {
-    if (tool.name.includes('document') || tool.name.includes('doc')) {
-      return <FileText className="h-4 w-4 text-blue-600" />
+    switch (tool.type) {
+      case 'document':
+        return <FileText className="h-4 w-4 text-blue-600" />
+      case 'file':
+        return <File className="h-4 w-4 text-green-600" />
+      case 'table':
+        return <Database className="h-4 w-4 text-purple-600" />
+      case 'agent':
+        return <Users className="h-4 w-4 text-orange-600" />
+      case 'oauth_app':
+        return <Users className="h-4 w-4 text-orange-600" />
+      case 'webhook':
+        return <Zap className="h-4 w-4 text-purple-600" />
+      case 'utility':
+        return <BarChart className="h-4 w-4 text-gray-600" />
+      default:
+        return <Zap className="h-4 w-4 text-gray-600" />
     }
-    if (tool.name.includes('file')) {
-      return <File className="h-4 w-4 text-green-600" />
-    }
-    if (tool.name.includes('table') || tool.name.includes('data')) {
-      return <Database className="h-4 w-4 text-purple-600" />
-    }
-    if (tool.name.includes('slack') || tool.name.includes('teams')) {
-      return <Users className="h-4 w-4 text-orange-600" />
-    }
-    return <Zap className="h-4 w-4 text-gray-600" />
   }
 
-  // Get display name from tool config
+  // Get display name from tool DTO
   const getDisplayName = () => {
-    return tool.config.title || tool.config.name || tool.name
+    return tool.title
   }
 
   // Handle opening artifact
   const handleOpenArtifact = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (onOpenArtifact && canOpenArtifact) {
+    if (onOpenArtifact && tool.canOpenArtifact) {
       try {
         // Create appropriate artifact based on tool type
-        if (tool.name.includes('document') || tool.name.includes('doc')) {
+        if (tool.type === 'document') {
           // Create document artifact from tool config
           const artifact = createDocumentArtifact(
             tool.config as any, // DocumentFieldValue
@@ -87,7 +87,7 @@ function ToolCard({ tool, isSelected, onToggle, onOpenArtifact, canOpenArtifact 
             tool.config.fileUrl
           )
           onOpenArtifact(artifact)
-        } else if (tool.name.includes('file')) {
+        } else if (tool.type === 'file') {
           // Create file artifact from tool config
           const artifact = createFileArtifact(
             tool.config as any, // FileFieldValue
@@ -125,8 +125,17 @@ function ToolCard({ tool, isSelected, onToggle, onOpenArtifact, canOpenArtifact 
         {isSelected && <X className="h-3 w-3" />}
       </button>
 
+      {/* Connection status indicator */}
+      {tool.requiresConnection && (
+        <div className={`w-2 h-2 rounded-full ${
+          tool.connectionStatus === 'connected' ? 'bg-green-500' :
+          tool.connectionStatus === 'error' ? 'bg-red-500' :
+          'bg-yellow-500'
+        }`} title={`Connection: ${tool.connectionStatus || 'unknown'}`} />
+      )}
+
       {/* Artifact open button - only for doc/file references */}
-      {canOpenArtifact && (
+      {tool.canOpenArtifact && (
         <Button
           variant="ghost"
           size="sm"
@@ -149,12 +158,12 @@ function CategorySection({
   onOpenArtifact
 }: {
   category: ToolCategory
-  selectedTools: ToolConfig[]
-  onToolSelect: (tool: ToolConfig) => void
-  onToolDeselect: (tool: ToolConfig) => void
+  selectedTools: ToolDTO[]
+  onToolSelect: (tool: ToolDTO) => void
+  onToolDeselect: (tool: ToolDTO) => void
   onOpenArtifact?: (artifact: any) => void
 }) {
-  const [isExpanded, setIsExpanded] = useState(true)
+  const [isExpanded, setIsExpanded] = useState(category.expanded !== false)
 
   if (category.tools.length === 0) {
     return null
@@ -166,8 +175,9 @@ function CategorySection({
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-2"
       >
-        {category.icon}
+        {getCategoryIcon(category.icon)}
         {category.label}
+        <span className="text-xs text-muted-foreground ml-1">({category.tools.length})</span>
         {isExpanded ? (
           <ChevronDown className="h-3 w-3" />
         ) : (
@@ -178,15 +188,13 @@ function CategorySection({
       {isExpanded && (
         <div className="flex flex-wrap gap-2">
           {category.tools.map((tool, index) => {
-            const isSelected = selectedTools.some(t => t.name === tool.name)
-            const canOpenArtifact = tool.config.type === 'document' || tool.config.type === 'file'
+            const isSelected = selectedTools.some(t => t.id === tool.id)
 
             return (
               <ToolCard
-                key={`${tool.name}-${index}`}
+                key={`${tool.id}-${index}`}
                 tool={tool}
                 isSelected={isSelected}
-                canOpenArtifact={canOpenArtifact}
                 onOpenArtifact={onOpenArtifact}
                 onToggle={() => {
                   if (isSelected) {
@@ -205,7 +213,6 @@ function CategorySection({
 }
 
 export function ToolSelectionPanel({
-  availableTools,
   selectedTools,
   onToolSelect,
   onToolDeselect,
@@ -213,9 +220,61 @@ export function ToolSelectionPanel({
   className = ""
 }: ToolSelectionPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [toolData, setToolData] = useState<ToolSelectionDTO | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // Don't render if no tools available
-  if (availableTools.every(cat => cat.tools.length === 0)) {
+  // Load available tools on mount
+  useEffect(() => {
+    loadAvailableTools()
+  }, [])
+
+  const loadAvailableTools = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+
+      const result = await getAvailableTools()
+      if (result.success && result.data) {
+        setToolData(result.data)
+      } else {
+        setError(result.error || 'Failed to load tools')
+      }
+    } catch (err) {
+      console.error('Error loading tools:', err)
+      setError('Failed to load tools')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Don't render if loading or no tools available
+  if (isLoading) {
+    return (
+      <div className={`border-t border-border bg-muted/10 ${className}`}>
+        <div className="px-4 py-3 flex items-center gap-2">
+          <RefreshCw className="h-4 w-4 animate-spin" />
+          <span className="text-sm text-muted-foreground">Loading tools...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className={`border-t border-border bg-muted/10 ${className}`}>
+        <div className="px-4 py-3">
+          <div className="text-sm text-destructive mb-2">{error}</div>
+          <Button onClick={loadAvailableTools} size="sm" variant="outline">
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Retry
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!toolData || toolData.availableCategories.every(cat => cat.tools.length === 0)) {
     return null
   }
 
@@ -250,7 +309,7 @@ export function ToolSelectionPanel({
         {/* Tool Categories */}
         {!isCollapsed && (
           <div className="space-y-4">
-            {availableTools.map((category, index) => (
+            {toolData.availableCategories.map((category, index) => (
               <CategorySection
                 key={`${category.name}-${index}`}
                 category={category}
@@ -261,7 +320,7 @@ export function ToolSelectionPanel({
               />
             ))}
 
-            {availableTools.every(cat => cat.tools.length === 0) && (
+            {toolData.availableCategories.every(cat => cat.tools.length === 0) && (
               <div className="text-center py-4 text-muted-foreground text-sm">
                 No tools or references available
               </div>
@@ -273,86 +332,51 @@ export function ToolSelectionPanel({
   )
 }
 
-// Utility function to convert ResolvedReference to ToolConfig for compatibility
+// Helper function to get React icon component from string identifier
+function getCategoryIcon(iconName: string) {
+  const icons: Record<string, React.ReactNode> = {
+    Database: <Database className="h-3 w-3" />,
+    Users: <Users className="h-3 w-3" />,
+    BarChart: <BarChart className="h-3 w-3" />,
+    Zap: <Zap className="h-3 w-3" />,
+    Settings: <Settings className="h-3 w-3" />
+  }
+  return icons[iconName] || <Settings className="h-3 w-3" />
+}
+
+// Utility function to convert ResolvedReference to ToolDTO for compatibility
 export function createReferenceToolCategory(references: ResolvedReference[]): ToolCategory {
+  const tools: ToolDTO[] = references
+    .filter(ref => !ref.metadata?.error) // Only include valid references
+    .map(ref => ({
+      id: `${ref.type}-${ref.data?.id || Math.random()}`,
+      name: ref.type === 'doc' ? 'document_reader' :
+            ref.type === 'file' ? 'file_reader' :
+            ref.type === 'table' ? 'table_reader' :
+            ref.type === 'agent' ? 'agent_reader' : 'reference_reader',
+      version: '1.0',
+      title: ref.data?.name || ref.data?.documentMetadata?.title || ref.originalMatch,
+      description: `${ref.type} reference`,
+      category: 'references' as const,
+      type: ref.type as any,
+      requiresConnection: false,
+      canOpenArtifact: ref.type === 'doc' || ref.type === 'file',
+      config: {
+        title: ref.data?.name || ref.data?.documentMetadata?.title || ref.originalMatch,
+        type: ref.type,
+        id: ref.data?.id?.toString() || ref.originalMatch,
+        reference_id: ref.data?.id?.toString(),
+        original_match: ref.originalMatch,
+        ...ref.data
+      }
+    }))
+
   return {
     name: 'references',
     label: 'References',
-    icon: <Database className="h-3 w-3" />,
-    tools: references
-      .filter(ref => !ref.metadata?.error) // Only include valid references
-      .map(ref => ({
-        name: ref.type === 'doc' ? 'document_reader' :
-              ref.type === 'file' ? 'file_reader' :
-              ref.type === 'table' ? 'table_reader' :
-              ref.type === 'agent' ? 'agent_reader' : 'reference_reader',
-        version: '1.0',
-        config: {
-          title: ref.data?.name || ref.data?.documentMetadata?.title || ref.originalMatch,
-          type: ref.type,
-          id: ref.data?.id?.toString() || ref.originalMatch,
-          reference_id: ref.data?.id?.toString(),
-          original_match: ref.originalMatch,
-          // Include metadata for artifact generation
-          ...ref.data
-        }
-      })) as ToolConfig[]
+    icon: 'Database',
+    description: 'Documents and files from your data',
+    tools,
+    expanded: true
   }
-}
-
-// Utility to create sample tool categories (for development/testing)
-export function createSampleToolCategories(): ToolCategory[] {
-  return [
-    {
-      name: 'references',
-      label: 'References',
-      icon: <Database className="h-3 w-3" />,
-      tools: [
-        {
-          name: 'document_reader',
-          version: '1.0',
-          config: { title: 'Sales Report Q4', type: 'document', id: 'doc_1' }
-        },
-        {
-          name: 'file_reader',
-          version: '1.0',
-          config: { title: 'Analysis.pdf', type: 'file', id: 'file_1' }
-        }
-      ] as ToolConfig[]
-    },
-    {
-      name: 'apps',
-      label: 'Apps',
-      icon: <Users className="h-3 w-3" />,
-      tools: [
-        {
-          name: 'slack_send_message',
-          version: '1.0',
-          config: { title: 'Send Slack Message', app: 'slack' }
-        },
-        {
-          name: 'pipedream_webhook',
-          version: '1.0',
-          config: { title: 'Trigger Webhook', app: 'pipedream' }
-        }
-      ] as ToolConfig[]
-    },
-    {
-      name: 'utilities',
-      label: 'Utilities',
-      icon: <BarChart className="h-3 w-3" />,
-      tools: [
-        {
-          name: 'data_analyzer',
-          version: '1.0',
-          config: { title: 'Analyze Data', type: 'utility' }
-        },
-        {
-          name: 'report_generator',
-          version: '1.0',
-          config: { title: 'Generate Report', type: 'utility' }
-        }
-      ] as ToolConfig[]
-    }
-  ]
 }

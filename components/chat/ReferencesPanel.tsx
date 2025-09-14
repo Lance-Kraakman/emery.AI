@@ -1,26 +1,28 @@
 'use client'
 
-import React, { useState } from 'react'
-import { FileText, File, Database, Users, Plus, X, ChevronDown, ChevronUp } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { FileText, File, Database, Users, Plus, X, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { ResolvedReference } from '@/lib/chat/reference-resolver'
+import { resolveReferences } from '@/app/actions/references'
+import type { ReferenceDTO, ReferencePanelStateDTO } from '@/app/mappers/reference-mapper'
 
 interface ReferencesPanelProps {
-  resolvedReferences: ResolvedReference[]
-  onReferenceClick: (reference: ResolvedReference) => void
+  referenceTexts?: string[] // Reference texts to resolve (@doc:path, @file:path)
+  resolvedReferences?: ReferenceDTO[] // Pre-resolved references
+  onReferenceClick: (reference: ReferenceDTO) => void
   isLoading?: boolean
   className?: string
 }
 
 interface ReferenceCardProps {
-  reference: ResolvedReference
+  reference: ReferenceDTO
   onClick: () => void
 }
 
 function ReferenceCard({ reference, onClick }: ReferenceCardProps) {
-  // Determine icon based on reference type
+  // Determine icon based on reference category
   const getIcon = () => {
-    switch (reference.type) {
+    switch (reference.category) {
       case 'doc':
         return <FileText className="h-4 w-4 text-blue-600" />
       case 'file':
@@ -29,27 +31,20 @@ function ReferenceCard({ reference, onClick }: ReferenceCardProps) {
         return <Database className="h-4 w-4 text-purple-600" />
       case 'agent':
         return <Users className="h-4 w-4 text-orange-600" />
+      case 'database':
+        return <Database className="h-4 w-4 text-gray-600" />
       default:
         return <FileText className="h-4 w-4 text-gray-600" />
     }
   }
 
-  // Get display name
+  // Get display name from DTO
   const getDisplayName = () => {
     if (reference.metadata?.error) {
-      return `${reference.originalMatch} (not found)`
+      return `${reference.displayName} (not found)`
     }
-    
-    if (reference.type === 'doc' && reference.data) {
-      return reference.data.documentMetadata?.title || reference.data.name
-    }
-    
-    if (reference.type === 'file' && reference.data) {
-      return reference.data.name
-    }
-    
-    // Fallback to fullPath or originalMatch
-    return reference.fullPath || reference.originalMatch.replace(/^@\w+:/, '')
+
+    return reference.displayName
   }
 
   return (
@@ -59,11 +54,12 @@ function ReferenceCard({ reference, onClick }: ReferenceCardProps) {
       className={`
         flex items-center gap-2 px-3 py-2 rounded-md border text-sm
         transition-colors duration-150 flex-shrink-0 max-w-xs
-        ${reference.metadata?.error 
-          ? 'border-red-200 bg-red-50 text-red-600 cursor-not-allowed' 
+        ${reference.metadata?.error
+          ? 'border-red-200 bg-red-50 text-red-600 cursor-not-allowed'
           : 'border-border bg-background hover:bg-muted/50 cursor-pointer'
         }
       `}
+      title={reference.description}
     >
       {getIcon()}
       <span className="truncate font-medium">
@@ -82,15 +78,65 @@ function LoadingSkeleton() {
   )
 }
 
-export function ReferencesPanel({ 
-  resolvedReferences, 
-  onReferenceClick, 
-  isLoading = false,
-  className = "" 
+export function ReferencesPanel({
+  referenceTexts,
+  resolvedReferences: propResolvedReferences,
+  onReferenceClick,
+  isLoading: propIsLoading = false,
+  className = ""
 }: ReferencesPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [panelState, setPanelState] = useState<ReferencePanelStateDTO>({
+    resolvedReferences: propResolvedReferences || [],
+    isLoading: propIsLoading,
+    isCollapsed: false
+  })
 
-  if (!isLoading && resolvedReferences.length === 0) {
+  // Resolve references when referenceTexts prop changes
+  useEffect(() => {
+    if (referenceTexts && referenceTexts.length > 0) {
+      resolveReferenceTexts(referenceTexts)
+    } else if (propResolvedReferences) {
+      // Use pre-resolved references
+      setPanelState(prev => ({
+        ...prev,
+        resolvedReferences: propResolvedReferences,
+        isLoading: propIsLoading
+      }))
+    }
+  }, [referenceTexts, propResolvedReferences, propIsLoading])
+
+  const resolveReferenceTexts = async (texts: string[]) => {
+    try {
+      setPanelState(prev => ({ ...prev, isLoading: true, error: undefined }))
+
+      const result = await resolveReferences(texts)
+      if (result.success && result.data) {
+        setPanelState(prev => ({
+          ...prev,
+          resolvedReferences: result.data!.resolvedReferences,
+          isLoading: false,
+          error: undefined
+        }))
+      } else {
+        setPanelState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: result.error || 'Failed to resolve references'
+        }))
+      }
+    } catch (error) {
+      console.error('Error resolving references:', error)
+      setPanelState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }))
+    }
+  }
+
+  // Don't render if no references and not loading
+  if (!panelState.isLoading && panelState.resolvedReferences.length === 0 && !panelState.error) {
     return null
   }
 
@@ -111,9 +157,9 @@ export function ReferencesPanel({
                 <ChevronDown className="h-3 w-3" />
               )}
             </button>
-            {!isLoading && resolvedReferences.length > 0 && (
+            {!panelState.isLoading && panelState.resolvedReferences.length > 0 && (
               <span className="text-xs text-muted-foreground">
-                {resolvedReferences.length}
+                {panelState.resolvedReferences.length}
               </span>
             )}
           </div>
@@ -131,16 +177,25 @@ export function ReferencesPanel({
         {/* References */}
         {!isCollapsed && (
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            {isLoading && (
+            {/* Error State */}
+            {panelState.error && (
+              <div className="px-3 py-2 rounded-md border border-red-200 bg-red-50 text-red-600 text-sm">
+                {panelState.error}
+              </div>
+            )}
+
+            {/* Loading State */}
+            {panelState.isLoading && (
               <>
                 <LoadingSkeleton />
                 <LoadingSkeleton />
               </>
             )}
-            
-            {resolvedReferences.map((reference, index) => (
+
+            {/* Resolved References */}
+            {panelState.resolvedReferences.map((reference, index) => (
               <ReferenceCard
-                key={`${reference.type}-${reference.originalMatch}-${index}`}
+                key={`${reference.category}-${reference.id}-${index}`}
                 reference={reference}
                 onClick={() => onReferenceClick(reference)}
               />
