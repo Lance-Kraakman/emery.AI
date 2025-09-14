@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Edit, ChevronDown, ChevronRight, Activity, Cog, Save, X, Loader2, Calendar, Plus, Trash2 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';

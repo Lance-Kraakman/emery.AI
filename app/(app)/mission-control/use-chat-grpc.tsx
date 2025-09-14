@@ -1,7 +1,7 @@
 'use client'
 
 import { generateId } from 'ai'
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { ChatHandler, Message } from '@llamaindex/chat-ui'
 
 interface ChatMessage extends Message {

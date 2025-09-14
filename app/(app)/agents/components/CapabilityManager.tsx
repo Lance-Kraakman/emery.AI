@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Settings, Plus, Edit, Trash2, Save, X } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { CapabilityConfig, StepConfig, ToolConfig, ServerConfig } from '@/ddd/domain/agents/entities/agent';

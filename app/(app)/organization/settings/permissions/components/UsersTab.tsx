@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   useReactTable, 
   getCoreRowModel, 
@@ -265,7 +265,7 @@ interface MembersTableProps {
   members: OrganizationMemberDTO[];
   roleUpdating: string | null;
   onRoleChange: (userId: string, newRole: SystemRoleType) => void;
-  getRoleIcon: (role: SystemRoleType | string) => JSX.Element;
+  getRoleIcon: (role: SystemRoleType | string) => React.JSX.Element;
   getRoleBadgeVariant: (role: SystemRoleType | string) => 'default' | 'secondary' | 'destructive' | 'outline';
 }
 

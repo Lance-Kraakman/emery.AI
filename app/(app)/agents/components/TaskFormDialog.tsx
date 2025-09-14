@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { ToolConfig, ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import { createTask } from '@/app/actions/tasks';

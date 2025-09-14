@@ -1,7 +1,7 @@
 'use client';
 
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { getTasks } from '@/app/actions/tasks';
 import TaskFormDialog from './TaskFormDialog';
 

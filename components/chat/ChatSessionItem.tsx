@@ -7,7 +7,7 @@
  * Displays chat metadata and handles session switching.
  */
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { MoreHorizontal, MessageSquare, Calendar, Archive, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {

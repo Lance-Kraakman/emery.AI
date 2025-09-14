@@ -1,3 +1,4 @@
+import React from 'react'
 import './globals.css'
 import AuthProvider from '@/components/AuthProvider'
 import { Metadata } from 'next'

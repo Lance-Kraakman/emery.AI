@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { useSearchParams } from 'next/navigation'
 import DashboardMainContent from '@/app/components/DashboardMainContent'
 import { MissionControlPage } from '@/components/canvas'

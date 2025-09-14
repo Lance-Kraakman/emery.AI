@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { FileText, File, Database, Users, Plus, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { ResolvedReference } from '@/lib/chat/reference-resolver'

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, RefreshCw } from 'lucide-react';
 import { getUserOAuthConnections, getAppConnectionUrl, disconnectOAuthAccount } from '@/app/actions/connections';
 import { Button } from '@/components/ui/button';

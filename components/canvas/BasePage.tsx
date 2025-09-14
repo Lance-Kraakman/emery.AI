@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode } from 'react'
+import React, { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft } from 'lucide-react'
 import { useLayout } from '@/components/layout/LayoutProvider'

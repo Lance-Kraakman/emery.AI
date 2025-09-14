@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { TeamDTO } from '@/app/mappers/team-mapper';
 import { getTeamMembers, addTeamMember, removeTeamMember } from '@/app/actions/teams';
 

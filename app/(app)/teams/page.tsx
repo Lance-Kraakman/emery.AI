@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import React, { Suspense } from 'react';
 import { getTeams } from '@/app/actions/teams';
 import { getAgents } from '@/app/actions/agents';
 import { Loading } from '@/components/ui/loading';

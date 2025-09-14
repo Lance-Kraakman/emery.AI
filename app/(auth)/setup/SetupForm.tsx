@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { createOrganization } from "@/app/actions/setup";
 import { useRouter } from "next/navigation";
 

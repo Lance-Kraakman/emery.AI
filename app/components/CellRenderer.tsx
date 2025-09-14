@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 
 interface CellRendererProps {

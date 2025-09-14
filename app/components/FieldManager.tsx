@@ -2,7 +2,7 @@
 
 // AIDEV-NOTE: Client component for field management - needs interactivity for CRUD operations
 
-import { useState, useTransition } from 'react';
+import React, { useState, useTransition } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { createFieldAction, deleteFieldAction } from '@/app/actions/fields';
 import type { FieldDTO } from '@/app/mappers/field-mapper';

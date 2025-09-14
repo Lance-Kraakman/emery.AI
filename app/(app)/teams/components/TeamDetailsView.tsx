@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Edit, Users, Target, CheckCircle, ChevronDown, ChevronRight, UserCheck, Activity, Save, X, Loader2 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { TeamDTO } from '@/app/mappers/team-mapper';
