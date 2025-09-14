@@ -7,7 +7,7 @@ import { EmeryChat } from '@/components/chat/EmeryChat'
 import { useLayout } from './LayoutProvider'
 import type { EmeryLayoutProps, ChatContextConfig } from './types'
 
-/**
+/** p p
  * EmeryLayout - Core layout component with canvas expansion logic
  * 
  * Layout modes based on canvas state:
