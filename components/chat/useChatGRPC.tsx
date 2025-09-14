@@ -9,12 +9,13 @@ import { useLayout } from '@/components/layout/LayoutProvider'
 import { createChatStreamRequest, type ChatContextOptions } from './types/chat-requests'
 import { loadChatWithFullHistory, getCurrentChatSession } from '@/app/actions/chat-history'
 import type { ChatMessageDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
+import type { ToolConfig } from '@/lib/grpc/generated/agent_worker'
 
 interface ChatMessage extends Message {
   id: string
 }
 
-// Extended ChatHandler interface with scroll functionality and persistence
+// Extended ChatHandler interface with scroll functionality, persistence, and tool management
 interface ExtendedChatHandler extends ChatHandler {
   append: (message: Message) => Promise<string>
   scrollRef?: React.RefObject<HTMLDivElement>
@@ -24,6 +25,11 @@ interface ExtendedChatHandler extends ChatHandler {
   switchToChat?: (chatId: string) => Promise<void>
   createNewChat?: () => Promise<void>
   onChatCreated?: (chatId: string) => void
+  // Tool management
+  selectedTools: ToolConfig[]
+  availableTools: ToolConfig[]
+  addTool: (tool: ToolConfig) => void
+  removeTool: (toolName: string) => void
 }
 
 /**
@@ -51,6 +57,10 @@ export function useChatGRPC(
   const [currentChatId, setCurrentChatId] = useState<string | undefined>()
   const scrollRef = useRef<HTMLDivElement>(null)
   const { chatContext } = useLayout()
+
+  // Tool management state
+  const [selectedTools, setSelectedTools] = useState<ToolConfig[]>([])
+  const [availableTools, setAvailableTools] = useState<ToolConfig[]>([])
   
   // Generate domain-specific storage key for this chat session
   const chatStorageKey = `emery-chat-${contextOptions?.domainType || chatContext?.domainType || 'general'}-${contextOptions?.domainId || chatContext?.domainId || 'default'}`
@@ -151,25 +161,25 @@ export function useChatGRPC(
     setInput('')
 
     try {
-      console.log('[CHAT-GRPC-HOOK] Calling gRPC-based chat API with context:', {
-        contextOptions,
-        chatContext,
-        domainType: contextOptions?.domainType || chatContext?.domainType
+      console.log('[CHAT-GRPC-HOOK] Calling gRPC-based chat API with tools:', {
+        selectedTools: selectedTools.length,
+        toolNames: selectedTools.map(t => t.name)
       })
-      
-      // Prepare context data for API call using proper UI types
+
+      // Prepare chat messages for API call
       const chatMessages = [...messages, userMessage].map(m => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,
       }))
-      
+
+      // Prepare context data for API call using proper UI types
       const chatContextOptions = {
         domainType: contextOptions?.domainType || chatContext?.domainType,
         domainId: contextOptions?.domainId || chatContext?.domainId
       }
-      
-      // AIDEV-NOTE: Use helper function for consistent request structure
-      const requestBody = createChatStreamRequest(chatMessages, chatContextOptions, currentChatId)
+
+      // AIDEV-NOTE: Use helper function for consistent request structure with tools
+      const requestBody = createChatStreamRequest(chatMessages, chatContextOptions, currentChatId, selectedTools)
       
       // Call the gRPC-based streaming chat API
       const response = await fetch('/api/chat/stream-grpc', {
@@ -319,22 +329,37 @@ export function useChatGRPC(
         domainType: contextOptions?.domainType || chatContext?.domainType,
         domainId: contextOptions?.domainId || chatContext?.domainId
       })
-      
+
       // Clear current session
       setMessages([])
       setCurrentChatId(undefined)
-      
+
       // Clear localStorage for this context
       if (typeof window !== 'undefined') {
         localStorage.removeItem(chatStorageKey)
       }
-      
+
       // Note: New chat sessions are created automatically by stream-grpc
       // when the first message is sent with no chatId
-      
+
     } catch (error) {
       console.error('[CHAT-GRPC-HOOK] Failed to create new chat:', error)
     }
+  }
+
+  // Tool management functions
+  const addTool = (tool: ToolConfig) => {
+    setSelectedTools(prev => {
+      // Prevent duplicates
+      if (prev.find(t => t.name === tool.name)) {
+        return prev
+      }
+      return [...prev, tool]
+    })
+  }
+
+  const removeTool = (toolName: string) => {
+    setSelectedTools(prev => prev.filter(t => t.name !== toolName))
   }
 
   return {
@@ -350,6 +375,11 @@ export function useChatGRPC(
     currentChatId,
     switchToChat,
     createNewChat,
+    // Tool management
+    selectedTools,
+    availableTools,
+    addTool,
+    removeTool,
   }
 }
 

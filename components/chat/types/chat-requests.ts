@@ -5,6 +5,7 @@
  */
 
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
+import type { ToolConfig } from '@/lib/grpc/generated/agent_worker'
 
 export interface ChatMessageRequest {
   role: 'user' | 'assistant' | 'system'
@@ -16,6 +17,7 @@ export interface ChatStreamRequest {
   chatId?: string
   domainType?: DomainType | 'organizations' | 'general'
   domainId?: number
+  tools: ToolConfig[]  // Always present, can be empty array
 }
 
 export interface ChatContextOptions {
@@ -28,12 +30,14 @@ export interface ChatContextOptions {
 export function createChatStreamRequest(
   messages: ChatMessageRequest[],
   options?: ChatContextOptions,
-  chatId?: string
+  chatId?: string,
+  tools: ToolConfig[] = []
 ): ChatStreamRequest {
   return {
     messages,
     chatId,
     ...(options?.domainType ? { domainType: options.domainType } : {}),
-    ...(options?.domainId ? { domainId: options.domainId } : {})
+    ...(options?.domainId ? { domainId: options.domainId } : {}),
+    tools
   }
 }

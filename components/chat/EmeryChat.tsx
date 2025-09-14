@@ -25,12 +25,10 @@ import CustomChatInput from './CustomChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
 import { createChatContextForPage } from '@/components/layout/types'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
-import { resolveReferencesAction } from '@/app/actions/resolve-references'
-import { hasReferences } from '@/lib/chat/reference-patterns'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
-import { ReferencesPanel } from './ReferencesPanel'
-import type { ResolvedReference } from '@/lib/chat/reference-resolver'
+import { ToolSelectionPanel } from './ToolSelectionPanel'
+import type { ToolConfig } from '@/lib/grpc/generated/agent_worker'
 
 /**
  * EmeryChat - Main chat component with LlamaIndex integration
@@ -210,10 +208,6 @@ export function EmeryChat() {
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const [isClient, setIsClient] = useState(false)
-  const [inputValue, setInputValue] = useState('')
-  const [cursorPosition, setCursorPosition] = useState(0)
-  const [resolvedReferences, setResolvedReferences] = useState<ResolvedReference[]>([])
-  const [isResolvingReferences, setIsResolvingReferences] = useState(false)
 
   // Handle chat history updates (callback for forcing refresh)
   const handleChatHistoryUpdate = () => {
@@ -281,31 +275,8 @@ export function EmeryChat() {
     setIsClient(true)
   }, [])
 
-  // Load references from chat history on mount/message changes
-  useEffect(() => {
-    const loadHistoryReferences = async () => {
-      if (!emeryData || handler.messages.length === 0) return;
-
-      console.log('[EMERY-CHAT] Loading references from chat history...');
-      const allRefs: ResolvedReference[] = [];
-
-      // Parse all existing user messages for references
-      for (const message of handler.messages) {
-        if (message.role === 'user' && hasReferences(message.content)) {
-          try {
-            const parsedRefs = await parseReferencesWithContext(message.content, emeryData);
-            allRefs.push(...parsedRefs);
-          } catch (error) {
-            console.error('[EMERY-CHAT] Error parsing references from message:', error);
-          }
-        }
-      }
-
-      setResolvedReferences(allRefs);
-    };
-
-    loadHistoryReferences();
-  }, [emeryData, handler.messages])
+  // AIDEV-NOTE: Removed complex text parsing - tools now come from explicit selection only
+  // This eliminates the parseReferencesWithContext runtime error and simplifies the architecture
 
   // NOW ALL HOOKS ARE CALLED - CONDITIONAL RETURNS ARE SAFE BELOW THIS POINT
 
@@ -400,52 +371,60 @@ export function EmeryChat() {
     handler.append({ content: suggestion, role: 'user' })
   }
 
-  // Handle references change from CustomChatInput
-  const handleReferencesChange = (references: ResolvedReference[], isLoading: boolean) => {
-    setResolvedReferences(references)
-    setIsResolvingReferences(isLoading)
-  }
-  
-
-  // Handle reference click to open in canvas
-  const handleReferenceClick = (reference: ResolvedReference) => {
-    console.log('[EMERY-CHAT] Reference clicked:', reference)
-    
-    if (reference.metadata?.error || !reference.data) {
-      console.warn('[EMERY-CHAT] Cannot open reference with error or no data:', reference)
-      return
+  // Sample available tools - TODO: Replace with real tool registry
+  const availableToolCategories = React.useMemo(() => [
+    {
+      name: 'references' as const,
+      label: 'References',
+      icon: <Database className="h-3 w-3" />,
+      tools: [
+        {
+          name: 'document_reader',
+          version: '1.0',
+          config: { title: 'Sales Report Q4', type: 'document' }
+        },
+        {
+          name: 'file_reader',
+          version: '1.0',
+          config: { title: 'Analysis.pdf', type: 'file' }
+        }
+      ] as ToolConfig[]
+    },
+    {
+      name: 'apps' as const,
+      label: 'Apps',
+      icon: <Users className="h-3 w-3" />,
+      tools: [
+        {
+          name: 'slack_send_message',
+          version: '1.0',
+          config: { title: 'Send Slack Message', app: 'slack' }
+        },
+        {
+          name: 'pipedream_webhook',
+          version: '1.0',
+          config: { title: 'Trigger Webhook', app: 'pipedream' }
+        }
+      ] as ToolConfig[]
+    },
+    {
+      name: 'utilities' as const,
+      label: 'Utilities',
+      icon: <BarChart className="h-3 w-3" />,
+      tools: [
+        {
+          name: 'data_analyzer',
+          version: '1.0',
+          config: { title: 'Analyze Data', type: 'utility' }
+        },
+        {
+          name: 'report_generator',
+          version: '1.0',
+          config: { title: 'Generate Report', type: 'utility' }
+        }
+      ] as ToolConfig[]
     }
-
-    try {
-      // Create artifact from reference
-      const artifact = reference.type === 'doc' 
-        ? createDocumentArtifact(
-            reference.data,
-            1, // TODO: Extract actual tableId from reference
-            1, // TODO: Extract actual fieldId from reference
-            'view'
-          )
-        : createFileArtifact(
-            reference.data,
-            1, // TODO: Extract actual tableId from reference
-            1, // TODO: Extract actual fieldId from reference
-            'pdf', // TODO: Determine correct viewer type from file
-            '/api/files/' + reference.data.id // TODO: Generate correct file URL
-          )
-
-      console.log('[EMERY-CHAT] Created artifact for canvas:', artifact)
-      
-      // TODO: Implement direct canvas opening via useChatCanvas hook
-      
-      // Expand canvas if collapsed
-      if (canvasState === 'collapsed') {
-        toggleCanvas()
-      }
-      
-    } catch (error) {
-      console.error('[EMERY-CHAT] Error creating artifact for reference:', error)
-    }
-  }
+  ], [])
 
 
 
@@ -499,22 +478,28 @@ export function EmeryChat() {
                 )}
               </div>
               
-              {/* References Panel - compact, above input */}
-              <ReferencesPanel
-                resolvedReferences={resolvedReferences}
-                onReferenceClick={handleReferenceClick}
-                isLoading={isResolvingReferences}
+              {/* Tool Selection Panel - unified tool selection interface */}
+              <ToolSelectionPanel
+                availableTools={availableToolCategories}
+                selectedTools={handler.selectedTools}
+                onToolSelect={handler.addTool}
+                onToolDeselect={handler.removeTool}
+                onOpenArtifact={(artifact) => {
+                  // Open artifact in ChatCanvas
+                  if (handler.onArtifactCreated) {
+                    handler.onArtifactCreated(artifact)
+                  }
+                }}
               />
               
               {/* Input area - back inside ChatSection */}
               <div className="flex-shrink-0 p-4 border-t border-border/10 bg-card" onKeyDown={handleKeyDown}>
-                <CustomChatInput 
+                <CustomChatInput
                   onSendMessage={async (message) => {
-                    // Send message normally - references will be handled by backend RAG
+                    // Send message - tools will come from ToolSelectionPanel selection
                     handler.append({ content: message, role: 'user' })
                     setShowSuggestions(false)
                   }}
-                  onReferencesChange={handleReferencesChange}
                   placeholder="Ask Emery anything..."
                 />
               </div>
