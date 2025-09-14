@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { FileText, File, Database, Users, Plus, X, ChevronDown, ChevronUp, Settings, Zap, BarChart, ExternalLink, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { ToolConfig } from '@/lib/grpc/generated/agent_worker'
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
 // Reference types for backward compatibility (simplified from old reference-resolver)
 export interface ResolvedReference {

@@ -195,7 +195,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     processing_time_ms=processing_time,
                     metadata={
                         'content_length': str(len(total_content)),
-                        'rag_sources': str(len(rag_context_data['sources']) if rag_context_data else 0),
+                        'rag_sources': str(len(rag_context_data.sources) if rag_context_data else 0),
                         'domain_type': request.context.domain_type if request.context else 'none'
                     }
                 ),
@@ -274,76 +274,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.error(f"❌ RAG context retrieval failed: {e}")
             return {'sources': [], 'context_summary': f'RAG failed: {str(e)}'}
 
-    async def _stream_ai_response(
-        self, 
-        conversation_messages: List[Dict[str, str]], 
-        rag_context_data: Optional[Any],
-        domain_context: Optional[Any] = None
-    ) -> AsyncIterator[str]:
-        """
-        Stream AI response using RAG processor and HuggingFace integration.
-        
-        This method now uses the real RagProcessor to format context
-        and will integrate with actual AI models when available.
-        """
-        
-        # Import here to avoid circular dependencies
-        from ...core.rag.rag_processor import RagContextData
-        
-        try:
-            # Build system prompt using real RAG processor
-            if self.rag_processor and rag_context_data and isinstance(rag_context_data, RagContextData):
-                # Use the real RAG processor for context formatting
-                domain_context_dict = {
-                    'domain_type': domain_context.domain_type if domain_context else None,
-                    'domain_id': domain_context.domain_id if domain_context else None
-                } if domain_context else None
-                
-                system_prompt = self.rag_processor.format_context_for_llm(
-                    rag_context_data=rag_context_data,
-                    user_query=conversation_messages[-1]['content'] if conversation_messages else '',
-                    domain_context=domain_context_dict
-                )
-                
-                logger.info(f"✅ Generated system prompt using RAG processor: {len(system_prompt)} chars")
-                
-                # Get context metadata for logging
-                context_metadata = self.rag_processor.extract_context_metadata(rag_context_data)
-                logger.info(f"📊 RAG context metadata: {context_metadata}")
-                
-            else:
-                # Fallback to basic system prompt if no RAG context
-                system_prompt = self._build_basic_system_prompt(domain_context)
-                logger.info("Using basic system prompt (no RAG context)")
-
-            # Prepare messages for model
-            messages = [{'role': 'system', 'content': system_prompt}] + conversation_messages
-            
-            # Use real AI model streaming
-            if self.model_factory:
-                logger.info(f"🤖 Streaming AI response using real {self._get_model_name()}")
-                
-                # Stream response from real AI model
-                async for chunk in self.model_factory.stream_response(messages, model_name='chat'):
-                    yield chunk
-                
-            else:
-                logger.warning("⚠️ Model factory not available - using enhanced mock response")
-                
-                # Fallback enhanced mock response
-                if rag_context_data and rag_context_data.assembled_context:
-                    mock_response = f"Based on the relevant context from your organization's data (found {len(rag_context_data.sources)} sources), I can help you with your request. Let me provide you with specific information from the available documentation and data."
-                else:
-                    mock_response = "I understand your question. Let me provide you with general guidance about your request."
-                
-                # Stream the fallback response word by word
-                for word in mock_response.split():
-                    yield word + " "
-                    await asyncio.sleep(0.02)
-                
-        except Exception as e:
-            logger.error(f"❌ AI streaming failed: {e}")
-            yield f"I apologize, but I encountered an error processing your request: {str(e)}"
 
     async def _stream_tool_calling_agent_response(
         self,
@@ -354,127 +284,127 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
     ) -> AsyncIterator[str]:
         """
         Stream AI response using ToolCallingAgent with proper streaming support.
-        Handles both tool execution and regular chat with RAG context.
+        Always uses ToolCallingAgent approach whether tools are provided or not.
 
-        AIDEV-NOTE: Consolidated method that always uses ToolCallingAgent approach,
-        whether tools are provided or not. Uses direct model streaming for chat-like
-        responses while supporting tool execution when needed.
+        AIDEV-NOTE: Uses agent.run() and simulates streaming by chunking the result
+        since smolagents doesn't natively support streaming.
         """
 
         try:
             # Import here to avoid circular dependencies
             from ...core.rag.rag_processor import RagContextData
 
-            # Build system prompt using RAG processor if available
-            system_prompt = ""
-            if self.rag_processor and rag_context_data and isinstance(rag_context_data, RagContextData):
-                # Use the real RAG processor for context formatting
+            # 1. Build system prompt using RAG processor if available
+            system_prompt = self._build_system_prompt_with_rag(rag_context_data, domain_context)
+            logger.info(f"📝 Built system prompt: {len(system_prompt)} chars")
+
+            # 2. Convert protobuf tools to smolagents tools
+            smolagents_tools = self._convert_tools_to_smolagents(tools)
+            logger.info(f"🔧 Converted {len(smolagents_tools)} tools for ToolCallingAgent")
+
+            # 3. Create ToolCallingAgent with model provider
+            agent = self._create_agent_with_model_provider(smolagents_tools)
+            logger.info(f"🤖 Created ToolCallingAgent with {len(smolagents_tools)} tools")
+
+            # 4. Build conversation prompt
+            full_prompt = self._build_conversation_prompt(system_prompt, conversation_messages)
+            logger.info(f"💬 Built conversation prompt: {len(full_prompt)} chars")
+
+            # 5. Execute with ToolCallingAgent (synchronous) and stream result
+            logger.info("🚀 Executing ToolCallingAgent...")
+            result = agent.run(full_prompt)  # This is synchronous in smolagents
+            logger.info(f"✅ Execution completed: {len(result)} chars")
+
+            # 6. Stream the result by chunks to simulate streaming
+            async for chunk in self._stream_text_chunks(result):
+                yield chunk
+
+        except Exception as e:
+            logger.error(f"❌ ToolCallingAgent execution failed: {e}")
+            yield f"I apologize, but I encountered an error processing your request: {str(e)}"
+
+    def _build_system_prompt_with_rag(
+        self,
+        rag_context_data: Optional['RagContextData'],
+        domain_context: Optional['agent_worker_pb2.ChatContext']
+    ) -> str:
+        """Build system prompt with RAG context integration."""
+        if self.rag_processor and rag_context_data:
+            from ...core.rag.rag_processor import RagContextData
+
+            if isinstance(rag_context_data, RagContextData):
                 domain_context_dict = {
                     'domain_type': domain_context.domain_type if domain_context else None,
                     'domain_id': domain_context.domain_id if domain_context else None
                 } if domain_context else None
 
-                system_prompt = self.rag_processor.format_context_for_llm(
+                return self.rag_processor.format_context_for_llm(
                     rag_context_data=rag_context_data,
-                    user_query=conversation_messages[-1]['content'] if conversation_messages else '',
+                    user_query='',  # Will be added in conversation prompt
                     domain_context=domain_context_dict
                 )
 
-                logger.info(f"✅ Generated system prompt using RAG processor: {len(system_prompt)} chars")
-            else:
-                # Fallback to basic system prompt if no RAG context
-                system_prompt = self._build_basic_system_prompt(domain_context)
-                logger.info("Using basic system prompt (no RAG context)")
+        return self._build_basic_system_prompt(domain_context)
 
-            # Convert ToolConfig protobuf objects to smolagents tools using tool registry
-            smolagents_tools = []
-            tool_names = []
-            if tools and self.tool_registry:
-                logger.info(f"🔧 Processing {len(tools)} tools for ToolCallingAgent")
+    def _convert_tools_to_smolagents(self, tools: List['agent_worker_pb2.ToolConfig']) -> List[Any]:
+        """Convert protobuf ToolConfig objects to smolagents tools."""
+        if not tools or not self.tool_registry:
+            return []
 
-                # Convert protobuf ToolConfig to core.entities.ToolConfig
+        try:
+            core_tool_configs = []
+            for tool_config in tools:
+                logger.info(f"Converting tool: {tool_config.name} (version: {tool_config.version})")
 
-                core_tool_configs = []
-                for tool_config in tools:
-                    tool_names.append(tool_config.name)
-                    logger.info(f"Tool: {tool_config.name} (version: {tool_config.version})")
+                core_config = CoreToolConfig(
+                    name=tool_config.name,
+                    version=tool_config.version,
+                    config=dict(tool_config.config) if tool_config.config else {}
+                )
+                core_tool_configs.append(core_config)
 
-                    # Convert protobuf ToolConfig to core ToolConfig
-                    core_config = CoreToolConfig(
-                        name=tool_config.name,
-                        version=tool_config.version,
-                        config=dict(tool_config.config) if tool_config.config else {}
-                    )
-                    core_tool_configs.append(core_config)
+            return self.tool_registry.load_tools(core_tool_configs)
 
-                # Load tools using tool registry (same as agents use)
-                try:
-                    smolagents_tools = self.tool_registry.load_tools(core_tool_configs)
-                    logger.info(f"✅ Loaded {len(smolagents_tools)} smolagents tools via tool registry")
-                except Exception as tool_error:
-                    logger.error(f"❌ Failed to load tools via registry: {tool_error}")
-                    smolagents_tools = []
+        except Exception as tool_error:
+            logger.error(f"❌ Failed to convert tools: {tool_error}")
+            return []
 
-            elif tools and not self.tool_registry:
-                logger.warning("⚠️ Tools provided but tool registry not available")
-                tool_names = [tool.name for tool in tools]
+    def _create_agent_with_model_provider(self, smolagents_tools: List[Any]) -> ToolCallingAgent:
+        """Create ToolCallingAgent using centralized model provider."""
+        if not self.model_factory:
+            raise RuntimeError("Model factory required for ToolCallingAgent creation")
 
-            # Use model factory for streaming if available
-            if self.model_factory:
-                logger.info(f"🤖 Always using ToolCallingAgent approach (with {len(smolagents_tools)} tools)")
+        # Use model provider like the capability router does
+        model_provider = SmolagentsModelProvider()
+        model = model_provider.get_default_model_for_capability()
 
-                # Always create ToolCallingAgent - handles empty tools gracefully
-                try:
-                    # Use model provider like the capability router does
-                    model_provider = SmolagentsModelProvider()
-                    model = model_provider.get_default_model_for_capability()
+        agent = ToolCallingAgent(
+            tools=smolagents_tools,  # Can be empty list
+            model=model,
+            max_steps=10
+        )
+        agent.name = "chat_tool_calling"
+        agent.description = f"Chat agent with {len(smolagents_tools)} tools available"
 
-                    # Create ToolCallingAgent (works with empty tools list)
-                    agent = ToolCallingAgent(
-                        tools=smolagents_tools,  # Can be empty list
-                        model=model,
-                        max_steps=10
-                    )
-                    agent.name = "chat_tool_calling"
-                    agent.description = f"Chat agent with {len(smolagents_tools)} tools available"
+        return agent
 
-                    # Build full prompt with system context + user message
-                    full_prompt = system_prompt + "\n\n"
-                    for msg in conversation_messages:
-                        role_prefix = msg['role'].upper() + ": "
-                        full_prompt += role_prefix + msg['content'] + "\n"
+    def _build_conversation_prompt(self, system_prompt: str, conversation_messages: List[Dict[str, str]]) -> str:
+        """Build full conversation prompt for ToolCallingAgent."""
+        full_prompt = system_prompt + "\n\n" if system_prompt else ""
 
-                    logger.info(f"🚀 Executing ToolCallingAgent with prompt length: {len(full_prompt)} chars")
+        for msg in conversation_messages:
+            role_prefix = msg['role'].upper() + ": "
+            full_prompt += role_prefix + msg['content'] + "\n"
 
-                    # Execute with ToolCallingAgent - note: this is not streaming yet
-                    # AIDEV-TODO: Implement actual streaming when smolagents supports it
-                    result = agent.run(full_prompt)
+        return full_prompt.strip()
 
-                    # Stream the result word by word to simulate streaming
-                    for word in result.split():
-                        yield word + " "
-                        await asyncio.sleep(0.02)
-
-                except Exception as agent_error:
-                    logger.error(f"❌ ToolCallingAgent execution failed: {agent_error}")
-                    # Fall back to direct model streaming as last resort
-                    logger.info("Falling back to direct model streaming")
-
-                    messages = []
-                    if system_prompt:
-                        messages.append({'role': 'system', 'content': system_prompt})
-                    messages.extend(conversation_messages)
-
-                    async for chunk in self.model_factory.stream_response(messages, model_name='chat'):
-                        yield chunk
-
-            else:
-                logger.error("❌ Model factory not available - cannot stream response")
-                raise RuntimeError("Model factory required for streaming responses")
-
-        except Exception as e:
-            logger.error(f"❌ ToolCallingAgent streaming failed: {e}")
-            yield f"I apologize, but I encountered an error processing your request: {str(e)}"
+    async def _stream_text_chunks(self, text: str, chunk_size: int = 5) -> AsyncIterator[str]:
+        """Stream text by word chunks to simulate streaming."""
+        words = text.split()
+        for i in range(0, len(words), chunk_size):
+            chunk = ' '.join(words[i:i + chunk_size]) + ' '
+            yield chunk
+            await asyncio.sleep(0.05)  # Small delay for realistic streaming feel
 
     def _build_basic_system_prompt(self, domain_context: Optional[Any] = None) -> str:
         """Build basic system prompt without RAG context."""

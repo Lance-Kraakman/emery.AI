@@ -3,12 +3,13 @@
 // Uses DDD Value Objects for type-safe identity management
 
 import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
-import { 
-  AgentId, 
-  OrganizationId, 
-  UserId, 
-  AgentStatus, 
-  ApiKey 
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import {
+  AgentId,
+  OrganizationId,
+  UserId,
+  AgentStatus,
+  ApiKey
 } from '@/ddd/domain/shared/value-objects';
 
 
@@ -31,11 +32,6 @@ export interface AgentSpecialization {
 }
 
 // Domain-specific configuration types for Agent
-export interface ToolConfig {
-  name: string;
-  version?: string;
-  config?: Record<string, any>;
-}
 
 export interface ServerConfig {
   name: string;
@@ -109,7 +105,9 @@ export class AgentFactory {
       role: record.role,
       description: record.description,
       persona: record.persona,
-      tools: record.tools || [],
+      tools: (record.tools || []).map((tool: any) =>
+        tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
+      ),
       servers: record.servers || [],
       trigger: record.trigger,
       capabilities: record.capabilities || [],
@@ -132,7 +130,7 @@ export class AgentFactory {
       role: agent.role,
       description: agent.description,
       persona: agent.persona,
-      tools: agent.tools,
+      tools: agent.tools.map(tool => tool.toPlain()),
       servers: agent.servers,
       trigger: agent.trigger,
       capabilities: agent.capabilities,

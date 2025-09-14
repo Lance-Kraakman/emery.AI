@@ -7,15 +7,15 @@
 
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
-import { 
-  Agent, 
-  type CreateAgentData, 
+import {
+  Agent,
+  type CreateAgentData,
   type UpdateAgentData,
-  type ToolConfig,
   type ServerConfig,
   type CapabilityConfig,
   type AgentType
 } from '@/ddd/domain/agents/entities/agent';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createAgentDefaults } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, OrganizationId, UserId, TeamId, AgentStatus, ApiKey, AGENT_STATUS } from '@/ddd/domain/shared/value-objects';

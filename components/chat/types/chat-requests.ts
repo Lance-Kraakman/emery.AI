@@ -5,7 +5,7 @@
  */
 
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
-import type { ToolConfig } from '@/lib/grpc/generated/agent_worker'
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config'
 
 export interface ChatMessageRequest {
   role: 'user' | 'assistant' | 'system'
