@@ -135,7 +135,7 @@ export interface ProcessMessageRequest {
   organization_id: number;        // Organization for multi-tenant routing
   context?: ChatContext;          // Context for RAG and domain-specific processing
   conversation_history?: HistoryMessage[]; // Conversation history from Next.js database
-  metadata?: Record<string, string>; // Optional metadata
+  tools?: ToolConfig[];           // Tools for ToolCallingAgent execution
 }
 
 export interface ProcessMessageResponse {

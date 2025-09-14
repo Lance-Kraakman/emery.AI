@@ -79,8 +79,13 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Parse request
-    const { messages, chatId, domainType, domainId } = await req.json();
+    const { messages, chatId, domainType, domainId, tools = [] } = await req.json();
     const latestMessage = messages[messages.length - 1]?.content;
+
+    console.log('[CHAT-GRPC-API] Request includes tools:', {
+      toolCount: tools.length,
+      toolNames: tools.map((t: any) => t.name)
+    });
     
     if (!latestMessage) {
       return new Response(
@@ -185,7 +190,7 @@ export async function POST(req: NextRequest) {
     // 5. Determine processing options from contextMetadata or request params
     let resolvedDomainType = currentChat?.contextMetadata?.contextType || domainType;
     let resolvedDomainId = currentChat?.contextMetadata?.domainSchema?.id || domainId;
-    
+
     // Convert 'organization' contextType to null for processing
     if (resolvedDomainType === 'organization') {
       resolvedDomainType = null;
@@ -198,7 +203,8 @@ export async function POST(req: NextRequest) {
       enableRag: true, // Enable RAG by default
       ragThreshold: 0.3,
       maxRagDocs: 5,
-      primaryRagWeight: 0.7
+      primaryRagWeight: 0.7,
+      tools: tools // NEW: Add tools to processing options
     };
 
     console.log('[CHAT-GRPC-API] Chat processing options:', processingOptions);
@@ -232,6 +238,7 @@ export async function POST(req: NextRequest) {
                 role: 'assistant',
                 metadata: {
                   ragSources: ragSources,
+                  tools: tools.map((t: any) => t.name), // Track which tools were used
                   processingTime: Date.now() - startTime,
                   modelUsed: 'qwen-coder' // This will come from gRPC response
                 }
@@ -272,15 +279,15 @@ export async function POST(req: NextRequest) {
 
       // Get dual-context RAG results
       const dualContextResult = await dualContextRagService.getDualContext(contextOptions);
-      
+
       if (dualContextResult.totalDocuments > 0) {
         ragContextForGrpc = dualContextRagService.formatContextForSystemMessage(dualContextResult);
         ragSources = dualContextRagService.getRagSourceSummary(dualContextResult);
-        
+
         // Add assembled RAG context to processing options
         processingOptions.assembledRagContext = ragContextForGrpc;
         processingOptions.ragSources = ragSources;
-        
+
         console.log(`[CHAT-GRPC-API] Generated RAG context with ${dualContextResult.primaryContext.length} primary + ${dualContextResult.secondaryContext.length} secondary docs`);
         console.log(`[CHAT-GRPC-API] Context type: ${resolvedDomainType || 'organization'} chat`);
         console.log(`[CHAT-GRPC-API] RAG context size: ${ragContextForGrpc.length} chars`);
@@ -321,12 +328,12 @@ export async function POST(req: NextRequest) {
                 fullAssistantResponse += response.content;
                 const chunk = new TextEncoder().encode(response.content);
                 controller.enqueue(chunk);
-                
+
               } else if (response.type === 'rag_context' && response.ragContext) {
                 // Store RAG sources for later saving to database
                 ragSources = response.ragContext.sources || [];
                 console.log(`[CHAT-GRPC-API] Received RAG context with ${ragSources.length} sources`);
-                
+
               } else if (response.type === 'complete' && response.complete) {
                 // AI processing completed
                 console.log(`[CHAT-GRPC-API] AI processing completed:`, {

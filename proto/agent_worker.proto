@@ -168,15 +168,15 @@ message ProcessMessageRequest {
   string message_content = 1;        // User message content
   string user_id = 2;                // User identifier for context
   int32 organization_id = 3;         // Organization for multi-tenant routing
-  
+
   // Context for RAG and domain-specific processing
   ChatContext context = 4;
-  
+
   // Conversation history (passed from Next.js database)
   repeated HistoryMessage conversation_history = 5;
-  
-  // Optional metadata
-  map<string, string> metadata = 6;
+
+  // Tools for ToolCallingAgent execution (can be empty)
+  repeated ToolConfig tools = 6;
 }
 
 // Streaming response from AI processing
@@ -188,7 +188,7 @@ message ProcessMessageResponse {
     ProcessingComplete complete = 3;   // Processing finished marker
     ProcessingError error = 4;        // Processing error
   }
-  
+
   int64 timestamp = 5;               // Response timestamp
 }
 
