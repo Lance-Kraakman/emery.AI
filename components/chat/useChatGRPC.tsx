@@ -180,14 +180,20 @@ export function useChatGRPC(
       }
 
       // AIDEV-NOTE: Use helper function for consistent request structure with tools
-      // Convert ToolDTOs to legacy ToolConfigs for createChatStreamRequest compatibility
-      const legacyToolConfigs = selectedTools.map(tool => ({
+      // Extract tool data for gRPC request - only name, version, and config are needed
+      const toolData = selectedTools.map(tool => ({
         name: tool.name,
         version: tool.version,
         config: tool.config
-      }));
+      }))
 
-      const requestBody = createChatStreamRequest(chatMessages, chatContextOptions, currentChatId, legacyToolConfigs)
+      const requestBody = {
+        messages: chatMessages,
+        chatId: currentChatId,
+        ...(chatContextOptions?.domainType ? { domainType: chatContextOptions.domainType } : {}),
+        ...(chatContextOptions?.domainId ? { domainId: chatContextOptions.domainId } : {}),
+        tools: toolData
+      }
       
       // Call the gRPC-based streaming chat API
       const response = await fetch('/api/chat/stream-grpc', {
@@ -360,7 +366,7 @@ export function useChatGRPC(
     // Validate tool before adding
     try {
       const validationResult = await validateToolSelection([tool])
-      if (validationResult.success && validationResult.data?.valid.length > 0) {
+      if (validationResult.success && validationResult.data && validationResult.data.valid.length > 0) {
         setSelectedTools(prev => {
           // Prevent duplicates
           if (prev.find(t => t.id === tool.id)) {

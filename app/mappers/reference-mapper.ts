@@ -1,4 +1,4 @@
-import type { Reference } from '@/ddd/domain/chat/value-objects/reference';
+import { Reference } from '@/ddd/domain/chat/value-objects/reference';
 import type { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
 
 /**

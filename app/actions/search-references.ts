@@ -13,10 +13,11 @@
 import { getReferenceApplicationService } from '@/ddd/application/di/container';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { SimpleReference, SearchReferencesResult } from '@/ddd/application/services/chat/reference-application-service';
+import type { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
 
 export interface SearchReferencesParams {
   query: string;
-  categories?: ('doc' | 'file' | 'agent' | 'table' | 'database')[];
+  categories?: ReferenceCategory[];
   limit?: number;
   offset?: number;
   organizationId: number;
