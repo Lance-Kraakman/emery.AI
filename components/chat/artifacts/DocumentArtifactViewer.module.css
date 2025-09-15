@@ -2,7 +2,7 @@
 
 /* Main Editor Container */
 .editorContainer {
-  @apply border border-border rounded-xl overflow-hidden shadow-2xl bg-card backdrop-blur-sm;
+  @apply border border-border rounded-xl overflow-hidden shadow-2xl bg-card backdrop-blur-sm h-full flex flex-col;
   background-color: hsl(var(--card) / 0.95);
 }
 
@@ -30,19 +30,20 @@
 
 /* Editor Content Area */
 .editorWrapper {
-  @apply bg-background backdrop-blur-sm rounded-b-xl;
-  min-height: 400px;
+  @apply bg-background backdrop-blur-sm rounded-b-xl flex-1 overflow-hidden;
   background-color: hsl(var(--background) / 0.98);
 }
 
 .tiptapEditor {
-  @apply relative;
+  @apply relative h-full;
 }
 
 /* TipTap ProseMirror Content Styling */
 .tiptapEditor :global(.ProseMirror) {
   @apply outline-none p-6 leading-relaxed text-sm text-foreground bg-transparent;
-  min-height: 350px;
+  min-height: 500px;
+  height: 100%;
+  overflow-y: auto;
 }
 
 /* Typography Styles */

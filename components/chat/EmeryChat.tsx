@@ -300,15 +300,37 @@ function ChatContentWithCanvas({
       <div ref={handler.scrollRef} className="flex-1 overflow-y-auto flex flex-col px-1">
         {/* Messages area */}
         <div className="flex-1">
-          <ChatMessages
-            messages={handler.messages}
+          {/* Debug: Show message count */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="text-xs text-gray-500 p-2">
+              Messages: {handler.messages?.length || 0}
+            </div>
+          )}
+
+          {/* Temporary direct message rendering for debugging */}
+          <div className="px-3 py-1">
+            {handler.messages?.map((message: any, index: number) => (
+              <div key={index} className="mb-4 p-3 rounded-lg bg-muted/20">
+                <div className="text-xs text-muted-foreground mb-1">
+                  {message.role || 'user'}
+                </div>
+                <div className="text-sm">
+                  {typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Original LlamaIndex ChatMessages (commented out for debugging) */}
+          {/* <ChatMessages
+            handler={handler}
             className="bg-transparent px-3 py-1 text-sm
               [&_*]:text-sm [&_pre]:text-xs [&_code]:text-xs [&_p]:text-sm [&_p]:leading-5
               [&_div]:text-sm [&_span]:text-sm [&_li]:text-sm [&_ul]:text-sm [&_ol]:text-sm
               [&_button]:text-xs [&_button]:px-2 [&_button]:py-1 [&_button]:float-right [&_button]:ml-2
               [&_*]:break-words [&_*]:hyphens-auto [&_div:has(button)]:clear-both
             "
-          />
+          /> */}
         </div>
 
         {/* Suggestions at bottom of messages area when no messages */}
