@@ -136,10 +136,6 @@ export class ToolMapper {
         id: toolConfig.config.id,
         reference_id: toolConfig.config.reference_id,
         original_match: toolConfig.config.original_match,
-        tableId: toolConfig.config.tableId,
-        fieldId: toolConfig.config.fieldId,
-        fileUrl: toolConfig.config.fileUrl,
-        app: toolConfig.config.app,
         ...toolConfig.config
       },
       canOpenArtifact

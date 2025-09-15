@@ -5,6 +5,7 @@
 
 import { requireAuth } from "./permissions";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects";
+import { ToolConfig } from "@/ddd/domain/tools/value-objects/tool-config";
 import { ToolMapper, type ToolDTO, type ToolCategoryDTO, type ToolSelectionDTO } from "@/app/mappers/tool-mapper";
 import { ConnectionMapper, type ConnectionDTO } from "@/app/mappers/connection-mapper";
 import { getUserOAuthConnections } from "./connections";
@@ -208,67 +209,43 @@ export async function getToolsByCategory(categoryName: string): Promise<Result<T
 
 // AIDEV-NOTE: Temporary sample tool creation until ToolApplicationService is implemented
 // This should be replaced with actual domain service integration
-function createSampleTools() {
+function createSampleTools(): ToolConfig[] {
   return [
     // Reference tools (documents/files)
-    {
-      name: 'document_reader',
-      version: '1.0',
-      config: {
-        title: 'Sales Report Q4',
-        type: 'document',
-        id: 'doc_1',
-        reference_id: 'doc_1'
-      }
-    },
-    {
-      name: 'file_reader',
-      version: '1.0',
-      config: {
-        title: 'Analysis.pdf',
-        type: 'file',
-        id: 'file_1',
-        reference_id: 'file_1'
-      }
-    },
+    ToolConfig.create('document_reader', '1.0', {
+      title: 'Sales Report Q4',
+      type: 'document',
+      id: 'doc_1',
+      reference_id: 'doc_1'
+    }),
+    ToolConfig.create('file_reader', '1.0', {
+      title: 'Analysis.pdf',
+      type: 'file',
+      id: 'file_1',
+      reference_id: 'file_1'
+    }),
     // OAuth app tools
-    {
-      name: 'slack_send_message',
-      version: '1.0',
-      config: {
-        title: 'Send Slack Message',
-        app: 'slack',
-        type: 'oauth_app'
-      }
-    },
-    {
-      name: 'gmail_send_email',
-      version: '1.0',
-      config: {
-        title: 'Send Gmail Email',
-        app: 'gmail',
-        type: 'oauth_app'
-      }
-    },
+    ToolConfig.create('slack_send_message', '1.0', {
+      title: 'Send Slack Message',
+      app: 'slack',
+      type: 'oauth_app'
+    }),
+    ToolConfig.create('gmail_send_email', '1.0', {
+      title: 'Send Gmail Email',
+      app: 'gmail',
+      type: 'oauth_app'
+    }),
     // Utility tools
-    {
-      name: 'data_analyzer',
-      version: '1.0',
-      config: {
-        title: 'Analyze Data',
-        type: 'utility'
-      }
-    },
+    ToolConfig.create('data_analyzer', '1.0', {
+      title: 'Analyze Data',
+      type: 'utility'
+    }),
     // Integration tools
-    {
-      name: 'pipedream_webhook',
-      version: '1.0',
-      config: {
-        title: 'Trigger Webhook',
-        app: 'pipedream',
-        type: 'webhook'
-      }
-    }
+    ToolConfig.create('pipedream_webhook', '1.0', {
+      title: 'Trigger Webhook',
+      app: 'pipedream',
+      type: 'webhook'
+    })
   ];
 }
 

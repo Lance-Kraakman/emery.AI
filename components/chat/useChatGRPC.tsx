@@ -30,7 +30,7 @@ interface ExtendedChatHandler extends ChatHandler {
   selectedTools: ToolDTO[]
   availableTools: ToolDTO[]
   addTool: (tool: ToolDTO) => void
-  removeTool: (toolId: string) => void
+  removeTool: (tool: ToolDTO) => void
 }
 
 /**
@@ -396,8 +396,8 @@ export function useChatGRPC(
     }
   }
 
-  const removeTool = (toolId: string) => {
-    setSelectedTools(prev => prev.filter(t => t.id !== toolId))
+  const removeTool = (tool: ToolDTO) => {
+    setSelectedTools(prev => prev.filter(t => t.id !== tool.id))
   }
 
   return {

@@ -10,18 +10,21 @@
 
 import { chatMessages } from '@/lib/db/schema';
 import { eq, and, desc, asc, ilike, sql, max, count } from 'drizzle-orm';
+import type { InferSelectModel } from 'drizzle-orm';
 import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
 import type { ChatMessage, CreateChatMessageData, UpdateChatMessageData } from '@/ddd/domain/chat/entities/chat-message';
 import { ChatId, ChatMessageId } from '@/ddd/domain/shared/value-objects';
 import type { DbClient } from '@/lib/db/client';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 
+type ChatMessageRow = InferSelectModel<typeof chatMessages>;
+
 export class DrizzleChatMessageRepository extends DrizzleBaseRepository<
   ChatMessage,
   ChatMessageId,
   CreateChatMessageData,
   UpdateChatMessageData,
-  any
+  ChatMessageRow
 > implements IChatMessageRepository {
   protected readonly table = chatMessages;
   protected readonly idColumn = chatMessages.id;
@@ -78,7 +81,7 @@ export class DrizzleChatMessageRepository extends DrizzleBaseRepository<
       .limit(limit)
       .offset(offset);
 
-    return results.map(message => this.mapToChatMessage(message));
+    return results.map((message: ChatMessageRow) => this.mapToChatMessage(message));
   }
 
   /**
@@ -96,7 +99,7 @@ export class DrizzleChatMessageRepository extends DrizzleBaseRepository<
       .limit(limit)
       .offset(offset);
 
-    return results.map(message => this.mapToChatMessage(message));
+    return results.map((message: ChatMessageRow) => this.mapToChatMessage(message));
   }
 
   /**
@@ -123,7 +126,7 @@ export class DrizzleChatMessageRepository extends DrizzleBaseRepository<
       .where(eq(chatMessages.parentMessageId, parentMessageId.value))
       .orderBy(asc(chatMessages.messageIndex));
 
-    return results.map(message => this.mapToChatMessage(message));
+    return results.map((message: ChatMessageRow) => this.mapToChatMessage(message));
   }
 
   /**
@@ -193,7 +196,7 @@ export class DrizzleChatMessageRepository extends DrizzleBaseRepository<
       .limit(limit)
       .offset(offset);
 
-    return results.map(message => this.mapToChatMessage(message));
+    return results.map((message: ChatMessageRow) => this.mapToChatMessage(message));
   }
 
   /**
@@ -213,7 +216,7 @@ export class DrizzleChatMessageRepository extends DrizzleBaseRepository<
       .limit(limit)
       .offset(offset);
 
-    return results.map(message => this.mapToChatMessage(message));
+    return results.map((message: ChatMessageRow) => this.mapToChatMessage(message));
   }
 
   /**
@@ -228,7 +231,7 @@ export class DrizzleChatMessageRepository extends DrizzleBaseRepository<
       .limit(contextSize);
 
     // Return in chronological order (oldest first)
-    return results.reverse().map(message => this.mapToChatMessage(message));
+    return results.reverse().map((message: ChatMessageRow) => this.mapToChatMessage(message));
   }
 
   /**
@@ -247,7 +250,7 @@ export class DrizzleChatMessageRepository extends DrizzleBaseRepository<
       .limit(limit)
       .offset(offset);
 
-    return results.map(message => this.mapToChatMessage(message));
+    return results.map((message: ChatMessageRow) => this.mapToChatMessage(message));
   }
 
   /**
@@ -301,7 +304,7 @@ export class DrizzleChatMessageRepository extends DrizzleBaseRepository<
       .values(insertData)
       .returning();
 
-    return results.map(message => this.mapToChatMessage(message));
+    return results.map((message: ChatMessageRow) => this.mapToChatMessage(message));
   }
 
   /**

@@ -11,6 +11,7 @@
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import path from 'path';
+import type { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import type {
   ProcessMessageRequest,
   ProcessMessageResponse,
@@ -44,6 +45,7 @@ export interface ChatProcessingOptions {
   primaryRagWeight?: number;
   assembledRagContext?: string;  // Pre-assembled RAG context from DualContextRagService
   ragSources?: string[];         // RAG source summary
+  tools?: ToolConfig[];          // Available tools for the chat
 }
 
 export interface StreamingChatResponse {
@@ -98,11 +100,7 @@ export class ChatProcessingClient {
       message_content: messageContent,
       user_id: userId,
       organization_id: organizationId,
-      conversation_history: conversationHistory,
-      metadata: {
-        'api_version': '1.0',
-        'client': 'nextjs-api'
-      }
+      conversation_history: conversationHistory
     };
 
     // Add context if provided

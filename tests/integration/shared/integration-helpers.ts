@@ -136,7 +136,7 @@ export class IntegrationTestClient {
         return;
       }
       
-      const testOrgIds = testOrgs.map(org => org.id);
+      const testOrgIds = testOrgs.map((org: any) => org.id);
       console.log(`🧹 Starting cleanup for ${testOrgIds.length} test organizations: [${testOrgIds.join(', ')}]`);
       
       // Delete in proper cascade order (deepest children first, then parents)
@@ -146,7 +146,7 @@ export class IntegrationTestClient {
       const chatsInOrgs = await db.select({ id: schema.chats.id }).from(schema.chats)
         .where(inArray(schema.chats.organizationId, testOrgIds));
       if (chatsInOrgs.length > 0) {
-        const chatIds = chatsInOrgs.map(c => c.id);
+        const chatIds = chatsInOrgs.map((c: any) => c.id);
         await this.safeDelete(db, schema.chatMessages, inArray(schema.chatMessages.chatId, chatIds), 'chat_messages');
       }
       
@@ -158,7 +158,7 @@ export class IntegrationTestClient {
       const tablesInOrgs = await db.select({ id: schema.tables.id }).from(schema.tables)
         .where(inArray(schema.tables.organizationId, testOrgIds));
       if (tablesInOrgs.length > 0) {
-        const tableIds = tablesInOrgs.map(t => t.id);
+        const tableIds = tablesInOrgs.map((t: any) => t.id);
         await this.safeDelete(db, schema.fields, inArray(schema.fields.tableId, tableIds), 'fields');
       }
       

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback, useRef, useMemo } from 'react'
+import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import type { MentionCategory } from './types/chat-mentions'
 
 /**
@@ -25,20 +25,24 @@ interface AtMentionState {
 interface AtMentionHook {
   // State
   mentionState: AtMentionState
-  
+
   // Refs for input tracking
   inputRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement>
-  
+
   // Handlers
   handleInputChange: (value: string) => void
   handleKeyDown: (event: React.KeyboardEvent) => void
   insertTextAtCursor: (text: string) => void
   clearMention: () => void
-  
+  triggerExternally: () => void // New function to trigger @ dropdown externally
+
   // Computed values
   shouldShowDropdown: boolean
   filteredCategories: MentionCategory[]
 }
+
+// Create a shared trigger function that can be accessed by other components
+let globalTriggerFunction: (() => void) | null = null
 
 export function useAtMentions(onMentionTrigger?: (searchTerm: string, position: number) => void): AtMentionHook {
   const [mentionState, setMentionState] = useState<AtMentionState>({
@@ -166,6 +170,53 @@ export function useAtMentions(onMentionTrigger?: (searchTerm: string, position: 
     })
   }, [])
 
+  // Trigger @ dropdown externally
+  const triggerExternally = useCallback(() => {
+    const input = inputRef.current
+    if (!input) return
+
+    const cursorPos = input.selectionStart || input.value.length
+
+    // Add @ at cursor position
+    const currentValue = input.value
+    const beforeCursor = currentValue.slice(0, cursorPos)
+    const afterCursor = currentValue.slice(cursorPos)
+    const newValue = beforeCursor + '@' + afterCursor
+
+    // Update input value
+    input.value = newValue
+
+    // Set cursor after @
+    const newCursorPos = cursorPos + 1
+    input.setSelectionRange(newCursorPos, newCursorPos)
+
+    // Update previous value ref
+    previousValueRef.current = newValue
+
+    // Trigger mention state
+    setMentionState({
+      isTriggered: true,
+      triggerPosition: cursorPos,
+      searchTerm: '',
+      cursorPosition: newCursorPos
+    })
+
+    // Notify parent component
+    onMentionTrigger?.('', cursorPos)
+
+    // Trigger change event for React
+    const changeEvent = new Event('input', { bubbles: true })
+    input.dispatchEvent(changeEvent)
+  }, [onMentionTrigger])
+
+  // Set global trigger function so other components can access it
+  useEffect(() => {
+    globalTriggerFunction = triggerExternally
+    return () => {
+      globalTriggerFunction = null
+    }
+  }, [triggerExternally])
+
   // Filter categories based on search term
   const filteredCategories: MentionCategory[] = useMemo(() => {
     if (!mentionState.isTriggered || !mentionState.searchTerm) {
@@ -211,16 +262,17 @@ export function useAtMentions(onMentionTrigger?: (searchTerm: string, position: 
   return {
     // State
     mentionState,
-    
+
     // Refs
     inputRef,
-    
-    // Handlers  
+
+    // Handlers
     handleInputChange,
     handleKeyDown,
     insertTextAtCursor,
     clearMention,
-    
+    triggerExternally,
+
     // Computed values
     shouldShowDropdown,
     filteredCategories
@@ -263,6 +315,13 @@ export function getCursorCoordinates(input: HTMLTextAreaElement | HTMLInputEleme
   return {
     x: spanRect.left,
     y: spanRect.top
+  }
+}
+
+// Export function for external components to trigger @ dropdown
+export function triggerAtMentions() {
+  if (globalTriggerFunction) {
+    globalTriggerFunction()
   }
 }
 

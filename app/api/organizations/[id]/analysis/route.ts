@@ -8,6 +8,7 @@ import { getAgentTypeConfig, getDefaultToolsForType, getDefaultSpecializationFor
 import type { AgentType } from '@/ddd/domain/agents/entities/agent';
 import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { TriggerConfigs } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export const dynamic = 'force-dynamic';
@@ -67,11 +68,13 @@ export async function POST(
           organizationId: OrganizationId.fromNumber(organizationId),
           roleId: 1, // Default role ID - will be set by application layer
           agentType,
-          tools: getDefaultToolsForType(agentType).map(toolName => ({
-            name: toolName,
-            version: '1.0',
-            config: toolName.includes('_api') ? { organization_id: organizationId.toString() } : {}
-          })),
+          tools: getDefaultToolsForType(agentType).map(toolName =>
+            ToolConfig.create(
+              toolName,
+              '1.0',
+              toolName.includes('_api') ? { organization_id: organizationId.toString() } : {}
+            )
+          ),
           servers: [],
           trigger: triggerConfig,
           capabilities: [],

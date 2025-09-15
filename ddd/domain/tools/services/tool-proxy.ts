@@ -6,6 +6,10 @@
  *
  * AIDEV-NOTE: Domain service that encapsulates the proxy pattern for tools
  * that require external connections (OAuth, API keys, etc.)
+ *
+ * AIDEV-TODO: Enhance for gRPC tool execution integration.
+ * Should coordinate between local tool registry and remote gRPC worker execution.
+ * Add streaming support for long-running tool operations via gRPC streams.
  */
 
 import { ToolConfig } from '../value-objects/tool-config'
@@ -74,4 +78,12 @@ export interface IToolProxyService {
     connectionType?: 'oauth' | 'api_key'
     configurationFields?: string[]
   }>
+
+  /**
+   * AIDEV-TODO: Add gRPC worker coordination methods
+   * - executeOnWorker(workerId: string, request: ToolExecutionRequest): Promise<ToolExecutionResult>
+   * - streamToolExecution(workerId: string, request: ToolExecutionRequest): AsyncIterable<ToolExecutionUpdate>
+   * - getWorkerHealth(workerId: string): Promise<WorkerHealthStatus>
+   * - routeToolToOptimalWorker(toolName: string): Promise<string>
+   */
 }

@@ -10,6 +10,8 @@ interface ReferencesPanelProps {
   referenceTexts?: string[] // Reference texts to resolve (@doc:path, @file:path)
   resolvedReferences?: ReferenceDTO[] // Pre-resolved references
   onReferenceClick: (reference: ReferenceDTO) => void
+  onAddReference?: () => void // Trigger @ dropdown for adding references
+  onRemoveReference?: (reference: ReferenceDTO) => void // Remove reference from message
   isLoading?: boolean
   className?: string
 }
@@ -17,9 +19,10 @@ interface ReferencesPanelProps {
 interface ReferenceCardProps {
   reference: ReferenceDTO
   onClick: () => void
+  onRemove?: () => void
 }
 
-function ReferenceCard({ reference, onClick }: ReferenceCardProps) {
+function ReferenceCard({ reference, onClick, onRemove }: ReferenceCardProps) {
   // Determine icon based on reference category
   const getIcon = () => {
     switch (reference.category) {
@@ -48,24 +51,40 @@ function ReferenceCard({ reference, onClick }: ReferenceCardProps) {
   }
 
   return (
-    <button
-      onClick={onClick}
-      disabled={!!reference.metadata?.error}
-      className={`
-        flex items-center gap-2 px-3 py-2 rounded-md border text-sm
-        transition-colors duration-150 flex-shrink-0 max-w-xs
-        ${reference.metadata?.error
-          ? 'border-red-200 bg-red-50 text-red-600 cursor-not-allowed'
-          : 'border-border bg-background hover:bg-muted/50 cursor-pointer'
-        }
-      `}
-      title={reference.description}
-    >
-      {getIcon()}
-      <span className="truncate font-medium">
-        {getDisplayName()}
-      </span>
-    </button>
+    <div className="relative flex items-center group">
+      <button
+        onClick={onClick}
+        disabled={!!reference.metadata?.error}
+        className={`
+          flex items-center gap-2 px-3 py-2 rounded-md border text-sm
+          transition-colors duration-150 flex-shrink-0 max-w-xs
+          ${reference.metadata?.error
+            ? 'border-red-200 bg-red-50 text-red-600 cursor-not-allowed'
+            : 'border-border bg-background hover:bg-muted/50 cursor-pointer'
+          }
+        `}
+        title={reference.description}
+      >
+        {getIcon()}
+        <span className="truncate font-medium">
+          {getDisplayName()}
+        </span>
+      </button>
+
+      {/* Remove button - shows on hover */}
+      {onRemove && !reference.metadata?.error && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove()
+          }}
+          className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Remove reference"
+        >
+          <X className="w-2 h-2" />
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -82,6 +101,8 @@ export function ReferencesPanel({
   referenceTexts,
   resolvedReferences: propResolvedReferences,
   onReferenceClick,
+  onAddReference,
+  onRemoveReference,
   isLoading: propIsLoading = false,
   className = ""
 }: ReferencesPanelProps) {
@@ -169,6 +190,7 @@ export function ReferencesPanel({
             size="sm"
             className="h-6 w-6 p-0"
             title="Add reference"
+            onClick={onAddReference}
           >
             <Plus className="h-3 w-3" />
           </Button>
@@ -198,6 +220,7 @@ export function ReferencesPanel({
                 key={`${reference.category}-${reference.id}-${index}`}
                 reference={reference}
                 onClick={() => onReferenceClick(reference)}
+                onRemove={onRemoveReference ? () => onRemoveReference(reference) : undefined}
               />
             ))}
           </div>

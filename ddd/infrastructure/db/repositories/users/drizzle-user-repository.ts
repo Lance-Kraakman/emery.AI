@@ -2,8 +2,8 @@
 // User business operations with organization relationships and role management
 
 import { eq, and, sql } from 'drizzle-orm';
+import type { InferSelectModel } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
-import type postgres from 'postgres';
 
 import { users, userOrganizations, organizations } from '@/lib/db/schema';
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
@@ -20,8 +20,10 @@ import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationName } from '
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 import type { DbClient } from '@/lib/db/client';
 
-export class DrizzleUserRepository 
-  extends DrizzleBaseRepository<User, UserId, CreateUserData, UpdateUserData, any>
+type UserRow = InferSelectModel<typeof users>;
+
+export class DrizzleUserRepository
+  extends DrizzleBaseRepository<User, UserId, CreateUserData, UpdateUserData, UserRow>
   implements IUserRepository {
   
   protected readonly table = users;
@@ -191,14 +193,14 @@ export class DrizzleUserRepository
 
     console.log("🗃️ DrizzleUserRepository.getUserOrganizations() - Raw query result:", {
       count: result.length,
-      results: result.map(r => ({
+      results: result.map((r: { organization: any }) => ({
         orgId: r.organization.id,
         orgName: r.organization.name,
         orgSlug: r.organization.slug
       }))
     });
 
-    const mappedResults = result.map(r => ({
+    const mappedResults = result.map((r: { organization: any }) => ({
       ...r.organization,
       id: OrganizationId.fromNumber(r.organization.id),
       name: OrganizationName.fromString(r.organization.name),
@@ -271,7 +273,7 @@ export class DrizzleUserRepository
       .innerJoin(users, eq(userOrganizations.userId, users.id))
       .where(eq(userOrganizations.organizationId, organizationId.value));
 
-    return result.map(r => this.fromPersistence(r.user));
+    return result.map((r: { user: UserRow }) => this.fromPersistence(r.user));
   }
 
   async findByRole(organizationId: OrganizationId, role: string): Promise<User[]> {
@@ -288,7 +290,7 @@ export class DrizzleUserRepository
         )
       );
 
-    return result.map(r => this.fromPersistence(r.user));
+    return result.map((r: { user: UserRow }) => this.fromPersistence(r.user));
   }
 
   // Business logic operations
@@ -309,7 +311,7 @@ export class DrizzleUserRepository
 
 
   async getUserWithOrganizations(userId: UserId): Promise<(User & { organizations: Organization[] }) | null> {
-    return await this.db.transaction(async (tx) => {
+    return await this.db.transaction(async (tx: any) => {
       // Get the user
       const userResult = await tx
         .select()
@@ -331,7 +333,7 @@ export class DrizzleUserRepository
         .innerJoin(organizations, eq(userOrganizations.organizationId, organizations.id))
         .where(eq(userOrganizations.userId, userId.value));
 
-      const userOrgs = orgsResult.map(r => ({
+      const userOrgs = orgsResult.map((r: { organization: any }) => ({
         ...r.organization,
         id: OrganizationId.fromNumber(r.organization.id),
         name: OrganizationName.fromString(r.organization.name),
@@ -363,7 +365,7 @@ export class DrizzleUserRepository
   }
 
   // AIDEV-NOTE: Base repository interface - maps database primitives to domain Value Objects
-  protected fromPersistence(data: any): User {
+  protected fromPersistence(data: UserRow): User {
     return {
       id: UserId.fromString(data.id),
       name: data.name,

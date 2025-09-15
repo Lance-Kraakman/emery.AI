@@ -5,6 +5,7 @@
  */
 
 import { eq, and, lt, lte, desc, asc, sql, or, isNull } from 'drizzle-orm';
+import type { InferSelectModel } from 'drizzle-orm';
 import type { DbClient } from '@/lib/db/client';
 import { tasks } from '@/lib/db/schema';
 import type { ITaskRepository, CreateTaskData, UpdateTaskData } from '@/ddd/domain/tasks/repositories/task-repository';
@@ -14,8 +15,10 @@ import { TaskId } from '@/ddd/domain/tasks/value-objects/task-id';
 import { TaskStatus, TASK_STATUS } from '@/ddd/domain/tasks/value-objects/task-status';
 import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
-export class DrizzleTaskRepository 
-  extends DrizzleBaseRepository<Task, TaskId, CreateTaskData, UpdateTaskData, any>
+type TaskRow = InferSelectModel<typeof tasks>;
+
+export class DrizzleTaskRepository
+  extends DrizzleBaseRepository<Task, TaskId, CreateTaskData, UpdateTaskData, TaskRow>
   implements ITaskRepository {
   
   protected readonly table = tasks;
@@ -70,7 +73,7 @@ export class DrizzleTaskRepository
       .where(eq(tasks.agentId, agentId.value))
       .orderBy(desc(tasks.createdAt));
 
-    return results.map(r => this.fromPersistence(r));
+    return results.map((r: TaskRow) => this.fromPersistence(r));
   }
 
   // Legacy save method - kept for backward compatibility during transition
@@ -102,7 +105,7 @@ export class DrizzleTaskRepository
     const results = limit 
       ? await queryBuilder.limit(limit)
       : await queryBuilder;
-    return results.map(r => this.fromPersistence(r));
+    return results.map((r: TaskRow) => this.fromPersistence(r));
   }
 
   async findReadyForExecution(before?: Date): Promise<Task[]> {
@@ -121,7 +124,7 @@ export class DrizzleTaskRepository
       )
       .orderBy(asc(tasks.createdAt));
 
-    return results.map(r => this.fromPersistence(r));
+    return results.map((r: TaskRow) => this.fromPersistence(r));
   }
 
   async findByStatus(status: TaskStatus, limit?: number): Promise<Task[]> {
@@ -134,7 +137,7 @@ export class DrizzleTaskRepository
     const results = limit 
       ? await queryBuilder.limit(limit)
       : await queryBuilder;
-    return results.map(r => this.fromPersistence(r));
+    return results.map((r: TaskRow) => this.fromPersistence(r));
   }
 
   async findScheduledTasksDue(before?: Date): Promise<Task[]> {
@@ -151,7 +154,7 @@ export class DrizzleTaskRepository
       )
       .orderBy(asc(tasks.createdAt));
 
-    return results.map(r => this.fromPersistence(r));
+    return results.map((r: TaskRow) => this.fromPersistence(r));
   }
 
   async saveMultiple(taskEntities: Task[]): Promise<void> {
@@ -190,7 +193,7 @@ export class DrizzleTaskRepository
       .groupBy(tasks.status);
 
     const tasksByStatus: Record<string, number> = {};
-    statusResult.forEach(row => {
+    statusResult.forEach((row: { status: string; count: number }) => {
       tasksByStatus[row.status] = row.count;
     });
 
@@ -251,7 +254,7 @@ export class DrizzleTaskRepository
     return 0; // Return count not available in this Drizzle version
   }
 
-  protected fromPersistence(record: any): Task {
+  protected fromPersistence(record: TaskRow): Task {
     return Task.fromPersistence({
       id: record.id,
       agentId: record.agentId,
@@ -265,7 +268,7 @@ export class DrizzleTaskRepository
       startedAt: record.startedAt,
       completedAt: record.completedAt,
       createdBy: record.createdBy,
-      createdAt: record.createdAt
+      createdAt: record.createdAt || new Date()
     });
   }
   

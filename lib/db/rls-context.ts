@@ -34,7 +34,7 @@ export async function withRLSContext<T>(
   operation: (tx: DrizzleTransaction) => Promise<T>,
   userId?: UserId
 ): Promise<T> {
-  return await db.transaction(async (tx) => {
+  return await db.transaction(async (tx: any) => {
     try {
       // Always set organization context (primary RLS boundary)
       await tx.execute(sql`SELECT set_config('app.current_organization_id', ${organizationId.value.toString()}, true)`);

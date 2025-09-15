@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { Settings, Plus, Edit, Trash2, Save, X } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import type { CapabilityConfig, StepConfig, ToolConfig, ServerConfig } from '@/ddd/domain/agents/entities/agent';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import type { CapabilityConfig, StepConfig, ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -115,7 +116,7 @@ export default function CapabilityManager({
 
   const handleAddStepTool = (stepIndex: number) => {
     if (!editingCapability) return;
-    const newTool: ToolConfig = { name: '', version: undefined, config: undefined };
+    const newTool: ToolConfig = ToolConfig.create('', '1.0', {});
     const updatedStep = {
       ...editingCapability.steps[stepIndex],
       tools: [...(editingCapability.steps[stepIndex].tools || []), newTool]
@@ -134,9 +135,21 @@ export default function CapabilityManager({
 
   const handleUpdateStepTool = (stepIndex: number, toolIndex: number, field: keyof ToolConfig, value: string) => {
     if (!editingCapability) return;
-    const updatedTools = editingCapability.steps[stepIndex].tools?.map((tool, i) => 
-      i === toolIndex ? { ...tool, [field]: value || undefined } : tool
-    ) || [];
+    const updatedTools = editingCapability.steps[stepIndex].tools?.map((tool, i) => {
+      if (i === toolIndex) {
+        // Create new ToolConfig with updated field
+        const updatedConfig = { ...tool.config };
+        if (field === 'name') {
+          return ToolConfig.create(value || '', tool.version, tool.config);
+        } else if (field === 'version') {
+          return ToolConfig.create(tool.name, value || '1.0', tool.config);
+        } else if (field === 'config') {
+          return ToolConfig.create(tool.name, tool.version, { ...tool.config, ...(value ? JSON.parse(value) : {}) });
+        }
+        return tool;
+      }
+      return tool;
+    }) || [];
     const updatedStep = {
       ...editingCapability.steps[stepIndex],
       tools: updatedTools

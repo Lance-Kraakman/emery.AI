@@ -11,6 +11,7 @@ import type { TaskProgress } from '@/lib/grpc/client';
 import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/lib/grpc/proto-mappers';
 import { getAgentDisplayName, getCapabilitiesCount } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, UserId, OrganizationId, TaskStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
   // Track active executions for status queries
@@ -48,10 +49,12 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       const taskRequest = createTaskRequest({
         taskId: executionId,
         agentId: agent.id.value,
-        instructionConfig: { 
-          instructions, 
-          tools: tools || [], 
-          servers: servers || [] 
+        instructionConfig: {
+          instructions,
+          tools: (tools || []).map(tool =>
+            tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
+          ),
+          servers: servers || []
         },
         agent: agent,
         triggerData: {}, // Empty for proto compatibility

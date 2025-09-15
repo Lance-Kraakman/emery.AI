@@ -45,11 +45,11 @@ export abstract class DrizzleBaseRepository<
       throw new Error(`${this.constructor.name} does not support organization filtering`);
     }
     
-    const records = await this.db
+    const records: TRecord[] = await this.db
       .select()
       .from(this.table)
       .where(eq(this.organizationColumn, orgId.value));
-    
+
     return records.map(r => this.fromPersistence(r));
   }
 

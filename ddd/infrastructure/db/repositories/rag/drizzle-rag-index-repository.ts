@@ -2,6 +2,7 @@
 // Provides concrete database operations using existing schema
 
 import { eq, and, inArray, sql, desc, ne } from 'drizzle-orm';
+import type { InferSelectModel } from 'drizzle-orm';
 import { ragIndexes } from '@/lib/db/schema';
 import { RagIndex } from '@/ddd/domain/rag/entities';
 import { RagIndexId, OrganizationId, type DomainType, type IndexStatus } from '@/ddd/domain/rag/value-objects';
@@ -9,8 +10,10 @@ import type { RagIndexRepository, CreateRagIndexData, UpdateRagIndexData, RagInd
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import type { DbClient } from '@/lib/db/client';
 
-export class DrizzleRagIndexRepository 
-  extends DrizzleBaseRepository<RagIndex, RagIndexId, CreateRagIndexData, UpdateRagIndexData, any>
+type RagIndexRow = InferSelectModel<typeof ragIndexes>;
+
+export class DrizzleRagIndexRepository
+  extends DrizzleBaseRepository<RagIndex, RagIndexId, CreateRagIndexData, UpdateRagIndexData, RagIndexRow>
   implements RagIndexRepository {
   
   protected readonly table = ragIndexes;
@@ -71,7 +74,7 @@ export class DrizzleRagIndexRepository
       .where(eq(ragIndexes.agentId, agentId))
       .orderBy(desc(ragIndexes.createdAt));
 
-    return records.map(record => this.fromPersistence(record));
+    return records.map((record: RagIndexRow) => this.fromPersistence(record));
   }
 
   async findByFilters(filters: RagIndexFilters): Promise<RagIndex[]> {
@@ -102,7 +105,7 @@ export class DrizzleRagIndexRepository
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(ragIndexes.createdAt));
 
-    return records.map(record => this.fromPersistence(record));
+    return records.map((record: RagIndexRow) => this.fromPersistence(record));
   }
 
   async exists(id: RagIndexId): Promise<boolean> {
@@ -190,24 +193,24 @@ export class DrizzleRagIndexRepository
       .where(inArray(ragIndexes.status, ['error', 'created']))
       .orderBy(desc(ragIndexes.createdAt));
 
-    return records.map(record => this.fromPersistence(record));
+    return records.map((record: RagIndexRow) => this.fromPersistence(record));
   }
 
-  protected fromPersistence(record: any): RagIndex {
+  protected fromPersistence(record: RagIndexRow): RagIndex {
     return RagIndex.fromPersistence({
       id: record.id,
       organizationId: record.organizationId,
       name: record.name,
-      description: record.description,
-      agentId: record.agentId,
-      domainTypes: record.domainTypes as DomainType[],
-      domainFilters: record.domainFilters,
+      description: record.description || undefined,
+      agentId: record.agentId || undefined,
+      domainTypes: (record.domainTypes as DomainType[]) || [],
+      domainFilters: record.domainFilters || undefined,
       embeddingModel: record.embeddingModel || 'sentence-transformers/all-mpnet-base-v2',
       embeddingDimensions: record.embeddingDimensions || 768,
       status: record.status as IndexStatus,
       documentCount: record.documentCount || 0,
-      createdAt: record.createdAt,
-      lastIndexedAt: record.lastIndexedAt
+      createdAt: record.createdAt || new Date(),
+      lastIndexedAt: record.lastIndexedAt || undefined
     });
   }
   

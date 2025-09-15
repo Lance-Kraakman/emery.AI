@@ -2,6 +2,7 @@
 // Provides vector search capabilities using pgvector and raw SQL
 
 import { eq, and, inArray, sql, desc } from 'drizzle-orm';
+import type { InferSelectModel } from 'drizzle-orm';
 import { ragDocuments } from '@/lib/db/schema';
 import { 
   RagSqlTemplates, 
@@ -21,6 +22,8 @@ import {
 import { RagDocument, type DocumentMetadata } from '@/ddd/domain/rag/entities';
 import { DocumentId, RagIndexId, type DomainType } from '@/ddd/domain/rag/value-objects';
 import type { DbClient } from '@/lib/db/client';
+
+type RagDocumentRow = InferSelectModel<typeof ragDocuments>;
 
 // AIDEV-NOTE: This repository does NOT extend DrizzleBaseRepository due to architectural differences:
 // 1. RAG repository uses save(entity) and update(entity) patterns instead of create(data)/update(id,data)
@@ -56,7 +59,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
       .where(eq(ragDocuments.ragIndexId, indexId.value))
       .orderBy(desc(ragDocuments.indexedAt));
 
-    return records.map(record => this.mapToDomainEntity(record));
+    return records.map((record: RagDocumentRow) => this.mapToDomainEntity(record));
   }
 
   async findByDomain(sourceId: string, domainType: DomainType): Promise<RagDocument[]> {
@@ -71,7 +74,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
       )
       .orderBy(desc(ragDocuments.indexedAt));
 
-    return records.map(record => this.mapToDomainEntity(record));
+    return records.map((record: RagDocumentRow) => this.mapToDomainEntity(record));
   }
 
   async findByFilters(filters: DocumentFilters): Promise<RagDocument[]> {
@@ -103,7 +106,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(ragDocuments.indexedAt));
 
-    return records.map(record => this.mapToDomainEntity(record));
+    return records.map((record: RagDocumentRow) => this.mapToDomainEntity(record));
   }
 
   async vectorSearch(params: DomainVectorSearchParams): Promise<VectorSearchResult> {
@@ -160,7 +163,7 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
         )
       );
 
-    return new Set(records.map(r => r.contentHash).filter(hash => hash !== null));
+    return new Set(records.map((r: { contentHash: string | null }) => r.contentHash).filter((hash: string | null): hash is string => hash !== null));
   }
 
   async existsByContentHash(indexId: RagIndexId, contentHash: string): Promise<boolean> {
@@ -355,38 +358,39 @@ export class DrizzleRagDocumentRepository implements RagDocumentRepository {
   }
 
   // Private mapping methods
-  private mapToDomainEntity(record: any): RagDocument {
+  private mapToDomainEntity(record: RagDocumentRow): RagDocument {
     // Parse embedding - handle pgvector string format, arrays, and nulls
     let embedding: number[] = [];
     if (record.embedding) {
-      if (typeof record.embedding === 'string') {
+      const embeddingValue = record.embedding as any;
+      if (typeof embeddingValue === 'string') {
         // pgvector returns embeddings as strings like "[0.1,0.2,...]"
         // Remove brackets and parse
-        const cleanString = record.embedding.replace(/^\[|\]$/g, '');
+        const cleanString = embeddingValue.replace(/^\[|\]$/g, '');
         embedding = cleanString.split(',').map((v: string) => parseFloat(v.trim()));
-      } else if (Array.isArray(record.embedding)) {
-        embedding = record.embedding;
+      } else if (Array.isArray(embeddingValue)) {
+        embedding = embeddingValue;
       } else {
-        console.warn('[DOCUMENT-REPO] Unexpected embedding type:', typeof record.embedding);
+        console.warn('[DOCUMENT-REPO] Unexpected embedding type:', typeof embeddingValue);
         embedding = [];
       }
     }
 
     return RagDocument.fromPersistence({
       id: record.id,
-      indexId: record.rag_index_id || record.ragIndexId,
-      organizationId: record.organization_id || record.organizationId,
-      sourceId: record.source_id || record.sourceId,
-      domainType: (record.domain_type || record.domainType) as DomainType,
-      sourceName: record.source_name || record.sourceName,
+      indexId: record.ragIndexId,
+      organizationId: record.organizationId,
+      sourceId: record.sourceId,
+      domainType: record.domainType as DomainType,
+      sourceName: record.sourceName,
       title: record.title,
       content: record.content,
       metadata: record.metadata as DocumentMetadata,
       embedding: embedding,
-      contentHash: record.content_hash || record.contentHash,
-      createdAt: record.indexed_at || record.indexedAt || new Date(),
-      updatedAt: record.source_updated_at || record.sourceUpdatedAt || new Date(),
-      similarity: record.similarity ? Number(record.similarity) : undefined
+      contentHash: record.contentHash,
+      createdAt: record.indexedAt || new Date(),
+      updatedAt: record.sourceUpdatedAt || new Date(),
+      similarity: (record as any).similarity ? Number((record as any).similarity) : undefined
     });
   }
 }

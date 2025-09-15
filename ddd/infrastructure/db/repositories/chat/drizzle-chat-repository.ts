@@ -10,10 +10,13 @@
 
 import { chats } from '@/lib/db/schema';
 import { eq, and, desc, asc, ilike, isNull, isNotNull, sql } from 'drizzle-orm';
+import type { InferSelectModel } from 'drizzle-orm';
 import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
 import { Chat, type CreateChatData, type UpdateChatData } from '@/ddd/domain/chat/entities/chat';
 import type { ChatId, OrganizationId, TableId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { DbClient } from '@/lib/db/client';
+
+type ChatRow = InferSelectModel<typeof chats>;
 
 export class DrizzleChatRepository implements IChatRepository {
   constructor(private readonly db: DbClient) {}
@@ -63,7 +66,7 @@ export class DrizzleChatRepository implements IChatRepository {
       .limit(limit)
       .offset(offset);
 
-    return results.map(chat => this.mapToChat(chat));
+    return results.map((chat: ChatRow) => this.mapToChat(chat));
   }
 
   /**
@@ -81,7 +84,7 @@ export class DrizzleChatRepository implements IChatRepository {
       .limit(limit)
       .offset(offset);
 
-    return results.map(chat => this.mapToChat(chat));
+    return results.map((chat: ChatRow) => this.mapToChat(chat));
   }
 
   /**
@@ -98,7 +101,7 @@ export class DrizzleChatRepository implements IChatRepository {
       .orderBy(desc(chats.updatedAt))
       .limit(limit)
       .offset(offset);
-    return results.map(chat => this.mapToChat(chat));
+    return results.map((chat: ChatRow) => this.mapToChat(chat));
   }
 
   /**
@@ -116,7 +119,7 @@ export class DrizzleChatRepository implements IChatRepository {
       .limit(limit)
       .offset(offset);
 
-    return results.map(chat => this.mapToChat(chat));
+    return results.map((chat: ChatRow) => this.mapToChat(chat));
   }
 
   /**
@@ -134,7 +137,7 @@ export class DrizzleChatRepository implements IChatRepository {
       .limit(limit)
       .offset(offset);
 
-    return results.map(chat => this.mapToChat(chat));
+    return results.map((chat: ChatRow) => this.mapToChat(chat));
   }
 
   /**
@@ -152,7 +155,7 @@ export class DrizzleChatRepository implements IChatRepository {
       .limit(limit)
       .offset(offset);
 
-    return results.map(chat => this.mapToChat(chat));
+    return results.map((chat: ChatRow) => this.mapToChat(chat));
   }
 
   /**
@@ -276,7 +279,7 @@ export class DrizzleChatRepository implements IChatRepository {
       .orderBy(desc(chats.lastMessageAt), desc(chats.updatedAt))
       .limit(limit);
 
-    return results.map(chat => this.mapToChat(chat));
+    return results.map((chat: ChatRow) => this.mapToChat(chat));
   }
 
   /**
@@ -296,7 +299,7 @@ export class DrizzleChatRepository implements IChatRepository {
       .limit(limit)
       .offset(offset);
 
-    return results.map(chat => this.mapToChat(chat));
+    return results.map((chat: ChatRow) => this.mapToChat(chat));
   }
 
   /**

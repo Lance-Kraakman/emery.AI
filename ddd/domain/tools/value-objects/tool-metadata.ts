@@ -6,6 +6,12 @@
  *
  * AIDEV-NOTE: Separates tool display concerns from tool execution configuration.
  * Enables rich tool categorization and filtering in tool selection interfaces.
+ *
+ * AIDEV-TODO: Add gRPC worker metadata integration fields:
+ * - workerId?: string (which worker provides this tool)
+ * - workerVersion?: string (version of worker providing tool)
+ * - isRemote?: boolean (whether tool executes on remote worker)
+ * - capabilities?: ToolCapability[] (what the tool can do)
  */
 
 /**

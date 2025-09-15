@@ -238,7 +238,6 @@ export async function POST(req: NextRequest) {
                 role: 'assistant',
                 metadata: {
                   ragSources: ragSources,
-                  tools: tools.map((t: any) => t.name), // Track which tools were used
                   processingTime: Date.now() - startTime,
                   modelUsed: 'qwen-coder' // This will come from gRPC response
                 }

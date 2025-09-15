@@ -3,7 +3,14 @@
 
 import type { DbClient } from '@/lib/db/client';
 import { eq, and, lt, gte, desc, sql, inArray } from 'drizzle-orm';
+import type { InferSelectModel } from 'drizzle-orm';
 import { invitations, users, organizations, userOrganizations, roles } from '@/lib/db/schema';
+
+type InvitationRow = InferSelectModel<typeof invitations>;
+type InvitationWithRole = {
+  invitation: InvitationRow;
+  roleName: string | null;
+};
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import type { 
   IInvitationRepository,
@@ -23,10 +30,9 @@ import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
 import { EmailAddress } from '@/ddd/domain/shared/value-objects/email-address';
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 import { InvitationId, InvitationToken } from '@/ddd/domain/shared/value-objects';
-import type { InvitationRow } from '@/types/db';
 
-export class DrizzleInvitationRepository 
-  extends DrizzleBaseRepository<Invitation, InvitationId, CreateInvitationData, UpdateInvitationData, any>
+export class DrizzleInvitationRepository
+  extends DrizzleBaseRepository<Invitation, InvitationId, CreateInvitationData, UpdateInvitationData, InvitationRow>
   implements IInvitationRepository {
   
   protected readonly table = invitations;
@@ -170,7 +176,7 @@ export class DrizzleInvitationRepository
       .where(eq(invitations.organizationId, organizationId.value))
       .orderBy(desc(invitations.createdAt));
 
-    return results.map(result => this.mapToEntity({
+    return results.map((result: InvitationWithRole) => this.mapToEntity({
       ...result.invitation,
       systemRole: result.roleName || SYSTEM_ROLES.MEMBER
     }));
@@ -220,7 +226,7 @@ export class DrizzleInvitationRepository
       .where(whereConditions.length > 0 ? and(...whereConditions) : undefined)
       .orderBy(desc(invitations.createdAt));
 
-    return results.map(result => this.mapToEntity({
+    return results.map((result: InvitationWithRole) => this.mapToEntity({
       ...result.invitation,
       systemRole: result.roleName || SYSTEM_ROLES.MEMBER
     }));
@@ -390,8 +396,8 @@ export class DrizzleInvitationRepository
     const stats = {
       organizationId,
       totalInvitations: allInvitations.length,
-      pendingInvitations: allInvitations.filter(inv => inv.expiresAt > now).length,
-      expiredInvitations: allInvitations.filter(inv => inv.expiresAt <= now).length,
+      pendingInvitations: allInvitations.filter((inv: any) => inv.expiresAt > now).length,
+      expiredInvitations: allInvitations.filter((inv: any) => inv.expiresAt <= now).length,
       acceptedInvitations: 0, // This would need to be tracked separately
       // TODO: Update invitation stats for RBAC system - role-based stats no longer applicable
       invitationsByRole: {

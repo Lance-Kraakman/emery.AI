@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import type { ToolConfig, ServerConfig } from '@/ddd/domain/agents/entities/agent';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import { createTask } from '@/app/actions/tasks';
 
 interface TaskFormDialogProps {

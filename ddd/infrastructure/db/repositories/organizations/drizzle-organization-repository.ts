@@ -1,5 +1,5 @@
 import { eq, ilike, and, count } from 'drizzle-orm';
-import type postgres from 'postgres';
+import type { InferSelectModel } from 'drizzle-orm';
 
 import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
@@ -9,8 +9,10 @@ import { organizations, users, userOrganizations, roles, userRoles } from '@/lib
 import { OrganizationId, UserId, OrganizationName, EmailAddress } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 
-export class DrizzleOrganizationRepository 
-  extends DrizzleBaseRepository<Organization, OrganizationId, CreateOrganizationData, UpdateOrganizationData, any>
+type OrganizationRow = InferSelectModel<typeof organizations>;
+
+export class DrizzleOrganizationRepository
+  extends DrizzleBaseRepository<Organization, OrganizationId, CreateOrganizationData, UpdateOrganizationData, OrganizationRow>
   implements IOrganizationRepository {
   
   protected readonly table = organizations;
@@ -52,7 +54,7 @@ export class DrizzleOrganizationRepository
       .innerJoin(userOrganizations, eq(organizations.id, userOrganizations.organizationId))
       .where(eq(userOrganizations.userId, userId.value));
 
-    return result.map(org => this.fromPersistence(org));
+    return result.map((org: OrganizationRow) => this.fromPersistence(org));
   }
 
   async findByIdWithMembers(id: OrganizationId): Promise<OrganizationWithMembers | null> {
@@ -101,7 +103,7 @@ export class DrizzleOrganizationRepository
 
   async createWithOwner(data: CreateOrganizationData, ownerId: UserId): Promise<Organization> {
     // Always use transaction for data consistency
-    return await this.db.transaction(async (tx) => {
+    return await this.db.transaction(async (tx: any) => {
       return this.createWithOwnerBootstrap(data, ownerId, tx);
     });
   }
@@ -186,7 +188,7 @@ export class DrizzleOrganizationRepository
   }
 
   async delete(id: OrganizationId): Promise<void> {
-    await this.db.transaction(async (tx) => {
+    await this.db.transaction(async (tx: any) => {
       // Clean up user organization memberships (should cascade)
       await tx
         .delete(userOrganizations)
@@ -260,7 +262,7 @@ export class DrizzleOrganizationRepository
         where: ilike(organizations.name, `%${name}%`),
         limit
       });
-      return result.map(org => this.fromPersistence(org));
+      return result.map((org: OrganizationRow) => this.fromPersistence(org));
     } catch (error) {
       console.log("error finding org", error);
     } finally {

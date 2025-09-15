@@ -48,6 +48,7 @@ import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/
 // Tools domain imports
 import { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
 import { IToolProxyService } from '@/ddd/domain/tools/services/tool-proxy';
+import { StaticToolRegistry } from '@/ddd/infrastructure/tools/static-tool-registry';
 
 // Chat domain imports
 import { IReferenceResolverService } from '@/ddd/domain/chat/services/reference-resolver';
@@ -418,7 +419,10 @@ export class DIContainer {
       console.log('✅ Connection services registered with Pipedream client');
     }
 
-    
+    // Register tool registry service
+    const toolRegistryService = new StaticToolRegistry();
+    this.repositories.set('IToolRegistryService', toolRegistryService);
+
     this.isInitialized = true;
     console.log('✅ DIContainer initialized with repositories, file storage, agent services, RAG services, and connection services');
   }
@@ -515,6 +519,9 @@ type ServiceMap = {
   // Connection Services
   ConnectionRepository: IConnectionRepository;
   ConnectionApplicationService: ConnectionApplicationService;
+
+  // Tool Services
+  IToolRegistryService: IToolRegistryService;
 };
 
 // Generate getter functions dynamically
@@ -526,9 +533,10 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
   // Special mappings for services with interface prefix
   const specialMappings: Record<string, string> = {
     'RagIndexRepository': 'IRagIndexRepository',
-    'RagDocumentRepository': 'IRagDocumentRepository', 
+    'RagDocumentRepository': 'IRagDocumentRepository',
     'RagQueryLogRepository': 'IRagQueryLogRepository',
     'ConnectionRepository': 'IConnectionRepository',
+    'IToolRegistryService': 'IToolRegistryService',
   };
   
   if (specialMappings[key as string]) {
@@ -581,6 +589,9 @@ export const getIndexingDomainService = createGetter('IndexingDomainService');
 export const getSearchDomainService = createGetter('SearchDomainService');
 export const getRagSearchApplicationService = createGetter('RagSearchApplicationService');
 export const getIndexingQueueService = createGetter('IndexingQueueService');
+
+// Tool service getters
+export const getToolRegistryService = createGetter('IToolRegistryService');
 
 // Connection service getters - handle null gracefully when Pipedream not configured
 export const getConnectionRepository = (): IConnectionRepository => {

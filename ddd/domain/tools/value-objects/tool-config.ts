@@ -6,13 +6,114 @@
  *
  * AIDEV-NOTE: This VO is shared between agents, chat, and infrastructure layers.
  * Provides type safety, validation, and immutability for tool configurations.
+ * Extended with specific config types for different tool categories.
  */
+
+import type { AgentId, UserId, OrganizationId } from '@/ddd/domain/shared/value-objects'
+
+/**
+ * Base configuration interface
+ */
+export interface BaseToolConfig {
+  [key: string]: any
+}
+
+/**
+ * Agent tool configuration - references an existing agent
+ */
+export interface AgentToolConfig extends BaseToolConfig {
+  agentId: number  // Will be converted to AgentId in domain layer
+  organizationId: number
+  ownerId: string
+}
+
+/**
+ * Table tool configuration - references a dynamic table
+ */
+export interface TableToolConfig extends BaseToolConfig {
+  tableId: string
+  organizationId: number
+  tableName?: string
+  hasHeaders?: boolean
+}
+
+/**
+ * Document tool configuration - references a document/file
+ */
+export interface DocumentToolConfig extends BaseToolConfig {
+  documentId: string
+  filename: string
+  mimeType: string
+  organizationId: number
+  path?: string
+  size?: number
+}
+
+/**
+ * File tool configuration - references a file
+ */
+export interface FileToolConfig extends BaseToolConfig {
+  fileId: string
+  filename: string
+  mimeType: string
+  organizationId: number
+  path?: string
+  size?: number
+  uploadedBy?: string
+}
+
+/**
+ * Database tool configuration - references a database connection
+ */
+export interface DatabaseToolConfig extends BaseToolConfig {
+  databaseId: string
+  connectionString?: string
+  schemaName?: string
+  organizationId: number
+  readOnly?: boolean
+}
+
+/**
+ * OAuth tool configuration - for external app integrations
+ */
+export interface OAuthToolConfig extends BaseToolConfig {
+  oauth_token: string
+  refresh_token?: string
+  expires_at?: string
+  scope?: string
+  organizationId: number
+  userId: string
+}
+
+/**
+ * API Key tool configuration - for API-based integrations
+ */
+export interface ApiKeyToolConfig extends BaseToolConfig {
+  agent_api_key: string
+  api_key?: string
+  organizationId: number
+  userId: string
+  endpoint?: string
+}
+
+/**
+ * Union type for all possible tool configurations
+ */
+export type ToolConfigData =
+  | AgentToolConfig
+  | TableToolConfig
+  | DocumentToolConfig
+  | FileToolConfig
+  | DatabaseToolConfig
+  | OAuthToolConfig
+  | ApiKeyToolConfig
+  | BaseToolConfig
 
 export class ToolConfig {
   constructor(
     public readonly name: string,
     public readonly version: string,
-    public readonly config: Record<string, any>
+    public readonly config: ToolConfigData
   ) {
     if (!name?.trim()) {
       throw new Error('Tool name is required and cannot be empty')
@@ -28,44 +129,229 @@ export class ToolConfig {
   /**
    * Create a ToolConfig with standard defaults
    */
-  static create(name: string, version: string = '1.0', config: Record<string, any> = {}): ToolConfig {
+  static create(name: string, version: string = '1.0', config: ToolConfigData = {}): ToolConfig {
     return new ToolConfig(name, version, config)
   }
 
   /**
    * Create a basic tool configuration for common tools
    */
-  static basic(name: string, config: Record<string, any> = {}): ToolConfig {
+  static basic(name: string, config: BaseToolConfig = {}): ToolConfig {
     return new ToolConfig(name, '1.0', config)
+  }
+
+  /**
+   * Create an agent tool configuration
+   */
+  static agent(
+    name: string,
+    agentId: number,
+    organizationId: number,
+    ownerId: string,
+    version: string = '1.0'
+  ): ToolConfig {
+    const config: AgentToolConfig = {
+      agentId,
+      organizationId,
+      ownerId
+    }
+    return new ToolConfig(name, version, config)
+  }
+
+  /**
+   * Create a table tool configuration
+   */
+  static table(
+    name: string,
+    tableId: string,
+    organizationId: number,
+    tableName?: string,
+    version: string = '1.0'
+  ): ToolConfig {
+    const config: TableToolConfig = {
+      tableId,
+      organizationId,
+      ...(tableName && { tableName })
+    }
+    return new ToolConfig(name, version, config)
+  }
+
+  /**
+   * Create a document tool configuration
+   */
+  static document(
+    name: string,
+    documentId: string,
+    filename: string,
+    mimeType: string,
+    organizationId: number,
+    version: string = '1.0'
+  ): ToolConfig {
+    const config: DocumentToolConfig = {
+      documentId,
+      filename,
+      mimeType,
+      organizationId
+    }
+    return new ToolConfig(name, version, config)
+  }
+
+  /**
+   * Create a file tool configuration
+   */
+  static file(
+    name: string,
+    fileId: string,
+    filename: string,
+    mimeType: string,
+    organizationId: number,
+    version: string = '1.0'
+  ): ToolConfig {
+    const config: FileToolConfig = {
+      fileId,
+      filename,
+      mimeType,
+      organizationId
+    }
+    return new ToolConfig(name, version, config)
+  }
+
+  /**
+   * Create a database tool configuration
+   */
+  static database(
+    name: string,
+    databaseId: string,
+    organizationId: number,
+    version: string = '1.0'
+  ): ToolConfig {
+    const config: DatabaseToolConfig = {
+      databaseId,
+      organizationId
+    }
+    return new ToolConfig(name, version, config)
+  }
+
+  /**
+   * Create an OAuth tool configuration
+   */
+  static oauth(
+    name: string,
+    oauthToken: string,
+    organizationId: number,
+    userId: string,
+    version: string = '1.0'
+  ): ToolConfig {
+    const config: OAuthToolConfig = {
+      oauth_token: oauthToken,
+      organizationId,
+      userId
+    }
+    return new ToolConfig(name, version, config)
   }
 
   /**
    * Create a tool configuration with API key for OAuth tools
    */
-  static withApiKey(name: string, apiKey: string, version: string = '1.0'): ToolConfig {
-    return new ToolConfig(name, version, { agent_api_key: apiKey })
+  static withApiKey(
+    name: string,
+    apiKey: string,
+    organizationId: number,
+    userId: string,
+    version: string = '1.0'
+  ): ToolConfig {
+    const config: ApiKeyToolConfig = {
+      agent_api_key: apiKey,
+      organizationId,
+      userId
+    }
+    return new ToolConfig(name, version, config)
   }
 
   /**
    * Check if this tool requires a connection (OAuth, API key, etc.)
    */
   get requiresConnection(): boolean {
-    return !!(this.config.agent_api_key || this.config.oauth_token || this.config.api_key)
+    const config = this.config as any
+    return !!(config.agent_api_key || config.oauth_token || config.api_key)
   }
 
   /**
    * Get the connection type for this tool
    */
   get connectionType(): 'oauth' | 'api_key' | 'none' {
-    if (this.config.oauth_token) return 'oauth'
-    if (this.config.agent_api_key || this.config.api_key) return 'api_key'
+    const config = this.config as any
+    if (config.oauth_token) return 'oauth'
+    if (config.agent_api_key || config.api_key) return 'api_key'
     return 'none'
+  }
+
+  /**
+   * Type guards for specific config types
+   */
+  isAgentTool(): this is ToolConfig & { config: AgentToolConfig } {
+    return 'agentId' in this.config && typeof this.config.agentId === 'number'
+  }
+
+  isTableTool(): this is ToolConfig & { config: TableToolConfig } {
+    return 'tableId' in this.config && typeof this.config.tableId === 'string'
+  }
+
+  isDocumentTool(): this is ToolConfig & { config: DocumentToolConfig } {
+    return 'documentId' in this.config && typeof this.config.documentId === 'string'
+  }
+
+  isFileTool(): this is ToolConfig & { config: FileToolConfig } {
+    return 'fileId' in this.config && typeof this.config.fileId === 'string'
+  }
+
+  isDatabaseTool(): this is ToolConfig & { config: DatabaseToolConfig } {
+    return 'databaseId' in this.config && typeof this.config.databaseId === 'string'
+  }
+
+  isOAuthTool(): this is ToolConfig & { config: OAuthToolConfig } {
+    return 'oauth_token' in this.config && typeof this.config.oauth_token === 'string'
+  }
+
+  isApiKeyTool(): this is ToolConfig & { config: ApiKeyToolConfig } {
+    return 'agent_api_key' in this.config && typeof this.config.agent_api_key === 'string'
+  }
+
+  /**
+   * Get typed config for specific tool types
+   */
+  getAgentConfig(): AgentToolConfig | null {
+    return this.isAgentTool() ? this.config : null
+  }
+
+  getTableConfig(): TableToolConfig | null {
+    return this.isTableTool() ? this.config : null
+  }
+
+  getDocumentConfig(): DocumentToolConfig | null {
+    return this.isDocumentTool() ? this.config : null
+  }
+
+  getFileConfig(): FileToolConfig | null {
+    return this.isFileTool() ? this.config : null
+  }
+
+  getDatabaseConfig(): DatabaseToolConfig | null {
+    return this.isDatabaseTool() ? this.config : null
+  }
+
+  getOAuthConfig(): OAuthToolConfig | null {
+    return this.isOAuthTool() ? this.config : null
+  }
+
+  getApiKeyConfig(): ApiKeyToolConfig | null {
+    return this.isApiKeyTool() ? this.config : null
   }
 
   /**
    * Create a copy with updated configuration
    */
-  withConfig(additionalConfig: Record<string, any>): ToolConfig {
+  withConfig(additionalConfig: Partial<ToolConfigData>): ToolConfig {
     return new ToolConfig(
       this.name,
       this.version,
@@ -90,7 +376,7 @@ export class ToolConfig {
   /**
    * Convert to plain object for serialization
    */
-  toPlain(): { name: string; version: string; config: Record<string, any> } {
+  toPlain(): { name: string; version: string; config: ToolConfigData } {
     return {
       name: this.name,
       version: this.version,
@@ -101,7 +387,7 @@ export class ToolConfig {
   /**
    * Create from plain object (for deserialization)
    */
-  static fromPlain(plain: { name: string; version?: string; config?: Record<string, any> }): ToolConfig {
+  static fromPlain(plain: { name: string; version?: string; config?: ToolConfigData }): ToolConfig {
     return new ToolConfig(
       plain.name,
       plain.version || '1.0',
@@ -114,7 +400,7 @@ export class ToolConfig {
 export interface ToolConfigInterface {
   name: string;
   version?: string;
-  config?: Record<string, any>;
+  config?: ToolConfigData;
 }
 
 /**

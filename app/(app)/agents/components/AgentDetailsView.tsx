@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Edit, ChevronDown, ChevronRight, Activity, Cog, Save, X, Loader2, Calendar, Plus, Trash2 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
-import { type ToolConfig, type ServerConfig } from '@/ddd/domain/agents/entities/agent';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
+import { discoverTools, createToolConfigFromMetadata, type ToolMetadataDTO } from '@/app/actions/tool-registry';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import CapabilityManager from './CapabilityManager';
 import AgentActivityPanel from './AgentActivityPanel';
@@ -235,29 +238,35 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
   };
 
   // Tool management functions
-  const addTool = () => {
-    const newTool: ToolConfig = { name: '', version: undefined, config: undefined };
-    setEditFormData(prev => ({
-      ...prev,
-      tools: [...prev.tools, newTool]
-    }));
+  const [availableTools, setAvailableTools] = useState<ToolMetadataDTO[]>([]);
+  const [isToolSelectorOpen, setIsToolSelectorOpen] = useState(false);
+
+  useEffect(() => {
+    const loadAvailableTools = async () => {
+      const result = await discoverTools({});
+      if (result.success && result.data) {
+        setAvailableTools(result.data.tools);
+      }
+    };
+    loadAvailableTools();
+  }, []);
+
+  const addToolFromRegistry = async (toolMetadata: ToolMetadataDTO) => {
+    const result = await createToolConfigFromMetadata(toolMetadata.name);
+    if (result.success && result.data) {
+      const newTool = ToolConfig.create(result.data.name, result.data.version, result.data.config);
+      setEditFormData(prev => ({
+        ...prev,
+        tools: [...prev.tools, newTool]
+      }));
+    }
+    setIsToolSelectorOpen(false);
   };
 
   const removeTool = (index: number) => {
     setEditFormData(prev => ({
       ...prev,
       tools: prev.tools.filter((_, i) => i !== index)
-    }));
-  };
-
-  const updateTool = (index: number, field: keyof ToolConfig, value: string) => {
-    setEditFormData(prev => ({
-      ...prev,
-      tools: prev.tools.map((tool, i) => 
-        i === index 
-          ? { ...tool, [field]: value || undefined }
-          : tool
-      )
     }));
   };
 
@@ -420,45 +429,33 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                 {isEditMode && (
                   <Button
                     type="button"
-                    onClick={addTool}
+                    onClick={() => setIsToolSelectorOpen(true)}
                     variant="outline"
                     size="sm"
                     className="h-7 px-2 text-xs"
                   >
                     <Plus size={12} className="mr-1" />
-                    Add
+                    Add Tool
                   </Button>
                 )}
               </div>
               {isEditMode ? (
                 <div className="space-y-2">
                   {editFormData.tools?.map((tool, index) => (
-                    <div key={index} className="space-y-1 p-2 border rounded-md bg-muted/20">
-                      <div className="flex gap-2">
-                        <Input
-                          value={tool.name}
-                          onChange={(e) => updateTool(index, 'name', e.target.value)}
-                          placeholder="Tool name"
-                          className="text-sm flex-1"
-                        />
-                        <Button
-                          type="button"
-                          onClick={() => removeTool(index)}
-                          variant="outline"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                        >
-                          <Trash2 size={12} />
-                        </Button>
+                    <div key={index} className="flex items-center justify-between p-2 border rounded-md bg-muted/20">
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">{tool.name}</div>
+                        <div className="text-xs text-muted-foreground">v{tool.version}</div>
                       </div>
-                      <div className="flex gap-2">
-                        <Input
-                          value={tool.version || ''}
-                          onChange={(e) => updateTool(index, 'version', e.target.value)}
-                          placeholder="Version (optional)"
-                          className="text-xs flex-1"
-                        />
-                      </div>
+                      <Button
+                        type="button"
+                        onClick={() => removeTool(index)}
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                      >
+                        <Trash2 size={12} />
+                      </Button>
                     </div>
                   ))}
                   {editFormData.tools.length === 0 && (
@@ -788,6 +785,44 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
           </CollapsibleContent>
         </div>
       </Collapsible>
+
+      {/* Tool Selector Modal */}
+      <Dialog open={isToolSelectorOpen} onOpenChange={setIsToolSelectorOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Add Tool</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
+            <div className="grid gap-2">
+              {availableTools.map((tool) => (
+                <div
+                  key={tool.name}
+                  className="p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                  onClick={() => addToolFromRegistry(tool)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm truncate">{tool.displayName}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{tool.description}</div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Badge variant="outline" className="text-xs">{tool.category}</Badge>
+                        {tool.requiresConnection && (
+                          <Badge variant="secondary" className="text-xs">Requires Connection</Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {availableTools.length === 0 && (
+                <div className="text-center text-muted-foreground py-8">
+                  No tools available
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

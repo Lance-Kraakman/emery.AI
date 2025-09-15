@@ -10,6 +10,7 @@ import { getAgentApplicationService } from "@/ddd/application/di/container";
 import type { CreateAgentCommand, UpdateAgentCommand, AgentFilters } from "@/ddd/application/services/agents/agent-application-service";
 import type { CapabilityConfig } from "@/ddd/domain/agents/entities/agent";
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { AgentMapper, type AgentDTO } from "@/app/mappers/agent-mapper";
 
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
@@ -131,11 +132,11 @@ export async function createAgentAction(formData: FormData): Promise<Result> {
       const toolsStr = formData.get('tools') as string;
       const serversStr = formData.get('servers') as string;
       
-      const tools = toolsStr 
+      const tools = toolsStr
         ? toolsStr.split(',')
             .map(t => t.trim())
             .filter(t => t)
-            .map(toolName => ({ name: toolName })) // Simple format, can be enhanced later
+            .map(toolName => ToolConfig.create(toolName, '1.0', {})) // Create proper ToolConfig instances
         : undefined;
       
       const servers = serversStr 

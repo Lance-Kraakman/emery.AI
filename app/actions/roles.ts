@@ -75,7 +75,7 @@ export async function getOrganizationRoles(): Promise<CustomRole[]> {
 
       // Get permission counts and user counts for each role
       const rolesWithCounts = await Promise.all(
-        rolesData.map(async (role) => {
+        rolesData.map(async (role: any) => {
           // Count permissions for this role
           const permissionCount = await db
             .select({ count: rolePermissions.id })
@@ -249,7 +249,7 @@ export async function createCustomRole(formData: FormData): Promise<Result> {
       }
 
       // Create the role in a transaction
-      const result = await db.transaction(async (tx) => {
+      const result = await db.transaction(async (tx: any) => {
         // Create role
         const [newRole] = await tx
           .insert(roles)
@@ -372,7 +372,7 @@ export async function updateCustomRole(formData: FormData): Promise<Result> {
       }
 
       // Update role in a transaction
-      await db.transaction(async (tx) => {
+      await db.transaction(async (tx: any) => {
         // Update role basic info
         await tx
           .update(roles)
@@ -478,7 +478,7 @@ export async function deleteCustomRole(roleId: number): Promise<Result> {
       // }
 
       // Delete role and its permissions in transaction
-      await db.transaction(async (tx) => {
+      await db.transaction(async (tx: any) => {
         // Delete role-permission assignments
         await tx
           .delete(rolePermissions)

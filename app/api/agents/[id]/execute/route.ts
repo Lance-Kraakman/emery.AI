@@ -8,6 +8,7 @@ import { agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import crypto from 'crypto';
 
@@ -72,23 +73,28 @@ export async function POST(
     const { instructions, tools, servers, metadata, webhook_url, timeout = 30000 } = body;
 
     if (!instructions) {
-      return Response.json({ 
-        error: 'Instructions are required' 
+      return Response.json({
+        error: 'Instructions are required'
       }, { status: 400 });
     }
+
+    // Convert tools to ToolConfig instances
+    const toolConfigs = tools?.map(tool =>
+      ToolConfig.create(tool.name, tool.version || '1.0', tool.config || {})
+    );
 
     // Generate execution ID for tracking (UUID format for database compatibility)
     const executionId = crypto.randomUUID();
 
     // Execute agent via DDD application service
     console.log(`[AGENT-EXEC] ${executionId}: Agent ${agentId} executing task for user ${userId}`);
-    
+
     const agentTaskService = getAgentTaskApplicationService();
-    
+
     // Create task instructions
     const taskInstructions: TaskInstructions = {
       instructions,
-      tools,
+      tools: toolConfigs,
       servers,
       metadata
     };

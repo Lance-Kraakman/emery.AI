@@ -1,22 +1,28 @@
 'use client';
 
 /**
- * Simplified CustomChatInput
+ * CustomChatInput with Enhanced Tool Selection Support
  *
- * Clean chat input without reference parsing.
- * References and tools are now selected explicitly via ToolSelectionPanel.
+ * Chat input with @ tool selection functionality using ReferenceTool objects.
+ * Supports @doc:, @file:, @agent:, @table:, @database: for tool selection.
  *
- * AIDEV-NOTE: Removed all @ symbol parsing complexity.
- * Tools and references now come from explicit user selection only.
+ * AIDEV-NOTE: Enhanced with proper Tool domain integration.
+ * Uses ReferenceTool objects for type-safe tool configs and unified architecture.
+ * Simplified @ detection using input change handler with DDD ToolDropdown.
  */
 
-import React, { useState, useRef, KeyboardEvent } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ToolDropdown } from './ToolDropdown';
+import { resolveReferences } from '@/app/actions/references';
+import type { ReferenceDTO } from '@/app/mappers/reference-mapper';
+import type { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool';
 
 interface CustomChatInputProps {
   onSendMessage: (message: string) => void;
+  onToolsChange?: (tools: ReferenceTool[]) => void; // Enhanced to accept ReferenceTool objects
   placeholder?: string;
   className?: string;
   disabled?: boolean;
@@ -24,56 +30,204 @@ interface CustomChatInputProps {
 
 export default function CustomChatInput({
   onSendMessage,
+  onToolsChange,
   placeholder = "Type your message here...",
   className = "",
   disabled = false
 }: CustomChatInputProps) {
   const [inputValue, setInputValue] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [dropdownQuery, setDropdownQuery] = useState('');
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const [selectedTools, setSelectedTools] = useState<ReferenceTool[]>([]);
+
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleSendMessage = () => {
-    const trimmedMessage = inputValue.trim();
-    if (trimmedMessage && !disabled) {
-      onSendMessage(trimmedMessage);
+  // Detect @ tools and show/hide dropdown
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart || 0;
+
+    setInputValue(value);
+
+    // Find @ symbol before cursor
+    const beforeCursor = value.slice(0, cursorPos);
+    const atMatch = beforeCursor.match(/@([^@\s]*)$/);
+
+    if (atMatch) {
+      const query = atMatch[1] || '';
+      setDropdownQuery(query);
+      setShowDropdown(true);
+
+      // Position above input since chat is at bottom of screen
+      if (inputRef.current) {
+        const rect = inputRef.current.getBoundingClientRect();
+        setDropdownPosition({
+          top: rect.top - 400 - 4, // 400px dropdown height + 4px gap
+          left: rect.left,
+        });
+      }
+    } else {
+      setShowDropdown(false);
+    }
+  };
+
+  // Handle tool selection - add to selected tools and update input
+  const handleToolSelect = (tool: ReferenceTool) => {
+    const cursorPos = inputRef.current?.selectionStart || 0;
+    const beforeCursor = inputValue.slice(0, cursorPos);
+    const afterCursor = inputValue.slice(cursorPos);
+
+    // Find and replace the @ query with the full tool reference
+    const atMatch = beforeCursor.match(/@[^@\s]*$/);
+    if (atMatch) {
+      const beforeAt = beforeCursor.slice(0, atMatch.index);
+      const displayInfo = tool.getChatDisplayInfo();
+      const newValue = beforeAt + displayInfo.insertText + ' ' + afterCursor;
+      setInputValue(newValue);
+
+      // Add to selected tools
+      const updatedTools = [...selectedTools, tool];
+      setSelectedTools(updatedTools);
+      onToolsChange?.(updatedTools);
+
+      // Position cursor after inserted text
+      const newCursorPos = beforeAt.length + displayInfo.insertText.length + 1;
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+          inputRef.current.focus();
+        }
+      }, 0);
+    }
+
+    setShowDropdown(false);
+  };
+
+  // Extract tool references from message text
+  const extractToolReferences = (text: string): string[] => {
+    const toolRegex = /@(doc|file|table|agent|database):[^\s]+/g;
+    return text.match(toolRegex) || [];
+  };
+
+  // Send message with tool resolution
+  const handleSendMessage = async () => {
+    if (inputValue.trim() && !disabled) {
+      const message = inputValue.trim();
+
+      // Check for manual tool references that need resolution
+      const toolReferences = extractToolReferences(message);
+      if (toolReferences.length > 0) {
+        try {
+          const result = await resolveReferences(toolReferences);
+          if (result.success && result.data) {
+            // Merge with existing selected tools
+            const allTools = [...selectedTools];
+
+            // Add new resolved tools (avoid duplicates)
+            // Note: This uses legacy reference resolution, would need enhancement for full ReferenceTool support
+            result.data.resolvedReferences.forEach(newTool => {
+              const exists = allTools.some(existing => {
+                const displayInfo = existing.getChatDisplayInfo();
+                return displayInfo.insertText === newTool.insertText;
+              });
+              if (!exists) {
+                // TODO: Convert ReferenceDTO to ReferenceTool for proper typing
+                // For now, keeping this section for backward compatibility
+                console.warn('Manual reference resolution needs ReferenceTool conversion');
+              }
+            });
+
+            // Update tools (keeping existing since resolved refs need conversion)
+            // setSelectedTools(allTools);
+            // onToolsChange?.(allTools);
+          }
+        } catch (error) {
+          console.error('Error resolving tool references:', error);
+        }
+      }
+
+      // Send message
+      onSendMessage(message);
       setInputValue('');
+      setShowDropdown(false);
+
+      // Keep selected tools visible after sending
       inputRef.current?.focus();
     }
   };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  // Handle key presses
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // When dropdown is open, prevent default behavior for navigation keys
+    if (showDropdown && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return; // Let ToolDropdown handle these
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value);
-  };
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showDropdown && inputRef.current && !inputRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDropdown]);
 
   return (
-    <div className={`flex items-center gap-2 p-4 border-t bg-white ${className}`}>
-      <div className="flex-1">
-        <Input
-          ref={inputRef}
-          type="text"
-          placeholder={placeholder}
-          value={inputValue}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          disabled={disabled}
-          className="w-full resize-none"
-        />
+    <div className={`relative ${className}`}>
+      <div className="flex gap-2 items-center">
+        <div className="flex-1 relative">
+          <Input
+            ref={inputRef}
+            value={inputValue}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={disabled}
+            className="pr-12"
+          />
+
+          {/* Tool Dropdown */}
+          <ToolDropdown
+            query={dropdownQuery}
+            isOpen={showDropdown}
+            onClose={() => setShowDropdown(false)}
+            onSelect={handleToolSelect}
+            position={{
+              top: dropdownPosition.top,
+              left: dropdownPosition.left,
+              maxHeight: 400,
+            }}
+          />
+        </div>
+
+        <Button
+          onClick={handleSendMessage}
+          disabled={!inputValue.trim() || disabled}
+          size="sm"
+          className="px-3"
+        >
+          <Send className="h-4 w-4" />
+        </Button>
       </div>
 
-      <Button
-        onClick={handleSendMessage}
-        disabled={!inputValue.trim() || disabled}
-        size="sm"
-        className="flex-shrink-0"
-      >
-        <Send className="h-4 w-4" />
-      </Button>
+      {/* Helpful hint */}
+      {!inputValue && (
+        <div className="text-xs text-gray-400 mt-1">
+          Type @ to add tools, documents, agents, and more
+        </div>
+      )}
     </div>
   );
 }

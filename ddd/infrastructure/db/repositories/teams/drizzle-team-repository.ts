@@ -7,10 +7,13 @@ import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { OrganizationId, TeamId, AgentId } from '@/ddd/domain/shared/value-objects';
 import { teams } from '@/lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
+import type { InferSelectModel } from 'drizzle-orm';
 import type { DbClient } from '@/lib/db/client';
 
-export class DrizzleTeamRepository 
-  extends DrizzleBaseRepository<Team, TeamId, CreateTeamData, UpdateTeamData, any>
+type TeamRow = InferSelectModel<typeof teams>;
+
+export class DrizzleTeamRepository
+  extends DrizzleBaseRepository<Team, TeamId, CreateTeamData, UpdateTeamData, TeamRow>
   implements ITeamRepository {
   
   protected readonly table = teams;
@@ -51,7 +54,7 @@ export class DrizzleTeamRepository
       .from(teams)
       .where(sql`${teams.agentIds} @> ARRAY[${agentId.value}]::text[]`);
 
-    return results.map(result => this.fromPersistence(result));
+    return results.map((result: TeamRow) => this.fromPersistence(result));
   }
 
   async countByOrganization(organizationId: OrganizationId): Promise<number> {
@@ -63,7 +66,7 @@ export class DrizzleTeamRepository
     return result.length;
   }
 
-  protected fromPersistence(record: any): Team {
+  protected fromPersistence(record: TeamRow): Team {
     return Team.fromPersistence({
       id: record.id,
       name: record.name,

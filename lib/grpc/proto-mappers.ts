@@ -10,7 +10,8 @@
  * - Proto messages (proto/agent_worker.proto) - Transport layer only
  */
 
-import { Agent, CapabilityConfig, ServerConfig, StepConfig, ToolConfig } from '@/ddd/domain/agents/entities/agent';
+import { Agent, CapabilityConfig, ServerConfig, StepConfig } from '@/ddd/domain/agents/entities/agent';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 import { 
   AgentConfig as AgentConfigProto,
