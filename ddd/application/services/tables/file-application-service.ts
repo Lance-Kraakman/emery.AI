@@ -33,9 +33,21 @@ export interface DownloadFileCommand {
   organizationId: OrganizationId;
 }
 
+export interface UpdateFileCommand {
+  fileId: FileKey;
+  fieldId: FieldId;
+  tableId: TableId;
+  organizationId: OrganizationId;
+  file: {
+    buffer: Buffer;
+    filename: string;
+    mimeType: string;
+  };
+}
+
 export interface DeleteFileCommand {
   fileId: FileKey;
-  fieldId: FieldId; // Use fieldId to match repository interface  
+  fieldId: FieldId; // Use fieldId to match repository interface
   tableId: TableId; // Need table context
   organizationId: OrganizationId;
 }
@@ -129,6 +141,67 @@ export class FileUseCases {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to upload file'
+      };
+    }
+  }
+
+  /**
+   * Update existing file content
+   */
+  async updateFile(command: UpdateFileCommand): Promise<Result<any>> {
+    try {
+      // 1. Get table and validate field exists and is a file field
+      const table = await this.dynamicTableService.getTable(command.tableId);
+      if (!table) {
+        return {
+          success: false,
+          error: 'Table not found'
+        };
+      }
+
+      const field = table.getFieldById(command.fieldId);
+      if (!field) {
+        return {
+          success: false,
+          error: `Field with ID '${command.fieldId}' not found in table`
+        };
+      }
+
+      if (field.type !== 'file' && field.type !== 'document') {
+        return {
+          success: false,
+          error: `Field ${field.name} is not a file or document field`
+        };
+      }
+
+      // 2. Create file storage request
+      const uploadRequest = {
+        buffer: command.file.buffer,
+        filename: command.file.filename,
+        mimeType: command.file.mimeType,
+        organizationId: command.organizationId,
+        fieldId: command.fieldId,
+        metadata: {
+          tableId: command.tableId.value.toString(),
+          fieldName: field.name
+        }
+      };
+
+      // 3. Update file in storage using existing file ID
+      const updatedFile = await this.fileStorageRepository.updateFile(command.fileId, uploadRequest);
+
+      console.log(`[FILE-APP-SERVICE] Updated file ${updatedFile.name} in field ${field.name} in table ${table.name}`);
+
+      return {
+        success: true,
+        data: updatedFile
+      };
+
+    } catch (error) {
+      console.error('[FILE-APP-SERVICE] Error updating file:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update file'
       };
     }
   }

@@ -3,11 +3,9 @@
 @tailwind utilities;
 
 /* Import required LlamaIndex Chat UI styles for editor functionality */
-/* AIDEV-NOTE: Temporarily commented out to fix build issues - can be re-enabled when LlamaIndex is working
 @import '@llamaindex/chat-ui/styles/markdown.css';
 @import '@llamaindex/chat-ui/styles/pdf.css';
 @import '@llamaindex/chat-ui/styles/editor.css';
-*/
 
 @layer base {
   *,
