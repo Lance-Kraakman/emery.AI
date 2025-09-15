@@ -5,7 +5,6 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { generateId } from 'ai'
 import {
-  ChatSection,
   ChatMessages,
   useChatCanvas
 } from '@llamaindex/chat-ui'
@@ -231,10 +230,9 @@ function ChatContentWithCanvas({
   setShowSuggestions,
   chatContext
 }: ChatContentWithCanvasProps) {
-  // Access canvas context - this works because component is inside ChatSection
   const { openArtifactInCanvas } = useChatCanvas()
 
-  // Handle tool click with direct canvas access
+  // Handle tool click using canvas hook
   const handleToolClick = async (tool: ReferenceToolDTO | ToolDTO) => {
     console.log('Tool clicked:', tool)
 
@@ -254,7 +252,7 @@ function ChatContentWithCanvas({
       )
 
       if (result.success && result.data) {
-        // Create artifact and open directly in canvas
+        // Create artifact and open in canvas
         const artifact = createDocumentArtifact(result.data, 1, 1, 'view')
         openArtifactInCanvas(artifact)
         console.log('Document artifact opened in canvas:', artifact)
@@ -279,7 +277,7 @@ function ChatContentWithCanvas({
 
         const downloadUrl = urlResult.success ? urlResult.data! : ''
 
-        // Create artifact and open directly in canvas
+        // Create artifact and open in canvas
         const artifact = createFileArtifact(fileResult.data, 1, 1, 'generic', downloadUrl)
         openArtifactInCanvas(artifact)
         console.log('File artifact opened in canvas:', artifact)
@@ -584,26 +582,20 @@ export function EmeryChat() {
         
         {/* Chat content area - takes remaining height after header */}
         <div className="flex-1 min-h-0 overflow-hidden" suppressHydrationWarning>
-          <ChatSection
+          <ChatContentWithCanvas
+            selectedTools={selectedTools}
+            onToolsChange={handleToolsChange}
+            onAddTool={handleAddTool}
+            onRemoveTool={handleRemoveTool}
+            showSuggestions={showSuggestions}
+            selectedSuggestionIndex={selectedSuggestionIndex}
+            onSuggestionClick={handleSuggestionClick}
+            onKeyDown={handleKeyDown}
+            isClient={isClient}
             handler={handler}
-            className="h-full flex flex-col p-0"
-            autoOpenCanvas={true}
-          >
-            <ChatContentWithCanvas
-              selectedTools={selectedTools}
-              onToolsChange={handleToolsChange}
-              onAddTool={handleAddTool}
-              onRemoveTool={handleRemoveTool}
-              showSuggestions={showSuggestions}
-              selectedSuggestionIndex={selectedSuggestionIndex}
-              onSuggestionClick={handleSuggestionClick}
-              onKeyDown={handleKeyDown}
-              isClient={isClient}
-              handler={handler}
-              setShowSuggestions={setShowSuggestions}
-              chatContext={chatContext}
-            />
-          </ChatSection>
+            setShowSuggestions={setShowSuggestions}
+            chatContext={chatContext}
+          />
         </div>
       </div>
     </div>

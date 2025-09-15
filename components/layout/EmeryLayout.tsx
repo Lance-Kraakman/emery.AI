@@ -4,8 +4,11 @@ import React, { Suspense } from 'react'
 import { EmerySidebar } from '@/components/EmerySidebar'
 import { Loading } from '@/components/ui/loading'
 import { EmeryChat } from '@/components/chat/EmeryChat'
+import { ChatSection, useChatCanvas } from '@llamaindex/chat-ui'
+import { ChatCanvas } from '@/components/chat/ChatCanvas'
 import { useLayout } from './LayoutProvider'
 import type { EmeryLayoutProps, ChatContextConfig } from './types'
+import { useChatGRPC } from '@/components/chat/useChatGRPC'
 
 /** p p
  * EmeryLayout - Core layout component with canvas expansion logic
@@ -47,6 +50,21 @@ function EmeryLayoutInner({
     }
   }, [chatContext, setChatContext])
 
+  // Create basic chat handler for canvas functionality in main content
+  const canvasHandler = useChatGRPC({
+    domainType: chatContext?.domainType,
+    domainId: chatContext?.domainId,
+    chatId: undefined
+  })
+
+  // Component that conditionally renders canvas or main content
+  function MainContentWithCanvas({ children }: { children: React.ReactNode }) {
+    const { displayedArtifact } = useChatCanvas()
+
+    // Show canvas when artifact is displayed, otherwise show children
+    return displayedArtifact ? <ChatCanvas /> : <>{children}</>
+  }
+
   // Calculate responsive classes
   const sidebarWidth = getSidebarWidth(sidebarState, isMobile)
   const showSidebarOverlay = isMobile && sidebarState === 'expanded'
@@ -76,26 +94,32 @@ function EmeryLayoutInner({
         </Suspense>
       </aside>
 
-      {/* Main Content Area + Chat - 3-panel layout */}
-      <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
-        {/* Main Content Area */}
-        <main className="flex-1 overflow-hidden">
-          {children || (
-            <div className="h-full flex items-center justify-center p-6">
-              <div className="text-center text-muted-foreground">
-                <p>Select a page from the sidebar to get started</p>
+      {/* Main Content Area + Chat - 3-panel layout wrapped in ChatSection */}
+      <ChatSection
+        handler={canvasHandler}
+        className="flex-1 flex min-h-0 overflow-hidden h-screen"
+        autoOpenCanvas={false}
+      >
+        <MainContentWithCanvas>
+          {/* Main Content Area */}
+          <main className="flex-1 overflow-hidden">
+            {children || (
+              <div className="h-full flex items-center justify-center p-6">
+                <div className="text-center text-muted-foreground">
+                  <p>Select a page from the sidebar to get started</p>
+                </div>
               </div>
+            )}
+          </main>
+
+          {/* Chat Area */}
+          {enableChat && (
+            <div className="w-96 border-l border-border">
+              <EmeryChat />
             </div>
           )}
-        </main>
-
-        {/* Chat Area */}
-        {enableChat && (
-          <div className="w-96 border-l border-border">
-            <EmeryChat />
-          </div>
-        )}
-      </div>
+        </MainContentWithCanvas>
+      </ChatSection>
 
       {/* Mobile Chat Overlay - Remove since EmeryChat handles everything */}
       {isMobile && enableChat && chatState === 'expanded' && (
