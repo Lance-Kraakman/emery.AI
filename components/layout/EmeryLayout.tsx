@@ -1,11 +1,9 @@
 'use client'
 
 import React, { Suspense } from 'react'
-import { ChatSection, useChatCanvas } from '@llamaindex/chat-ui'
 import { EmerySidebar } from '@/components/EmerySidebar'
 import { Loading } from '@/components/ui/loading'
 import { EmeryChat } from '@/components/chat/EmeryChat'
-import { ChatCanvas } from '@/components/chat/ChatCanvas'
 import { useLayout } from './LayoutProvider'
 import type { EmeryLayoutProps, ChatContextConfig } from './types'
 
@@ -27,37 +25,31 @@ interface EmeryLayoutInnerProps extends EmeryLayoutProps {
   // This component needs layout context, so it must be wrapped by LayoutProvider
 }
 
-// Component that accesses useChatCanvas hook inside ChatSection
-function LayoutContentWithCanvas({
-  children,
-  enableChat,
-  sidebarState,
-  chatState,
-  canvasState,
-  isMobile,
-  setSidebarState,
-  setChatState
-}: {
-  children: React.ReactNode
-  enableChat: boolean
-  sidebarState: string
-  chatState: string
-  canvasState: string
-  isMobile: boolean
-  setSidebarState: (state: any) => void
-  setChatState: (state: any) => void
-}) {
-  // Access canvas state from LlamaIndex
-  const { displayedArtifact } = useChatCanvas()
 
-  // Calculate responsive classes and layout mode
+function EmeryLayoutInner({
+  children,
+  chatContext,
+  enableChat = true
+}: EmeryLayoutInnerProps) {
+  const {
+    sidebarState,
+    chatState,
+    isMobile,
+    setChatContext,
+    setSidebarState,
+    setChatState
+  } = useLayout()
+
+  // Set chat context when provided
+  React.useEffect(() => {
+    if (chatContext) {
+      setChatContext(chatContext)
+    }
+  }, [chatContext, setChatContext])
+
+  // Calculate responsive classes
   const sidebarWidth = getSidebarWidth(sidebarState, isMobile)
   const showSidebarOverlay = isMobile && sidebarState === 'expanded'
-
-  // Determine layout mode based on canvas state and displayed artifact
-  const isCanvasMode = canvasState === 'expanded'
-  const isChatMainMode = canvasState === 'collapsed'
-  const hasDisplayedArtifact = !!displayedArtifact
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -84,63 +76,28 @@ function LayoutContentWithCanvas({
         </Suspense>
       </aside>
 
-      {/* Main Content Area - Conditional based on displayedArtifact */}
+      {/* Main Content Area + Chat - 3-panel layout */}
       <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
-        {hasDisplayedArtifact ? (
-          // Canvas Mode: Show artifact in full main area
-          <div className="flex-1 flex">
-            <ChatCanvas />
-            {/* Keep chat visible on the right when canvas is open */}
-            {enableChat && chatState !== 'hidden' && !isMobile && (
-              <div className={`h-full ${getChatWidth(chatState)}`}>
-                <Suspense fallback={<ChatSkeleton />}>
-                  <EmeryChat />
-                </Suspense>
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-hidden">
+          {children || (
+            <div className="h-full flex items-center justify-center p-6">
+              <div className="text-center text-muted-foreground">
+                <p>Select a page from the sidebar to get started</p>
               </div>
-            )}
+            </div>
+          )}
+        </main>
+
+        {/* Chat Area */}
+        {enableChat && (
+          <div className="w-96 border-l border-border">
+            <EmeryChat />
           </div>
-        ) : (
-          // Normal Mode: Original layout logic
-          <>
-            {/* Canvas Mode: Traditional 3-panel (sidebar | canvas | chat) */}
-            {isCanvasMode && (
-              <>
-                {/* Center Panel - Canvas/Main Content */}
-                <main className="flex-1 flex flex-col overflow-hidden min-w-0 h-full">
-                  {children}
-                </main>
-
-                {/* Right Panel - Chat Interface */}
-                {enableChat && chatState !== 'hidden' && (
-                  <div className={`h-full ${getChatWidth(chatState)} ${isMobile ? 'hidden' : 'block'}`}>
-                    <Suspense fallback={<ChatSkeleton />}>
-                      <EmeryChat />
-                    </Suspense>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Chat Main Mode: 2-panel (sidebar | chat-as-main) */}
-            {isChatMainMode && enableChat && (
-              <div className="flex-1 flex flex-col overflow-hidden h-screen">
-                <Suspense fallback={<ChatSkeleton />}>
-                  <EmeryChat />
-                </Suspense>
-              </div>
-            )}
-
-            {/* Fallback: Show main content if chat disabled */}
-            {isChatMainMode && !enableChat && (
-              <main className="flex-1 flex flex-col overflow-hidden min-w-0">
-                {children}
-              </main>
-            )}
-          </>
         )}
       </div>
 
-      {/* Mobile Chat Overlay */}
+      {/* Mobile Chat Overlay - Remove since EmeryChat handles everything */}
       {isMobile && enableChat && chatState === 'expanded' && (
         <>
           <div
@@ -155,46 +112,6 @@ function LayoutContentWithCanvas({
         </>
       )}
     </div>
-  )
-}
-
-function EmeryLayoutInner({
-  children,
-  chatContext,
-  enableChat = true
-}: EmeryLayoutInnerProps) {
-  const {
-    sidebarState,
-    chatState,
-    canvasState,
-    isMobile,
-    breakpoint,
-    setChatContext,
-    setSidebarState,
-    setChatState
-  } = useLayout()
-  
-
-  // Set chat context when provided
-  React.useEffect(() => {
-    if (chatContext) {
-      setChatContext(chatContext)
-    }
-  }, [chatContext, setChatContext])
-
-  return (
-    <ChatSection>
-      <LayoutContentWithCanvas
-        children={children}
-        enableChat={enableChat}
-        sidebarState={sidebarState}
-        chatState={chatState}
-        canvasState={canvasState}
-        isMobile={isMobile}
-        setSidebarState={setSidebarState}
-        setChatState={setChatState}
-      />
-    </ChatSection>
   )
 }
 

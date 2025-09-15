@@ -35,10 +35,8 @@ export function BasePage({
 }: BasePageProps) {
   const { canvasState, toggleCanvas } = useLayout()
 
-  // Only render when canvas is expanded (page is visible)
-  if (canvasState !== 'expanded') {
-    return <div className="hidden" />
-  }
+  // Note: Visibility now controlled by EmeryChat's conditional layout
+  // BasePage always renders and lets EmeryChat decide when to show it
 
   return (
     <div className={`flex flex-col h-full bg-card ${className}`}>
