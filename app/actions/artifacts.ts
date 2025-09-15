@@ -36,7 +36,7 @@ export async function fetchDocumentArtifactData(
       documentMetadata: {
         title: filename,
         version: 1.0, // TODO: Get real version if needed
-        documentType: mimeType.startsWith('text/') ? 'file' as const : 'file' as const
+        documentType: 'tiptap' as const // Set to tiptap for inline editing in canvas
       }
     }
 
