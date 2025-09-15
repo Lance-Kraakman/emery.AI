@@ -124,13 +124,16 @@ function createQueryBuilderProxy(queryBuilder: any, originalDb: DbClient, contex
 
 /**
  * Create a simplified context proxy that intercepts key database methods
- * 
+ *
  * This proxy focuses on the methods that repositories actually use:
  * - transaction() - Most repository operations go through transactions
- * - select(), insert(), update(), delete() - Direct query builder operations  
+ * - select(), insert(), update(), delete() - Direct query builder operations
  * - query - Relational queries (db.query.users.findMany)
  */
 function createSimpleContextProxy(baseDb: DbClient): DbClient {
+  // Add recursion guard
+  let isInRLSCall = false;
+
   return new Proxy(baseDb, {
     get(target, prop, receiver) {
       const originalValue = Reflect.get(target, prop, receiver);
@@ -144,17 +147,22 @@ function createSimpleContextProxy(baseDb: DbClient): DbClient {
       if (prop === 'transaction') {
         return function(callback: any, config?: any) {
           const context = contextManager.getContext();
-          
-          if (context) {
-            // Wrap transaction with RLS context
-            return withRLSContext(
-              target, // Use original target to avoid proxy recursion
-              context.organizationId,
-              callback, // Pass the transaction callback through
-              context.userId
-            );
+
+          if (context && !isInRLSCall) {
+            isInRLSCall = true;
+            try {
+              // Wrap transaction with RLS context
+              return withRLSContext(
+                target, // Use original target to avoid proxy recursion
+                context.organizationId,
+                callback, // Pass the transaction callback through
+                context.userId
+              );
+            } finally {
+              isInRLSCall = false;
+            }
           } else {
-            // No context - call original transaction
+            // No context or already in RLS call - call original transaction
             return originalValue.call(target, callback, config);
           }
         };
@@ -164,7 +172,7 @@ function createSimpleContextProxy(baseDb: DbClient): DbClient {
       if (prop === 'select' || prop === 'insert' || prop === 'update' || prop === 'delete') {
         return function(...args: any[]) {
           const context = contextManager.getContext();
-          console.log(`🔍 RLS Proxy: Intercepted ${prop as string} method, context:`, context ? `org=${context.organizationId.value}` : 'NONE');
+          // console.log(`🔍 RLS Proxy: Intercepted ${prop as string} method, context:`, context ? `org=${context.organizationId.value}` : 'NONE', 'stack:', new Error().stack?.split('\n')[2]);
           
           if (context) {
             // Create the query builder first, then proxy it with the initial step

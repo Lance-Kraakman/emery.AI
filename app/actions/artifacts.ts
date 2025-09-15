@@ -11,7 +11,7 @@ import { requirePermission } from "./permissions";
 import { getDocumentApplicationService, getFileApplicationService } from "@/ddd/application/di/container";
 import { FieldId, OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 import type { Result } from "./types";
 import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
