@@ -163,17 +163,17 @@ export class FileUseCases {
         };
       }
 
-      if (field.type !== 'file') {
+      if (field.type !== 'file' && field.type !== 'document') {
         return {
           success: false,
-          error: `Field ${field.name} is not a file field`
+          error: `Field ${field.name} is not a file or document field`
         };
       }
 
       // 2. Get file metadata and generate download URL
       // Note: This would require getting current file values from the field
       // For now, we'll generate URL directly using the file storage repository
-      const downloadUrl = await this.fileStorageRepository.generateDownloadUrl(command.fileId, { 
+      const downloadUrl = await this.fileStorageRepository.generateDownloadUrl(command.fileId, {
         expiresIn: 3600 // 1 hour expiry
       });
 
@@ -226,10 +226,10 @@ export class FileUseCases {
         };
       }
 
-      if (field.type !== 'file') {
+      if (field.type !== 'file' && field.type !== 'document') {
         return {
           success: false,
-          error: `Field ${field.name} is not a file field`
+          error: `Field ${field.name} is not a file or document field`
         };
       }
 
@@ -293,10 +293,10 @@ export class FileUseCases {
           };
         }
 
-        if (field.type !== 'file') {
+        if (field.type !== 'file' && field.type !== 'document') {
           return {
             success: false,
-            error: `Field ${field.name} is not a file field`
+            error: `Field ${field.name} is not a file or document field`
           };
         }
 

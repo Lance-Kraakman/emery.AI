@@ -15,6 +15,9 @@ import { DocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-valu
 import { FileUseCases } from './file-application-service';
 import { OrganizationId, TableId, FieldId, UserId } from '@/ddd/domain/shared/value-objects';
 import { Result } from '@/ddd/domain/shared/result';
+import { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
+import { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
+import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 
 export interface CreateTiptapDocumentCommand {
   organizationId: OrganizationId;
@@ -52,8 +55,65 @@ export interface GetDocumentFileUrlCommand {
 
 export class DocumentApplicationService {
   constructor(
-    private readonly fileUseCases: FileUseCases  // Reuse existing file infrastructure
+    private readonly fileUseCases: FileUseCases,  // For file upload/creation operations
+    private readonly fileStorageRepository: IFileStorageRepository,  // Direct S3 access
+    private readonly dynamicTableService: DynamicTableService,  // Table metadata queries
+    private readonly tableRepository: IDynamicTableRepository  // Direct row queries
   ) {}
+
+  /**
+   * Private helper to find document data in table rows
+   */
+  private async findDocumentInTable(
+    documentId: string,
+    organizationId: OrganizationId,
+    tableId: TableId,
+    fieldId: FieldId
+  ): Promise<{ s3Key: string; name: string; mimeType: string } | null> {
+    try {
+      // Get table and validate field
+      const table = await this.dynamicTableService.getTable(tableId);
+      if (!table || !table.isOwnedBy(organizationId)) {
+        return null;
+      }
+
+      const field = table.getFieldById(fieldId);
+      if (!field || (field.type !== 'file' && field.type !== 'document')) {
+        return null;
+      }
+
+      // Get all rows using proper repository pattern
+      const rows = await this.tableRepository.findRows(tableId);
+
+      // Find the document in the rows
+      for (const row of rows) {
+        try {
+          const fieldValue = row.getFieldValue(field.name);
+          if (!fieldValue || !fieldValue.value) continue;
+
+          // Document fields are always arrays (DocumentFieldValue[])
+          const files = fieldValue.value as DocumentFieldValue[];
+          const matchingFile = files.find((f: any) => f && f.id === documentId);
+
+          if (matchingFile && matchingFile.s3Key) {
+            return {
+              s3Key: matchingFile.s3Key,
+              name: matchingFile.name || documentId,
+              mimeType: matchingFile.mimeType || 'application/vnd.tiptap+json'
+            };
+          }
+        } catch (error) {
+          console.warn('[DOCUMENT-APP-SERVICE] Error parsing document data from row:', error);
+          continue;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error('[DOCUMENT-APP-SERVICE] Error finding document in table:', error);
+      return null;
+    }
+  }
 
   /**
    * Create a new TipTap document as a special file type
@@ -201,37 +261,78 @@ export class DocumentApplicationService {
    * Get TipTap document content for editing
    */
   async getTiptapContent(command: GetTiptapContentCommand): Promise<Result<{ content: object; metadata: any }>> {
+    console.log('[DOCUMENT-APP-SERVICE] getTiptapContent() called with:', {
+      documentId: command.documentId,
+      organizationId: command.organizationId.value,
+      tableId: command.tableId.value,
+      fieldId: command.fieldId.value,
+      requestedBy: command.requestedBy.value
+    });
+
     try {
-      // 1. Use existing file service to generate download URL
-      const downloadResult = await this.fileUseCases.generateDownloadUrl({
-        fileId: command.documentId,
-        fieldId: command.fieldId,
-        tableId: command.tableId,
-        organizationId: command.organizationId
+      // 1. Find the document in the table to get the actual s3Key
+      console.log('[DOCUMENT-APP-SERVICE] Searching for document in table...');
+      const documentData = await this.findDocumentInTable(
+        command.documentId,
+        command.organizationId,
+        command.tableId,
+        command.fieldId
+      );
+
+      if (!documentData) {
+        console.error('[DOCUMENT-APP-SERVICE] Document not found in table');
+        return { success: false, error: 'Document not found in database' };
+      }
+
+      console.log('[DOCUMENT-APP-SERVICE] Found document data:', {
+        s3Key: documentData.s3Key,
+        name: documentData.name,
+        mimeType: documentData.mimeType
       });
 
-      if (!downloadResult.success) {
-        return { success: false, error: downloadResult.error };
-      }
+      // 2. Generate signed URL using the actual s3Key
+      console.log('[DOCUMENT-APP-SERVICE] Generating signed URL for s3Key:', documentData.s3Key);
+      const downloadUrl = await this.fileStorageRepository.generateDownloadUrl(documentData.s3Key, {
+        expiresIn: 3600 // 1 hour expiry
+      });
 
-      // 2. Fetch and parse JSON content
-      if (!downloadResult.data) {
-        return { success: false, error: 'Failed to download TipTap document content' };
-      }
-      const response = await fetch(downloadResult.data.url);
+      console.log('[DOCUMENT-APP-SERVICE] About to fetch from S3 URL:', downloadUrl);
+
+      const response = await fetch(downloadUrl);
+
+      console.log('[DOCUMENT-APP-SERVICE] Fetch response:', {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+
       if (!response.ok) {
-        return { success: false, error: `Failed to fetch document content: ${response.statusText}` };
+        const errorMsg = `Failed to fetch document content: ${response.status} ${response.statusText}`;
+        console.error('[DOCUMENT-APP-SERVICE]', errorMsg);
+        return { success: false, error: errorMsg };
       }
 
+      console.log('[DOCUMENT-APP-SERVICE] Parsing JSON content...');
       const tiptapJson = await response.json();
+
+      console.log('[DOCUMENT-APP-SERVICE] Parsed JSON:', {
+        type: tiptapJson.type,
+        hasContent: !!tiptapJson.content,
+        hasMetadata: !!tiptapJson.metadata,
+        keys: Object.keys(tiptapJson)
+      });
 
       // 3. Validate it's a TipTap document
       if (!tiptapJson.type || tiptapJson.type !== 'doc') {
-        return { success: false, error: 'Invalid TipTap document format' };
+        const errorMsg = `Invalid TipTap document format - expected type 'doc', got '${tiptapJson.type}'`;
+        console.error('[DOCUMENT-APP-SERVICE]', errorMsg);
+        return { success: false, error: errorMsg };
       }
 
-      return { 
-        success: true, 
+      console.log('[DOCUMENT-APP-SERVICE] Successfully loaded TipTap content');
+      return {
+        success: true,
         data: {
           content: tiptapJson,
           metadata: tiptapJson.metadata || {}
@@ -252,23 +353,39 @@ export class DocumentApplicationService {
    */
   async getDocumentFileUrl(command: GetDocumentFileUrlCommand): Promise<Result<{ url: string; filename: string }>> {
     try {
-      // Use existing file service for download URL
-      const downloadResult = await this.fileUseCases.generateDownloadUrl({
-        fileId: command.documentId,
-        fieldId: command.fieldId,
-        tableId: command.tableId,
-        organizationId: command.organizationId
+      console.log('[DOCUMENT-APP-SERVICE] getDocumentFileUrl - Searching for document in table...');
+
+      // Find the document in the table to get the actual s3Key
+      const documentData = await this.findDocumentInTable(
+        command.documentId,
+        command.organizationId,
+        command.tableId,
+        command.fieldId
+      );
+
+      if (!documentData) {
+        console.error('[DOCUMENT-APP-SERVICE] getDocumentFileUrl - Document not found in table');
+        return { success: false, error: 'Document not found in database' };
+      }
+
+      console.log('[DOCUMENT-APP-SERVICE] getDocumentFileUrl - Found document data:', {
+        s3Key: documentData.s3Key,
+        name: documentData.name,
+        mimeType: documentData.mimeType
       });
 
-      if (!downloadResult.success) {
-        return { success: false, error: downloadResult.error };
-      }
+      // Generate signed URL using the actual s3Key
+      const downloadUrl = await this.fileStorageRepository.generateDownloadUrl(documentData.s3Key, {
+        expiresIn: 3600 // 1 hour expiry
+      });
+
+      console.log('[DOCUMENT-APP-SERVICE] getDocumentFileUrl - Generated download URL for s3Key:', documentData.s3Key);
 
       return {
         success: true,
         data: {
-          url: downloadResult.data?.url || '',
-          filename: downloadResult.data?.filename || ''
+          url: downloadUrl,
+          filename: documentData.name
         }
       };
 

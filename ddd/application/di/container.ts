@@ -324,7 +324,10 @@ export class DIContainer {
     
     // Initialize DocumentApplicationService (extends file system)
     const documentApplicationService = new DocumentApplicationService(
-      fileApplicationService
+      fileApplicationService,
+      fileStorageRepository,
+      dynamicTableService,
+      tableRepository
     );
     
     // Register chat repositories

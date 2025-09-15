@@ -30,7 +30,17 @@ import {
   User,
   Calendar,
   Hash,
-  AtSign
+  AtSign,
+  Bold,
+  Italic,
+  Underline,
+  List,
+  ListOrdered,
+  Quote,
+  Code,
+  Heading1,
+  Heading2,
+  Heading3
 } from 'lucide-react'
 import type { DocumentArtifact } from '../types/chat-artifacts'
 import { getDocumentDisplayInfo } from '../types/chat-artifacts'
@@ -48,16 +58,17 @@ export function DocumentArtifactViewer({
   className = "" 
 }: DocumentArtifactViewerProps) {
   const { documentField, mode } = artifact.data
-  const [isEditing, setIsEditing] = useState(mode === 'edit')
+  const [isEditing, setIsEditing] = useState(true) // Always start in edit mode
   const [documentTitle, setDocumentTitle] = useState('')
   const [hasChanges, setHasChanges] = useState(false)
   // Extract display information
   const displayInfo = getDocumentDisplayInfo(artifact)
 
-  const [content, setContent] = useState('<p>Loading document content...</p>')
+  const [content, setContent] = useState<any>('<p>Loading document content...</p>')
   const [isLoadingContent, setIsLoadingContent] = useState(false)
   const [loadAttempts, setLoadAttempts] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [contentLoaded, setContentLoaded] = useState(false)
 
   // Initialize title
   useEffect(() => {
@@ -67,8 +78,10 @@ export function DocumentArtifactViewer({
   // Load TipTap content for TipTap documents
   useEffect(() => {
     const loadContent = async () => {
-      if (documentField.documentMetadata?.documentType === 'tiptap' && !isLoadingContent) {
+      if (documentField.documentMetadata?.documentType === 'tiptap' && !isLoadingContent && !contentLoaded && loadAttempts < 3) {
         setIsLoadingContent(true)
+        setLoadError(null)
+
         try {
           const result = await fetchTiptapDocumentContent(
             documentField.id,
@@ -77,37 +90,58 @@ export function DocumentArtifactViewer({
             artifact.data.fieldId
           )
 
-          if (result.success && result.data?.downloadUrl) {
-            // Fetch the actual TipTap JSON content
-            const response = await fetch(result.data.downloadUrl)
-            if (response.ok) {
-              const tiptapJson = await response.json()
-              if (tiptapJson.type === 'doc') {
-                // Valid TipTap document - convert to HTML or keep as JSON
-                setContent(JSON.stringify(tiptapJson))
-              } else {
-                setContent('<p>Invalid TipTap document format</p>')
-              }
+          if (result.success && result.data?.content) {
+            // Use the parsed TipTap content directly (no more fetch needed!)
+            const tiptapJson = result.data.content as any
+            if (tiptapJson && typeof tiptapJson === 'object' && tiptapJson.type === 'doc') {
+              // Valid TipTap document - pass JSON object directly to editor
+              setContent(tiptapJson)
+              setLoadError(null)
+              setContentLoaded(true)
             } else {
-              setContent('<p>Failed to load document content</p>')
+              setContent('<p>Invalid TipTap document format</p>')
+              setLoadError('Invalid document format')
             }
           } else {
-            setContent('<p>Document content not available</p>')
+            const errorMsg = result.error || 'Document content not available'
+            setContent(`<p>Failed to load document: ${errorMsg}</p>`)
+            setLoadError(errorMsg)
+
+            // Increment retry counter
+            setLoadAttempts(prev => prev + 1)
           }
         } catch (error) {
           console.error('Error loading TipTap content:', error)
-          setContent('<p>Error loading document content</p>')
+          const errorMsg = error instanceof Error ? error.message : 'Error loading document content'
+          setContent(`<p>Error loading document content: ${errorMsg}</p>`)
+          setLoadError(errorMsg)
+
+          // Increment retry counter
+          setLoadAttempts(prev => prev + 1)
         } finally {
           setIsLoadingContent(false)
         }
       } else if (documentField.documentMetadata?.documentType !== 'tiptap') {
         // For non-TipTap documents, show document info
         setContent(`<p><em>Document: ${documentField.name}</em></p><p>Type: ${documentField.mimeType}</p>`)
+      } else if (loadAttempts >= 3) {
+        setContent('<p>Failed to load document after multiple attempts</p>')
+        setLoadError('Maximum retry attempts exceeded')
       }
     }
 
-    loadContent()
-  }, [documentField, artifact.data.tableId, artifact.data.fieldId, artifact.data.organizationId, isLoadingContent])
+    // Add exponential backoff for retries
+    const delay = loadAttempts > 0 ? Math.min(1000 * Math.pow(2, loadAttempts - 1), 5000) : 0
+
+    const timeoutId = setTimeout(loadContent, delay)
+    return () => clearTimeout(timeoutId)
+  }, [documentField, artifact.data.tableId, artifact.data.fieldId, artifact.data.organizationId, loadAttempts])
+
+  // Reset content loaded flag when document changes
+  useEffect(() => {
+    setContentLoaded(false)
+    setLoadAttempts(0)
+  }, [documentField.id, artifact.data.tableId, artifact.data.fieldId])
 
   // Configure TipTap editor
   const editor = useEditor({
@@ -128,7 +162,8 @@ export function DocumentArtifactViewer({
     editable: isEditing,
     immediatelyRender: false, // Fix SSR hydration mismatch
     onUpdate: ({ editor }) => {
-      const newContent = editor.getHTML()
+      // Get JSON content from editor to maintain TipTap format
+      const newContent = editor.getJSON()
       setContent(newContent)
       setHasChanges(true)
     }
@@ -136,8 +171,19 @@ export function DocumentArtifactViewer({
 
   // Update editor content when content changes
   useEffect(() => {
-    if (editor && editor.getHTML() !== content) {
-      editor.commands.setContent(content)
+    if (editor && content) {
+      // For string content (error messages), compare with HTML
+      if (typeof content === 'string') {
+        if (editor.getHTML() !== content) {
+          editor.commands.setContent(content)
+        }
+      } else {
+        // For JSON content (TipTap documents), compare JSON structures
+        const currentJSON = editor.getJSON()
+        if (JSON.stringify(currentJSON) !== JSON.stringify(content)) {
+          editor.commands.setContent(content)
+        }
+      }
     }
   }, [editor, content])
 
@@ -233,10 +279,87 @@ export function DocumentArtifactViewer({
         {documentField.documentMetadata?.documentType === 'tiptap' ? (
           // TipTap editor for editable documents
           <div className={`prose prose-sm max-w-none p-4 ${isEditing ? 'min-h-[400px]' : ''}`}>
-            <EditorContent 
-              editor={editor} 
-              className={isEditing ? 'focus:outline-none' : 'cursor-default'}
-            />
+            {editor ? (
+              <div className="relative">
+                {/* TipTap Toolbar */}
+                {isEditing && (
+                  <div className="border-b border-border mb-4 pb-2">
+                    <div className="flex flex-wrap gap-1">
+                      <Button
+                        variant={editor.isActive('bold') ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => editor.chain().focus().toggleBold().run()}
+                      >
+                        <Bold className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant={editor.isActive('italic') ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => editor.chain().focus().toggleItalic().run()}
+                      >
+                        <Italic className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant={editor.isActive('heading', { level: 1 }) ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+                      >
+                        <Heading1 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant={editor.isActive('heading', { level: 2 }) ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+                      >
+                        <Heading2 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant={editor.isActive('bulletList') ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => editor.chain().focus().toggleBulletList().run()}
+                      >
+                        <List className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant={editor.isActive('orderedList') ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                      >
+                        <ListOrdered className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant={editor.isActive('blockquote') ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => editor.chain().focus().toggleBlockquote().run()}
+                      >
+                        <Quote className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant={editor.isActive('code') ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => editor.chain().focus().toggleCode().run()}
+                      >
+                        <Code className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <EditorContent
+                  editor={editor}
+                  className={isEditing ? 'focus:outline-none' : 'cursor-default'}
+                />
+                {/* Show placeholder for empty documents in view mode */}
+                {!isEditing && editor.isEmpty && (
+                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                    <p className="text-sm italic">This document is empty</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-4 border border-dashed border-gray-300 rounded">
+                <p>Editor not initialized</p>
+              </div>
+            )}
           </div>
         ) : (
           // Static content for non-TipTap documents
