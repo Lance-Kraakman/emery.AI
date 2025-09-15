@@ -301,7 +301,7 @@ function ChatContentWithCanvas({
         {/* Messages area */}
         <div className="flex-1">
           <ChatMessages
-            handler={handler}
+            messages={handler.messages}
             className="bg-transparent px-3 py-1 text-sm
               [&_*]:text-sm [&_pre]:text-xs [&_code]:text-xs [&_p]:text-sm [&_p]:leading-5
               [&_div]:text-sm [&_span]:text-sm [&_li]:text-sm [&_ul]:text-sm [&_ol]:text-sm

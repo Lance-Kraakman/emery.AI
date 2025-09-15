@@ -174,7 +174,7 @@ export async function updateTiptapDocumentContent(
   content: object
 ): Promise<Result<DocumentFieldValue>> {
   try {
-    await requirePermission("data:edit");
+    await requirePermission("data:manage");
 
     const documentService = getDocumentApplicationService();
     const result = await documentService.updateTiptapDocument({
