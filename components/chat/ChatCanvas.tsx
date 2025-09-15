@@ -42,7 +42,7 @@ export function ChatCanvas() {
   
   // Render the canvas content - standard right-side panel format
   return isCustomArtifact ? (
-    <div className="flex-1 border-l border-border flex flex-col bg-card">
+    <div className="h-full border-l border-border flex flex-col bg-card">
         {/* Custom Artifact Content - Document artifacts handle their own headers */}
         {isDocumentArtifact(displayedArtifact) ? (
           <DocumentArtifactViewer
@@ -91,7 +91,7 @@ export function ChatCanvas() {
         )}
       </div>
   ) : (
-    <div className="flex-1 border-l border-border flex flex-col bg-card">
+    <div className="h-full border-l border-border flex flex-col bg-card">
       {/* Canvas Header with Artifact Info */}
       <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
         <div className="flex items-center gap-2 min-w-0 flex-1">

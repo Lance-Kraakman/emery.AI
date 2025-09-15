@@ -2,8 +2,9 @@
 
 /* Main Editor Container */
 .editorContainer {
-  @apply border border-border rounded-xl overflow-hidden shadow-2xl bg-card backdrop-blur-sm h-full flex flex-col;
+  @apply border border-border rounded-xl shadow-2xl bg-card backdrop-blur-sm flex flex-col;
   background-color: hsl(var(--card) / 0.95);
+  overflow: hidden;
 }
 
 /* Toolbar Styling */
@@ -30,20 +31,55 @@
 
 /* Editor Content Area */
 .editorWrapper {
-  @apply bg-background backdrop-blur-sm rounded-b-xl flex-1 overflow-hidden;
+  @apply bg-background backdrop-blur-sm rounded-b-xl flex-1;
   background-color: hsl(var(--background) / 0.98);
+  min-height: calc(100vh - 180px); /* Ensure proper height for editor */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .tiptapEditor {
-  @apply relative h-full;
+  @apply relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Ensure EditorContent and all wrapper elements fill the container */
+.tiptapEditor :global(.ProseMirror-body) {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Target the TipTap React wrapper elements */
+.tiptapEditor :global([data-editor]) {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.tiptapEditor :global(.tiptap) {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* TipTap ProseMirror Content Styling */
 .tiptapEditor :global(.ProseMirror) {
   @apply outline-none p-6 leading-relaxed text-sm text-foreground bg-transparent;
-  min-height: 500px;
-  height: 100%;
+  flex: 1;
   overflow-y: auto;
+  box-sizing: border-box;
+  cursor: text;
+  min-height: calc(100vh - 200px); /* Ensure minimum height for proper editing */
+  height: 100%;
+  width: 100%;
 }
 
 /* Typography Styles */
@@ -198,11 +234,6 @@
   background-color: hsl(var(--secondary) / 0.8);
 }
 
-/* Footer */
-.documentFooter {
-  @apply flex items-center justify-between p-3 border-t border-border text-xs text-muted-foreground bg-muted;
-  background-color: hsl(var(--muted) / 0.3);
-}
 
 /* Badge Styling */
 .documentBadge {

@@ -62,7 +62,7 @@ function EmeryLayoutInner({
     const { displayedArtifact } = useChatCanvas()
 
     // Show canvas when artifact is displayed, otherwise show children
-    return displayedArtifact ? <ChatCanvas /> : <>{children}</>
+    return displayedArtifact ? <div className="h-full"><ChatCanvas /></div> : <>{children}</>
   }
 
   // Calculate responsive classes
@@ -102,7 +102,7 @@ function EmeryLayoutInner({
       >
         <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
           {/* Main Content Area with Canvas */}
-          <main className="flex-1 overflow-hidden">
+          <main className="flex-1 overflow-hidden h-full">
             <MainContentWithCanvas>
               {children || (
                 <div className="h-full flex items-center justify-center p-6">

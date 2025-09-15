@@ -307,22 +307,8 @@ function ChatContentWithCanvas({
             </div>
           )}
 
-          {/* Temporary direct message rendering for debugging */}
-          <div className="px-3 py-1">
-            {handler.messages?.map((message: any, index: number) => (
-              <div key={index} className="mb-4 p-3 rounded-lg bg-muted/20">
-                <div className="text-xs text-muted-foreground mb-1">
-                  {message.role || 'user'}
-                </div>
-                <div className="text-sm">
-                  {typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Original LlamaIndex ChatMessages (commented out for debugging) */}
-          {/* <ChatMessages
+          {/* Restored ChatMessages component */}
+          <ChatMessages
             handler={handler}
             className="bg-transparent px-3 py-1 text-sm
               [&_*]:text-sm [&_pre]:text-xs [&_code]:text-xs [&_p]:text-sm [&_p]:leading-5
@@ -330,7 +316,24 @@ function ChatContentWithCanvas({
               [&_button]:text-xs [&_button]:px-2 [&_button]:py-1 [&_button]:float-right [&_button]:ml-2
               [&_*]:break-words [&_*]:hyphens-auto [&_div:has(button)]:clear-both
             "
-          /> */}
+          />
+
+          {/* Debug: Direct message rendering for comparison (hidden in production) */}
+          {process.env.NODE_ENV === 'development' && false && (
+            <div className="px-3 py-1 border-l-2 border-yellow-500 ml-2">
+              <div className="text-xs text-yellow-600 mb-2">Debug: Direct Messages</div>
+              {handler.messages?.map((message: any, index: number) => (
+                <div key={index} className="mb-4 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
+                  <div className="text-xs text-muted-foreground mb-1">
+                    {message.role || 'user'}
+                  </div>
+                  <div className="text-sm">
+                    {typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Suggestions at bottom of messages area when no messages */}
