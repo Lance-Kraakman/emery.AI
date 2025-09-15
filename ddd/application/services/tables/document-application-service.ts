@@ -176,7 +176,19 @@ export class DocumentApplicationService {
    */
   async updateTiptapDocument(command: UpdateTiptapDocumentCommand): Promise<Result<DocumentFieldValue>> {
     try {
-      // 1. Get existing document content to preserve metadata
+      // 1. Get existing document data to retrieve s3Key for proper update
+      const existingDocument = await this.findDocumentInTable(
+        command.documentId,
+        command.organizationId,
+        command.tableId,
+        command.fieldId
+      );
+
+      if (!existingDocument) {
+        return { success: false, error: 'Document not found in database' };
+      }
+
+      // 2. Get existing document content to preserve metadata
       const existingContent = await this.getTiptapContent({
         documentId: command.documentId,
         organizationId: command.organizationId,
@@ -189,7 +201,7 @@ export class DocumentApplicationService {
         return { success: false, error: 'Could not retrieve existing document' };
       }
 
-      // 2. Create updated content with incremented version
+      // 3. Create updated content with incremented version
       const updatedJson = {
         ...command.content,
         metadata: {
@@ -202,9 +214,9 @@ export class DocumentApplicationService {
 
       const fileBuffer = Buffer.from(JSON.stringify(updatedJson, null, 2), 'utf-8');
 
-      // 3. Update existing file using updateFile to preserve the same S3 key/ID
+      // 4. Update existing file using updateFile to preserve the same S3 key/ID
       const updateResult = await this.fileUseCases.updateFile({
-        fileId: command.documentId,
+        fileId: existingDocument.s3Key,
         fieldId: command.fieldId,
         tableId: command.tableId,
         organizationId: command.organizationId,
