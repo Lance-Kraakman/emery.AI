@@ -100,25 +100,27 @@ function EmeryLayoutInner({
         className="flex-1 flex min-h-0 overflow-hidden h-screen"
         autoOpenCanvas={false}
       >
-        <MainContentWithCanvas>
-          {/* Main Content Area */}
+        <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
+          {/* Main Content Area with Canvas */}
           <main className="flex-1 overflow-hidden">
-            {children || (
-              <div className="h-full flex items-center justify-center p-6">
-                <div className="text-center text-muted-foreground">
-                  <p>Select a page from the sidebar to get started</p>
+            <MainContentWithCanvas>
+              {children || (
+                <div className="h-full flex items-center justify-center p-6">
+                  <div className="text-center text-muted-foreground">
+                    <p>Select a page from the sidebar to get started</p>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </MainContentWithCanvas>
           </main>
 
-          {/* Chat Area */}
+          {/* Chat Area - always visible */}
           {enableChat && (
             <div className="w-96 border-l border-border">
               <EmeryChat />
             </div>
           )}
-        </MainContentWithCanvas>
+        </div>
       </ChatSection>
 
       {/* Mobile Chat Overlay - Remove since EmeryChat handles everything */}
