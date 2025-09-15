@@ -181,25 +181,6 @@ export function DocumentArtifactViewer({
             )}
           </Button>
           
-          {/* Reference button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              // Insert document reference into chat
-              const docName = artifact.data.documentField.name
-              const referenceText = `@doc:${docName}`
-              
-              // TODO: Implement reference button functionality with new simplified system
-              console.log('Add reference:', referenceText)
-            }}
-            className="text-xs"
-            title="Add document reference to chat"
-          >
-            <AtSign className="w-3 h-3 mr-1" />
-            Reference
-          </Button>
-          
           {/* Save button */}
           {isEditing && hasChanges && (
             <Button
