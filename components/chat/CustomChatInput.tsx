@@ -63,10 +63,30 @@ export default function CustomChatInput({
       // Position above input since chat is at bottom of screen
       if (inputRef.current) {
         const rect = inputRef.current.getBoundingClientRect();
-        setDropdownPosition({
-          top: rect.top - 400 - 4, // 400px dropdown height + 4px gap
-          left: rect.left,
-        });
+        const dropdownHeight = 400;
+        const gap = 4;
+
+        // Calculate optimal position to stay within viewport
+        let top = rect.top - dropdownHeight - gap;
+        let left = rect.left;
+
+        // Prevent going off top of screen
+        if (top < 0) {
+          top = rect.bottom + gap; // Position below input instead
+        }
+
+        // Prevent going off right side of screen
+        const dropdownWidth = 400; // min-w-96 = 384px, but give some buffer
+        if (left + dropdownWidth > window.innerWidth) {
+          left = window.innerWidth - dropdownWidth - 16; // 16px margin
+        }
+
+        // Prevent going off left side of screen
+        if (left < 0) {
+          left = 16; // 16px margin
+        }
+
+        setDropdownPosition({ top, left });
       }
     } else {
       setShowDropdown(false);
@@ -162,7 +182,7 @@ export default function CustomChatInput({
   // Handle key presses
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     // When dropdown is open, prevent default behavior for navigation keys
-    if (showDropdown && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key)) {
+    if (showDropdown && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape', 'Tab'].includes(e.key)) {
       e.preventDefault();
       e.stopPropagation();
       return; // Let ToolDropdown handle these
@@ -177,9 +197,17 @@ export default function CustomChatInput({
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (showDropdown && inputRef.current && !inputRef.current.contains(event.target as Node)) {
-        setShowDropdown(false);
-      }
+      if (!showDropdown) return;
+
+      const target = event.target as Node;
+      const input = inputRef.current;
+      const dropdown = document.querySelector('[data-tool-dropdown]');
+
+      // Don't close if clicking on input or dropdown elements
+      if (input && input.contains(target)) return;
+      if (dropdown && dropdown.contains(target)) return;
+
+      setShowDropdown(false);
     };
 
     document.addEventListener('mousedown', handleClickOutside);

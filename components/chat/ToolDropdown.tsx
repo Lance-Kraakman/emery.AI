@@ -58,6 +58,8 @@ export function ToolDropdown({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectedCategories, setSelectedCategories] = useState<ReferenceCategory[]>([]);
   const [isClient, setIsClient] = useState(false);
+  const [focusedCategoryIndex, setFocusedCategoryIndex] = useState(-1);
+  const [isInCategoryMode, setIsInCategoryMode] = useState(false);
 
   // Fix hydration mismatch by ensuring client-side rendering
   useEffect(() => {
@@ -73,6 +75,7 @@ export function ToolDropdown({
     queryKey: ['search-all-tools', query, selectedCategories],
     queryFn: async () => {
       try {
+        console.log(`[ToolDropdown] Searching with query: "${query}", categories:`, selectedCategories);
         const result = await searchAllTools({
           query,
           categories: selectedCategories.length > 0 ? selectedCategories : undefined,
@@ -85,7 +88,7 @@ export function ToolDropdown({
           throw new Error(result.error);
         }
 
-        console.log('[ToolDropdown] Search successful:', result.data?.referenceTools?.length || 0, 'tools found');
+        console.log('[ToolDropdown] Search successful:', result.data?.referenceTools?.length || 0, 'reference tools,', result.data?.systemTools?.length || 0, 'system tools found');
         return result.data;
       } catch (error) {
         console.error('[ToolDropdown] Search error:', error);
@@ -103,6 +106,17 @@ export function ToolDropdown({
     ...(searchResult?.referenceTools ?? [])
   ];
 
+  // Handle category filter toggle
+  const toggleCategory = (category: ReferenceCategory) => {
+    setSelectedCategories(prev => {
+      const newCategories = prev.includes(category)
+        ? prev.filter(c => c !== category)
+        : [...prev, category];
+      console.log(`[ToolDropdown] Category filter toggled: ${category}, new filters:`, newCategories);
+      return newCategories;
+    });
+  };
+
   // Reset selected index when query changes
   useEffect(() => {
     setSelectedIndex(0);
@@ -112,27 +126,76 @@ export function ToolDropdown({
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!isOpen) return;
 
+    const allCategories = Object.values(ReferenceCategory);
+
     switch (e.key) {
+      case 'Tab':
+        e.preventDefault();
+        if (!isInCategoryMode) {
+          setIsInCategoryMode(true);
+          setFocusedCategoryIndex(0);
+        } else {
+          setFocusedCategoryIndex(prev =>
+            prev < allCategories.length - 1 ? prev + 1 : 0
+          );
+        }
+        break;
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedIndex(prev => Math.min(prev + 1, allTools.length - 1));
+        if (isInCategoryMode) {
+          setIsInCategoryMode(false);
+          setFocusedCategoryIndex(-1);
+          setSelectedIndex(0);
+        } else {
+          setSelectedIndex(prev => {
+            const newIndex = Math.min(prev + 1, allTools.length - 1);
+            // Scroll into view
+            setTimeout(() => {
+              const element = document.querySelector(`[data-tool-item-index="${newIndex}"]`);
+              element?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }, 0);
+            return newIndex;
+          });
+        }
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setSelectedIndex(prev => Math.max(prev - 1, 0));
+        if (isInCategoryMode) {
+          setIsInCategoryMode(false);
+          setFocusedCategoryIndex(-1);
+          setSelectedIndex(allTools.length - 1);
+        } else {
+          setSelectedIndex(prev => {
+            const newIndex = Math.max(prev - 1, 0);
+            // Scroll into view
+            setTimeout(() => {
+              const element = document.querySelector(`[data-tool-item-index="${newIndex}"]`);
+              element?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }, 0);
+            return newIndex;
+          });
+        }
         break;
       case 'Enter':
         e.preventDefault();
-        if (allTools[selectedIndex]) {
+        if (isInCategoryMode && focusedCategoryIndex >= 0) {
+          const category = allCategories[focusedCategoryIndex];
+          toggleCategory(category);
+        } else if (allTools[selectedIndex]) {
           onSelect(allTools[selectedIndex]);
         }
         break;
       case 'Escape':
         e.preventDefault();
-        onClose();
+        if (isInCategoryMode) {
+          setIsInCategoryMode(false);
+          setFocusedCategoryIndex(-1);
+        } else {
+          onClose();
+        }
         break;
     }
-  }, [isOpen, selectedIndex, allTools, onSelect, onClose]);
+  }, [isOpen, selectedIndex, allTools, onSelect, onClose, isInCategoryMode, focusedCategoryIndex, toggleCategory]);
 
   useEffect(() => {
     if (isOpen) {
@@ -140,15 +203,6 @@ export function ToolDropdown({
       return () => document.removeEventListener('keydown', handleKeyDown);
     }
   }, [isOpen, handleKeyDown]);
-
-  // Handle category filter toggle
-  const toggleCategory = (category: ReferenceCategory) => {
-    setSelectedCategories(prev =>
-      prev.includes(category)
-        ? prev.filter(c => c !== category)
-        : [...prev, category]
-    );
-  };
 
   // Don't render until client-side to prevent hydration mismatch
   if (!isOpen || !isClient) return null;
@@ -167,10 +221,11 @@ export function ToolDropdown({
       {/* Category Filters */}
       <div className="p-3 border-b border-gray-100">
         <div className="flex flex-wrap gap-2">
-          {allCategories.map(category => {
+          {allCategories.map((category, index) => {
             const Icon = categoryIcons[category];
             const categoryInfo = REFERENCE_CATEGORY_INFO[category];
             const isSelected = selectedCategories.includes(category);
+            const isFocused = isInCategoryMode && focusedCategoryIndex === index;
 
             return (
               <button
@@ -180,7 +235,8 @@ export function ToolDropdown({
                   'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors',
                   isSelected
                     ? categoryColors[category]
-                    : 'text-gray-500 bg-gray-50 hover:bg-gray-100'
+                    : 'text-gray-500 bg-gray-50 hover:bg-gray-100',
+                  isFocused && 'ring-2 ring-blue-500 ring-offset-1'
                 )}
                 title={categoryInfo.description}
               >
@@ -233,14 +289,15 @@ export function ToolDropdown({
                   ? (categoryIcons[displayInfo.category as ReferenceCategory] || FileText)
                   : FileText; // Default for system tools
                 const isSelected = index === selectedIndex;
-                // Create unique key based on tool type and ID
+                // Create unique key based on tool type and ID/name + index to ensure uniqueness
                 const toolId = isReferenceTool
-                  ? `ref-${tool.id || index}`
-                  : `sys-${tool.name || index}`;
+                  ? `ref-${tool.toolName || 'unknown'}-${tool.id || 'no-id'}-${index}`
+                  : `sys-${tool.name || 'unknown'}-${index}`;
 
                 return (
                   <button
                     key={toolId}
+                    data-tool-item-index={index}
                     onClick={() => onSelect(tool)}
                     onMouseEnter={() => setSelectedIndex(index)}
                     className={cn(

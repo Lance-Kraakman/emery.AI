@@ -121,9 +121,12 @@ export class ReferenceTool extends Tool {
     filename: string,
     mimeType: string,
     tableName: string,
+    tableId: number,
+    fieldId: number,
+    rowId: string,
     databaseName?: string
   ): ReferenceTool {
-    const toolConfig = ToolConfig.file(`file-${fileId}`, fileId, filename, mimeType, organizationId)
+    const toolConfig = ToolConfig.file(`file-${fileId}`, fileId, filename, mimeType, organizationId, tableId, fieldId, rowId)
     const toolMetadata = ToolMetadata.reference(
       `file-${fileId}`,
       filename,
