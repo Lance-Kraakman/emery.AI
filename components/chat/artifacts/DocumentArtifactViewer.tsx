@@ -54,7 +54,8 @@ import {
   AlignJustify,
   Undo,
   Redo,
-  Palette
+  Palette,
+  X
 } from 'lucide-react'
 import type { DocumentArtifact } from '../types/chat-artifacts'
 import { getDocumentDisplayInfo } from '../types/chat-artifacts'
@@ -64,13 +65,15 @@ import styles from './DocumentArtifactViewer.module.css'
 interface DocumentArtifactViewerProps {
   artifact: DocumentArtifact
   onSave?: (content: string, title?: string) => void
+  onClose?: () => void
   className?: string
 }
 
-export function DocumentArtifactViewer({ 
-  artifact, 
+export function DocumentArtifactViewer({
+  artifact,
   onSave,
-  className = "" 
+  onClose,
+  className = ""
 }: DocumentArtifactViewerProps) {
   const { documentField, mode } = artifact.data
   const [isEditing, setIsEditing] = useState(true) // Always start in edit mode
@@ -309,6 +312,19 @@ export function DocumentArtifactViewer({
             <Save className="w-3 h-3 mr-1" />
             Save {hasChanges && <span className="ml-1 text-xs opacity-75">(⌘S)</span>}
           </Button>
+
+          {/* Close button */}
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className={`text-xs ${styles.actionButton} ml-2`}
+              title="Close document (Esc)"
+            >
+              <X className="w-3 h-3" />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -316,9 +332,9 @@ export function DocumentArtifactViewer({
       <div className={styles.editorWrapper}>
         {documentField.documentMetadata?.documentType === 'tiptap' ? (
           // TipTap editor for editable documents
-          <div className="p-4">
+          <div className="h-full flex flex-col">
             {editor ? (
-              <div className="relative">
+              <div className="flex flex-col h-full">
                 {/* Comprehensive TipTap Toolbar */}
                 {isEditing && (
                   <div className={styles.toolbar}>
@@ -496,11 +512,11 @@ export function DocumentArtifactViewer({
                     </div>
                   </div>
                 )}
-                <div className={styles.editorWrapper}>
+                <div className="flex-1 overflow-hidden">
                   <div className={styles.tiptapEditor}>
                     <EditorContent
                       editor={editor}
-                      className={isEditing ? 'focus:outline-none' : 'cursor-default'}
+                      className={`${isEditing ? 'focus:outline-none' : 'cursor-default'} h-full`}
                     />
                   </div>
                 </div>

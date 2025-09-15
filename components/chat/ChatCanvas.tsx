@@ -43,54 +43,52 @@ export function ChatCanvas() {
   // Render the canvas content - standard right-side panel format
   return isCustomArtifact ? (
     <div className="flex-1 border-l border-border flex flex-col bg-card">
-        {/* Custom Artifact Header */}
-        <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            {isDocumentArtifact(displayedArtifact) ? (
-              <FileText className="h-4 w-4 text-blue-600 flex-shrink-0" />
-            ) : (
-              <FileText className="h-4 w-4 text-green-600 flex-shrink-0" />
-            )}
-            <div className="min-w-0 flex-1">
-              <h3 className="font-medium text-sm truncate">
-                {isDocumentArtifact(displayedArtifact) 
-                  ? displayedArtifact.data.documentField.documentMetadata?.title || displayedArtifact.data.documentField.name
-                  : isFileArtifact(displayedArtifact)
-                  ? displayedArtifact.data.fileField.name
-                  : 'Artifact'
-                }
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                {isDocumentArtifact(displayedArtifact) ? 'Document' : 'File'}
-              </p>
-            </div>
-          </div>
-          
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => canvasContext?.closeCanvas?.()}
-            className="h-7 w-7 p-0 flex-shrink-0"
-            title="Close canvas"
-          >
-            <X className="h-3 w-3" />
-          </Button>
-        </div>
+        {/* Custom Artifact Content - Document artifacts handle their own headers */}
+        {isDocumentArtifact(displayedArtifact) ? (
+          <DocumentArtifactViewer
+            artifact={displayedArtifact}
+            onClose={() => canvasContext?.closeCanvas?.()}
+            className="h-full"
+          />
+        ) : (
+          <>
+            {/* Header only for non-document artifacts */}
+            <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <FileText className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-medium text-sm truncate">
+                    {isFileArtifact(displayedArtifact)
+                      ? displayedArtifact.data.fileField.name
+                      : 'Artifact'
+                    }
+                  </h3>
+                  <p className="text-xs text-muted-foreground">File</p>
+                </div>
+              </div>
 
-        {/* Custom Artifact Content */}
-        <div className="flex-1 overflow-auto p-4">
-          {isDocumentArtifact(displayedArtifact) ? (
-            <DocumentArtifactViewer 
-              artifact={displayedArtifact}
-              className="h-full"
-            />
-          ) : isFileArtifact(displayedArtifact) ? (
-            <FileArtifactViewer 
-              artifact={displayedArtifact}
-              className="h-full"
-            />
-          ) : null}
-        </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => canvasContext?.closeCanvas?.()}
+                className="h-7 w-7 p-0 flex-shrink-0"
+                title="Close canvas"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+
+            {/* Content for non-document artifacts */}
+            <div className="flex-1 overflow-auto p-4">
+              {isFileArtifact(displayedArtifact) ? (
+                <FileArtifactViewer
+                  artifact={displayedArtifact}
+                  className="h-full"
+                />
+              ) : null}
+            </div>
+          </>
+        )}
       </div>
   ) : (
     <div className="flex-1 border-l border-border flex flex-col bg-card">
