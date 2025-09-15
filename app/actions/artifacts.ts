@@ -55,24 +55,43 @@ export async function fetchDocumentArtifactData(
 }
 
 /**
- * Fetch TipTap document content from S3 using DocumentApplicationService
+ * Fetch TipTap document content using DocumentApplicationService
  */
 export async function fetchTiptapDocumentContent(
   documentId: string,
   organizationId: number,
   tableId: number,
   fieldId: number
-): Promise<Result<any>> {
+): Promise<Result<{ content: object; metadata: any }>> {
+  console.log('[FETCH-TIPTAP-ACTION] Called with:', {
+    documentId,
+    organizationId,
+    tableId,
+    fieldId
+  });
+
   try {
-    await requirePermission("data:view");
+    const session = await requirePermission("data:view");
 
-    // Construct proper API URL with required parameters
-    const downloadUrl = `/api/files/${documentId}/download?org=${organizationId}&tableId=${tableId}&fieldId=${fieldId}`;
+    console.log('[FETCH-TIPTAP-ACTION] Permission check passed, getting DocumentApplicationService...');
+    const documentService = getDocumentApplicationService();
 
-    return {
-      success: true,
-      data: { downloadUrl }
-    };
+    console.log('[FETCH-TIPTAP-ACTION] Calling documentService.getTiptapContent...');
+    const result = await documentService.getTiptapContent({
+      documentId,
+      organizationId: OrganizationId.fromNumber(organizationId),
+      tableId: TableId.fromNumber(tableId),
+      fieldId: FieldId.fromNumber(fieldId),
+      requestedBy: UserId.fromString(session.user.id)
+    });
+
+    console.log('[FETCH-TIPTAP-ACTION] DocumentService result:', {
+      success: result.success,
+      hasData: !!result.data,
+      error: result.error
+    });
+
+    return result;
   } catch (error) {
     console.error("Error fetching TipTap content:", error);
     return {
