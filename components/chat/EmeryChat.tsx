@@ -342,12 +342,13 @@ function ChatContentWithCanvas({
   )
 }
 
+
 export function EmeryChat() {
   // ALL HOOKS MUST BE CALLED FIRST - NO CONDITIONAL RETURNS BEFORE THIS POINT
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { data: session } = useSession()
-  const { chatState, canvasState, chatContext, toggleCanvas, setChatContext } = useLayout()
+  const { chatState, canvasState, isMobile, chatContext, toggleCanvas, setChatContext } = useLayout()
   const { data: emeryData } = useEmery()
 
   // Chat session state
@@ -602,10 +603,6 @@ export function EmeryChat() {
               setShowSuggestions={setShowSuggestions}
               chatContext={chatContext}
             />
-
-            {/* ChatCanvas - renders in chat panel or via portal to main content */}
-            <ChatCanvas />
-
           </ChatSection>
         </div>
       </div>
