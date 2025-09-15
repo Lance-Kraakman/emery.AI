@@ -14,7 +14,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { searchReferenceTools } from '@/app/actions/references';
-import type { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool';
+import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper';
 import { ReferenceCategory, REFERENCE_CATEGORY_INFO } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ChevronDown, Search, Loader2, FileText, Bot, Database, Table, File } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -23,7 +23,7 @@ interface ToolDropdownProps {
   query: string;
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (tool: ReferenceTool) => void;
+  onSelect: (tool: ReferenceToolDTO) => void;
   position?: {
     top: number;
     left: number;
@@ -207,17 +207,17 @@ export function ToolDropdown({
             {tools.map((tool, index) => {
               try {
                 // Safely get display info with error handling
-                const displayInfo = tool?.getChatDisplayInfo?.() || {
-                  displayName: 'Unknown Tool',
-                  description: 'Tool description not available',
-                  insertText: '@unknown',
-                  category: ReferenceCategory.DOC,
-                  supportsArtifacts: false
+                const displayInfo = {
+                  displayName: tool?.displayName || 'Unknown Tool',
+                  description: tool?.description || 'Tool description not available',
+                  insertText: tool?.insertText || '@unknown',
+                  category: tool?.category || ReferenceCategory.DOC,
+                  supportsArtifacts: tool?.supportsArtifacts || false
                 };
 
                 const Icon = categoryIcons[displayInfo.category as ReferenceCategory] || FileText;
                 const isSelected = index === selectedIndex;
-                const toolId = tool?.reference?.id || `tool-${index}`;
+                const toolId = tool?.id || `tool-${index}`;
 
                 return (
                   <button

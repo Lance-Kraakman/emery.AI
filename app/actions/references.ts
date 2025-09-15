@@ -8,7 +8,7 @@ import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 import { getToolSearchApplicationService } from "@/ddd/application/di/container";
 import { ReferenceMapper, type ReferenceDTO, type ReferencePanelStateDTO } from "@/app/mappers/reference-mapper";
 import { ToolMapper, type ToolSearchResultDTO } from "@/app/mappers/tool-mapper";
-import { ReferenceToolMapper } from "@/app/mappers/reference-tool-mapper";
+import { ReferenceToolMapper, type ReferenceToolDTO } from "@/app/mappers/reference-tool-mapper";
 import { ReferenceCategory } from "@/ddd/domain/chat/value-objects/reference-types";
 import type { ReferenceTool } from "@/ddd/domain/tools/entities/reference-tool";
 import type { Result } from "./types";
@@ -114,10 +114,13 @@ export async function searchReferenceTools(options: {
       hasMore: searchResult.hasMore
     });
 
+    // Convert domain objects to DTOs for client components
+    const referenceToolDTOs = ReferenceToolMapper.toDTOs(searchResult.referenceTools);
+
     return {
       success: true,
       data: {
-        referenceTools: searchResult.referenceTools,
+        referenceTools: referenceToolDTOs,
         hasMore: searchResult.hasMore,
         totalCount: searchResult.totalCount,
         query: options.query,

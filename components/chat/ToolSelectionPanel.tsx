@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { X, ChevronDown, ChevronUp, Settings, RefreshCw, Eye } from 'lucide-react'
+import { X, ChevronDown, ChevronUp, Settings, RefreshCw, Eye, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import type { ToolDTO, ToolSearchResultDTO } from '@/app/mappers/tool-mapper'
 import { ToolCategory } from '@/app/mappers/tool-mapper'
 import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper'
@@ -174,6 +175,7 @@ export default function ToolSelectionPanel({
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedTools, setSelectedTools] = useState<(ToolDTO | ReferenceToolDTO)[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     if (isVisible) {
@@ -186,7 +188,7 @@ export default function ToolSelectionPanel({
       setIsLoading(true)
       setError(null)
 
-      const result = await searchAllTools({ query: '', limit: 50 })
+      const result = await searchAllTools({ query: searchQuery, limit: 50 })
       if (result.success && result.data) {
         setToolData(result.data)
       } else {
@@ -199,6 +201,16 @@ export default function ToolSelectionPanel({
       setIsLoading(false)
     }
   }
+
+  // Reload tools when search query changes
+  useEffect(() => {
+    if (isVisible) {
+      const timeoutId = setTimeout(() => {
+        loadAvailableTools()
+      }, 300) // Debounce search
+      return () => clearTimeout(timeoutId)
+    }
+  }, [searchQuery, isVisible])
 
   const handleToolSelect = (tool: ToolDTO | ReferenceToolDTO) => {
     setSelectedTools(prev => [...prev, tool])
@@ -255,6 +267,17 @@ export default function ToolSelectionPanel({
           <Button variant="ghost" size="sm" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
+        </div>
+
+        {/* Search */}
+        <div className="relative mb-4">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search tools and references..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
         </div>
 
         {/* Content */}
