@@ -19,16 +19,18 @@ import { ToolConfig, AgentToolConfig, TableToolConfig, DocumentToolConfig, FileT
 import { ToolMetadata, ToolCategory } from '../value-objects/tool-metadata'
 import { Reference } from '@/ddd/domain/chat/value-objects/reference'
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
+import { Tool } from './tool'
 
 /**
- * Reference Tool entity - combines Tool and Reference concepts
+ * Reference Tool entity - specialized Tool for data references
  */
-export class ReferenceTool {
+export class ReferenceTool extends Tool {
   constructor(
-    public readonly toolConfig: ToolConfig,
-    public readonly toolMetadata: ToolMetadata,
+    toolConfig: ToolConfig,
+    toolMetadata: ToolMetadata,
     public readonly reference: Reference
   ) {
+    super(toolConfig, toolMetadata)
     // Ensure this is a REFERENCES category tool
     if (toolMetadata.category !== ToolCategory.REFERENCES) {
       throw new Error('ReferenceTool must have REFERENCES category')
@@ -203,17 +205,17 @@ export class ReferenceTool {
   }
 
   /**
-   * Check if this reference tool can be used in chat
+   * Override: Check if this reference tool can be used in chat
    */
-  canBeUsedInChat(): boolean {
+  override canBeUsedInChat(): boolean {
     // All reference tools can be used in chat via @ mentions
     return true
   }
 
   /**
-   * Check if this reference tool supports artifacts
+   * Override: Check if this reference tool supports artifacts
    */
-  supportsArtifacts(): boolean {
+  override supportsArtifacts(): boolean {
     const category = this.reference.category
     return category === ReferenceCategory.DOC ||
            category === ReferenceCategory.FILE ||
@@ -243,18 +245,21 @@ export class ReferenceTool {
 
   /**
    * Get tool information for tool-based interfaces
+   * @deprecated Use getDisplayInfo() from base Tool class instead
    */
   getToolDisplayInfo() {
-    return this.toolMetadata.getDisplayInfo()
+    return this.getDisplayInfo()
   }
 
 
   /**
-   * Check if this reference tool equals another
+   * Override: Check if this reference tool equals another
    */
-  equals(other: ReferenceTool): boolean {
-    return this.toolConfig.equals(other.toolConfig) &&
-           this.reference.equals(other.reference)
+  override equals(other: Tool): boolean {
+    if (!(other instanceof ReferenceTool)) {
+      return false
+    }
+    return super.equals(other) && this.reference.equals(other.reference)
   }
 }
 

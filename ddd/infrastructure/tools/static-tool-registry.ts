@@ -16,6 +16,7 @@ import type {
 } from '@/ddd/domain/tools/services/tool-registry';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { ToolMetadata, ToolCategory, ConnectionType } from '@/ddd/domain/tools/value-objects/tool-metadata';
+import { Tool } from '@/ddd/domain/tools/entities/tool';
 
 export class StaticToolRegistry implements IToolRegistryService {
   private readonly tools: ToolMetadata[] = [
@@ -225,5 +226,20 @@ export class StaticToolRegistry implements IToolRegistryService {
       connectionType: metadata.connectionType,
       ...customConfig
     });
+  }
+
+  /**
+   * Create a Tool instance from ToolMetadata
+   */
+  createTool(metadata: ToolMetadata, customConfig: Record<string, any> = {}): Tool {
+    return Tool.fromMetadata(metadata, customConfig);
+  }
+
+  /**
+   * Create multiple Tool instances from search results
+   */
+  async createToolsFromSearch(query: string, limit = 20): Promise<Tool[]> {
+    const metadataList = await this.searchTools(query, limit);
+    return metadataList.map(metadata => this.createTool(metadata));
   }
 }

@@ -130,6 +130,25 @@ export function mapReferenceToolsToDTO(referenceTools: ReferenceTool[]): Referen
 }
 
 /**
+ * Reference Tool Mapper Class - for consistency with tool-mapper pattern
+ */
+export class ReferenceToolMapper {
+  /**
+   * Convert ReferenceTool entity to DTO
+   */
+  static toDTO(referenceTool: ReferenceTool): ReferenceToolDTO {
+    return mapReferenceToolToDTO(referenceTool)
+  }
+
+  /**
+   * Convert multiple ReferenceTool entities to DTOs
+   */
+  static toDTOs(referenceTools: ReferenceTool[]): ReferenceToolDTO[] {
+    return mapReferenceToolsToDTO(referenceTools)
+  }
+}
+
+/**
  * Type guard to check if DTO is an agent tool
  */
 export function isAgentToolDTO(dto: ReferenceToolDTO): boolean {

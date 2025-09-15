@@ -5,38 +5,34 @@
 
 import { requireAuth } from "./permissions";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects";
-import { getReferenceApplicationService } from "@/ddd/application/di/container";
-import { ReferenceMapper, type ReferenceDTO, type ReferenceSearchResultDTO, type ReferencePanelStateDTO } from "@/app/mappers/reference-mapper";
+import { getToolSearchApplicationService } from "@/ddd/application/di/container";
+import { ReferenceMapper, type ReferenceDTO, type ReferencePanelStateDTO } from "@/app/mappers/reference-mapper";
+import { ToolMapper, type ToolSearchResultDTO } from "@/app/mappers/tool-mapper";
+import { ReferenceToolMapper } from "@/app/mappers/reference-tool-mapper";
 import { ReferenceCategory } from "@/ddd/domain/chat/value-objects/reference-types";
 import type { ReferenceTool } from "@/ddd/domain/tools/entities/reference-tool";
 import type { Result } from "./types";
 
 /**
- * Enhanced search that returns ReferenceTool objects with proper typing
- * Used by new tool-based chat system
+ * Complete tool search that returns both reference tools and system tools
+ * This is the new recommended method for tool search
  */
-export async function searchReferenceTools(options: {
+export async function searchAllTools(options: {
   query: string;
   categories?: ReferenceCategory[];
   limit?: number;
   offset?: number;
-}): Promise<Result<{
-  referenceTools: ReferenceTool[];
-  hasMore: boolean;
-  totalCount: number;
-  query: string;
-  isLoading: boolean;
-}>> {
+}): Promise<Result<ToolSearchResultDTO>> {
   try {
     const session = await requireAuth();
-    const referenceService = getReferenceApplicationService();
+    const toolSearchService = getToolSearchApplicationService();
 
     const { query, categories, limit = 20, offset = 0 } = options;
 
-    console.log(`[ReferenceActions] Searching reference tools for query: "${query}"`);
+    console.log(`[ReferenceActions] Searching all tools for query: "${query}", categories:`, categories);
 
-    // Use enhanced domain service to search for ReferenceTool objects
-    const searchResult = await referenceService.searchReferenceTools({
+    // Use the new searchAllTools method that properly separates tool types
+    const searchResult = await toolSearchService.searchAllTools({
       query,
       categories,
       limit,
@@ -44,7 +40,79 @@ export async function searchReferenceTools(options: {
       organizationId: OrganizationId.fromNumber(session.user.currentOrganizationId)
     });
 
-    console.log(`[ReferenceActions] Found ${searchResult.referenceTools.length} reference tools (${searchResult.totalCount} total)`);
+    console.log(`[ReferenceActions] Search result:`, {
+      referenceToolsFound: searchResult.referenceTools.length,
+      systemToolsFound: searchResult.systemTools.length,
+      totalCount: searchResult.totalCount,
+      hasMore: searchResult.hasMore
+    });
+
+    // Map to DTOs
+    const referenceToolDTOs = ReferenceToolMapper.toDTOs(searchResult.referenceTools);
+    const systemToolDTOs = ToolMapper.toDTOs(searchResult.systemTools);
+
+    return {
+      success: true,
+      data: {
+        referenceTools: referenceToolDTOs,
+        systemTools: systemToolDTOs,
+        hasMore: searchResult.hasMore,
+        totalCount: searchResult.totalCount
+      }
+    };
+  } catch (error) {
+    console.error('[ReferenceActions] Error searching all tools:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to search tools',
+      data: {
+        referenceTools: [],
+        systemTools: [],
+        hasMore: false,
+        totalCount: 0
+      }
+    };
+  }
+}
+
+/**
+ * Search reference tools only (agents, docs, files, tables, databases)
+ * Used by ToolDropdown.tsx
+ */
+export async function searchReferenceTools(options: {
+  query: string;
+  categories?: ReferenceCategory[];
+  limit?: number;
+  offset?: number;
+}): Promise<Result<{
+  referenceTools: ReferenceToolDTO[];
+  hasMore: boolean;
+  totalCount: number;
+  query: string;
+  isLoading: boolean;
+}>> {
+  try {
+    const session = await requireAuth();
+    const toolSearchService = getToolSearchApplicationService();
+
+    const { query, categories, limit = 20, offset = 0 } = options;
+
+    console.log(`[ReferenceActions] Searching reference tools for query: "${query}", categories:`, categories);
+
+    // Use tool search service to search for ReferenceTool objects only
+    const searchResult = await toolSearchService.searchReferenceTools({
+      query,
+      categories,
+      limit,
+      offset,
+      organizationId: OrganizationId.fromNumber(session.user.currentOrganizationId)
+    });
+
+    console.log(`[ReferenceActions] Search result:`, {
+      toolsFound: searchResult.referenceTools.length,
+      totalCount: searchResult.totalCount,
+      hasMore: searchResult.hasMore
+    });
 
     return {
       success: true,
@@ -52,7 +120,7 @@ export async function searchReferenceTools(options: {
         referenceTools: searchResult.referenceTools,
         hasMore: searchResult.hasMore,
         totalCount: searchResult.totalCount,
-        query: query,
+        query: options.query,
         isLoading: false
       }
     };
@@ -69,117 +137,14 @@ export async function searchReferenceTools(options: {
 }
 
 /**
- * Legacy search references across all categories (documents, files, agents, tables, databases)
- * @deprecated Use searchReferenceTools() instead for proper tool integration
- */
-export async function searchReferences(options: {
-  query: string;
-  categories?: ReferenceCategory[];
-  limit?: number;
-  offset?: number;
-}): Promise<Result<ReferenceSearchResultDTO>> {
-  try {
-    const session = await requireAuth();
-    const referenceService = getReferenceApplicationService();
-
-    const { query, categories, limit = 20, offset = 0 } = options;
-
-    console.log(`[ReferenceActions] Searching references for query: "${query}"`);
-
-    // Use domain service to search across all categories
-    const searchResult = await referenceService.searchReferences({
-      query,
-      categories,
-      limit,
-      offset,
-      organizationId: OrganizationId.fromNumber(session.user.currentOrganizationId)
-    });
-
-    // Convert domain results to DTOs using proper mapper
-    const referenceDTOs = searchResult.references.map(simpleRef =>
-      ReferenceMapper.toDTO({
-        id: simpleRef.id,
-        insertText: simpleRef.insertText,
-        displayName: simpleRef.displayName,
-        description: simpleRef.description,
-        category: simpleRef.category as ReferenceCategory,
-        referencePath: simpleRef.insertText.substring(simpleRef.insertText.indexOf(':') + 1),
-        referencePrefix: simpleRef.insertText.substring(0, simpleRef.insertText.indexOf(':')),
-        equals: () => false,
-        matchesSearch: () => false,
-        toPlain: () => ({} as any)
-      } as any)
-    );
-
-    console.log(`[ReferenceActions] Found ${referenceDTOs.length} references (${searchResult.totalCount} total)`);
-
-    return {
-      success: true,
-      data: {
-        references: referenceDTOs,
-        hasMore: searchResult.hasMore,
-        totalCount: searchResult.totalCount,
-        query: query,
-        isLoading: false
-      }
-    };
-  } catch (error: unknown) {
-    console.error('[ReferenceActions] Error searching references:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return {
-      success: false,
-      error: errorMessage.includes('Authentication required')
-        ? 'Authentication required'
-        : 'Failed to search references'
-    };
-  }
-}
-
-/**
- * Get references by specific category (for category-specific views)
- */
-export async function getReferencesByCategory(
-  category: ReferenceCategory,
-  searchQuery?: string,
-  limit = 50
-): Promise<Result<ReferenceDTO[]>> {
-  try {
-    const session = await requireAuth();
-
-    console.log(`[ReferenceActions] Getting ${category} references with query: "${searchQuery || 'none'}"`);
-
-    const searchResult = await searchReferences({
-      query: searchQuery || '',
-      categories: [category],
-      limit,
-      offset: 0
-    });
-
-    if (!searchResult.success) {
-      return { success: false, error: searchResult.error };
-    }
-
-    return {
-      success: true,
-      data: searchResult.data?.references || []
-    };
-  } catch (error: unknown) {
-    console.error(`[ReferenceActions] Error getting ${category} references:`, error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get references'
-    };
-  }
-}
-
-/**
  * Resolve specific references from chat message mentions
  * Used to populate ReferencesPanel with resolved reference data
+ * Used by ReferencesPanel.tsx, EmeryChat.tsx, CustomChatInput.tsx
  */
 export async function resolveReferences(referenceTexts: string[]): Promise<Result<ReferencePanelStateDTO>> {
   try {
     const session = await requireAuth();
-    const referenceService = getReferenceApplicationService();
+    const toolSearchService = getToolSearchApplicationService();
 
     console.log(`[ReferenceActions] Resolving ${referenceTexts.length} references:`, referenceTexts);
 
@@ -196,8 +161,8 @@ export async function resolveReferences(referenceTexts: string[]): Promise<Resul
           continue;
         }
 
-        // Search for the specific reference
-        const searchResult = await referenceService.searchReferences({
+        // Search for the specific reference using ToolSearchApplicationService
+        const searchResult = await toolSearchService.searchReferenceTools({
           query: searchTerm,
           categories: [category],
           limit: 1,
@@ -206,16 +171,16 @@ export async function resolveReferences(referenceTexts: string[]): Promise<Resul
         });
 
         // Add the first matching result
-        if (searchResult.references.length > 0) {
-          const simpleRef = searchResult.references[0];
+        if (searchResult.referenceTools.length > 0) {
+          const referenceTool = searchResult.referenceTools[0];
           const referenceDTO = ReferenceMapper.toDTO({
-            id: simpleRef.id,
-            insertText: simpleRef.insertText,
-            displayName: simpleRef.displayName,
-            description: simpleRef.description,
-            category: simpleRef.category as ReferenceCategory,
-            referencePath: simpleRef.insertText.substring(simpleRef.insertText.indexOf(':') + 1),
-            referencePrefix: simpleRef.insertText.substring(0, simpleRef.insertText.indexOf(':')),
+            id: `ref-${referenceTool.getDataPointer()}`,
+            insertText: referenceTool.reference.insertText,
+            displayName: referenceTool.reference.displayName,
+            description: referenceTool.reference.description,
+            category: referenceTool.reference.category,
+            referencePath: referenceTool.reference.insertText.substring(referenceTool.reference.insertText.indexOf(':') + 1),
+            referencePrefix: referenceTool.reference.insertText.substring(0, referenceTool.reference.insertText.indexOf(':')),
             equals: () => false,
             matchesSearch: () => false,
             toPlain: () => ({} as any)
@@ -272,94 +237,6 @@ export async function resolveReferences(referenceTexts: string[]): Promise<Resul
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to resolve references'
-    };
-  }
-}
-
-/**
- * Get recent references (for quick access)
- */
-export async function getRecentReferences(limit = 10): Promise<Result<ReferenceDTO[]>> {
-  try {
-    const session = await requireAuth();
-
-    console.log(`[ReferenceActions] Getting ${limit} recent references`);
-
-    // Search all categories with empty query to get recent/popular items
-    const searchResult = await searchReferences({
-      query: '',
-      limit,
-      offset: 0
-    });
-
-    if (!searchResult.success) {
-      return { success: false, error: searchResult.error };
-    }
-
-    return {
-      success: true,
-      data: searchResult.data?.references || []
-    };
-  } catch (error: unknown) {
-    console.error('[ReferenceActions] Error getting recent references:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get recent references'
-    };
-  }
-}
-
-/**
- * Get reference suggestions based on current context (for auto-complete)
- */
-export async function getReferenceSuggestions(
-  partialText: string,
-  context?: { tableId?: number; agentId?: number }
-): Promise<Result<ReferenceDTO[]>> {
-  try {
-    const session = await requireAuth();
-
-    console.log(`[ReferenceActions] Getting suggestions for: "${partialText}"`);
-
-    // Determine categories based on partial text
-    let categories: ReferenceCategory[] | undefined;
-    let query = partialText;
-
-    if (partialText.startsWith('@doc:')) {
-      categories = [ReferenceCategory.DOC];
-      query = partialText.substring(5);
-    } else if (partialText.startsWith('@file:')) {
-      categories = [ReferenceCategory.FILE];
-      query = partialText.substring(6);
-    } else if (partialText.startsWith('@agent:')) {
-      categories = [ReferenceCategory.AGENT];
-      query = partialText.substring(7);
-    } else if (partialText.startsWith('@table:')) {
-      categories = [ReferenceCategory.TABLE];
-      query = partialText.substring(7);
-    } else if (partialText.startsWith('@')) {
-      query = partialText.substring(1);
-    }
-
-    const searchResult = await searchReferences({
-      query,
-      categories,
-      limit: 8 // Smaller limit for suggestions
-    });
-
-    if (!searchResult.success) {
-      return { success: false, error: searchResult.error };
-    }
-
-    return {
-      success: true,
-      data: searchResult.data?.references || []
-    };
-  } catch (error: unknown) {
-    console.error('[ReferenceActions] Error getting suggestions:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get suggestions'
     };
   }
 }
