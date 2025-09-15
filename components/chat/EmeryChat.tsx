@@ -20,7 +20,6 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useLayout } from '@/components/layout/LayoutProvider'
-import { useChatGRPC } from './useChatGRPC'
 import { ChatCanvas } from './ChatCanvas'
 import CustomChatInput from './CustomChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
@@ -355,7 +354,11 @@ function ChatContentWithCanvas({
 }
 
 
-export function EmeryChat() {
+interface EmeryChatProps {
+  handler: any; // Chat handler from layout
+}
+
+export function EmeryChat({ handler }: EmeryChatProps) {
   // ALL HOOKS MUST BE CALLED FIRST - NO CONDITIONAL RETURNS BEFORE THIS POINT
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -388,11 +391,7 @@ export function EmeryChat() {
     handleChatHistoryUpdate()
   }
 
-  const handler = useChatGRPC({
-    domainType: chatContext?.domainType,
-    domainId: chatContext?.domainId,
-    chatId: currentChatId
-  }, handleChatCreated)
+  // Handler is now passed as prop from layout - no local creation needed
 
   // Auto-detect page context if not already set
   useEffect(() => {
