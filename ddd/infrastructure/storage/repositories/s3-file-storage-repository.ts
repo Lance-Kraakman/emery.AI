@@ -48,7 +48,7 @@ export class S3FileStorageRepository implements IFileStorageRepository {
           organizationId: request.organizationId?.toString() || '',
           tableId: request.tableId?.toString() || '',
           fieldId: request.fieldId?.toString() || '',
-          uploadedAt: new Date(),
+          uploadedAt: new Date().toISOString(),
           md5: md5Hash,
           sha256: sha256Hash,
         },
@@ -99,7 +99,7 @@ export class S3FileStorageRepository implements IFileStorageRepository {
         Metadata: {
           originalName: request.filename.replace(/[^\w.-]/g, '_'),
           fieldId: request.fieldId?.value?.toString() || '',
-          uploadedAt: new Date(),
+          uploadedAt: new Date().toISOString(),
           md5: md5Hash,
           sha256: sha256Hash,
           ...(request.metadata || {}),
@@ -264,10 +264,7 @@ export class S3FileStorageRepository implements IFileStorageRepository {
       parts.push(`field_${request.fieldId}`);
     }
     
-    // Add year/month for partitioning
-    const now = new Date();
-    parts.push(now.getFullYear().toString());
-    parts.push((now.getMonth() + 1).toString().padStart(2, '0'));
+    // Remove date-based partitioning for cleaner paths
     
     // Add file ID and sanitized filename
     const sanitizedFilename = request.filename.replace(/[^a-zA-Z0-9.-]/g, '_');
