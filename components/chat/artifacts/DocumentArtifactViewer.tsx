@@ -164,7 +164,7 @@ export function DocumentArtifactViewer({
   // Configure TipTap editor
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit, // Includes Strike and other basic extensions
       Placeholder.configure({
         placeholder: 'Start writing your document...'
       }),
@@ -175,8 +175,7 @@ export function DocumentArtifactViewer({
       TableRow,
       TableHeader,
       TableCell,
-      Underline,
-      Strike,
+      Underline, // Not included in StarterKit
       TextStyle,
       Color,
       Highlight.configure({
@@ -332,9 +331,9 @@ export function DocumentArtifactViewer({
       <div className={styles.editorWrapper}>
         {documentField.documentMetadata?.documentType === 'tiptap' ? (
           // TipTap editor for editable documents
-          <div className="h-full flex flex-col">
+          <>
             {editor ? (
-              <div className="flex flex-col h-full">
+              <>
                 {/* Comprehensive TipTap Toolbar */}
                 {isEditing && (
                   <div className={styles.toolbar}>
@@ -512,7 +511,16 @@ export function DocumentArtifactViewer({
                     </div>
                   </div>
                 )}
-                <div className="flex-1 overflow-hidden">
+                {/* Editor Content Area - Must be flex-1 to fill remaining space */}
+                <div
+                  className="flex-1 flex flex-col overflow-hidden"
+                  onClick={(e) => {
+                    // Focus editor when clicking anywhere in the editor area
+                    if (editor && isEditing) {
+                      editor.commands.focus('end')
+                    }
+                  }}
+                >
                   <div className={styles.tiptapEditor}>
                     <EditorContent
                       editor={editor}
@@ -529,7 +537,7 @@ export function DocumentArtifactViewer({
                     </div>
                   </div>
                 )}
-              </div>
+              </>
             ) : (
               <div className="p-8 border border-dashed border-border rounded-lg bg-muted/20">
                 <div className="text-center">
@@ -538,7 +546,7 @@ export function DocumentArtifactViewer({
                 </div>
               </div>
             )}
-          </div>
+          </>
         ) : (
           // Static content for non-TipTap documents
           <div className="p-8 text-center">
@@ -567,28 +575,6 @@ export function DocumentArtifactViewer({
         )}
       </div>
 
-      {/* Footer */}
-      <div className={styles.documentFooter}>
-        <div className="flex items-center gap-4">
-          {displayInfo.version && (
-            <span className="flex items-center gap-1">
-              <Hash className="w-3 h-3" />
-              v{displayInfo.version}
-            </span>
-          )}
-
-          {documentField.uploadedAt && (
-            <span className="flex items-center gap-1">
-              <Calendar className="w-3 h-3" />
-              {new Date(documentField.uploadedAt).toLocaleDateString()}
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span>Table {artifact.data.tableId} • Field {artifact.data.fieldId}</span>
-        </div>
-      </div>
     </div>
   )
 }

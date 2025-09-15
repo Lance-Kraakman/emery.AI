@@ -10,6 +10,8 @@
 import { requirePermission } from "./permissions";
 import { getDocumentApplicationService, getFileApplicationService } from "@/ddd/application/di/container";
 import { FieldId, OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import type { Result } from "./types";
 import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
@@ -176,6 +178,15 @@ export async function updateTiptapDocumentContent(
   try {
     await requirePermission("data:manage");
 
+    // Get current user from session
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return {
+        success: false,
+        error: "User not authenticated"
+      };
+    }
+
     const documentService = getDocumentApplicationService();
     const result = await documentService.updateTiptapDocument({
       documentId,
@@ -183,7 +194,7 @@ export async function updateTiptapDocumentContent(
       tableId: TableId.fromNumber(tableId),
       fieldId: FieldId.fromNumber(fieldId),
       content: content,
-      updatedBy: UserId.fromString("current-user") // TODO: Get from session
+      updatedBy: UserId.fromString(session.user.id)
     });
 
     if (!result.success) {
