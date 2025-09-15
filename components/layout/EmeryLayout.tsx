@@ -117,7 +117,9 @@ function EmeryLayoutInner({
           {/* Chat Area - always visible */}
           {enableChat && (
             <div className="w-96 border-l border-border">
-              <EmeryChat />
+              <Suspense fallback={<ChatSkeleton />}>
+                <EmeryChat />
+              </Suspense>
             </div>
           )}
         </div>

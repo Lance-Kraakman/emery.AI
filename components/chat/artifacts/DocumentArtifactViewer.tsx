@@ -59,6 +59,7 @@ import {
 import type { DocumentArtifact } from '../types/chat-artifacts'
 import { getDocumentDisplayInfo } from '../types/chat-artifacts'
 import { fetchTiptapDocumentContent, updateTiptapDocumentContent } from '@/app/actions/artifacts'
+import styles from './DocumentArtifactViewer.module.css'
 
 interface DocumentArtifactViewerProps {
   artifact: DocumentArtifact
@@ -262,85 +263,73 @@ export function DocumentArtifactViewer({
   }
 
   return (
-    <div className={`border border-border rounded-lg ${className}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border">
-        <div className="flex items-center gap-3">
-          <FileText className="w-5 h-5 text-primary" />
-          <div>
-            <h3 className="font-medium text-sm text-foreground">{displayInfo.title}</h3>
-            <p className="text-xs text-muted-foreground">{displayInfo.subtitle}</p>
+    <div className={`${styles.editorContainer} ${className}`}>
+      {/* Streamlined Header */}
+      <div className={styles.documentHeader}>
+        <div className={styles.documentTitle}>
+          <FileText className={styles.documentIcon} />
+          <div className="space-y-1">
+            <h3 className={styles.titleText}>{displayInfo.title}</h3>
+            <div className="flex items-center gap-2">
+              <p className={styles.subtitleText}>application/vnd.tiptap+json</p>
+              <span className="text-primary-foreground/40">•</span>
+              <span className={`${styles.subtitleText} ${isEditing ? 'text-accent-foreground bg-accent/20 px-2 py-0.5 rounded-full text-xs' : ''}`}>
+                {isEditing ? 'editing' : 'viewing'}
+              </span>
+            </div>
           </div>
         </div>
-        
-        <div className="flex items-center gap-2">
-          {/* Document metadata */}
-          {displayInfo.wordCount && (
-            <Badge variant="outline" className="text-xs">
-              <Hash className="w-3 h-3 mr-1" />
-              {displayInfo.wordCount} words
-            </Badge>
-          )}
-          
-          {displayInfo.readTime && (
-            <Badge variant="outline" className="text-xs">
-              <Clock className="w-3 h-3 mr-1" />
-              {displayInfo.readTime} min read
-            </Badge>
-          )}
-          
-          {/* Mode toggle */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={toggleMode}
-            className="text-xs"
-          >
-            {isEditing ? (
-              <>
-                <Eye className="w-3 h-3 mr-1" />
-                View
-              </>
-            ) : (
-              <>
-                <Edit3 className="w-3 h-3 mr-1" />
-                Edit
-              </>
+
+        <div className={styles.headerActions}>
+          {/* Document metadata badges */}
+          <div className="flex items-center gap-2">
+            {displayInfo.wordCount && (
+              <Badge variant="outline" className={`text-xs ${styles.documentBadge}`}>
+                <Hash className="w-3 h-3 mr-1" />
+                {displayInfo.wordCount} words
+              </Badge>
             )}
+
+            {hasChanges && (
+              <Badge variant="outline" className="text-xs border-accent/50 bg-accent/10 text-accent-foreground">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent mr-1.5"></span>
+                unsaved
+              </Badge>
+            )}
+          </div>
+
+          {/* Always show Save button for immediate access */}
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleSave}
+            className={`text-xs ${styles.saveButton} ${styles.actionButton} ${hasChanges ? 'ring-2 ring-accent/30' : ''}`}
+            disabled={!hasChanges}
+          >
+            <Save className="w-3 h-3 mr-1" />
+            Save {hasChanges && <span className="ml-1 text-xs opacity-75">(⌘S)</span>}
           </Button>
-          
-          {/* Save button */}
-          {isEditing && hasChanges && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleSave}
-              className="text-xs"
-            >
-              <Save className="w-3 h-3 mr-1" />
-              Save
-            </Button>
-          )}
         </div>
       </div>
 
       {/* Editor Content */}
-      <div className="min-h-[400px]">
+      <div className={styles.editorWrapper}>
         {documentField.documentMetadata?.documentType === 'tiptap' ? (
           // TipTap editor for editable documents
-          <div className={`p-4 ${isEditing ? 'min-h-[400px]' : ''}`}>
+          <div className="p-4">
             {editor ? (
               <div className="relative">
                 {/* Comprehensive TipTap Toolbar */}
                 {isEditing && (
-                  <div className="border border-border rounded-lg mb-4 p-2 bg-background">
-                    <div className="flex flex-wrap gap-1">
+                  <div className={styles.toolbar}>
+                    <div className={styles.toolbarButtons}>
                       {/* Undo/Redo */}
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => editor.chain().focus().undo().run()}
                         disabled={!editor.can().undo()}
+                        className={styles.toolbarButton}
                       >
                         <Undo className="w-4 h-4" />
                       </Button>
@@ -349,17 +338,19 @@ export function DocumentArtifactViewer({
                         size="sm"
                         onClick={() => editor.chain().focus().redo().run()}
                         disabled={!editor.can().redo()}
+                        className={styles.toolbarButton}
                       >
                         <Redo className="w-4 h-4" />
                       </Button>
 
-                      <div className="w-px h-6 bg-border mx-1" />
+                      <div className={styles.toolbarSeparator} />
 
                       {/* Headings */}
                       <Button
                         variant={editor.isActive('heading', { level: 1 }) ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+                        className={styles.toolbarButton}
                       >
                         H1
                       </Button>
@@ -367,6 +358,7 @@ export function DocumentArtifactViewer({
                         variant={editor.isActive('heading', { level: 2 }) ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+                        className={styles.toolbarButton}
                       >
                         H2
                       </Button>
@@ -374,11 +366,12 @@ export function DocumentArtifactViewer({
                         variant={editor.isActive('heading', { level: 3 }) ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+                        className={styles.toolbarButton}
                       >
                         H3
                       </Button>
 
-                      <div className="w-px h-6 bg-border mx-1" />
+                      <div className={styles.toolbarSeparator} />
 
                       {/* Text Formatting */}
                       <Button
@@ -388,6 +381,7 @@ export function DocumentArtifactViewer({
                           console.log('Bold button clicked, editor state:', editor?.isActive('bold'));
                           editor.chain().focus().toggleBold().run();
                         }}
+                        className={styles.toolbarButton}
                       >
                         <Bold className="w-4 h-4" />
                       </Button>
@@ -395,6 +389,7 @@ export function DocumentArtifactViewer({
                         variant={editor.isActive('italic') ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().toggleItalic().run()}
+                        className={styles.toolbarButton}
                       >
                         <Italic className="w-4 h-4" />
                       </Button>
@@ -402,6 +397,7 @@ export function DocumentArtifactViewer({
                         variant={editor.isActive('underline') ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().toggleUnderline().run()}
+                        className={styles.toolbarButton}
                       >
                         <UnderlineIcon className="w-4 h-4" />
                       </Button>
@@ -409,6 +405,7 @@ export function DocumentArtifactViewer({
                         variant={editor.isActive('strike') ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().toggleStrike().run()}
+                        className={styles.toolbarButton}
                       >
                         <Strikethrough className="w-4 h-4" />
                       </Button>
@@ -416,17 +413,19 @@ export function DocumentArtifactViewer({
                         variant={editor.isActive('code') ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().toggleCode().run()}
+                        className={styles.toolbarButton}
                       >
                         <Code className="w-4 h-4" />
                       </Button>
 
-                      <div className="w-px h-6 bg-border mx-1" />
+                      <div className={styles.toolbarSeparator} />
 
                       {/* Lists */}
                       <Button
                         variant={editor.isActive('bulletList') ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().toggleBulletList().run()}
+                        className={styles.toolbarButton}
                       >
                         <List className="w-4 h-4" />
                       </Button>
@@ -434,17 +433,19 @@ export function DocumentArtifactViewer({
                         variant={editor.isActive('orderedList') ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                        className={styles.toolbarButton}
                       >
                         <ListOrdered className="w-4 h-4" />
                       </Button>
 
-                      <div className="w-px h-6 bg-border mx-1" />
+                      <div className={styles.toolbarSeparator} />
 
                       {/* Alignment */}
                       <Button
                         variant={editor.isActive({ textAlign: 'left' }) ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().setTextAlign('left').run()}
+                        className={styles.toolbarButton}
                       >
                         <AlignLeft className="w-4 h-4" />
                       </Button>
@@ -452,6 +453,7 @@ export function DocumentArtifactViewer({
                         variant={editor.isActive({ textAlign: 'center' }) ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().setTextAlign('center').run()}
+                        className={styles.toolbarButton}
                       >
                         <AlignCenter className="w-4 h-4" />
                       </Button>
@@ -459,6 +461,7 @@ export function DocumentArtifactViewer({
                         variant={editor.isActive({ textAlign: 'right' }) ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().setTextAlign('right').run()}
+                        className={styles.toolbarButton}
                       >
                         <AlignRight className="w-4 h-4" />
                       </Button>
@@ -466,17 +469,19 @@ export function DocumentArtifactViewer({
                         variant={editor.isActive({ textAlign: 'justify' }) ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+                        className={styles.toolbarButton}
                       >
                         <AlignJustify className="w-4 h-4" />
                       </Button>
 
-                      <div className="w-px h-6 bg-border mx-1" />
+                      <div className={styles.toolbarSeparator} />
 
                       {/* Quote and Code Block */}
                       <Button
                         variant={editor.isActive('blockquote') ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().toggleBlockquote().run()}
+                        className={styles.toolbarButton}
                       >
                         <Quote className="w-4 h-4" />
                       </Button>
@@ -484,143 +489,70 @@ export function DocumentArtifactViewer({
                         variant={editor.isActive('codeBlock') ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+                        className={styles.toolbarButton}
                       >
                         <Code className="w-4 h-4" />
                       </Button>
                     </div>
                   </div>
                 )}
-                <div className="tiptap-editor">
-                  <EditorContent
-                    editor={editor}
-                    className={isEditing ? 'focus:outline-none' : 'cursor-default'}
-                  />
+                <div className={styles.editorWrapper}>
+                  <div className={styles.tiptapEditor}>
+                    <EditorContent
+                      editor={editor}
+                      className={isEditing ? 'focus:outline-none' : 'cursor-default'}
+                    />
+                  </div>
                 </div>
-                <style jsx>{`
-                  .tiptap-editor :global(.ProseMirror) {
-                    outline: none;
-                    min-height: 200px;
-                    padding: 12px;
-                  }
-
-                  .tiptap-editor :global(.ProseMirror p) {
-                    margin-bottom: 12px;
-                  }
-
-                  .tiptap-editor :global(.ProseMirror h1) {
-                    font-size: 1.5rem;
-                    font-weight: bold;
-                    margin-bottom: 16px;
-                    line-height: 1.2;
-                  }
-
-                  .tiptap-editor :global(.ProseMirror h2) {
-                    font-size: 1.25rem;
-                    font-weight: bold;
-                    margin-bottom: 12px;
-                    line-height: 1.3;
-                  }
-
-                  .tiptap-editor :global(.ProseMirror h3) {
-                    font-size: 1.125rem;
-                    font-weight: bold;
-                    margin-bottom: 8px;
-                    line-height: 1.4;
-                  }
-
-                  .tiptap-editor :global(.ProseMirror strong) {
-                    font-weight: bold;
-                  }
-
-                  .tiptap-editor :global(.ProseMirror em) {
-                    font-style: italic;
-                  }
-
-                  .tiptap-editor :global(.ProseMirror u) {
-                    text-decoration: underline;
-                  }
-
-                  .tiptap-editor :global(.ProseMirror s) {
-                    text-decoration: line-through;
-                  }
-
-                  .tiptap-editor :global(.ProseMirror code) {
-                    background-color: #f3f4f6;
-                    padding: 2px 4px;
-                    border-radius: 4px;
-                    font-family: monospace;
-                  }
-
-                  .tiptap-editor :global(.ProseMirror blockquote) {
-                    border-left: 4px solid #d1d5db;
-                    padding-left: 16px;
-                    font-style: italic;
-                    margin: 16px 0;
-                  }
-
-                  .tiptap-editor :global(.ProseMirror ul) {
-                    list-style-type: disc;
-                    margin-left: 24px;
-                    margin-bottom: 12px;
-                  }
-
-                  .tiptap-editor :global(.ProseMirror ol) {
-                    list-style-type: decimal;
-                    margin-left: 24px;
-                    margin-bottom: 12px;
-                  }
-
-                  .tiptap-editor :global(.ProseMirror li) {
-                    margin-bottom: 4px;
-                  }
-
-                  .tiptap-editor :global(.ProseMirror pre) {
-                    background-color: #1f2937;
-                    color: #f9fafb;
-                    padding: 12px;
-                    border-radius: 6px;
-                    margin: 16px 0;
-                    overflow-x: auto;
-                  }
-                `}</style>
                 {/* Show placeholder for empty documents in view mode */}
                 {!isEditing && editor.isEmpty && (
-                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                    <p className="text-sm italic">This document is empty</p>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center space-y-2">
+                      <p className="text-sm text-muted-foreground italic">This document is empty</p>
+                      <p className="text-xs text-muted-foreground/60">Switch to edit mode to add content</p>
+                    </div>
                   </div>
                 )}
               </div>
             ) : (
-              <div className="p-4 border border-dashed border-gray-300 rounded">
-                <p>Editor not initialized</p>
+              <div className="p-8 border border-dashed border-border rounded-lg bg-muted/20">
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">Editor not initialized</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Please refresh the page if this persists</p>
+                </div>
               </div>
             )}
           </div>
         ) : (
           // Static content for non-TipTap documents
-          <div className="p-4 text-center text-muted-foreground">
-            <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
-            <p className="text-sm font-medium mb-1 text-foreground">{documentField.name}</p>
-            <p className="text-xs mb-3">{documentField.mimeType}</p>
-            <p className="text-xs">
-              This document type cannot be edited inline.
-            </p>
-            {artifact.data.fileUrl && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="mt-3"
-                onClick={() => window.open(artifact.data.fileUrl, '_blank')}
-              >
-                Open External
-              </Button>
-            )}
+          <div className="p-8 text-center">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <FileText className="w-16 h-16 text-muted-foreground/40" />
+              <div className="space-y-2">
+                <p className="text-base font-medium text-foreground">{documentField.name}</p>
+                <p className="text-sm text-muted-foreground">{documentField.mimeType}</p>
+                <p className="text-xs text-muted-foreground/80 max-w-xs">
+                  This document type cannot be edited inline. Use the external viewer to access content.
+                </p>
+              </div>
+              {artifact.data.fileUrl && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`mt-4 ${styles.actionButton}`}
+                  onClick={() => window.open(artifact.data.fileUrl, '_blank')}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Open External
+                </Button>
+              )}
+            </div>
           </div>
         )}
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between p-3 border-t border-border text-xs text-muted-foreground">
+      <div className={styles.documentFooter}>
         <div className="flex items-center gap-4">
           {displayInfo.version && (
             <span className="flex items-center gap-1">
@@ -628,7 +560,7 @@ export function DocumentArtifactViewer({
               v{displayInfo.version}
             </span>
           )}
-          
+
           {documentField.uploadedAt && (
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
@@ -636,7 +568,7 @@ export function DocumentArtifactViewer({
             </span>
           )}
         </div>
-        
+
         <div className="flex items-center gap-2">
           <span>Table {artifact.data.tableId} • Field {artifact.data.fieldId}</span>
         </div>
