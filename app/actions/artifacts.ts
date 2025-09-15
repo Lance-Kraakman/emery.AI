@@ -162,3 +162,46 @@ export async function getFileDownloadUrl(
     };
   }
 }
+
+/**
+ * Update TipTap document content
+ */
+export async function updateTiptapDocumentContent(
+  documentId: string,
+  organizationId: number,
+  tableId: number,
+  fieldId: number,
+  content: object
+): Promise<Result<DocumentFieldValue>> {
+  try {
+    await requirePermission("data:edit");
+
+    const documentService = getDocumentApplicationService();
+    const result = await documentService.updateTiptapDocument({
+      documentId,
+      organizationId: OrganizationId.fromNumber(organizationId),
+      tableId: TableId.fromNumber(tableId),
+      fieldId: FieldId.fromNumber(fieldId),
+      content: content,
+      updatedBy: UserId.fromString("current-user") // TODO: Get from session
+    });
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to update document"
+      };
+    }
+
+    return {
+      success: true,
+      data: result.data!
+    };
+  } catch (error) {
+    console.error("Error updating TipTap document:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update document"
+    };
+  }
+}
