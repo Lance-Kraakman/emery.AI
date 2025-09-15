@@ -23,7 +23,7 @@ export async function fetchDocumentArtifactData(
   mimeType: string
 ): Promise<Result<DocumentFieldValue>> {
   try {
-    await requirePermission("data:read");
+    await requirePermission("data:view");
 
     // Create DocumentFieldValue with real data from tool config
     const documentField: DocumentFieldValue = {
@@ -63,7 +63,7 @@ export async function fetchFileArtifactData(
   mimeType: string
 ): Promise<Result<FileFieldValue>> {
   try {
-    await requirePermission("data:read");
+    await requirePermission("data:view");
 
     // Create FileFieldValue with real data from tool config
     const fileField: FileFieldValue = {
@@ -96,7 +96,7 @@ export async function getFileDownloadUrl(
   organizationId: number
 ): Promise<Result<string>> {
   try {
-    await requirePermission("data:read");
+    await requirePermission("data:view");
 
     // TODO: Implement proper download URL generation
     // For now, return a placeholder URL structure

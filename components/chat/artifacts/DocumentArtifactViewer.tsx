@@ -52,26 +52,27 @@ export function DocumentArtifactViewer({
   const [isEditing, setIsEditing] = useState(mode === 'edit')
   const [documentTitle, setDocumentTitle] = useState('')
   const [hasChanges, setHasChanges] = useState(false)
-  const [content, setContent] = useState('')
-
   // Extract display information
   const displayInfo = getDocumentDisplayInfo(artifact)
 
-  // Initialize content and title
-  useEffect(() => {
-    // Set title from artifact display info
-    setDocumentTitle(displayInfo.title)
-
-    // For TipTap documents, try to parse content
+  // Initialize content based on document type
+  const getInitialContent = () => {
     if (documentField.documentMetadata?.documentType === 'tiptap') {
       // AIDEV-TODO: Load actual TipTap content from file URL or S3
       // For now, show placeholder content
-      setContent('<p>Loading document content...</p>')
+      return '<p>Loading document content...</p>'
     } else {
       // For non-TipTap documents, show document info
-      setContent(`<p><em>Document: ${documentField.name}</em></p><p>Type: ${documentField.mimeType}</p>`)
+      return `<p><em>Document: ${documentField.name}</em></p><p>Type: ${documentField.mimeType}</p>`
     }
-  }, [documentField, displayInfo.title])
+  }
+
+  const [content, setContent] = useState(getInitialContent())
+
+  // Initialize title
+  useEffect(() => {
+    setDocumentTitle(displayInfo.title)
+  }, [displayInfo.title])
 
   // Configure TipTap editor
   const editor = useEditor({
@@ -93,6 +94,7 @@ export function DocumentArtifactViewer({
     ],
     content: content,
     editable: isEditing,
+    immediatelyRender: false, // Fix SSR hydration mismatch
     onUpdate: ({ editor }) => {
       const newContent = editor.getHTML()
       setContent(newContent)
