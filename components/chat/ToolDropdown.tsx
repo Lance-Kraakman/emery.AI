@@ -13,8 +13,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { searchReferenceTools } from '@/app/actions/references';
+import { searchAllTools } from '@/app/actions/references';
 import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper';
+import type { ToolDTO, ToolSearchResultDTO } from '@/app/mappers/tool-mapper';
 import { ReferenceCategory, REFERENCE_CATEGORY_INFO } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ChevronDown, Search, Loader2, FileText, Bot, Database, Table, File } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -23,7 +24,7 @@ interface ToolDropdownProps {
   query: string;
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (tool: ReferenceToolDTO) => void;
+  onSelect: (tool: ReferenceToolDTO | ToolDTO) => void;
   position?: {
     top: number;
     left: number;
@@ -69,10 +70,10 @@ export function ToolDropdown({
     isLoading,
     error
   } = useQuery({
-    queryKey: ['search-reference-tools', query, selectedCategories],
+    queryKey: ['search-all-tools', query, selectedCategories],
     queryFn: async () => {
       try {
-        const result = await searchReferenceTools({
+        const result = await searchAllTools({
           query,
           categories: selectedCategories.length > 0 ? selectedCategories : undefined,
           limit: 20,
@@ -91,12 +92,16 @@ export function ToolDropdown({
         throw error;
       }
     },
-    enabled: isOpen && query.length > 0 && isClient,
+    enabled: isOpen && isClient,
     staleTime: 30 * 1000, // 30 seconds
     retry: 1,
   });
 
-  const tools = searchResult?.referenceTools ?? [];
+  // Combine and categorize all tools
+  const allTools: (ReferenceToolDTO | ToolDTO)[] = [
+    ...(searchResult?.systemTools ?? []),
+    ...(searchResult?.referenceTools ?? [])
+  ];
 
   // Reset selected index when query changes
   useEffect(() => {
@@ -110,7 +115,7 @@ export function ToolDropdown({
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedIndex(prev => Math.min(prev + 1, tools.length - 1));
+        setSelectedIndex(prev => Math.min(prev + 1, allTools.length - 1));
         break;
       case 'ArrowUp':
         e.preventDefault();
@@ -118,8 +123,8 @@ export function ToolDropdown({
         break;
       case 'Enter':
         e.preventDefault();
-        if (tools[selectedIndex]) {
-          onSelect(tools[selectedIndex]);
+        if (allTools[selectedIndex]) {
+          onSelect(allTools[selectedIndex]);
         }
         break;
       case 'Escape':
@@ -127,7 +132,7 @@ export function ToolDropdown({
         onClose();
         break;
     }
-  }, [isOpen, selectedIndex, tools, onSelect, onClose]);
+  }, [isOpen, selectedIndex, allTools, onSelect, onClose]);
 
   useEffect(() => {
     if (isOpen) {
@@ -198,26 +203,40 @@ export function ToolDropdown({
           <div className="p-4 text-center text-sm text-red-600">
             Failed to load tools. Please try again.
           </div>
-        ) : tools.length === 0 ? (
+        ) : allTools.length === 0 ? (
           <div className="p-4 text-center text-sm text-gray-500">
             {query.trim() ? 'No tools found' : 'Type to search tools'}
           </div>
         ) : (
           <>
-            {tools.map((tool, index) => {
+            {allTools.map((tool, index) => {
               try {
-                // Safely get display info with error handling
-                const displayInfo = {
-                  displayName: tool?.displayName || 'Unknown Tool',
-                  description: tool?.description || 'Tool description not available',
-                  insertText: tool?.insertText || '@unknown',
-                  category: tool?.category || ReferenceCategory.DOC,
-                  supportsArtifacts: tool?.supportsArtifacts || false
+                // Check if it's a reference tool or system tool
+                const isReferenceTool = 'toolName' in tool;
+
+                // Create display info based on tool type
+                const displayInfo = isReferenceTool ? {
+                  displayName: tool.displayName || 'Unknown Tool',
+                  description: tool.description || 'Tool description not available',
+                  insertText: tool.insertText || '@unknown',
+                  category: tool.category || ReferenceCategory.DOC,
+                  supportsArtifacts: tool.supportsArtifacts || false
+                } : {
+                  displayName: tool.displayName || 'Unknown Tool',
+                  description: tool.description || 'Tool description not available',
+                  insertText: `@tool:${tool.name}`,
+                  category: tool.category,
+                  supportsArtifacts: false
                 };
 
-                const Icon = categoryIcons[displayInfo.category as ReferenceCategory] || FileText;
+                const Icon = isReferenceTool
+                  ? (categoryIcons[displayInfo.category as ReferenceCategory] || FileText)
+                  : FileText; // Default for system tools
                 const isSelected = index === selectedIndex;
-                const toolId = tool?.id || `tool-${index}`;
+                // Create unique key based on tool type and ID
+                const toolId = isReferenceTool
+                  ? `ref-${tool.id || index}`
+                  : `sys-${tool.name || index}`;
 
                 return (
                   <button
@@ -270,9 +289,9 @@ export function ToolDropdown({
 
       {/* Footer */}
       <div className="p-2 border-t border-gray-100 text-xs text-gray-400 text-center">
-        {tools.length > 0 && (
+        {allTools.length > 0 && (
           <>
-            {tools.length} tool{tools.length !== 1 ? 's' : ''}
+            {allTools.length} tool{allTools.length !== 1 ? 's' : ''}
           </>
         )}
       </div>

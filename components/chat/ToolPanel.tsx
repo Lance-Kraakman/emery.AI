@@ -12,39 +12,47 @@ import React, { useState } from 'react'
 import { FileText, File, Database, Users, Plus, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper'
+import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
 
 interface ToolPanelProps {
-  tools?: ReferenceToolDTO[] // Selected tools
-  onToolClick: (tool: ReferenceToolDTO) => void // Handle tool click (artifact opening, etc.)
+  tools?: (ReferenceToolDTO | ToolDTO)[] // Selected tools
+  onToolClick: (tool: ReferenceToolDTO | ToolDTO) => void // Handle tool click (artifact opening, etc.)
   onAddTool?: () => void // Trigger @ dropdown for adding tools
-  onRemoveTool?: (tool: ReferenceToolDTO) => void // Remove tool from selection
+  onRemoveTool?: (tool: ReferenceToolDTO | ToolDTO) => void // Remove tool from selection
   isLoading?: boolean
   className?: string
 }
 
 interface ToolCardProps {
-  tool: ReferenceToolDTO
+  tool: ReferenceToolDTO | ToolDTO
   onClick: () => void
   onRemove?: () => void
 }
 
 function ToolCard({ tool, onClick, onRemove }: ToolCardProps) {
+  const isReferenceTool = 'toolName' in tool;
+
   // Determine icon based on tool category
   const getIcon = () => {
-    switch (tool.category) {
-      case ReferenceCategory.DOC:
-        return <FileText className="h-4 w-4 text-blue-600" />
-      case ReferenceCategory.FILE:
-        return <File className="h-4 w-4 text-green-600" />
-      case ReferenceCategory.TABLE:
-        return <Database className="h-4 w-4 text-purple-600" />
-      case ReferenceCategory.AGENT:
-        return <Users className="h-4 w-4 text-orange-600" />
-      case ReferenceCategory.DATABASE:
-        return <Database className="h-4 w-4 text-gray-600" />
-      default:
-        return <FileText className="h-4 w-4 text-gray-600" />
+    if (isReferenceTool) {
+      switch (tool.category) {
+        case ReferenceCategory.DOC:
+          return <FileText className="h-4 w-4 text-blue-600" />
+        case ReferenceCategory.FILE:
+          return <File className="h-4 w-4 text-green-600" />
+        case ReferenceCategory.TABLE:
+          return <Database className="h-4 w-4 text-purple-600" />
+        case ReferenceCategory.AGENT:
+          return <Users className="h-4 w-4 text-orange-600" />
+        case ReferenceCategory.DATABASE:
+          return <Database className="h-4 w-4 text-gray-600" />
+        default:
+          return <FileText className="h-4 w-4 text-gray-600" />
+      }
+    } else {
+      // System tool icons - use generic icons for now
+      return <Plus className="h-4 w-4 text-gray-600" />
     }
   }
 
@@ -54,7 +62,7 @@ function ToolCard({ tool, onClick, onRemove }: ToolCardProps) {
   }
 
   // Check if tool can be opened as artifact
-  const canOpenArtifact = tool.supportsArtifacts
+  const canOpenArtifact = isReferenceTool && tool.supportsArtifacts
 
   return (
     <div className="relative flex items-center group">
@@ -163,14 +171,18 @@ export function ToolPanel({
 
             {/* Selected Tools */}
             {tools.length > 0 ? (
-              tools.map((toolDTO, index) => (
-                <ToolCard
-                  key={`${toolDTO.category}-${toolDTO.id}-${index}`}
-                  tool={toolDTO}
-                  onClick={() => onToolClick(toolDTO)} // Pass DTO
-                  onRemove={onRemoveTool ? () => onRemoveTool(toolDTO) : undefined}
-                />
-              ))
+              tools.map((toolDTO, index) => {
+                // Create type-safe key for both tool types
+                const toolKey = 'toolName' in toolDTO ? toolDTO.id : toolDTO.name;
+                return (
+                  <ToolCard
+                    key={`${toolDTO.category}-${toolKey}-${index}`}
+                    tool={toolDTO}
+                    onClick={() => onToolClick(toolDTO)} // Pass DTO
+                    onRemove={onRemoveTool ? () => onRemoveTool(toolDTO) : undefined}
+                  />
+                );
+              })
             ) : !isLoading ? (
               /* Empty State with Helpful Hint */
               <div className="text-sm text-muted-foreground py-2">
