@@ -69,7 +69,7 @@ export class S3FileStorageRepository implements IFileStorageRepository {
         name: request.filename,
         size: request.buffer.length,
         mimeType: request.mimeType,
-        uploadedAt: new Date(),
+        uploadedAt: new Date().toISOString(),
         metadata: request.metadata,
         checksums: {
           md5: md5Hash,
@@ -79,6 +79,56 @@ export class S3FileStorageRepository implements IFileStorageRepository {
     } catch (error) {
       throw new FileStorageError(
         `Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'NETWORK_ERROR',
+        { filename: request.filename, size: request.buffer.length }
+      );
+    }
+  }
+
+  // Update existing file with new content
+  async updateFile(key: FileKey, request: FileUploadRequest): Promise<StoredFile> {
+    try {
+      const md5Hash = crypto.createHash('md5').update(request.buffer).digest('hex');
+      const sha256Hash = crypto.createHash('sha256').update(request.buffer).digest('hex');
+
+      const commandParams: any = {
+        Bucket: this.bucketName,
+        Key: key, // Use existing key (FileKey is already a string)
+        Body: request.buffer,
+        ContentType: request.mimeType,
+        Metadata: {
+          originalName: request.filename.replace(/[^\w.-]/g, '_'),
+          fieldId: request.fieldId?.value?.toString() || '',
+          uploadedAt: new Date().toISOString(),
+          md5: md5Hash,
+          sha256: sha256Hash,
+          ...(request.metadata || {}),
+        },
+      };
+
+      if (this.shouldUseEncryption()) {
+        commandParams.ServerSideEncryption = 'AES256';
+      }
+
+      const command = new PutObjectCommand(commandParams);
+      await this.s3.send(command);
+
+      return {
+        id: key, // Return the same ID (FileKey is already a string)
+        key,
+        name: request.filename,
+        size: request.buffer.length,
+        mimeType: request.mimeType,
+        uploadedAt: new Date().toISOString(),
+        metadata: request.metadata,
+        checksums: {
+          md5: md5Hash,
+          sha256: sha256Hash,
+        },
+      };
+    } catch (error) {
+      throw new FileStorageError(
+        `Failed to update file: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'NETWORK_ERROR',
         { filename: request.filename, size: request.buffer.length }
       );

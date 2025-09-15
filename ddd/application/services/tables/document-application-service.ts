@@ -202,18 +202,12 @@ export class DocumentApplicationService {
 
       const fileBuffer = Buffer.from(JSON.stringify(updatedJson, null, 2), 'utf-8');
 
-      // 3. Delete old file and upload new version using existing service
-      await this.fileUseCases.deleteFile({
+      // 3. Update existing file using updateFile to preserve the same S3 key/ID
+      const updateResult = await this.fileUseCases.updateFile({
         fileId: command.documentId,
         fieldId: command.fieldId,
         tableId: command.tableId,
-        organizationId: command.organizationId
-      });
-
-      const uploadResult = await this.fileUseCases.uploadFile({
         organizationId: command.organizationId,
-        tableId: command.tableId,
-        fieldId: command.fieldId,
         file: {
           buffer: fileBuffer,
           filename: `${existingContent.data?.metadata?.title || 'document'}.tiptap.json`,
@@ -221,14 +215,14 @@ export class DocumentApplicationService {
         }
       });
 
-      if (!uploadResult.success) {
-        return { success: false, error: uploadResult.error };
+      if (!updateResult.success) {
+        return { success: false, error: updateResult.error };
       }
 
       // 4. Create updated document field value
       const documentField = DocumentField.fromFieldValue(
         {
-          ...uploadResult.data,
+          ...updateResult.data,
           documentMetadata: {
             title: existingContent.data?.metadata?.title || 'Untitled',
             version: updatedJson.metadata.version,
