@@ -72,15 +72,58 @@ export async function GET(
       );
     }
 
-    // Construct S3 key using the same pattern as uploads
-    // Note: This is a simplified approach. In production, you'd query the row data
-    // to get the exact s3Key from the FileFieldValue stored in the database
-    const s3Key = `org-${table.organizationId}/table-${tableId}/field-${fieldId}/${new Date().getFullYear()}/${(new Date().getMonth() + 1).toString().padStart(2, '0')}/${fileId}_${filename || 'file'}`;
+    // Query the row data to find the actual file with matching fileId
+    // Dynamic table query using the field_{id} column pattern
+    const columnName = `field_${fieldId}`;
+    const tableName = `table_${tableId}`;
+
+    // Validate column and table names (security check for SQL injection)
+    if (!/^field_\d+$/.test(columnName) || !/^table_\d+$/.test(tableName)) {
+      return NextResponse.json(
+        { error: "Invalid table or field identifier" },
+        { status: 400 }
+      );
+    }
+
+    // Raw SQL query to find the file in the dynamic table
+    // Note: Column and table names cannot be parameterized, but we validate them above
+    const queryResult = await db.execute(`
+      SELECT ${columnName} as file_data
+      FROM ${tableName}
+      WHERE organization_id = $1
+      AND ${columnName} IS NOT NULL
+    `, [table.organizationId]);
+
+    // Find the row that contains our fileId
+    let fileData: any = null;
+    for (const row of queryResult.rows) {
+      try {
+        const files = Array.isArray(row.file_data) ? row.file_data : [row.file_data];
+        const matchingFile = files.find((f: any) => f && f.id === fileId);
+        if (matchingFile) {
+          fileData = matchingFile;
+          break;
+        }
+      } catch (error) {
+        console.warn('Error parsing file data from row:', error);
+        continue;
+      }
+    }
+
+    if (!fileData || !fileData.s3Key) {
+      return NextResponse.json(
+        { error: "File not found in database" },
+        { status: 404 }
+      );
+    }
+
+    // Use the actual S3 key from the database
+    const s3Key = fileData.s3Key;
 
     // Generate signed URL (15 minutes expiry)
     const downloadUrl = await fileStorageRepository.generateDownloadUrl(s3Key, {
       expiresIn: 900, // 15 minutes
-      downloadFilename: filename || undefined
+      downloadFilename: fileData.name || filename || undefined
     });
 
     return NextResponse.json({ 

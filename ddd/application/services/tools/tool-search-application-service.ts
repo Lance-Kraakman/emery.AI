@@ -366,8 +366,14 @@ export class ToolSearchApplicationService {
         try {
           // Get table fields to map fieldSlug to fieldId
           const tableFields = await this.tableApplicationService.getFieldsForTable(table.id);
+
+          // Skip tables without document or file fields
+          const documentFields = tableFields.filter(field => field.type === 'document' || field.type === 'file');
+          if (documentFields.length === 0) continue;
+
+          // Map field name (slug) to fieldId - the FieldValue.fieldSlug is the field name, not column name
           const fieldSlugToIdMap = new Map(
-            tableFields.map(field => [field.getColumnName(), field.id.value])
+            tableFields.map(field => [field.name, field.id.value])
           );
 
           // Use TableApplicationService.getRows with proper pagination
@@ -389,6 +395,7 @@ export class ToolSearchApplicationService {
               for (const fieldValue of rowDTO.fieldValues) {
                 const fieldId = fieldSlugToIdMap.get(fieldValue.fieldSlug);
                 if (!fieldId) continue; // Skip if we can't find the fieldId
+
                 if (fieldValue.fieldType === 'document' && fieldValue.value && isDocumentArray(fieldValue.value)) {
                   // Handle DocumentArrayFieldValue - iterate through each document
                   const docArray = fieldValue.value as DocumentFieldValue[];
@@ -427,6 +434,9 @@ export class ToolSearchApplicationService {
                           title,
                           fileField.mimeType || 'application/octet-stream',
                           table.name,
+                          table.id.value,
+                          fieldId,
+                          rowDTO.id,
                           database.name
                         )
                       );
@@ -443,6 +453,7 @@ export class ToolSearchApplicationService {
       }
     }
 
+    console.log(`[searchDocumentTools] Search completed. Found ${allDocumentTools.length} total documents`);
     return allDocumentTools.slice(0, limit);
   }
 

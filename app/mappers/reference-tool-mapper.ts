@@ -50,6 +50,9 @@ export interface ReferenceToolDTO {
     fileId?: string
     filename?: string
     fileMimeType?: string
+    fileTableId?: number
+    fileFieldId?: number
+    fileRowId?: string
 
     // Database tool config
     databaseId?: string
@@ -119,6 +122,9 @@ export function mapReferenceToolToDTO(referenceTool: ReferenceTool): ReferenceTo
     dto.config.filename = fileConfig.filename
     dto.config.fileMimeType = fileConfig.mimeType
     dto.config.organizationId = fileConfig.organizationId
+    dto.config.fileTableId = fileConfig.tableId
+    dto.config.fileFieldId = fileConfig.fieldId
+    dto.config.fileRowId = fileConfig.rowId
   } else if (referenceTool.toolConfig.isDatabaseTool()) {
     const dbConfig = referenceTool.toolConfig.getDatabaseConfig()!
     dto.config.databaseId = dbConfig.databaseId

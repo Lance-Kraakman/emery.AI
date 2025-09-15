@@ -56,6 +56,8 @@ export function DocumentArtifactViewer({
 
   const [content, setContent] = useState('<p>Loading document content...</p>')
   const [isLoadingContent, setIsLoadingContent] = useState(false)
+  const [loadAttempts, setLoadAttempts] = useState(0)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Initialize title
   useEffect(() => {
