@@ -21,6 +21,8 @@ import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/val
 export interface DocumentArtifactData {
   /** Document data from existing DTO */
   documentField: DocumentFieldValue
+  /** Organization context for document */
+  organizationId: number
   /** Table context for document */
   tableId: number
   /** Field context for document */
@@ -104,6 +106,7 @@ export function isEmeryArtifact(artifact: any): artifact is EmeryArtifact {
  */
 export function createDocumentArtifact(
   documentField: DocumentFieldValue,
+  organizationId: number,
   tableId: number,
   fieldId: number,
   mode: 'view' | 'edit' = 'view',
@@ -116,6 +119,7 @@ export function createDocumentArtifact(
     type: 'emery-document',
     data: {
       documentField,
+      organizationId,
       tableId,
       fieldId,
       mode,

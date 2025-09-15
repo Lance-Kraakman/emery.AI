@@ -45,6 +45,9 @@ export interface DocumentToolConfig extends BaseToolConfig {
   filename: string
   mimeType: string
   organizationId: number
+  tableId: number
+  fieldId: number
+  rowId: string
   path?: string
   size?: number
 }
@@ -57,6 +60,9 @@ export interface FileToolConfig extends BaseToolConfig {
   filename: string
   mimeType: string
   organizationId: number
+  tableId: number
+  fieldId: number
+  rowId: string
   path?: string
   size?: number
   uploadedBy?: string
@@ -185,13 +191,19 @@ export class ToolConfig {
     filename: string,
     mimeType: string,
     organizationId: number,
+    tableId: number,
+    fieldId: number,
+    rowId: string,
     version: string = '1.0'
   ): ToolConfig {
     const config: DocumentToolConfig = {
       documentId,
       filename,
       mimeType,
-      organizationId
+      organizationId,
+      tableId,
+      fieldId,
+      rowId
     }
     return new ToolConfig(name, version, config)
   }
@@ -205,13 +217,19 @@ export class ToolConfig {
     filename: string,
     mimeType: string,
     organizationId: number,
+    tableId: number,
+    fieldId: number,
+    rowId: string,
     version: string = '1.0'
   ): ToolConfig {
     const config: FileToolConfig = {
       fileId,
       filename,
       mimeType,
-      organizationId
+      organizationId,
+      tableId,
+      fieldId,
+      rowId
     }
     return new ToolConfig(name, version, config)
   }

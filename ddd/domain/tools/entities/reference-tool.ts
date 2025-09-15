@@ -95,9 +95,12 @@ export class ReferenceTool extends Tool {
     filename: string,
     mimeType: string,
     tableName: string,
+    tableId: number,
+    fieldId: number,
+    rowId: string,
     databaseName?: string
   ): ReferenceTool {
-    const toolConfig = ToolConfig.document(`doc-${documentId}`, documentId, filename, mimeType, organizationId)
+    const toolConfig = ToolConfig.document(`doc-${documentId}`, documentId, filename, mimeType, organizationId, tableId, fieldId, rowId)
     const toolMetadata = ToolMetadata.reference(
       `doc-${documentId}`,
       filename,

@@ -252,8 +252,14 @@ function ChatContentWithCanvas({
       )
 
       if (result.success && result.data) {
-        // Create artifact and open in canvas
-        const artifact = createDocumentArtifact(result.data, 1, 1, 'view')
+        // Create artifact and open in canvas using tool config data
+        const artifact = createDocumentArtifact(
+          result.data,
+          tool.config.organizationId,
+          tool.config.documentTableId!,
+          tool.config.documentFieldId!,
+          'view'
+        )
         openArtifactInCanvas(artifact)
         console.log('Document artifact opened in canvas:', artifact)
       } else {
@@ -294,12 +300,15 @@ function ChatContentWithCanvas({
       <div ref={handler.scrollRef} className="flex-1 overflow-y-auto flex flex-col px-1">
         {/* Messages area */}
         <div className="flex-1">
-          <ChatMessages className="bg-transparent px-3 py-1 text-sm
-            [&_*]:text-sm [&_pre]:text-xs [&_code]:text-xs [&_p]:text-sm [&_p]:leading-5
-            [&_div]:text-sm [&_span]:text-sm [&_li]:text-sm [&_ul]:text-sm [&_ol]:text-sm
-            [&_button]:text-xs [&_button]:px-2 [&_button]:py-1 [&_button]:float-right [&_button]:ml-2
-            [&_*]:break-words [&_*]:hyphens-auto [&_div:has(button)]:clear-both
-          " />
+          <ChatMessages
+            handler={handler}
+            className="bg-transparent px-3 py-1 text-sm
+              [&_*]:text-sm [&_pre]:text-xs [&_code]:text-xs [&_p]:text-sm [&_p]:leading-5
+              [&_div]:text-sm [&_span]:text-sm [&_li]:text-sm [&_ul]:text-sm [&_ol]:text-sm
+              [&_button]:text-xs [&_button]:px-2 [&_button]:py-1 [&_button]:float-right [&_button]:ml-2
+              [&_*]:break-words [&_*]:hyphens-auto [&_div:has(button)]:clear-both
+            "
+          />
         </div>
 
         {/* Suggestions at bottom of messages area when no messages */}

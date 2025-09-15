@@ -75,6 +75,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         
         const documentArtifact = createDocumentArtifact(
           documentFieldValue,
+          organizationId,
           tableId,
           field.id || 0,
           'edit', // TipTap documents are editable

@@ -42,6 +42,7 @@ export function DocumentFieldCell({
     
     const documentArtifact = createDocumentArtifact(
       documentValue,
+      organizationId,
       tableId,
       field.id,
       'edit' // Document fields are always editable
