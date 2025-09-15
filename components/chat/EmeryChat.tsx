@@ -33,6 +33,7 @@ import { createDocumentArtifact, createFileArtifact } from './types/chat-artifac
 import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
 import { fetchDocumentArtifactData, fetchFileArtifactData, getFileDownloadUrl } from '@/app/actions/artifacts'
 import { mapReferenceToolToDTO, type ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper'
+import type { ToolDTO } from '@/app/mappers/tool-mapper'
 
 /**
  * EmeryChat - Main chat component with LlamaIndex integration
@@ -214,7 +215,7 @@ export function EmeryChat() {
   const [isClient, setIsClient] = useState(false)
 
   // Tools state for @ tool selection
-  const [selectedTools, setSelectedTools] = useState<ReferenceToolDTO[]>([])
+  const [selectedTools, setSelectedTools] = useState<(ReferenceToolDTO | ToolDTO)[]>([])
 
   // Handle chat history updates (callback for forcing refresh)
   const handleChatHistoryUpdate = () => {
@@ -370,13 +371,19 @@ export function EmeryChat() {
   }
 
   // Handle tool changes from chat input
-  const handleToolsChange = (tools: ReferenceToolDTO[]) => {
+  const handleToolsChange = (tools: (ReferenceToolDTO | ToolDTO)[]) => {
     setSelectedTools(tools)
   }
 
   // Handle tool click from panel - receives ReferenceTool, works with DTO
-  const handleToolClick = async (tool: ReferenceToolDTO) => {
+  const handleToolClick = async (tool: ReferenceToolDTO | ToolDTO) => {
     console.log('Tool clicked:', tool)
+
+    // Only handle reference tools for artifact opening
+    if (!('toolName' in tool)) {
+      console.log('System tool clicked:', tool.name)
+      return
+    }
 
     if (tool.category === ReferenceCategory.DOC) {
       // Fetch real document data using DTO config
@@ -449,9 +456,17 @@ export function EmeryChat() {
   }
 
   // Handle removing tool from panel
-  const handleRemoveTool = (toolToRemove: ReferenceToolDTO) => {
+  const handleRemoveTool = (toolToRemove: ReferenceToolDTO | ToolDTO) => {
     // Remove from selected tools
-    const updatedTools = selectedTools.filter(tool => tool.id !== toolToRemove.id)
+    const updatedTools = selectedTools.filter(tool => {
+      if ('toolName' in tool && 'toolName' in toolToRemove) {
+        return tool.id !== toolToRemove.id
+      }
+      if (!('toolName' in tool) && !('toolName' in toolToRemove)) {
+        return tool.name !== toolToRemove.name
+      }
+      return true
+    })
     setSelectedTools(updatedTools)
 
     // TODO: Also update the input text to remove the tool reference
