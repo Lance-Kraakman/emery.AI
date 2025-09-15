@@ -58,7 +58,7 @@ import { TableApplicationService } from '@/ddd/application/services/tables/table
 import { FileUseCases } from '@/ddd/application/services/tables/file-application-service';
 import { DocumentApplicationService } from '@/ddd/application/services/tables/document-application-service';
 import { ChatApplicationService } from '@/ddd/application/services/chat/chat-application-service';
-import { ReferenceApplicationService } from '@/ddd/application/services/chat/reference-application-service';
+import { ToolSearchApplicationService } from '@/ddd/application/services/tools/tool-search-application-service';
 
 // Domain services
 import { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
@@ -143,7 +143,7 @@ interface RepositoryRegistry {
   IChatRepository: IChatRepository;
   IChatMessageRepository: IChatMessageRepository;
   ChatApplicationService: ChatApplicationService;
-  ReferenceApplicationService: ReferenceApplicationService;
+  ToolSearchApplicationService: ToolSearchApplicationService;
 
   // RAG domain repositories
   IRagIndexRepository: DrizzleRagIndexRepository;
@@ -341,18 +341,23 @@ export class DIContainer {
       agentRepository
     );
 
-    // Initialize ReferenceApplicationService with proper dependencies
-    const referenceApplicationService = new ReferenceApplicationService(
+    // Initialize tool registry service
+    const toolRegistryService = new StaticToolRegistry();
+    this.repositories.set('IToolRegistryService', toolRegistryService);
+
+    // Initialize ToolSearchApplicationService with proper dependencies (replaces ReferenceApplicationService)
+    const toolSearchApplicationService = new ToolSearchApplicationService(
       tableApplicationService,
       agentApplicationService,
-      databaseApplicationService
+      databaseApplicationService,
+      toolRegistryService
     );
     
     this.repositories.set('TableApplicationService', tableApplicationService);
     this.repositories.set('FileApplicationService', fileApplicationService);
     this.repositories.set('DocumentApplicationService', documentApplicationService);
     this.repositories.set('ChatApplicationService', chatApplicationService);
-    this.repositories.set('ReferenceApplicationService', referenceApplicationService);
+    this.repositories.set('ToolSearchApplicationService', toolSearchApplicationService);
 
     // Initialize RAG domain repositories
     const ragIndexRepository = new DrizzleRagIndexRepository(contextAwareDb);
@@ -419,9 +424,6 @@ export class DIContainer {
       console.log('✅ Connection services registered with Pipedream client');
     }
 
-    // Register tool registry service
-    const toolRegistryService = new StaticToolRegistry();
-    this.repositories.set('IToolRegistryService', toolRegistryService);
 
     this.isInitialized = true;
     console.log('✅ DIContainer initialized with repositories, file storage, agent services, RAG services, and connection services');
@@ -501,7 +503,7 @@ type ServiceMap = {
   FileApplicationService: FileUseCases;
   DocumentApplicationService: DocumentApplicationService;
   ChatApplicationService: ChatApplicationService;
-  ReferenceApplicationService: ReferenceApplicationService;
+  ToolSearchApplicationService: ToolSearchApplicationService;
   
 
   // RAG Services
@@ -577,7 +579,8 @@ export const getTableApplicationService = createGetter('TableApplicationService'
 export const getFileApplicationService = createGetter('FileApplicationService');
 export const getDocumentApplicationService = createGetter('DocumentApplicationService');
 export const getChatApplicationService = createGetter('ChatApplicationService');
-export const getReferenceApplicationService = createGetter('ReferenceApplicationService');
+export const getToolSearchApplicationService = createGetter('ToolSearchApplicationService');
+// Note: getReferenceApplicationService replaced by getToolSearchApplicationService
 
 // RAG service getters
 export const getRagIndexRepository = createGetter('RagIndexRepository');

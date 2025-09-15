@@ -167,21 +167,6 @@ export class ToolMetadata {
   }
 
   /**
-   * Check if this tool matches a search query
-   */
-  matchesSearch(query: string): boolean {
-    const searchTerms = query.toLowerCase().split(' ')
-    const searchableText = [
-      this.name,
-      this.displayName,
-      this.description,
-      ...this.tags
-    ].join(' ').toLowerCase()
-
-    return searchTerms.every(term => searchableText.includes(term))
-  }
-
-  /**
    * Check if this tool has a specific tag
    */
   hasTag(tag: string): boolean {
@@ -199,6 +184,7 @@ export class ToolMetadata {
     requiresConnection: boolean
     connectionBadge?: string
     icon?: string
+    tags: readonly string[]
   } {
     return {
       name: this.name,
@@ -207,8 +193,42 @@ export class ToolMetadata {
       category: this.category,
       requiresConnection: this.requiresConnection,
       connectionBadge: this.requiresConnection ? this.connectionType.toUpperCase() : undefined,
-      icon: this.icon
+      icon: this.icon,
+      tags: this.tags
     }
+  }
+
+  /**
+   * Check if metadata matches search query
+   */
+  matchesSearch(query: string): boolean {
+    const searchText = query.toLowerCase().trim()
+    if (!searchText) return true
+
+    return (
+      this.name.toLowerCase().includes(searchText) ||
+      this.displayName.toLowerCase().includes(searchText) ||
+      this.description.toLowerCase().includes(searchText) ||
+      this.tags.some(tag => tag.toLowerCase().includes(searchText))
+    )
+  }
+
+
+  /**
+   * Check if this metadata equals another
+   */
+  equals(other: ToolMetadata): boolean {
+    return (
+      this.name === other.name &&
+      this.displayName === other.displayName &&
+      this.description === other.description &&
+      this.category === other.category &&
+      this.requiresConnection === other.requiresConnection &&
+      this.connectionType === other.connectionType &&
+      this.icon === other.icon &&
+      this.tags.length === other.tags.length &&
+      this.tags.every((tag, index) => tag === other.tags[index])
+    )
   }
 }
 

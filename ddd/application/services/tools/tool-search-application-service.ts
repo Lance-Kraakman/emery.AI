@@ -1,24 +1,19 @@
 /**
- * Reference Application Service
+ * Tool Search Application Service
  *
- * Orchestrates cross-domain reference searches for chat mentions.
- * Enhanced to return ReferenceTool objects that unify Tool and Reference concepts.
+ * Unified search across all tool types:
+ * 1. Reference tools (agents, tables, documents, files, databases)
+ * 2. Hardcoded tools (from tool registry)
  *
- * AIDEV-NOTE: This service consolidates reference search across agents, tables,
- * documents, files by using existing TableApplicationService, AgentApplicationService etc.
- * Now returns proper Tool objects with typed configurations.
- *
- * AIDEV-TODO: Add gRPC tool registry integration for dynamic tool discovery:
- * - Integrate with IToolRegistryService for gRPC worker tool discovery
- * - Add agent tool discovery from active gRPC workers
- * - Cache worker tool metadata for performance
- * - Add tool availability checking based on worker health
+ * AIDEV-NOTE: Renamed from ReferenceApplicationService with broader scope.
+ * Now searches both reference data AND hardcoded tools for @ mentions.
  */
 
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
-import { Reference, referenceToSimple } from '@/ddd/domain/chat/value-objects/reference';
+import { Reference } from '@/ddd/domain/chat/value-objects/reference';
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool';
+import { Tool } from '@/ddd/domain/tools/entities/tool';
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
 import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
@@ -26,15 +21,7 @@ import type { DatabaseApplicationService } from '@/ddd/application/services/data
 import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
 import { RowMapper, type DocumentFieldValue, type FileFieldValue } from '@/app/mappers/row-mapper';
 import { isDocumentArray, isFileArray } from '@/ddd/domain/tables/value-objects/field-values';
-
-// Legacy interface for backward compatibility
-export interface SimpleReference {
-  id: string;
-  insertText: string;      // "@doc:database/table/document-title"
-  displayName: string;     // "John's Profile Document"
-  description: string;     // "Document in Users table"
-  category: 'doc' | 'file' | 'agent' | 'table' | 'database';
-}
+import type { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
 
 export interface SearchReferencesOptions {
   query: string;
@@ -42,12 +29,6 @@ export interface SearchReferencesOptions {
   limit?: number;
   offset?: number;
   organizationId: OrganizationId;
-}
-
-export interface SearchReferencesResult {
-  references: SimpleReference[];
-  hasMore: boolean;
-  totalCount: number;
 }
 
 /**
@@ -59,17 +40,78 @@ export interface SearchReferenceToolsResult {
   totalCount: number;
 }
 
-export class ReferenceApplicationService {
+/**
+ * Complete tool search result with both reference and system tools
+ */
+export interface SearchToolsResult {
+  referenceTools: ReferenceTool[];  // Data references (agents, docs, files, tables, databases)
+  systemTools: Tool[];              // Execution tools (python_repl, web_search, etc.)
+  hasMore: boolean;
+  totalCount: number;
+}
+
+export class ToolSearchApplicationService {
   constructor(
     private readonly tableApplicationService: TableApplicationService,
     private readonly agentApplicationService: AgentApplicationService,
-    private readonly databaseApplicationService: DatabaseApplicationService
+    private readonly databaseApplicationService: DatabaseApplicationService,
+    private readonly toolRegistryService: IToolRegistryService
   ) {}
 
   /**
-   * Enhanced search that returns ReferenceTool objects with typed configs
+   * Complete search that returns both reference tools and system tools
+   * This is the new recommended method for tool search
+   */
+  async searchAllTools(options: SearchReferencesOptions): Promise<SearchToolsResult> {
+    const { query, categories, limit = 20, offset = 0, organizationId } = options;
+
+    console.log(`[ToolSearchService] Searching for query: "${query}", categories:`, categories);
+
+    // Search both reference tools and system tools in parallel
+    const [referenceToolsResult, systemTools] = await Promise.all([
+      this.searchOnlyReferenceTools(options),
+      this.searchSystemTools(query, categories)
+    ]);
+
+    console.log(`[ToolSearchService] Found ${referenceToolsResult.referenceTools.length} reference tools, ${systemTools.length} system tools`);
+
+    // Apply pagination to combined results
+    const allTools = [
+      ...referenceToolsResult.referenceTools,
+      ...systemTools
+    ];
+
+    // Sort by relevance
+    const sortedReferenceTools = this.sortReferenceToolsByRelevance(referenceToolsResult.referenceTools, query);
+    const sortedSystemTools = this.sortSystemToolsByRelevance(systemTools, query);
+
+    // Apply pagination
+    const paginatedReferenceTools = sortedReferenceTools.slice(offset, Math.min(offset + limit, sortedReferenceTools.length));
+    const remainingLimit = limit - paginatedReferenceTools.length;
+    const paginatedSystemTools = remainingLimit > 0 ? sortedSystemTools.slice(0, remainingLimit) : [];
+
+    const totalItems = sortedReferenceTools.length + sortedSystemTools.length;
+    const hasMore = offset + limit < totalItems;
+
+    return {
+      referenceTools: paginatedReferenceTools,
+      systemTools: paginatedSystemTools,
+      hasMore,
+      totalCount: totalItems
+    };
+  }
+
+  /**
+   * Search only reference tools (agents, docs, files, tables, databases)
    */
   async searchReferenceTools(options: SearchReferencesOptions): Promise<SearchReferenceToolsResult> {
+    return this.searchOnlyReferenceTools(options);
+  }
+
+  /**
+   * Search only reference tools (original behavior)
+   */
+  private async searchOnlyReferenceTools(options: SearchReferencesOptions): Promise<SearchReferenceToolsResult> {
     const { query, categories, limit = 20, offset = 0, organizationId } = options;
 
     // Determine what categories to search based on query pattern
@@ -82,52 +124,54 @@ export class ReferenceApplicationService {
 
     const categoryResults = await Promise.all(searchPromises);
 
-    // Combine and sort results
+    // Combine results
     const allReferenceTools = categoryResults.flat();
-    const sortedReferenceTools = this.sortReferenceToolsByRelevance(allReferenceTools, query);
-
-    // Apply pagination to combined results
-    const paginatedReferenceTools = sortedReferenceTools.slice(offset, offset + limit);
-    const hasMore = sortedReferenceTools.length > offset + limit;
 
     return {
-      referenceTools: paginatedReferenceTools,
-      hasMore,
-      totalCount: sortedReferenceTools.length
+      referenceTools: allReferenceTools,
+      hasMore: false, // Will be calculated at the top level
+      totalCount: allReferenceTools.length
     };
   }
 
   /**
-   * Legacy search method that returns SimpleReference objects
-   * @deprecated Use searchReferenceTools() instead for proper Tool integration
+   * Search system tools from tool registry
+   * These are execution tools like python_repl, web_search, etc.
+   * Returns proper Tool instances (no more architectural abuse!)
    */
-  async searchReferences(options: SearchReferencesOptions): Promise<SearchReferencesResult> {
-    const { query, categories, limit = 20, offset = 0, organizationId } = options;
-    
-    // Determine what categories to search based on query pattern
-    const searchCategories = this.determineSearchCategories(query, categories);
-    
-    // Execute searches in parallel for better performance
-    const searchPromises = searchCategories.map(category => 
-      this.searchByCategory(category, query, organizationId, limit, offset)
-    );
-    
-    const categoryResults = await Promise.all(searchPromises);
-    
-    // Combine and sort results
-    const allReferences = categoryResults.flat();
-    const sortedReferences = this.sortReferencesByRelevance(allReferences, query);
-    
-    // Apply pagination to combined results
-    const paginatedReferences = sortedReferences.slice(offset, offset + limit);
-    const hasMore = sortedReferences.length > offset + limit;
-    
-    return {
-      references: paginatedReferences,
-      hasMore,
-      totalCount: sortedReferences.length
-    };
+  private async searchSystemTools(
+    query: string,
+    categories: ReferenceCategory[] | undefined
+  ): Promise<Tool[]> {
+    console.log(`[ToolSearchService] Searching system tools for: "${query}"`);
+
+    try {
+      // Use the proper tool registry service to search tools
+      const toolMetadataList = await this.toolRegistryService.searchTools(query, 20);
+
+      console.log(`[ToolSearchService] Found ${toolMetadataList.length} system tools`);
+
+      // Convert ToolMetadata to proper Tool instances
+      const systemTools: Tool[] = [];
+
+      for (const toolMetadata of toolMetadataList) {
+        try {
+          // Create proper Tool instances from metadata
+          const tool = Tool.fromMetadata(toolMetadata);
+          systemTools.push(tool);
+        } catch (error) {
+          console.error(`[ToolSearchService] Error creating tool for ${toolMetadata.name}:`, error);
+        }
+      }
+
+      return systemTools;
+    } catch (error) {
+      console.error(`[ToolSearchService] Error searching system tools:`, error);
+      return [];
+    }
   }
+
+
 
   /**
    * Determine which categories to search based on query pattern
@@ -196,42 +240,6 @@ export class ReferenceApplicationService {
     }
   }
 
-  /**
-   * Legacy search within a specific category using the appropriate service
-   * @deprecated Use searchToolsByCategory() instead
-   */
-  private async searchByCategory(
-    category: 'doc' | 'file' | 'agent' | 'table' | 'database',
-    query: string,
-    organizationId: OrganizationId,
-    limit: number,
-    offset: number
-  ): Promise<SimpleReference[]> {
-    const searchText = this.extractSearchText(query);
-    
-    try {
-      switch (category) {
-        case 'agent':
-          return await this.searchAgents(searchText, organizationId, limit, offset);
-        
-        case 'table':
-          return await this.searchTables(searchText, organizationId, limit, offset);
-        
-        case 'database':
-          return await this.searchDatabases(searchText, organizationId, limit, offset);
-        
-        case 'doc':
-        case 'file':
-          return await this.searchDocuments(searchText, organizationId, limit, offset);
-        
-        default:
-          return [];
-      }
-    } catch (error) {
-      console.error(`Error searching ${category}:`, error);
-      return [];
-    }
-  }
 
   /**
    * Search agents returning ReferenceTool objects
@@ -262,34 +270,6 @@ export class ReferenceApplicationService {
     });
   }
 
-  /**
-   * Legacy search agents using AgentApplicationService
-   * @deprecated Use searchAgentTools() instead
-   */
-  private async searchAgents(
-    searchText: string,
-    organizationId: OrganizationId,
-    limit: number,
-    offset: number
-  ): Promise<SimpleReference[]> {
-    const agents = await this.agentApplicationService.getAgents({
-      organizationId,
-      searchQuery: searchText,
-      status: 'active'
-    });
-
-    // Apply pagination manually since AgentApplicationService doesn't support offset
-    const paginatedAgents = agents.slice(offset, offset + limit);
-
-    return paginatedAgents.map(agent => {
-      const reference = Reference.agent(
-        `agent-${agent.id.value}`,
-        agent.name,
-        `${agent.role || 'Agent'} - ${agent.description || 'No description'}`
-      );
-      return referenceToSimple(reference);
-    });
-  }
 
   /**
    * Search tables returning ReferenceTool objects
@@ -332,45 +312,6 @@ export class ReferenceApplicationService {
     return allTableTools.slice(offset, offset + limit);
   }
 
-  /**
-   * Legacy search tables using DatabaseApplicationService
-   * @deprecated Use searchTableTools() instead
-   */
-  private async searchTables(
-    searchText: string,
-    organizationId: OrganizationId,
-    limit: number,
-    offset: number
-  ): Promise<SimpleReference[]> {
-    const databases = await this.databaseApplicationService.getDatabases({ organizationId });
-    const allTables: SimpleReference[] = [];
-
-    // Search through all tables in all databases
-    const allOrgTables = await this.tableApplicationService.getTablesForOrganization(organizationId);
-    
-    for (const database of databases) {
-      const tables = allOrgTables.filter(table => table.databaseId.equals(database.id));
-      
-      const matchingTables = tables
-        .filter(table => 
-          !searchText || 
-          table.name.toLowerCase().includes(searchText.toLowerCase()) ||
-          table.description?.toLowerCase().includes(searchText.toLowerCase())
-        )
-        .map(table => ({
-          id: `table-${table.id.value}`,
-          insertText: `@table:${database.name}/${table.name}`,
-          displayName: table.name,
-          description: `Table in ${database.name} - ${table.description || 'No description'}`,
-          category: 'table' as const
-        }));
-
-      allTables.push(...matchingTables);
-    }
-
-    // Apply pagination
-    return allTables.slice(offset, offset + limit);
-  }
 
   /**
    * Search databases returning ReferenceTool objects
@@ -402,35 +343,6 @@ export class ReferenceApplicationService {
     return matchingDatabases;
   }
 
-  /**
-   * Legacy search databases using DatabaseApplicationService
-   * @deprecated Use searchDatabaseTools() instead
-   */
-  private async searchDatabases(
-    searchText: string,
-    organizationId: OrganizationId,
-    limit: number,
-    offset: number
-  ): Promise<SimpleReference[]> {
-    const databases = await this.databaseApplicationService.getDatabases({ organizationId });
-    
-    const matchingDatabases = databases
-      .filter(database => 
-        !searchText || 
-        database.name.toLowerCase().includes(searchText.toLowerCase()) ||
-        database.description?.toLowerCase().includes(searchText.toLowerCase())
-      )
-      .slice(offset, offset + limit)
-      .map(database => ({
-        id: `database-${database.id.value}`,
-        insertText: `@database:${database.name}`,
-        displayName: database.name,
-        description: `Database - ${database.description || 'No description'}`,
-        category: 'database' as const
-      }));
-
-    return matchingDatabases;
-  }
 
   /**
    * Search documents/files returning ReferenceTool objects
@@ -523,92 +435,6 @@ export class ReferenceApplicationService {
     return allDocumentTools.slice(0, limit);
   }
 
-  /**
-   * Legacy search documents/files using TableApplicationService with proper pagination
-   * @deprecated Use searchDocumentTools() instead
-   */
-  private async searchDocuments(
-    searchText: string,
-    organizationId: OrganizationId,
-    limit: number,
-    offset: number
-  ): Promise<SimpleReference[]> {
-    const databases = await this.databaseApplicationService.getDatabases({ organizationId });
-    const allDocuments: SimpleReference[] = [];
-
-    // Search through all tables for document-like content
-    const allOrgTables = await this.tableApplicationService.getTablesForOrganization(organizationId);
-    
-    for (const database of databases) {
-      const tables = allOrgTables.filter(table => table.databaseId.equals(database.id));
-      
-      for (const table of tables) {
-        try {
-          // Use TableApplicationService.getRows with proper pagination
-          // Note: We do filtering after RowMapper.toDTO() for proper document/file name matching
-          const queryOptions: RowQueryOptions = {
-            limit: limit * 2, // Get more rows since we'll filter by document/file names
-            offset,
-            orderBy: 'created_at',
-            orderDirection: 'DESC'
-          };
-
-          const rows = await this.tableApplicationService.getRows(table.id, queryOptions);
-          
-          if (rows && rows.length > 0) {
-            // Process each row using RowMapper to get properly typed field values
-            for (const row of rows) {
-              const rowDTO = RowMapper.toDTO(row);
-              
-              // Look through all field values to find document and file fields
-              for (const fieldValue of rowDTO.fieldValues) {
-                if (fieldValue.fieldType === 'document' && fieldValue.value && isDocumentArray(fieldValue.value)) {
-                  // Handle DocumentArrayFieldValue - iterate through each document
-                  const docArray = fieldValue.value as DocumentFieldValue[];
-                  for (const docField of docArray) {
-                    const title = docField.documentMetadata?.title || docField.name || 'Untitled Document';
-                    
-                    // Filter by search text if provided
-                    if (!searchText || title.toLowerCase().includes(searchText.toLowerCase())) {
-                      allDocuments.push({
-                        id: `doc-${table.id.value}-${row.id}-${docField.id}`,
-                        insertText: `@doc:${database.name}/${table.name}/${title}`,
-                        displayName: title,
-                        description: `Document in ${table.name} table`,
-                        category: 'doc' as const
-                      });
-                    }
-                  }
-                } else if (fieldValue.fieldType === 'file' && fieldValue.value && isFileArray(fieldValue.value)) {
-                  // Handle FileArrayFieldValue - iterate through each file  
-                  const fileArray = fieldValue.value as FileFieldValue[];
-                  for (const fileField of fileArray) {
-                    const title = fileField.name || 'Untitled File';
-                    
-                    // Filter by search text if provided
-                    if (!searchText || title.toLowerCase().includes(searchText.toLowerCase())) {
-                      allDocuments.push({
-                        id: `file-${table.id.value}-${row.id}-${fileField.id}`,
-                        insertText: `@file:${database.name}/${table.name}/${title}`,
-                        displayName: title,
-                        description: `File in ${table.name} table (${fileField.mimeType})`,
-                        category: 'file' as const
-                      });
-                    }
-                  }
-                }
-              }
-            }
-          }
-        } catch (error) {
-          console.error(`Error searching documents in table ${table.name}:`, error);
-          continue;
-        }
-      }
-    }
-
-    return allDocuments.slice(0, limit);
-  }
 
   /**
    * Extract the actual search text from query (remove @ prefixes)
@@ -667,28 +493,30 @@ export class ReferenceApplicationService {
   }
 
   /**
-   * Legacy sort references by relevance to search query
-   * @deprecated Use sortReferenceToolsByRelevance() instead
+   * Sort Tool objects by relevance to search query
    */
-  private sortReferencesByRelevance(references: SimpleReference[], query: string): SimpleReference[] {
+  private sortSystemToolsByRelevance(tools: Tool[], query: string): Tool[] {
     const searchText = this.extractSearchText(query).toLowerCase();
-    
+
     if (!searchText) {
-      return references;
+      return tools;
     }
 
-    return references.sort((a, b) => {
+    return tools.sort((a, b) => {
+      const aDisplayName = a.toolMetadata.displayName.toLowerCase();
+      const bDisplayName = b.toolMetadata.displayName.toLowerCase();
+
       // Exact matches in display name get highest priority
-      const aDisplayExact = a.displayName.toLowerCase() === searchText ? 2 : 0;
-      const bDisplayExact = b.displayName.toLowerCase() === searchText ? 2 : 0;
-      
+      const aDisplayExact = aDisplayName === searchText ? 2 : 0;
+      const bDisplayExact = bDisplayName === searchText ? 2 : 0;
+
       // Starts with matches get medium priority
-      const aDisplayStarts = a.displayName.toLowerCase().startsWith(searchText) ? 1 : 0;
-      const bDisplayStarts = b.displayName.toLowerCase().startsWith(searchText) ? 1 : 0;
-      
+      const aDisplayStarts = aDisplayName.startsWith(searchText) ? 1 : 0;
+      const bDisplayStarts = bDisplayName.startsWith(searchText) ? 1 : 0;
+
       // Contains matches get low priority
-      const aDisplayContains = a.displayName.toLowerCase().includes(searchText) ? 0.5 : 0;
-      const bDisplayContains = b.displayName.toLowerCase().includes(searchText) ? 0.5 : 0;
+      const aDisplayContains = aDisplayName.includes(searchText) ? 0.5 : 0;
+      const bDisplayContains = bDisplayName.includes(searchText) ? 0.5 : 0;
 
       const aScore = aDisplayExact + aDisplayStarts + aDisplayContains;
       const bScore = bDisplayExact + bDisplayStarts + bDisplayContains;
@@ -696,4 +524,5 @@ export class ReferenceApplicationService {
       return bScore - aScore;
     });
   }
+
 }

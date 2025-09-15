@@ -10,7 +10,7 @@ import { createChatStreamRequest, type ChatContextOptions } from './types/chat-r
 import { loadChatWithFullHistory, getCurrentChatSession } from '@/app/actions/chat-history'
 import type { ChatMessageDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
-import { validateToolSelection } from '@/app/actions/tools'
+// TODO: Replace with new tool validation logic
 
 interface ChatMessage extends Message {
   id: string
@@ -363,41 +363,18 @@ export function useChatGRPC(
 
   // Tool management functions
   const addTool = async (tool: ToolDTO) => {
-    // Validate tool before adding
-    try {
-      const validationResult = await validateToolSelection([tool])
-      if (validationResult.success && validationResult.data && validationResult.data.valid.length > 0) {
-        setSelectedTools(prev => {
-          // Prevent duplicates
-          if (prev.find(t => t.id === tool.id)) {
-            return prev
-          }
-          return [...prev, tool]
-        })
-      } else {
-        console.warn('Tool validation failed:', tool.name, validationResult.data?.missingConnections)
-        // Still add the tool but user will see connection status
-        setSelectedTools(prev => {
-          if (prev.find(t => t.id === tool.id)) {
-            return prev
-          }
-          return [...prev, tool]
-        })
+    // No validation needed - domain objects are self-validating
+    setSelectedTools(prev => {
+      // Prevent duplicates
+      if (prev.find(t => t.name === tool.name)) {
+        return prev
       }
-    } catch (error) {
-      console.error('Error validating tool:', error)
-      // Add tool anyway, validation is not critical
-      setSelectedTools(prev => {
-        if (prev.find(t => t.id === tool.id)) {
-          return prev
-        }
-        return [...prev, tool]
-      })
-    }
+      return [...prev, tool]
+    })
   }
 
   const removeTool = (tool: ToolDTO) => {
-    setSelectedTools(prev => prev.filter(t => t.id !== tool.id))
+    setSelectedTools(prev => prev.filter(t => t.name !== tool.name))
   }
 
   return {

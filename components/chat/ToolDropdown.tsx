@@ -14,7 +14,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { searchReferenceTools } from '@/app/actions/references';
-import type { ReferenceDTO } from '@/app/mappers/reference-mapper';
 import type { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool';
 import { ReferenceCategory, REFERENCE_CATEGORY_INFO } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ChevronDown, Search, Loader2, FileText, Bot, Database, Table, File } from 'lucide-react';
@@ -57,6 +56,12 @@ export function ToolDropdown({
 }: ToolDropdownProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectedCategories, setSelectedCategories] = useState<ReferenceCategory[]>([]);
+  const [isClient, setIsClient] = useState(false);
+
+  // Fix hydration mismatch by ensuring client-side rendering
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Search tools using enhanced DDD action
   const {
@@ -66,21 +71,29 @@ export function ToolDropdown({
   } = useQuery({
     queryKey: ['search-reference-tools', query, selectedCategories],
     queryFn: async () => {
-      const result = await searchReferenceTools({
-        query,
-        categories: selectedCategories.length > 0 ? selectedCategories : undefined,
-        limit: 20,
-        offset: 0
-      });
+      try {
+        const result = await searchReferenceTools({
+          query,
+          categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+          limit: 20,
+          offset: 0
+        });
 
-      if (!result.success) {
-        throw new Error(result.error);
+        if (!result.success) {
+          console.error('[ToolDropdown] Search failed:', result.error);
+          throw new Error(result.error);
+        }
+
+        console.log('[ToolDropdown] Search successful:', result.data?.referenceTools?.length || 0, 'tools found');
+        return result.data;
+      } catch (error) {
+        console.error('[ToolDropdown] Search error:', error);
+        throw error;
       }
-
-      return result.data;
     },
-    enabled: isOpen && query.length > 0,
+    enabled: isOpen && query.length > 0 && isClient,
     staleTime: 30 * 1000, // 30 seconds
+    retry: 1,
   });
 
   const tools = searchResult?.referenceTools ?? [];
@@ -132,7 +145,8 @@ export function ToolDropdown({
     );
   };
 
-  if (!isOpen) return null;
+  // Don't render until client-side to prevent hydration mismatch
+  if (!isOpen || !isClient) return null;
 
   const allCategories = Object.values(ReferenceCategory);
 
@@ -191,46 +205,64 @@ export function ToolDropdown({
         ) : (
           <>
             {tools.map((tool, index) => {
-              const displayInfo = tool.getChatDisplayInfo();
-              const Icon = categoryIcons[displayInfo.category as ReferenceCategory];
-              const isSelected = index === selectedIndex;
+              try {
+                // Safely get display info with error handling
+                const displayInfo = tool?.getChatDisplayInfo?.() || {
+                  displayName: 'Unknown Tool',
+                  description: 'Tool description not available',
+                  insertText: '@unknown',
+                  category: ReferenceCategory.DOC,
+                  supportsArtifacts: false
+                };
 
-              return (
-                <button
-                  key={tool.reference.id}
-                  onClick={() => onSelect(tool)}
-                  onMouseEnter={() => setSelectedIndex(index)}
-                  className={cn(
-                    'w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-50 last:border-b-0 transition-colors',
-                    isSelected && 'bg-blue-50 border-blue-100'
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={cn(
-                      'p-1 rounded-md flex-shrink-0',
-                      categoryColors[displayInfo.category as ReferenceCategory]
-                    )}>
-                      <Icon className="w-3 h-3" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm text-gray-900 truncate">
-                        {displayInfo.displayName}
+                const Icon = categoryIcons[displayInfo.category as ReferenceCategory] || FileText;
+                const isSelected = index === selectedIndex;
+                const toolId = tool?.reference?.id || `tool-${index}`;
+
+                return (
+                  <button
+                    key={toolId}
+                    onClick={() => onSelect(tool)}
+                    onMouseEnter={() => setSelectedIndex(index)}
+                    className={cn(
+                      'w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-50 last:border-b-0 transition-colors',
+                      isSelected && 'bg-blue-50 border-blue-100'
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={cn(
+                        'p-1 rounded-md flex-shrink-0',
+                        categoryColors[displayInfo.category as ReferenceCategory] || 'text-gray-600 bg-gray-50'
+                      )}>
+                        <Icon className="w-3 h-3" />
                       </div>
-                      <div className="text-xs text-gray-500 truncate">
-                        {displayInfo.description}
-                      </div>
-                      <div className="text-xs text-gray-400 mt-1 font-mono">
-                        {displayInfo.insertText}
-                      </div>
-                      {displayInfo.supportsArtifacts && (
-                        <div className="text-xs text-blue-500 mt-1">
-                          Can open as artifact
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm text-gray-900 truncate">
+                          {displayInfo.displayName}
                         </div>
-                      )}
+                        <div className="text-xs text-gray-500 truncate">
+                          {displayInfo.description}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1 font-mono">
+                          {displayInfo.insertText}
+                        </div>
+                        {displayInfo.supportsArtifacts && (
+                          <div className="text-xs text-blue-500 mt-1">
+                            Can open as artifact
+                          </div>
+                        )}
+                      </div>
                     </div>
+                  </button>
+                );
+              } catch (error) {
+                console.error('[ToolDropdown] Error rendering tool:', error, tool);
+                return (
+                  <div key={`error-${index}`} className="px-4 py-3 text-xs text-red-500">
+                    Error rendering tool
                   </div>
-                </button>
-              );
+                );
+              }
             })}
           </>
         )}

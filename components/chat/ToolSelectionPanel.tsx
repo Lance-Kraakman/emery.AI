@@ -1,106 +1,49 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { FileText, File, Database, Users, Plus, X, ChevronDown, ChevronUp, Settings, Zap, BarChart, ExternalLink, Eye, RefreshCw } from 'lucide-react'
+import { X, ChevronDown, ChevronUp, Settings, RefreshCw, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
-import { getAvailableTools, validateToolSelection } from '@/app/actions/tools'
-import type { ToolDTO, ToolCategoryDTO, ToolSelectionDTO } from '@/app/mappers/tool-mapper'
-// Legacy interface maintained for backward compatibility during migration
+import type { ToolDTO, ToolSearchResultDTO } from '@/app/mappers/tool-mapper'
+import { ToolCategory } from '@/app/mappers/tool-mapper'
+import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper'
+import { searchAllTools } from '@/app/actions/references'
+import { TOOL_CATEGORY_INFO, getCategoryInfo } from '@/ddd/domain/tools/value-objects/tool-metadata'
+
 export interface ResolvedReference {
   type: 'doc' | 'file' | 'table' | 'agent' | 'tool'
   fullPath: string
-  originalMatch: string
-  startIndex: number
-  endIndex: number
-  data?: any
-  metadata?: {
-    title?: string
-    description?: string
-    content?: string
-    size?: number
-    mimeType?: string
-    wordCount?: number
-    error?: string
-  }
+  metadata?: Record<string, any>
 }
 
-// Using proper DTOs from mapper
-type ToolCategory = ToolCategoryDTO
-
 interface ToolSelectionPanelProps {
-  selectedTools: ToolDTO[]
-  onToolSelect: (tool: ToolDTO) => void
-  onToolDeselect: (tool: ToolDTO) => void
-  onOpenArtifact?: (artifact: any) => void // For opening doc/file artifacts
-  className?: string
+  isVisible: boolean
+  onClose: () => void
+  onSelectTool: (tool: ToolDTO | ReferenceToolDTO) => void
+  onResolveReference?: (reference: ResolvedReference) => void
+  currentOrganizationId: number
 }
 
 interface ToolCardProps {
-  tool: ToolDTO
+  tool: ToolDTO | ReferenceToolDTO
   isSelected: boolean
   onToggle: () => void
-  onOpenArtifact?: (artifact: any) => void
+  onOpenArtifact?: (tool: ToolDTO | ReferenceToolDTO) => void
 }
 
 function ToolCard({ tool, isSelected, onToggle, onOpenArtifact }: ToolCardProps) {
-  // Determine icon based on tool type from DTO
-  const getIcon = () => {
-    switch (tool.type) {
-      case 'document':
-        return <FileText className="h-4 w-4 text-blue-600" />
-      case 'file':
-        return <File className="h-4 w-4 text-green-600" />
-      case 'table':
-        return <Database className="h-4 w-4 text-purple-600" />
-      case 'agent':
-        return <Users className="h-4 w-4 text-orange-600" />
-      case 'oauth_app':
-        return <Users className="h-4 w-4 text-orange-600" />
-      case 'webhook':
-        return <Zap className="h-4 w-4 text-purple-600" />
-      case 'utility':
-        return <BarChart className="h-4 w-4 text-gray-600" />
-      default:
-        return <Zap className="h-4 w-4 text-gray-600" />
-    }
-  }
+  const isReferenceTool = 'toolName' in tool
+  const displayName = isReferenceTool ? tool.displayName : tool.displayName
+  const description = isReferenceTool ? tool.description : tool.description
+  const toolCategory = isReferenceTool ? ToolCategory.REFERENCES : tool.category
+  const requiresConnection = isReferenceTool ? tool.metadata.requiresConnection : tool.requiresConnection
+  const supportsArtifacts = isReferenceTool ? tool.supportsArtifacts : false
 
-  // Get display name from tool DTO
-  const getDisplayName = () => {
-    return tool.title
-  }
+  const categoryInfo = getCategoryInfo(toolCategory)
 
-  // Handle opening artifact
   const handleOpenArtifact = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (onOpenArtifact && tool.canOpenArtifact) {
-      try {
-        // Create appropriate artifact based on tool type
-        if (tool.type === 'document') {
-          // Create document artifact from tool config
-          const artifact = createDocumentArtifact(
-            tool.config as any, // DocumentFieldValue
-            parseInt(tool.config.tableId || '0'),
-            parseInt(tool.config.fieldId || '0'),
-            'view',
-            tool.config.fileUrl
-          )
-          onOpenArtifact(artifact)
-        } else if (tool.type === 'file') {
-          // Create file artifact from tool config
-          const artifact = createFileArtifact(
-            tool.config as any, // FileFieldValue
-            parseInt(tool.config.tableId || '0'),
-            parseInt(tool.config.fieldId || '0'),
-            'pdf', // TODO: Detect actual viewer type
-            tool.config.fileUrl || ''
-          )
-          onOpenArtifact(artifact)
-        }
-      } catch (error) {
-        console.error('Failed to create artifact:', error)
-      }
+    if (onOpenArtifact && supportsArtifacts) {
+      onOpenArtifact(tool)
     }
   }
 
@@ -113,29 +56,22 @@ function ToolCard({ tool, isSelected, onToggle, onOpenArtifact }: ToolCardProps)
         : 'border-border bg-background hover:bg-muted/50'
       }
     `}>
-      {/* Main tool info - clickable to select */}
       <button
         onClick={onToggle}
         className="flex items-center gap-2 flex-1 min-w-0"
       >
-        {getIcon()}
+        <span className="text-xs">{categoryInfo.icon}</span>
         <span className="truncate font-medium">
-          {getDisplayName()}
+          {displayName}
         </span>
         {isSelected && <X className="h-3 w-3" />}
       </button>
 
-      {/* Connection status indicator */}
-      {tool.requiresConnection && (
-        <div className={`w-2 h-2 rounded-full ${
-          tool.connectionStatus === 'connected' ? 'bg-green-500' :
-          tool.connectionStatus === 'error' ? 'bg-red-500' :
-          'bg-yellow-500'
-        }`} title={`Connection: ${tool.connectionStatus || 'unknown'}`} />
+      {requiresConnection && (
+        <div className="w-2 h-2 rounded-full bg-green-500" title="Connection required" />
       )}
 
-      {/* Artifact open button - only for doc/file references */}
-      {tool.canOpenArtifact && (
+      {supportsArtifacts && (
         <Button
           variant="ghost"
           size="sm"
@@ -150,22 +86,27 @@ function ToolCard({ tool, isSelected, onToggle, onOpenArtifact }: ToolCardProps)
   )
 }
 
+interface CategorySectionProps {
+  category: ToolCategory
+  tools: (ToolDTO | ReferenceToolDTO)[]
+  selectedTools: (ToolDTO | ReferenceToolDTO)[]
+  onToolSelect: (tool: ToolDTO | ReferenceToolDTO) => void
+  onToolDeselect: (tool: ToolDTO | ReferenceToolDTO) => void
+  onOpenArtifact?: (tool: ToolDTO | ReferenceToolDTO) => void
+}
+
 function CategorySection({
   category,
+  tools,
   selectedTools,
   onToolSelect,
   onToolDeselect,
   onOpenArtifact
-}: {
-  category: ToolCategory
-  selectedTools: ToolDTO[]
-  onToolSelect: (tool: ToolDTO) => void
-  onToolDeselect: (tool: ToolDTO) => void
-  onOpenArtifact?: (artifact: any) => void
-}) {
-  const [isExpanded, setIsExpanded] = useState(category.expanded !== false)
+}: CategorySectionProps) {
+  const [isExpanded, setIsExpanded] = useState(true)
+  const categoryInfo = getCategoryInfo(category)
 
-  if (category.tools.length === 0) {
+  if (tools.length === 0) {
     return null
   }
 
@@ -175,9 +116,9 @@ function CategorySection({
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-2"
       >
-        {getCategoryIcon(category.icon)}
-        {category.label}
-        <span className="text-xs text-muted-foreground ml-1">({category.tools.length})</span>
+        <span>{categoryInfo.icon}</span>
+        {categoryInfo.label}
+        <span className="text-xs text-muted-foreground ml-1">({tools.length})</span>
         {isExpanded ? (
           <ChevronDown className="h-3 w-3" />
         ) : (
@@ -187,12 +128,21 @@ function CategorySection({
 
       {isExpanded && (
         <div className="flex flex-wrap gap-2">
-          {category.tools.map((tool, index) => {
-            const isSelected = selectedTools.some(t => t.id === tool.id)
+          {tools.map((tool, index) => {
+            const toolId = 'toolName' in tool ? `${tool.toolName}-${tool.id}` : `${tool.name}-${index}`
+            const isSelected = selectedTools.some(t => {
+              if ('toolName' in tool && 'toolName' in t) {
+                return t.toolName === tool.toolName && t.id === tool.id
+              }
+              if (!('toolName' in tool) && !('toolName' in t)) {
+                return t.name === tool.name
+              }
+              return false
+            })
 
             return (
               <ToolCard
-                key={`${tool.id}-${index}`}
+                key={toolId}
                 tool={tool}
                 isSelected={isSelected}
                 onOpenArtifact={onOpenArtifact}
@@ -212,29 +162,31 @@ function CategorySection({
   )
 }
 
-export function ToolSelectionPanel({
-  selectedTools,
-  onToolSelect,
-  onToolDeselect,
-  onOpenArtifact,
-  className = ""
+export default function ToolSelectionPanel({
+  isVisible,
+  onClose,
+  onSelectTool,
+  onResolveReference,
+  currentOrganizationId
 }: ToolSelectionPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [toolData, setToolData] = useState<ToolSelectionDTO | null>(null)
+  const [toolData, setToolData] = useState<ToolSearchResultDTO | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedTools, setSelectedTools] = useState<(ToolDTO | ReferenceToolDTO)[]>([])
 
-  // Load available tools on mount
   useEffect(() => {
-    loadAvailableTools()
-  }, [])
+    if (isVisible) {
+      loadAvailableTools()
+    }
+  }, [isVisible])
 
   const loadAvailableTools = async () => {
     try {
       setIsLoading(true)
       setError(null)
 
-      const result = await getAvailableTools()
+      const result = await searchAllTools({ query: '', limit: 50 })
       if (result.success && result.data) {
         setToolData(result.data)
       } else {
@@ -248,135 +200,104 @@ export function ToolSelectionPanel({
     }
   }
 
-  // Don't render if loading or no tools available
-  if (isLoading) {
-    return (
-      <div className={`border-t border-border bg-muted/10 ${className}`}>
-        <div className="px-4 py-3 flex items-center gap-2">
-          <RefreshCw className="h-4 w-4 animate-spin" />
-          <span className="text-sm text-muted-foreground">Loading tools...</span>
-        </div>
-      </div>
-    )
+  const handleToolSelect = (tool: ToolDTO | ReferenceToolDTO) => {
+    setSelectedTools(prev => [...prev, tool])
+    onSelectTool(tool)
   }
 
-  if (error) {
-    return (
-      <div className={`border-t border-border bg-muted/10 ${className}`}>
-        <div className="px-4 py-3">
-          <div className="text-sm text-destructive mb-2">{error}</div>
-          <Button onClick={loadAvailableTools} size="sm" variant="outline">
-            <RefreshCw className="h-3 w-3 mr-1" />
-            Retry
-          </Button>
-        </div>
-      </div>
-    )
+  const handleToolDeselect = (tool: ToolDTO | ReferenceToolDTO) => {
+    setSelectedTools(prev => prev.filter(t => {
+      if ('toolName' in tool && 'toolName' in t) {
+        return !(t.toolName === tool.toolName && t.id === tool.id)
+      }
+      if (!('toolName' in tool) && !('toolName' in t)) {
+        return t.name !== tool.name
+      }
+      return true
+    }))
   }
 
-  if (!toolData || toolData.availableCategories.every(cat => cat.tools.length === 0)) {
-    return null
-  }
+  if (!isVisible) return null
 
-  const totalSelectedCount = selectedTools.length
+  const organizeToolsByCategory = (data: ToolSearchResultDTO) => {
+    const categoryMap = new Map<ToolCategory, (ToolDTO | ReferenceToolDTO)[]>()
+
+    // Add system tools
+    data.systemTools.forEach(tool => {
+      const existing = categoryMap.get(tool.category) || []
+      categoryMap.set(tool.category, [...existing, tool])
+    })
+
+    // Add reference tools - all reference tools go to REFERENCES category
+    data.referenceTools.forEach(tool => {
+      const category = ToolCategory.REFERENCES
+      const existing = categoryMap.get(category) || []
+      categoryMap.set(category, [...existing, tool])
+    })
+
+    return categoryMap
+  }
 
   return (
-    <div className={`border-t border-border bg-muted/10 ${className}`}>
-      <div className="px-4 py-3">
+    <div className="fixed inset-y-0 right-0 w-96 bg-white border-l shadow-lg z-50">
+      <div className="p-4 h-full flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsCollapsed(!isCollapsed)}
-              className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Settings className="h-3 w-3" />
-              Tools & References
-              {isCollapsed ? (
-                <ChevronUp className="h-3 w-3" />
-              ) : (
-                <ChevronDown className="h-3 w-3" />
-              )}
-            </button>
-            {totalSelectedCount > 0 && (
+            <Settings className="h-4 w-4" />
+            <h2 className="text-lg font-semibold">Tools & References</h2>
+            {selectedTools.length > 0 && (
               <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">
-                {totalSelectedCount} selected
+                {selectedTools.length} selected
               </span>
             )}
           </div>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
         </div>
 
-        {/* Tool Categories */}
-        {!isCollapsed && (
-          <div className="space-y-4">
-            {toolData.availableCategories.map((category, index) => (
-              <CategorySection
-                key={`${category.name}-${index}`}
-                category={category}
-                selectedTools={selectedTools}
-                onToolSelect={onToolSelect}
-                onToolDeselect={onToolDeselect}
-                onOpenArtifact={onOpenArtifact}
-              />
-            ))}
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {isLoading && (
+            <div className="flex items-center gap-2 justify-center py-8">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <span className="text-sm text-muted-foreground">Loading tools...</span>
+            </div>
+          )}
 
-            {toolData.availableCategories.every(cat => cat.tools.length === 0) && (
-              <div className="text-center py-4 text-muted-foreground text-sm">
-                No tools or references available
-              </div>
-            )}
-          </div>
-        )}
+          {error && (
+            <div className="text-center py-8">
+              <div className="text-sm text-destructive mb-2">{error}</div>
+              <Button onClick={loadAvailableTools} size="sm" variant="outline">
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Retry
+              </Button>
+            </div>
+          )}
+
+          {toolData && !isLoading && !error && (
+            <div className="space-y-4">
+              {Array.from(organizeToolsByCategory(toolData)).map(([category, tools]) => (
+                <CategorySection
+                  key={category}
+                  category={category}
+                  tools={tools}
+                  selectedTools={selectedTools}
+                  onToolSelect={handleToolSelect}
+                  onToolDeselect={handleToolDeselect}
+                />
+              ))}
+
+              {toolData.systemTools.length === 0 && toolData.referenceTools.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  No tools or references available
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
-}
-
-// Helper function to get React icon component from string identifier
-function getCategoryIcon(iconName: string) {
-  const icons: Record<string, React.ReactNode> = {
-    Database: <Database className="h-3 w-3" />,
-    Users: <Users className="h-3 w-3" />,
-    BarChart: <BarChart className="h-3 w-3" />,
-    Zap: <Zap className="h-3 w-3" />,
-    Settings: <Settings className="h-3 w-3" />
-  }
-  return icons[iconName] || <Settings className="h-3 w-3" />
-}
-
-// Utility function to convert ResolvedReference to ToolDTO for compatibility
-export function createReferenceToolCategory(references: ResolvedReference[]): ToolCategory {
-  const tools: ToolDTO[] = references
-    .filter(ref => !ref.metadata?.error) // Only include valid references
-    .map(ref => ({
-      id: `${ref.type}-${ref.data?.id || Math.random()}`,
-      name: ref.type === 'doc' ? 'document_reader' :
-            ref.type === 'file' ? 'file_reader' :
-            ref.type === 'table' ? 'table_reader' :
-            ref.type === 'agent' ? 'agent_reader' : 'reference_reader',
-      version: '1.0',
-      title: ref.data?.name || ref.data?.documentMetadata?.title || ref.originalMatch,
-      description: `${ref.type} reference`,
-      category: 'references' as const,
-      type: ref.type as any,
-      requiresConnection: false,
-      canOpenArtifact: ref.type === 'doc' || ref.type === 'file',
-      config: {
-        title: ref.data?.name || ref.data?.documentMetadata?.title || ref.originalMatch,
-        type: ref.type,
-        id: ref.data?.id?.toString() || ref.originalMatch,
-        reference_id: ref.data?.id?.toString(),
-        original_match: ref.originalMatch,
-        ...ref.data
-      }
-    }))
-
-  return {
-    name: 'references',
-    label: 'References',
-    icon: 'Database',
-    description: 'Documents and files from your data',
-    tools,
-    expanded: true
-  }
 }
