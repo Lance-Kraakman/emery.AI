@@ -8,8 +8,8 @@
  */
 
 import { requirePermission } from "./permissions";
-import { getFileApplicationService, getTableApplicationService } from "@/ddd/application/di/container";
-import { FieldId, OrganizationId, TableId } from "@/ddd/domain/shared/value-objects";
+import { getDocumentApplicationService, getFileApplicationService } from "@/ddd/application/di/container";
+import { FieldId, OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
 import type { Result } from "./types";
 import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
@@ -25,18 +25,19 @@ export async function fetchDocumentArtifactData(
   try {
     await requirePermission("data:view");
 
-    // Create DocumentFieldValue with real data from tool config
+    // Create DocumentFieldValue with real metadata
+    // Content will be fetched by DocumentArtifactViewer when needed
     const documentField: DocumentFieldValue = {
       id: documentId,
       name: filename,
-      size: 0, // TODO: Get real size from storage if needed
+      size: 0, // Size is handled by file system
       mimeType: mimeType,
       s3Key: documentId, // Document ID is the storage key
       uploadedAt: new Date().toISOString(), // TODO: Get real upload date if needed
       documentMetadata: {
         title: filename,
         version: 1.0, // TODO: Get real version if needed
-        documentType: 'tiptap' as const // Set to tiptap for inline editing in canvas
+        documentType: mimeType === 'application/vnd.tiptap+json' ? 'tiptap' : 'file'
       }
     }
 
@@ -49,6 +50,34 @@ export async function fetchDocumentArtifactData(
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to fetch document data"
+    };
+  }
+}
+
+/**
+ * Fetch TipTap document content from S3 using DocumentApplicationService
+ */
+export async function fetchTiptapDocumentContent(
+  documentId: string,
+  organizationId: number,
+  tableId: number,
+  fieldId: number
+): Promise<Result<any>> {
+  try {
+    await requirePermission("data:view");
+
+    // Construct proper API URL with required parameters
+    const downloadUrl = `/api/files/${documentId}/download?org=${organizationId}&tableId=${tableId}&fieldId=${fieldId}`;
+
+    return {
+      success: true,
+      data: { downloadUrl }
+    };
+  } catch (error) {
+    console.error("Error fetching TipTap content:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to fetch TipTap content"
     };
   }
 }

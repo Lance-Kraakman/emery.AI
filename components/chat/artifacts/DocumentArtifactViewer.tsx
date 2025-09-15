@@ -15,19 +15,18 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Image from '@tiptap/extension-image'
-import Link from '@tiptap/extension-link'
 import { Table } from '@tiptap/extension-table'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { TableRow } from '@tiptap/extension-table-row'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Save, 
-  Edit3, 
-  Eye, 
-  FileText, 
-  Clock, 
+import {
+  Save,
+  Edit3,
+  Eye,
+  FileText,
+  Clock,
   User,
   Calendar,
   Hash,
@@ -35,7 +34,7 @@ import {
 } from 'lucide-react'
 import type { DocumentArtifact } from '../types/chat-artifacts'
 import { getDocumentDisplayInfo } from '../types/chat-artifacts'
-// Note: Old reference search store removed in favor of simplified system
+import { fetchTiptapDocumentContent } from '@/app/actions/artifacts'
 
 interface DocumentArtifactViewerProps {
   artifact: DocumentArtifact
@@ -55,24 +54,58 @@ export function DocumentArtifactViewer({
   // Extract display information
   const displayInfo = getDocumentDisplayInfo(artifact)
 
-  // Initialize content based on document type
-  const getInitialContent = () => {
-    if (documentField.documentMetadata?.documentType === 'tiptap') {
-      // AIDEV-TODO: Load actual TipTap content from file URL or S3
-      // For now, show placeholder content
-      return '<p>Loading document content...</p>'
-    } else {
-      // For non-TipTap documents, show document info
-      return `<p><em>Document: ${documentField.name}</em></p><p>Type: ${documentField.mimeType}</p>`
-    }
-  }
-
-  const [content, setContent] = useState(getInitialContent())
+  const [content, setContent] = useState('<p>Loading document content...</p>')
+  const [isLoadingContent, setIsLoadingContent] = useState(false)
 
   // Initialize title
   useEffect(() => {
     setDocumentTitle(displayInfo.title)
   }, [displayInfo.title])
+
+  // Load TipTap content for TipTap documents
+  useEffect(() => {
+    const loadContent = async () => {
+      if (documentField.documentMetadata?.documentType === 'tiptap' && !isLoadingContent) {
+        setIsLoadingContent(true)
+        try {
+          const result = await fetchTiptapDocumentContent(
+            documentField.id,
+            artifact.data.organizationId,
+            artifact.data.tableId,
+            artifact.data.fieldId
+          )
+
+          if (result.success && result.data?.downloadUrl) {
+            // Fetch the actual TipTap JSON content
+            const response = await fetch(result.data.downloadUrl)
+            if (response.ok) {
+              const tiptapJson = await response.json()
+              if (tiptapJson.type === 'doc') {
+                // Valid TipTap document - convert to HTML or keep as JSON
+                setContent(JSON.stringify(tiptapJson))
+              } else {
+                setContent('<p>Invalid TipTap document format</p>')
+              }
+            } else {
+              setContent('<p>Failed to load document content</p>')
+            }
+          } else {
+            setContent('<p>Document content not available</p>')
+          }
+        } catch (error) {
+          console.error('Error loading TipTap content:', error)
+          setContent('<p>Error loading document content</p>')
+        } finally {
+          setIsLoadingContent(false)
+        }
+      } else if (documentField.documentMetadata?.documentType !== 'tiptap') {
+        // For non-TipTap documents, show document info
+        setContent(`<p><em>Document: ${documentField.name}</em></p><p>Type: ${documentField.mimeType}</p>`)
+      }
+    }
+
+    loadContent()
+  }, [documentField, artifact.data.tableId, artifact.data.fieldId, artifact.data.organizationId, isLoadingContent])
 
   // Configure TipTap editor
   const editor = useEditor({
@@ -82,9 +115,6 @@ export function DocumentArtifactViewer({
         placeholder: 'Start writing your document...'
       }),
       Image,
-      Link.configure({
-        openOnClick: false
-      }),
       Table.configure({
         resizable: true
       }),
@@ -134,14 +164,14 @@ export function DocumentArtifactViewer({
   }
 
   return (
-    <div className={`bg-white border rounded-lg shadow-sm ${className}`}>
+    <div className={`border border-border rounded-lg ${className}`}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+      <div className="flex items-center justify-between p-4 border-b border-border">
         <div className="flex items-center gap-3">
-          <FileText className="w-5 h-5 text-blue-600" />
+          <FileText className="w-5 h-5 text-primary" />
           <div>
-            <h3 className="font-medium text-sm">{displayInfo.title}</h3>
-            <p className="text-xs text-gray-500">{displayInfo.subtitle}</p>
+            <h3 className="font-medium text-sm text-foreground">{displayInfo.title}</h3>
+            <p className="text-xs text-muted-foreground">{displayInfo.subtitle}</p>
           </div>
         </div>
         
@@ -208,9 +238,9 @@ export function DocumentArtifactViewer({
           </div>
         ) : (
           // Static content for non-TipTap documents
-          <div className="p-4 text-center text-gray-500">
-            <FileText className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-            <p className="text-sm font-medium mb-1">{documentField.name}</p>
+          <div className="p-4 text-center text-muted-foreground">
+            <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+            <p className="text-sm font-medium mb-1 text-foreground">{documentField.name}</p>
             <p className="text-xs mb-3">{documentField.mimeType}</p>
             <p className="text-xs">
               This document type cannot be edited inline.
@@ -230,7 +260,7 @@ export function DocumentArtifactViewer({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between p-3 border-t bg-gray-50 text-xs text-gray-500">
+      <div className="flex items-center justify-between p-3 border-t border-border text-xs text-muted-foreground">
         <div className="flex items-center gap-4">
           {displayInfo.version && (
             <span className="flex items-center gap-1">

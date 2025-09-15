@@ -364,6 +364,12 @@ export class ToolSearchApplicationService {
 
       for (const table of tables) {
         try {
+          // Get table fields to map fieldSlug to fieldId
+          const tableFields = await this.tableApplicationService.getFieldsForTable(table.id);
+          const fieldSlugToIdMap = new Map(
+            tableFields.map(field => [field.getColumnName(), field.id.value])
+          );
+
           // Use TableApplicationService.getRows with proper pagination
           const queryOptions: RowQueryOptions = {
             limit: limit * 2, // Get more rows since we'll filter by document/file names
@@ -381,6 +387,8 @@ export class ToolSearchApplicationService {
 
               // Look through all field values to find document and file fields
               for (const fieldValue of rowDTO.fieldValues) {
+                const fieldId = fieldSlugToIdMap.get(fieldValue.fieldSlug);
+                if (!fieldId) continue; // Skip if we can't find the fieldId
                 if (fieldValue.fieldType === 'document' && fieldValue.value && isDocumentArray(fieldValue.value)) {
                   // Handle DocumentArrayFieldValue - iterate through each document
                   const docArray = fieldValue.value as DocumentFieldValue[];
@@ -396,6 +404,9 @@ export class ToolSearchApplicationService {
                           title,
                           docField.mimeType || 'application/octet-stream',
                           table.name,
+                          table.id.value,
+                          fieldId,
+                          rowDTO.id,
                           database.name
                         )
                       );
