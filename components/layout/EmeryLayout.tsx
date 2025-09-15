@@ -1,9 +1,11 @@
 'use client'
 
 import React, { Suspense } from 'react'
+import { ChatSection, useChatCanvas } from '@llamaindex/chat-ui'
 import { EmerySidebar } from '@/components/EmerySidebar'
 import { Loading } from '@/components/ui/loading'
 import { EmeryChat } from '@/components/chat/EmeryChat'
+import { ChatCanvas } from '@/components/chat/ChatCanvas'
 import { useLayout } from './LayoutProvider'
 import type { EmeryLayoutProps, ChatContextConfig } from './types'
 
@@ -25,10 +27,141 @@ interface EmeryLayoutInnerProps extends EmeryLayoutProps {
   // This component needs layout context, so it must be wrapped by LayoutProvider
 }
 
-function EmeryLayoutInner({ 
-  children, 
+// Component that accesses useChatCanvas hook inside ChatSection
+function LayoutContentWithCanvas({
+  children,
+  enableChat,
+  sidebarState,
+  chatState,
+  canvasState,
+  isMobile,
+  setSidebarState,
+  setChatState
+}: {
+  children: React.ReactNode
+  enableChat: boolean
+  sidebarState: string
+  chatState: string
+  canvasState: string
+  isMobile: boolean
+  setSidebarState: (state: any) => void
+  setChatState: (state: any) => void
+}) {
+  // Access canvas state from LlamaIndex
+  const { displayedArtifact } = useChatCanvas()
+
+  // Calculate responsive classes and layout mode
+  const sidebarWidth = getSidebarWidth(sidebarState, isMobile)
+  const showSidebarOverlay = isMobile && sidebarState === 'expanded'
+
+  // Determine layout mode based on canvas state and displayed artifact
+  const isCanvasMode = canvasState === 'expanded'
+  const isChatMainMode = canvasState === 'collapsed'
+  const hasDisplayedArtifact = !!displayedArtifact
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-background">
+      {/* Mobile Overlay for Sidebar */}
+      {showSidebarOverlay && (
+        <div
+          className="fixed inset-0 bg-black/50 z-20 md:hidden"
+          onClick={() => setSidebarState('collapsed')}
+        />
+      )}
+
+      {/* Left Panel - Sidebar */}
+      <aside
+        className={`
+          h-screen
+          ${sidebarWidth}
+          ${isMobile ? 'fixed left-0 top-0 h-screen z-30 transform transition-transform duration-300' : ''}
+          ${isMobile && sidebarState === 'collapsed' ? '-translate-x-full' : 'translate-x-0'}
+          bg-card border-r border-border
+        `}
+      >
+        <Suspense fallback={<SidebarSkeleton />}>
+          <EmerySidebar />
+        </Suspense>
+      </aside>
+
+      {/* Main Content Area - Conditional based on displayedArtifact */}
+      <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
+        {hasDisplayedArtifact ? (
+          // Canvas Mode: Show artifact in full main area
+          <div className="flex-1 flex">
+            <ChatCanvas />
+            {/* Keep chat visible on the right when canvas is open */}
+            {enableChat && chatState !== 'hidden' && !isMobile && (
+              <div className={`h-full ${getChatWidth(chatState)}`}>
+                <Suspense fallback={<ChatSkeleton />}>
+                  <EmeryChat />
+                </Suspense>
+              </div>
+            )}
+          </div>
+        ) : (
+          // Normal Mode: Original layout logic
+          <>
+            {/* Canvas Mode: Traditional 3-panel (sidebar | canvas | chat) */}
+            {isCanvasMode && (
+              <>
+                {/* Center Panel - Canvas/Main Content */}
+                <main className="flex-1 flex flex-col overflow-hidden min-w-0 h-full">
+                  {children}
+                </main>
+
+                {/* Right Panel - Chat Interface */}
+                {enableChat && chatState !== 'hidden' && (
+                  <div className={`h-full ${getChatWidth(chatState)} ${isMobile ? 'hidden' : 'block'}`}>
+                    <Suspense fallback={<ChatSkeleton />}>
+                      <EmeryChat />
+                    </Suspense>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Chat Main Mode: 2-panel (sidebar | chat-as-main) */}
+            {isChatMainMode && enableChat && (
+              <div className="flex-1 flex flex-col overflow-hidden h-screen">
+                <Suspense fallback={<ChatSkeleton />}>
+                  <EmeryChat />
+                </Suspense>
+              </div>
+            )}
+
+            {/* Fallback: Show main content if chat disabled */}
+            {isChatMainMode && !enableChat && (
+              <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+                {children}
+              </main>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Mobile Chat Overlay */}
+      {isMobile && enableChat && chatState === 'expanded' && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 z-20"
+            onClick={() => setChatState('collapsed')}
+          />
+          <div className="fixed right-0 top-0 h-screen w-80 z-30 bg-card border-l border-border">
+            <Suspense fallback={<ChatSkeleton />}>
+              <EmeryChat />
+            </Suspense>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function EmeryLayoutInner({
+  children,
   chatContext,
-  enableChat = true 
+  enableChat = true
 }: EmeryLayoutInnerProps) {
   const {
     sidebarState,
@@ -49,93 +182,19 @@ function EmeryLayoutInner({
     }
   }, [chatContext, setChatContext])
 
-  // Calculate responsive classes and layout mode
-  const sidebarWidth = getSidebarWidth(sidebarState, isMobile)
-  const showSidebarOverlay = isMobile && sidebarState === 'expanded'
-  
-  // Determine layout mode based on canvas state and chat canvas
-  const isCanvasMode = canvasState === 'expanded'
-  const isChatMainMode = canvasState === 'collapsed'
-
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Mobile Overlay for Sidebar */}
-      {showSidebarOverlay && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-20 md:hidden"
-          onClick={() => setSidebarState('collapsed')}
-        />
-      )}
-
-      {/* Left Panel - Sidebar */}
-      <aside 
-        className={`
-          h-screen
-          ${sidebarWidth}
-          ${isMobile ? 'fixed left-0 top-0 h-screen z-30 transform transition-transform duration-300' : ''}
-          ${isMobile && sidebarState === 'collapsed' ? '-translate-x-full' : 'translate-x-0'}
-          bg-card border-r border-border
-        `}
-      >
-        <Suspense fallback={<SidebarSkeleton />}>
-          <EmerySidebar />
-        </Suspense>
-      </aside>
-
-      {/* Main Content Area - Layout changes based on canvas state and chat canvas */}
-      <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
-
-        {/* Canvas Mode: Traditional 3-panel (sidebar | canvas | chat) */}
-        {isCanvasMode && (
-          <>
-            {/* Center Panel - Canvas/Main Content */}
-            <main className="flex-1 flex flex-col overflow-hidden min-w-0 h-full">
-              {children}
-            </main>
-
-            {/* Right Panel - Chat Interface */}
-            {enableChat && chatState !== 'hidden' && (
-              <div className={`h-full ${getChatWidth(chatState)} ${isMobile ? 'hidden' : 'block'}`}>
-                <Suspense fallback={<ChatSkeleton />}>
-                  <EmeryChat />
-                </Suspense>
-              </div>
-            )}
-          </>
-        )}
-        
-        {/* Chat Main Mode: 2-panel (sidebar | chat-as-main) */}
-        {isChatMainMode && enableChat && (
-          <div className="flex-1 flex flex-col overflow-hidden h-screen">
-            <Suspense fallback={<ChatSkeleton />}>
-              <EmeryChat />
-            </Suspense>
-          </div>
-        )}
-        
-        {/* Fallback: Show main content if chat disabled */}
-        {isChatMainMode && !enableChat && (
-          <main className="flex-1 flex flex-col overflow-hidden min-w-0">
-            {children}
-          </main>
-        )}
-      </div>
-      
-      {/* Mobile Chat Overlay */}
-      {isMobile && enableChat && chatState === 'expanded' && (
-        <>
-          <div 
-            className="fixed inset-0 bg-black/50 z-20"
-            onClick={() => setChatState('collapsed')}
-          />
-          <div className="fixed right-0 top-0 h-screen w-80 z-30 bg-card border-l border-border">
-            <Suspense fallback={<ChatSkeleton />}>
-              <EmeryChat />
-            </Suspense>
-          </div>
-        </>
-      )}
-    </div>
+    <ChatSection>
+      <LayoutContentWithCanvas
+        children={children}
+        enableChat={enableChat}
+        sidebarState={sidebarState}
+        chatState={chatState}
+        canvasState={canvasState}
+        isMobile={isMobile}
+        setSidebarState={setSidebarState}
+        setChatState={setChatState}
+      />
+    </ChatSection>
   )
 }
 
