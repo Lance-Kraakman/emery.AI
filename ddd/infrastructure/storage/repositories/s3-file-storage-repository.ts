@@ -48,7 +48,7 @@ export class S3FileStorageRepository implements IFileStorageRepository {
           organizationId: request.organizationId?.toString() || '',
           tableId: request.tableId?.toString() || '',
           fieldId: request.fieldId?.toString() || '',
-          uploadedAt: new Date().toISOString(),
+          uploadedAt: new Date(),
           md5: md5Hash,
           sha256: sha256Hash,
         },
@@ -69,7 +69,7 @@ export class S3FileStorageRepository implements IFileStorageRepository {
         name: request.filename,
         size: request.buffer.length,
         mimeType: request.mimeType,
-        uploadedAt: new Date().toISOString(),
+        uploadedAt: new Date(),
         metadata: request.metadata,
         checksums: {
           md5: md5Hash,
@@ -99,7 +99,7 @@ export class S3FileStorageRepository implements IFileStorageRepository {
         Metadata: {
           originalName: request.filename.replace(/[^\w.-]/g, '_'),
           fieldId: request.fieldId?.value?.toString() || '',
-          uploadedAt: new Date().toISOString(),
+          uploadedAt: new Date(),
           md5: md5Hash,
           sha256: sha256Hash,
           ...(request.metadata || {}),
@@ -119,7 +119,7 @@ export class S3FileStorageRepository implements IFileStorageRepository {
         name: request.filename,
         size: request.buffer.length,
         mimeType: request.mimeType,
-        uploadedAt: new Date().toISOString(),
+        uploadedAt: new Date(),
         metadata: request.metadata,
         checksums: {
           md5: md5Hash,

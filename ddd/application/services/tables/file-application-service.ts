@@ -190,11 +190,21 @@ export class FileUseCases {
       // 3. Update file in storage using existing file ID
       const updatedFile = await this.fileStorageRepository.updateFile(command.fileId, uploadRequest);
 
-      console.log(`[FILE-APP-SERVICE] Updated file ${updatedFile.name} in field ${field.name} in table ${table.name}`);
+      // 4. Create file field value
+      const updatedFileFieldValue: FileFieldValue = {
+        id: updatedFile.id,
+        name: updatedFile.name,
+        size: updatedFile.size,
+        mimeType: updatedFile.mimeType,
+        s3Key: updatedFile.key,
+        uploadedAt: updatedFile.uploadedAt.toISOString(),
+      };
+
+      console.log(`[FILE-APP-SERVICE] Updated file ${updatedFileFieldValue.name} in field ${field.name} in table ${table.name}`);
 
       return {
         success: true,
-        data: updatedFile
+        data: updatedFileFieldValue
       };
 
     } catch (error) {

@@ -118,7 +118,7 @@ function EmeryLayoutInner({
           {enableChat && (
             <div className="w-96 border-l border-border">
               <Suspense fallback={<ChatSkeleton />}>
-                <EmeryChat />
+                <EmeryChat handler={canvasHandler} />
               </Suspense>
             </div>
           )}
@@ -134,7 +134,7 @@ function EmeryLayoutInner({
           />
           <div className="fixed right-0 top-0 h-screen w-80 z-30 bg-card border-l border-border">
             <Suspense fallback={<ChatSkeleton />}>
-              <EmeryChat />
+              <EmeryChat handler={canvasHandler} />
             </Suspense>
           </div>
         </>
