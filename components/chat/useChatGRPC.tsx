@@ -382,7 +382,7 @@ export function useChatGRPC(
     setInput,
     isLoading,
     append,
-    messages,
+    messages: messages.map(msg => ({ content: msg.content, role: msg.role })), // Transform to base Message format for ChatMessages component
     setMessages,
     scrollRef,
     scrollToBottom,

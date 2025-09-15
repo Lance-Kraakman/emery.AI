@@ -166,7 +166,12 @@ export function DocumentArtifactViewer({
     extensions: [
       StarterKit, // Includes Strike and other basic extensions
       Placeholder.configure({
-        placeholder: 'Start writing your document...'
+        placeholder: 'Start writing your document...',
+        showOnlyWhenEditable: true,
+        showOnlyCurrent: true,
+        includeChildren: false,
+        emptyEditorClass: 'is-editor-empty',
+        emptyNodeClass: 'is-empty'
       }),
       Image,
       Table.configure({

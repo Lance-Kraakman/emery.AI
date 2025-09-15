@@ -181,10 +181,15 @@
   @apply shadow-[inset_0_0_0_2px] shadow-accent/10;
 }
 
-/* Empty State */
-.tiptapEditor :global(.ProseMirror.ProseMirror-focused .is-empty::before) {
+/* Empty State - Only show placeholder for the currently focused empty node */
+.tiptapEditor :global(.ProseMirror .is-empty::before) {
   @apply text-muted-foreground float-left h-0 pointer-events-none;
   content: attr(data-placeholder);
+}
+
+/* Only show placeholder when editor is completely empty and focused */
+.tiptapEditor :global(.ProseMirror:not(.is-editor-empty) .is-empty::before) {
+  display: none;
 }
 
 /* Header Improvements */

@@ -163,7 +163,8 @@ export function ChatHistoryDropdown({
       
       if (result.success && result.data) {
         setSessions(result.data)
-        onChatHistoryUpdate?.() // Notify parent
+        // Don't call onChatHistoryUpdate here as it causes infinite loop
+        // onChatHistoryUpdate?.() // Notify parent
       }
     } catch (error) {
       console.error('Failed to load chat sessions:', error)

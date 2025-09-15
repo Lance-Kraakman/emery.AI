@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { generateId } from 'ai'
@@ -469,8 +469,8 @@ export function EmeryChat() {
   }
 
   // Get user info for chat history
-  const userId = session?.user?.id
-  const organizationId = session?.user?.currentOrganizationId
+  const userId = useMemo(() => session?.user?.id, [session?.user?.id])
+  const organizationId = useMemo(() => session?.user?.currentOrganizationId, [session?.user?.currentOrganizationId])
 
   // Don't render if user is not authenticated
   if (!userId || !organizationId) {
