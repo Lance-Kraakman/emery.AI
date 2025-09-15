@@ -26,9 +26,14 @@ import { ChatHistoryDropdown } from './ChatHistoryDropdown'
 import { createChatContextForPage } from '@/components/layout/types'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
+import { ToolPanel } from './ToolPanel'
+import { resolveReferences } from '@/app/actions/references'
+import type { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool'
+import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
-import { ToolSelectionPanel } from './ToolSelectionPanel'
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config'
+import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
+import { fetchDocumentArtifactData, fetchFileArtifactData, getFileDownloadUrl } from '@/app/actions/artifacts'
+import { mapReferenceToolToDTO, type ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper'
 
 /**
  * EmeryChat - Main chat component with LlamaIndex integration
@@ -209,6 +214,9 @@ export function EmeryChat() {
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const [isClient, setIsClient] = useState(false)
 
+  // Tools state for @ tool selection
+  const [selectedTools, setSelectedTools] = useState<ReferenceTool[]>([])
+
   // Handle chat history updates (callback for forcing refresh)
   const handleChatHistoryUpdate = () => {
     // Trigger refresh of chat history dropdown
@@ -362,45 +370,108 @@ export function EmeryChat() {
     }
   }
 
+  // Handle tool changes from chat input
+  const handleToolsChange = (tools: ReferenceTool[]) => {
+    setSelectedTools(tools)
+  }
+
+  // Handle tool click from panel - receives ReferenceTool, works with DTO
+  const handleToolClick = async (tool: ReferenceTool) => {
+    console.log('Tool clicked:', tool)
+
+    // Convert to DTO for consistent data access
+    const toolDTO = mapReferenceToolToDTO(tool)
+
+    if (toolDTO.category === ReferenceCategory.DOC) {
+      // Fetch real document data using DTO config
+      const result = await fetchDocumentArtifactData(
+        toolDTO.config.documentId!,
+        toolDTO.config.organizationId,
+        toolDTO.config.documentFilename!,
+        toolDTO.config.documentMimeType!
+      )
+
+      if (result.success && result.data) {
+        // Create and send artifact to canvas with real data
+        const artifact = createDocumentArtifact(result.data, 1, 1, 'view')
+        handler.append({
+          content: `Opening document: ${toolDTO.displayName}`,
+          role: 'assistant'
+        })
+      } else {
+        handler.append({
+          content: `Failed to open document: ${result.error || 'Unknown error'}`,
+          role: 'assistant'
+        })
+      }
+    } else if (toolDTO.category === ReferenceCategory.FILE) {
+      // Fetch real file data using DTO config
+      const fileResult = await fetchFileArtifactData(
+        toolDTO.config.fileId!,
+        toolDTO.config.organizationId,
+        toolDTO.config.filename!,
+        toolDTO.config.fileMimeType!
+      )
+
+      if (fileResult.success && fileResult.data) {
+        // Get download URL for the file
+        const urlResult = await getFileDownloadUrl(
+          toolDTO.config.fileId!,
+          toolDTO.config.organizationId
+        )
+
+        const downloadUrl = urlResult.success ? urlResult.data! : ''
+
+        // Create and send artifact to canvas with real data
+        const artifact = createFileArtifact(fileResult.data, 1, 1, 'generic', downloadUrl)
+        handler.append({
+          content: `Opening file: ${toolDTO.displayName}`,
+          role: 'assistant'
+        })
+      } else {
+        handler.append({
+          content: `Failed to open file: ${fileResult.error || 'Unknown error'}`,
+          role: 'assistant'
+        })
+      }
+    }
+    // Other tool types have different behaviors (agents, tables, databases)
+  }
+
+  // Handle adding tool via + button
+  const handleAddTool = () => {
+    // Focus the input and trigger @ character
+    const inputElement = document.querySelector('input[placeholder*="Ask Emery"]') as HTMLInputElement
+    if (inputElement) {
+      inputElement.focus()
+      // Simulate @ character input to trigger dropdown
+      const event = new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '@' })
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+      nativeInputValueSetter?.call(inputElement, inputElement.value + '@')
+      inputElement.dispatchEvent(event)
+    }
+  }
+
+  // Handle removing tool from panel
+  const handleRemoveTool = (toolToRemove: ReferenceTool) => {
+    // Remove from selected tools
+    const updatedTools = selectedTools.filter(tool => tool.reference.id !== toolToRemove.reference.id)
+    setSelectedTools(updatedTools)
+
+    // TODO: Also update the input text to remove the tool reference
+    // This would require access to the input element's value and updating it
+    console.log('Tool removed:', toolToRemove)
+  }
+
   const handleSuggestionClick = (suggestion: string) => {
     console.log('Suggestion clicked:', suggestion)
     setSelectedSuggestionIndex(-1)
     setShowSuggestions(false) // Hide suggestions after selection
-    
+
     // Use the chat handler to send the suggestion
     handler.append({ content: suggestion, role: 'user' })
   }
 
-  // Sample available tools - TODO: Replace with real tool registry
-  const availableToolCategories = React.useMemo(() => [
-    {
-      name: 'references' as const,
-      label: 'References',
-      icon: <Database className="h-3 w-3" />,
-      tools: [
-        ToolConfig.create('document_reader', '1.0', { title: 'Sales Report Q4', type: 'document' }),
-        ToolConfig.create('file_reader', '1.0', { title: 'Analysis.pdf', type: 'file' })
-      ]
-    },
-    {
-      name: 'apps' as const,
-      label: 'Apps',
-      icon: <Users className="h-3 w-3" />,
-      tools: [
-        ToolConfig.create('slack_send_message', '1.0', { title: 'Send Slack Message', app: 'slack' }),
-        ToolConfig.create('pipedream_webhook', '1.0', { title: 'Trigger Webhook', app: 'pipedream' })
-      ]
-    },
-    {
-      name: 'utilities' as const,
-      label: 'Utilities',
-      icon: <BarChart className="h-3 w-3" />,
-      tools: [
-        ToolConfig.create('data_analyzer', '1.0', { title: 'Analyze Data', type: 'utility' }),
-        ToolConfig.create('report_generator', '1.0', { title: 'Generate Report', type: 'utility' })
-      ]
-    }
-  ], [])
 
 
 
@@ -454,29 +525,26 @@ export function EmeryChat() {
                 )}
               </div>
               
-              {/* Tool Selection Panel - unified tool selection interface */}
-              <ToolSelectionPanel
-                availableTools={availableToolCategories}
-                selectedTools={handler.selectedTools}
-                onToolSelect={handler.addTool}
-                onToolDeselect={handler.removeTool}
-                onOpenArtifact={(artifact) => {
-                  // Open artifact in ChatCanvas
-                  if (handler.onArtifactCreated) {
-                    handler.onArtifactCreated(artifact)
-                  }
-                }}
+              {/* Tool Panel - always visible, shows selected tools */}
+              <ToolPanel
+                tools={selectedTools}
+                onToolClick={handleToolClick}
+                onAddTool={handleAddTool}
+                onRemoveTool={handleRemoveTool}
+                className="border-t border-border/10"
               />
-              
+
               {/* Input area - back inside ChatSection */}
               <div className="flex-shrink-0 p-4 border-t border-border/10 bg-card" onKeyDown={handleKeyDown}>
                 <CustomChatInput
                   onSendMessage={async (message) => {
-                    // Send message - tools will come from ToolSelectionPanel selection
+                    // Send message with tools
                     handler.append({ content: message, role: 'user' })
                     setShowSuggestions(false)
+                    // Keep tools visible after sending (don't clear them)
                   }}
-                  placeholder="Ask Emery anything..."
+                  onToolsChange={handleToolsChange}
+                  placeholder="Ask Emery anything... (type @ to add tools, docs, agents, etc.)"
                 />
               </div>
             </div>

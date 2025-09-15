@@ -3,7 +3,8 @@
 import { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { Row } from '@/ddd/domain/tables/value-objects/row';
-import type { ToolConfig, ServerConfig, CapabilityConfig } from '@/ddd/domain/agents/entities/agent';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import type { ServerConfig, CapabilityConfig } from '@/ddd/domain/agents/entities/agent';
 import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 // Export the unified Result interface for use in Server Actions
@@ -110,12 +111,14 @@ export interface CreateAgentClientData {
 
 // Import agent types from domain layer
 export type {
-  ToolConfig,
   ServerConfig,
   StepConfig,
   CapabilityConfig,
   CreateAgentData
 } from '@/ddd/domain/agents/entities/agent';
+
+// Import tool types from tools domain
+export type { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 export type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 

@@ -7,11 +7,14 @@ import { AgentFactory } from '@/ddd/domain/agents/entities/agent';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { agents } from '@/lib/db/schema';
 import { eq, and, isNotNull, sql, ne } from 'drizzle-orm';
+import type { InferSelectModel } from 'drizzle-orm';
 import { AgentId, OrganizationId, UserId, AgentStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
 import type { DbClient } from '@/lib/db/client';
 
-export class DrizzleAgentRepository 
-  extends DrizzleBaseRepository<Agent, AgentId, CreateAgentData, UpdateAgentData, any>
+type AgentRow = InferSelectModel<typeof agents>;
+
+export class DrizzleAgentRepository
+  extends DrizzleBaseRepository<Agent, AgentId, CreateAgentData, UpdateAgentData, AgentRow>
   implements IAgentRepository {
   
   protected readonly table = agents;
@@ -46,7 +49,7 @@ export class DrizzleAgentRepository
   // Inherits delete from base class
 
   async findByOwner(ownerId: UserId): Promise<Agent[]> {
-    const results = await this.db
+    const results: AgentRow[] = await this.db
       .select()
       .from(agents)
       .where(eq(agents.ownerId, ownerId.value));
@@ -55,7 +58,7 @@ export class DrizzleAgentRepository
   }
 
   async findActiveByOrganization(organizationId: OrganizationId): Promise<Agent[]> {
-    const results = await this.db
+    const results: AgentRow[] = await this.db
       .select()
       .from(agents)
       .where(
@@ -89,7 +92,7 @@ export class DrizzleAgentRepository
       conditions.push(eq(agents.organizationId, organizationId.value));
     }
 
-    const results = await this.db
+    const results: AgentRow[] = await this.db
       .select()
       .from(agents)
       .where(and(...conditions));
@@ -108,7 +111,7 @@ export class DrizzleAgentRepository
       conditions.push(eq(agents.organizationId, organizationId.value));
     }
 
-    const results = await this.db
+    const results: AgentRow[] = await this.db
       .select()
       .from(agents)
       .where(and(...conditions));

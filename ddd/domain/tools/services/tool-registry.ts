@@ -6,6 +6,10 @@
  *
  * AIDEV-NOTE: Domain service pattern - defines contract for tool discovery
  * without coupling to specific implementation (Python, database, etc.)
+ *
+ * AIDEV-TODO: Add gRPC integration for dynamic tool discovery from Python workers.
+ * Should discover tools available on Python gRPC agents at runtime.
+ * See agent_worker.proto for tool_discovery and tool_metadata services.
  */
 
 import { ToolConfig } from '../value-objects/tool-config'
@@ -80,4 +84,11 @@ export interface IToolRegistryService {
    * Get all available categories
    */
   getAvailableCategories(): Promise<ToolCategory[]>
+
+  /**
+   * AIDEV-TODO: Add gRPC tool discovery methods
+   * - discoverGrpcTools(workerId: string): Promise<ToolMetadata[]>
+   * - syncToolsFromWorkers(): Promise<void>
+   * - getWorkerToolCapabilities(workerId: string): Promise<ToolCapability[]>
+   */
 }

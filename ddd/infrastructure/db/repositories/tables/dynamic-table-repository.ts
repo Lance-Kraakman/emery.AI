@@ -12,6 +12,7 @@
 import type { DbClient } from '@/lib/db/client';
 import { tables, fields } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
+import type { InferSelectModel } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { s3Client, BUCKET_NAME, ensureBucketExists } from '@/lib/s3/client';
 import { GetObjectCommand, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
@@ -31,6 +32,9 @@ import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata'
 import { ResultHelpers } from '@/ddd/domain/shared/result';
 import type { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
 import type { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
+
+type TableRow = InferSelectModel<typeof tables>;
+type FieldRow = InferSelectModel<typeof fields>;
 
 export class DynamicTableRepository implements IDynamicTableRepository {
   constructor(
@@ -108,7 +112,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       });
 
       // Convert field persistence records to domain TableField objects
-      const tableFields = fieldRecords.map(fieldRecord => 
+      const tableFields = fieldRecords.map((fieldRecord: FieldRow) =>
         TableField.fromPersistence({
           id: fieldRecord.id,
           tableId: fieldRecord.tableId,
@@ -162,7 +166,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         });
 
         // Convert field persistence records to domain TableField objects
-        const tableFields = fieldRecords.map(fieldRecord => 
+        const tableFields = fieldRecords.map((fieldRecord: FieldRow) =>
           TableField.fromPersistence({
             id: fieldRecord.id,
             tableId: fieldRecord.tableId,
@@ -207,7 +211,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         where: eq(tables.databaseId, databaseId.value)
       });
 
-      return tableRecords.map(record => DynamicTable.fromPersistence({
+      return tableRecords.map((record: TableRow) => DynamicTable.fromPersistence({
         id: record.id,
         databaseId: record.databaseId,
         organizationId: record.organizationId,
@@ -275,7 +279,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         .where(eq(fields.tableId, tableId.value));
 
       // Find fields that need to be added (exist in memory but not in DB)
-      const existingFieldNames = new Set(existingFields.map(f => f.name));
+      const existingFieldNames = new Set(existingFields.map((f: FieldRow) => f.name));
       const fieldsToAdd = tableFields.filter(f => !existingFieldNames.has(f.name));
 
       // Insert new fields
@@ -566,7 +570,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     try {
       const tableRecords = await this.db.query.tables.findMany();
 
-      return tableRecords.map(record => DynamicTable.fromPersistence({
+      return tableRecords.map((record: TableRow) => DynamicTable.fromPersistence({
         id: record.id,
         databaseId: record.databaseId,
         organizationId: record.organizationId,

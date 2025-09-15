@@ -15,6 +15,7 @@
 
 import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { getAgentTaskApplicationService, getAgentApplicationService } from '@/ddd/application/di/container';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Set default timeout to 3 minutes for agent execution tests (accounts for AI model delays)
 const TEST_TIMEOUT = 180000;
@@ -33,7 +34,7 @@ interface CreateAndExecuteTaskTestInput {
   agentId: AgentId;
   name: string;
   instructions: string;
-  tools: { name: string }[];
+  tools: ToolConfig[];
   servers: { name: string }[];
   timeoutSeconds?: number;
 }
@@ -54,7 +55,7 @@ function createTaskExecutionTestCases(testAgentId: AgentId): TestCase<CreateAndE
         agentId: testAgentId,
         name: 'Simple Python Calculation',
         instructions: 'Calculate 2 + 2 using python and return the result',
-        tools: [{ name: 'python_repl' }],
+        tools: [ToolConfig.basic('python_repl')],
         servers: [],
         timeoutSeconds: 30
       },
@@ -66,7 +67,7 @@ function createTaskExecutionTestCases(testAgentId: AgentId): TestCase<CreateAndE
         agentId: testAgentId,
         name: 'Calculator Test',
         instructions: 'Use the calculator to compute 5 * 3',
-        tools: [{ name: 'calculator' }],
+        tools: [ToolConfig.basic('calculator')],
         servers: [],
         timeoutSeconds: 30
       },
@@ -78,7 +79,7 @@ function createTaskExecutionTestCases(testAgentId: AgentId): TestCase<CreateAndE
         agentId: testAgentId,
         name: 'Math Expression Test',
         instructions: 'Calculate the square root of 16',
-        tools: [{ name: 'calculator' }],
+        tools: [ToolConfig.basic('calculator')],
         servers: [],
         timeoutSeconds: 30
       },
@@ -123,10 +124,10 @@ describe('Agent Task Execution Integration Tests', () => {
         role: 'assistant',
         agentType: 'data-collector',
         tools: [
-          { name: 'python_repl' },
-          { name: 'file_reader' },
-          { name: 'web_search' },
-          { name: 'calculator' }
+          ToolConfig.basic('python_repl'),
+          ToolConfig.basic('file_reader'),
+          ToolConfig.basic('web_search'),
+          ToolConfig.basic('calculator')
         ],
         capabilities: [
           {
@@ -137,9 +138,9 @@ describe('Agent Task Execution Integration Tests', () => {
                 type: 'TOOL_STEP',
                 instructions: 'Use available tools to collect and analyze data as requested',
                 tools: [
-                  { name: 'python_repl' },
-                  { name: 'web_search' },
-                  { name: 'calculator' }
+                  ToolConfig.basic('python_repl'),
+                  ToolConfig.basic('web_search'),
+                  ToolConfig.basic('calculator')
                 ],
                 servers: []
               }
@@ -153,8 +154,8 @@ describe('Agent Task Execution Integration Tests', () => {
                 type: 'TOOL_STEP',
                 instructions: 'Read, process, or manipulate files as requested',
                 tools: [
-                  { name: 'file_reader' },
-                  { name: 'python_repl' }
+                  ToolConfig.basic('file_reader'),
+                  ToolConfig.basic('python_repl')
                 ],
                 servers: []
               }
@@ -199,7 +200,7 @@ describe('Agent Task Execution Integration Tests', () => {
         name: 'Creation Test Task',
         instructions: {
           instructions: 'Test task creation without execution',
-          tools: [{ name: 'python_repl' }],
+          tools: [ToolConfig.basic('python_repl')],
           servers: []
         }
       };
@@ -230,7 +231,7 @@ describe('Agent Task Execution Integration Tests', () => {
         name: 'Individual Execution Test',
         instructions: {
           instructions: 'Calculate 3 + 5 using python',
-          tools: [{ name: 'python_repl' }],
+          tools: [ToolConfig.basic('python_repl')],
           servers: []
         }
       };
@@ -352,7 +353,7 @@ describe('Agent Task Execution Integration Tests', () => {
           name,
           instructions: {
             instructions: `Task instructions for ${name}`,
-            tools: [{ name: 'python_repl' }],
+            tools: [ToolConfig.basic('python_repl')],
             servers: []
           }
         });
@@ -393,7 +394,7 @@ describe('Agent Task Execution Integration Tests', () => {
         name: 'Cancellation Test Task',
         instructions: {
           instructions: 'This task will be cancelled',
-          tools: [{ name: 'python_repl' }],
+          tools: [ToolConfig.basic('python_repl')],
           servers: []
         }
       });
@@ -465,10 +466,10 @@ describe('Agent Task Execution Integration Tests', () => {
         role: 'assistant',
         agentType: 'data-collector',
         tools: [
-          { name: 'python_repl' },
-          { name: 'file_reader' },
-          { name: 'web_search' },
-          { name: 'calculator' }
+          ToolConfig.basic('python_repl'),
+          ToolConfig.basic('file_reader'),
+          ToolConfig.basic('web_search'),
+          ToolConfig.basic('calculator')
         ],
         capabilities: [
           {
@@ -479,8 +480,8 @@ describe('Agent Task Execution Integration Tests', () => {
                 type: 'TOOL_STEP',
                 instructions: 'Execute the requested task using available tools',
                 tools: [
-                  { name: 'python_repl' },
-                  { name: 'calculator' }
+                  ToolConfig.basic('python_repl'),
+                  ToolConfig.basic('calculator')
                 ],
                 servers: []
               }
@@ -499,7 +500,7 @@ describe('Agent Task Execution Integration Tests', () => {
         name: 'Org 1 Task',
         instructions: {
           instructions: 'Task in organization 1',
-          tools: [{ name: 'python_repl' }],
+          tools: [ToolConfig.basic('python_repl')],
           servers: []
         }
       });
@@ -510,7 +511,7 @@ describe('Agent Task Execution Integration Tests', () => {
         name: 'Org 2 Task',
         instructions: {
           instructions: 'Task in organization 2',
-          tools: [{ name: 'python_repl' }],
+          tools: [ToolConfig.basic('python_repl')],
           servers: []
         }
       });

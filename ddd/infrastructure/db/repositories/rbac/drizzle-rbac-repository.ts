@@ -2,6 +2,7 @@
 // Handles permission checking, role management, and user-role assignments
 
 import { eq, and, inArray, sql } from 'drizzle-orm';
+import type { InferSelectModel } from 'drizzle-orm';
 import type { DbClient } from '@/lib/db/client';
 import { 
   permissions, 
@@ -18,6 +19,10 @@ import type {
   SYSTEM_ROLES 
 } from '@/ddd/domain/rbac/entities/role';
 import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
+
+type RoleRow = InferSelectModel<typeof roles>;
+type PermissionRow = InferSelectModel<typeof permissions>;
+type UserRoleRow = InferSelectModel<typeof userRoles>;
 
 export class DrizzleRBACRepository implements IRBACRepository {
   constructor(private db: DbClient) {
@@ -184,7 +189,7 @@ export class DrizzleRBACRepository implements IRBACRepository {
         eq(userRoles.organizationId, organizationId.value)
       ));
 
-    return result.map(r => new Permission(r.resource as any, r.action as any));
+    return result.map((r: PermissionRow) => new Permission(r.resource as any, r.action as any));
   }
 
   async getUserRoles(userId: UserId, organizationId: OrganizationId): Promise<Role[]> {
@@ -203,12 +208,12 @@ export class DrizzleRBACRepository implements IRBACRepository {
       ))
       .groupBy(roles.id);
 
-    return result.map(r => this.mapToRoleEntity(r.role, r.permissions || []));
+    return result.map((r: { role: RoleRow; permissions: string[] }) => this.mapToRoleEntity(r.role, r.permissions || []));
   }
 
   // Role management
   async createRole(data: CreateRoleData): Promise<Role> {
-    return await this.db.transaction(async (tx) => {
+    return await this.db.transaction(async (tx: any) => {
       // Create role
       const [newRole] = await tx
         .insert(roles)
@@ -236,7 +241,7 @@ export class DrizzleRBACRepository implements IRBACRepository {
   }
 
   async updateRole(roleId: number, data: UpdateRoleData): Promise<Role> {
-    return await this.db.transaction(async (tx) => {
+    return await this.db.transaction(async (tx: any) => {
       // Update role metadata
       const updateData: any = {};
       if (data.name !== undefined) updateData.name = data.name;
@@ -302,7 +307,7 @@ export class DrizzleRBACRepository implements IRBACRepository {
       .where(eq(roles.organizationId, organizationId.value))
       .groupBy(roles.id);
 
-    return result.map(r => this.mapToRoleEntity(r.role, r.permissions || []));
+    return result.map((r: { role: RoleRow; permissions: string[] }) => this.mapToRoleEntity(r.role, r.permissions || []));
   }
 
   async getSystemRoles(): Promise<Role[]> {
@@ -317,7 +322,7 @@ export class DrizzleRBACRepository implements IRBACRepository {
       .where(eq(roles.isSystem, true))
       .groupBy(roles.id);
 
-    return result.map(r => this.mapToRoleEntity(r.role, r.permissions || []));
+    return result.map((r: { role: RoleRow; permissions: string[] }) => this.mapToRoleEntity(r.role, r.permissions || []));
   }
 
   // Role-permission assignment
@@ -343,7 +348,7 @@ export class DrizzleRBACRepository implements IRBACRepository {
   }
 
   async setRolePermissions(roleId: number, newPermissions: Permission[]): Promise<void> {
-    await this.db.transaction(async (tx) => {
+    await this.db.transaction(async (tx: any) => {
       // Remove all existing permissions
       await tx.delete(rolePermissions).where(eq(rolePermissions.roleId, roleId));
       
@@ -383,7 +388,7 @@ export class DrizzleRBACRepository implements IRBACRepository {
   }
 
   async setUserRoles(userId: UserId, roleIds: number[], organizationId: OrganizationId): Promise<void> {
-    await this.db.transaction(async (tx) => {
+    await this.db.transaction(async (tx: any) => {
       // Remove all existing roles
       await tx
         .delete(userRoles)
@@ -490,7 +495,7 @@ export class DrizzleRBACRepository implements IRBACRepository {
       })
       .from(permissions);
 
-    return result.map(r => new Permission(r.resource as any, r.action as any));
+    return result.map((r: PermissionRow) => new Permission(r.resource as any, r.action as any));
   }
 
   async seedPermissions(): Promise<void> {
@@ -527,10 +532,10 @@ export class DrizzleRBACRepository implements IRBACRepository {
         )})`
       );
 
-    return result.map((r: any) => r.id);
+    return result.map((r: { id: number }) => r.id);
   }
 
-  private mapToRoleEntity(roleData: any, permissionStrings: string[]): Role {
+  private mapToRoleEntity(roleData: RoleRow, permissionStrings: string[]): Role {
     const rolePermissions = permissionStrings
       .filter(p => p && p !== '') // Filter out null/empty strings
       .map(p => Permission.fromString(p));
@@ -538,11 +543,11 @@ export class DrizzleRBACRepository implements IRBACRepository {
     return {
       id: roleData.id,
       name: roleData.name,
-      description: roleData.description,
+      description: roleData.description || undefined,
       organizationId: roleData.organizationId ? OrganizationId.fromNumber(roleData.organizationId) : undefined,
-      isSystem: roleData.isSystem,
+      isSystem: roleData.isSystem ?? false,
       permissions: rolePermissions,
-      createdAt: roleData.createdAt
+      createdAt: roleData.createdAt || new Date()
     };
   }
 }

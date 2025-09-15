@@ -2,12 +2,15 @@
 // Provides query logging and analytics using existing schema
 
 import { eq, and, sql, desc } from 'drizzle-orm';
+import type { InferSelectModel } from 'drizzle-orm';
 import type { DbClient } from '@/lib/db/client';
 import { ragQueryLogs } from '@/lib/db/schema';
 
 
 import { RagIndexId, SearchQuery } from '@/ddd/domain/rag/value-objects';
 import { QueryAnalytics, QueryLogEntry, RagQueryLogRepository } from '@/ddd/domain/rag/repositories/rag-query-log-repository';
+
+type RagQueryLogRow = InferSelectModel<typeof ragQueryLogs>;
 
 export class DrizzleRagQueryLogRepository implements RagQueryLogRepository {
   constructor(private readonly db: DbClient) {}
@@ -163,7 +166,7 @@ export class DrizzleRagQueryLogRepository implements RagQueryLogRepository {
         .orderBy(desc(ragQueryLogs.createdAt))
         .limit(limit);
 
-      return records.map(record => this.mapToDomainEntity(record));
+      return records.map((record: RagQueryLogRow) => this.mapToDomainEntity(record));
     } catch (error) {
       console.error('[QUERY-LOG-REPO] Failed to get recent queries:', error);
       return [];
@@ -192,23 +195,23 @@ export class DrizzleRagQueryLogRepository implements RagQueryLogRepository {
     }
   }
 
-  private mapToDomainEntity(record: any): QueryLogEntry {
+  private mapToDomainEntity(record: RagQueryLogRow): QueryLogEntry {
     return {
       id: record.id,
       indexId: RagIndexId.fromString(record.ragIndexId),
-      organizationId: record.organizationId,
+      organizationId: record.organizationId || undefined,
       query: record.query,
-      queryEmbedding: typeof record.queryEmbedding === 'string' 
-        ? JSON.parse(record.queryEmbedding) 
+      queryEmbedding: typeof record.queryEmbedding === 'string'
+        ? JSON.parse(record.queryEmbedding)
         : record.queryEmbedding || [],
       resultsCount: record.resultsCount,
-      topResults: record.topResults,
-      userId: record.userId,
-      agentId: record.agentId,
-      sessionId: record.sessionId,
-      similarityMetric: record.similarityMetric,
-      threshold: record.threshold,
-      createdAt: record.createdAt
+      topResults: (record.topResults as any[]) || undefined,
+      userId: record.userId || undefined,
+      agentId: record.agentId || undefined,
+      sessionId: record.sessionId || undefined,
+      similarityMetric: record.similarityMetric || 'cosine',
+      threshold: record.threshold || 0,
+      createdAt: record.createdAt || new Date()
     };
   }
 }

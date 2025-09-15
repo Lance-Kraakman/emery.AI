@@ -8,11 +8,69 @@ import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 import { getReferenceApplicationService } from "@/ddd/application/di/container";
 import { ReferenceMapper, type ReferenceDTO, type ReferenceSearchResultDTO, type ReferencePanelStateDTO } from "@/app/mappers/reference-mapper";
 import { ReferenceCategory } from "@/ddd/domain/chat/value-objects/reference-types";
+import type { ReferenceTool } from "@/ddd/domain/tools/entities/reference-tool";
 import type { Result } from "./types";
 
 /**
- * Search references across all categories (documents, files, agents, tables, databases)
- * Used by chat @ mentions and reference panels
+ * Enhanced search that returns ReferenceTool objects with proper typing
+ * Used by new tool-based chat system
+ */
+export async function searchReferenceTools(options: {
+  query: string;
+  categories?: ReferenceCategory[];
+  limit?: number;
+  offset?: number;
+}): Promise<Result<{
+  referenceTools: ReferenceTool[];
+  hasMore: boolean;
+  totalCount: number;
+  query: string;
+  isLoading: boolean;
+}>> {
+  try {
+    const session = await requireAuth();
+    const referenceService = getReferenceApplicationService();
+
+    const { query, categories, limit = 20, offset = 0 } = options;
+
+    console.log(`[ReferenceActions] Searching reference tools for query: "${query}"`);
+
+    // Use enhanced domain service to search for ReferenceTool objects
+    const searchResult = await referenceService.searchReferenceTools({
+      query,
+      categories,
+      limit,
+      offset,
+      organizationId: OrganizationId.fromNumber(session.user.currentOrganizationId)
+    });
+
+    console.log(`[ReferenceActions] Found ${searchResult.referenceTools.length} reference tools (${searchResult.totalCount} total)`);
+
+    return {
+      success: true,
+      data: {
+        referenceTools: searchResult.referenceTools,
+        hasMore: searchResult.hasMore,
+        totalCount: searchResult.totalCount,
+        query: query,
+        isLoading: false
+      }
+    };
+  } catch (error: unknown) {
+    console.error('[ReferenceActions] Error searching reference tools:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      success: false,
+      error: errorMessage.includes('Authentication required')
+        ? 'Authentication required'
+        : 'Failed to search reference tools'
+    };
+  }
+}
+
+/**
+ * Legacy search references across all categories (documents, files, agents, tables, databases)
+ * @deprecated Use searchReferenceTools() instead for proper tool integration
  */
 export async function searchReferences(options: {
   query: string;
