@@ -11,16 +11,14 @@
 import React, { useState } from 'react'
 import { FileText, File, Database, Users, Plus, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool'
 import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper'
-import { mapReferenceToolToDTO } from '@/app/mappers/reference-tool-mapper'
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
 
 interface ToolPanelProps {
-  tools?: ReferenceTool[] // Selected tools
-  onToolClick: (tool: ReferenceTool) => void // Handle tool click (artifact opening, etc.)
+  tools?: ReferenceToolDTO[] // Selected tools
+  onToolClick: (tool: ReferenceToolDTO) => void // Handle tool click (artifact opening, etc.)
   onAddTool?: () => void // Trigger @ dropdown for adding tools
-  onRemoveTool?: (tool: ReferenceTool) => void // Remove tool from selection
+  onRemoveTool?: (tool: ReferenceToolDTO) => void // Remove tool from selection
   isLoading?: boolean
   className?: string
 }
@@ -115,8 +113,7 @@ export function ToolPanel({
 }: ToolPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
 
-  // Convert ReferenceTool domain objects to DTOs for display
-  const toolDTOs = tools.map(mapReferenceToolToDTO)
+  // Tools are already DTOs
 
   return (
     <div className={`border-t border-border bg-muted/10 ${className}`}>
@@ -165,13 +162,13 @@ export function ToolPanel({
             )}
 
             {/* Selected Tools */}
-            {toolDTOs.length > 0 ? (
-              toolDTOs.map((toolDTO, index) => (
+            {tools.length > 0 ? (
+              tools.map((toolDTO, index) => (
                 <ToolCard
                   key={`${toolDTO.category}-${toolDTO.id}-${index}`}
                   tool={toolDTO}
-                  onClick={() => onToolClick(tools[index])} // Pass original ReferenceTool
-                  onRemove={onRemoveTool ? () => onRemoveTool(tools[index]) : undefined}
+                  onClick={() => onToolClick(toolDTO)} // Pass DTO
+                  onRemove={onRemoveTool ? () => onRemoveTool(toolDTO) : undefined}
                 />
               ))
             ) : !isLoading ? (

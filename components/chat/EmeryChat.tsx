@@ -28,7 +28,6 @@ import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { ToolPanel } from './ToolPanel'
 import { resolveReferences } from '@/app/actions/references'
-import type { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool'
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
 import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
@@ -215,7 +214,7 @@ export function EmeryChat() {
   const [isClient, setIsClient] = useState(false)
 
   // Tools state for @ tool selection
-  const [selectedTools, setSelectedTools] = useState<ReferenceTool[]>([])
+  const [selectedTools, setSelectedTools] = useState<ReferenceToolDTO[]>([])
 
   // Handle chat history updates (callback for forcing refresh)
   const handleChatHistoryUpdate = () => {
@@ -371,31 +370,28 @@ export function EmeryChat() {
   }
 
   // Handle tool changes from chat input
-  const handleToolsChange = (tools: ReferenceTool[]) => {
+  const handleToolsChange = (tools: ReferenceToolDTO[]) => {
     setSelectedTools(tools)
   }
 
   // Handle tool click from panel - receives ReferenceTool, works with DTO
-  const handleToolClick = async (tool: ReferenceTool) => {
+  const handleToolClick = async (tool: ReferenceToolDTO) => {
     console.log('Tool clicked:', tool)
 
-    // Convert to DTO for consistent data access
-    const toolDTO = mapReferenceToolToDTO(tool)
-
-    if (toolDTO.category === ReferenceCategory.DOC) {
+    if (tool.category === ReferenceCategory.DOC) {
       // Fetch real document data using DTO config
       const result = await fetchDocumentArtifactData(
-        toolDTO.config.documentId!,
-        toolDTO.config.organizationId,
-        toolDTO.config.documentFilename!,
-        toolDTO.config.documentMimeType!
+        tool.config.documentId!,
+        tool.config.organizationId,
+        tool.config.documentFilename!,
+        tool.config.documentMimeType!
       )
 
       if (result.success && result.data) {
         // Create and send artifact to canvas with real data
         const artifact = createDocumentArtifact(result.data, 1, 1, 'view')
         handler.append({
-          content: `Opening document: ${toolDTO.displayName}`,
+          content: `Opening document: ${tool.displayName}`,
           role: 'assistant'
         })
       } else {
@@ -404,20 +400,20 @@ export function EmeryChat() {
           role: 'assistant'
         })
       }
-    } else if (toolDTO.category === ReferenceCategory.FILE) {
+    } else if (tool.category === ReferenceCategory.FILE) {
       // Fetch real file data using DTO config
       const fileResult = await fetchFileArtifactData(
-        toolDTO.config.fileId!,
-        toolDTO.config.organizationId,
-        toolDTO.config.filename!,
-        toolDTO.config.fileMimeType!
+        tool.config.fileId!,
+        tool.config.organizationId,
+        tool.config.filename!,
+        tool.config.fileMimeType!
       )
 
       if (fileResult.success && fileResult.data) {
         // Get download URL for the file
         const urlResult = await getFileDownloadUrl(
-          toolDTO.config.fileId!,
-          toolDTO.config.organizationId
+          tool.config.fileId!,
+          tool.config.organizationId
         )
 
         const downloadUrl = urlResult.success ? urlResult.data! : ''
@@ -425,7 +421,7 @@ export function EmeryChat() {
         // Create and send artifact to canvas with real data
         const artifact = createFileArtifact(fileResult.data, 1, 1, 'generic', downloadUrl)
         handler.append({
-          content: `Opening file: ${toolDTO.displayName}`,
+          content: `Opening file: ${tool.displayName}`,
           role: 'assistant'
         })
       } else {
@@ -453,9 +449,9 @@ export function EmeryChat() {
   }
 
   // Handle removing tool from panel
-  const handleRemoveTool = (toolToRemove: ReferenceTool) => {
+  const handleRemoveTool = (toolToRemove: ReferenceToolDTO) => {
     // Remove from selected tools
-    const updatedTools = selectedTools.filter(tool => tool.reference.id !== toolToRemove.reference.id)
+    const updatedTools = selectedTools.filter(tool => tool.id !== toolToRemove.id)
     setSelectedTools(updatedTools)
 
     // TODO: Also update the input text to remove the tool reference
