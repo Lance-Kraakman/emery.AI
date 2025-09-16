@@ -5,7 +5,7 @@ import { Edit, ChevronDown, ChevronRight, Activity, Cog, Save, X, Loader2, Calen
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
+import type { ServerConfig, CapabilityConfig } from '@/ddd/domain/agents/entities/agent';
 import { discoverTools, createToolConfigFromMetadata, type ToolMetadataDTO } from '@/app/actions/tool-registry';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,16 +19,18 @@ import { updateAgentFromClient } from '@/app/actions/agents';
 import CapabilityManager from './CapabilityManager';
 import AgentActivityPanel from './AgentActivityPanel';
 import ScheduleManager from './ScheduleManager';
-import { 
-  isCalendarTrigger, 
-  isDatabaseEventTrigger, 
+import {
+  isCalendarTrigger,
+  isDatabaseEventTrigger,
   isWebhookTrigger,
   getCalendarRRule,
   getDatabaseEventOperations,
+  getDatabaseEventTableId,
   getWebhookSecret,
   getWebhookRequiresSignature,
   getTriggerTypeLabel
 } from './trigger-utils';
+import { TableSelector } from './TableSelector';
 
 // AIDEV-NOTE: Agent details view with inline editing functionality
 
@@ -47,6 +49,7 @@ interface EditFormData {
   trigger: TriggerConfig;
   tools: ToolConfig[];
   servers: ServerConfig[];
+  capabilities: CapabilityConfig[];
 }
 
 export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetailsViewProps) {
@@ -63,7 +66,8 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
     status: agent.status || 'active',
     trigger: agent.trigger || TriggerConfigs.manual(),
     tools: (agent.tools as ToolConfig[]) || [],
-    servers: (agent.servers as ServerConfig[]) || []
+    servers: (agent.servers as ServerConfig[]) || [],
+    capabilities: (agent.capabilities as CapabilityConfig[]) || []
   });
 
   const handleEdit = () => {
@@ -76,7 +80,8 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       status: agent.status || 'active',
       trigger: agent.trigger || TriggerConfigs.manual(),
       tools: (agent.tools as ToolConfig[]) || [],
-      servers: (agent.servers as ServerConfig[]) || []
+      servers: (agent.servers as ServerConfig[]) || [],
+      capabilities: (agent.capabilities as CapabilityConfig[]) || []
     });
   };
 
@@ -90,7 +95,8 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       status: agent.status || 'active',
       trigger: agent.trigger || TriggerConfigs.manual(),
       tools: (agent.tools as ToolConfig[]) || [],
-      servers: (agent.servers as ServerConfig[]) || []
+      servers: (agent.servers as ServerConfig[]) || [],
+      capabilities: (agent.capabilities as CapabilityConfig[]) || []
     });
   };
 
@@ -115,7 +121,8 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
         status: editFormData.status,
         trigger: editFormData.trigger,
         tools: editFormData.tools,
-        servers: editFormData.servers
+        servers: editFormData.servers,
+        capabilities: editFormData.capabilities
       });
       
       if (!result.success) {
@@ -161,7 +168,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
     setEditFormData(prev => ({ ...prev, trigger: newTrigger }));
   };
 
-  const handleTriggerConfigChange = (config: Partial<TriggerConfig>) => {
+  const handleTriggerConfigChange = (config: any) => {
     setEditFormData(prev => {
       // Type-safe trigger config update that preserves discriminated union
       let updatedTrigger: TriggerConfig;
@@ -213,12 +220,15 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
           });
         } else if (currentTrigger instanceof TriggerConfigs.databaseEvent(['INSERT']).constructor) {
           const current = currentTrigger as any;
-          updatedTrigger = TriggerConfigs.databaseEvent(current.operations, {
-            tableId: current.tableId,
-            conditions: current.conditions,
-            enabled: config.enabled !== undefined ? config.enabled : current.enabled,
-            description: config.description !== undefined ? config.description : current.description
-          });
+          updatedTrigger = TriggerConfigs.databaseEvent(
+            config.operations !== undefined ? config.operations : current.operations,
+            {
+              tableId: config.tableId !== undefined ? config.tableId : current.tableId,
+              conditions: current.conditions,
+              enabled: config.enabled !== undefined ? config.enabled : current.enabled,
+              description: config.description !== undefined ? config.description : current.description
+            }
+          );
         } else if (currentTrigger instanceof TriggerConfigs.webhook().constructor) {
           const current = currentTrigger as any;
           updatedTrigger = TriggerConfigs.webhook({
@@ -583,12 +593,12 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="px-3 pb-3">
-              <CapabilityManager 
-                agent={agent} 
+              <CapabilityManager
+                agent={isEditMode ? undefined : agent}
+                capabilities={isEditMode ? editFormData.capabilities : undefined}
                 isEditable={isEditMode}
                 onCapabilitiesChange={(capabilities) => {
-                  // TODO: Handle capability updates - could trigger agent update
-                  console.log('Capabilities updated:', capabilities);
+                  setEditFormData(prev => ({ ...prev, capabilities }));
                 }}
               />
             </div>
@@ -623,36 +633,91 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                     </Badge>
                   </div>
                   
-                  {agent.trigger && isCalendarTrigger(agent.trigger) && agent.trigger.rrule && (
-                    <div>
-                      <h5 className="font-medium text-sm mb-1">Schedule</h5>
-                      <p className="text-xs text-muted-foreground">
-                        {agent.trigger.rrule}
-                      </p>
+                  {agent.trigger && isCalendarTrigger(agent.trigger) && (
+                    <div className="space-y-2">
+                      {agent.trigger.rrule && (
+                        <div>
+                          <h5 className="font-medium text-sm mb-1">Schedule</h5>
+                          <Badge variant="outline" className="text-xs font-mono">
+                            {agent.trigger.rrule}
+                          </Badge>
+                        </div>
+                      )}
+                      {agent.trigger.timezone && (
+                        <div>
+                          <h5 className="font-medium text-sm mb-1">Timezone</h5>
+                          <Badge variant="secondary" className="text-xs">
+                            {agent.trigger.timezone}
+                          </Badge>
+                        </div>
+                      )}
+                      {agent.trigger.startDate && (
+                        <div>
+                          <h5 className="font-medium text-sm mb-1">Start Date</h5>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(agent.trigger.startDate).toLocaleString()}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                   
                   {agent.trigger && isDatabaseEventTrigger(agent.trigger) && (
-                    <div>
-                      <h5 className="font-medium text-sm mb-1">Operations</h5>
-                      <div className="flex gap-1">
-                        {agent.trigger.operations.map((op, index) => (
-                          <Badge key={index} variant="secondary" className="text-xs">
-                            {op}
+                    <div className="space-y-2">
+                      {agent.trigger.tableId && (
+                        <div>
+                          <h5 className="font-medium text-sm mb-1">Table</h5>
+                          <Badge variant="outline" className="text-xs">
+                            Table: {agent.trigger.tableId}
                           </Badge>
-                        ))}
+                        </div>
+                      )}
+                      <div>
+                        <h5 className="font-medium text-sm mb-1">Operations</h5>
+                        <div className="flex gap-1">
+                          {agent.trigger.operations.map((op, index) => (
+                            <Badge key={index} variant="secondary" className="text-xs">
+                              {op}
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   )}
                   
                   
                   {agent.trigger && isWebhookTrigger(agent.trigger) && (
-                    <div className="space-y-1">
+                    <div className="space-y-2">
+                      <div>
+                        <h5 className="font-medium text-sm mb-1">Webhook URL</h5>
+                        <div className="bg-muted p-2 rounded text-xs font-mono break-all">
+                          {`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/agents/${agent.id}/trigger`}
+                        </div>
+                      </div>
+                      {agent.trigger.allowedOrigins && agent.trigger.allowedOrigins.length > 0 && (
+                        <div>
+                          <h5 className="font-medium text-sm mb-1">Allowed Origins</h5>
+                          <div className="flex flex-wrap gap-1">
+                            {agent.trigger.allowedOrigins.map((origin, index) => (
+                              <Badge key={index} variant="outline" className="text-xs">
+                                {origin}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <div>
                         <h5 className="font-medium text-sm mb-1">Security</h5>
-                        <Badge variant={agent.trigger.requiresSignature ? 'success' : 'secondary'} className="text-xs">
-                          {agent.trigger.requiresSignature ? 'Signature Required' : 'No Signature'}
-                        </Badge>
+                        <div className="flex gap-2">
+                          <Badge variant={agent.trigger.requiresSignature ? 'default' : 'secondary'} className="text-xs">
+                            {agent.trigger.requiresSignature ? 'Signature Required' : 'No Signature'}
+                          </Badge>
+                          {agent.trigger.webhookSecret && (
+                            <Badge variant="outline" className="text-xs">
+                              Secret Configured
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -677,44 +742,115 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
 
                   {/* Trigger Type Specific Configuration */}
                   {editFormData.trigger?.type === 'MANUAL' && (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <p className="text-xs text-muted-foreground">
                         Agent will execute only when manually triggered by users.
                       </p>
+
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                        <h5 className="font-medium text-sm mb-1 text-green-900">Manual Execution</h5>
+                        <p className="text-xs text-green-700">
+                          This agent can be triggered from the agent dashboard, via API calls, or when referenced in chat.
+                        </p>
+                      </div>
+
+                      <div>
+                        <h5 className="font-medium text-sm mb-1">Execution Context</h5>
+                        <Input
+                          value={editFormData.trigger?.description || ''}
+                          onChange={(e) => handleTriggerConfigChange({ description: e.target.value })}
+                          placeholder="Optional: Describe when this agent should be triggered"
+                          className="text-sm"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Helps users understand when to trigger this agent manually
+                        </p>
+                      </div>
                     </div>
                   )}
 
                   {editFormData.trigger?.type === 'CALENDAR' && (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <p className="text-xs text-muted-foreground">
                         Configure recurring schedules using the calendar interface.
                       </p>
-                      <ScheduleManager 
-                        initialRRule={getCalendarRRule(editFormData.trigger)}
-                        onScheduleChange={(rrule) => {
-                          handleTriggerConfigChange({ rrule });
-                        }}
-                        isCreationMode={false}
-                      />
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <h5 className="font-medium text-sm mb-1">Timezone</h5>
+                          <Input
+                            value={isCalendarTrigger(editFormData.trigger) ? editFormData.trigger.timezone || '' : ''}
+                            onChange={(e) => handleTriggerConfigChange({ timezone: e.target.value })}
+                            placeholder="UTC"
+                            className="text-sm"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            e.g., America/New_York, UTC, Europe/London
+                          </p>
+                        </div>
+
+                        <div>
+                          <h5 className="font-medium text-sm mb-1">Start Date</h5>
+                          <Input
+                            type="datetime-local"
+                            value={isCalendarTrigger(editFormData.trigger) && editFormData.trigger.startDate
+                              ? new Date(editFormData.trigger.startDate).toISOString().slice(0, 16)
+                              : ''
+                            }
+                            onChange={(e) => {
+                              const startDate = e.target.value ? new Date(e.target.value) : undefined;
+                              handleTriggerConfigChange({ startDate });
+                            }}
+                            className="text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <h5 className="font-medium text-sm mb-2">Schedule Configuration</h5>
+                        <ScheduleManager
+                          initialRRule={getCalendarRRule(editFormData.trigger)}
+                          onScheduleChange={(rrule) => {
+                            handleTriggerConfigChange({ rrule });
+                          }}
+                          isCreationMode={false}
+                        />
+                      </div>
                     </div>
                   )}
 
                   {editFormData.trigger?.type === 'DATABASE_EVENT' && (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <p className="text-xs text-muted-foreground">
                         Trigger agent execution when database changes occur.
                       </p>
+
+                      <div>
+                        <h5 className="font-medium text-sm mb-2">Table Selection</h5>
+                        <TableSelector
+                          value={getDatabaseEventTableId(editFormData.trigger)}
+                          onValueChange={(tableId) => {
+                            handleTriggerConfigChange({ tableId });
+                          }}
+                          placeholder="Select table to monitor..."
+                          className="text-sm"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Select a specific table to monitor, or leave unselected to monitor all tables
+                        </p>
+                      </div>
+
                       <div>
                         <h5 className="font-medium text-sm mb-1">Operations</h5>
                         <div className="flex gap-2 text-xs">
                           {['INSERT', 'UPDATE', 'DELETE'].map((op) => (
                             <label key={op} className="flex items-center gap-1">
-                              <input 
-                                type="checkbox" 
+                              <input
+                                type="checkbox"
                                 checked={getDatabaseEventOperations(editFormData.trigger).includes(op as 'INSERT' | 'UPDATE' | 'DELETE')}
                                 onChange={(e) => {
                                   const current = getDatabaseEventOperations(editFormData.trigger);
-                                  const newOps = e.target.checked 
+                                  const newOps = e.target.checked
                                     ? [...current, op as 'INSERT' | 'UPDATE' | 'DELETE']
                                     : current.filter((o) => o !== op);
                                   handleTriggerConfigChange({ operations: newOps });
@@ -730,11 +866,22 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
 
 
                   {editFormData.trigger?.type === 'WEBHOOK' && (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <p className="text-xs text-muted-foreground">
                         Trigger agent execution via webhook HTTP calls.
                       </p>
-                      <div className="grid gap-2">
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <h5 className="font-medium text-sm mb-1 text-blue-900">Webhook URL</h5>
+                        <div className="font-mono text-xs text-blue-800 bg-blue-100 p-2 rounded border break-all">
+                          {`${window.location.origin}/api/webhooks/agents/${agent.id}/trigger`}
+                        </div>
+                        <p className="text-xs text-blue-700 mt-1">
+                          Use this URL to trigger the agent externally
+                        </p>
+                      </div>
+
+                      <div className="grid gap-3">
                         <div>
                           <h5 className="font-medium text-sm mb-1">Webhook Secret</h5>
                           <Input
@@ -744,10 +891,30 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                             placeholder="Optional security secret"
                             className="text-sm"
                           />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Used for request validation. Include in X-Webhook-Secret header.
+                          </p>
                         </div>
-                        <label className="flex items-center gap-2 text-xs">
-                          <input 
-                            type="checkbox" 
+
+                        <div>
+                          <h5 className="font-medium text-sm mb-1">Allowed Origins</h5>
+                          <Input
+                            value={isWebhookTrigger(editFormData.trigger) ? editFormData.trigger.allowedOrigins?.join(', ') || '' : ''}
+                            onChange={(e) => {
+                              const origins = e.target.value.split(',').map(o => o.trim()).filter(o => o);
+                              handleTriggerConfigChange({ allowedOrigins: origins.length > 0 ? origins : undefined });
+                            }}
+                            placeholder="https://example.com, https://app.com"
+                            className="text-sm"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Comma-separated list of allowed origins. Leave empty to allow all.
+                          </p>
+                        </div>
+
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
                             checked={getWebhookRequiresSignature(editFormData.trigger)}
                             onChange={(e) => handleTriggerConfigChange({ requiresSignature: e.target.checked })}
                           />

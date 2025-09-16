@@ -138,15 +138,6 @@ export function RolesTab() {
     return 'outline' as const;
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin text-primary" />
-        <span className="ml-2 text-muted-foreground">Loading roles...</span>
-      </div>
-    );
-  }
-
   const columnHelper = createColumnHelper<CustomRole>();
 
   const columns = useMemo(() => [
@@ -238,6 +229,15 @@ export function RolesTab() {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+        <span className="ml-2 text-muted-foreground">Loading roles...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

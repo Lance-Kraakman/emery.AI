@@ -1,9 +1,20 @@
 .rbc-calendar {
   @apply bg-transparent text-white;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .rbc-toolbar {
   @apply bg-transparent mb-4;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.rbc-toolbar .rbc-toolbar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .rbc-toolbar button {
@@ -28,4 +39,31 @@
 
 .rbc-month-row {
   @apply border-gray-800;
+}
+
+.rbc-month-view,
+.rbc-time-view {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.rbc-time-content {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .rbc-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rbc-toolbar button {
+    @apply text-sm px-2 py-1;
+  }
+
+  .rbc-header {
+    font-size: 0.875rem;
+  }
 }
