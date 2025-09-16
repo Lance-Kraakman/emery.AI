@@ -277,7 +277,17 @@ export async function getToolConnectionStatus(
 
     for (const tool of tools) {
       // Get tool metadata to check connection requirements
-      const requiredApps = tool.requiredApps || [];
+      let requiredApps = tool.requiredApps || [];
+
+      // Fallback: infer required apps from tool name if not explicitly set
+      if (requiredApps.length === 0) {
+        const toolName = tool.name.toLowerCase();
+        if (toolName.includes('slack')) requiredApps = ['slack'];
+        else if (toolName.includes('gmail')) requiredApps = ['gmail'];
+        else if (toolName.includes('google') && toolName.includes('sheet')) requiredApps = ['google-sheets'];
+        else if (toolName.includes('github')) requiredApps = ['github'];
+        else if (toolName.includes('notion')) requiredApps = ['notion'];
+      }
 
       let isConnected = true;
       let missingApps: string[] = [];
@@ -285,14 +295,24 @@ export async function getToolConnectionStatus(
       let connectionType: 'oauth' | 'api_key' | 'none' = 'none';
 
       if (requiredApps.length > 0) {
-        // Check which connections are missing
-        const missingConnections = await connectionService.getMissingConnections(userId, requiredApps);
-        missingApps = missingConnections.map(app => app.value);
-        isConnected = missingApps.length === 0;
-        connectionType = 'oauth'; // Most tools use OAuth
+        try {
+          // Check which connections are missing
+          const missingConnections = await connectionService.getMissingConnections(userId, requiredApps);
+          missingApps = missingConnections.map(app => app.value);
+          isConnected = missingApps.length === 0;
+          connectionType = 'oauth'; // Most tools use OAuth
 
-        if (!isConnected) {
-          warnings.push(`Missing connections: ${missingApps.join(', ')}`);
+          console.log(`[ConnectionStatus] Tool ${tool.name}: required=${requiredApps}, missing=${missingApps}, connected=${isConnected}`);
+
+          if (!isConnected) {
+            warnings.push(`Missing connections: ${missingApps.join(', ')}`);
+          }
+        } catch (error) {
+          console.error(`[ConnectionStatus] Error checking connections for ${tool.name}:`, error);
+          // Default to showing as disconnected if we can't check
+          isConnected = false;
+          missingApps = requiredApps;
+          connectionType = 'oauth';
         }
       }
 
@@ -414,7 +434,17 @@ export async function getConnectionSetupUrl(
       redirectUrl: redirectPath
     });
 
-    return result;
+    if (result.success && result.data) {
+      return {
+        success: true,
+        data: result.data as string
+      };
+    } else {
+      return {
+        success: false,
+        error: result.error || 'Failed to generate setup URL'
+      };
+    }
   } catch (error) {
     console.error('Error generating connection setup URL:', error);
     return {
