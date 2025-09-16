@@ -45,6 +45,7 @@ export class ToolMetadata {
     public readonly category: ToolCategory,
     public readonly requiresConnection: boolean,
     public readonly connectionType: ConnectionType,
+    public readonly requiredApps: readonly string[] = [], // Apps like 'gmail', 'slack', 'github'
     public readonly icon?: string,
     public readonly tags: readonly string[] = []
   ) {
@@ -75,6 +76,7 @@ export class ToolMetadata {
       ToolCategory.UTILITIES,
       false,
       ConnectionType.NONE,
+      [], // No required apps
       undefined,
       tags
     )
@@ -87,6 +89,7 @@ export class ToolMetadata {
     name: string,
     displayName: string,
     description: string,
+    requiredApps: string[] = [],
     icon?: string,
     tags: string[] = []
   ): ToolMetadata {
@@ -97,6 +100,7 @@ export class ToolMetadata {
       ToolCategory.APPS,
       true,
       ConnectionType.OAUTH,
+      requiredApps,
       icon,
       tags
     )
@@ -109,6 +113,7 @@ export class ToolMetadata {
     name: string,
     displayName: string,
     description: string,
+    requiredApps: string[] = [],
     icon?: string,
     tags: string[] = []
   ): ToolMetadata {
@@ -119,6 +124,7 @@ export class ToolMetadata {
       ToolCategory.APPS,
       true,
       ConnectionType.API_KEY,
+      requiredApps,
       icon,
       tags
     )
@@ -140,6 +146,7 @@ export class ToolMetadata {
       ToolCategory.REFERENCES,
       false,
       ConnectionType.NONE,
+      [], // No required apps
       undefined,
       tags
     )
@@ -161,6 +168,7 @@ export class ToolMetadata {
       ToolCategory.ORGANIZATIONAL,
       false,
       ConnectionType.NONE,
+      [], // No required apps
       undefined,
       tags
     )
@@ -182,6 +190,7 @@ export class ToolMetadata {
     description: string
     category: string
     requiresConnection: boolean
+    requiredApps: readonly string[]
     connectionBadge?: string
     icon?: string
     tags: readonly string[]
@@ -192,6 +201,7 @@ export class ToolMetadata {
       description: this.description,
       category: this.category,
       requiresConnection: this.requiresConnection,
+      requiredApps: this.requiredApps,
       connectionBadge: this.requiresConnection ? this.connectionType.toUpperCase() : undefined,
       icon: this.icon,
       tags: this.tags
@@ -225,6 +235,8 @@ export class ToolMetadata {
       this.category === other.category &&
       this.requiresConnection === other.requiresConnection &&
       this.connectionType === other.connectionType &&
+      this.requiredApps.length === other.requiredApps.length &&
+      this.requiredApps.every((app, index) => app === other.requiredApps[index]) &&
       this.icon === other.icon &&
       this.tags.length === other.tags.length &&
       this.tags.every((tag, index) => tag === other.tags[index])

@@ -235,13 +235,14 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       role: data.role,
       description: data.description,
       persona: data.persona,
+      ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,
       tools: data.tools,
       servers: data.servers,
       trigger: data.trigger,
       capabilities: data.capabilities,
       status: (() => {
         const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
-        return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived') 
+        return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
           ? statusValue as 'active' | 'inactive' | 'archived'
           : undefined;
       })()

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   User,
   Settings,
@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfigurationCard } from './ConfigurationCard';
 import { useModal } from './modals/ModalContext';
+import { getOrganizationMembers } from '@/app/actions/invitations';
 import {
   isCalendarTrigger,
   isDatabaseEventTrigger,
@@ -28,13 +29,51 @@ interface AgentDetailsPanelProps {
   onUpdate?: () => void;
 }
 
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  systemRole?: string;
+}
+
 export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   const { openModal } = useModal();
+  const [ownerName, setOwnerName] = useState<string>('Loading...');
+  const [users, setUsers] = useState<User[]>([]);
+
+  // Load organization members to get owner name
+  useEffect(() => {
+    loadOwnerName();
+  }, [agent.ownerId]);
+
+  const loadOwnerName = async () => {
+    try {
+      const members = await getOrganizationMembers();
+      setUsers(members || []);
+      const owner = members?.find(u => u.id === agent.ownerId);
+      setOwnerName(owner?.name || 'Unknown User');
+    } catch (error) {
+      console.error('Error loading owner name:', error);
+      setOwnerName('Unknown User');
+    }
+  };
 
   // Determine configuration status for each area
   const getBasicInfoStatus = () => {
     if (!agent.role || agent.role === 'No role specified') return 'partial';
-    return agent.name && agent.role ? 'configured' : 'empty';
+    return agent.name && agent.role && agent.ownerId ? 'configured' : 'empty';
+  };
+
+  const getBasicInfoSummary = () => {
+    const parts = [];
+    if (agent.name) parts.push(agent.name);
+    if (ownerName !== 'Loading...' && ownerName !== 'Unknown User') {
+      parts.push(`Owner: ${ownerName}`);
+    }
+    if (agent.role && agent.role !== 'No role specified') {
+      parts.push(`Role: ${agent.role}`);
+    }
+    return parts.join(' • ') || 'Basic information needs setup';
   };
 
   const getTriggerStatus = () => {
@@ -117,10 +156,11 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
         {/* Basic Information */}
         <ConfigurationCard
           title="Basic Information"
-          description="Name, role, and status"
+          description="Name, owner, role, and status"
           icon={User}
           status={getBasicInfoStatus()}
           statusText={getBasicInfoStatus() === 'configured' ? 'Complete' : 'Incomplete'}
+          summary={getBasicInfoSummary()}
           onClick={() => openModal('basic-info', { agent })}
           actionText="Edit Details"
         />

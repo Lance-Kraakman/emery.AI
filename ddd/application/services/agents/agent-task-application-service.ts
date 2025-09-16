@@ -171,8 +171,14 @@ export class AgentTaskApplicationService {
         ownerId: agent.ownerId.value,
         timeoutSeconds,
         onProgress: (logMessage: string) => {
+          console.log(`[TASK-DEBUG] onProgress callback called with:`, logMessage);
+          console.log(`[TASK-DEBUG] Task logs count before append:`, task.logs.length);
+
           // Append log to task in real-time
           task.appendLog(logMessage);
+
+          console.log(`[TASK-DEBUG] Task logs count after append:`, task.logs.length);
+          console.log(`[TASK-DEBUG] Latest log entry:`, task.logs[task.logs.length - 1]);
         }
       };
 
@@ -190,6 +196,10 @@ export class AgentTaskApplicationService {
       }
 
       // 7. Save final task state
+      console.log(`[TASK-DEBUG] About to save task to database`);
+      console.log(`[TASK-DEBUG] Final task logs count:`, task.logs.length);
+      console.log(`[TASK-DEBUG] Final task logs:`, JSON.stringify(task.logs, null, 2));
+
       await this.taskRepository.update(task.id, {
         status: task.status.value,
         result: task.result,
@@ -197,6 +207,8 @@ export class AgentTaskApplicationService {
         error: task.error,
         logs: task.logs
       });
+
+      console.log(`[TASK-DEBUG] Task saved to database successfully`);
 
       console.log(`[AGENT-TASK-SERVICE] Completed task ${taskId.substring(0, 8)}: ${executionResult.success ? 'SUCCESS' : 'FAILED'}`);
 

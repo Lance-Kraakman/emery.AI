@@ -82,12 +82,23 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       await workerClient.executeTask(taskRequest as any, async (progress: TaskProgress) => {
         console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Step ${progress.step_id} - Status: ${progress.status} (${progress.progress_percent}%)`);
 
+        // DEBUG: Log full TaskProgress object
+        console.log(`[GRPC-DEBUG] TaskProgress received:`, JSON.stringify(progress, null, 2));
+        console.log(`[GRPC-DEBUG] output_json content:`, progress.output_json);
+        console.log(`[GRPC-DEBUG] step_id:`, progress.step_id);
+        console.log(`[GRPC-DEBUG] step_type:`, progress.step_type);
+
         // Create log message from TaskProgress
         const logMessage = `Step ${progress.step_id} (${progress.step_type}): ${progress.status} - ${progress.progress_percent}% ${progress.output_json ? `| Output: ${progress.output_json.substring(0, 200)}${progress.output_json.length > 200 ? '...' : ''}` : ''}${progress.error_message ? ` | Error: ${progress.error_message}` : ''}`;
 
+        console.log(`[GRPC-DEBUG] Formatted log message:`, logMessage);
+
         // Send log to callback if provided
         if (onProgress) {
+          console.log(`[GRPC-DEBUG] Calling onProgress callback`);
           onProgress(logMessage);
+        } else {
+          console.log(`[GRPC-DEBUG] No onProgress callback provided`);
         }
 
         // Map proto progress to TypeScript types

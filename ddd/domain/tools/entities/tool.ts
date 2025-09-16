@@ -12,6 +12,18 @@
 
 import { ToolConfig } from '../value-objects/tool-config'
 import { ToolMetadata, ToolCategory } from '../value-objects/tool-metadata'
+import { UserId } from '@/ddd/domain/shared/value-objects'
+import type { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service'
+
+/**
+ * Connection validation result
+ */
+export interface ConnectionValidationResult {
+  valid: boolean
+  warnings: string[]
+  missingConnections: string[]
+  ownerName?: string
+}
 
 /**
  * Base Tool entity - contains core tool configuration and metadata
@@ -92,6 +104,56 @@ export class Tool {
   supportsArtifacts(): boolean {
     // Base implementation - most tools don't support artifacts
     return false
+  }
+
+  /**
+   * Validate owner connections for this tool (non-blocking)
+   */
+  async validateOwnerConnections(
+    ownerId: UserId,
+    connectionService?: ConnectionApplicationService
+  ): Promise<ConnectionValidationResult> {
+    if (!this.requiresConnection()) {
+      return {
+        valid: true,
+        warnings: [],
+        missingConnections: []
+      }
+    }
+
+    if (!connectionService) {
+      return {
+        valid: false,
+        warnings: ['Connection validation service not available'],
+        missingConnections: this.toolMetadata.requiredApps.slice()
+      }
+    }
+
+    try {
+      // Check which required apps are missing connections for the owner
+      const missingApps = await connectionService.getMissingConnections(
+        ownerId,
+        this.toolMetadata.requiredApps.slice()
+      )
+
+      const missingAppNames = missingApps.map(app => app.value)
+      const warnings = missingAppNames.map(app =>
+        `Owner missing ${app} connection for ${this.toolMetadata.displayName}`
+      )
+
+      return {
+        valid: missingAppNames.length === 0,
+        warnings,
+        missingConnections: missingAppNames
+      }
+    } catch (error) {
+      console.error('Error validating tool connections:', error)
+      return {
+        valid: false,
+        warnings: ['Failed to validate connections'],
+        missingConnections: this.toolMetadata.requiredApps.slice()
+      }
+    }
   }
 
   /**

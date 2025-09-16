@@ -1,0 +1,200 @@
+'use client';
+
+import React, { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Edit3, Upload, ExternalLink, PlusCircle, Trash2 } from 'lucide-react';
+import type { DocumentArrayFieldValue, DocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
+import { DocumentCreationDialog } from '@/app/(app)/data/components/DocumentCreationDialog';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
+
+interface DocumentFieldInputProps {
+  value: DocumentArrayFieldValue;
+  onChange: (value: DocumentArrayFieldValue) => void;
+  required?: boolean;
+  error?: string;
+  field?: FieldDTO;
+  organizationId?: number;
+  tableId?: number;
+}
+
+export function DocumentFieldInput({
+  value,
+  onChange,
+  required,
+  error,
+  field,
+  organizationId = 1,
+  tableId = 1
+}: DocumentFieldInputProps) {
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [hoveredDocumentIndex, setHoveredDocumentIndex] = useState<number | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+
+  const documents = Array.isArray(value) ? value : [];
+
+  const handleDocumentCreated = (document: DocumentFieldValue, shouldOpen: boolean) => {
+    const newDocuments = [...documents, document];
+    onChange(newDocuments);
+
+    // TODO: Handle shouldOpen flag for opening document editor
+    if (shouldOpen) {
+      console.log('Would open document for editing:', document);
+    }
+  };
+
+  const handleFileUpload = async (file: File) => {
+    setIsCreating(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('organizationId', organizationId.toString());
+      formData.append('tableId', tableId.toString());
+      formData.append('fieldId', field?.id?.toString() || '0');
+
+      const response = await fetch('/api/files/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+
+        const documentFieldValue: DocumentFieldValue = {
+          ...result.data,
+          documentMetadata: {
+            title: result.data.name,
+            version: 1,
+            documentType: 'file',
+            lastEditedBy: 'current-user',
+            lastEditedAt: new Date().toISOString()
+          }
+        };
+
+        const newDocuments = [...documents, documentFieldValue];
+        onChange(newDocuments);
+      } else {
+        console.error('Failed to upload file:', await response.text());
+      }
+    } catch (error) {
+      console.error('Failed to upload file:', error);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleRemoveDocument = (index: number) => {
+    const newDocuments = documents.filter((_, i) => i !== index);
+    onChange(newDocuments);
+  };
+
+  const handleQuickOpen = (documentValue: DocumentFieldValue) => {
+    console.log('Would open document:', documentValue.name);
+    // TODO: Implement document opening logic when needed
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Document badges display */}
+      <div className="flex flex-wrap gap-2">
+        {documents.map((doc, idx) => {
+          const displayName = doc.documentMetadata?.title || doc.name;
+
+          return (
+            <div
+              key={doc.id || idx}
+              className="relative flex items-center gap-2"
+              onMouseEnter={() => setHoveredDocumentIndex(idx)}
+              onMouseLeave={() => setHoveredDocumentIndex(null)}
+            >
+              <Badge variant="outline" className="text-xs">
+                {displayName}
+              </Badge>
+
+              {/* Action buttons on hover */}
+              {hoveredDocumentIndex === idx && (
+                <div className="flex gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleQuickOpen(doc)}
+                    className="h-6 w-6 p-0"
+                    title="Open document"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleRemoveDocument(idx)}
+                    className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                    title="Remove document"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Add button */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-6 w-6" disabled={isCreating}>
+              <PlusCircle className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          {!isCreating && (
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => setShowCreateDialog(true)}>
+                <Edit3 className="w-4 h-4 mr-2" />
+                Add Document
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => document.getElementById(`doc-file-upload-${field?.id || 'unknown'}`)?.click()}>
+                <Upload className="w-4 h-4 mr-2" />
+                Upload File
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          )}
+        </DropdownMenu>
+      </div>
+
+      {/* Hidden file input */}
+      <input
+        id={`doc-file-upload-${field?.id || 'unknown'}`}
+        type="file"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileUpload(file);
+        }}
+      />
+
+      {/* Error display */}
+      {error && (
+        <div className="text-sm text-destructive">{error}</div>
+      )}
+
+      {/* Required validation */}
+      {required && documents.length === 0 && (
+        <div className="text-sm text-muted-foreground">
+          At least one document is required
+        </div>
+      )}
+
+      {/* Document creation dialog */}
+      {field && (
+        <DocumentCreationDialog
+          isOpen={showCreateDialog}
+          onClose={() => setShowCreateDialog(false)}
+          field={field}
+          organizationId={organizationId}
+          tableId={tableId}
+          onDocumentCreated={handleDocumentCreated}
+        />
+      )}
+    </div>
+  );
+}
