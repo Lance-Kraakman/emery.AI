@@ -210,15 +210,343 @@ export async function canUseApp(appName: string): Promise<Result<boolean>> {
   try {
     const session = await requireAuth();
     const connectionService = getConnectionApplicationService();
-    
+
     const canUse = await connectionService.canUseApp(
       UserId.fromString(session.user.id),
       AppName.fromString(appName)
     );
-    
+
     return { success: true, data: canUse };
   } catch (error) {
     console.error(`[ConnectionActions] Error checking app availability for ${appName}:`, error);
     return { success: false, error: 'Failed to check app availability' };
+  }
+}
+
+// AIDEV-NOTE: Extended connection actions for UI connection status components
+
+/**
+ * Connection status for a specific tool
+ */
+export interface ToolConnectionStatus {
+  toolName: string;
+  displayName: string;
+  isConnected: boolean;
+  requiredApps: string[];
+  missingApps: string[];
+  warnings: string[];
+  connectionType: 'oauth' | 'api_key' | 'none';
+}
+
+/**
+ * Summary of connection health for an agent
+ */
+export interface AgentConnectionSummary {
+  agentId: number;
+  agentName: string;
+  totalTools: number;
+  connectedTools: number;
+  disconnectedTools: number;
+  missingApps: string[];
+  connectionHealth: 'healthy' | 'warning' | 'critical';
+}
+
+/**
+ * Connection validation result
+ */
+export interface ConnectionValidationResult {
+  valid: boolean;
+  warnings: string[];
+  missingConnections: string[];
+  toolStatuses: ToolConnectionStatus[];
+}
+
+/**
+ * Get connection status for multiple tools
+ */
+export async function getToolConnectionStatus(
+  tools: any[], // ToolConfig[]
+  ownerId?: string
+): Promise<Result<ToolConnectionStatus[]>> {
+  try {
+    const session = await requireAuth();
+    const connectionService = getConnectionApplicationService();
+
+    const userId = ownerId ? UserId.fromString(ownerId) : UserId.fromString(session.user.id);
+    const toolStatuses: ToolConnectionStatus[] = [];
+
+    for (const tool of tools) {
+      // Get tool metadata to check connection requirements
+      const requiredApps = tool.requiredApps || [];
+
+      let isConnected = true;
+      let missingApps: string[] = [];
+      let warnings: string[] = [];
+      let connectionType: 'oauth' | 'api_key' | 'none' = 'none';
+
+      if (requiredApps.length > 0) {
+        // Check which connections are missing
+        const missingConnections = await connectionService.getMissingConnections(userId, requiredApps);
+        missingApps = missingConnections.map(app => app.value);
+        isConnected = missingApps.length === 0;
+        connectionType = 'oauth'; // Most tools use OAuth
+
+        if (!isConnected) {
+          warnings.push(`Missing connections: ${missingApps.join(', ')}`);
+        }
+      }
+
+      toolStatuses.push({
+        toolName: tool.name,
+        displayName: tool.displayName || tool.name,
+        isConnected,
+        requiredApps,
+        missingApps,
+        warnings,
+        connectionType
+      });
+    }
+
+    return {
+      success: true,
+      data: toolStatuses
+    };
+  } catch (error) {
+    console.error('Error getting tool connection status:', error);
+    return {
+      success: false,
+      error: 'Failed to get connection status'
+    };
+  }
+}
+
+/**
+ * Get agents owned by user that need connections
+ */
+export async function getAgentsNeedingConnections(): Promise<Result<AgentConnectionSummary[]>> {
+  try {
+    const session = await requireAuth();
+
+    // Import agent services
+    const { getAgentApplicationService } = await import('@/ddd/application/di/container');
+    const agentService = getAgentApplicationService();
+    const connectionService = getConnectionApplicationService();
+
+    const userId = UserId.fromString(session.user.id);
+
+    // Get agents owned by this user
+    const agents = await agentService.getAgents({
+      ownerId: userId
+    });
+
+    const agentSummaries: AgentConnectionSummary[] = [];
+
+    for (const agent of agents) {
+      const tools = agent.tools || [];
+
+      if (tools.length === 0) continue;
+
+      // Get connection status for agent tools
+      const toolStatusResult = await getToolConnectionStatus(tools, session.user.id);
+
+      if (!toolStatusResult.success) continue;
+
+      const toolStatuses = toolStatusResult.data || [];
+      const connectedTools = toolStatuses.filter(t => t.isConnected).length;
+      const disconnectedTools = toolStatuses.length - connectedTools;
+
+      // Collect all missing apps
+      const allMissingApps = new Set<string>();
+      toolStatuses.forEach(tool => {
+        tool.missingApps.forEach(app => allMissingApps.add(app));
+      });
+
+      // Determine connection health
+      let connectionHealth: 'healthy' | 'warning' | 'critical';
+      if (disconnectedTools === 0) {
+        connectionHealth = 'healthy';
+      } else if (connectedTools > disconnectedTools) {
+        connectionHealth = 'warning';
+      } else {
+        connectionHealth = 'critical';
+      }
+
+      // Only include agents that need connections
+      if (disconnectedTools > 0) {
+        agentSummaries.push({
+          agentId: agent.id.value,
+          agentName: agent.name,
+          totalTools: toolStatuses.length,
+          connectedTools,
+          disconnectedTools,
+          missingApps: Array.from(allMissingApps),
+          connectionHealth
+        });
+      }
+    }
+
+    return {
+      success: true,
+      data: agentSummaries
+    };
+  } catch (error) {
+    console.error('Error getting agents needing connections:', error);
+    return {
+      success: false,
+      error: 'Failed to get agent connection status'
+    };
+  }
+}
+
+/**
+ * Generate OAuth setup URL for a specific app
+ */
+export async function getConnectionSetupUrl(
+  appName: string,
+  redirectPath: string = '/connections'
+): Promise<Result<string>> {
+  try {
+    await requireAuth();
+
+    // Use existing getAppConnectionUrl function
+    const result = await getAppConnectionUrl({
+      appName,
+      redirectUrl: redirectPath
+    });
+
+    return result;
+  } catch (error) {
+    console.error('Error generating connection setup URL:', error);
+    return {
+      success: false,
+      error: 'Failed to generate setup URL'
+    };
+  }
+}
+
+/**
+ * Validate connections for a specific agent
+ */
+export async function validateAgentConnections(
+  agentId: number
+): Promise<Result<ConnectionValidationResult>> {
+  try {
+    const session = await requireAuth();
+
+    const { getAgentApplicationService } = await import('@/ddd/application/di/container');
+    const agentService = getAgentApplicationService();
+
+    // Get agent details
+    const agent = await agentService.getAgent({ value: agentId } as any);
+
+    if (!agent) {
+      return {
+        success: false,
+        error: 'Agent not found'
+      };
+    }
+
+    const tools = agent.tools || [];
+
+    if (tools.length === 0) {
+      return {
+        success: true,
+        data: {
+          valid: true,
+          warnings: [],
+          missingConnections: [],
+          toolStatuses: []
+        }
+      };
+    }
+
+    // Get tool connection status
+    const toolStatusResult = await getToolConnectionStatus(tools, session.user.id);
+
+    if (!toolStatusResult.success) {
+      return {
+        success: false,
+        error: toolStatusResult.error
+      };
+    }
+
+    const toolStatuses = toolStatusResult.data || [];
+    const allMissingApps = new Set<string>();
+    const warnings: string[] = [];
+
+    toolStatuses.forEach(tool => {
+      tool.missingApps.forEach(app => allMissingApps.add(app));
+      warnings.push(...tool.warnings);
+    });
+
+    const valid = allMissingApps.size === 0;
+
+    return {
+      success: true,
+      data: {
+        valid,
+        warnings,
+        missingConnections: Array.from(allMissingApps),
+        toolStatuses
+      }
+    };
+  } catch (error) {
+    console.error('Error validating agent connections:', error);
+    return {
+      success: false,
+      error: 'Failed to validate connections'
+    };
+  }
+}
+
+/**
+ * Get connection health summary for current user's agents
+ */
+export async function getConnectionHealthSummary(): Promise<Result<{
+  totalAgentsWithTools: number;
+  agentsNeedingConnections: number;
+  totalMissingConnections: number;
+  mostNeededApps: Array<{ app: string; count: number }>;
+}>> {
+  try {
+    const agentsResult = await getAgentsNeedingConnections();
+
+    if (!agentsResult.success) {
+      return {
+        success: false,
+        error: agentsResult.error
+      };
+    }
+
+    const agents = agentsResult.data || [];
+    const appCounts = new Map<string, number>();
+
+    // Count missing app occurrences
+    agents.forEach(agent => {
+      agent.missingApps.forEach(app => {
+        appCounts.set(app, (appCounts.get(app) || 0) + 1);
+      });
+    });
+
+    const mostNeededApps = Array.from(appCounts.entries())
+      .map(([app, count]) => ({ app, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    return {
+      success: true,
+      data: {
+        totalAgentsWithTools: agents.length, // Simplified for now
+        agentsNeedingConnections: agents.length,
+        totalMissingConnections: appCounts.size,
+        mostNeededApps
+      }
+    };
+  } catch (error) {
+    console.error('Error getting connection health summary:', error);
+    return {
+      success: false,
+      error: 'Failed to get connection health summary'
+    };
   }
 }
