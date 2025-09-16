@@ -7,9 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, X } from 'lucide-react';
+import { Loader2, Save, X, User } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { updateAgentFromClient } from '@/app/actions/agents';
+import { UserSelect } from '@/components/ui/UserSelect';
+import { getOrganizationMembers } from '@/app/actions/invitations';
+import { hasPermission } from '@/lib/auth';
+import { useSession } from 'next-auth/react';
 
 interface BasicInfoModalProps {
   isOpen: boolean;
@@ -23,17 +27,38 @@ interface FormData {
   role: string;
   description: string;
   status: string;
+  ownerId: string;
+}
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  systemRole?: string;
 }
 
 export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoModalProps) {
+  const { data: session } = useSession();
   const [formData, setFormData] = useState<FormData>({
     name: '',
     role: '',
     description: '',
-    status: 'active'
+    status: 'active',
+    ownerId: ''
   });
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [canManageAgents, setCanManageAgents] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [currentOwnerName, setCurrentOwnerName] = useState<string>('Unknown User');
+
+  // Load users and permissions when modal opens
+  useEffect(() => {
+    if (isOpen && session?.user) {
+      loadUsersAndPermissions();
+    }
+  }, [isOpen, session]);
 
   // Initialize form data when modal opens
   useEffect(() => {
@@ -42,12 +67,46 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
         name: agent.name || '',
         role: agent.role || '',
         description: agent.description || '',
-        status: agent.status || 'active'
+        status: agent.status || 'active',
+        ownerId: agent.ownerId || ''
       };
       setFormData(initialData);
       setHasChanges(false);
+
+      // Find current owner name
+      if (users.length > 0) {
+        const owner = users.find(u => u.id === agent.ownerId);
+        setCurrentOwnerName(owner?.name || 'Unknown User');
+      }
     }
-  }, [isOpen, agent]);
+  }, [isOpen, agent, users]);
+
+  const loadUsersAndPermissions = async () => {
+    if (!session?.user?.id || !session?.user?.currentOrganizationId) return;
+
+    try {
+      setLoadingUsers(true);
+
+      // Check permissions
+      const hasManagePermission = await hasPermission(
+        session.user.id,
+        'agents:manage',
+        session.user.currentOrganizationId
+      );
+      setCanManageAgents(hasManagePermission);
+
+      // Load organization members
+      const members = await getOrganizationMembers();
+      setUsers(members || []);
+
+    } catch (error) {
+      console.error('Error loading users and permissions:', error);
+      setUsers([]);
+      setCanManageAgents(false);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
 
   // Track changes
   useEffect(() => {
@@ -56,7 +115,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
         formData.name !== (agent.name || '') ||
         formData.role !== (agent.role || '') ||
         formData.description !== (agent.description || '') ||
-        formData.status !== (agent.status || 'active')
+        formData.status !== (agent.status || 'active') ||
+        formData.ownerId !== (agent.ownerId || '')
       );
       setHasChanges(hasChanged);
     }
@@ -74,7 +134,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
         name: formData.name.trim(),
         role: formData.role.trim(),
         description: formData.description.trim(),
-        status: formData.status
+        status: formData.status,
+        ...(canManageAgents && formData.ownerId && { ownerId: formData.ownerId })
       });
 
       if (!result.success) {
@@ -190,6 +251,40 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
           </Select>
           <p className="text-xs text-muted-foreground">
             Active agents can be executed, inactive agents are paused
+          </p>
+        </div>
+
+        {/* Description */}
+        {/* Owner Selection */}
+        <div className="space-y-2">
+          <Label htmlFor="owner" className="text-sm font-medium">
+            Agent Owner
+          </Label>
+          {loadingUsers ? (
+            <div className="flex items-center gap-2 p-2 border rounded">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm text-muted-foreground">Loading users...</span>
+            </div>
+          ) : canManageAgents ? (
+            <UserSelect
+              value={formData.ownerId}
+              onValueChange={(value) => handleInputChange('ownerId', value)}
+              users={users}
+              placeholder="Select agent owner..."
+              disabled={isSaving}
+              showCurrentOwnerBadge={true}
+              currentOwnerId={agent?.ownerId}
+            />
+          ) : (
+            <div className="flex items-center gap-2 p-2 border rounded bg-muted">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">{currentOwnerName}</span>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {canManageAgents
+              ? "Tools will use this user's OAuth connections. Only users with 'agents:manage' permission can change ownership."
+              : "You don't have permission to change the agent owner. Tools will use the current owner's OAuth connections."}
           </p>
         </div>
 

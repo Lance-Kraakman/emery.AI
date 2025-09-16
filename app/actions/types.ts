@@ -100,6 +100,7 @@ export interface CreateAgentClientData {
   role?: string;
   description?: string;
   persona?: string;
+  ownerId?: string; // User ID string - converted to UserId in action
   tools?: ToolConfig[];
   servers?: ServerConfig[];
   trigger?: TriggerConfig;

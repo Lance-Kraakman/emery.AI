@@ -43,6 +43,7 @@ export interface UpdateAgentCommand {
   role?: string;
   description?: string;
   persona?: string;
+  ownerId?: UserId;
   tools?: ToolConfig[];
   servers?: ServerConfig[];
   trigger?: TriggerConfig;
@@ -162,11 +163,12 @@ export class AgentApplicationService {
 
       // Build update data with only changed fields
       const updateData: any = {};
-      
+
       if (command.name !== undefined) updateData.name = command.name;
       if (command.role !== undefined) updateData.role = command.role;
       if (command.description !== undefined) updateData.description = command.description;
       if (command.persona !== undefined) updateData.persona = command.persona;
+      if (command.ownerId !== undefined) updateData.ownerId = command.ownerId;
       if (command.tools !== undefined) updateData.tools = command.tools;
       if (command.servers !== undefined) updateData.servers = command.servers;
       if (command.trigger !== undefined) updateData.trigger = command.trigger;

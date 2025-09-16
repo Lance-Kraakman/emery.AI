@@ -18,8 +18,10 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Trash2 } from "lucide-react"
 import { EditableCell } from "./EditableCell"
+import { RowViewerModal } from "@/components/tables/RowViewerModal"
+import { RowEditorModal } from "@/components/tables/RowEditorModal"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
-import type { RowDTO } from "@/app/mappers/row-mapper"
+import type { RowDTO, TypedFieldValueDTO } from "@/app/mappers/row-mapper"
 import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 
 interface DynamicDataTableProps {
@@ -36,6 +38,16 @@ export function DynamicDataTable({ fields, rows, organizationId, tableId, onUpda
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+
+  // Modal states
+  const [viewerModal, setViewerModal] = useState<{ isOpen: boolean; rowIndex: number }>({
+    isOpen: false,
+    rowIndex: 0
+  })
+  const [editorModal, setEditorModal] = useState<{ isOpen: boolean; mode: 'create' | 'edit'; rowData?: RowDTO }>({
+    isOpen: false,
+    mode: 'create'
+  })
 
   const columnHelper = createColumnHelper<RowDTO>();
 
@@ -140,11 +152,58 @@ export function DynamicDataTable({ fields, rows, organizationId, tableId, onUpda
     setRowSelection({});
   };
 
+  // Modal handlers
+  const handleRowClick = (rowIndex: number) => {
+    setViewerModal({ isOpen: true, rowIndex });
+  };
+
+  const handleViewerNavigate = (newIndex: number) => {
+    setViewerModal(prev => ({ ...prev, rowIndex: newIndex }));
+  };
+
+  const handleViewerEdit = (rowIndex: number) => {
+    const row = rows[rowIndex];
+    setViewerModal({ isOpen: false, rowIndex: 0 });
+    setEditorModal({ isOpen: true, mode: 'edit', rowData: row });
+  };
+
+  const handleCreateRow = () => {
+    setEditorModal({ isOpen: true, mode: 'create' });
+  };
+
+  const handleEditRow = (row: RowDTO) => {
+    setEditorModal({ isOpen: true, mode: 'edit', rowData: row });
+  };
+
+  const handleSaveRow = async (fieldValues: TypedFieldValueDTO[]): Promise<boolean> => {
+    try {
+      if (editorModal.mode === 'create') {
+        // For create mode, we'll need to call onAddRow with the field values
+        // This is a simplified implementation - you may need to adapt based on your onAddRow signature
+        onAddRow();
+        return true;
+      } else if (editorModal.mode === 'edit' && editorModal.rowData) {
+        // For edit mode, update each field
+        for (const fieldValue of fieldValues) {
+          const field = fields.find(f => f.name === fieldValue.fieldSlug);
+          if (field) {
+            onUpdateRow(editorModal.rowData.id, field.id, fieldValue.value);
+          }
+        }
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error saving row:', error);
+      return false;
+    }
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Button onClick={onAddRow} size="sm">
+          <Button onClick={handleCreateRow} size="sm">
             <Plus className="w-4 h-4 mr-1" />
             Add Row
           </Button>
@@ -184,14 +243,24 @@ export function DynamicDataTable({ fields, rows, organizationId, tableId, onUpda
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
+              table.getRowModel().rows.map((row, rowIndex) => (
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className={`hover:bg-muted/30 ${row.getIsSelected() ? "bg-blue-50 dark:bg-blue-950/20" : ""}`}
+                  className={`hover:bg-muted/30 cursor-pointer ${row.getIsSelected() ? "bg-blue-50 dark:bg-blue-950/20" : ""}`}
+                  onClick={() => handleRowClick(rowIndex)}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className={cell.column.id === 'select' ? "px-2" : cell.column.id === 'actions' ? "p-0" : "p-1"}>
+                    <TableCell
+                      key={cell.id}
+                      className={cell.column.id === 'select' ? "px-2" : cell.column.id === 'actions' ? "p-0" : "p-1"}
+                      onClick={(e) => {
+                        // Prevent row click for these interactive cells
+                        if (cell.column.id === 'select' || cell.column.id === 'actions') {
+                          e.stopPropagation();
+                        }
+                      }}
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}
@@ -207,6 +276,27 @@ export function DynamicDataTable({ fields, rows, organizationId, tableId, onUpda
           </TableBody>
         </Table>
       </div>
+
+      {/* Row Viewer Modal */}
+      <RowViewerModal
+        isOpen={viewerModal.isOpen}
+        onClose={() => setViewerModal({ isOpen: false, rowIndex: 0 })}
+        fields={fields}
+        rows={rows}
+        currentRowIndex={viewerModal.rowIndex}
+        onNavigate={handleViewerNavigate}
+        onEdit={handleViewerEdit}
+      />
+
+      {/* Row Editor Modal */}
+      <RowEditorModal
+        isOpen={editorModal.isOpen}
+        onClose={() => setEditorModal({ isOpen: false, mode: 'create' })}
+        fields={fields}
+        rowData={editorModal.rowData}
+        mode={editorModal.mode}
+        onSave={handleSaveRow}
+      />
     </div>
   )
 }
