@@ -265,6 +265,7 @@ export class DrizzleTaskRepository
       status: record.status,
       result: record.result,
       error: record.error,
+      logs: record.logs,
       startedAt: record.startedAt,
       completedAt: record.completedAt,
       createdBy: record.createdBy,
