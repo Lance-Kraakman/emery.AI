@@ -510,6 +510,7 @@ export const tasks = pgTable("tasks", {
   status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed, cancelled, timeout
   result: jsonb("result"), // Final output data
   error: text("error"),
+  logs: jsonb("logs").$type<string[]>().default([]), // Execution logs from gRPC TaskProgress
   
   // Execution tracking
   startedAt: timestamp("started_at"),

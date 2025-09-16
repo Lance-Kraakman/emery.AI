@@ -30,6 +30,7 @@ export interface UpdateTaskData {
   status?: string;
   result?: any;
   error?: string | null;
+  logs?: string[];
   startedAt?: Date | null;
   completedAt?: Date | null;
 }

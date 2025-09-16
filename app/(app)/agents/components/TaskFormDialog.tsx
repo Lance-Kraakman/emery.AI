@@ -15,32 +15,59 @@ interface TaskFormDialogProps {
 export default function TaskFormDialog({ isOpen, onClose, agent }: TaskFormDialogProps) {
   const [selectedTools, setSelectedTools] = useState<ToolConfig[]>([]);
   const [selectedServers, setSelectedServers] = useState<ServerConfig[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Reset state when dialog opens
+  React.useEffect(() => {
+    if (isOpen) {
+      setError(null);
+      setIsSubmitting(false);
+      setSelectedTools([]);
+      setSelectedServers([]);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const name = formData.get('name') as string;
-    const capabilityName = formData.get('capability') as string;
-    const instructions = formData.get('instructions') as string;
-    
-    await createTask({ 
-      agentId: agent.id, 
-      name, 
-      capabilityName: capabilityName || undefined, // Auto-route if empty
-      instructions: {
-        instructions,
-        tools: selectedTools.length > 0 ? selectedTools : undefined,
-        servers: selectedServers.length > 0 ? selectedServers : undefined,
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const formData = new FormData(event.currentTarget);
+      const name = formData.get('name') as string;
+      const capabilityName = formData.get('capability') as string;
+      const instructions = formData.get('instructions') as string;
+
+      const result = await createTask({
+        agentId: agent.id,
+        name,
+        capabilityName: capabilityName || undefined, // Auto-route if empty
+        instructions: {
+          instructions,
+          tools: selectedTools.length > 0 ? selectedTools : undefined,
+          servers: selectedServers.length > 0 ? selectedServers : undefined,
+        }
+      });
+
+      if (result.success) {
+        onClose();
+      } else {
+        setError(result.error || 'Failed to create task');
       }
-    });
-    onClose();
+    } catch (error) {
+      setError('An unexpected error occurred');
+      console.error('Task creation error:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-      <div className="bg-popover p-6 rounded-lg shadow-lg w-full max-w-md border">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]" onClick={onClose}>
+      <div className="bg-background p-6 rounded-lg shadow-lg w-full max-w-md border" onClick={e => e.stopPropagation()}>
         <h2 className="text-2xl font-bold mb-4 text-foreground">Assign Task</h2>
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
@@ -128,19 +155,28 @@ export default function TaskFormDialog({ isOpen, onClose, agent }: TaskFormDialo
               </div>
             </div>
           </div>
+
+          {error && (
+            <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+              {error}
+            </div>
+          )}
+
           <div className="mt-6 flex justify-end space-x-2">
             <button
               type="button"
               onClick={onClose}
-              className="bg-secondary text-secondary-foreground px-4 py-2 rounded"
+              disabled={isSubmitting}
+              className="bg-secondary text-secondary-foreground px-4 py-2 rounded disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="bg-primary text-primary-foreground px-4 py-2 rounded"
+              disabled={isSubmitting}
+              className="bg-primary text-primary-foreground px-4 py-2 rounded disabled:opacity-50"
             >
-              Assign Task
+              {isSubmitting ? 'Creating...' : 'Assign Task'}
             </button>
           </div>
         </form>
