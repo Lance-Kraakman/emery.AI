@@ -101,6 +101,7 @@ export async function createAgentFromClient(data: CreateAgentClientData): Promis
     ...data,
     status: data.status ? AgentStatus.fromString(data.status) : AgentStatus.active(),
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
+    ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,
   };
   return createAgent(domainData);
 }
@@ -112,6 +113,7 @@ export async function updateAgentFromClient(agentId: number, data: Partial<Creat
     ...data,
     status: data.status ? AgentStatus.fromString(data.status) : undefined,
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
+    ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,
   };
   return updateAgent(agentId, domainData, revalidateUrl);
 }
@@ -235,7 +237,7 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       role: data.role,
       description: data.description,
       persona: data.persona,
-      ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,
+      ownerId: data.ownerId, // Already a UserId from domain data conversion
       tools: data.tools,
       servers: data.servers,
       trigger: data.trigger,

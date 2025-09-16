@@ -26,7 +26,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
    */
   async executeAgent(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
     const { agentId, instructions, tools, servers, executionId, organizationId, timeoutSeconds, onProgress } = request;
-    
+
     console.log(`[GRPC-EXECUTION-REPO] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
     
     try {

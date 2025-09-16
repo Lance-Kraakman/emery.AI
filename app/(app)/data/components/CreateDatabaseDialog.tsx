@@ -54,8 +54,14 @@ export function CreateDatabaseDialog({ isOpen, onClose, onDatabaseCreated }: Cre
     }
   }
 
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      handleClose()
+    }
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Create New Database</DialogTitle>

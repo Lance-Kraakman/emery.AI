@@ -45,28 +45,32 @@ export class StaticToolRegistry implements IToolRegistryService {
       'slack_send_message',
       'Slack Message',
       'Send messages to Slack channels and users',
-      'slack',
+      ['slack'],
+      undefined,
       ['slack', 'messaging', 'communication']
     ),
     ToolMetadata.oauthApp(
       'gmail_send_email',
       'Gmail Email',
       'Send emails via Gmail',
-      'gmail',
+      ['gmail'],
+      undefined,
       ['email', 'gmail', 'communication']
     ),
     ToolMetadata.oauthApp(
       'github_repo_manager',
       'GitHub Repository',
       'Manage GitHub repositories, issues, and pull requests',
-      'github',
+      ['github'],
+      undefined,
       ['github', 'repository', 'code', 'version-control']
     ),
     ToolMetadata.oauthApp(
       'google_sheets',
       'Google Sheets',
       'Read and write Google Sheets spreadsheets',
-      'google-sheets',
+      ['google-sheets'],
+      undefined,
       ['spreadsheet', 'data', 'google', 'sheets']
     ),
 

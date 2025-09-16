@@ -38,7 +38,7 @@ function DataDialogs() {
     <>
       <CreateDatabaseDialog
         isOpen={isCreateDatabaseOpen}
-        onClose={() => storeActions.closeTableForm()}
+        onClose={() => storeActions.closeDatabaseForm()}
         onDatabaseCreated={handleDataStructureCreated}
       />
       

@@ -184,6 +184,10 @@ export const storeActions = {
     teamsActions.setFormDialogOpen(true, editingTeam)
   },
 
+  openDatabaseForm() {
+    uiStateActions.setCreateDatabaseOpen(true)
+  },
+
   openTableForm(selectedDatabaseId?: number) {
     uiStateActions.setCreateTableOpen(true)
     uiStateActions.setSelectedDatabaseForTable(selectedDatabaseId)
@@ -229,6 +233,10 @@ export const storeActions = {
     uiStateActions.closeModal('teamCreate')
     formsActions.setTeamForm(false, null)
     teamsActions.setFormDialogOpen(false, null)
+  },
+
+  closeDatabaseForm() {
+    uiStateActions.setCreateDatabaseOpen(false)
   },
 
   closeTableForm() {

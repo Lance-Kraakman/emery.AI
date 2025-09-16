@@ -254,7 +254,7 @@ export function EmerySidebar() {
                             )}
                             {/* Add Database button at the bottom */}
                             <button
-                              onClick={() => uiStateActions.setCreateDatabaseOpen(true)}
+                              onClick={() => storeActions.openDatabaseForm()}
                               className="flex items-center justify-center w-full rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted mt-2"
                               title="Add Database"
                             >

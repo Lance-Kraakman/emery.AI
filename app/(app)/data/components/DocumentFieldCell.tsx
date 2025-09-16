@@ -9,7 +9,7 @@ import { Edit3, Eye, FileText, Plus, Upload, Loader, ExternalLink, PlusCircle } 
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { DocumentFieldValue, DocumentArrayFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 // AIDEV-NOTE: DocumentField entity removed - using DTOs directly for artifacts
-import { DocumentCreationDialog } from './DocumentCreationDialog';
+import { DocumentCreationDialog } from '@/components/tables/dialogs/DocumentCreationDialog';
 import { createDocumentArtifact } from '@/components/chat/types/chat-artifacts';
 
 interface DocumentFieldCellProps {

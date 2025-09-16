@@ -60,8 +60,14 @@ export function CreateTableDialog({ isOpen, onClose, onTableCreated, selectedDat
     }
   }
 
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      handleClose()
+    }
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create New Table</DialogTitle>

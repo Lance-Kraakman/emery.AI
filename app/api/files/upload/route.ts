@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, hasPermission } from "@/lib/auth";
 import { getFileApplicationService, getTableApplicationService, getDocumentApplicationService } from "@/ddd/application/di/container";
-import { FieldId, OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
+import { OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
 import type { UploadFileCommand } from "@/ddd/application/services/tables/file-application-service";
 import type { CreateTiptapDocumentCommand } from "@/ddd/application/services/tables/document-application-service";
 import { withAuthContext } from '@/lib/auth/with-context';

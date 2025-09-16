@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Save, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BaseModal } from '@/app/(app)/agents/components/modals/BaseModal';
@@ -54,8 +54,11 @@ export function RowEditorModal({
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Sort fields by order index
-  const sortedFields = [...fields].sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+  // Sort fields by order index (memoized to prevent infinite useEffect loops)
+  const sortedFields = useMemo(() =>
+    [...fields].sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0)),
+    [fields]
+  );
 
   // Initialize form data
   useEffect(() => {

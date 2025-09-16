@@ -12,7 +12,7 @@ import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import { UserSelect } from '@/components/ui/UserSelect';
 import { getOrganizationMembers } from '@/app/actions/invitations';
-import { hasPermission } from '@/lib/auth';
+import { checkPermission } from '@/app/actions/permissions';
 import { useSession } from 'next-auth/react';
 
 interface BasicInfoModalProps {
@@ -87,13 +87,9 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
     try {
       setLoadingUsers(true);
 
-      // Check permissions
-      const hasManagePermission = await hasPermission(
-        session.user.id,
-        'agents:manage',
-        session.user.currentOrganizationId
-      );
-      setCanManageAgents(hasManagePermission);
+      // Check permissions using server action
+      const permissionResult = await checkPermission('agents:manage');
+      setCanManageAgents(permissionResult.success && permissionResult.data === true);
 
       // Load organization members
       const members = await getOrganizationMembers();
