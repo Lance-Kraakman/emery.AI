@@ -10,7 +10,7 @@
 
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState, useMemo } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -87,6 +87,7 @@ export function DocumentArtifactViewer({
   const [loadAttempts, setLoadAttempts] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [contentLoaded, setContentLoaded] = useState(false)
+  const [isUpdatingEditor, setIsUpdatingEditor] = useState(false)
 
   // Initialize title
   useEffect(() => {
@@ -153,15 +154,22 @@ export function DocumentArtifactViewer({
 
     const timeoutId = setTimeout(loadContent, delay)
     return () => clearTimeout(timeoutId)
-  }, [documentField, artifact.data.tableId, artifact.data.fieldId, artifact.data.organizationId, loadAttempts])
+  }, [documentField.id, artifact.data.tableId, artifact.data.fieldId, artifact.data.organizationId, loadAttempts])
+
+  // Create a stable document key for comparison
+  const documentKey = useMemo(() =>
+    `${documentField.id}-${artifact.data.tableId}-${artifact.data.fieldId}`,
+    [documentField.id, artifact.data.tableId, artifact.data.fieldId]
+  )
 
   // Reset content loaded flag when document changes
   useEffect(() => {
     setContentLoaded(false)
     setLoadAttempts(0)
-  }, [documentField.id, artifact.data.tableId, artifact.data.fieldId])
+    setContent('<p>Loading document content...</p>')
+  }, [documentKey])
 
-  // Configure TipTap editor
+  // Configure TipTap editor with stable dependencies
   const editor = useEditor({
     extensions: [
       StarterKit, // Includes Strike and other basic extensions
@@ -190,34 +198,52 @@ export function DocumentArtifactViewer({
         types: ['heading', 'paragraph'],
       })
     ],
-    content: content,
+    content: '<p>Loading document content...</p>', // Use stable initial content
     editable: isEditing,
     immediatelyRender: false, // Fix SSR hydration mismatch
     onUpdate: ({ editor }) => {
-      // Get JSON content from editor to maintain TipTap format
-      const newContent = editor.getJSON()
-      setContent(newContent)
-      setHasChanges(true)
-    }
-  })
-
-  // Update editor content when content changes
-  useEffect(() => {
-    if (editor && content) {
-      // For string content (error messages), compare with HTML
-      if (typeof content === 'string') {
-        if (editor.getHTML() !== content) {
-          editor.commands.setContent(content)
-        }
-      } else {
-        // For JSON content (TipTap documents), compare JSON structures
-        const currentJSON = editor.getJSON()
-        if (JSON.stringify(currentJSON) !== JSON.stringify(content)) {
-          editor.commands.setContent(content)
-        }
+      // Prevent circular updates by checking if we're currently updating
+      if (!isUpdatingEditor) {
+        // Get JSON content from editor to maintain TipTap format
+        const newContent = editor.getJSON()
+        setContent(newContent)
+        setHasChanges(true)
       }
     }
-  }, [editor, content])
+  }, [isEditing]) // Only recreate when editing state changes
+
+  // Update editor content when content changes (prevent circular updates)
+  useEffect(() => {
+    if (editor && content && contentLoaded && !isUpdatingEditor) {
+      setIsUpdatingEditor(true)
+
+      try {
+        // For string content (error messages), compare with HTML
+        if (typeof content === 'string') {
+          const currentHTML = editor.getHTML()
+          if (currentHTML !== content) {
+            editor.commands.setContent(content, { emitUpdate: false })
+          }
+        } else if (content && typeof content === 'object' && content.type === 'doc') {
+          // For JSON content (TipTap documents), do a shallow comparison first
+          const currentJSON = editor.getJSON()
+          const shouldUpdate = (
+            !currentJSON ||
+            currentJSON.type !== content.type ||
+            !currentJSON.content ||
+            currentJSON.content.length !== content.content?.length
+          )
+
+          if (shouldUpdate) {
+            editor.commands.setContent(content, { emitUpdate: false })
+          }
+        }
+      } finally {
+        // Reset the updating flag after a short delay to allow editor to settle
+        setTimeout(() => setIsUpdatingEditor(false), 100)
+      }
+    }
+  }, [editor, content, contentLoaded])
 
   // Update editor editable state
   useEffect(() => {
