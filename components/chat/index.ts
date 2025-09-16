@@ -12,8 +12,5 @@ export { useChatGRPC, useChatForPage } from './useChatGRPC'
 export { ChatPlusButton } from './ChatPlusButton'
 export { default as CustomChatInput } from './CustomChatInput'
 
-// Mention hooks (deprecated - now using TanStack Store)
-export { useAtMentions, getCursorCoordinates } from './useAtMentions'
-
 // Mention types
 export type * from './types/chat-mentions'

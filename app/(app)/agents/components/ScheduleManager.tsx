@@ -59,28 +59,30 @@ const ScheduleManager: React.FC<ScheduleManagerProps> = ({ agentId, initialRRule
   const onView = useCallback((newView: any) => setView(newView), [setView]);
 
   return (
-    <div className="h-[500px]">
-      <Calendar
-        localizer={localizer}
-        events={events}
-        startAccessor="start"
-        endAccessor="end"
-        style={{ height: '100%' }}
-        selectable
-        date={date}
-        view={view}
-        onView={onView}
-        components={{
-          toolbar: (props) => (
-            <CalendarToolbar
-              {...props}
-              onNavigate={onNavigate}
-              label={moment(date).format('MMMM YYYY')}
-              onScheduleClick={() => setIsScheduleDialogOpen(true)}
-            />
-          ),
-        }}
-      />
+    <div className="w-full max-w-full overflow-hidden">
+      <div className="h-[400px] min-h-[300px] max-h-[500px] w-full">
+        <Calendar
+          localizer={localizer}
+          events={events}
+          startAccessor="start"
+          endAccessor="end"
+          style={{ height: '100%', width: '100%' }}
+          selectable
+          date={date}
+          view={view}
+          onView={onView}
+          components={{
+            toolbar: (props) => (
+              <CalendarToolbar
+                {...props}
+                onNavigate={onNavigate}
+                label={moment(date).format('MMMM YYYY')}
+                onScheduleClick={() => setIsScheduleDialogOpen(true)}
+              />
+            ),
+          }}
+        />
+      </div>
       <ScheduleDialog
         isOpen={isScheduleDialogOpen}
         onClose={() => setIsScheduleDialogOpen(false)}

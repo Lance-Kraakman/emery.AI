@@ -23,8 +23,11 @@ export const isWebhookTrigger = (trigger: TriggerConfig): trigger is WebhookTrig
 export const getCalendarRRule = (trigger: TriggerConfig): string | undefined => 
   isCalendarTrigger(trigger) ? trigger.rrule : undefined;
 
-export const getDatabaseEventOperations = (trigger: TriggerConfig): ('INSERT' | 'UPDATE' | 'DELETE')[] => 
+export const getDatabaseEventOperations = (trigger: TriggerConfig): ('INSERT' | 'UPDATE' | 'DELETE')[] =>
   isDatabaseEventTrigger(trigger) ? trigger.operations : [];
+
+export const getDatabaseEventTableId = (trigger: TriggerConfig): string | undefined =>
+  isDatabaseEventTrigger(trigger) ? trigger.tableId : undefined;
 
 
 export const getWebhookSecret = (trigger: TriggerConfig): string | undefined => 

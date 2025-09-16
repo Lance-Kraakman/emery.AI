@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Settings, Plus, Edit, Trash2, Save, X } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
@@ -9,6 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { ToolDropdown } from '@/components/chat/ToolDropdown';
+import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper';
+import type { ToolDTO } from '@/app/mappers/tool-mapper';
 
 // AIDEV-NOTE: Capability manager with full CRUD functionality
 // Supports both view and edit modes with compact UI
@@ -33,6 +36,12 @@ export default function CapabilityManager({
   const [editingCapability, setEditingCapability] = useState<CapabilityConfig | null>(null);
   const [toolInput, setToolInput] = useState('');
   const [editingStepIndex, setEditingStepIndex] = useState<number | null>(null);
+  const [showToolDropdown, setShowToolDropdown] = useState(false);
+  const [dropdownQuery, setDropdownQuery] = useState('');
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const [editingStepToolIndex, setEditingStepToolIndex] = useState<{ stepIndex: number; toolIndex: number } | null>(null);
+
+  const toolInputRef = useRef<HTMLInputElement>(null);
 
   const capabilities = initialCapabilities;
 
@@ -122,6 +131,67 @@ export default function CapabilityManager({
       tools: [...(editingCapability.steps[stepIndex].tools || []), newTool]
     };
     handleUpdateStep(stepIndex, updatedStep);
+  };
+
+  // Handle tool input change for @ tool detection
+  const handleToolInputChange = (e: React.ChangeEvent<HTMLInputElement>, stepIndex: number, toolIndex: number) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart || 0;
+
+    // Update the tool name
+    handleUpdateStepTool(stepIndex, toolIndex, 'name', value);
+
+    // Find @ symbol before cursor for tool dropdown
+    const beforeCursor = value.slice(0, cursorPos);
+    const atMatch = beforeCursor.match(/@([^@\s]*)$/);
+
+    if (atMatch) {
+      const query = atMatch[1] || '';
+      setDropdownQuery(query);
+      setEditingStepToolIndex({ stepIndex, toolIndex });
+      setShowToolDropdown(true);
+
+      // Position dropdown
+      if (toolInputRef.current) {
+        const rect = toolInputRef.current.getBoundingClientRect();
+        const dropdownHeight = 400;
+        const gap = 4;
+
+        let top = rect.top - dropdownHeight - gap;
+        let left = rect.left;
+
+        if (top < 0) {
+          top = rect.bottom + gap;
+        }
+
+        const dropdownWidth = 400;
+        if (left + dropdownWidth > window.innerWidth) {
+          left = window.innerWidth - dropdownWidth - 16;
+        }
+        if (left < 0) {
+          left = 16;
+        }
+
+        setDropdownPosition({ top, left });
+      }
+    } else {
+      setShowToolDropdown(false);
+      setEditingStepToolIndex(null);
+    }
+  };
+
+  // Handle tool selection from dropdown
+  const handleToolSelect = (tool: ReferenceToolDTO | ToolDTO) => {
+    if (!editingStepToolIndex) return;
+
+    const { stepIndex, toolIndex } = editingStepToolIndex;
+    const toolName = 'insertText' in tool ? tool.insertText : `@tool:${tool.name}`;
+
+    // Update the tool with selected name
+    handleUpdateStepTool(stepIndex, toolIndex, 'name', toolName);
+
+    setShowToolDropdown(false);
+    setEditingStepToolIndex(null);
   };
 
   const handleRemoveStepTool = (stepIndex: number, toolIndex: number) => {
@@ -271,13 +341,14 @@ export default function CapabilityManager({
                             <Plus size={8} />
                           </Button>
                         </div>
-                        <div className="space-y-1">
+                        <div className="space-y-1 relative">
                           {step.tools?.map((tool, toolIndex) => (
                             <div key={toolIndex} className="flex gap-1">
                               <Input
+                                ref={editingStepToolIndex?.stepIndex === stepIndex && editingStepToolIndex?.toolIndex === toolIndex ? toolInputRef : undefined}
                                 value={tool.name}
-                                onChange={(e) => handleUpdateStepTool(stepIndex, toolIndex, 'name', e.target.value)}
-                                placeholder="Tool name"
+                                onChange={(e) => handleToolInputChange(e, stepIndex, toolIndex)}
+                                placeholder="Type @ to search tools..."
                                 className="text-xs h-6 flex-1"
                               />
                               <Button
@@ -292,7 +363,7 @@ export default function CapabilityManager({
                             </div>
                           ))}
                           {(!step.tools || step.tools.length === 0) && (
-                            <div className="text-xs text-muted-foreground">No tools</div>
+                            <div className="text-xs text-muted-foreground">No tools - click "+" to add tools</div>
                           )}
                         </div>
                       </div>
@@ -359,6 +430,22 @@ export default function CapabilityManager({
             <Save size={14} className="mr-1" /> Save
           </Button>
         </div>
+
+        {/* Tool Selection Dropdown */}
+        <ToolDropdown
+          query={dropdownQuery}
+          isOpen={showToolDropdown}
+          onClose={() => {
+            setShowToolDropdown(false);
+            setEditingStepToolIndex(null);
+          }}
+          onSelect={handleToolSelect}
+          position={{
+            top: dropdownPosition.top,
+            left: dropdownPosition.left,
+            maxHeight: 400,
+          }}
+        />
       </div>
     );
   }

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { Loading } from '@/components/ui/loading';
 import AgentDetailsView from './AgentDetailsView';
+import { NewAgentDetailsView } from './NewAgentDetailsView';
 import AgentCreateView from './AgentCreateView';
 import { agentsStore, agentsSelectors } from '@/stores/agents.store';
 import { storeActions, agentsActions } from '@/stores/actions';
@@ -173,11 +174,9 @@ export default function AgentDashboardClient({ initialAgents, teams }: AgentDash
                 onCreated={refreshAgents}
               />
             ) : selectedAgent ? (
-              <AgentDetailsView
+              <NewAgentDetailsView
                 agent={selectedAgent}
-                onEdit={() => {
-                  // This is now handled inline within AgentDetailsView
-                }}
+                onBack={() => agentsActions.setSelectedAgent(null)}
                 onUpdate={refreshAgents}
               />
             ) : (
