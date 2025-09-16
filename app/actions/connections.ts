@@ -5,7 +5,7 @@
 
 import { requireAuth } from "./permissions";
 import { getConnectionApplicationService } from "@/ddd/application/di/container";
-import { UserId } from "@/ddd/domain/shared/value-objects";
+import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
 import { AppName, ConnectionId } from "@/ddd/domain/connections/value-objects";
 import { ConnectionMapper, type ConnectionDTO } from "@/app/mappers/connection-mapper";
 import type { Result } from "./types";
@@ -334,9 +334,9 @@ export async function getAgentsNeedingConnections(): Promise<Result<AgentConnect
 
     const userId = UserId.fromString(session.user.id);
 
-    // Get agents owned by this user
+    // Get agents in this organization
     const agents = await agentService.getAgents({
-      ownerId: userId
+      organizationId: OrganizationId.fromNumber(session.user.currentOrganizationId!)
     });
 
     const agentSummaries: AgentConnectionSummary[] = [];

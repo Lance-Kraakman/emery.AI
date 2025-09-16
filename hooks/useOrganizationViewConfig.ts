@@ -69,12 +69,13 @@ interface UseOrganizationViewConfigReturn {
 
 export function useOrganizationViewConfig({
   organizationId,
-  autoSaveDelay = 2000,
+  autoSaveDelay = 3000, // Increased default delay
   enabled = true,
 }: UseOrganizationViewConfigOptions = {}): UseOrganizationViewConfigReturn {
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedDataRef = useRef<string | null>(null); // Track last saved state to prevent unnecessary saves
 
   // Validate view data structure
   const validateViewData = useCallback((data: any): boolean => {
@@ -153,9 +154,18 @@ export function useOrganizationViewConfig({
       try {
         setIsSaving(true);
         const viewData = createViewData(nodes, edges, viewState);
-        
-        await updateOrganizationViewConfig(organizationId, viewData);
-        
+
+        // Check if data has actually changed to prevent unnecessary saves
+        const currentDataString = JSON.stringify(viewData);
+        if (lastSavedDataRef.current === currentDataString) {
+          setIsSaving(false);
+          return; // No changes, skip save
+        }
+
+        await updateOrganizationViewConfig(organizationId, viewData, false); // Don't revalidate for auto-saves
+
+        // Update last saved data reference
+        lastSavedDataRef.current = currentDataString;
         setLastSaved(new Date());
       } catch (error) {
         console.error('Failed to save organization view config:', error);
@@ -194,6 +204,9 @@ export function useOrganizationViewConfig({
         ...defaultViewState,
         ...savedConfig.viewState
       } : defaultViewState;
+
+      // Set the initial saved data reference to prevent immediate re-save
+      lastSavedDataRef.current = JSON.stringify(savedConfig);
 
       return {
         nodes: restoredNodes,

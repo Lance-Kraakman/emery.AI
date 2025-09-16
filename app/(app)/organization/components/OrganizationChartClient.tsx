@@ -57,7 +57,10 @@ export default function OrganizationChartClient() {
     orgChartActions.setIsClient(true);
   }, []);
 
+  // Fetch tasks only once when component mounts and has current organization
   useEffect(() => {
+    if (!currentOrganization?.id || tasks.length > 0) return; // Don't refetch if already have data
+
     orgChartActions.setTasksLoading(true);
     getTasks().then(result => {
       if (result.success) {
@@ -66,7 +69,7 @@ export default function OrganizationChartClient() {
     }).finally(() => {
       orgChartActions.setTasksLoading(false);
     });
-  }, []);
+  }, [currentOrganization?.id]); // Only depend on organization id
   
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -209,12 +212,13 @@ export default function OrganizationChartClient() {
     saveViewConfig(nodes, edges, viewState);
   }, [nodes, edges, selectedNodes, searchTerm, isPanelCollapsed, isConfiguring, currentOrganization, saveViewConfig]);
 
-  // Generate nodes and edges when data changes - only on client
+  // Generate nodes and edges when data changes - only on client, and only when we have data
   useEffect(() => {
-    if (isClient) {
+    if (isClient && agents.length > 0 && nodes.length === 0) {
+      // Only generate initially or when data significantly changes
       generateNodesAndEdges();
     }
-  }, [generateNodesAndEdges, isClient]);
+  }, [agents.length, teams.length, tasks.length, isClient]); // Depend on data length, not the full generateNodesAndEdges function
 
   // Load view from DB on mount using the custom hook - only on client
   useEffect(() => {
@@ -242,16 +246,27 @@ export default function OrganizationChartClient() {
     }
   }, [currentOrganization?.id, currentOrganization?.viewConfig, nodes.length, loadViewConfig, setNodes]);
 
-  // Debounced auto-save effect - only on client
+  // Debounced auto-save effect - only on client and for meaningful changes
   useEffect(() => {
-    if (!isClient || nodes.length === 0) return; // Don't auto-save until we have data
-    
+    if (!isClient || nodes.length === 0 || !currentOrganization?.id) return; // Don't auto-save until we have data
+
     const timer = setTimeout(() => {
       autoSaveView();
-    }, 2000); // Auto-save 2 seconds after last change
-    
+    }, 3000); // Increased delay to 3 seconds to reduce frequency
+
     return () => clearTimeout(timer);
-  }, [nodes, selectedNodes, searchTerm, isPanelCollapsed, isConfiguring, autoSaveView, isClient]);
+  }, [nodes, isClient, currentOrganization?.id]); // Only trigger auto-save for node changes (positions), not UI state changes
+
+  // Save UI state changes less frequently (every 10 seconds) to avoid constant updates
+  useEffect(() => {
+    if (!isClient || !currentOrganization?.id) return;
+
+    const timer = setTimeout(() => {
+      autoSaveView(); // This will include current UI state
+    }, 10000); // Save UI state every 10 seconds
+
+    return () => clearTimeout(timer);
+  }, [selectedNodes, searchTerm, isPanelCollapsed, isConfiguring, isClient, currentOrganization?.id]);
 
   // Handle node selection with multi-select support
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
