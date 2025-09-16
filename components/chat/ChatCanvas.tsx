@@ -46,6 +46,7 @@ export function ChatCanvas() {
         {/* Custom Artifact Content - Document artifacts handle their own headers */}
         {isDocumentArtifact(displayedArtifact) ? (
           <DocumentArtifactViewer
+            key={`doc-${displayedArtifact.data.documentField.id}-${displayedArtifact.data.tableId}-${displayedArtifact.data.fieldId}`}
             artifact={displayedArtifact}
             onClose={() => canvasContext?.closeCanvas?.()}
             className="h-full"

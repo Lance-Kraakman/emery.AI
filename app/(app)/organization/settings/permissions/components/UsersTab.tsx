@@ -49,40 +49,57 @@ export function UsersTab() {
   const [inviteRole, setInviteRole] = useState<SystemRoleType>(SYSTEM_ROLES.MEMBER);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(true);
 
   useEffect(() => {
     loadData();
+    return () => {
+      setIsMounted(false);
+    };
   }, []);
 
   const loadData = async () => {
     try {
+      if (!isMounted) return;
       setLoading(true);
+
       const [membersData, invitationsData] = await Promise.all([
         getOrganizationMembers(),
         getPendingInvitations()
       ]);
-      
+
+      if (!isMounted) return; // Check again after async operations
+
       setMembers(membersData || []);
       setPendingInvitations(invitationsData || []);
     } catch (error) {
       console.error("Error loading users data:", error);
+      // Only update state if component is still mounted
+      if (isMounted) {
+        setMembers([]);
+        setPendingInvitations([]);
+      }
     } finally {
-      setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+      }
     }
   };
 
   const handleInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
+    if (!inviteEmail.trim() || !isMounted) return;
 
     setInviteLoading(true);
     try {
       const formData = new FormData();
       formData.append("email", inviteEmail);
       formData.append("systemRole", inviteRole);
-      
+
       const result = await inviteUser(formData);
-      
+
+      if (!isMounted) return; // Check after async operation
+
       if (result.success) {
         setInviteEmail("");
         setInviteRole(SYSTEM_ROLES.MEMBER);
@@ -93,14 +110,20 @@ export function UsersTab() {
     } catch (error) {
       console.error("Error inviting user:", error);
     } finally {
-      setInviteLoading(false);
+      if (isMounted) {
+        setInviteLoading(false);
+      }
     }
   };
 
   const handleRoleChange = async (userId: string, newRole: SystemRoleType) => {
+    if (!isMounted) return;
     setRoleUpdating(userId);
     try {
       const result = await assignUserRole(userId, newRole as any);
+
+      if (!isMounted) return; // Check after async operation
+
       if (result.success) {
         await loadData(); // Refresh data
       } else {
@@ -109,7 +132,9 @@ export function UsersTab() {
     } catch (error) {
       console.error("Error updating role:", error);
     } finally {
-      setRoleUpdating(null);
+      if (isMounted) {
+        setRoleUpdating(null);
+      }
     }
   };
 

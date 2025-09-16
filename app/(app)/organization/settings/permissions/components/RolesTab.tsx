@@ -38,29 +38,46 @@ export function RolesTab() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingRole, setDeletingRole] = useState<CustomRole | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [isMounted, setIsMounted] = useState(true);
 
   useEffect(() => {
     loadRoles();
+    return () => {
+      setIsMounted(false);
+    };
   }, []);
 
   const loadRoles = async () => {
     try {
+      if (!isMounted) return;
       setLoading(true);
+
       const rolesData = await getOrganizationRoles();
+
+      if (!isMounted) return; // Check again after async operation
+
       setRoles(rolesData || []);
     } catch (error) {
       console.error("Error loading roles:", error);
+      // Only update state if component is still mounted
+      if (isMounted) {
+        setRoles([]);
+      }
     } finally {
-      setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+      }
     }
   };
 
   const handleCreateSuccess = () => {
+    if (!isMounted) return;
     setCreateDialogOpen(false);
     loadRoles(); // Refresh roles list
   };
 
   const handleEditSuccess = () => {
+    if (!isMounted) return;
     setEditDialogOpen(false);
     setEditingRole(null);
     loadRoles(); // Refresh roles list
@@ -77,12 +94,14 @@ export function RolesTab() {
   };
 
   const confirmDeleteRole = async () => {
-    if (!deletingRole) return;
+    if (!deletingRole || !isMounted) return;
 
     setDeleteLoading(true);
     try {
       const result = await deleteCustomRole(deletingRole.id);
-      
+
+      if (!isMounted) return; // Check after async operation
+
       if (result.success) {
         setDeleteDialogOpen(false);
         setDeletingRole(null);
@@ -94,7 +113,9 @@ export function RolesTab() {
     } catch (error) {
       console.error("Error deleting role:", error);
     } finally {
-      setDeleteLoading(false);
+      if (isMounted) {
+        setDeleteLoading(false);
+      }
     }
   };
 

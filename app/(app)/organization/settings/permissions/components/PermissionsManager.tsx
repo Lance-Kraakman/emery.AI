@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, Settings } from "lucide-react";
 import { UsersTab } from "./UsersTab";
 import { RolesTab } from "./RolesTab";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 export function PermissionsManager() {
   const [activeTab, setActiveTab] = useState("users");
@@ -23,11 +24,15 @@ export function PermissionsManager() {
       </TabsList>
 
       <TabsContent value="users" className="space-y-6">
-        <UsersTab />
+        <ErrorBoundary key="users-tab">
+          <UsersTab key="users-component" />
+        </ErrorBoundary>
       </TabsContent>
 
       <TabsContent value="roles" className="space-y-6">
-        <RolesTab />
+        <ErrorBoundary key="roles-tab">
+          <RolesTab key="roles-component" />
+        </ErrorBoundary>
       </TabsContent>
     </Tabs>
   );
