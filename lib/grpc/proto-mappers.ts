@@ -88,8 +88,8 @@ export function mapStepToProto(step: StepConfig): StepConfigProto {
     type: stepTypeMap[step.type] || StepType.TOOL_STEP,
     instructions: step.instructions,
     model: step.model || '',
-    tools: step.tools?.map(mapToolToProto) || [],
-    servers: step.servers?.map(mapServerToProto) || []
+    tools: step.tools?.filter(tool => tool !== null && tool !== undefined)?.map(mapToolToProto) || [],
+    servers: step.servers?.filter(server => server !== null && server !== undefined)?.map(mapServerToProto) || []
   };
 }
 
@@ -113,9 +113,9 @@ export function mapAgentToProto(agent: Agent): AgentConfigProto {
     role: agent.role || '',
     description: agent.description || '',
     persona: agent.persona || '',
-    tools: agent.tools?.map(mapToolToProto) || [],
-    servers: agent.servers?.map(mapServerToProto) || [],
-    capabilities: agent.capabilities?.map(mapCapabilityToProto) || []
+    tools: agent.tools?.filter(tool => tool !== null && tool !== undefined)?.map(mapToolToProto) || [],
+    servers: agent.servers?.filter(server => server !== null && server !== undefined)?.map(mapServerToProto) || [],
+    capabilities: agent.capabilities?.filter(capability => capability !== null && capability !== undefined)?.map(mapCapabilityToProto) || []
   };
 }
 
@@ -129,8 +129,8 @@ export function mapInstructionConfigToProto(instructionConfig: {
 }): InstructionConfigProto {
   return {
     instructions: instructionConfig.instructions,
-    tools: instructionConfig.tools?.map(mapToolToProto) || [],
-    servers: instructionConfig.servers?.map(mapServerToProto) || []
+    tools: instructionConfig.tools?.filter(tool => tool !== null && tool !== undefined)?.map(mapToolToProto) || [],
+    servers: instructionConfig.servers?.filter(server => server !== null && server !== undefined)?.map(mapServerToProto) || []
   };
 }
 
