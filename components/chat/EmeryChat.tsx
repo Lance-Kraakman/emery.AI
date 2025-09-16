@@ -309,7 +309,6 @@ function ChatContentWithCanvas({
 
           {/* ChatMessages component */}
           <ChatMessages
-            handler={handler}
             className="flex-1 h-full bg-transparent [&_.message]:bg-transparent [&_.message]:py-1 [&_.message]:px-2 [&_.message]:text-sm [&_.message]:leading-tight [&_p]:text-sm [&_p]:leading-5 [&_*]:text-sm"
           />
 
