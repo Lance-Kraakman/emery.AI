@@ -22,8 +22,8 @@ export async function createTask(data: CreateTaskData): Promise<Result> {
       };
     }
 
-    // Check resource-specific permission for task assignment to this specific agent
-    const session = await requireResourcePermission("tasks:assign", "agent", agentId);
+    // Check resource-specific permission for task creation to this specific agent
+    const session = await requireResourcePermission("tasks:create", "agent", agentId);
     const currentOrg = await requireCurrentOrganization();
 
     // Create task using application service

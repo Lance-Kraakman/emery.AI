@@ -5,12 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  Activity, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
-  Filter, 
+import {
+  Activity,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Filter,
   Calendar,
   User,
   Bot,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { TaskDTO as Task } from '@/app/mappers/task-mapper';
 import { format, formatDistanceToNow } from 'date-fns';
+import { TaskCard } from '@/components/tasks/TaskCard';
 
 interface ActivityPanelProps {
   activities: Task[];
@@ -185,52 +186,24 @@ export default function ActivityPanel({
                 </div>
                 
                 {(statusActivities as Task[]).map((activity) => (
-                  <Card key={activity.id || Math.random().toString()} className="shadow-sm hover:shadow-md transition-shadow min-w-0 w-full">
-                    <CardContent className="p-3 min-w-0 w-full">
-                      <div className="flex items-start justify-between mb-2 min-w-0">
-                        <div className="flex-1 min-w-0 pr-1 overflow-hidden">
-                          <h4 className="font-medium text-sm truncate">
-                            {activity.name}
-                          </h4>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {activity.capabilityName}
-                          </p>
-                        </div>
-                        <Badge 
-                          variant="secondary" 
-                          className={`text-xs shrink-0 ml-1 ${getStatusColor(activity.status || 'unknown')}`}
-                        >
-                          {(activity.status || 'unknown').replace('_', ' ')}
-                        </Badge>
-                      </div>
-                      
-                      <div className="flex flex-col gap-1 text-xs text-muted-foreground min-w-0">
-                        <div className="flex items-center gap-1 min-w-0 overflow-hidden">
-                          <Bot className="w-3 h-3 shrink-0" />
-                          <span className="truncate">Agent {activity.agentId}</span>
-                        </div>
-                        <div className="flex items-center gap-1 min-w-0 overflow-hidden">
-                          <Calendar className="w-3 h-3 shrink-0" />
-                          <span className="truncate">
-                            {activity.createdAt ? formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true }) : 'Unknown time'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {activity.error && (
-                        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs">
-                          <p className="text-red-800 font-medium">Error:</p>
-                          <p className="text-red-700 mt-1 break-words">{activity.error}</p>
-                        </div>
-                      )}
-
-                      {activity.result && activity.status === 'completed' && (
-                        <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-xs">
-                          <p className="text-green-800 font-medium">Result available</p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                  <TaskCard
+                    key={activity.id || Math.random().toString()}
+                    task={{
+                      id: activity.id || '',
+                      name: activity.name,
+                      status: activity.status || 'unknown',
+                      capabilityName: activity.capabilityName || undefined,
+                      result: activity.result,
+                      error: activity.error || undefined,
+                      logs: activity.logs || [],
+                      createdAt: activity.createdAt.toISOString(),
+                      completedAt: activity.completedAt?.toISOString(),
+                      startedAt: activity.startedAt?.toISOString()
+                    }}
+                    variant="compact"
+                    className="shadow-sm hover:shadow-md transition-shadow min-w-0 w-full"
+                    hasMounted={true}
+                  />
                 ))}
               </div>
             ))}

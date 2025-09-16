@@ -18,6 +18,7 @@ export interface TaskDTO {
   status: string;                     // Converted from TaskStatus value object
   result: any;
   error: string | null;
+  logs: string[];                     // Task execution logs
   startedAt: Date | null;
   completedAt: Date | null;
   createdBy: string | null;           // Converted from UserId value object
@@ -38,6 +39,7 @@ export function taskToDTO(task: TaskEntity): TaskDTO {
     status: task.status.value,
     result: task.result,
     error: task.error,
+    logs: task.logs,
     startedAt: task.startedAt,
     completedAt: task.completedAt,
     createdBy: task.createdBy?.value || null,

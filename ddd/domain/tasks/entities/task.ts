@@ -38,6 +38,7 @@ export interface TaskConfig {
   status?: TaskStatus;
   result?: any;
   error?: string;
+  logs?: string[];
   startedAt?: Date;
   completedAt?: Date;
   createdBy?: UserId;
@@ -63,6 +64,7 @@ export class Task {
     private _status: TaskStatus,
     private _result: any | null,
     private _error: string | null,
+    private _logs: string[],
     private _startedAt: Date | null,
     private _completedAt: Date | null,
     public readonly createdBy: UserId | null,
@@ -92,6 +94,7 @@ export class Task {
       config.status || TaskStatus.pending(),
       config.result || null,
       config.error || null,
+      config.logs || [],
       config.startedAt || null,
       config.completedAt || null,
       config.createdBy || null,
@@ -109,6 +112,7 @@ export class Task {
     status: string;
     result?: any;
     error?: string | null;
+    logs?: any; // JSONB from database
     startedAt?: Date | null;
     completedAt?: Date | null;
     createdBy?: string | null;
@@ -124,6 +128,7 @@ export class Task {
       TaskStatus.fromString(data.status),
       data.result || null,
       data.error || null,
+      Array.isArray(data.logs) ? data.logs : [],
       data.startedAt || null,
       data.completedAt || null,
       data.createdBy ? UserId.fromString(data.createdBy) : null,
@@ -141,6 +146,7 @@ export class Task {
     status: string;
     result: any;
     error: string | null;
+    logs: string[];
     startedAt: Date | null;
     completedAt: Date | null;
     createdBy: string | null;
@@ -156,6 +162,7 @@ export class Task {
       status: this._status.value,
       result: this._result,
       error: this._error,
+      logs: this._logs,
       startedAt: this._startedAt,
       completedAt: this._completedAt,
       createdBy: this.createdBy?.value || null,
@@ -167,6 +174,7 @@ export class Task {
   get status(): TaskStatus { return this._status; }
   get result(): any | null { return this._result; }
   get error(): string | null { return this._error; }
+  get logs(): string[] { return this._logs; }
   get startedAt(): Date | null { return this._startedAt; }
   get completedAt(): Date | null { return this._completedAt; }
 
@@ -234,6 +242,15 @@ export class Task {
     this._status = TaskStatus.failed(); // Use failed status for timeout
     this._error = 'Task execution timed out';
     this._completedAt = new Date();
+  }
+
+  /**
+   * Append a log message to the task
+   */
+  appendLog(message: string): void {
+    const timestamp = new Date().toISOString();
+    const logEntry = `[${timestamp}] ${message}`;
+    this._logs.push(logEntry);
   }
 
   /**

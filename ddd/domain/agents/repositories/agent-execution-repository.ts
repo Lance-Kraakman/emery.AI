@@ -17,6 +17,7 @@ export interface AgentExecutionRequest {
   organizationId?: number;
   ownerId?: string;
   timeoutSeconds?: number;
+  onProgress?: (logMessage: string) => void; // Callback for real-time log messages
 }
 
 export interface AgentExecutionResult {

@@ -169,7 +169,11 @@ export class AgentTaskApplicationService {
         executionId: task.id.value,
         organizationId: task.organizationId.value,
         ownerId: agent.ownerId.value,
-        timeoutSeconds
+        timeoutSeconds,
+        onProgress: (logMessage: string) => {
+          // Append log to task in real-time
+          task.appendLog(logMessage);
+        }
       };
 
       const executionResult = await this.executionRepository.executeAgent(executionRequest);
@@ -190,7 +194,8 @@ export class AgentTaskApplicationService {
         status: task.status.value,
         result: task.result,
         completedAt: task.completedAt,
-        error: task.error
+        error: task.error,
+        logs: task.logs
       });
 
       console.log(`[AGENT-TASK-SERVICE] Completed task ${taskId.substring(0, 8)}: ${executionResult.success ? 'SUCCESS' : 'FAILED'}`);

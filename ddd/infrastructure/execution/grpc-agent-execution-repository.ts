@@ -25,7 +25,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
    * Execute agent via gRPC worker
    */
   async executeAgent(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
-    const { agentId, instructions, tools, servers, executionId, organizationId, timeoutSeconds } = request;
+    const { agentId, instructions, tools, servers, executionId, organizationId, timeoutSeconds, onProgress } = request;
     
     console.log(`[GRPC-EXECUTION-REPO] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
     
@@ -81,7 +81,15 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       // 6. Execute task via gRPC with streaming progress updates
       await workerClient.executeTask(taskRequest as any, async (progress: TaskProgress) => {
         console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Step ${progress.step_id} - Status: ${progress.status} (${progress.progress_percent}%)`);
-        
+
+        // Create log message from TaskProgress
+        const logMessage = `Step ${progress.step_id} (${progress.step_type}): ${progress.status} - ${progress.progress_percent}% ${progress.output_json ? `| Output: ${progress.output_json.substring(0, 200)}${progress.output_json.length > 200 ? '...' : ''}` : ''}${progress.error_message ? ` | Error: ${progress.error_message}` : ''}`;
+
+        // Send log to callback if provided
+        if (onProgress) {
+          onProgress(logMessage);
+        }
+
         // Map proto progress to TypeScript types
         const taskUpdate = mapTaskProgressFromProto(progress);
         
