@@ -203,7 +203,6 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
 
     if (atMatch) {
       const query = atMatch[1] || '';
-      console.log('ToolDropdown triggered:', { value, query, atMatch });
       setDropdownQuery(query);
       setEditingToolInfo({
         stepIndex,
@@ -212,10 +211,10 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
       });
       setShowToolDropdown(true);
 
-      // Position dropdown
+      // Position dropdown above input
       const rect = e.target.getBoundingClientRect();
       setDropdownPosition({
-        top: rect.bottom + 4,
+        top: rect.top - 400 - 4, // 400px dropdown height + 4px gap
         left: rect.left
       });
     } else {
@@ -260,7 +259,6 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
 
     if (atMatch) {
       const query = atMatch[1] || '';
-      console.log('Instructions ToolDropdown triggered:', { value, query, atMatch });
       setDropdownQuery(query);
       setEditingToolInfo({
         stepIndex,
@@ -269,10 +267,10 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
       });
       setShowToolDropdown(true);
 
-      // Position dropdown
+      // Position dropdown above input
       const rect = e.target.getBoundingClientRect();
       setDropdownPosition({
-        top: rect.bottom + 4,
+        top: rect.top - 400 - 4, // 400px dropdown height + 4px gap
         left: rect.left
       });
     } else {
