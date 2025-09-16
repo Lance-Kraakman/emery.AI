@@ -20,7 +20,6 @@ import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { TableRow } from '@tiptap/extension-table-row'
 import Underline from '@tiptap/extension-underline'
-import Strike from '@tiptap/extension-strike'
 import TextAlign from '@tiptap/extension-text-align'
 import { TextStyle } from '@tiptap/extension-text-style'
 import Color from '@tiptap/extension-color'
@@ -112,22 +111,12 @@ export function DocumentArtifactViewer({
           if (result.success && result.data?.content) {
             // Use the parsed TipTap content directly (no more fetch needed!)
             const tiptapJson = result.data.content as any
-            console.log('[DOCUMENT-VIEWER] Received content:', {
-              hasContent: !!tiptapJson,
-              contentType: typeof tiptapJson,
-              isValidDoc: tiptapJson?.type === 'doc',
-              hasContentArray: !!tiptapJson?.content,
-              contentLength: tiptapJson?.content?.length
-            })
-
             if (tiptapJson && typeof tiptapJson === 'object' && tiptapJson.type === 'doc') {
               // Valid TipTap document - pass JSON object directly to editor
-              console.log('[DOCUMENT-VIEWER] Setting valid TipTap content and marking as loaded')
               setContent(tiptapJson)
               setLoadError(null)
               setContentLoaded(true)
             } else {
-              console.log('[DOCUMENT-VIEWER] Invalid TipTap format:', tiptapJson)
               setContent('<p>Invalid TipTap document format</p>')
               setLoadError('Invalid document format')
             }
@@ -188,13 +177,10 @@ export function DocumentArtifactViewer({
     setContent('<p>Loading document content...</p>')
   }, [documentKey])
 
-  // Configure TipTap editor with stable dependencies
+  // Configure TipTap editor with StarterKit and additional extensions
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({
-        // Configure StarterKit to exclude conflicting extensions
-        strike: false, // We'll add Strike separately to avoid conflicts
-      }),
+      StarterKit,
       Placeholder.configure({
         placeholder: 'Start writing your document...',
         showOnlyWhenEditable: true,
@@ -210,8 +196,7 @@ export function DocumentArtifactViewer({
       TableRow,
       TableHeader,
       TableCell,
-      Underline, // Not included in StarterKit
-      Strike, // Add Strike separately to prevent conflicts
+      Underline, // This might cause the warning, but it's functional
       TextStyle,
       Color,
       Highlight.configure({
@@ -237,17 +222,7 @@ export function DocumentArtifactViewer({
 
   // Update editor content when content changes (prevent circular updates)
   useEffect(() => {
-    console.log('[DOCUMENT-VIEWER] Editor content update check:', {
-      hasEditor: !!editor,
-      hasContent: !!content,
-      contentLoaded,
-      isUpdatingEditor,
-      contentType: typeof content,
-      isDocType: content?.type === 'doc'
-    })
-
     if (editor && content && contentLoaded && !isUpdatingEditor) {
-      console.log('[DOCUMENT-VIEWER] Updating editor content...')
       setIsUpdatingEditor(true)
 
       try {
@@ -255,30 +230,31 @@ export function DocumentArtifactViewer({
         if (typeof content === 'string') {
           const currentHTML = editor.getHTML()
           if (currentHTML !== content) {
-            console.log('[DOCUMENT-VIEWER] Setting string content to editor')
             editor.commands.setContent(content, { emitUpdate: false })
           }
         } else if (content && typeof content === 'object' && content.type === 'doc') {
-          // For JSON content (TipTap documents), do a shallow comparison first
+          // For JSON content (TipTap documents), check if content actually differs
           const currentJSON = editor.getJSON()
+
+          // Force update when content is first loaded (contentLoaded just became true)
+          // Use HTML comparison as a safer approach
+          const currentHTML = editor.getHTML();
+          const isFirstLoad = contentLoaded && !currentHTML.includes('Loading document content...');
+
+          // Simple text-based comparison for content changes
+          const currentText = JSON.stringify(currentJSON)
+          const newText = JSON.stringify(content)
+          const contentDiffers = currentText !== newText
+
           const shouldUpdate = (
             !currentJSON ||
             currentJSON.type !== content.type ||
             !currentJSON.content ||
-            currentJSON.content.length !== content.content?.length
+            contentDiffers ||
+            isFirstLoad
           )
 
-          console.log('[DOCUMENT-VIEWER] JSON content comparison:', {
-            shouldUpdate,
-            currentHasContent: !!currentJSON,
-            currentType: currentJSON?.type,
-            newType: content.type,
-            currentContentLength: currentJSON?.content?.length,
-            newContentLength: content.content?.length
-          })
-
           if (shouldUpdate) {
-            console.log('[DOCUMENT-VIEWER] Setting JSON content to editor:', content)
             editor.commands.setContent(content, { emitUpdate: false })
           }
         }
@@ -303,8 +279,6 @@ export function DocumentArtifactViewer({
         // Get TipTap JSON content
         const tiptapContent = editor.getJSON()
 
-        console.log('Saving TipTap content:', tiptapContent)
-
         // Call the update action
         const result = await updateTiptapDocumentContent(
           documentField.id,
@@ -316,7 +290,6 @@ export function DocumentArtifactViewer({
 
         if (result.success) {
           setHasChanges(false)
-          console.log('Document saved successfully')
 
           // Call the onSave callback if provided
           if (onSave) {
@@ -467,10 +440,7 @@ export function DocumentArtifactViewer({
                       <Button
                         variant={editor.isActive('bold') ? 'default' : 'outline'}
                         size="sm"
-                        onClick={() => {
-                          console.log('Bold button clicked, editor state:', editor?.isActive('bold'));
-                          editor.chain().focus().toggleBold().run();
-                        }}
+                        onClick={() => editor.chain().focus().toggleBold().run()}
                         className={styles.toolbarButton}
                       >
                         <Bold className="w-4 h-4" />
