@@ -28,6 +28,7 @@ export interface ToolDTO {
   version: string
   requiresConnection: boolean
   connectionType: ConnectionType
+  requiredApps?: readonly string[]
   icon?: string
   tags: readonly string[]
   config: Record<string, any>
@@ -71,6 +72,7 @@ export class ToolMapper {
       version: tool.getVersion(),
       requiresConnection: tool.requiresConnection(),
       connectionType: tool.toolMetadata.connectionType,
+      requiredApps: tool.toolMetadata.requiredApps,
       icon: tool.toolMetadata.icon,
       tags: tool.toolMetadata.tags,
       config: tool.toolConfig.config
@@ -119,6 +121,7 @@ export class ToolMapper {
       dto.category,
       dto.requiresConnection,
       dto.connectionType,
+      dto.requiredApps || [], // requiredApps from DTO or empty array
       dto.icon,
       dto.tags
     )

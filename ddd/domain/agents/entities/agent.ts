@@ -169,6 +169,7 @@ export interface UpdateAgentData {
   role?: string;
   description?: string;
   persona?: string;
+  ownerId?: UserId;
   tools?: ToolConfig[];
   servers?: ServerConfig[];
   trigger?: TriggerConfig;
@@ -177,7 +178,7 @@ export interface UpdateAgentData {
   status?: AgentStatus;
   agentType?: AgentType;
   specialization?: AgentSpecialization;
-  // Note: organizationId and ownerId typically not changed after creation
+  // Note: organizationId typically not changed after creation
   // apiKey updates handled through separate methods for security
 }
 

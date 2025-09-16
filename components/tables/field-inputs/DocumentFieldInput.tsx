@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Edit3, Upload, ExternalLink, PlusCircle, Trash2 } from 'lucide-react';
 import type { DocumentArrayFieldValue, DocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
-import { DocumentCreationDialog } from '@/app/(app)/data/components/DocumentCreationDialog';
+import { DocumentCreationDialog } from '@/components/tables/dialogs/DocumentCreationDialog';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 
 interface DocumentFieldInputProps {
@@ -34,17 +34,12 @@ export function DocumentFieldInput({
 
   const documents = Array.isArray(value) ? value : [];
 
-  const handleDocumentCreated = (document: DocumentFieldValue, shouldOpen: boolean) => {
+  const handleDocumentCreated = useCallback((document: DocumentFieldValue, shouldOpen: boolean) => {
     const newDocuments = [...documents, document];
     onChange(newDocuments);
+  }, [documents, onChange]);
 
-    // TODO: Handle shouldOpen flag for opening document editor
-    if (shouldOpen) {
-      console.log('Would open document for editing:', document);
-    }
-  };
-
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = useCallback(async (file: File) => {
     setIsCreating(true);
     try {
       const formData = new FormData();
@@ -82,17 +77,25 @@ export function DocumentFieldInput({
     } finally {
       setIsCreating(false);
     }
-  };
+  }, [documents, onChange, organizationId, tableId, field?.id]);
 
-  const handleRemoveDocument = (index: number) => {
+  const handleRemoveDocument = useCallback((index: number) => {
     const newDocuments = documents.filter((_, i) => i !== index);
     onChange(newDocuments);
-  };
+  }, [documents, onChange]);
 
-  const handleQuickOpen = (documentValue: DocumentFieldValue) => {
+  const handleQuickOpen = useCallback((documentValue: DocumentFieldValue) => {
     console.log('Would open document:', documentValue.name);
     // TODO: Implement document opening logic when needed
-  };
+  }, []);
+
+  const handleCreateDocument = useCallback(() => {
+    setShowCreateDialog(true);
+  }, []);
+
+  const handleUploadFile = useCallback(() => {
+    document.getElementById(`doc-file-upload-${field?.id || 'unknown'}`)?.click();
+  }, [field?.id]);
 
   return (
     <div className="space-y-3">
@@ -146,18 +149,16 @@ export function DocumentFieldInput({
               <PlusCircle className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          {!isCreating && (
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => setShowCreateDialog(true)}>
-                <Edit3 className="w-4 h-4 mr-2" />
-                Add Document
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => document.getElementById(`doc-file-upload-${field?.id || 'unknown'}`)?.click()}>
-                <Upload className="w-4 h-4 mr-2" />
-                Upload File
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          )}
+          <DropdownMenuContent>
+            <DropdownMenuItem onClick={handleCreateDocument} disabled={isCreating}>
+              <Edit3 className="w-4 h-4 mr-2" />
+              Add Document
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleUploadFile} disabled={isCreating}>
+              <Upload className="w-4 h-4 mr-2" />
+              Upload File
+            </DropdownMenuItem>
+          </DropdownMenuContent>
         </DropdownMenu>
       </div>
 

@@ -129,7 +129,7 @@ export class AgentTaskApplicationService {
    */
   async executeTask(request: ExecuteTaskRequest): Promise<TaskExecutionResult> {
     const { taskId, timeoutSeconds } = request;
-    
+
     console.log(`[AGENT-TASK-SERVICE] Executing task ${taskId.substring(0, 8)}`);
     
     // 1. Load and validate task

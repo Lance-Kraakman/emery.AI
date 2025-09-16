@@ -349,6 +349,7 @@ export function createToolFromDefinition(definition: ToolDefinition): {
     toolCategory,
     definition.requiresConnection,
     definition.connectionType,
+    [], // requiredApps - empty for hardcoded tools for now
     undefined, // icon
     definition.tags
   )

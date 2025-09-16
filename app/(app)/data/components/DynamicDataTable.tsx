@@ -248,7 +248,7 @@ export function DynamicDataTable({ fields, rows, organizationId, tableId, onUpda
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
                   className={`hover:bg-muted/30 cursor-pointer ${row.getIsSelected() ? "bg-blue-50 dark:bg-blue-950/20" : ""}`}
-                  onClick={() => handleRowClick(rowIndex)}
+                  onDoubleClick={() => handleRowClick(rowIndex)}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell

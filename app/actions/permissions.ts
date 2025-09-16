@@ -196,4 +196,39 @@ export async function requireResourcePermission(
   }
 }
 
-// AIDEV-NOTE: Only these 4 functions are actually used throughout the app
+/**
+ * Check if the current user has a specific permission (for client-side use)
+ */
+export async function checkPermission(permissionString: string): Promise<Result<boolean>> {
+  try {
+    const session = await requireAuth();
+
+    if (!session.user.currentOrganizationId) {
+      return {
+        success: false,
+        error: "No current organization selected"
+      };
+    }
+
+    // Use the existing hasPermission function from lib/auth
+    const { hasPermission } = await import('@/lib/auth');
+    const hasPermissionResult = await hasPermission(
+      session.user.id,
+      permissionString,
+      session.user.currentOrganizationId
+    );
+
+    return {
+      success: true,
+      data: hasPermissionResult
+    };
+  } catch (error) {
+    console.error("Error checking permission:", error);
+    return {
+      success: false,
+      error: "Failed to check permission"
+    };
+  }
+}
+
+// AIDEV-NOTE: Only these 5 functions are actually used throughout the app
