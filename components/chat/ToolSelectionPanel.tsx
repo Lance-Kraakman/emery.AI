@@ -1,14 +1,20 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { X, ChevronDown, ChevronUp, Settings, RefreshCw, Eye, Search } from 'lucide-react'
+import { X, ChevronDown, ChevronUp, Settings, RefreshCw, Eye, Search, Filter, CheckCircle, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { ConnectionSummaryCard } from '@/components/ui/ConnectionSummaryCard'
+import { ConnectionStatusDot } from '@/components/ui/ConnectionStatusBadge'
+import { QuickConnectionSetup } from '@/components/ui/ConnectionSetupFlow'
+import { getToolConnectionStatus, type ToolConnectionStatus } from '@/app/actions/connections'
 import type { ToolDTO, ToolSearchResultDTO } from '@/app/mappers/tool-mapper'
 import { ToolCategory } from '@/app/mappers/tool-mapper'
 import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper'
 import { searchAllTools } from '@/app/actions/references'
 import { TOOL_CATEGORY_INFO, getCategoryInfo } from '@/ddd/domain/tools/value-objects/tool-metadata'
+import { useSession } from 'next-auth/react'
 
 export interface ResolvedReference {
   type: 'doc' | 'file' | 'table' | 'agent' | 'tool'
@@ -29,9 +35,12 @@ interface ToolCardProps {
   isSelected: boolean
   onToggle: () => void
   onOpenArtifact?: (tool: ToolDTO | ReferenceToolDTO) => void
+  connectionStatus?: ToolConnectionStatus | null
 }
 
-function ToolCard({ tool, isSelected, onToggle, onOpenArtifact }: ToolCardProps) {
+type ConnectionFilter = 'all' | 'connected' | 'needs-setup';
+
+function ToolCard({ tool, isSelected, onToggle, onOpenArtifact, connectionStatus }: ToolCardProps) {
   const isReferenceTool = 'toolName' in tool
   const displayName = isReferenceTool ? tool.displayName : tool.displayName
   const description = isReferenceTool ? tool.description : tool.description
@@ -48,6 +57,17 @@ function ToolCard({ tool, isSelected, onToggle, onOpenArtifact }: ToolCardProps)
     }
   }
 
+  // Get connection status tooltip
+  const getConnectionTooltip = () => {
+    if (!connectionStatus || connectionStatus.connectionType === 'none') {
+      return 'No authentication required';
+    }
+    if (connectionStatus.isConnected) {
+      return `Connected to: ${connectionStatus.requiredApps.join(', ')}`;
+    }
+    return `Needs connections: ${connectionStatus.missingApps.join(', ')}`;
+  };
+
   return (
     <div className={`
       flex items-center gap-2 p-2 rounded-md border text-sm
@@ -56,6 +76,7 @@ function ToolCard({ tool, isSelected, onToggle, onOpenArtifact }: ToolCardProps)
         ? 'border-primary bg-primary/10 text-primary'
         : 'border-border bg-background hover:bg-muted/50'
       }
+      ${connectionStatus && !connectionStatus.isConnected && connectionStatus.connectionType !== 'none' ? 'border-l-2 border-l-yellow-400' : ''}
     `}>
       <button
         onClick={onToggle}
@@ -68,8 +89,19 @@ function ToolCard({ tool, isSelected, onToggle, onOpenArtifact }: ToolCardProps)
         {isSelected && <X className="h-3 w-3" />}
       </button>
 
-      {requiresConnection && (
-        <div className="w-2 h-2 rounded-full bg-green-500" title="Connection required" />
+      {/* Connection status indicator */}
+      {connectionStatus && connectionStatus.connectionType !== 'none' && (
+        <div title={getConnectionTooltip()}>
+          <ConnectionStatusDot
+            isConnected={connectionStatus.isConnected}
+            size="sm"
+          />
+        </div>
+      )}
+
+      {/* Legacy connection indicator for backward compatibility */}
+      {!connectionStatus && requiresConnection && (
+        <div className="w-2 h-2 rounded-full bg-gray-400" title="Connection status unknown" />
       )}
 
       {supportsArtifacts && (
@@ -94,6 +126,7 @@ interface CategorySectionProps {
   onToolSelect: (tool: ToolDTO | ReferenceToolDTO) => void
   onToolDeselect: (tool: ToolDTO | ReferenceToolDTO) => void
   onOpenArtifact?: (tool: ToolDTO | ReferenceToolDTO) => void
+  getConnectionStatus?: (tool: ToolDTO | ReferenceToolDTO) => ToolConnectionStatus | null
 }
 
 function CategorySection({
@@ -102,7 +135,8 @@ function CategorySection({
   selectedTools,
   onToolSelect,
   onToolDeselect,
-  onOpenArtifact
+  onOpenArtifact,
+  getConnectionStatus
 }: CategorySectionProps) {
   const [isExpanded, setIsExpanded] = useState(true)
   const categoryInfo = getCategoryInfo(category)
@@ -147,6 +181,7 @@ function CategorySection({
                 tool={tool}
                 isSelected={isSelected}
                 onOpenArtifact={onOpenArtifact}
+                connectionStatus={getConnectionStatus ? getConnectionStatus(tool) : null}
                 onToggle={() => {
                   if (isSelected) {
                     onToolDeselect(tool)
@@ -170,6 +205,7 @@ export default function ToolSelectionPanel({
   onResolveReference,
   currentOrganizationId
 }: ToolSelectionPanelProps) {
+  const { data: session } = useSession();
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [toolData, setToolData] = useState<ToolSearchResultDTO | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -177,11 +213,24 @@ export default function ToolSelectionPanel({
   const [selectedTools, setSelectedTools] = useState<(ToolDTO | ReferenceToolDTO)[]>([])
   const [searchQuery, setSearchQuery] = useState('')
 
+  // Connection status state
+  const [connectionStatuses, setConnectionStatuses] = useState<ToolConnectionStatus[]>([])
+  const [isLoadingConnections, setIsLoadingConnections] = useState(false)
+  const [connectionFilter, setConnectionFilter] = useState<ConnectionFilter>('all')
+  const [showConnectionSummary, setShowConnectionSummary] = useState(false)
+
   useEffect(() => {
     if (isVisible) {
       loadAvailableTools()
     }
   }, [isVisible])
+
+  // Load connection status when tool data changes
+  useEffect(() => {
+    if (toolData && session?.user?.id) {
+      loadConnectionStatus()
+    }
+  }, [toolData, session?.user?.id])
 
   const loadAvailableTools = async () => {
     try {
@@ -202,6 +251,34 @@ export default function ToolSelectionPanel({
     }
   }
 
+  const loadConnectionStatus = async () => {
+    if (!toolData || !session?.user?.id) return
+
+    try {
+      setIsLoadingConnections(true)
+
+      // Combine all tools from toolData
+      const allTools = [...toolData.systemTools, ...toolData.referenceTools]
+
+      // Convert to simple tool objects for connection checking
+      const simpleTools = allTools.map(tool => ({
+        name: ('name' in tool ? tool.name : tool.toolName) || tool.displayName,
+        displayName: tool.displayName,
+        requiredApps: 'requiredApps' in tool ? tool.requiredApps || [] : []
+      }))
+
+      const result = await getToolConnectionStatus(simpleTools, session.user.id)
+
+      if (result.success && result.data) {
+        setConnectionStatuses(result.data)
+      }
+    } catch (error) {
+      console.error('Failed to load connection status:', error)
+    } finally {
+      setIsLoadingConnections(false)
+    }
+  }
+
   // Reload tools when search query changes
   useEffect(() => {
     if (isVisible) {
@@ -211,6 +288,42 @@ export default function ToolSelectionPanel({
       return () => clearTimeout(timeoutId)
     }
   }, [searchQuery, isVisible])
+
+  // Helper functions
+  const getConnectionStatus = (tool: ToolDTO | ReferenceToolDTO) => {
+    const toolName = 'name' in tool ? tool.name : tool.toolName;
+    return connectionStatuses.find(status =>
+      status.toolName === toolName || status.toolName === tool.displayName
+    ) || null
+  }
+
+  const filterToolsByConnection = (tools: (ToolDTO | ReferenceToolDTO)[]) => {
+    if (connectionFilter === 'all') return tools
+
+    return tools.filter(tool => {
+      const status = getConnectionStatus(tool)
+      if (!status || status.connectionType === 'none') return connectionFilter === 'connected'
+
+      if (connectionFilter === 'connected') return status.isConnected
+      if (connectionFilter === 'needs-setup') return !status.isConnected
+
+      return true
+    })
+  }
+
+  const getConnectionSummary = () => {
+    if (connectionStatuses.length === 0) return null
+
+    const connected = connectionStatuses.filter(s => s.isConnected || s.connectionType === 'none').length
+    const needsSetup = connectionStatuses.filter(s => !s.isConnected && s.connectionType !== 'none').length
+    const missingApps = [...new Set(connectionStatuses.flatMap(s => s.missingApps))]
+
+    return { connected, total: connectionStatuses.length, needsSetup, missingApps }
+  }
+
+  const handleSetupConnection = (appName: string) => {
+    window.open('/connections?setup=' + encodeURIComponent(appName), '_blank')
+  }
 
   const handleToolSelect = (tool: ToolDTO | ReferenceToolDTO) => {
     setSelectedTools(prev => [...prev, tool])
@@ -280,6 +393,48 @@ export default function ToolSelectionPanel({
           />
         </div>
 
+        {/* Connection Summary */}
+        {getConnectionSummary() && (
+          <div className="mb-4">
+            <ConnectionSummaryCard
+              tools={connectionStatuses}
+              isLoading={isLoadingConnections}
+              onRefresh={loadConnectionStatus}
+              onSetupConnection={handleSetupConnection}
+              onViewAllConnections={() => window.open('/connections', '_blank')}
+              title="Connection Status"
+              className="border-0 bg-muted/20"
+              collapsible={true}
+              defaultExpanded={showConnectionSummary}
+            />
+          </div>
+        )}
+
+        {/* Connection Filters */}
+        {connectionStatuses.length > 0 && (
+          <div className="flex items-center gap-2 mb-4">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <div className="flex gap-1">
+              {[
+                { value: 'all', label: 'All', icon: null },
+                { value: 'connected', label: 'Connected', icon: CheckCircle },
+                { value: 'needs-setup', label: 'Need Setup', icon: XCircle }
+              ].map(({ value, label, icon: Icon }) => (
+                <Button
+                  key={value}
+                  variant={connectionFilter === value ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setConnectionFilter(value as ConnectionFilter)}
+                  className="text-xs h-7"
+                >
+                  {Icon && <Icon className="h-3 w-3 mr-1" />}
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           {isLoading && (
@@ -301,20 +456,42 @@ export default function ToolSelectionPanel({
 
           {toolData && !isLoading && !error && (
             <div className="space-y-4">
-              {Array.from(organizeToolsByCategory(toolData)).map(([category, tools]) => (
-                <CategorySection
-                  key={category}
-                  category={category}
-                  tools={tools}
-                  selectedTools={selectedTools}
-                  onToolSelect={handleToolSelect}
-                  onToolDeselect={handleToolDeselect}
-                />
-              ))}
+              {Array.from(organizeToolsByCategory(toolData)).map(([category, tools]) => {
+                const filteredTools = filterToolsByConnection(tools);
+                if (filteredTools.length === 0) return null;
+
+                return (
+                  <CategorySection
+                    key={category}
+                    category={category}
+                    tools={filteredTools}
+                    selectedTools={selectedTools}
+                    onToolSelect={handleToolSelect}
+                    onToolDeselect={handleToolDeselect}
+                    onOpenArtifact={undefined}
+                    getConnectionStatus={getConnectionStatus}
+                  />
+                );
+              })}
 
               {toolData.systemTools.length === 0 && toolData.referenceTools.length === 0 && (
                 <div className="text-center py-8 text-muted-foreground text-sm">
                   No tools or references available
+                </div>
+              )}
+
+              {/* Show message when filters hide all tools */}
+              {connectionFilter !== 'all' && Array.from(organizeToolsByCategory(toolData)).every(([, tools]) => filterToolsByConnection(tools).length === 0) && (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  No tools match the selected connection filter
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setConnectionFilter('all')}
+                    className="ml-2"
+                  >
+                    Show all
+                  </Button>
                 </div>
               )}
             </div>

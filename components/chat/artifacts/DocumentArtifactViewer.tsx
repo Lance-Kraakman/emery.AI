@@ -112,12 +112,22 @@ export function DocumentArtifactViewer({
           if (result.success && result.data?.content) {
             // Use the parsed TipTap content directly (no more fetch needed!)
             const tiptapJson = result.data.content as any
+            console.log('[DOCUMENT-VIEWER] Received content:', {
+              hasContent: !!tiptapJson,
+              contentType: typeof tiptapJson,
+              isValidDoc: tiptapJson?.type === 'doc',
+              hasContentArray: !!tiptapJson?.content,
+              contentLength: tiptapJson?.content?.length
+            })
+
             if (tiptapJson && typeof tiptapJson === 'object' && tiptapJson.type === 'doc') {
               // Valid TipTap document - pass JSON object directly to editor
+              console.log('[DOCUMENT-VIEWER] Setting valid TipTap content and marking as loaded')
               setContent(tiptapJson)
               setLoadError(null)
               setContentLoaded(true)
             } else {
+              console.log('[DOCUMENT-VIEWER] Invalid TipTap format:', tiptapJson)
               setContent('<p>Invalid TipTap document format</p>')
               setLoadError('Invalid document format')
             }
@@ -154,7 +164,16 @@ export function DocumentArtifactViewer({
 
     const timeoutId = setTimeout(loadContent, delay)
     return () => clearTimeout(timeoutId)
-  }, [documentField.id, artifact.data.tableId, artifact.data.fieldId, artifact.data.organizationId, loadAttempts])
+  }, [
+    documentField.id,
+    artifact.data.tableId,
+    artifact.data.fieldId,
+    artifact.data.organizationId,
+    loadAttempts,
+    isLoadingContent,
+    contentLoaded,
+    documentField.documentMetadata?.documentType
+  ])
 
   // Create a stable document key for comparison
   const documentKey = useMemo(() =>
@@ -172,7 +191,10 @@ export function DocumentArtifactViewer({
   // Configure TipTap editor with stable dependencies
   const editor = useEditor({
     extensions: [
-      StarterKit, // Includes Strike and other basic extensions
+      StarterKit.configure({
+        // Configure StarterKit to exclude conflicting extensions
+        strike: false, // We'll add Strike separately to avoid conflicts
+      }),
       Placeholder.configure({
         placeholder: 'Start writing your document...',
         showOnlyWhenEditable: true,
@@ -189,6 +211,7 @@ export function DocumentArtifactViewer({
       TableHeader,
       TableCell,
       Underline, // Not included in StarterKit
+      Strike, // Add Strike separately to prevent conflicts
       TextStyle,
       Color,
       Highlight.configure({
@@ -214,7 +237,17 @@ export function DocumentArtifactViewer({
 
   // Update editor content when content changes (prevent circular updates)
   useEffect(() => {
+    console.log('[DOCUMENT-VIEWER] Editor content update check:', {
+      hasEditor: !!editor,
+      hasContent: !!content,
+      contentLoaded,
+      isUpdatingEditor,
+      contentType: typeof content,
+      isDocType: content?.type === 'doc'
+    })
+
     if (editor && content && contentLoaded && !isUpdatingEditor) {
+      console.log('[DOCUMENT-VIEWER] Updating editor content...')
       setIsUpdatingEditor(true)
 
       try {
@@ -222,6 +255,7 @@ export function DocumentArtifactViewer({
         if (typeof content === 'string') {
           const currentHTML = editor.getHTML()
           if (currentHTML !== content) {
+            console.log('[DOCUMENT-VIEWER] Setting string content to editor')
             editor.commands.setContent(content, { emitUpdate: false })
           }
         } else if (content && typeof content === 'object' && content.type === 'doc') {
@@ -234,7 +268,17 @@ export function DocumentArtifactViewer({
             currentJSON.content.length !== content.content?.length
           )
 
+          console.log('[DOCUMENT-VIEWER] JSON content comparison:', {
+            shouldUpdate,
+            currentHasContent: !!currentJSON,
+            currentType: currentJSON?.type,
+            newType: content.type,
+            currentContentLength: currentJSON?.content?.length,
+            newContentLength: content.content?.length
+          })
+
           if (shouldUpdate) {
+            console.log('[DOCUMENT-VIEWER] Setting JSON content to editor:', content)
             editor.commands.setContent(content, { emitUpdate: false })
           }
         }

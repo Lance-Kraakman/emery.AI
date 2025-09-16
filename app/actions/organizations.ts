@@ -8,14 +8,17 @@ import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
 
-export async function updateOrganizationViewConfig(organizationId: number, viewConfig: any) {
+export async function updateOrganizationViewConfig(organizationId: number, viewConfig: any, shouldRevalidate: boolean = false) {
   try {
     const orgRepo = getOrganizationRepository();
-    
+
     await orgRepo.update(OrganizationId.fromNumber(organizationId), { viewConfig });
 
-    revalidatePath(`/organization`);
-    
+    // Only revalidate for explicit saves, not auto-saves to prevent reload loops
+    if (shouldRevalidate) {
+      revalidatePath(`/organization`);
+    }
+
     return { success: true };
   } catch (error) {
     console.error("Failed to update organization view config:", error);
