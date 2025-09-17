@@ -100,7 +100,8 @@ export class ChatProcessingClient {
       message_content: messageContent,
       user_id: userId,
       organization_id: organizationId,
-      conversation_history: conversationHistory
+      conversation_history: conversationHistory,
+      tools: options.tools || [] // Add tools from options
     };
 
     // Add context if provided

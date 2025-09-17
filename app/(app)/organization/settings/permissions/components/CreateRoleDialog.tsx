@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2, Plus } from "lucide-react";
 import { getAvailablePermissions, createCustomRole } from "@/app/actions/roles";
-import { PermissionSelector } from "./PermissionSelector";
+import { PermissionSelector, type PermissionAssignment } from "./PermissionSelector";
 
 interface CreateRoleDialogProps {
   open: boolean;
@@ -31,7 +31,7 @@ export function CreateRoleDialog({ open, onOpenChange, onSuccess }: CreateRoleDi
     defaultValues: {
       name: '',
       description: '',
-      selectedPermissions: [] as number[],
+      selectedPermissions: [] as PermissionAssignment[],
     },
     onSubmit: async ({ value }) => {
       try {
@@ -40,7 +40,7 @@ export function CreateRoleDialog({ open, onOpenChange, onSuccess }: CreateRoleDi
         const formData = new FormData();
         formData.append('name', value.name.trim());
         formData.append('description', value.description.trim());
-        formData.append('permissionIds', JSON.stringify(value.selectedPermissions));
+        formData.append('permissionAssignments', JSON.stringify(value.selectedPermissions));
 
         const result = await createCustomRole(formData);
 

@@ -85,15 +85,19 @@ export async function getUserConnections(userId: string) {
       let appName = '';
       if (typeof account.app === 'string') {
         appName = account.app;
+      } else if (account.app && typeof account.app.name_slug === 'string') {
+        appName = account.app.name_slug;
       } else if (account.app && typeof account.app.name === 'string') {
         appName = account.app.name;
       } else {
         appName = 'unknown'; // Fallback for unexpected structure
       }
       
-      // Normalize Google services to 'gmail' for tool matching
-      if (appName === 'google' || appName.startsWith('google_')) {
+      // Normalize Google services - preserve specific app types like google-sheets
+      if (appName === 'google' || appName === 'google_gmail') {
         appName = 'gmail';
+      } else if (appName === 'google_sheets' || appName === 'googlesheets') {
+        appName = 'google-sheets';
       }
       
       return {

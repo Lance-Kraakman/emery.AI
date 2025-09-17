@@ -201,12 +201,12 @@ export class UserRoleApplicationService {
       // Return the first system role found (users should have exactly one role per org)
       const systemRole = roles.find(r => r.isSystem);
       if (systemRole) {
-        console.log(`Found system role '${systemRole.name}' for user ${userId.value} in org ${organizationId.value}`);
+        // console.log(`Found system role '${systemRole.name}' for user ${userId.value} in org ${organizationId.value}`);
         return systemRole.name as SystemRoleType;
       }
-      
+
       // If no system role, return the first role's name
-      console.log(`Using first role '${roles[0].name}' for user ${userId.value} in org ${organizationId.value}`);
+      // console.log(`Using first role '${roles[0].name}' for user ${userId.value} in org ${organizationId.value}`);
       return roles[0].name as SystemRoleType;
     } catch (error) {
       console.error("Error getting user organization role:", error);

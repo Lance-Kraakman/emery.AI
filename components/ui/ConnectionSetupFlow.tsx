@@ -48,33 +48,16 @@ export function ConnectionSetupFlow({
       setIsLoading(true);
       setError(null);
 
-      const result = await getConnectionSetupUrl(appName, redirectPath);
+      // Create redirect URL with current page context
+      const currentPath = window.location.pathname;
+      const redirectUrl = redirectPath || `${window.location.origin}${currentPath}?connected=${appName}`;
+
+      const result = await getConnectionSetupUrl(appName, redirectUrl);
 
       if (result.success && result.data) {
-        // Open OAuth flow in new window/tab
-        const oauthWindow = window.open(
-          result.data as string,
-          'oauth',
-          'width=600,height=700,scrollbars=yes,resizable=yes'
-        );
-
-        // Monitor for window close (user completed or cancelled)
-        const checkClosed = setInterval(() => {
-          if (oauthWindow?.closed) {
-            clearInterval(checkClosed);
-            setIsLoading(false);
-            onSuccess?.();
-            onClose();
-          }
-        }, 1000);
-
-        // Cleanup interval if component unmounts
-        setTimeout(() => {
-          if (oauthWindow && !oauthWindow.closed) {
-            clearInterval(checkClosed);
-            setIsLoading(false);
-          }
-        }, 300000); // 5 minute timeout
+        // Use same-tab navigation like OAuth connections page to prevent popup blockers
+        // and ensure consistent behavior across the application
+        window.location.href = result.data as string;
       } else {
         throw new Error(result.error || 'Failed to generate setup URL');
       }
@@ -174,7 +157,7 @@ export function ConnectionSetupFlow({
               </div>
               <div className="flex items-center gap-2">
                 <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                Return here to continue using your connected tools
+                You'll be redirected back here after successful connection
               </div>
             </div>
           </div>

@@ -41,7 +41,7 @@ class ModelFactory:
         self.models = {
             'chat': ModelConfig(
                 name='chat',
-                model_id='Qwen/Qwen2.5-Coder-32B-Instruct',
+                model_id='Qwen/Qwen2.5-Coder-7B-Instruct',
                 max_tokens=2048,
                 temperature=0.7
             ),

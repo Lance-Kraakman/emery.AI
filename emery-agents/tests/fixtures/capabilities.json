@@ -7,19 +7,19 @@
         "id": "analyze_requirements",
         "type": "CODE_STEP",
         "instructions": "Analyze the requirements and plan the code structure",
-        "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+        "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
       },
       {
         "id": "generate_code",
         "type": "CODE_STEP", 
         "instructions": "Generate the actual code implementation",
-        "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+        "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
       },
       {
         "id": "test_code",
         "type": "CODE_STEP",
         "instructions": "Create comprehensive tests for the generated code",
-        "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+        "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
       }
     ]
   },

@@ -128,7 +128,7 @@ export default function CustomChatInput({
 
   // Extract tool references from message text
   const extractToolReferences = (text: string): string[] => {
-    const toolRegex = /@(doc|file|table|agent|database):[^\s]+/g;
+    const toolRegex = /@(tool|doc|file|table|agent|database):[^\s]+/g;
     return text.match(toolRegex) || [];
   };
 
@@ -190,6 +190,7 @@ export default function CustomChatInput({
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      e.stopPropagation(); // AIDEV-NOTE: Prevent event bubbling to parent forms
       handleSendMessage();
     }
   };

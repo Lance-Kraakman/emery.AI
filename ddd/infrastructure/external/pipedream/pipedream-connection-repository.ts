@@ -27,6 +27,7 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
       // Handle different response structures from Pipedream SDK
       const accounts = Array.isArray(response) ? response : (response?.data || []);
       console.log(`[ConnectionRepo] Received ${accounts.length} accounts from Pipedream`);
+      console.log(`[ConnectionRepo] Raw Pipedream accounts:`, accounts.map(a => ({ id: a.id, app: a.app, status: a.status })));
       
       return accounts
         .filter(account => {
@@ -38,10 +39,14 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
         })
         .map(account => {
           try {
-            return PipedreamConnectionMapper.toDomainEntity(userId, account);
+            console.log(`[ConnectionRepo] Mapping account ${account.id} for app '${account.app}'`);
+            const domainEntity = PipedreamConnectionMapper.toDomainEntity(userId, account);
+            console.log(`[ConnectionRepo] Successfully mapped to domain entity: app='${domainEntity.appName.value}', status='${domainEntity.status}'`);
+            return domainEntity;
           } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            console.warn(`[ConnectionRepo] Failed to map account ${account.id} for app ${account.app}:`, errorMessage);
+            console.error(`[ConnectionRepo] Failed to map account ${account.id} for app '${account.app}':`, errorMessage);
+            console.error(`[ConnectionRepo] Raw account data:`, account);
             return null;
           }
         })
@@ -55,14 +60,23 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
   
   async findByUserAndApp(userId: UserId, appName: AppName): Promise<Connection | null> {
     const connections = await this.findByUserId(userId);
-    const connection = connections.find(conn => conn.appName.value === appName.value);
-    
+
+    // Enhanced debugging for connection matching
+    console.log(`[ConnectionRepo] Looking for ${appName.value} connection for user ${userId.value}`);
+    console.log(`[ConnectionRepo] Available connections: [${connections.map(c => `${c.appName.value}:${c.status}`).join(', ')}]`);
+
+    const connection = connections.find(conn => {
+      const matches = conn.appName.value === appName.value;
+      console.log(`[ConnectionRepo] Comparing '${conn.appName.value}' === '${appName.value}': ${matches}`);
+      return matches;
+    });
+
     if (connection) {
-      console.log(`[ConnectionRepo] Found ${appName.value} connection for user ${userId.value}: ${connection.accountName}`);
+      console.log(`[ConnectionRepo] Found ${appName.value} connection for user ${userId.value}: ${connection.accountName} (status: ${connection.status})`);
     } else {
       console.log(`[ConnectionRepo] No ${appName.value} connection found for user ${userId.value}`);
     }
-    
+
     return connection || null;
   }
   

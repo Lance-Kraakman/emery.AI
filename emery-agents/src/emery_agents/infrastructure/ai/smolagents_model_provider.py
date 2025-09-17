@@ -35,20 +35,20 @@ class SmolagentsModelProvider(IModelProviderService):
         # Based on existing model_factory.py patterns
         self.model_configs = {
             ModelType.CHAT: {
-                'model_id': 'Qwen/Qwen2.5-Coder-32B-Instruct',
+                'model_id': 'Qwen/Qwen2.5-Coder-7B-Instruct',
                 'max_tokens': 2048,
                 'temperature': 0.7,
                 'description': 'General conversation and interaction'
             },
             ModelType.CODE: {
-                'model_id': 'Qwen/Qwen2.5-Coder-32B-Instruct', 
+                'model_id': 'Qwen/Qwen2.5-Coder-7B-Instruct', 
                 'max_tokens': 4096,
                 'temperature': 0.6,
                 'description': 'Code generation and programming tasks'
             },
             ModelType.TOOL_CALLING: {
-                'model_id': 'Qwen/Qwen2.5-14B-Instruct',
-                'max_tokens': 2048, 
+                'model_id': 'Qwen/Qwen2.5-Coder-7B-Instruct',
+                'max_tokens': 2048,
                 'temperature': 0.7,
                 'description': 'Tool execution and function calling'
             },

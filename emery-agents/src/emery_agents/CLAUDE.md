@@ -114,12 +114,12 @@ class SmolagentsModelProvider(IModelProviderService):
     def __init__(self):
         self.model_configs = {
             ModelType.CHAT: {
-                'model_id': 'Qwen/Qwen2.5-Coder-32B-Instruct',
+                'model_id': 'Qwen/Qwen2.5-Coder-7B-Instruct',
                 'max_tokens': 2048,
                 'temperature': 0.7
             },
             ModelType.CODE: {
-                'model_id': 'Qwen/Qwen2.5-Coder-32B-Instruct',
+                'model_id': 'Qwen/Qwen2.5-Coder-7B-Instruct',
                 'max_tokens': 4096, 
                 'temperature': 0.6
             },

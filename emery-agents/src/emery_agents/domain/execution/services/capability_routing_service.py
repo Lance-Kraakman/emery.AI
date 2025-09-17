@@ -112,7 +112,7 @@ class CapabilityRoutingService:
         # Extract tools from capability steps
         all_tools = []
         for step in capability.steps:
-            if step.tools:
+            if hasattr(step, 'tools') and step.tools:
                 all_tools.extend([tool.name for tool in step.tools])
         
         return ExecutionContext(
@@ -130,7 +130,7 @@ class CapabilityRoutingService:
         
         # Extract tool names from instruction config
         tool_names = []
-        if instruction_config.tools:
+        if hasattr(instruction_config, 'tools') and instruction_config.tools:
             tool_names = [tool.name for tool in instruction_config.tools]
         
         return ExecutionContext(
