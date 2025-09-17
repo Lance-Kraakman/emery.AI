@@ -31,7 +31,7 @@ class TestCapabilityRouter:
             id="test_step",
             type=StepType.CODE_STEP,
             instructions="Write a Python function",
-            model="Qwen/Qwen2.5-Coder-32B-Instruct",
+            model="Qwen/Qwen2.5-Coder-7B-Instruct",
             tools=[],
             servers=[]
         )

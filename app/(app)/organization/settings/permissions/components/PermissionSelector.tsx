@@ -6,7 +6,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Eye, Edit, Plus, Play, Users, Shield } from "lucide-react";
+import { Search, Eye, Edit, Plus, Play, Users, Shield, ChevronDown } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ResourceSelector } from "./ResourceSelector";
 
 interface Permission {
   id: number;
@@ -15,20 +17,76 @@ interface Permission {
   description: string | null;
 }
 
+// Extended permission with resource scope information
+export interface PermissionAssignment {
+  permissionId: number;
+  resourceType?: 'agent' | 'team' | 'user' | null;
+  resourceScope: 'all' | 'specific' | 'owned' | 'team';
+  resourceIds?: number[];
+}
+
 interface PermissionSelectorProps {
   availablePermissions: Permission[];
-  selectedPermissions: number[];
-  onSelectionChange: (selectedIds: number[]) => void;
+  selectedPermissions: PermissionAssignment[];
+  onSelectionChange: (assignments: PermissionAssignment[]) => void;
   disabled?: boolean;
 }
 
-export function PermissionSelector({ 
-  availablePermissions, 
-  selectedPermissions, 
+export function PermissionSelector({
+  availablePermissions,
+  selectedPermissions,
   onSelectionChange,
   disabled = false
 }: PermissionSelectorProps) {
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Helper functions for resource-specific permissions
+  const isResourceSpecificPermission = (resource: string): boolean => {
+    return ['agents', 'teams', 'data'].includes(resource.toLowerCase());
+  };
+
+  const getResourceType = (resource: string): 'agent' | 'team' | 'user' | null => {
+    switch (resource.toLowerCase()) {
+      case 'agents': return 'agent';
+      case 'teams': return 'team';
+      case 'users': return 'user';
+      default: return null;
+    }
+  };
+
+  const getScopeOptions = (resource: string): Array<{value: 'all' | 'specific' | 'owned' | 'team', label: string}> => {
+    const resourceType = resource.toLowerCase();
+    switch (resourceType) {
+      case 'agents':
+        return [
+          { value: 'all', label: 'All Agents' },
+          { value: 'owned', label: 'Owned Agents Only' },
+          { value: 'specific', label: 'Specific Agents' }
+        ];
+      case 'teams':
+        return [
+          { value: 'all', label: 'All Teams' },
+          { value: 'team', label: 'Team Member Only' },
+          { value: 'specific', label: 'Specific Teams' }
+        ];
+      case 'data':
+        return [
+          { value: 'all', label: 'All Tables' },
+          { value: 'owned', label: 'Owned Tables Only' },
+          { value: 'specific', label: 'Specific Tables' }
+        ];
+      default:
+        return [{ value: 'all', label: 'All' }];
+    }
+  };
+
+  const getPermissionAssignment = (permissionId: number): PermissionAssignment | undefined => {
+    return selectedPermissions.find(p => p.permissionId === permissionId);
+  };
+
+  const isPermissionSelected = (permissionId: number): boolean => {
+    return selectedPermissions.some(p => p.permissionId === permissionId);
+  };
 
   // Group permissions by resource
   const permissionsByResource = availablePermissions.reduce((acc, permission) => {
@@ -54,34 +112,82 @@ export function PermissionSelector({
     return acc;
   }, {} as Record<string, Permission[]>);
 
-  const handlePermissionToggle = (permissionId: number) => {
+  const handlePermissionToggle = (permission: Permission) => {
     if (disabled) return;
-    
-    if (selectedPermissions.includes(permissionId)) {
-      onSelectionChange(selectedPermissions.filter(id => id !== permissionId));
+
+    const isSelected = isPermissionSelected(permission.id);
+
+    if (isSelected) {
+      // Remove permission
+      onSelectionChange(selectedPermissions.filter(p => p.permissionId !== permission.id));
     } else {
-      onSelectionChange([...selectedPermissions, permissionId]);
+      // Add permission with default scope
+      const resourceType = getResourceType(permission.resource);
+      const isResourceSpecific = isResourceSpecificPermission(permission.resource);
+
+      const newAssignment: PermissionAssignment = {
+        permissionId: permission.id,
+        resourceType,
+        resourceScope: isResourceSpecific ? 'all' : 'all',
+        resourceIds: undefined
+      };
+
+      onSelectionChange([...selectedPermissions, newAssignment]);
     }
+  };
+
+  const handleScopeChange = (permissionId: number, newScope: 'all' | 'specific' | 'owned' | 'team') => {
+    if (disabled) return;
+
+    const updatedPermissions = selectedPermissions.map(p =>
+      p.permissionId === permissionId
+        ? { ...p, resourceScope: newScope, resourceIds: newScope === 'specific' ? (p.resourceIds || []) : undefined }
+        : p
+    );
+
+    onSelectionChange(updatedPermissions);
+  };
+
+  const handleResourceSelection = (permissionId: number, resourceIds: number[]) => {
+    if (disabled) return;
+
+    const updatedPermissions = selectedPermissions.map(p =>
+      p.permissionId === permissionId
+        ? { ...p, resourceIds }
+        : p
+    );
+
+    onSelectionChange(updatedPermissions);
   };
 
   const handleResourceToggle = (resourcePermissions: Permission[]) => {
     if (disabled) return;
-    
+
     const resourcePermissionIds = resourcePermissions.map(p => p.id);
-    const allSelected = resourcePermissionIds.every(id => selectedPermissions.includes(id));
-    
+    const allSelected = resourcePermissionIds.every(id => isPermissionSelected(id));
+
     if (allSelected) {
       // Unselect all permissions in this resource
-      onSelectionChange(selectedPermissions.filter(id => !resourcePermissionIds.includes(id)));
+      onSelectionChange(selectedPermissions.filter(p => !resourcePermissionIds.includes(p.permissionId)));
     } else {
       // Select all permissions in this resource
-      const newSelections = [...selectedPermissions];
-      resourcePermissionIds.forEach(id => {
-        if (!newSelections.includes(id)) {
-          newSelections.push(id);
+      const newAssignments = [...selectedPermissions];
+
+      resourcePermissions.forEach(permission => {
+        if (!isPermissionSelected(permission.id)) {
+          const resourceType = getResourceType(permission.resource);
+          const isResourceSpecific = isResourceSpecificPermission(permission.resource);
+
+          newAssignments.push({
+            permissionId: permission.id,
+            resourceType,
+            resourceScope: isResourceSpecific ? 'all' : 'all',
+            resourceIds: undefined
+          });
         }
       });
-      onSelectionChange(newSelections);
+
+      onSelectionChange(newAssignments);
     }
   };
 
@@ -165,7 +271,7 @@ export function PermissionSelector({
       <div className="grid gap-4">
         {Object.entries(filteredResourceGroups).map(([resource, permissions]) => {
           const resourcePermissionIds = permissions.map(p => p.id);
-          const selectedInResource = resourcePermissionIds.filter(id => selectedPermissions.includes(id));
+          const selectedInResource = resourcePermissionIds.filter(id => isPermissionSelected(id));
           const allSelected = selectedInResource.length === resourcePermissionIds.length;
           const someSelected = selectedInResource.length > 0;
 
@@ -192,45 +298,102 @@ export function PermissionSelector({
               </CardHeader>
               <CardContent className="grid gap-3">
                 {permissions.map((permission) => {
-                  const isSelected = selectedPermissions.includes(permission.id);
-                  
+                  const isSelected = isPermissionSelected(permission.id);
+                  const assignment = getPermissionAssignment(permission.id);
+                  const isResourceSpecific = isResourceSpecificPermission(permission.resource);
+                  const scopeOptions = getScopeOptions(permission.resource);
+
                   return (
-                    <div 
-                      key={permission.id} 
-                      className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${
-                        isSelected 
-                          ? 'border-primary/50 bg-primary/5' 
+                    <div
+                      key={permission.id}
+                      className={`border rounded-lg transition-colors ${
+                        isSelected
+                          ? 'border-primary/50 bg-primary/5'
                           : 'border-border hover:border-primary/30'
-                      } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                      onClick={() => handlePermissionToggle(permission.id)}
+                      } ${disabled ? 'opacity-50' : ''}`}
                     >
-                      <div className="flex items-center space-x-3 flex-1">
-                        <Checkbox
-                          checked={isSelected}
-                          disabled={disabled}
-                          // Prevent double-click when clicking checkbox directly
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge 
-                              variant={getActionBadgeVariant(permission.action)}
-                              className="flex items-center gap-1"
-                            >
-                              {getActionIcon(permission.action)}
-                              {permission.action}
-                            </Badge>
-                            <span className="font-medium">
-                              {permission.resource}:{permission.action}
-                            </span>
+                      <div
+                        className={`flex items-center justify-between p-3 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                        onClick={() => !disabled && handlePermissionToggle(permission)}
+                      >
+                        <div className="flex items-center space-x-3 flex-1">
+                          <Checkbox
+                            checked={isSelected}
+                            disabled={disabled}
+                            // Prevent double-click when clicking checkbox directly
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Badge
+                                variant={getActionBadgeVariant(permission.action)}
+                                className="flex items-center gap-1"
+                              >
+                                {getActionIcon(permission.action)}
+                                {permission.action}
+                              </Badge>
+                              <span className="font-medium">
+                                {permission.resource}:{permission.action}
+                              </span>
+                            </div>
+                            {permission.description && (
+                              <p className="text-sm text-muted-foreground">
+                                {permission.description}
+                              </p>
+                            )}
                           </div>
-                          {permission.description && (
-                            <p className="text-sm text-muted-foreground">
-                              {permission.description}
-                            </p>
-                          )}
                         </div>
                       </div>
+
+                      {/* Scope Selection for Resource-Specific Permissions */}
+                      {isSelected && isResourceSpecific && (
+                        <div className="border-t border-border/50 bg-muted/20">
+                          <div className="flex items-center gap-3 p-3">
+                            <label className="text-sm font-medium text-muted-foreground min-w-[60px]">
+                              Scope:
+                            </label>
+                            <Select
+                              value={assignment?.resourceScope || 'all'}
+                              onValueChange={(value: 'all' | 'specific' | 'owned' | 'team') =>
+                                handleScopeChange(permission.id, value)
+                              }
+                              disabled={disabled}
+                            >
+                              <SelectTrigger className="w-48">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {scopeOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {assignment?.resourceScope === 'specific' && (
+                              <Badge variant="outline" className="text-xs">
+                                {(assignment.resourceIds?.length || 0) === 0
+                                  ? "Select specific resources below"
+                                  : `${assignment.resourceIds?.length} selected`
+                                }
+                              </Badge>
+                            )}
+                          </div>
+
+                          {/* Resource Selection for Specific Scope */}
+                          {assignment?.resourceScope === 'specific' && assignment.resourceType && (
+                            <div className="px-3 pb-3">
+                              <ResourceSelector
+                                resourceType={assignment.resourceType}
+                                selectedResourceIds={assignment.resourceIds || []}
+                                onSelectionChange={(resourceIds) => handleResourceSelection(permission.id, resourceIds)}
+                                disabled={disabled}
+                                className="border-0 shadow-none bg-transparent"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -259,19 +422,32 @@ export function PermissionSelector({
       {/* Quick Actions */}
       {!disabled && (
         <div className="flex items-center gap-2 pt-4 border-t">
-          <Button 
+          <Button
             type="button"
-            variant="outline" 
-            size="sm" 
-            onClick={() => onSelectionChange(availablePermissions.map(p => p.id))}
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const allAssignments: PermissionAssignment[] = availablePermissions.map(permission => {
+                const resourceType = getResourceType(permission.resource);
+                const isResourceSpecific = isResourceSpecificPermission(permission.resource);
+
+                return {
+                  permissionId: permission.id,
+                  resourceType,
+                  resourceScope: isResourceSpecific ? 'all' : 'all',
+                  resourceIds: undefined
+                };
+              });
+              onSelectionChange(allAssignments);
+            }}
             disabled={selectedCount === totalCount}
           >
             Select All ({totalCount})
           </Button>
-          <Button 
+          <Button
             type="button"
-            variant="outline" 
-            size="sm" 
+            variant="outline"
+            size="sm"
             onClick={() => onSelectionChange([])}
             disabled={selectedCount === 0}
           >

@@ -27,7 +27,18 @@ export async function getUserOAuthConnections(): Promise<Result<ConnectionDTO[]>
     
     if (result.success && result.data) {
       console.log(`[ConnectionActions] Retrieved ${result.data.length} connections`);
+
+      // Enhanced debugging for connection consistency
+      const connectionDetails = result.data.map(conn => ({
+        app: conn.appName.value,
+        status: conn.status,
+        accountName: conn.accountName
+      }));
+      console.log(`[ConnectionActions] Connection details:`, connectionDetails);
+
       const connectionDTOs = ConnectionMapper.toDTOArray(result.data);
+      console.log(`[ConnectionActions] Mapped to ${connectionDTOs.length} DTOs`);
+
       return { success: true, data: connectionDTOs };
     } else {
       console.error(`[ConnectionActions] Failed to get connections:`, result.error);
@@ -46,19 +57,29 @@ export async function getUserOAuthConnections(): Promise<Result<ConnectionDTO[]>
 }
 
 /**
- * Generate app connection URL - replaces getAppConnectionUrl from pipedream.ts
- * Creates OAuth flow URL for connecting external services
+ * Generate app connection URL - enhanced with duplicate prevention
+ * Creates OAuth flow URL for connecting external services with smart duplicate handling
  */
 export async function getAppConnectionUrl(data: {
   appName: string;
   redirectUrl?: string;
-}): Promise<Result> {
+  forceNew?: boolean;
+  reconnectExisting?: boolean;
+}): Promise<Result<{
+  url?: string;
+  isReconnection?: boolean;
+  existingConnection?: boolean;
+  warningMessage?: string;
+}>> {
   try {
     const session = await requireAuth();
     const connectionService = getConnectionApplicationService();
-    
-    console.log(`[ConnectionActions] Generating connection URL for app ${data.appName}`);
-    
+
+    console.log(`[ConnectionActions] Generating connection URL for app ${data.appName}`, {
+      forceNew: data.forceNew,
+      reconnectExisting: data.reconnectExisting
+    });
+
     // Validate app name using domain value object
     let appName: AppName;
     try {
@@ -66,29 +87,38 @@ export async function getAppConnectionUrl(data: {
     } catch (appError: unknown) {
       const errorMessage = appError instanceof Error ? appError.message : 'Invalid app name';
       console.error(`[ConnectionActions] Invalid app name: ${data.appName}`, errorMessage);
-      return { 
-        success: false, 
-        error: errorMessage 
+      return {
+        success: false,
+        error: errorMessage
       };
     }
-    
+
     const result = await connectionService.initiateConnection(
       UserId.fromString(session.user.id),
       appName,
-      data.redirectUrl
+      data.redirectUrl,
+      {
+        forceNew: data.forceNew,
+        reconnectExisting: data.reconnectExisting
+      }
     );
-    
+
     if (result.success) {
-      console.log(`[ConnectionActions] Generated connection URL for ${data.appName}`);
+      const resultData = result.data!;
+      if (resultData.existingConnection) {
+        console.log(`[ConnectionActions] Existing connection found for ${data.appName}: ${resultData.warningMessage}`);
+      } else {
+        console.log(`[ConnectionActions] Generated connection URL for ${data.appName} (${resultData.isReconnection ? 'reconnection' : 'new connection'})`);
+      }
     } else {
       console.error(`[ConnectionActions] Failed to generate URL for ${data.appName}:`, result.error);
     }
-    
+
     return result;
   } catch (error) {
     console.error('[ConnectionActions] Error generating connection URL:', error);
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: 'Failed to generate connection URL'
     };
   }
@@ -183,21 +213,72 @@ export async function getConnectionSummary(): Promise<Result<{
   try {
     const session = await requireAuth();
     const connectionService = getConnectionApplicationService();
-    
+
     const result = await connectionService.getConnectionSummary(
       UserId.fromString(session.user.id)
     );
-    
+
     if (result.success && result.data) {
       console.log(`[ConnectionActions] Connection summary: ${result.data.activeConnections}/${result.data.totalConnections} active`);
     }
-    
+
     return result;
   } catch (error) {
     console.error('[ConnectionActions] Error getting connection summary:', error);
-    return { 
-      success: false, 
-      error: 'Failed to get connection summary' 
+    return {
+      success: false,
+      error: 'Failed to get connection summary'
+    };
+  }
+}
+
+/**
+ * Get all user connections including duplicates (for debugging and power users)
+ * Returns detailed information about duplicate groups
+ */
+export async function getUserConnectionsWithDuplicates(): Promise<Result<{
+  connections: ConnectionDTO[];
+  duplicateCount: number;
+  duplicateGroups: Array<{ key: string; count: number; connections: ConnectionDTO[] }>;
+}>> {
+  try {
+    const session = await requireAuth();
+    const connectionService = getConnectionApplicationService();
+
+    console.log(`[ConnectionActions] Getting all connections with duplicates for user ${session.user.id}`);
+
+    const result = await connectionService.getAllConnectionsWithDuplicates(
+      UserId.fromString(session.user.id)
+    );
+
+    if (result.success && result.data) {
+      console.log(`[ConnectionActions] Retrieved ${result.data.connections.length} total connections, ${result.data.duplicateCount} duplicates in ${result.data.duplicateGroups.length} groups`);
+
+      // Map domain entities to DTOs
+      const connectionDTOs = ConnectionMapper.toDTOArray(result.data.connections);
+      const duplicateGroupDTOs = result.data.duplicateGroups.map(group => ({
+        ...group,
+        connections: ConnectionMapper.toDTOArray(group.connections)
+      }));
+
+      return {
+        success: true,
+        data: {
+          connections: connectionDTOs,
+          duplicateCount: result.data.duplicateCount,
+          duplicateGroups: duplicateGroupDTOs
+        }
+      };
+    } else {
+      console.error(`[ConnectionActions] Failed to get connections with duplicates:`, result.error);
+      return { success: false, error: result.error };
+    }
+  } catch (error: unknown) {
+    console.error('[ConnectionActions] Error getting connections with duplicates:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      success: false,
+      error: `Failed to fetch connections with duplicates: ${errorMessage}`
     };
   }
 }
@@ -211,11 +292,14 @@ export async function canUseApp(appName: string): Promise<Result<boolean>> {
     const session = await requireAuth();
     const connectionService = getConnectionApplicationService();
 
+    console.log(`[ConnectionActions] Checking if user ${session.user.id} can use app '${appName}'`);
+
     const canUse = await connectionService.canUseApp(
       UserId.fromString(session.user.id),
       AppName.fromString(appName)
     );
 
+    console.log(`[ConnectionActions] canUseApp result for '${appName}': ${canUse}`);
     return { success: true, data: canUse };
   } catch (error) {
     console.error(`[ConnectionActions] Error checking app availability for ${appName}:`, error);
@@ -224,6 +308,107 @@ export async function canUseApp(appName: string): Promise<Result<boolean>> {
 }
 
 // AIDEV-NOTE: Extended connection actions for UI connection status components
+
+/**
+ * Unified connection check that both OAuth page and toolbar can use
+ * This ensures consistency between different UI components
+ */
+export async function getUnifiedConnectionStatus(appName: string): Promise<Result<{
+  isConnected: boolean;
+  rawConnection: ConnectionDTO | null;
+  connectionDetails: string;
+}>> {
+  try {
+    const session = await requireAuth();
+    const userId = UserId.fromString(session.user.id);
+    const connectionService = getConnectionApplicationService();
+
+    console.log(`[UnifiedConnectionStatus] Checking ${appName} for user ${session.user.id}`);
+
+    // Get raw connections (same as OAuth page)
+    const rawConnections = await connectionService.getUserConnections(userId);
+    const matchingConnection = rawConnections.success && rawConnections.data
+      ? rawConnections.data.find(conn => conn.appName.value.toLowerCase() === appName.toLowerCase())
+      : null;
+
+    // Check via canUseApp (same as toolbar)
+    const canUse = await connectionService.canUseApp(userId, AppName.fromString(appName));
+
+    const connectionDTO = matchingConnection ? ConnectionMapper.toDTO(matchingConnection) : null;
+
+    console.log(`[UnifiedConnectionStatus] Results for ${appName}:`);
+    console.log(`  - Raw connection found: ${!!matchingConnection} (status: ${matchingConnection?.status || 'none'})`);
+    console.log(`  - canUseApp result: ${canUse}`);
+    console.log(`  - Connection match: ${!!connectionDTO}`);
+
+    return {
+      success: true,
+      data: {
+        isConnected: canUse,
+        rawConnection: connectionDTO,
+        connectionDetails: matchingConnection
+          ? `${matchingConnection.accountName} (${matchingConnection.status})`
+          : 'No connection'
+      }
+    };
+  } catch (error) {
+    console.error(`[UnifiedConnectionStatus] Error checking ${appName}:`, error);
+    return {
+      success: false,
+      error: `Failed to check connection status for ${appName}`
+    };
+  }
+}
+
+/**
+ * Handle OAuth redirect and provide user feedback
+ * Call this in useEffect to detect successful connections and refresh data
+ */
+export async function handleOAuthRedirect(): Promise<Result<{
+  isRedirect: boolean;
+  connectedApp?: string;
+  message?: string;
+}>> {
+  try {
+    if (typeof window === 'undefined') {
+      return { success: true, data: { isRedirect: false } };
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const connectedApp = urlParams.get('connected');
+
+    if (connectedApp) {
+      // Clean up the URL to prevent re-triggers
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+
+      console.log(`[OAuthRedirect] Successfully connected ${connectedApp}`);
+
+      // Verify the connection was actually created
+      const verification = await getUnifiedConnectionStatus(connectedApp);
+      const isActuallyConnected = verification.success && verification.data?.isConnected;
+
+      return {
+        success: true,
+        data: {
+          isRedirect: true,
+          connectedApp,
+          message: isActuallyConnected
+            ? `Successfully connected to ${connectedApp}!`
+            : `Connection to ${connectedApp} may need verification`
+        }
+      };
+    }
+
+    return { success: true, data: { isRedirect: false } };
+  } catch (error) {
+    console.error('[OAuthRedirect] Error handling OAuth redirect:', error);
+    return {
+      success: false,
+      error: 'Failed to process connection redirect'
+    };
+  }
+}
 
 /**
  * Connection status for a specific tool
@@ -282,11 +467,17 @@ export async function getToolConnectionStatus(
       // Fallback: infer required apps from tool name if not explicitly set
       if (requiredApps.length === 0) {
         const toolName = tool.name.toLowerCase();
-        if (toolName.includes('slack')) requiredApps = ['slack'];
-        else if (toolName.includes('gmail')) requiredApps = ['gmail'];
-        else if (toolName.includes('google') && toolName.includes('sheet')) requiredApps = ['google-sheets'];
-        else if (toolName.includes('github')) requiredApps = ['github'];
-        else if (toolName.includes('notion')) requiredApps = ['notion'];
+        if (toolName.includes('slack')) {
+          requiredApps = ['slack'];
+        } else if (toolName.includes('gmail') || toolName.includes('google-gmail') || (toolName.includes('google') && toolName.includes('mail'))) {
+          requiredApps = ['gmail'];
+        } else if (toolName.includes('google') && toolName.includes('sheet')) {
+          requiredApps = ['google-sheets'];
+        } else if (toolName.includes('github')) {
+          requiredApps = ['github'];
+        } else if (toolName.includes('notion')) {
+          requiredApps = ['notion'];
+        }
       }
 
       let isConnected = true;
@@ -302,7 +493,15 @@ export async function getToolConnectionStatus(
           isConnected = missingApps.length === 0;
           connectionType = 'oauth'; // Most tools use OAuth
 
+          // Get user's actual connections for debugging
+          const allConnections = await connectionService.getUserConnections(userId);
+          const actualAppNames = allConnections.success && allConnections.data
+            ? allConnections.data.map(conn => conn.appName.value)
+            : [];
+
           console.log(`[ConnectionStatus] Tool ${tool.name}: required=${requiredApps}, missing=${missingApps}, connected=${isConnected}`);
+          console.log(`[ConnectionStatus] User's actual connections: ${actualAppNames.join(', ')}`);
+          console.log(`[ConnectionStatus] Checking against: ${requiredApps.join(', ')}`);
 
           if (!isConnected) {
             warnings.push(`Missing connections: ${missingApps.join(', ')}`);
@@ -428,6 +627,20 @@ export async function getConnectionSetupUrl(
   try {
     await requireAuth();
 
+    console.log(`[ConnectionSetupUrl] Setting up connection for ${appName}, redirect: ${redirectPath}`);
+
+    // Validate app name first to provide better error messages
+    try {
+      AppName.fromString(appName);
+    } catch (error) {
+      const supportedApps = AppName.getAllSupported().join(', ');
+      console.error(`[ConnectionSetupUrl] Unsupported app: ${appName}`);
+      return {
+        success: false,
+        error: `"${appName}" is not supported. Available apps: ${supportedApps}`
+      };
+    }
+
     // Use existing getAppConnectionUrl function
     const result = await getAppConnectionUrl({
       appName,
@@ -435,21 +648,34 @@ export async function getConnectionSetupUrl(
     });
 
     if (result.success && result.data) {
+      console.log(`[ConnectionSetupUrl] Successfully generated URL for ${appName}`);
       return {
         success: true,
-        data: result.data as string
+        data: (result.data as { url: string }).url
       };
     } else {
+      console.error(`[ConnectionSetupUrl] Failed to generate URL for ${appName}:`, result.error);
+
+      // Provide more user-friendly error messages
+      const userFriendlyError = result.error?.includes('Unsupported app')
+        ? `${appName} connections are not available right now. Please try again later.`
+        : result.error?.includes('Authentication required')
+        ? 'Please sign in to connect your accounts.'
+        : result.error || `Failed to set up ${appName} connection`;
+
       return {
         success: false,
-        error: result.error || 'Failed to generate setup URL'
+        error: userFriendlyError
       };
     }
   } catch (error) {
     console.error('Error generating connection setup URL:', error);
+    const userFriendlyError = error instanceof Error && error.message.includes('Authentication required')
+      ? 'Please sign in to connect your accounts.'
+      : `Unable to connect to ${appName} right now. Please try again later.`;
     return {
       success: false,
-      error: 'Failed to generate setup URL'
+      error: userFriendlyError
     };
   }
 }

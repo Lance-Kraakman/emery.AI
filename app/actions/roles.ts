@@ -12,6 +12,8 @@ import { db } from '@/lib/db/client';
 import { roles, permissions, rolePermissions, userRoles } from '@/lib/db/schema';
 import { eq, and, or, isNull, sql } from 'drizzle-orm';
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
+import { getRBACRepository } from '@/ddd/application/di/container';
+import { Permission } from '@/ddd/domain/shared/value-objects/permission';
 
 export interface CustomRole {
   id: number;
@@ -32,14 +34,26 @@ export interface CustomRole {
 export interface CreateRoleCommand {
   name: string;
   description?: string;
-  permissionIds: number[];
+  permissionIds: number[]; // Legacy - for backward compatibility
+  permissionAssignments?: Array<{
+    permissionId: number;
+    resourceType?: 'agent' | 'team' | 'user' | null;
+    resourceScope: 'all' | 'specific' | 'owned' | 'team';
+    resourceIds?: number[];
+  }>;
 }
 
 export interface UpdateRoleCommand {
   id: number;
   name: string;
   description?: string;
-  permissionIds: number[];
+  permissionIds: number[]; // Legacy - for backward compatibility
+  permissionAssignments?: Array<{
+    permissionId: number;
+    resourceType?: 'agent' | 'team' | 'user' | null;
+    resourceScope: 'all' | 'specific' | 'owned' | 'team';
+    resourceIds?: number[];
+  }>;
 }
 
 /**
@@ -217,6 +231,7 @@ export async function createCustomRole(formData: FormData): Promise<Result> {
       const name = formData.get("name") as string;
       const description = formData.get("description") as string;
       const permissionIdsStr = formData.get("permissionIds") as string;
+      const permissionAssignmentsStr = formData.get("permissionAssignments") as string;
 
       if (!name?.trim()) {
         return {
@@ -225,9 +240,27 @@ export async function createCustomRole(formData: FormData): Promise<Result> {
         };
       }
 
-      const permissionIds: number[] = permissionIdsStr 
-        ? JSON.parse(permissionIdsStr) 
-        : [];
+      // Handle both old and new formats
+      let permissionAssignments: Array<{
+        permissionId: number;
+        resourceType?: 'agent' | 'team' | 'user' | null;
+        resourceScope: 'all' | 'specific' | 'owned' | 'team';
+        resourceIds?: number[];
+      }> = [];
+
+      if (permissionAssignmentsStr) {
+        // New format with resource scopes
+        permissionAssignments = JSON.parse(permissionAssignmentsStr);
+      } else if (permissionIdsStr) {
+        // Legacy format - convert to new format with default 'all' scope
+        const permissionIds: number[] = JSON.parse(permissionIdsStr);
+        permissionAssignments = permissionIds.map(id => ({
+          permissionId: id,
+          resourceType: null,
+          resourceScope: 'all' as const,
+          resourceIds: undefined
+        }));
+      }
 
       // Check if role name already exists for this organization
       const existingRole = await db
@@ -261,16 +294,36 @@ export async function createCustomRole(formData: FormData): Promise<Result> {
           })
           .returning({ id: roles.id });
 
-        // Assign permissions to role
-        if (permissionIds.length > 0) {
-          await tx
-            .insert(rolePermissions)
-            .values(
-              permissionIds.map(permissionId => ({
+        // Assign permissions to role with resource-specific information
+        if (permissionAssignments.length > 0) {
+          for (const assignment of permissionAssignments) {
+            await tx
+              .insert(rolePermissions)
+              .values({
                 roleId: newRole.id,
-                permissionId,
-              }))
-            );
+                permissionId: assignment.permissionId,
+                resourceType: assignment.resourceType,
+                resourceScope: assignment.resourceScope,
+                resourceId: assignment.resourceScope === 'specific' && assignment.resourceIds?.length === 1
+                  ? assignment.resourceIds[0]
+                  : null
+              });
+
+            // For specific scope with multiple resources, create separate entries
+            if (assignment.resourceScope === 'specific' && assignment.resourceIds && assignment.resourceIds.length > 1) {
+              for (const resourceId of assignment.resourceIds.slice(1)) {
+                await tx
+                  .insert(rolePermissions)
+                  .values({
+                    roleId: newRole.id,
+                    permissionId: assignment.permissionId,
+                    resourceType: assignment.resourceType,
+                    resourceScope: assignment.resourceScope,
+                    resourceId: resourceId
+                  });
+              }
+            }
+          }
         }
 
         return newRole;
@@ -306,6 +359,7 @@ export async function updateCustomRole(formData: FormData): Promise<Result> {
       const name = formData.get("name") as string;
       const description = formData.get("description") as string;
       const permissionIdsStr = formData.get("permissionIds") as string;
+      const permissionAssignmentsStr = formData.get("permissionAssignments") as string;
 
       if (!roleId || !name?.trim()) {
         return {
@@ -314,9 +368,27 @@ export async function updateCustomRole(formData: FormData): Promise<Result> {
         };
       }
 
-      const permissionIds: number[] = permissionIdsStr 
-        ? JSON.parse(permissionIdsStr) 
-        : [];
+      // Handle both old and new formats
+      let permissionAssignments: Array<{
+        permissionId: number;
+        resourceType?: 'agent' | 'team' | 'user' | null;
+        resourceScope: 'all' | 'specific' | 'owned' | 'team';
+        resourceIds?: number[];
+      }> = [];
+
+      if (permissionAssignmentsStr) {
+        // New format with resource scopes
+        permissionAssignments = JSON.parse(permissionAssignmentsStr);
+      } else if (permissionIdsStr) {
+        // Legacy format - convert to new format with default 'all' scope
+        const permissionIds: number[] = JSON.parse(permissionIdsStr);
+        permissionAssignments = permissionIds.map(id => ({
+          permissionId: id,
+          resourceType: null,
+          resourceScope: 'all' as const,
+          resourceIds: undefined
+        }));
+      }
 
       // Verify role exists and belongs to organization
       const existingRole = await db
@@ -387,16 +459,36 @@ export async function updateCustomRole(formData: FormData): Promise<Result> {
           .delete(rolePermissions)
           .where(eq(rolePermissions.roleId, roleId));
 
-        // Add new permissions
-        if (permissionIds.length > 0) {
-          await tx
-            .insert(rolePermissions)
-            .values(
-              permissionIds.map(permissionId => ({
+        // Add new permissions with resource-specific information
+        if (permissionAssignments.length > 0) {
+          for (const assignment of permissionAssignments) {
+            await tx
+              .insert(rolePermissions)
+              .values({
                 roleId,
-                permissionId,
-              }))
-            );
+                permissionId: assignment.permissionId,
+                resourceType: assignment.resourceType,
+                resourceScope: assignment.resourceScope,
+                resourceId: assignment.resourceScope === 'specific' && assignment.resourceIds?.length === 1
+                  ? assignment.resourceIds[0]
+                  : null
+              });
+
+            // For specific scope with multiple resources, create separate entries
+            if (assignment.resourceScope === 'specific' && assignment.resourceIds && assignment.resourceIds.length > 1) {
+              for (const resourceId of assignment.resourceIds.slice(1)) {
+                await tx
+                  .insert(rolePermissions)
+                  .values({
+                    roleId,
+                    permissionId: assignment.permissionId,
+                    resourceType: assignment.resourceType,
+                    resourceScope: assignment.resourceScope,
+                    resourceId: resourceId
+                  });
+              }
+            }
+          }
         }
       });
 

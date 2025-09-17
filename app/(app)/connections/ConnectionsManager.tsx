@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, RefreshCw } from 'lucide-react';
-import { getUserOAuthConnections, getAppConnectionUrl, disconnectOAuthAccount } from '@/app/actions/connections';
+import { getUserOAuthConnections, getAppConnectionUrl, disconnectOAuthAccount, getUserConnectionsWithDuplicates } from '@/app/actions/connections';
 import { Button } from '@/components/ui/button';
 
 import { ConnectionDTO as Connection } from '@/app/mappers/connection-mapper';
@@ -18,6 +18,9 @@ const AVAILABLE_APPS = [
 
 export function ConnectionsManager() {
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [allConnections, setAllConnections] = useState<Connection[]>([]);
+  const [showAllDuplicates, setShowAllDuplicates] = useState(false);
+  const [duplicateCount, setDuplicateCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
@@ -49,14 +52,33 @@ export function ConnectionsManager() {
     try {
       setLoading(true);
       setError(null);
-      
-      // Get connections (user initialization handled automatically by DDD system)
-      const result = await getUserOAuthConnections();
-      if (result.success) {
-        console.log('🔍 Raw connections data:', JSON.stringify(result.data, null, 2));
-        setConnections(result.data || []);
+
+      // Get both deduplicated and all connections for full management capabilities
+      const [deduplicatedResult, allConnectionsResult] = await Promise.all([
+        getUserOAuthConnections(), // Returns deduplicated by default
+        getUserConnectionsWithDuplicates() // Returns all with duplicate analysis
+      ]);
+
+      if (deduplicatedResult.success) {
+        console.log('🔍 Deduplicated connections data:', JSON.stringify(deduplicatedResult.data, null, 2));
+        setConnections(deduplicatedResult.data || []);
       } else {
-        setError(result.error || 'Failed to load connections');
+        setError(deduplicatedResult.error || 'Failed to load connections');
+      }
+
+      if (allConnectionsResult.success && allConnectionsResult.data) {
+        console.log('🔍 All connections with duplicates:', {
+          total: allConnectionsResult.data.connections.length,
+          duplicates: allConnectionsResult.data.duplicateCount,
+          groups: allConnectionsResult.data.duplicateGroups.length
+        });
+        setAllConnections(allConnectionsResult.data.connections);
+        setDuplicateCount(allConnectionsResult.data.duplicateCount);
+      } else {
+        // If we can't get duplicate info, just use the main connections
+        setAllConnections(deduplicatedResult.data || []);
+        setDuplicateCount(0);
+        console.warn('Could not load duplicate analysis:', allConnectionsResult.error);
       }
     } catch (err) {
       setError('Failed to load connections');
@@ -94,20 +116,45 @@ export function ConnectionsManager() {
     }
   };
 
-  const handleConnectApp = async (appId: string) => {
+  const handleConnectApp = async (appId: string, forceNew = false, reconnectExisting = false) => {
     try {
       setConnectingApp(appId);
       setError(null);
-      
+
       const result = await getAppConnectionUrl({
         appName: appId,
         redirectUrl: `${window.location.origin}/connections?connected=${appId}`,
+        forceNew,
+        reconnectExisting,
       });
-      
-      if (result.success && result.data?.url) {
-        // Open connection URL immediately in the same window to avoid token expiration
-        // Use window.location.href instead of window.open to prevent popup blockers
-        window.location.href = result.data.url;
+
+      if (result.success && result.data) {
+        const { url, existingConnection, warningMessage } = result.data;
+
+        if (existingConnection && warningMessage) {
+          // Show dialog asking user what they want to do
+          const userChoice = confirm(
+            `${warningMessage}\n\nChoose:\n` +
+            `• OK: Reconnect existing account\n` +
+            `• Cancel: Add new account (may create duplicates)`
+          );
+
+          if (userChoice) {
+            // User chose to reconnect existing
+            return handleConnectApp(appId, false, true);
+          } else {
+            // User chose to add new account
+            return handleConnectApp(appId, true, false);
+          }
+        }
+
+        if (url) {
+          // Open connection URL immediately in the same window to avoid token expiration
+          // Use window.location.href instead of window.open to prevent popup blockers
+          window.location.href = url;
+        } else {
+          setError('No connection URL generated');
+        }
       } else {
         setError(result.error || 'Failed to generate connection URL');
       }
@@ -169,17 +216,49 @@ export function ConnectionsManager() {
         </div>
       )}
 
+      {/* Duplicate Management Info */}
+      {duplicateCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-amber-800 font-medium">
+                {duplicateCount} duplicate connection{duplicateCount !== 1 ? 's' : ''} found
+              </div>
+              <div className="text-amber-700 text-sm">
+                {showAllDuplicates
+                  ? `Showing all ${allConnections.length} connections including duplicates`
+                  : `Showing ${connections.length} unique connections (duplicates hidden)`
+                }
+              </div>
+            </div>
+            <Button
+              onClick={() => setShowAllDuplicates(!showAllDuplicates)}
+              variant="outline"
+              size="sm"
+              className="text-amber-800 border-amber-300 hover:bg-amber-100"
+            >
+              {showAllDuplicates ? 'Hide Duplicates' : 'Show All'}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Connected Apps */}
-      {connections && connections.length > 0 && (
+      {((showAllDuplicates ? allConnections : connections) && (showAllDuplicates ? allConnections : connections).length > 0) && (
         <div className="bg-card border border-border rounded-lg shadow-sm">
           <div className="px-6 py-4 border-b border-border">
             <h2 className="text-lg font-medium">Connected Apps</h2>
             <p className="text-sm text-muted-foreground">
               Apps that your agents can use on your behalf
+              {showAllDuplicates && duplicateCount > 0 && (
+                <span className="ml-2 text-amber-600 font-medium">
+                  (including {duplicateCount} duplicates)
+                </span>
+              )}
             </p>
           </div>
           <div className="divide-y divide-border">
-            {connections?.map((connection) => (
+            {(showAllDuplicates ? allConnections : connections)?.map((connection) => (
               <div key={connection.id} className="px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
@@ -229,6 +308,7 @@ export function ConnectionsManager() {
         </div>
         <div className="divide-y divide-gray-200">
           {AVAILABLE_APPS.map((app) => {
+            // Use deduplicated connections for determining connection status (not the showAll view)
             const connectedApp = connections?.find(c => c.app === app.id);
             const isConnected = !!connectedApp && (connectedApp.status === 'connected' || connectedApp.status === 'active');
             const isConnecting = connectingApp === app.id;

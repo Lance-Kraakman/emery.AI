@@ -113,7 +113,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         logger.info(f"📝 Message preview: {message_content[:100]}...")
 
         # Always use ToolCallingAgent - handles empty tools gracefully
-        tools_count = len(request.tools) if request.tools else 0
+        tools_count = len(request.tools) if hasattr(request, 'tools') and request.tools else 0
         logger.info(f"🔧 Tools provided: {tools_count}, always using ToolCallingAgent")
 
         try:
@@ -167,9 +167,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             total_content = ""
 
             # Always use ToolCallingAgent - handles RAG context and tools
+            tools_to_use = request.tools if hasattr(request, 'tools') and request.tools else []
             async for chunk in self._stream_tool_calling_agent_response(
                 conversation_messages,
-                request.tools if request.tools else [],
+                tools_to_use,
                 rag_context_data,
                 domain_context=request.context
             ):
@@ -486,7 +487,7 @@ Use this context to provide accurate, specific answers. When referencing informa
     def _get_model_name(self) -> str:
         """Get the AI model name being used (should match existing setup)."""
         # This should match the model used in lib/ai/models.ts
-        return 'Qwen/Qwen2.5-Coder-32B-Instruct'
+        return 'Qwen/Qwen2.5-Coder-7B-Instruct'
 
     def _convert_to_rag_context_proto(self, rag_data: Dict[str, Any]) -> agent_worker_pb2.RagContext:
         """Convert RAG context data to protobuf format."""

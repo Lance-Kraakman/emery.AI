@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2, Settings } from "lucide-react";
 import { getAvailablePermissions, getRoleDetails, updateCustomRole, type CustomRole } from "@/app/actions/roles";
-import { PermissionSelector } from "./PermissionSelector";
+import { PermissionSelector, type PermissionAssignment } from "./PermissionSelector";
 
 interface EditRoleDialogProps {
   open: boolean;
@@ -20,7 +20,7 @@ interface EditRoleDialogProps {
 export function EditRoleDialog({ open, onOpenChange, role, onSuccess }: EditRoleDialogProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [selectedPermissions, setSelectedPermissions] = useState<number[]>([]);
+  const [selectedPermissions, setSelectedPermissions] = useState<PermissionAssignment[]>([]);
   const [availablePermissions, setAvailablePermissions] = useState<Array<{
     id: number;
     resource: string;
@@ -48,7 +48,28 @@ export function EditRoleDialog({ open, onOpenChange, role, onSuccess }: EditRole
       if (roleDetails) {
         setName(roleDetails.name);
         setDescription(roleDetails.description || "");
-        setSelectedPermissions(roleDetails.permissions?.map(p => p.id) || []);
+
+        // Convert existing permissions to PermissionAssignment format
+        // For now, we'll default to 'all' scope since we don't have resource scope info from the backend yet
+        const permissionAssignments: PermissionAssignment[] = roleDetails.permissions?.map(p => {
+          const getResourceType = (resource: string): 'agent' | 'team' | 'user' | null => {
+            switch (resource.toLowerCase()) {
+              case 'agents': return 'agent';
+              case 'teams': return 'team';
+              case 'users': return 'user';
+              default: return null;
+            }
+          };
+
+          return {
+            permissionId: p.id,
+            resourceType: getResourceType(p.resource),
+            resourceScope: 'all' as const,
+            resourceIds: undefined
+          };
+        }) || [];
+
+        setSelectedPermissions(permissionAssignments);
       }
     } catch (error) {
       console.error("Error loading role details:", error);
@@ -92,7 +113,7 @@ export function EditRoleDialog({ open, onOpenChange, role, onSuccess }: EditRole
       formData.append("roleId", role.id.toString());
       formData.append("name", name.trim());
       formData.append("description", description.trim());
-      formData.append("permissionIds", JSON.stringify(selectedPermissions));
+      formData.append("permissionAssignments", JSON.stringify(selectedPermissions));
 
       const result = await updateCustomRole(formData);
 

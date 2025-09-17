@@ -8,12 +8,16 @@ import { UserId } from '@/ddd/domain/shared/value-objects';
 export class PipedreamConnectionMapper {
   /**
    * Convert Pipedream account response to domain Connection entity
+   * AIDEV-NOTE: Updated to extract app name from account.app.name_slug structure
    */
   static toDomainEntity(userId: UserId, pipedreamAccount: any): Connection {
+    // Extract app name from the actual Pipedream structure
+    const appName = pipedreamAccount.app?.name_slug || pipedreamAccount.app;
+
     return {
       connectionId: ConnectionId.fromPipedreamId(pipedreamAccount.id),
       userId,
-      appName: AppName.fromString(pipedreamAccount.app),
+      appName: AppName.fromString(appName),
       status: this.mapStatus(pipedreamAccount.status),
       accountName: this.extractAccountName(pipedreamAccount),
       connectedAt: new Date(pipedreamAccount.created_at || Date.now())
@@ -22,21 +26,23 @@ export class PipedreamConnectionMapper {
   
   /**
    * Map Pipedream status strings to domain enum
+   * AIDEV-NOTE: Updated to handle undefined status fields - treat as CONNECTED for existing accounts
    */
-  private static mapStatus(pipedreamStatus: string): ConnectionStatus {
-    if (!pipedreamStatus) {
-      return ConnectionStatus.ERROR;
+  private static mapStatus(pipedreamStatus: string | undefined): ConnectionStatus {
+    // If status is undefined, assume it's a connected account (common for established connections)
+    if (!pipedreamStatus || pipedreamStatus === undefined) {
+      return ConnectionStatus.CONNECTED;
     }
-    
+
     const statusMap: Record<string, ConnectionStatus> = {
       'connected': ConnectionStatus.CONNECTED,
       'active': ConnectionStatus.ACTIVE,
       'error': ConnectionStatus.ERROR,
       'expired': ConnectionStatus.EXPIRED
     };
-    
+
     const normalizedStatus = pipedreamStatus.toLowerCase();
-    return statusMap[normalizedStatus] || ConnectionStatus.ERROR;
+    return statusMap[normalizedStatus] || ConnectionStatus.CONNECTED;
   }
   
   /**
@@ -66,6 +72,7 @@ export class PipedreamConnectionMapper {
   
   /**
    * Validate if Pipedream account has required fields for domain entity creation
+   * AIDEV-NOTE: Updated to handle actual Pipedream API structure where app is an object with name_slug
    */
   static isValidPipedreamAccount(account: any): boolean {
     return !!(
@@ -74,15 +81,25 @@ export class PipedreamConnectionMapper {
       account.id &&
       typeof account.id === 'string' &&
       account.app &&
-      typeof account.app === 'string'
+      typeof account.app === 'object' &&
+      account.app.name_slug &&
+      typeof account.app.name_slug === 'string'
     );
   }
   
   /**
    * Check if account status indicates an active/usable connection
+   * AIDEV-NOTE: Updated to treat undefined status as active (for existing connections)
    */
   static isActiveConnection(pipedreamAccount: any): boolean {
-    const status = pipedreamAccount?.status?.toLowerCase();
-    return status === 'connected' || status === 'active';
+    const status = pipedreamAccount?.status;
+
+    // If status is undefined, treat as active (common for established connections)
+    if (!status || status === undefined) {
+      return true;
+    }
+
+    const normalizedStatus = status.toLowerCase();
+    return normalizedStatus === 'connected' || normalizedStatus === 'active';
   }
 }

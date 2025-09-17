@@ -26,7 +26,7 @@
             "id": "respond_emails", 
             "type": "CODE_STEP",
             "instructions": "Generate appropriate email responses",
-            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+            "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
           }
         ]
       }
@@ -121,7 +121,7 @@
             "id": "create_structured_intelligence_report",
             "type": "CODE_STEP", 
             "instructions": "Transform the analysis into a structured organizational intelligence report. Use this adaptable format: {'website_analysis': {discovered_characteristics}, 'business_classification': {industry_specific_insights}, 'key_insights': {tailored_processes_and_measurements}, 'confidence_assessment': {analysis_reliability}, 'implementation_recommendations': {next_steps_based_on_company_type}}. Adapt the depth and focus areas based on the discovered industry and business model.",
-            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+            "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
           }
         ]
       },
@@ -139,7 +139,7 @@
             "id": "create_adaptive_benchmark_report",
             "type": "CODE_STEP",
             "instructions": "Create an industry-adaptive benchmark report. Structure: {'industry_overview': {context_specific_trends}, 'performance_benchmarks': {relevant_metrics_for_this_industry}, 'process_standards': {industry_appropriate_workflows}, 'implementation_guidance': {tailored_priorities_and_timeline}}. Adjust the focus and depth based on the specific industry characteristics and company maturity level discovered in the analysis.",
-            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+            "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
           }
         ]
       }
@@ -170,7 +170,7 @@
             "id": "structure_universal_framework",
             "type": "CODE_STEP",
             "instructions": "Transform the context-specific KPI framework into the standard OrganizationAnalysisCapabilities.measurementFramework format. Create structured output: {'measurementFramework': {'measurements': [], 'kpiDefinitions': [], 'reportingSchedule': {}, 'defaultValidationRules': []}}. Ensure each KPI includes all required fields: id, name, description, formula, dependentMeasurements[], calculationAgent (AgentId), calculationFrequency, targetValue, thresholds{excellent, good, warning, critical}. Adapt the validation rules and reporting schedule to match the organizational context and industry requirements.",
-            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+            "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
           }
         ]
       },
@@ -188,7 +188,7 @@
             "id": "create_integrated_measurement_system",
             "type": "CODE_STEP",
             "instructions": "Create a comprehensive measurement system that integrates measurements with KPIs for any organizational context. Output format: {'measurementDefinitions': [], 'kpi_measurement_mapping': {}, 'data_collection_schedule': {}, 'validation_framework': {}}. Ensure measurements have appropriate dataSource configurations for the specific business type, establish proper KPI calculation chains, and create validation rules that match industry standards or general business practices. Adapt the system architecture to organizational size and complexity.",
-            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+            "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
           }
         ]
       }
@@ -218,7 +218,7 @@
             "id": "create_process_definitions",
             "type": "CODE_STEP",
             "instructions": "Transform estimated processes into OrganizationAnalysisCapabilities.processDefinitions format. Create structured output: {'processDefinitions': [], 'monitoringPoints': [], 'improvementOpportunities': []}. Each ProcessDefinition must include: id, name, description, processSteps[], monitoringPoints[], assignedTeams[], monitoringAgents[], improvementTriggers[], relatedMeasurements[]. Each ProcessStep needs: id, name, description, estimatedDuration (minutes), requiredInputs[], expectedOutputs[], qualityChecks[], order. Create MonitoringPoint entries: id, stepId, metricName, collectionInstruction, alertThreshold, frequency.",
-            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+            "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
           }
         ]
       },
@@ -236,7 +236,7 @@
             "id": "create_improvement_roadmap",
             "type": "CODE_STEP", 
             "instructions": "Create detailed improvement roadmap matching OrganizationAnalysisCapabilities.improvementTracking format. Output structure: {'improvementAreas': [], 'implementation_roadmap': {}, 'success_metrics': {}}. Each ImprovementArea needs: id, name, description, priority, identifiedDate, status, assignedTeams[], estimatedImpact, resourcesRequired[], targetCompletion. Sort by priority and impact. Include implementation phases and success criteria.",
-            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+            "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
           }
         ]
       }
@@ -267,7 +267,7 @@
             "id": "create_analysis_schedule_config",
             "type": "CODE_STEP",
             "instructions": "Transform optimized schedule into OrganizationAnalysisCapabilities.analysisSchedule format. Create structured output: {'analysisSchedule': {'timezone': 'UTC', 'dailyCollectionTime': '09:00', 'weeklyReportDay': 'monday', 'monthlyReportDay': 1, 'quarterlyReportMonth': 1, 'reporting': {'frequency': 'daily'|'weekly'|'monthly', 'recipients': [], 'format': 'dashboard'|'email'|'pdf', 'includeRecommendations': true}}}. Include detailed scheduling rationale and efficiency metrics.",
-            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+            "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
           }
         ]
       },
@@ -285,7 +285,7 @@
             "id": "create_monitoring_framework",
             "type": "CODE_STEP",
             "instructions": "Create comprehensive monitoring and alerting framework. Output structure: {'continuous_monitoring': {'trend_detection': {}, 'anomaly_alerts': {}, 'performance_insights': {}}, 'automation_recommendations': [], 'stakeholder_notifications': {}}. Include specific alert thresholds, escalation procedures, and automated insight generation. Map to improvement tracking systems for closed-loop optimization.",
-            "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+            "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
           }
         ]
       }

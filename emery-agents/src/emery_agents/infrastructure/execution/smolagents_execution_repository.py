@@ -345,7 +345,7 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
         
         # Load tools for this step - tools already have enhanced config from capability creation
         step_tools = []
-        if step.tools:
+        if hasattr(step, 'tools') and step.tools:
             try:
                 step_tools = self.tool_registry_repository.load_tools(step.tools)
             except Exception as e:

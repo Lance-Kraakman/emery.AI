@@ -500,9 +500,13 @@ export function EmeryChat({ handler }: EmeryChatProps) {
     // Check if reference dropdown is open to avoid conflicts
     const referenceDropdownOpen = document.querySelector('[data-chat-search-dropdown]')
     if (referenceDropdownOpen) return // Let reference dropdown handle navigation
-    
+
+    // AIDEV-NOTE: Check if the event target is the chat input to avoid conflicts
+    const isFromChatInput = (e.target as HTMLElement)?.tagName === 'INPUT'
+    if (isFromChatInput) return // Let CustomChatInput handle its own events
+
     if (!showSuggestions || suggestions.length === 0) return
-    
+
     if (e.key === 'ArrowUp') {
       e.preventDefault()
       setSelectedSuggestionIndex(prev => {

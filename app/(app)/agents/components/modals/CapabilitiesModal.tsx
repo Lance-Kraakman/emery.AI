@@ -280,10 +280,10 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
   };
 
   const handleToolSelect = (tool: ReferenceToolDTO | ToolDTO) => {
-    if (!editingToolInfo) return;
+    if (!editingToolInfo || !tool) return;
 
     const { stepIndex, toolIndex } = editingToolInfo;
-    const toolName = 'insertText' in tool ? tool.insertText : `@tool:${tool.name}`;
+    const toolName = 'insertText' in tool ? tool.insertText : `@tool:${tool.name || 'Unknown Tool'}`;
 
     if (toolIndex === -1) {
       // This is for instructions field - insert at cursor position AND add to tools array
@@ -635,10 +635,12 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
                             </p>
                           ) : (
                             <div className="space-y-2">
-                              {step.tools.map((tool, toolIndex) => (
-                                <div key={toolIndex} className="flex gap-2">
-                                  <Input
-                                    value={tool.name}
+                              {step.tools.map((tool, toolIndex) => {
+                                if (!tool) return null; // Skip null/undefined tools
+                                return (
+                                  <div key={toolIndex} className="flex gap-2">
+                                    <Input
+                                      value={tool.name || ''}
                                     onChange={(e) =>
                                       handleToolInputChange(e, stepIndex, toolIndex)
                                     }
@@ -669,7 +671,8 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
                                     <X className="h-3 w-3" />
                                   </Button>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>

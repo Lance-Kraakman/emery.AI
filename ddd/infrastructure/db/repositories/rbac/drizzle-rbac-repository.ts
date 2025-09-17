@@ -26,21 +26,21 @@ type UserRoleRow = InferSelectModel<typeof userRoles>;
 
 export class DrizzleRBACRepository implements IRBACRepository {
   constructor(private db: DbClient) {
-    console.log("🔧 DrizzleRBACRepository initialized with db client:", {
-      hasProxy: 'Proxy' in Object.getPrototypeOf(this.db),
-      clientType: this.db.constructor.name
-    });
+    // console.log("🔧 DrizzleRBACRepository initialized with db client:", {
+    //   hasProxy: 'Proxy' in Object.getPrototypeOf(this.db),
+    //   clientType: this.db.constructor.name
+    // });
   }
 
   // Core permission checking
   async hasPermission(userId: UserId, permission: Permission, organizationId: OrganizationId): Promise<boolean> {
-    console.log("🔍 DrizzleRBACRepository.hasPermission() - Checking permission:", {
-      userId: userId.value,
-      organizationId: organizationId.value,
-      permission: permission.toString(),
-      resource: permission.resource,
-      action: permission.action
-    });
+    // console.log("🔍 DrizzleRBACRepository.hasPermission() - Checking permission:", {
+    //   userId: userId.value,
+    //   organizationId: organizationId.value,
+    //   permission: permission.toString(),
+    //   resource: permission.resource,
+    //   action: permission.action
+    // });
 
     const result = await this.db
       .select({ count: sql<number>`count(*)` })
@@ -55,29 +55,29 @@ export class DrizzleRBACRepository implements IRBACRepository {
       ));
 
     const hasPermission = result[0]?.count > 0;
-    console.log("🔍 DrizzleRBACRepository.hasPermission() - Query result:", {
-      count: result[0]?.count,
-      hasPermission,
-      query: "userRoles -> rolePermissions -> permissions"
-    });
+    // console.log("🔍 DrizzleRBACRepository.hasPermission() - Query result:", {
+    //   count: result[0]?.count,
+    //   hasPermission,
+    //   query: "userRoles -> rolePermissions -> permissions"
+    // });
 
     return hasPermission;
   }
 
   async requirePermission(userId: UserId, permission: Permission, organizationId: OrganizationId): Promise<void> {
-    console.log("🛡️ DrizzleRBACRepository.requirePermission() - Starting check");
-    
+    // console.log("🛡️ DrizzleRBACRepository.requirePermission() - Starting check");
+
     // DEBUG: Show user's current roles and permissions
     // await this.debugUserPermissions(userId, organizationId);
-    
+
     const hasAccess = await this.hasPermission(userId, permission, organizationId);
-    
+
     if (!hasAccess) {
       console.error("🚫 DrizzleRBACRepository.requirePermission() - ACCESS DENIED");
       throw new Error(`Permission denied: ${permission.toString()}`);
     }
-    
-    console.log("✅ DrizzleRBACRepository.requirePermission() - ACCESS GRANTED");
+
+    // console.log("✅ DrizzleRBACRepository.requirePermission() - ACCESS GRANTED");
   }
 
   // Resource-specific permission checking
@@ -88,13 +88,13 @@ export class DrizzleRBACRepository implements IRBACRepository {
     resourceType: string, 
     resourceId?: number
   ): Promise<boolean> {
-    console.log("🔍 DrizzleRBACRepository.hasResourcePermission() - Checking resource permission:", {
-      userId: userId.value,
-      organizationId: organizationId.value,
-      permission: permission.toString(),
-      resourceType,
-      resourceId
-    });
+    // console.log("🔍 DrizzleRBACRepository.hasResourcePermission() - Checking resource permission:", {
+    //   userId: userId.value,
+    //   organizationId: organizationId.value,
+    //   permission: permission.toString(),
+    //   resourceType,
+    //   resourceId
+    // });
 
     // Use the enhanced user_has_permission function from RLS functions
     const result = await this.db.execute(sql`

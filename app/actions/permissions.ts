@@ -95,48 +95,47 @@ export async function assignUserRole(userId: string, role: SystemRoleType): Prom
 
 export async function requireAuth() {
   const session = await auth();
-  console.log("🔐 requireAuth() - Session check:", {
-    hasSession: !!session,
-    hasUser: !!session?.user,
-    userId: session?.user?.id,
-    currentOrgId: session?.user?.currentOrganizationId
-  });
-  
+  // console.log("🔐 requireAuth() - Session check:", {
+  //   hasSession: !!session,
+  //   hasUser: !!session?.user,
+  //   userId: session?.user?.id,
+  //   currentOrgId: session?.user?.currentOrganizationId
+  // });
+
   if (!session?.user) {
     console.error("🚫 requireAuth() - Authentication failed: No session or user");
     throw new Error("Authentication required");
   }
-  
-  console.log("✅ requireAuth() - Authentication successful");
+
+  // console.log("✅ requireAuth() - Authentication successful");
   return session;
 }
 
 export async function requirePermission(permissionString: string) {
-  console.log("🛡️ requirePermission() - Starting permission check for:", permissionString);
-  
+  // console.log("🛡️ requirePermission() - Starting permission check for:", permissionString);
+
   const session = await requireAuth();
-  
+
   if (!session.user.currentOrganizationId) {
     throw new Error("No current organization selected");
   }
-  
-  console.log("🛡️ requirePermission() - Context:", {
-    userId: session.user.id,
-    organizationId: session.user.currentOrganizationId,
-    permission: permissionString
-  });
-  
-  
+
+  // console.log("🛡️ requirePermission() - Context:", {
+  //   userId: session.user.id,
+  //   organizationId: session.user.currentOrganizationId,
+  //   permission: permissionString
+  // });
+
   // Convert string permission to Permission object
   const permission = Permission.fromString(permissionString);
-  
-  console.log("🛡️ requirePermission() - About to call RBAC requirePermission...");
-  
+
+  // console.log("🛡️ requirePermission() - About to call RBAC requirePermission...");
+
   try {
     // Use explicit organization context from session instead of requireCurrentOrganization
     await authRequirePermission(session.user.id, permission, session.user.currentOrganizationId);
-    
-    console.log("✅ requirePermission() - Permission check PASSED");
+
+    // console.log("✅ requirePermission() - Permission check PASSED");
     return session;
   } catch (error) {
     console.error("🚫 requirePermission() - Permission check FAILED:", {
@@ -151,28 +150,28 @@ export async function requirePermission(permissionString: string) {
 
 // Resource-specific permission checking
 export async function requireResourcePermission(
-  permissionString: string, 
-  resourceType: string, 
+  permissionString: string,
+  resourceType: string,
   resourceId?: number
 ) {
-  console.log("🛡️ requireResourcePermission() - Starting resource permission check:", {
-    permissionString,
-    resourceType,
-    resourceId
-  });
-  
+  // console.log("🛡️ requireResourcePermission() - Starting resource permission check:", {
+  //   permissionString,
+  //   resourceType,
+  //   resourceId
+  // });
+
   const session = await requireAuth();
-  
+
   if (!session.user.currentOrganizationId) {
     throw new Error("No current organization selected");
   }
-  
+
   // Convert string permission to Permission object
   const permission = Permission.fromString(permissionString);
-  
+
   try {
     const rbacRepository = getRBACRepository();
-    
+
     await rbacRepository.requireResourcePermission(
       UserId.fromString(session.user.id),
       permission,
@@ -180,8 +179,8 @@ export async function requireResourcePermission(
       resourceType,
       resourceId
     );
-    
-    console.log("✅ requireResourcePermission() - Resource permission check PASSED");
+
+    // console.log("✅ requireResourcePermission() - Resource permission check PASSED");
     return session;
   } catch (error) {
     console.error("🚫 requireResourcePermission() - Resource permission check FAILED:", {
