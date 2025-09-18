@@ -27,7 +27,29 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
       // Handle different response structures from Pipedream SDK
       const accounts = Array.isArray(response) ? response : (response?.data || []);
       console.log(`[ConnectionRepo] Received ${accounts.length} accounts from Pipedream`);
-      console.log(`[ConnectionRepo] Raw Pipedream accounts:`, accounts.map(a => ({ id: a.id, app: a.app, status: a.status })));
+      console.log(`[ConnectionRepo] Raw Pipedream accounts:`, accounts.map(a => ({
+        id: a.id,
+        app: a.app,
+        appType: typeof a.app,
+        appNameSlug: a.app?.name_slug,
+        status: a.status
+      })));
+
+      // Debug Google services specifically
+      const googleAccounts = accounts.filter(a =>
+        (typeof a.app === 'string' && a.app.includes('google')) ||
+        (typeof a.app === 'object' && a.app?.name_slug?.includes('google'))
+      );
+      if (googleAccounts.length > 0) {
+        console.log(`[ConnectionRepo] 🔍 Found ${googleAccounts.length} Google service accounts:`,
+          googleAccounts.map(a => ({
+            id: a.id,
+            app: a.app,
+            name_slug: a.app?.name_slug,
+            status: a.status
+          }))
+        );
+      }
       
       return accounts
         .filter(account => {
@@ -88,12 +110,24 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
       
       const externalUserId = getExternalUserId(userId.value);
       console.log(`[ConnectionRepo] Generating connection URL for user ${userId.value}, app ${appName.value}`);
-      
+
+      // Enhanced debug logging for Google Sheets issues
+      if (appName.value === 'google-sheets') {
+        console.log(`[ConnectionRepo] 🔍 GOOGLE SHEETS DEBUG - Starting token creation`);
+        console.log(`[ConnectionRepo] 🔍 External user ID: ${externalUserId}`);
+        console.log(`[ConnectionRepo] 🔍 Redirect URL: ${redirectUrl}`);
+      }
+
       const tokenResult = await pipedreamClient.tokens.create({
         external_user_id: externalUserId,
         allowed_origins: ['http://localhost:3000', 'http://localhost:3002'],
         success_redirect_uri: redirectUrl,
       });
+
+      // Enhanced debug logging for Google Sheets
+      if (appName.value === 'google-sheets') {
+        console.log(`[ConnectionRepo] 🔍 GOOGLE SHEETS DEBUG - Token result:`, JSON.stringify(tokenResult, null, 2));
+      }
       
       // Handle different response structures from Pipedream SDK
       const baseConnectUrl = tokenResult.connect_link_url || 
@@ -112,9 +146,18 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
       if (redirectUrl) {
         connectUrl.searchParams.set('success_redirect_uri', redirectUrl);
       }
-      
+
       const finalUrl = connectUrl.toString();
-      console.log(`[ConnectionRepo] Generated connection URL: ${finalUrl.substring(0, 100)}...`);
+
+      // Enhanced debug logging for Google Sheets
+      if (appName.value === 'google-sheets') {
+        console.log(`[ConnectionRepo] 🔍 GOOGLE SHEETS DEBUG - Base URL: ${baseConnectUrl}`);
+        console.log(`[ConnectionRepo] 🔍 GOOGLE SHEETS DEBUG - Final URL: ${finalUrl}`);
+        console.log(`[ConnectionRepo] 🔍 GOOGLE SHEETS DEBUG - App param: ${appName.value}`);
+      } else {
+        console.log(`[ConnectionRepo] Generated connection URL: ${finalUrl.substring(0, 100)}...`);
+      }
+
       return finalUrl;
       
     } catch (error: unknown) {

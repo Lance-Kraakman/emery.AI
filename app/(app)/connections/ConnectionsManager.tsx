@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { getUserOAuthConnections, getAppConnectionUrl, disconnectOAuthAccount, getUserConnectionsWithDuplicates } from '@/app/actions/connections';
 import { Button } from '@/components/ui/button';
-
+import { UnifiedConnectionsGrid } from './components/UnifiedConnectionsGrid';
 import { ConnectionDTO as Connection } from '@/app/mappers/connection-mapper';
 
 const AVAILABLE_APPS = [
@@ -166,32 +166,6 @@ export function ConnectionsManager() {
     }
   };
 
-  const getConnectionStatus = (connection: Connection) => {
-    const isConnected = connection.status === 'connected' || connection.status === 'active';
-    const statusText = connection.raw_status || connection.status;
-
-    if (isConnected) {
-      return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 capitalize">
-          {statusText}
-        </span>
-      );
-    }
-
-    if (connection.status === 'error') {
-      return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-destructive/10 text-destructive capitalize">
-          {statusText}
-        </span>
-      );
-    }
-
-    return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground capitalize">
-        {statusText}
-      </span>
-    );
-  };
 
   if (loading) {
     return (
@@ -216,141 +190,20 @@ export function ConnectionsManager() {
         </div>
       )}
 
-      {/* Duplicate Management Info */}
-      {duplicateCount > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-amber-800 font-medium">
-                {duplicateCount} duplicate connection{duplicateCount !== 1 ? 's' : ''} found
-              </div>
-              <div className="text-amber-700 text-sm">
-                {showAllDuplicates
-                  ? `Showing all ${allConnections.length} connections including duplicates`
-                  : `Showing ${connections.length} unique connections (duplicates hidden)`
-                }
-              </div>
-            </div>
-            <Button
-              onClick={() => setShowAllDuplicates(!showAllDuplicates)}
-              variant="outline"
-              size="sm"
-              className="text-amber-800 border-amber-300 hover:bg-amber-100"
-            >
-              {showAllDuplicates ? 'Hide Duplicates' : 'Show All'}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Connected Apps */}
-      {((showAllDuplicates ? allConnections : connections) && (showAllDuplicates ? allConnections : connections).length > 0) && (
-        <div className="bg-card border border-border rounded-lg shadow-sm">
-          <div className="px-6 py-4 border-b border-border">
-            <h2 className="text-lg font-medium">Connected Apps</h2>
-            <p className="text-sm text-muted-foreground">
-              Apps that your agents can use on your behalf
-              {showAllDuplicates && duplicateCount > 0 && (
-                <span className="ml-2 text-amber-600 font-medium">
-                  (including {duplicateCount} duplicates)
-                </span>
-              )}
-            </p>
-          </div>
-          <div className="divide-y divide-border">
-            {(showAllDuplicates ? allConnections : connections)?.map((connection) => (
-              <div key={connection.id} className="px-6 py-4 flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <img className="w-10 h-10 rounded-lg" src={AVAILABLE_APPS.find(a => a.id === connection.app)?.icon || ''} alt={connection.app} />
-                  </div>
-                  <div className="ml-4">
-                    <div className="text-sm font-medium">
-                      {AVAILABLE_APPS.find(a => a.id === connection.app)?.name || 'Unknown App'}
-                    </div>
-                    {connection.account_name && (
-                      <div className="text-sm text-muted-foreground">
-                        {connection.account_name}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center space-x-4">
-                  {getConnectionStatus(connection)}
-                  <Button
-                    onClick={() => handleDisconnectAccount(connection.id)}
-                    disabled={disconnectingAccount === connection.id}
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground hover:text-destructive"
-                    title="Disconnect"
-                  >
-                    {disconnectingAccount === connection.id ? (
-                      <RefreshCw size={16} className="animate-spin" />
-                    ) : (
-                      <Trash2 size={16} />
-                    )}
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Available Apps */}
-      <div className="bg-card border border-border rounded-lg shadow-sm">
-        <div className="px-6 py-4 border-b border-border">
-          <h2 className="text-lg font-medium">Available Apps</h2>
-          <p className="text-sm text-muted-foreground">
-            Connect apps to allow your agents to use them
-          </p>
-        </div>
-        <div className="divide-y divide-gray-200">
-          {AVAILABLE_APPS.map((app) => {
-            // Use deduplicated connections for determining connection status (not the showAll view)
-            const connectedApp = connections?.find(c => c.app === app.id);
-            const isConnected = !!connectedApp && (connectedApp.status === 'connected' || connectedApp.status === 'active');
-            const isConnecting = connectingApp === app.id;
-
-            return (
-              <div key={app.id} className="px-6 py-4 flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <img className="w-10 h-10 rounded-lg" src={app.icon} alt={app.name} />
-                  </div>
-                  <div className="ml-4">
-                    <div className="text-sm font-medium">
-                      {app.name}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {app.description}
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  {isConnected ? (
-                    <span className="text-green-600 text-sm font-medium">Connected</span>
-                  ) : (
-                    <Button
-                      onClick={() => handleConnectApp(app.id)}
-                      disabled={isConnecting}
-                      size="sm"
-                    >
-                      {isConnecting ? (
-                        <RefreshCw className="w-4 h-4 animate-spin mr-1" />
-                      ) : (
-                        <Plus className="w-4 h-4 mr-1" />
-                      )}
-                      Connect
-                    </Button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      {/* Unified Connections Grid */}
+      <UnifiedConnectionsGrid
+        apps={AVAILABLE_APPS}
+        connections={connections}
+        allConnections={allConnections}
+        showAllDuplicates={showAllDuplicates}
+        duplicateCount={duplicateCount}
+        connectingApp={connectingApp}
+        disconnectingAccount={disconnectingAccount}
+        onConnect={handleConnectApp}
+        onDisconnect={handleDisconnectAccount}
+        onReconnect={(appId) => handleConnectApp(appId, false, true)}
+        onToggleDuplicates={() => setShowAllDuplicates(!showAllDuplicates)}
+      />
     </div>
   );
 }
