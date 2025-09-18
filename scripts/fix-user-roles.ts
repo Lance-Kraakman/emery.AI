@@ -3,8 +3,8 @@
 // AIDEV-NOTE: Fix script to ensure all users in userOrganizations have corresponding user_roles entries
 // This is needed after the RBAC migration where user_roles creation was missing
 
-import { db } from '../lib/db/client';
-import { userOrganizations, roles, userRoles } from '../lib/db/schema';
+import { db } from '../src/lib/db/client';
+import { userOrganizations, roles, userRoles } from '../src/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 
 async function fixUserRoles() {
