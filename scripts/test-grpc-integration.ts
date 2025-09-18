@@ -5,7 +5,7 @@
  * Run with: npx tsx scripts/test-grpc-integration.ts
  */
 
-import { AgentWorkerTestClient } from '../lib/grpc/test-integration-client';
+import { AgentWorkerTestClient } from '../src/lib/grpc/test-integration-client';
 
 async function testGrpcIntegration() {
   console.log('🚀 Starting gRPC Agent Worker Integration Test\n');
