@@ -1,146 +1,156 @@
 """
-Smolagents Model Provider Implementation
+Simplified Smolagents Model Provider
 
-AIDEV-NOTE: Infrastructure implementation of ModelProviderService using smolagents.
-Consolidates all AI model configuration and creation logic into a single service.
-Replaces scattered hardcoded model instantiation throughout the codebase.
+AIDEV-NOTE: Custom model provider for IBM Granite model integration.
+Successfully routes to dedicated HuggingFace endpoint with proper token mapping.
+Endpoint: https://tpn5ewnxy4r17v9c.us-east-1.aws.endpoints.huggingface.cloud
+Model: ibm-granite/granite-3.3-8b-instruct
 """
 
 import os
 import logging
-from typing import Any, Optional
+from typing import Optional, List, Dict, Any
+from dataclasses import dataclass
 
-from smolagents.models import InferenceClientModel
-
-from ...core.types import StepType
-from ...domain.ai.services.model_provider_service import IModelProviderService, ModelType
+from smolagents.models import Model
+from huggingface_hub import InferenceClient
 
 logger = logging.getLogger(__name__)
 
 
-class SmolagentsModelProvider(IModelProviderService):
-    """
-    Smolagents implementation of AI model provider.
-    
-    AIDEV-NOTE: This implementation consolidates model configuration from
-    the existing model_factory.py and provides a clean interface for
-    creating smolagents InferenceClientModel instances.
-    """
-    
+@dataclass
+class TokenUsage:
+    """Token usage information compatible with smolagents expectations."""
+    input_tokens: int = 0   # smolagents expects 'input_tokens', not 'prompt_tokens'
+    output_tokens: int = 0  # smolagents expects 'output_tokens', not 'completion_tokens'
+    total_tokens: int = 0
+
+
+class SmolagentsCompatibleMessage:
+    """Message wrapper that provides all attributes expected by smolagents."""
+
+    def __init__(self, content: str, role: str = "assistant", token_usage: Optional[TokenUsage] = None):
+        self.content = content
+        self.role = role
+        self.token_usage = token_usage or TokenUsage()
+        # Add other attributes that might be expected
+        self.name = None
+        self.tool_calls = None
+
+
+class CustomInferenceModel(Model):
+    """Custom model class for dedicated HuggingFace inference endpoints."""
+
+    def __init__(self, endpoint_url: str, model_name: str, token: str):
+        self.endpoint_url = endpoint_url
+        self.model_name = model_name
+        self.client = InferenceClient(model=endpoint_url, token=token)
+
+        # Tool calling configuration required by smolagents
+        self.tool_name_key = "name"
+        self.tool_description_key = "description"
+        self.tool_parameters_key = "parameters"
+        self.tool_arguments_key = "arguments"
+
+        logger.info(f"🔧 CustomInferenceModel initialized with endpoint: {endpoint_url}")
+        logger.info(f"🔧 Model name: {model_name}")
+
+    def generate(self, messages: List[Any], stop_sequences: Optional[List[str]] = None, **kwargs) -> Any:
+        """Generate response using dedicated endpoint with correct model name."""
+        try:
+            # Convert messages to the format expected by your endpoint
+            chat_messages = []
+            for msg in messages:
+                # Handle both dict and ChatMessage object formats
+                if hasattr(msg, 'role') and hasattr(msg, 'content'):
+                    # ChatMessage object
+                    chat_messages.append({
+                        "role": msg.role,
+                        "content": msg.content
+                    })
+                elif isinstance(msg, dict):
+                    # Dictionary format
+                    chat_messages.append({
+                        "role": msg.get("role", "user"),
+                        "content": msg.get("content", "")
+                    })
+                else:
+                    # Unknown format, log and skip
+                    logger.warning(f"Unknown message format: {type(msg)}")
+                    continue
+
+            logger.info(f"🚀 Generating with {len(chat_messages)} messages using model: {self.model_name}")
+
+            # Make request to your dedicated endpoint with correct model name
+            response = self.client.chat_completion(
+                messages=chat_messages,
+                model=self.model_name,  # Send correct model name
+                stop=stop_sequences,
+                max_tokens=kwargs.get('max_tokens', 1024),
+                stream=False
+            )
+
+            # Extract the content and usage information
+            message = response.choices[0].message
+            content = message.content
+            logger.info(f"✅ Generated response: {len(content)} chars")
+
+            # Extract token usage if available
+            token_usage = None
+            if hasattr(response, 'usage') and response.usage:
+                usage = response.usage
+                token_usage = TokenUsage(
+                    input_tokens=getattr(usage, 'prompt_tokens', 0),      # Map prompt_tokens to input_tokens
+                    output_tokens=getattr(usage, 'completion_tokens', 0), # Map completion_tokens to output_tokens
+                    total_tokens=getattr(usage, 'total_tokens', 0)
+                )
+                logger.info(f"✅ Token usage: input={token_usage.input_tokens}, output={token_usage.output_tokens}, total={token_usage.total_tokens}")
+            else:
+                logger.info("⚠️ No usage info in response")
+
+            # Return smolagents-compatible message
+            return SmolagentsCompatibleMessage(
+                content=content,
+                role=getattr(message, 'role', 'assistant'),
+                token_usage=token_usage
+            )
+
+        except Exception as e:
+            logger.error(f"❌ Custom model generation failed: {e}")
+            logger.error(f"❌ Message types: {[type(msg) for msg in messages]}")
+            raise
+
+
+class SmolagentsModelProvider:
+    """Simple model provider using custom endpoint."""
+
     def __init__(self):
-        """Initialize the model provider with configuration."""
+        """Initialize with custom endpoint and token."""
         self.hf_token = self._get_hf_token()
-        
-        # AIDEV-NOTE: Centralized model configuration 
-        # Based on existing model_factory.py patterns
-        self.model_configs = {
-            ModelType.CHAT: {
-                'model_id': 'Qwen/Qwen2.5-Coder-7B-Instruct',
-                'max_tokens': 2048,
-                'temperature': 0.7,
-                'description': 'General conversation and interaction'
-            },
-            ModelType.CODE: {
-                'model_id': 'Qwen/Qwen2.5-Coder-7B-Instruct', 
-                'max_tokens': 4096,
-                'temperature': 0.6,
-                'description': 'Code generation and programming tasks'
-            },
-            ModelType.TOOL_CALLING: {
-                'model_id': 'Qwen/Qwen2.5-Coder-7B-Instruct',
-                'max_tokens': 2048,
-                'temperature': 0.7,
-                'description': 'Tool execution and function calling'
-            },
-            ModelType.FAST: {
-                'model_id': 'Qwen/Qwen2.5-Coder-7B-Instruct',
-                'max_tokens': 1024,
-                'temperature': 0.6,
-                'description': 'Quick responses and simple tasks'
-            }
+        self.endpoint_url = 'https://tpn5ewnxy4r17v9c.us-east-1.aws.endpoints.huggingface.cloud/v1'
+
+        # Simple model config - all point to custom endpoint for now
+        self.models = {
+            'chat': self.endpoint_url,
+            'tool_calling': self.endpoint_url,
+            'default': self.endpoint_url
         }
-        
-        # Step type to model type mapping
-        self.step_type_mapping = {
-            StepType.CODE_STEP: ModelType.CODE,
-            StepType.TOOL_STEP: ModelType.TOOL_CALLING,
-        }
-        
-        self._model_cache = {}  # Cache model instances
-        logger.info(f"✅ SmolagentsModelProvider initialized with {len(self.model_configs)} model types")
-    
-    def get_model_for_step_type(self, step_type: StepType, model_override: Optional[str] = None) -> InferenceClientModel:
-        """
-        Get appropriate AI model for a specific step type.
-        
-        AIDEV-NOTE: This replaces the hardcoded model creation patterns found in:
-        - smolagents_execution_repository.py
-        - capability_router_agent.py
-        """
-        if model_override:
-            # Use specific model override
-            return self._create_model(model_override)
-        
-        # Map step type to model type
-        model_type = self.step_type_mapping.get(step_type, ModelType.TOOL_CALLING)
-        return self.get_model_by_type(model_type)
-    
-    def get_model_by_type(self, model_type: ModelType) -> InferenceClientModel:
-        """Get AI model by standardized model type."""
-        if model_type not in self.model_configs:
-            raise ValueError(f"Unknown model type: {model_type}. Available: {list(self.model_configs.keys())}")
-        
-        # Use cache to avoid recreating the same model
-        cache_key = model_type.value
-        if cache_key in self._model_cache:
-            return self._model_cache[cache_key]
-        
-        config = self.model_configs[model_type]
-        model = self._create_model(config['model_id'])
-        
-        # Cache the model instance
-        self._model_cache[cache_key] = model
-        logger.info(f"✅ Created {model_type.value} model: {config['model_id']}")
-        
+
+        logger.info(f"✅ SmolagentsModelProvider initialized with custom endpoint")
+
+    def get_model(self, model_type: str = 'default') -> CustomInferenceModel:
+        """Get model for specified type. Types: 'chat', 'tool_calling', 'default'"""
+        # Use custom model class to properly handle dedicated endpoint
+        logger.info(f"🔧 Creating CustomInferenceModel with dedicated endpoint")
+
+        model = CustomInferenceModel(
+            endpoint_url=self.endpoint_url.replace('/v1', ''),  # Remove /v1 for InferenceClient
+            model_name="ibm-granite/granite-3.3-8b-instruct",  # Exact model name your endpoint expects
+            token=self.hf_token
+        )
+        logger.info(f"🔧 Created custom model: {model}")
         return model
-    
-    def get_default_model_for_capability(self, capability_name: Optional[str] = None) -> InferenceClientModel:
-        """Get default model for a specific capability or general use."""
-        # AIDEV-NOTE: Default to TOOL_CALLING model for general capability execution
-        # This matches the existing patterns in the codebase
-        return self.get_model_by_type(ModelType.TOOL_CALLING)
-    
-    def get_model_info(self, model_name: str) -> dict[str, Any]:
-        """Get information about a specific model."""
-        # Check if it's a model type
-        for model_type, config in self.model_configs.items():
-            if config['model_id'] == model_name or model_type.value == model_name:
-                return {
-                    'name': model_type.value,
-                    'model_id': config['model_id'],
-                    'max_tokens': config['max_tokens'],
-                    'temperature': config['temperature'],
-                    'description': config['description'],
-                    'available': True
-                }
-        
-        # Unknown model
-        return {
-            'name': model_name,
-            'available': False,
-            'error': f'Unknown model: {model_name}'
-        }
-    
-    def list_available_models(self) -> list[str]:
-        """List all available model names."""
-        return [config['model_id'] for config in self.model_configs.values()]
-    
-    def is_model_available(self, model_name: str) -> bool:
-        """Check if a specific model is available."""
-        available_models = self.list_available_models()
-        model_types = [model_type.value for model_type in self.model_configs.keys()]
-        return model_name in available_models or model_name in model_types
-    
+
     def _get_hf_token(self) -> str:
         """Get HuggingFace token from environment."""
         token = os.getenv('HF_TOKEN')
@@ -150,18 +160,3 @@ class SmolagentsModelProvider(IModelProviderService):
                 "Get your token from https://huggingface.co/settings/tokens"
             )
         return token
-    
-    def _create_model(self, model_id: str) -> InferenceClientModel:
-        """Create a new InferenceClientModel instance."""
-        try:
-            model = InferenceClientModel(model_id, token=self.hf_token)
-            logger.debug(f"Created model instance: {model_id}")
-            return model
-        except Exception as e:
-            logger.error(f"Failed to create model {model_id}: {e}")
-            raise ValueError(f"Failed to create model {model_id}: {e}") from e
-    
-    def clear_cache(self):
-        """Clear cached models (useful for testing)."""
-        self._model_cache.clear()
-        logger.info("✅ Model cache cleared")
