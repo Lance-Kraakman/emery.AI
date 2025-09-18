@@ -61,15 +61,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self.rag_processor = RagProcessor()
             logger.info("✅ RagProcessor initialized successfully")
 
-            # AI model integration (may not be available yet)
-            try:
-                from ...core.ai.model_factory import ModelFactory
-                self.model_factory = ModelFactory()
-                logger.info("✅ ModelFactory initialized successfully")
-            except ImportError as model_error:
-                logger.warning(f"⚠️ ModelFactory not available: {model_error}")
-                self.model_factory = None
-
             # Tool registry for converting ToolConfig to smolagents tools
             try:
                 from ...execution.tools.tool_registry import ToolRegistry
@@ -84,7 +75,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         except ImportError as e:
             logger.error(f"❌ Failed to import core services: {e}")
             self.rag_processor = None
-            self.model_factory = None
             self.tool_registry = None
 
     async def ProcessMessage(
@@ -371,13 +361,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             return []
 
     def _create_agent_with_model_provider(self, smolagents_tools: List[Any]) -> ToolCallingAgent:
-        """Create ToolCallingAgent using centralized model provider."""
-        if not self.model_factory:
-            raise RuntimeError("Model factory required for ToolCallingAgent creation")
-
-        # Use model provider like the capability router does
+        """Create ToolCallingAgent using simplified model provider."""
+        # Use simplified model provider
         model_provider = SmolagentsModelProvider()
-        model = model_provider.get_default_model_for_capability()
+        model = model_provider.get_model('tool_calling')
 
         agent = ToolCallingAgent(
             tools=smolagents_tools,  # Can be empty list

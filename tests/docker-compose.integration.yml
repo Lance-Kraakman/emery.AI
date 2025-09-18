@@ -89,6 +89,7 @@ services:
       PYTHONPATH: /usr/src/app/src
       WORKER_ADDRESS: 50051
       ORGANIZATION_ID: default
+      USE_PIPEDREAM_TOOLS: true
     depends_on:
       postgres-integration:
         condition: service_healthy

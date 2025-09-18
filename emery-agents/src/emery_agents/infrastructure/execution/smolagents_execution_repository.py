@@ -247,8 +247,8 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
             tool_configs = self._create_tool_configs_with_context(context.available_tools, context)
             tools = self.tool_registry_repository.load_tools(tool_configs)
         
-        # Get appropriate model from centralized provider
-        model = self.model_provider.get_default_model_for_capability()
+        # Get appropriate model from simplified provider
+        model = self.model_provider.get_model('tool_calling')
         
         agent = ToolCallingAgent(
             tools=tools,
@@ -279,7 +279,7 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
             step_agents.append(step_agent)
         
         # Create capability-level agent that manages step agents
-        model = self.model_provider.get_default_model_for_capability(capability.name)
+        model = self.model_provider.get_model('default')
         
         capability_agent = CodeAgent(
             tools=[],  # Capability agent delegates to step agents
@@ -340,8 +340,14 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
         
         AIDEV-NOTE: Updated to use centralized model provider with proper step type routing.
         """
-        # Get appropriate model for this step type using centralized provider
-        model = self.model_provider.get_model_for_step_type(step.type, model_override=step.model)
+        # Get appropriate model using simplified provider
+        if step.model:
+            # Use custom model if specified (would need to extend provider for this)
+            model = self.model_provider.get_model('default')
+        else:
+            # Use tool_calling for TOOL_STEP, default for others
+            model_type = 'tool_calling' if step.type.name == 'TOOL_STEP' else 'default'
+            model = self.model_provider.get_model(model_type)
         
         # Load tools for this step - tools already have enhanced config from capability creation
         step_tools = []

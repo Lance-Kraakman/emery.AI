@@ -84,9 +84,8 @@ class CapabilityRouterAgent:
             tools = self.tool_registry.load_tools(tool_configs)
             logger.info(f"Loaded {len(tools)} default tools: {default_tools}")
         
-        # Get appropriate model from centralized provider
-        # Use tool_calling model type - optimized for tool usage
-        model = self.model_provider.get_default_model_for_capability()
+        # Get appropriate model from simplified provider
+        model = self.model_provider.get_model('tool_calling')
         
         agent = ToolCallingAgent(
             tools=tools,
