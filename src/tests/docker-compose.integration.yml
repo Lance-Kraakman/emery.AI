@@ -78,7 +78,7 @@ services:
   agent-integration:
     build:
       context: ../emery-agents
-      dockerfile: Dockerfile  
+      dockerfile: Dockerfile
     container_name: emery-integration-agent
     ports:
       - "127.0.0.1:50053:50051"  # Different from main (50051) and dev (50052)

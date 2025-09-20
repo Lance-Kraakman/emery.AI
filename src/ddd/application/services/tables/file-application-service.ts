@@ -425,7 +425,7 @@ export class FileUseCases {
   }>> {
     try {
       // Use RowApplicationService to get files from organization's table data
-      const { getRowApplicationService } = require('@/ddd/application/di/container');
+      const { getRowApplicationService } = require('@/src/ddd/application/di/container');
       const rowService = getRowApplicationService();
       const files = await rowService.getFilesByOrganization(organizationId);
       
