@@ -10,8 +10,8 @@
  * - Proto messages (proto/agent_worker.proto) - Transport layer only
  */
 
-import { Agent, CapabilityConfig, ServerConfig, StepConfig } from '@/src/ddd/domain/agents/entities/agent';
-import { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config';
+import { Agent, CapabilityConfig, ServerConfig, StepConfig } from '@/ddd/domain/agents/entities/agent';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 import { 
   AgentConfig as AgentConfigProto,
@@ -25,7 +25,7 @@ import {
   InstructionConfig as InstructionConfigProto,
   StepType
 } from './generated/agent_worker';
-import { Task, TaskStatus } from '@/src/ddd/domain/tasks/entities/task';
+import { Task, TaskStatus } from '@/ddd/domain/tasks/entities/task';
 
 // AgentData interface for gRPC transport (uses primitives, not domain value objects)
 export interface AgentData {

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateRequest } from '@/src/lib/auth/test-auth';
-import { getTableApplicationService } from "@/src/ddd/application/di/container";
-import type { FieldType } from '@/src/ddd/domain/tables/value-objects/table-field';
-import { TableId } from '@/src/ddd/domain/shared/value-objects';
+import { authenticateRequest } from '@/lib/auth/test-auth';
+import { getTableApplicationService } from "@/ddd/application/di/container";
+import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import { TableId } from '@/ddd/domain/shared/value-objects';
 
 // AIDEV-NOTE: Field types support text, number, boolean, date, file, relation (no email/url)
-import type { CreateFieldCommand } from '@/src/ddd/application/services/tables/table-application-service';
+import type { CreateFieldCommand } from '@/ddd/application/services/tables/table-application-service';
 
 export async function POST(request: NextRequest) {
   try {

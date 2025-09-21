@@ -2,9 +2,9 @@
 // Eliminates race conditions by ensuring sequential processing per index
 // Handles retries and failure states gracefully
 
-import { DomainType, RagIndexId } from '@/src/ddd/domain/rag/value-objects';
+import { DomainType, RagIndexId } from '@/ddd/domain/rag/value-objects';
 import { getIndexingDomainService } from '../../di/container';
-import { withSystemContext } from '@/src/lib/db/system-context';
+import { withSystemContext } from '@/lib/db/system-context';
 import { getRagIndexRepository } from '../../di/container';
 
 

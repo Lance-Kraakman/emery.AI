@@ -11,7 +11,7 @@
  */
 
 import { FileFieldValue, validateFileFieldValue } from '../value-objects/field-values';
-import { OrganizationId, TableId, FieldId } from '@/src/ddd/domain/shared/value-objects';
+import { OrganizationId, TableId, FieldId } from '@/ddd/domain/shared/value-objects';
 import { FileTypeDetector } from '../services/file-type-detector';
 import { FileViewerType, TIPTAP_MIME_TYPE } from '../value-objects/file-viewer-types';
 

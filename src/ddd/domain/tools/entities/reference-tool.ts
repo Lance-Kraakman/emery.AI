@@ -17,8 +17,8 @@
 
 import { ToolConfig, AgentToolConfig, TableToolConfig, DocumentToolConfig, FileToolConfig, DatabaseToolConfig } from '../value-objects/tool-config'
 import { ToolMetadata, ToolCategory } from '../value-objects/tool-metadata'
-import { Reference } from '@/src/ddd/domain/chat/value-objects/reference'
-import { ReferenceCategory } from '@/src/ddd/domain/chat/value-objects/reference-types'
+import { Reference } from '@/ddd/domain/chat/value-objects/reference'
+import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
 import { Tool } from './tool'
 
 /**

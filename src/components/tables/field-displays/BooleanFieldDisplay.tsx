@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
-import { Badge } from '@/src/components/ui/badge';
+import { Badge } from '@/components/ui/badge';
 import { Check, X } from 'lucide-react';
-import type { BooleanFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
+import type { BooleanFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 interface BooleanFieldDisplayProps {
   value: BooleanFieldValue;

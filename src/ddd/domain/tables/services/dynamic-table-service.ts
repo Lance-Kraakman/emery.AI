@@ -9,11 +9,11 @@
  * Row operations moved to DynamicTable aggregate root.
  */
 
-import type { IDynamicTableRepository } from '@/src/ddd/domain/tables/repositories/dynamic-table-repository';
-import type { Result } from '@/src/ddd/domain/shared/result';
-import type { DynamicTable } from '@/src/ddd/domain/tables/entities/dynamic-table';
-import type { CreateDynamicTableData } from '@/src/ddd/application/services/tables/table-application-service';
-import { TableId, OrganizationId, DatabaseId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import type { Result } from '@/ddd/domain/shared/result';
+import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
+import type { CreateDynamicTableData } from '@/ddd/application/services/tables/table-application-service';
+import { TableId, OrganizationId, DatabaseId, UserId } from '@/ddd/domain/shared/value-objects';
 import { TableMetadata } from '../value-objects/table-metadata';
 
 

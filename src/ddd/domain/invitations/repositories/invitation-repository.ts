@@ -10,7 +10,7 @@ import type {
   BulkInvitationResult,
   InvitationStats
 } from '../entities/invitation';
-import { InvitationId, OrganizationId, UserId, EmailAddress, InvitationToken } from '@/src/ddd/domain/shared/value-objects';
+import { InvitationId, OrganizationId, UserId, EmailAddress, InvitationToken } from '@/ddd/domain/shared/value-objects';
 
 export interface IInvitationRepository {
   // Basic CRUD operations

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, hasPermission } from "@/src/lib/auth";
-import { getFileApplicationService, getTableApplicationService, getDocumentApplicationService } from "@/src/ddd/application/di/container";
-import { OrganizationId, TableId, UserId } from "@/src/ddd/domain/shared/value-objects";
-import type { UploadFileCommand } from "@/src/ddd/application/services/tables/file-application-service";
-import type { CreateTiptapDocumentCommand } from "@/src/ddd/application/services/tables/document-application-service";
-import { withAuthContext } from '@/src/lib/auth/with-context';
+import { auth, hasPermission } from "@/lib/auth";
+import { getFileApplicationService, getTableApplicationService, getDocumentApplicationService } from "@/ddd/application/di/container";
+import { OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
+import type { UploadFileCommand } from "@/ddd/application/services/tables/file-application-service";
+import type { CreateTiptapDocumentCommand } from "@/ddd/application/services/tables/document-application-service";
+import { withAuthContext } from '@/lib/auth/with-context';
 
 export async function POST(request: NextRequest) {
   return withAuthContext(async () => {

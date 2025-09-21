@@ -2,7 +2,7 @@
 // Defines data access operations for Agent entities
 
 import type { Agent } from '../entities/agent';
-import type { AgentId, OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import type { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 // Data transfer objects for repository operations
 export interface CreateAgentData {

@@ -12,7 +12,7 @@ import { existsSync } from 'fs';
 import path from 'path';
 import { S3Client, HeadBucketCommand, ListObjectsV2Command, CreateBucketCommand } from '@aws-sdk/client-s3';
 
-const DOCKER_COMPOSE_FILE = 'tests/docker-compose.integration.yml';
+const DOCKER_COMPOSE_FILE = 'src/tests/docker-compose.integration.yml';
 
 const CONTAINERS = [
   { name: 'emery-integration-db', timeout: 60000 },
@@ -130,15 +130,15 @@ async function runDatabaseSeeds(): Promise<void> {
   const baseEnv = 'NODE_ENV=test DATABASE_URL="postgresql://postgres:integration_test_password@localhost:5436/emery_integration_test"';
   
   console.log('🌱 Seeding RBAC data...');
-  execSync(`${baseEnv} npx tsx drizzle/seeds/rbac.ts`, { stdio: 'inherit', cwd: process.cwd() });
+  execSync(`${baseEnv} npx tsx src/drizzle/seeds/rbac.ts`, { stdio: 'inherit', cwd: process.cwd() });
   console.log('✅ RBAC seeding completed');
 
   console.log('🤖 Seeding system users...');
-  execSync(`${baseEnv} npx tsx drizzle/seeds/system-users.ts`, { stdio: 'inherit', cwd: process.cwd() });
+  execSync(`${baseEnv} npx tsx src/drizzle/seeds/system-users.ts`, { stdio: 'inherit', cwd: process.cwd() });
   console.log('✅ System users seeding completed');
 
   console.log('🔐 Assigning system user roles...');  
-  execSync(`${baseEnv} npx tsx drizzle/seeds/system-role-assignments.ts`, { stdio: 'inherit', cwd: process.cwd() });
+  execSync(`${baseEnv} npx tsx src/drizzle/seeds/system-role-assignments.ts`, { stdio: 'inherit', cwd: process.cwd() });
   console.log('✅ System role assignments completed');
 
   console.log('✅ All database seeding completed successfully');

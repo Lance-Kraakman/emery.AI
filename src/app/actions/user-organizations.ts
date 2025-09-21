@@ -5,13 +5,13 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAuth, requirePermission } from "./permissions";
-import { getUserRoleApplicationService, getUserRepository, getOrganizationRepository } from "@/src/ddd/application/di/container";
-import { withAuthContext } from '@/src/lib/auth/with-context';
+import { getUserRoleApplicationService, getUserRepository, getOrganizationRepository } from "@/ddd/application/di/container";
+import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
-import { UserId, OrganizationId } from "@/src/ddd/domain/shared/value-objects";
-import { SystemRoleType, SYSTEM_ROLES } from "@/src/ddd/domain/rbac/entities/role";
-import { contextManager } from '@/src/lib/db/context-manager';
-import { OrganizationMapper, type OrganizationDTO } from "@/src/app/mappers/organization-mapper";
+import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
+import { SystemRoleType, SYSTEM_ROLES } from "@/ddd/domain/rbac/entities/role";
+import { contextManager } from '@/lib/db/context-manager';
+import { OrganizationMapper, type OrganizationDTO } from "@/app/mappers/organization-mapper";
 
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
@@ -20,7 +20,7 @@ import type {
   SwitchOrganizationCommand,
   RemoveUserFromOrganizationCommand,
   OrganizationMemberFilters
-} from "@/src/ddd/application/services/user-organizations/user-role-application-service";
+} from "@/ddd/application/services/user-organizations/user-role-application-service";
 
 export async function switchCurrentOrganization(organizationId: number): Promise<Result> {
   return withAuthContext(async () => {

@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Command for reindexing RAG data
 // Updated to use value objects instead of primitives for type safety
 
-import { RagIndexId, OrganizationId, type DomainType } from '@/src/ddd/domain/rag/value-objects';
+import { RagIndexId, OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
 
 export interface ReindexCommand {
   indexId?: RagIndexId;

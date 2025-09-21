@@ -8,10 +8,10 @@
  */
 
 import { ReactNode } from 'react'
-import { ToolDefinition } from '@/src/lib/agents/tools-registry'
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper'
-import type { TeamDTO } from '@/src/app/mappers/team-mapper'
-import type { DatabaseWithTables } from '@/src/stores/app-state.store'
+import { ToolDefinition } from '@/lib/agents/tools-registry'
+import type { AgentDTO } from '@/app/mappers/agent-mapper'
+import type { TeamDTO } from '@/app/mappers/team-mapper'
+import type { DatabaseWithTables } from '@/stores/app-state.store'
 
 // Main category types for + button menu
 export type MentionCategory = 'tools' | 'agents' | 'teams' | 'settings' | 'data' | 'documents'

@@ -10,7 +10,7 @@
  */
 
 import { Store } from '@tanstack/react-store'
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper'
+import type { AgentDTO } from '@/app/mappers/agent-mapper'
 
 export interface AgentTask {
   id: string

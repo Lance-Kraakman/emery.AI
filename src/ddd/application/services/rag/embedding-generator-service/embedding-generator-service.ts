@@ -3,7 +3,7 @@
 // Refactored with template functions for maintainable content enhancement
 
 import crypto from 'crypto';
-import { s3Client, BUCKET_NAME } from '@/src/lib/s3/client';
+import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import fs from 'fs/promises';
 import path from 'path';
@@ -16,8 +16,8 @@ import {
   type ProcessedContent,
   type EmbeddingGeneratorConfig,
   type FileProcessingContext
-} from '@/src/ddd/domain/rag/services/embedding-generator-service';
-import { type EmbeddingGenerator } from '@/src/ddd/domain/rag/services';
+} from '@/ddd/domain/rag/services/embedding-generator-service';
+import { type EmbeddingGenerator } from '@/ddd/domain/rag/services';
 
 /**
  * Template data interface for content enhancement

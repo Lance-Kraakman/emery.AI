@@ -4,11 +4,11 @@
 
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
-import { Badge } from '@/src/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Users, Activity, Clock } from 'lucide-react';
-import { Team } from '@/src/types/db';
-import type { TaskDTO } from '@/src/app/mappers/task-mapper';
+import { Team } from '@/types/db';
+import type { TaskDTO } from '@/app/mappers/task-mapper';
 
 interface TeamNodeData extends Team {
   type: 'team';

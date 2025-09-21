@@ -7,19 +7,19 @@
  * AIDEV-NOTE: Application service for table management - handles business
  * rules, validation, and coordination between repositories
  */
-import type { DynamicTableService } from '@/src/ddd/domain/tables/services/dynamic-table-service';
-import type { IDatabaseRepository } from '@/src/ddd/domain/databases/repositories/database-repository';
-import type { IOrganizationRepository } from '@/src/ddd/domain/organizations/repositories/organization-repository';
-import type { IDynamicTableRepository } from '@/src/ddd/domain/tables/repositories/dynamic-table-repository';
-import type { DynamicTable } from '@/src/ddd/domain/tables/entities/dynamic-table';
-import type { Result } from '@/src/ddd/domain/shared/result';
-import { ResultHelpers } from '@/src/ddd/domain/shared/result';
-import { OrganizationId, DatabaseId, UserId, TableId } from '@/src/ddd/domain/shared/value-objects';
-import { TableMetadata } from '@/src/ddd/domain/tables/value-objects/table-metadata';
-import { TableField, type FieldType } from '@/src/ddd/domain/tables/value-objects/table-field';
-import { type FileFieldValue, isFileArray } from '@/src/ddd/domain/tables/value-objects/field-values';
-import { Row, RowId } from '@/src/ddd/domain/tables/value-objects/row';
-import type { RowQueryOptions } from '@/src/ddd/infrastructure/db/types/table-persistence';
+import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
+import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
+import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
+import type { Result } from '@/ddd/domain/shared/result';
+import { ResultHelpers } from '@/ddd/domain/shared/result';
+import { OrganizationId, DatabaseId, UserId, TableId } from '@/ddd/domain/shared/value-objects';
+import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
+import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import { type FileFieldValue, isFileArray } from '@/ddd/domain/tables/value-objects/field-values';
+import { Row, RowId } from '@/ddd/domain/tables/value-objects/row';
+import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
 
 // Application-layer context type for files with table information
 interface FileWithTableContext {

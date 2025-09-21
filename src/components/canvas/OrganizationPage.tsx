@@ -3,7 +3,7 @@
 import React from 'react'
 import { BasePage } from './BasePage'
 import { Building, Settings } from 'lucide-react'
-import { Button } from '@/src/components/ui/button'
+import { Button } from '@/components/ui/button'
 
 /**
  * OrganizationPage - Page for Organization settings

@@ -2,11 +2,11 @@
 
 import { ReactNode, useState } from 'react';
 import { Search, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
-import { Card, CardContent } from '@/src/components/ui/card';
-import { EmptyState } from '@/src/components/ui/empty-state';
-import { Loading } from '@/src/components/ui/loading';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/loading';
 
 // AIDEV-NOTE: Generic dashboard layout to reduce duplication across dashboard components
 // Provides consistent left panel (list) + right panel (details) layout

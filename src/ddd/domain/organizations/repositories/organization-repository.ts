@@ -1,6 +1,6 @@
 import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '../entities/organization';
-import { OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
-import { SystemRoleType } from '@/src/ddd/domain/rbac/entities/role';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType } from '@/ddd/domain/rbac/entities/role';
 
 export interface IOrganizationRepository {
   /**

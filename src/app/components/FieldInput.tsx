@@ -1,9 +1,9 @@
 'use client'
 
 import React from 'react'
-import type { FieldDTO } from '@/src/app/mappers/field-mapper';
-import { Input } from '@/src/components/ui/input';
-import { Checkbox } from '@/src/components/ui/checkbox';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import FileUpload from '../FileUpload';
 import RelationField from './RelationField';
 

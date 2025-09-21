@@ -10,10 +10,10 @@
  */
 
 import { Store } from '@tanstack/react-store'
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper'
-import type { TeamDTO } from '@/src/app/mappers/team-mapper'
-import type { TableDTO } from '@/src/app/mappers/table-mapper'
-import type { DatabaseDTO } from '@/src/app/mappers/database-mapper'
+import type { AgentDTO } from '@/app/mappers/agent-mapper'
+import type { TeamDTO } from '@/app/mappers/team-mapper'
+import type { TableDTO } from '@/app/mappers/table-mapper'
+import type { DatabaseDTO } from '@/app/mappers/database-mapper'
 
 // Extended database interface to include tables for frontend convenience
 export interface DatabaseWithTables extends DatabaseDTO {

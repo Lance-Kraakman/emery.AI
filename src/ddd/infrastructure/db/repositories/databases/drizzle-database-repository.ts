@@ -1,13 +1,13 @@
 // AIDEV-NOTE: Drizzle implementation of Database repository
 // Handles data persistence for Database domain entities
 
-import type { IDatabaseRepository, CreateDatabaseData, UpdateDatabaseData } from '@/src/ddd/domain/databases/repositories/database-repository';
-import { Database } from '@/src/ddd/domain/databases/entities/database';
+import type { IDatabaseRepository, CreateDatabaseData, UpdateDatabaseData } from '@/ddd/domain/databases/repositories/database-repository';
+import { Database } from '@/ddd/domain/databases/entities/database';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
-import type { DatabaseId, OrganizationId } from '@/src/ddd/domain/shared/value-objects';
-import { databases } from '@/src/lib/db/schema';
+import type { DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { databases } from '@/lib/db/schema';
 import { eq, and, ne } from 'drizzle-orm';
-import type { DbClient } from '@/src/lib/db/client';
+import type { DbClient } from '@/lib/db/client';
 
 export class DrizzleDatabaseRepository 
   extends DrizzleBaseRepository<Database, DatabaseId, CreateDatabaseData, UpdateDatabaseData, any>

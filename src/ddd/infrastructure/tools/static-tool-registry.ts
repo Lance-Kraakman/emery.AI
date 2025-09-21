@@ -13,10 +13,10 @@ import type {
   ToolDiscoveryOptions,
   ToolDiscoveryResult,
   ToolAvailability
-} from '@/src/ddd/domain/tools/services/tool-registry';
-import { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config';
-import { ToolMetadata, ToolCategory, ConnectionType } from '@/src/ddd/domain/tools/value-objects/tool-metadata';
-import { Tool } from '@/src/ddd/domain/tools/entities/tool';
+} from '@/ddd/domain/tools/services/tool-registry';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import { ToolMetadata, ToolCategory, ConnectionType } from '@/ddd/domain/tools/value-objects/tool-metadata';
+import { Tool } from '@/ddd/domain/tools/entities/tool';
 
 export class StaticToolRegistry implements IToolRegistryService {
   private readonly tools: ToolMetadata[] = [

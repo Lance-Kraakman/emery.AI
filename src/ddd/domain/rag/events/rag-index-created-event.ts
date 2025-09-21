@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Domain event for RAG index creation
 // Triggers automatic indexing when a new RAG index is created
 
-import { BaseDomainEvent, createBaseDomainEvent } from '@/src/ddd/domain/shared/events/base-domain-event';
+import { BaseDomainEvent, createBaseDomainEvent } from '@/ddd/domain/shared/events/base-domain-event';
 import { RagIndexId, OrganizationId, type DomainType } from '../value-objects';
 
 export interface RagIndexCreatedEvent extends BaseDomainEvent {

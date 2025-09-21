@@ -4,14 +4,14 @@
  * Handles user creation, role assignment, and organization membership.
  * Updated for full RBAC system with SystemRoleType roles.
  */
-import type { IUserRepository } from '@/src/ddd/domain/users/repositories/user-repository';
-import type { IOrganizationRepository } from '@/src/ddd/domain/organizations/repositories/organization-repository';
-import type { IRBACRepository } from '@/src/ddd/domain/rbac/repositories/rbac-repository';
-import type { UserOrganization, CreateUserOrganizationData } from '@/src/ddd/domain/users/entities/user';
-import type { OrganizationMember } from '@/src/ddd/domain/organizations/entities/organization';
-import { UserId, OrganizationId } from '@/src/ddd/domain/shared/value-objects';
-import { SystemRoleType, SYSTEM_ROLES } from '@/src/ddd/domain/rbac/entities/role';
-import type { Result } from '@/src/ddd/domain/shared/result';
+import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
+import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
+import type { UserOrganization, CreateUserOrganizationData } from '@/ddd/domain/users/entities/user';
+import type { OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
+import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
+import type { Result } from '@/ddd/domain/shared/result';
 
 export interface AddUserToOrganizationCommand {
   userId: string;

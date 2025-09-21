@@ -3,7 +3,7 @@
 import React from 'react'
 import { BasePage } from './BasePage'
 import { Users, Plus } from 'lucide-react'
-import { Button } from '@/src/components/ui/button'
+import { Button } from '@/components/ui/button'
 
 /**
  * TeamsPage - Page for Teams management

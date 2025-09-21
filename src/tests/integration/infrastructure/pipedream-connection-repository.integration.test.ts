@@ -1,9 +1,9 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { PipedreamConnectionRepository } from '@/src/ddd/infrastructure/external/pipedream/pipedream-connection-repository';
-import { PipedreamConnectionMapper } from '@/src/ddd/infrastructure/external/pipedream/connection-mapper';
-import { UserId } from '@/src/ddd/domain/shared/value-objects';
-import { AppName, ConnectionId } from '@/src/ddd/domain/connections/value-objects';
-import { ConnectionStatus } from '@/src/ddd/domain/connections/entities/connection';
+import { PipedreamConnectionRepository } from '@/ddd/infrastructure/external/pipedream/pipedream-connection-repository';
+import { PipedreamConnectionMapper } from '@/ddd/infrastructure/external/pipedream/connection-mapper';
+import { UserId } from '@/ddd/domain/shared/value-objects';
+import { AppName, ConnectionId } from '@/ddd/domain/connections/value-objects';
+import { ConnectionStatus } from '@/ddd/domain/connections/entities/connection';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';
 import type { TestContext } from '../shared/test-setup';

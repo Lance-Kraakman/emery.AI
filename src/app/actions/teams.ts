@@ -6,14 +6,14 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { withAuthContext } from '@/src/lib/auth/with-context';
-import { getTeamApplicationService } from "@/src/ddd/application/di/container";
-import { AgentId } from "@/src/ddd/domain/shared/value-objects";
-import { createTeamSchema, updateTeamSchema, parseFormDataToTeam } from "@/src/lib/schemas";
+import { withAuthContext } from '@/lib/auth/with-context';
+import { getTeamApplicationService } from "@/ddd/application/di/container";
+import { AgentId } from "@/ddd/domain/shared/value-objects";
+import { createTeamSchema, updateTeamSchema, parseFormDataToTeam } from "@/lib/schemas";
 import type { Result, CreateTeamData, CreateTeamClientData, TeamMembershipData } from "./types";
-import type { CreateTeamCommand, UpdateTeamCommand, TeamFilters } from "@/src/ddd/application/services/teams/team-application-service";
-import { TeamId, OrganizationId, UserId } from "@/src/ddd/domain/shared/value-objects";
-import { TeamMapper, type TeamDTO } from "@/src/app/mappers/team-mapper";
+import type { CreateTeamCommand, UpdateTeamCommand, TeamFilters } from "@/ddd/application/services/teams/team-application-service";
+import { TeamId, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
+import { TeamMapper, type TeamDTO } from "@/app/mappers/team-mapper";
 
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required

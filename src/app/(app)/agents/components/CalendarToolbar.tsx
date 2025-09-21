@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from '@/src/components/ui/button';
+import { Button } from '@/components/ui/button';
 
 interface CalendarToolbarProps {
   onNavigate: (action: 'PREV' | 'NEXT' | 'TODAY') => void;

@@ -1,4 +1,4 @@
-import { OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 // AIDEV-NOTE: Simplified context management for RLS policies
 // Single function handles both organization-only and full user+organization context

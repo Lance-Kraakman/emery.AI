@@ -9,7 +9,7 @@
  */
 
 import type { Chat, CreateChatData, UpdateChatData } from '../entities/chat';
-import type { ChatId, OrganizationId, TableId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import type { ChatId, OrganizationId, TableId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export interface IChatRepository {
   /**

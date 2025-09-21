@@ -1,15 +1,15 @@
 // AIDEV-NOTE: Drizzle implementation of Agent repository
 // Handles data persistence for Agent domain entities
 
-import type { IAgentRepository, CreateAgentData, UpdateAgentData } from '@/src/ddd/domain/agents/repositories/agent-repository';
-import type { Agent } from '@/src/ddd/domain/agents/entities/agent';
-import { AgentFactory } from '@/src/ddd/domain/agents/entities/agent';
+import type { IAgentRepository, CreateAgentData, UpdateAgentData } from '@/ddd/domain/agents/repositories/agent-repository';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import { AgentFactory } from '@/ddd/domain/agents/entities/agent';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
-import { agents } from '@/src/lib/db/schema';
+import { agents } from '@/lib/db/schema';
 import { eq, and, isNotNull, sql, ne } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import { AgentId, OrganizationId, UserId, AgentStatus, ApiKey } from '@/src/ddd/domain/shared/value-objects';
-import type { DbClient } from '@/src/lib/db/client';
+import { AgentId, OrganizationId, UserId, AgentStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
+import type { DbClient } from '@/lib/db/client';
 
 type AgentRow = InferSelectModel<typeof agents>;
 

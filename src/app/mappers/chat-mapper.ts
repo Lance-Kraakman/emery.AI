@@ -5,9 +5,9 @@
  * Provides consistent conversion patterns following established architecture.
  */
 
-import type { Chat } from '@/src/ddd/domain/chat/entities/chat';
-import type { ChatMessage } from '@/src/ddd/domain/chat/entities/chat-message';
-import type { DomainType } from '@/src/ddd/domain/rag/value-objects';
+import type { Chat } from '@/ddd/domain/chat/entities/chat';
+import type { ChatMessage } from '@/ddd/domain/chat/entities/chat-message';
+import type { DomainType } from '@/ddd/domain/rag/value-objects';
 
 /**
  * Context filter for loading chat sessions

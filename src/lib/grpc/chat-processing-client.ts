@@ -11,7 +11,7 @@
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import path from 'path';
-import type { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config';
+import type { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import type {
   ProcessMessageRequest,
   ProcessMessageResponse,

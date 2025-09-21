@@ -2,19 +2,19 @@
 
 import React, { useEffect } from 'react';
 import { useStore } from '@tanstack/react-store';
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper';
-import type { TeamDTO } from '@/src/app/mappers/team-mapper';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { TeamDTO } from '@/app/mappers/team-mapper';
 import { Search, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/src/components/ui/select';
-import { Card, CardContent } from '@/src/components/ui/card';
-import { Loading } from '@/src/components/ui/loading';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent } from '@/components/ui/card';
+import { Loading } from '@/components/ui/loading';
 import AgentDetailsView from './AgentDetailsView';
 import { NewAgentDetailsView } from './NewAgentDetailsView';
 import AgentCreateView from './AgentCreateView';
-import { agentsStore, agentsSelectors } from '@/src/stores/agents.store';
-import { storeActions, agentsActions } from '@/src/stores/actions';
+import { agentsStore, agentsSelectors } from '@/stores/agents.store';
+import { storeActions, agentsActions } from '@/stores/actions';
 
 // AIDEV-NOTE: Agent dashboard migrated to TanStack Store for better state management and performance
 interface AgentDashboardClientProps {

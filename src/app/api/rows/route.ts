@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateRequest } from '@/src/lib/auth/test-auth';
-import { createRow, updateRowData, deleteRowData, getRowsData } from '@/src/app/actions/rows';
+import { authenticateRequest } from '@/lib/auth/test-auth';
+import { createRow, updateRowData, deleteRowData, getRowsData } from '@/app/actions/rows';
 
 export async function POST(request: NextRequest) {
   try {

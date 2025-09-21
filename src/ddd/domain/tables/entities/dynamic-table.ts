@@ -4,7 +4,7 @@
 import type { TableMetadata } from '../value-objects/table-metadata';
 import { TableField } from '../value-objects/table-field';
 import type { FieldValidationResult, FieldValidationError } from '../value-objects/field-values';
-import { TableId, DatabaseId, OrganizationId, UserId, FieldId } from '@/src/ddd/domain/shared/value-objects';
+import { TableId, DatabaseId, OrganizationId, UserId, FieldId } from '@/ddd/domain/shared/value-objects';
 
 export class DynamicTable {
   private constructor(

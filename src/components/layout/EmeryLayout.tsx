@@ -1,14 +1,14 @@
 'use client'
 
 import React, { Suspense } from 'react'
-import { EmerySidebar } from '@/src/components/EmerySidebar'
-import { Loading } from '@/src/components/ui/loading'
-import { EmeryChat } from '@/src/components/chat/EmeryChat'
+import { EmerySidebar } from '@/components/EmerySidebar'
+import { Loading } from '@/components/ui/loading'
+import { EmeryChat } from '@/components/chat/EmeryChat'
 import { ChatSection, useChatCanvas } from '@llamaindex/chat-ui'
-import { ChatCanvas } from '@/src/components/chat/ChatCanvas'
+import { ChatCanvas } from '@/components/chat/ChatCanvas'
 import { useLayout } from './LayoutProvider'
 import type { EmeryLayoutProps, ChatContextConfig } from './types'
-import { useChatGRPC } from '@/src/components/chat/useChatGRPC'
+import { useChatGRPC } from '@/components/chat/useChatGRPC'
 
 /** p p
  * EmeryLayout - Core layout component with canvas expansion logic

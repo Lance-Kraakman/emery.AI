@@ -13,10 +13,10 @@ import {
   type SortingState,
   type ColumnFiltersState
 } from '@tanstack/react-table';
-import type { FieldDTO } from '@/src/app/mappers/field-mapper';
-import type { Row } from '@/src/ddd/domain/tables/value-objects/row';
-import { Button } from '@/src/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/src/components/ui/table';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
+import type { Row } from '@/ddd/domain/tables/value-objects/row';
+import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import CellRenderer from './CellRenderer';
 import FieldInput from './FieldInput';
 

@@ -13,9 +13,9 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import { cn } from '@/src/lib/utils';
+import { cn } from '@/lib/utils';
 import { ConnectionStatusBadge } from './ConnectionStatusBadge';
-import type { ToolConnectionStatus } from '@/src/app/actions/connections';
+import type { ToolConnectionStatus } from '@/app/actions/connections';
 
 interface ConnectionSummaryCardProps {
   tools?: ToolConnectionStatus[];

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
-import { Button } from "@/src/components/ui/button"
+import { Button } from "@/components/ui/button"
 import {
   Settings,
   Bot,
@@ -21,17 +21,17 @@ import {
   LogOut,
 } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/src/components/ui/collapsible"
-import { Separator } from "@/src/components/ui/separator"
-import { ScrollArea } from "@/src/components/ui/scroll-area"
-import { Popover, PopoverContent, PopoverTrigger } from "@/src/components/ui/popover"
-import { Avatar, AvatarFallback, AvatarImage } from "@/src/components/ui/avatar"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Separator } from "@/components/ui/separator"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { EmeryOrganizationModal } from "./EmeryOrganizationModal"
-import { useEmeryStore } from "@/src/contexts/EmeryStoreProvider"
+import { useEmeryStore } from "@/contexts/EmeryStoreProvider"
 import { useStore } from '@tanstack/react-store'
-import { uiStateStore, uiStateSelectors } from '@/src/stores/ui-state.store'
-import { storeActions, uiStateActions } from '@/src/stores/actions'
-import { useLayout } from "@/src/components/layout/LayoutProvider"
+import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
+import { storeActions, uiStateActions } from '@/stores/actions'
+import { useLayout } from "@/components/layout/LayoutProvider"
 
 const navItems = [
   { href: "/mission-control", label: "Mission Control", icon: Target },

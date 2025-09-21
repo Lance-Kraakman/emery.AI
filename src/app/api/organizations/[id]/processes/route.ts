@@ -2,9 +2,9 @@
 // Shows status and activity of process-analyst agents responsible for process analysis
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/src/app/actions/permissions';
-import { getAgentApplicationService } from '@/src/ddd/application/di/container';
-import { OrganizationId } from '@/src/ddd/domain/shared/value-objects';
+import { requirePermission } from '@/app/actions/permissions';
+import { getAgentApplicationService } from '@/ddd/application/di/container';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 export const dynamic = 'force-dynamic';
 

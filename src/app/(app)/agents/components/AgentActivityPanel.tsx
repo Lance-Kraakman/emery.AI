@@ -1,10 +1,10 @@
 'use client';
 
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import React, { useEffect, useState, useMemo } from 'react';
-import { getTasks } from '@/src/app/actions/tasks';
+import { getTasks } from '@/app/actions/tasks';
 import TaskFormDialog from './TaskFormDialog';
-import { TaskCard } from '@/src/components/tasks/TaskCard';
+import { TaskCard } from '@/components/tasks/TaskCard';
 import {
   Activity,
   Clock,
@@ -12,7 +12,7 @@ import {
   XCircle,
   Plus
 } from 'lucide-react';
-import { TaskDTO as Task } from '@/src/app/mappers/task-mapper';
+import { TaskDTO as Task } from '@/app/mappers/task-mapper';
 
 interface AgentActivityPanelProps {
   agent: AgentDTO;

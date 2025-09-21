@@ -8,16 +8,16 @@
  * AIDEV-NOTE: Application service for chat management - coordinates between
  * chat repositories, RAG services, and dynamic table context for table-connected chats
  */
-import type { IChatRepository } from '@/src/ddd/domain/chat/repositories/chat-repository';
-import type { IChatMessageRepository } from '@/src/ddd/domain/chat/repositories/chat-message-repository';
-import type { DynamicTableService } from '@/src/ddd/domain/tables/services/dynamic-table-service';
-import type { IAgentRepository } from '@/src/ddd/domain/agents/repositories/agent-repository';
-import { AgentId, TableId, OrganizationId, UserId, ChatId } from '@/src/ddd/domain/shared/value-objects';
-import { Chat, ChatUtils, type CreateChatData, type ChatContextMetadata } from '@/src/ddd/domain/chat/entities/chat';
-import type { DomainType } from '@/src/ddd/domain/rag/value-objects';
-import type { ChatMessage, CreateChatMessageData, ChatMessageMetadata } from '@/src/ddd/domain/chat/entities/chat-message';
-import type { Result } from '@/src/ddd/domain/shared/result';
-import { ChatMessageEntity } from '@/src/ddd/domain/chat/entities/chat-message';
+import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
+import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
+import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
+import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import { AgentId, TableId, OrganizationId, UserId, ChatId } from '@/ddd/domain/shared/value-objects';
+import { Chat, ChatUtils, type CreateChatData, type ChatContextMetadata } from '@/ddd/domain/chat/entities/chat';
+import type { DomainType } from '@/ddd/domain/rag/value-objects';
+import type { ChatMessage, CreateChatMessageData, ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
+import type { Result } from '@/ddd/domain/shared/result';
+import { ChatMessageEntity } from '@/ddd/domain/chat/entities/chat-message';
 
 export interface CreateChatCommand {
   organizationId: OrganizationId;

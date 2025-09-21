@@ -1,6 +1,6 @@
 import React from 'react'
 import './globals.css'
-import AuthProvider from '@/src/components/AuthProvider'
+import AuthProvider from '@/components/AuthProvider'
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {

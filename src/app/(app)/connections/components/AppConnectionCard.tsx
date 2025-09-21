@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState } from 'react';
-import { Button } from '@/src/components/ui/button';
-import { Badge } from '@/src/components/ui/badge';
-import { Card, CardContent } from '@/src/components/ui/card';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/src/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {
   Plus,
   Trash2,
@@ -16,7 +16,7 @@ import {
   ExternalLink,
   TestTube
 } from 'lucide-react';
-import { ConnectionDTO as Connection } from '@/src/app/mappers/connection-mapper';
+import { ConnectionDTO as Connection } from '@/app/mappers/connection-mapper';
 
 export interface AppInfo {
   id: string;

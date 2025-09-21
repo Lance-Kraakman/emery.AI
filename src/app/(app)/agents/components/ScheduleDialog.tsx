@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from '@/src/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/src/components/ui/dialog';
-import { Input } from '@/src/components/ui/input';
-import { Label } from '@/src/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/src/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RRule, Weekday } from 'rrule';
-import { Checkbox } from '@/src/components/ui/checkbox';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useTimezoneSelect } from 'react-timezone-select';
 
 interface ScheduleDialogProps {

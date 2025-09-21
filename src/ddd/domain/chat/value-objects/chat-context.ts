@@ -8,7 +8,7 @@
  * from general application context. Provides type safety for chat operations.
  */
 
-import { OrganizationId } from '@/src/ddd/domain/shared/value-objects'
+import { OrganizationId } from '@/ddd/domain/shared/value-objects'
 import { ReferenceCategory } from './reference-types'
 
 /**

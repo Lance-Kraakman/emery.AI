@@ -2,7 +2,7 @@
 // Defines data access operations for Database entities
 
 import type { Database } from '../entities/database';
-import type { DatabaseId, OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import type { DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 // Data transfer objects for repository operations
 export interface CreateDatabaseData {

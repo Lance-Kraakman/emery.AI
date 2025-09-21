@@ -2,16 +2,16 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Settings, Plus, Edit, Trash2, Save, X } from 'lucide-react';
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper';
-import { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config';
-import type { CapabilityConfig, StepConfig, ServerConfig } from '@/src/ddd/domain/agents/entities/agent';
-import { Badge } from '@/src/components/ui/badge';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
-import { Textarea } from '@/src/components/ui/textarea';
-import { ToolDropdown } from '@/src/components/chat/ToolDropdown';
-import type { ReferenceToolDTO } from '@/src/app/mappers/reference-tool-mapper';
-import type { ToolDTO } from '@/src/app/mappers/tool-mapper';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import type { CapabilityConfig, StepConfig, ServerConfig } from '@/ddd/domain/agents/entities/agent';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { ToolDropdown } from '@/components/chat/ToolDropdown';
+import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper';
+import type { ToolDTO } from '@/app/mappers/tool-mapper';
 
 // AIDEV-NOTE: Capability manager with full CRUD functionality
 // Supports both view and edit modes with compact UI

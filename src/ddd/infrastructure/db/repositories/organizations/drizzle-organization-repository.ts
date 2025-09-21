@@ -1,13 +1,13 @@
 import { eq, ilike, and, count } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 
-import { IOrganizationRepository } from '@/src/ddd/domain/organizations/repositories/organization-repository';
+import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
-import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '@/src/ddd/domain/organizations/entities/organization';
-import type { DbClient } from '@/src/lib/db/client';
-import { organizations, users, userOrganizations, roles, userRoles } from '@/src/lib/db/schema';
-import { OrganizationId, UserId, OrganizationName, EmailAddress } from '@/src/ddd/domain/shared/value-objects';
-import { SystemRoleType, SYSTEM_ROLES } from '@/src/ddd/domain/rbac/entities/role';
+import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
+import type { DbClient } from '@/lib/db/client';
+import { organizations, users, userOrganizations, roles, userRoles } from '@/lib/db/schema';
+import { OrganizationId, UserId, OrganizationName, EmailAddress } from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 
 type OrganizationRow = InferSelectModel<typeof organizations>;
 

@@ -10,8 +10,8 @@ import {
   ExternalLink,
   Loader2
 } from 'lucide-react';
-import { cn } from '@/src/lib/utils';
-import type { ToolConnectionStatus } from '@/src/app/actions/connections';
+import { cn } from '@/lib/utils';
+import type { ToolConnectionStatus } from '@/app/actions/connections';
 
 interface ConnectionStatusBadgeProps {
   tool: ToolConnectionStatus;

@@ -5,9 +5,9 @@
 
 import { requirePermission } from "./permissions";
 import { revalidatePath } from "next/cache";
-import { getFileApplicationService, getTableApplicationService } from "@/src/ddd/application/di/container";
-import { FieldId, OrganizationId, TableId } from "@/src/ddd/domain/shared/value-objects";
-import type { UploadFileCommand, DeleteFileCommand } from "@/src/ddd/application/services/tables/file-application-service";
+import { getFileApplicationService, getTableApplicationService } from "@/ddd/application/di/container";
+import { FieldId, OrganizationId, TableId } from "@/ddd/domain/shared/value-objects";
+import type { UploadFileCommand, DeleteFileCommand } from "@/ddd/application/services/tables/file-application-service";
 import type { Result } from "./types";
 
 export async function uploadFileAction(formData: FormData): Promise<Result> {

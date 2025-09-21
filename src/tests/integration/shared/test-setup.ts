@@ -1,15 +1,15 @@
-import { getUserRepository, getOrganizationRepository, getAgentRepository, getTeamApplicationService, initializeDI } from '@/src/ddd/application/di/container';
-import { UserId } from '@/src/ddd/domain/shared/value-objects/user-id';
-import { EmailAddress } from '@/src/ddd/domain/shared/value-objects/email-address';
-import { OrganizationName } from '@/src/ddd/domain/shared/value-objects/organization-name';
-import { OrganizationId } from '@/src/ddd/domain/shared/value-objects/organization-id';
-import { AgentId } from '@/src/ddd/domain/shared/value-objects/agent-id';
-import { TeamId } from '@/src/ddd/domain/shared/value-objects/team-id';
-import type { CreateUserData } from '@/src/ddd/domain/users/entities/user';
-import type { CreateOrganizationData } from '@/src/ddd/domain/organizations/entities/organization';
+import { getUserRepository, getOrganizationRepository, getAgentRepository, getTeamApplicationService, initializeDI } from '@/ddd/application/di/container';
+import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
+import { EmailAddress } from '@/ddd/domain/shared/value-objects/email-address';
+import { OrganizationName } from '@/ddd/domain/shared/value-objects/organization-name';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
+import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
+import { TeamId } from '@/ddd/domain/shared/value-objects/team-id';
+import type { CreateUserData } from '@/ddd/domain/users/entities/user';
+import type { CreateOrganizationData } from '@/ddd/domain/organizations/entities/organization';
 import { testClient } from './integration-helpers';
-import { SYSTEM_ROLES } from '@/src/ddd/domain/rbac/entities/role';
-import { userRoles, roles } from '@/src/lib/db/schema';
+import { SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
+import { userRoles, roles } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export interface TestContext {

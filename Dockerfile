@@ -53,13 +53,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/public ./public
+COPY --from=builder /app/src/public ./src/public
 
 # AIDEV-NOTE: Copy source files needed for tsx execution
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/lib ./lib
-COPY --from=builder /app/app ./app
-COPY --from=builder /app/ddd ./ddd
+COPY --from=builder /app/src/scripts ./src/scripts
+COPY --from=builder /app/src/lib ./src/lib
+COPY --from=builder /app/src/app ./src/app
+COPY --from=builder /app/src/ddd ./src/ddd
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 # AIDEV-NOTE: Copy proto files needed by scheduler at runtime
@@ -67,7 +67,7 @@ COPY --from=builder /app/proto ./proto
 
 # AIDEV-NOTE: Copy database migration files
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
-COPY --from=builder /app/drizzle ./drizzle
+COPY --from=builder /app/src/drizzle ./src/drizzle
 
 # Copy the entrypoint script
 COPY entrypoint.sh .

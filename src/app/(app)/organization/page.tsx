@@ -2,8 +2,8 @@
 
 import React from 'react';
 import dynamic from 'next/dynamic';
-import { Loading } from '@/src/components/ui/loading';
-import { OrganizationPage as OrganizationPageLayout } from '@/src/components/canvas';
+import { Loading } from '@/components/ui/loading';
+import { OrganizationPage as OrganizationPageLayout } from '@/components/canvas';
 
 // AIDEV-NOTE: Organization page updated to use canvas architecture with ReactFlow support
 // AIDEV-NOTE: This prevents hydration issues with client-only ReactFlow components

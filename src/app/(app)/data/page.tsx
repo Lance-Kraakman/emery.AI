@@ -1,7 +1,7 @@
 import React, { Suspense } from "react"
-import { DataPage } from "@/src/components/canvas"
+import { DataPage } from "@/components/canvas"
 import { DataViewsClientSimplified } from "./DataViewsClient-simplified"
-import { Loading } from "@/src/components/ui/loading"
+import { Loading } from "@/components/ui/loading"
 
 export default function DataViewsPage() {
   return (

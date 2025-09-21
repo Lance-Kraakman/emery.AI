@@ -1,8 +1,8 @@
 import { describe, test, expect, beforeAll } from 'vitest';
-import { ArrowDataStorageService } from '@/src/ddd/infrastructure/arrow/arrow-data-storage-service';
-import { DynamicTable } from '@/src/ddd/domain/tables/entities/dynamic-table';
-import { TableField, type FieldType } from '@/src/ddd/domain/tables/value-objects/table-field';
-import { Row } from '@/src/ddd/domain/tables/value-objects/row';
+import { ArrowDataStorageService } from '@/ddd/infrastructure/arrow/arrow-data-storage-service';
+import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
+import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import { Row } from '@/ddd/domain/tables/value-objects/row';
 import type { TestCase } from '../../shared/types';
 
 interface ArrowStorageTestInput {

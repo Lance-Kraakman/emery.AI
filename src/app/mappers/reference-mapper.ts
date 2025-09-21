@@ -1,5 +1,5 @@
-import { Reference } from '@/src/ddd/domain/chat/value-objects/reference';
-import type { ReferenceCategory } from '@/src/ddd/domain/chat/value-objects/reference-types';
+import { Reference } from '@/ddd/domain/chat/value-objects/reference';
+import type { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
 
 /**
  * Reference Data Transfer Object for Frontend

@@ -1,4 +1,4 @@
-import type { Row, FieldValue } from '@/src/ddd/domain/tables/value-objects/row';
+import type { Row, FieldValue } from '@/ddd/domain/tables/value-objects/row';
 import type { 
   FieldValue as DomainFieldValue,
   FileFieldValue,
@@ -11,7 +11,7 @@ import type {
   NumberFieldValue,
   BooleanFieldValue,
   DateFieldValue
-} from '@/src/ddd/domain/tables/value-objects/field-values';
+} from '@/ddd/domain/tables/value-objects/field-values';
 
 // ========================================
 // Use Domain Value Objects Directly - No DTO Layer Needed

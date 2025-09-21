@@ -1,4 +1,4 @@
-import { DynamicTable } from '@/src/ddd/domain/tables/entities/dynamic-table';
+import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 
 export interface TableDTO {
   id: number;

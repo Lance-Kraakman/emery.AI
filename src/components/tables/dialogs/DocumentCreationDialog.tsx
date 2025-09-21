@@ -1,13 +1,13 @@
 "use client"
 
 import React, { useState } from 'react';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
-import { Label } from '@/src/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/src/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Edit3, Loader } from 'lucide-react';
-import type { FieldDTO } from '@/src/app/mappers/field-mapper';
-import type { DocumentFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
+import type { DocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 interface DocumentCreationDialogProps {
   isOpen: boolean;

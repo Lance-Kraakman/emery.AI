@@ -9,7 +9,7 @@
  */
 
 import type { Artifact } from '@llamaindex/chat-ui'
-import type { DocumentFieldValue, FileFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values'
+import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
 
 // ========================================
 // Document Artifact Type

@@ -1,8 +1,8 @@
 // AIDEV-NOTE: Embedding service implementation
 // Provides embedding generation using the AI SDK with HuggingFace models
 
-import { getEmbeddingModel } from '@/src/lib/ai/models';
-import { type EmbeddingGenerator } from '@/src/ddd/domain/rag/services';
+import { getEmbeddingModel } from '@/lib/ai/models';
+import { type EmbeddingGenerator } from '@/ddd/domain/rag/services';
 import crypto from 'crypto';
 
 export class EmbeddingService implements EmbeddingGenerator {

@@ -6,7 +6,7 @@ import type {
   CalendarTriggerConfig, 
   DatabaseEventTriggerConfig,
   WebhookTriggerConfig 
-} from '@/src/ddd/domain/scheduling/value-objects/trigger-config';
+} from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 // Type guard functions
 export const isCalendarTrigger = (trigger: TriggerConfig): trigger is CalendarTriggerConfig => 

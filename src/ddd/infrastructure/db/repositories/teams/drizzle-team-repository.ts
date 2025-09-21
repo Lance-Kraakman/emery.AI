@@ -1,14 +1,14 @@
 // AIDEV-NOTE: Drizzle implementation of Team repository
 // Handles data persistence for Team domain entities
 
-import type { ITeamRepository, CreateTeamData, UpdateTeamData } from '@/src/ddd/domain/teams/repositories/team-repository';
-import { Team } from '@/src/ddd/domain/teams/entities/team';
+import type { ITeamRepository, CreateTeamData, UpdateTeamData } from '@/ddd/domain/teams/repositories/team-repository';
+import { Team } from '@/ddd/domain/teams/entities/team';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
-import { OrganizationId, TeamId, AgentId } from '@/src/ddd/domain/shared/value-objects';
-import { teams } from '@/src/lib/db/schema';
+import { OrganizationId, TeamId, AgentId } from '@/ddd/domain/shared/value-objects';
+import { teams } from '@/lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import type { DbClient } from '@/src/lib/db/client';
+import type { DbClient } from '@/lib/db/client';
 
 type TeamRow = InferSelectModel<typeof teams>;
 

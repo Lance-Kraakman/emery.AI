@@ -3,7 +3,7 @@
 
 import { Connection } from '../entities/connection';
 import { ConnectionId, AppName } from '../value-objects';
-import { UserId } from '@/src/ddd/domain/shared/value-objects';
+import { UserId } from '@/ddd/domain/shared/value-objects';
 
 export interface IConnectionRepository {
   /**

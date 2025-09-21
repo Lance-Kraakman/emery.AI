@@ -20,8 +20,8 @@ import {
   Loader2,
   X
 } from 'lucide-react';
-import { getConnectionSetupUrl } from '@/src/app/actions/connections';
-import { cn } from '@/src/lib/utils';
+import { getConnectionSetupUrl } from '@/app/actions/connections';
+import { cn } from '@/lib/utils';
 
 interface ConnectionSetupFlowProps {
   isOpen: boolean;

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Node, Edge } from '@xyflow/react';
-import { updateOrganizationViewConfig } from '@/src/app/actions/organizations';
+import { updateOrganizationViewConfig } from '@/app/actions/organizations';
 
 // AIDEV-NOTE: Custom hook for managing organization chart view configuration
 // AIDEV-NOTE: Provides auto-save functionality with debouncing to prevent excessive API calls

@@ -1,13 +1,13 @@
 'use client'
 
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/src/components/ui/card";
-import { Checkbox } from "@/src/components/ui/checkbox";
-import { Badge } from "@/src/components/ui/badge";
-import { Input } from "@/src/components/ui/input";
-import { Button } from "@/src/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Search, Eye, Edit, Plus, Play, Users, Shield, ChevronDown } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/src/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ResourceSelector } from "./ResourceSelector";
 
 interface Permission {

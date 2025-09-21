@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from 'react'
 import { FileText, File, Database, Users, Plus, X, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
-import { Button } from '@/src/components/ui/button'
-import { resolveReferences } from '@/src/app/actions/references'
-import type { ReferenceDTO, ReferencePanelStateDTO } from '@/src/app/mappers/reference-mapper'
+import { Button } from '@/components/ui/button'
+import { resolveReferences } from '@/app/actions/references'
+import type { ReferenceDTO, ReferencePanelStateDTO } from '@/app/mappers/reference-mapper'
 
 interface ReferencesPanelProps {
   referenceTexts?: string[] // Reference texts to resolve (@doc:path, @file:path)

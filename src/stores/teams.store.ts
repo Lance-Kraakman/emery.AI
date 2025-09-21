@@ -10,8 +10,8 @@
  */
 
 import { Store } from '@tanstack/react-store'
-import type { TeamDTO } from '@/src/app/mappers/team-mapper'
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper'
+import type { TeamDTO } from '@/app/mappers/team-mapper'
+import type { AgentDTO } from '@/app/mappers/agent-mapper'
 
 export interface TeamMember {
   id: string

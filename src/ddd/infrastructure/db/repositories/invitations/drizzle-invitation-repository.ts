@@ -1,10 +1,10 @@
 // AIDEV-NOTE: Drizzle implementation of invitation repository
 // Handles database operations for user invitations with token management and validation
 
-import type { DbClient } from '@/src/lib/db/client';
+import type { DbClient } from '@/lib/db/client';
 import { eq, and, lt, gte, desc, sql, inArray } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import { invitations, users, organizations, userOrganizations, roles } from '@/src/lib/db/schema';
+import { invitations, users, organizations, userOrganizations, roles } from '@/lib/db/schema';
 
 type InvitationRow = InferSelectModel<typeof invitations>;
 type InvitationWithRole = {
@@ -14,8 +14,8 @@ type InvitationWithRole = {
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import type { 
   IInvitationRepository,
-} from '@/src/ddd/domain/invitations/repositories/invitation-repository';
-import { Invitation } from '@/src/ddd/domain/invitations/entities/invitation';
+} from '@/ddd/domain/invitations/repositories/invitation-repository';
+import { Invitation } from '@/ddd/domain/invitations/entities/invitation';
 import type { 
   CreateInvitationData, 
   UpdateInvitationData,
@@ -23,13 +23,13 @@ import type {
   BulkInvitationData,
   BulkInvitationResult,
   InvitationStats
-} from '@/src/ddd/domain/invitations/entities/invitation';
-import { generateInvitationToken as generateToken } from '@/src/ddd/domain/invitations/entities/invitation';
-import { OrganizationId } from '@/src/ddd/domain/shared/value-objects/organization-id';
-import { UserId } from '@/src/ddd/domain/shared/value-objects/user-id';
-import { EmailAddress } from '@/src/ddd/domain/shared/value-objects/email-address';
-import { SystemRoleType, SYSTEM_ROLES } from '@/src/ddd/domain/rbac/entities/role';
-import { InvitationId, InvitationToken } from '@/src/ddd/domain/shared/value-objects';
+} from '@/ddd/domain/invitations/entities/invitation';
+import { generateInvitationToken as generateToken } from '@/ddd/domain/invitations/entities/invitation';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
+import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
+import { EmailAddress } from '@/ddd/domain/shared/value-objects/email-address';
+import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
+import { InvitationId, InvitationToken } from '@/ddd/domain/shared/value-objects';
 
 export class DrizzleInvitationRepository
   extends DrizzleBaseRepository<Invitation, InvitationId, CreateInvitationData, UpdateInvitationData, InvitationRow>
@@ -422,9 +422,9 @@ export class DrizzleInvitationRepository
   async canInviteToOrganization(inviterId: UserId, organizationId: OrganizationId): Promise<boolean> {
     // Check if user has permission to invite users using the RBAC repository directly
     try {
-      const { getRBACRepository } = await import('@/src/ddd/application/di/container');
+      const { getRBACRepository } = await import('@/ddd/application/di/container');
       const rbacRepository = getRBACRepository();
-      const { Permission } = await import('@/src/ddd/domain/shared/value-objects/permission');
+      const { Permission } = await import('@/ddd/domain/shared/value-objects/permission');
       const permission = Permission.fromString('users:invite');
       
       return await rbacRepository.hasPermission(inviterId, permission, organizationId);

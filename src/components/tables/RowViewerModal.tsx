@@ -2,10 +2,10 @@
 
 import React, { useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Edit, X } from 'lucide-react';
-import { Button } from '@/src/components/ui/button';
-import { BaseModal } from '@/src/app/(app)/agents/components/modals/BaseModal';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
-import { Badge } from '@/src/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { BaseModal } from '@/app/(app)/agents/components/modals/BaseModal';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   TextFieldDisplay,
   NumberFieldDisplay,
@@ -15,14 +15,14 @@ import {
   DocumentFieldDisplay,
   RelationFieldDisplay
 } from './field-displays';
-import type { FieldDTO } from '@/src/app/mappers/field-mapper';
-import type { RowDTO, TypedFieldValueDTO } from '@/src/app/mappers/row-mapper';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
+import type { RowDTO, TypedFieldValueDTO } from '@/app/mappers/row-mapper';
 import type {
   DateFieldValue,
   FileArrayFieldValue,
   DocumentArrayFieldValue,
   RelationArrayFieldValue
-} from '@/src/ddd/domain/tables/value-objects/field-values';
+} from '@/ddd/domain/tables/value-objects/field-values';
 
 interface RowViewerModalProps {
   isOpen: boolean;

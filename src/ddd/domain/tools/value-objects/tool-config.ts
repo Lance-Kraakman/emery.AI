@@ -9,7 +9,7 @@
  * Extended with specific config types for different tool categories.
  */
 
-import type { AgentId, UserId, OrganizationId } from '@/src/ddd/domain/shared/value-objects'
+import type { AgentId, UserId, OrganizationId } from '@/ddd/domain/shared/value-objects'
 
 /**
  * Base configuration interface

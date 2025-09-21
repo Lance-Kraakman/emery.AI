@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Input } from '@/src/components/ui/input';
-import type { NumberFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
+import { Input } from '@/components/ui/input';
+import type { NumberFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 interface NumberFieldInputProps {
   value: NumberFieldValue;

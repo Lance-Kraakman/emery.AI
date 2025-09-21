@@ -7,9 +7,9 @@
  * These users operate with elevated permissions across organizations.
  */
 
-import { db, rawClient } from '@/src/lib/db/client';
-import { users } from '@/src/lib/db/schema';
-import { SYSTEM_USER_ID_VALUE } from '@/src/lib/db/system-context';
+import { db, rawClient } from '@/lib/db/client';
+import { users } from '@/lib/db/schema';
+import { SYSTEM_USER_ID_VALUE } from '@/lib/db/system-context';
 
 export async function seedSystemUsers() {
   console.log('🤖 Seeding system users...');

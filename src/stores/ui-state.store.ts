@@ -15,7 +15,7 @@ export type PanelState = 'expanded' | 'collapsed' | 'hidden'
 export type LayoutBreakpoint = 'mobile' | 'tablet' | 'desktop'
 
 // Import ChatContextConfig and canvas types from layout types to avoid duplication
-import type { ChatContextConfig, CanvasType } from '@/src/components/layout/types'
+import type { ChatContextConfig, CanvasType } from '@/components/layout/types'
 
 export interface UIState {
   // Layout state (from LayoutProvider)

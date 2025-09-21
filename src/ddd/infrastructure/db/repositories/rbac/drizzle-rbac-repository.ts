@@ -3,22 +3,22 @@
 
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import type { DbClient } from '@/src/lib/db/client';
+import type { DbClient } from '@/lib/db/client';
 import { 
   permissions, 
   roles, 
   rolePermissions, 
   userRoles 
-} from '@/src/lib/db/schema';
-import { Permission, ACTIONS, RESOURCES } from '@/src/ddd/domain/shared/value-objects/permission';
-import { UserId, OrganizationId } from '@/src/ddd/domain/shared/value-objects';
+} from '@/lib/db/schema';
+import { Permission, ACTIONS, RESOURCES } from '@/ddd/domain/shared/value-objects/permission';
+import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { 
   Role, 
   CreateRoleData, 
   UpdateRoleData,
   SYSTEM_ROLES 
-} from '@/src/ddd/domain/rbac/entities/role';
-import type { IRBACRepository } from '@/src/ddd/domain/rbac/repositories/rbac-repository';
+} from '@/ddd/domain/rbac/entities/role';
+import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
 
 type RoleRow = InferSelectModel<typeof roles>;
 type PermissionRow = InferSelectModel<typeof permissions>;

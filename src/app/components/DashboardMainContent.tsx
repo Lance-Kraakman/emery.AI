@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { useSearchParams } from 'next/navigation'
-import { useEmery } from '@/src/contexts/EmeryStoreProvider'
+import { useEmery } from '@/contexts/EmeryStoreProvider'
 import TableEditorClient from './TableEditorClient'
 
 export default function DashboardMainContent() {

@@ -4,22 +4,22 @@ import React, { useEffect } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useStore } from '@tanstack/react-store'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/components/ui/card"
-import { Button } from "@/src/components/ui/button"
-import { Input } from "@/src/components/ui/input"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Settings, Plus, Search, TableIcon as Table, Database } from "lucide-react"
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/src/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { DynamicDataTable } from "./components/DynamicDataTable"
 import { FieldManagerDialog } from "./components/FieldManagerDialog"
-import { useEmery } from "@/src/contexts/EmeryStoreProvider"
-import { dataStore, dataSelectors } from '@/src/stores/data-management.store'
-import { storeActions, dataActions } from '@/src/stores/actions'
-import type { TableDTO } from "@/src/app/mappers/table-mapper"
-import { getFields } from "@/src/app/actions/fields"
-import { getRowsData, createRow, updateRowData, deleteRowData } from "@/src/app/actions/rows"
-import type { FieldDTO } from "@/src/app/mappers/field-mapper"
-import type { RowDTO } from "@/src/app/mappers/row-mapper"
-import type { FieldValue as DomainFieldValue } from "@/src/ddd/domain/tables/value-objects/field-values"
+import { useEmery } from "@/contexts/EmeryStoreProvider"
+import { dataStore, dataSelectors } from '@/stores/data-management.store'
+import { storeActions, dataActions } from '@/stores/actions'
+import type { TableDTO } from "@/app/mappers/table-mapper"
+import { getFields } from "@/app/actions/fields"
+import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
+import type { FieldDTO } from "@/app/mappers/field-mapper"
+import type { RowDTO } from "@/app/mappers/row-mapper"
+import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 
 export function DataViewsClientSimplified() {
   const searchParams = useSearchParams()

@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import { Button } from '@/src/components/ui/button';
-import { Badge } from '@/src/components/ui/badge';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/src/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Edit3, Upload, ExternalLink, PlusCircle, Trash2 } from 'lucide-react';
-import type { DocumentArrayFieldValue, DocumentFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
-import { DocumentCreationDialog } from '@/src/components/tables/dialogs/DocumentCreationDialog';
-import type { FieldDTO } from '@/src/app/mappers/field-mapper';
+import type { DocumentArrayFieldValue, DocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
+import { DocumentCreationDialog } from '@/components/tables/dialogs/DocumentCreationDialog';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
 
 interface DocumentFieldInputProps {
   value: DocumentArrayFieldValue;

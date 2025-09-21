@@ -2,11 +2,11 @@ import { Client } from 'pg';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql, inArray, or, like } from 'drizzle-orm';
-import * as schema from '@/src/lib/db/schema';
-import { withRLSContext } from '@/src/lib/db/rls-context';
-import { contextAwareDb, type ContextAwareDbClient } from '@/src/lib/db/simple-context-proxy';
-import { db as rawDb, type DbClient } from '@/src/lib/db/client';
-import type { OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import * as schema from '@/lib/db/schema';
+import { withRLSContext } from '@/lib/db/rls-context';
+import { contextAwareDb, type ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
+import { db as rawDb, type DbClient } from '@/lib/db/client';
+import type { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 // AIDEV-NOTE: Integration test client for HTTP API, gRPC, and direct database operations
 // Provides a unified interface for testing across all system boundaries

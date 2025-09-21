@@ -5,7 +5,7 @@
  * Handles conversion from Value Objects to serializable primitives.
  */
 
-import type { Task as TaskEntity, TaskInstructions } from '@/src/ddd/domain/tasks/entities/task';
+import type { Task as TaskEntity, TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 
 // DTO representing a task as returned by server actions to the frontend
 export interface TaskDTO {

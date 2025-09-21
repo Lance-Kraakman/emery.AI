@@ -1,8 +1,8 @@
 // AIDEV-NOTE: Role entity for RBAC system
 // Represents a collection of permissions that can be assigned to users
 
-import { Permission } from '@/src/ddd/domain/shared/value-objects/permission';
-import { OrganizationId } from '@/src/ddd/domain/shared/value-objects';
+import { Permission } from '@/ddd/domain/shared/value-objects/permission';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 export interface Role {
   id: number;

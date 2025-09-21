@@ -1,4 +1,4 @@
-import { Organization, OrganizationWithMembers, OrganizationMember } from '@/src/ddd/domain/organizations/entities/organization';
+import { Organization, OrganizationWithMembers, OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
 
 export interface OrganizationDTO {
   id: number;

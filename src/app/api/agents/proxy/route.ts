@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
-import { db } from '@/src/lib/db/client';
-import { agents } from '@/src/lib/db/schema';
+import { db } from '@/lib/db/client';
+import { agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { pipedreamClient, getExternalUserIdForAgent } from '@/src/lib/pipedream/client';
+import { pipedreamClient, getExternalUserIdForAgent } from '@/lib/pipedream/client';
 
 /**
  * Universal OAuth Proxy - Single endpoint for all agent OAuth calls

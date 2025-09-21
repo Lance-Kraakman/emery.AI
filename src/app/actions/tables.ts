@@ -6,12 +6,12 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { withAuthContext } from '@/src/lib/auth/with-context';
-import { getTableApplicationService } from "@/src/ddd/application/di/container";
-import { OrganizationId, TableId, DatabaseId, UserId } from "@/src/ddd/domain/shared/value-objects";
+import { withAuthContext } from '@/lib/auth/with-context';
+import { getTableApplicationService } from "@/ddd/application/di/container";
+import { OrganizationId, TableId, DatabaseId, UserId } from "@/ddd/domain/shared/value-objects";
 import type { Result, CreateTableData } from "./types";
-import type { CreateTableCommand } from "@/src/ddd/application/services/tables/table-application-service";
-import { TableMapper, type TableDTO } from "@/src/app/mappers/table-mapper";
+import type { CreateTableCommand } from "@/ddd/application/services/tables/table-application-service";
+import { TableMapper, type TableDTO } from "@/app/mappers/table-mapper";
 
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
@@ -68,7 +68,7 @@ export async function createTable(data: CreateTableData & { databaseId: number; 
     
     return {
       success: true,
-      data: result.data,
+      data: result.data ? TableMapper.toDTO(result.data) : null,
     };
   } catch (error) {
     console.error("Error creating table:", error);

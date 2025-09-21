@@ -1,10 +1,10 @@
 'use client';
 
 import React from 'react';
-import { Badge } from '@/src/components/ui/badge';
-import { Button } from '@/src/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { ExternalLink, FileText, File } from 'lucide-react';
-import type { DocumentArrayFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
+import type { DocumentArrayFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 interface DocumentFieldDisplayProps {
   value: DocumentArrayFieldValue;

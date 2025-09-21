@@ -1,8 +1,8 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { getInvitationApplicationService, getUserRepository } from '@/src/ddd/application/di/container';
-import { OrganizationId, UserId, EmailAddress, InvitationToken } from '@/src/ddd/domain/shared/value-objects';
-import { SystemRoleType, SYSTEM_ROLES } from '@/src/ddd/domain/rbac/entities/role';
-import type { SendInvitationCommand, AcceptInvitationCommand, BulkInvitationCommand } from '@/src/ddd/application/services/invitations/invitation-application-service';
+import { getInvitationApplicationService, getUserRepository } from '@/ddd/application/di/container';
+import { OrganizationId, UserId, EmailAddress, InvitationToken } from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
+import type { SendInvitationCommand, AcceptInvitationCommand, BulkInvitationCommand } from '@/ddd/application/services/invitations/invitation-application-service';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';
 import type { TestContext } from '../shared/test-setup';

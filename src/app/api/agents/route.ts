@@ -7,10 +7,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest } from 'next/server';
-import { authenticateRequest } from '@/src/lib/auth/test-auth';
-import { getAgentApplicationService } from '@/src/ddd/application/di/container';
-import type { CreateAgentCommand } from '@/src/ddd/application/services/agents/agent-application-service';
-import { UserId, OrganizationId } from '@/src/ddd/domain/shared/value-objects';
+import { authenticateRequest } from '@/lib/auth/test-auth';
+import { getAgentApplicationService } from '@/ddd/application/di/container';
+import type { CreateAgentCommand } from '@/ddd/application/services/agents/agent-application-service';
+import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 /**
  * Create a new agent using AgentApplicationService

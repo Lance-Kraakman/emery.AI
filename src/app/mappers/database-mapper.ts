@@ -1,4 +1,4 @@
-import { Database } from '@/src/ddd/domain/databases/entities/database';
+import { Database } from '@/ddd/domain/databases/entities/database';
 
 export interface DatabaseDTO {
   id: number;

@@ -5,8 +5,8 @@ import { eq, and, sql } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 
-import { users, userOrganizations, organizations } from '@/src/lib/db/schema';
-import type { IUserRepository } from '@/src/ddd/domain/users/repositories/user-repository';
+import { users, userOrganizations, organizations } from '@/lib/db/schema';
+import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import type { 
   User, 
@@ -14,11 +14,11 @@ import type {
   UpdateUserData, 
   UserOrganization,
   CreateUserOrganizationData
-} from '@/src/ddd/domain/users/entities/user';
-import type { Organization } from '@/src/ddd/domain/organizations/entities/organization';
-import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationName } from '@/src/ddd/domain/shared/value-objects';
-import { SystemRoleType, SYSTEM_ROLES } from '@/src/ddd/domain/rbac/entities/role';
-import type { DbClient } from '@/src/lib/db/client';
+} from '@/ddd/domain/users/entities/user';
+import type { Organization } from '@/ddd/domain/organizations/entities/organization';
+import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationName } from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
+import type { DbClient } from '@/lib/db/client';
 
 type UserRow = InferSelectModel<typeof users>;
 

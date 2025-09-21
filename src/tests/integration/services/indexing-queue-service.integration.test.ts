@@ -6,12 +6,12 @@ import {
   getIndexingQueueService,
   getRagIndexRepository,
   contextManager
-} from '@/src/ddd/application/di/container';
+} from '@/ddd/application/di/container';
 import { initializeTestDI } from '../shared/test-setup';
 import { testClient } from '../shared/integration-helpers';
 import { createTestOrganization, type TestContext } from '../shared/test-setup';
-import { OrganizationId } from '@/src/ddd/domain/shared/value-objects';
-import { RagIndex } from '@/src/ddd/domain/rag/entities';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { RagIndex } from '@/ddd/domain/rag/entities';
 
 describe('Indexing Queue Service Integration Tests', () => {
   let testContext: TestContext;

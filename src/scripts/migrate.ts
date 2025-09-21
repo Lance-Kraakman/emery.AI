@@ -3,7 +3,7 @@
 // Migration wrapper that uses our existing database client parser
 import { execSync } from 'child_process';
 import postgres from 'postgres';
-import { parseConnectionString } from '../src/lib/db/client-parser';
+import { parseConnectionString } from '../lib/db/client-parser';
 
 async function runMigration() {
   console.log('Starting database migration...');

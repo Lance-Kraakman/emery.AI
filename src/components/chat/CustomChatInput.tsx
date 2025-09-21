@@ -13,13 +13,13 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Send } from 'lucide-react';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ToolDropdown } from './ToolDropdown';
-import { resolveReferences } from '@/src/app/actions/references';
-import type { ReferenceDTO } from '@/src/app/mappers/reference-mapper';
-import type { ReferenceToolDTO } from '@/src/app/mappers/reference-tool-mapper';
-import type { ToolDTO } from '@/src/app/mappers/tool-mapper';
+import { resolveReferences } from '@/app/actions/references';
+import type { ReferenceDTO } from '@/app/mappers/reference-mapper';
+import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper';
+import type { ToolDTO } from '@/app/mappers/tool-mapper';
 
 interface CustomChatInputProps {
   onSendMessage: (message: string) => void;

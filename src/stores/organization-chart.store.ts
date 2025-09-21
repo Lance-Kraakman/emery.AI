@@ -12,7 +12,7 @@
 import { Store } from '@tanstack/react-store'
 
 // Import the proper task type from our mapper
-import type { TaskDTO } from '@/src/app/mappers/task-mapper'
+import type { TaskDTO } from '@/app/mappers/task-mapper'
 
 // Use TaskDTO as Task for organization chart store
 export type Task = TaskDTO

@@ -1,6 +1,6 @@
 import React from "react";
-import { auth } from "@/src/lib/auth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/src/components/ui/card";
+import { auth } from "@/lib/auth";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PermissionsManager } from "./components/PermissionsManager";
 
 export default async function PermissionsPage() {

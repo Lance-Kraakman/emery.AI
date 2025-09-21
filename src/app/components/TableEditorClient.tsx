@@ -5,11 +5,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { getFields } from '@/src/app/actions/fields';
-import { getRowsData } from '@/src/app/actions/rows';
-import { getTables } from '@/src/app/actions/tables';
-import type { FieldDTO } from '@/src/app/mappers/field-mapper';
-import type { Row } from '@/src/ddd/domain/tables/value-objects/row';
+import { getFields } from '@/app/actions/fields';
+import { getRowsData } from '@/app/actions/rows';
+import { getTables } from '@/app/actions/tables';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
+import type { Row } from '@/ddd/domain/tables/value-objects/row';
 import FieldManager from './FieldManager';
 import RowManager from './RowManager';
 

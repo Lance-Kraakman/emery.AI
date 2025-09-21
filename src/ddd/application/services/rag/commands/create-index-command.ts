@@ -1,8 +1,8 @@
 // AIDEV-NOTE: Command for creating RAG indexes
 // Updated to use value objects instead of primitives for type safety
 
-import { OrganizationId, type DomainType } from '@/src/ddd/domain/rag/value-objects';
-import { AgentId } from '@/src/ddd/domain/shared/value-objects';
+import { OrganizationId, type DomainType } from '@/ddd/domain/rag/value-objects';
+import { AgentId } from '@/ddd/domain/shared/value-objects';
 
 export interface CreateIndexCommand {
   name: string;

@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { SYSTEM_ROLES, SystemRoleType, isSystemRole } from '@/src/ddd/domain/rbac/entities/role';
+import { SYSTEM_ROLES, SystemRoleType, isSystemRole } from '@/ddd/domain/rbac/entities/role';
 
 describe('RBAC System', () => {
 

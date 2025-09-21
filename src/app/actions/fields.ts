@@ -5,13 +5,13 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
-import { withAuthContext } from '@/src/lib/auth/with-context';
-import { getTableApplicationService } from "@/src/ddd/application/di/container";
+import { withAuthContext } from '@/lib/auth/with-context';
+import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateFieldData } from "./types";
-import type { FieldType } from "@/src/ddd/domain/tables/value-objects/table-field";
-import type { CreateFieldCommand } from "@/src/ddd/application/services/tables/table-application-service";
-import { TableId } from "@/src/ddd/domain/shared/value-objects";
-import { FieldMapper, type FieldDTO } from "@/src/app/mappers/field-mapper";
+import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field";
+import type { CreateFieldCommand } from "@/ddd/application/services/tables/table-application-service";
+import { TableId } from "@/ddd/domain/shared/value-objects";
+import { FieldMapper, type FieldDTO } from "@/app/mappers/field-mapper";
 
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<Result> {
   try {

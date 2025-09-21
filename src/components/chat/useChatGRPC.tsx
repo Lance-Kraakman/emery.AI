@@ -4,12 +4,12 @@ import { generateId } from 'ai'
 import React, { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { ChatHandler, Message } from '@llamaindex/chat-ui'
-import type { DomainType } from '@/src/ddd/domain/rag/value-objects'
-import { useLayout } from '@/src/components/layout/LayoutProvider'
+import type { DomainType } from '@/ddd/domain/rag/value-objects'
+import { useLayout } from '@/components/layout/LayoutProvider'
 import { createChatStreamRequest, type ChatContextOptions } from './types/chat-requests'
-import { loadChatWithFullHistory, getCurrentChatSession } from '@/src/app/actions/chat-history'
-import type { ChatMessageDTO, ChatContextDTO } from '@/src/app/mappers/chat-mapper'
-import type { ToolDTO } from '@/src/app/mappers/tool-mapper'
+import { loadChatWithFullHistory, getCurrentChatSession } from '@/app/actions/chat-history'
+import type { ChatMessageDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
+import type { ToolDTO } from '@/app/mappers/tool-mapper'
 // TODO: Replace with new tool validation logic
 
 interface ChatMessage extends Message {

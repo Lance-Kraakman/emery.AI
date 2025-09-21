@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { BaseModal } from './BaseModal';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
-import { Label } from '@/src/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/src/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
-import { Badge } from '@/src/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   Wrench,
   Server,
@@ -23,13 +23,13 @@ import {
   FileText,
   Bot
 } from 'lucide-react';
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper';
-import { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config';
-import type { ServerConfig } from '@/src/ddd/domain/agents/entities/agent';
-import { updateAgentFromClient } from '@/src/app/actions/agents';
-import { ToolDropdown } from '@/src/components/chat/ToolDropdown';
-import type { ReferenceToolDTO } from '@/src/app/mappers/reference-tool-mapper';
-import type { ToolDTO } from '@/src/app/mappers/tool-mapper';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
+import { updateAgentFromClient } from '@/app/actions/agents';
+import { ToolDropdown } from '@/components/chat/ToolDropdown';
+import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper';
+import type { ToolDTO } from '@/app/mappers/tool-mapper';
 
 interface ToolsServersModalProps {
   isOpen: boolean;

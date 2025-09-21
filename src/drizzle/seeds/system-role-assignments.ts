@@ -7,11 +7,11 @@
  * This gives the scheduler access to perform operations across all organizations.
  */
 
-import { db } from '@/src/lib/db/client';
-import { userRoles, organizations, roles } from '@/src/lib/db/schema';
+import { db } from '@/lib/db/client';
+import { userRoles, organizations, roles } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { SYSTEM_ROLES } from '@/src/ddd/domain/rbac/entities/role';
-import { SYSTEM_USER_ID_VALUE } from '@/src/lib/db/system-context';
+import { SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
+import { SYSTEM_USER_ID_VALUE } from '@/lib/db/system-context';
 
 export async function seedSystemRoleAssignments() {
   console.log('🔐 Assigning system user to System Service role in all organizations...');

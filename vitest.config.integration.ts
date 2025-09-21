@@ -32,9 +32,9 @@ export default defineConfig({
       reportsDirectory: './coverage/integration',
       include: [
         'app/**/*.{js,ts,tsx}',
-        'lib/**/*.{js,ts}',
-        'ddd/**/*.{js,ts}',
-        'scripts/**/*.{js,ts}'
+        'src/lib/**/*.{js,ts}',
+        'src/ddd/**/*.{js,ts}',
+        'src/scripts/**/*.{js,ts}'
       ],
       exclude: [
         '**/*.d.ts',

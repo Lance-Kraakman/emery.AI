@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Suspense } from "react"
-import { Button } from "@/src/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { AlertCircle } from "lucide-react"
 
 function AuthErrorContent() {

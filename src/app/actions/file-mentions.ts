@@ -4,9 +4,9 @@
 // Provides file field data for chat mention system
 
 import { requirePermission } from "./permissions";
-import { getTableApplicationService } from "@/src/ddd/application/di/container";
-import { TableId } from "@/src/ddd/domain/shared/value-objects";
-import { RowMapper, type RowDTO, type FileFieldValue } from "@/src/app/mappers/row-mapper";
+import { getTableApplicationService } from "@/ddd/application/di/container";
+import { TableId } from "@/ddd/domain/shared/value-objects";
+import { RowMapper, type RowDTO, type FileFieldValue } from "@/app/mappers/row-mapper";
 
 export interface FileMention {
   id: string

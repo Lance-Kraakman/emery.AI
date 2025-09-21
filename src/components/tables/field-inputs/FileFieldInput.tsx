@@ -1,10 +1,10 @@
 'use client';
 
 import React from 'react';
-import { Button } from '@/src/components/ui/button';
-import { Badge } from '@/src/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Upload, Trash2, File } from 'lucide-react';
-import type { FileArrayFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
+import type { FileArrayFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 interface FileFieldInputProps {
   value: FileArrayFieldValue;

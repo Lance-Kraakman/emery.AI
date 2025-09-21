@@ -7,7 +7,7 @@
 import type { Task } from '../entities/task';
 import type { TaskId } from '../value-objects/task-id';
 import type { TaskStatus } from '../value-objects/task-status';
-import type { AgentId, OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import type { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 // Data transfer objects for repository operations
 export interface CreateTaskData {

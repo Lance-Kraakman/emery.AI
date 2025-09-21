@@ -8,7 +8,7 @@
  * Combines validation, processing, and mapping concerns into single cohesive value object.
  */
 
-import { FieldId, TableId } from '@/src/ddd/domain/shared/value-objects';
+import { FieldId, TableId } from '@/ddd/domain/shared/value-objects';
 
 export type FieldType = 
   | 'text' 

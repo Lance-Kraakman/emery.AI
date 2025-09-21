@@ -3,19 +3,19 @@
 import React, { useEffect } from 'react';
 import { useStore } from '@tanstack/react-store';
 import { Search, Plus, Users, ChevronLeft, ChevronRight } from 'lucide-react';
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper';
-import type { TeamDTO } from '@/src/app/mappers/team-mapper';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
-import { Card, CardContent } from '@/src/components/ui/card';
-import { EmptyState } from '@/src/components/ui/empty-state';
-import { Loading } from '@/src/components/ui/loading';
-import { Badge } from '@/src/components/ui/badge';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { TeamDTO } from '@/app/mappers/team-mapper';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/loading';
+import { Badge } from '@/components/ui/badge';
 import TeamDetailsView from './TeamDetailsView';
 import TeamFormDialog from './TeamFormDialog';
-import { teamsStore, teamsSelectors } from '@/src/stores/teams.store';
-import { useEmeryOrganization } from '@/src/contexts/EmeryStoreProvider';
-import { storeActions, teamsActions } from '@/src/stores/actions';
+import { teamsStore, teamsSelectors } from '@/stores/teams.store';
+import { useEmeryOrganization } from '@/contexts/EmeryStoreProvider';
+import { storeActions, teamsActions } from '@/stores/actions';
 
 // AIDEV-NOTE: Teams dashboard migrated to TanStack Store for better state management and performance
 

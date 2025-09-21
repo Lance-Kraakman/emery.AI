@@ -9,19 +9,19 @@
  * Now searches both reference data AND hardcoded tools for @ mentions.
  */
 
-import { OrganizationId } from '@/src/ddd/domain/shared/value-objects';
-import { Reference } from '@/src/ddd/domain/chat/value-objects/reference';
-import { ReferenceCategory } from '@/src/ddd/domain/chat/value-objects/reference-types';
-import { ReferenceTool } from '@/src/ddd/domain/tools/entities/reference-tool';
-import { Tool } from '@/src/ddd/domain/tools/entities/tool';
-import { ToolCategory } from '@/src/ddd/domain/tools/value-objects/tool-metadata';
-import type { TableApplicationService } from '@/src/ddd/application/services/tables/table-application-service';
-import type { AgentApplicationService } from '@/src/ddd/application/services/agents/agent-application-service';
-import type { DatabaseApplicationService } from '@/src/ddd/application/services/database/database-application-service';
-import type { RowQueryOptions } from '@/src/ddd/infrastructure/db/types/table-persistence';
-import { RowMapper, type DocumentFieldValue, type FileFieldValue } from '@/src/app/mappers/row-mapper';
-import { isDocumentArray, isFileArray } from '@/src/ddd/domain/tables/value-objects/field-values';
-import type { IToolRegistryService } from '@/src/ddd/domain/tools/services/tool-registry';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { Reference } from '@/ddd/domain/chat/value-objects/reference';
+import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
+import { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool';
+import { Tool } from '@/ddd/domain/tools/entities/tool';
+import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
+import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
+import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
+import type { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
+import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
+import { RowMapper, type DocumentFieldValue, type FileFieldValue } from '@/app/mappers/row-mapper';
+import { isDocumentArray, isFileArray } from '@/ddd/domain/tables/value-objects/field-values';
+import type { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
 
 export interface SearchReferencesOptions {
   query: string;

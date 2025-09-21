@@ -8,7 +8,7 @@
  * concerns from domain logic. These are storage implementation details.
  */
 
-import type { TableField } from '@/src/ddd/domain/tables/value-objects/table-field';
+import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 
 // ========================================
 // Database Row Format (S3 + PostgreSQL)

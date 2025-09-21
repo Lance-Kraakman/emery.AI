@@ -12,7 +12,7 @@
 
 import { DocumentFieldValue, DocumentMetadata, validateDocumentFieldValue } from '../value-objects/field-values';
 import { FileField } from './file-field-entity';
-import { OrganizationId, TableId, FieldId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import { OrganizationId, TableId, FieldId, UserId } from '@/ddd/domain/shared/value-objects';
 import crypto from 'crypto';
 
 export class DocumentField {

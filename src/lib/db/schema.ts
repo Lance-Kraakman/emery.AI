@@ -2,7 +2,7 @@ import { pgTable, text, uuid, serial, bigserial, integer, timestamp, boolean, pr
 import { sql } from "drizzle-orm";
 
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
-import type { OrganizationAnalysisCapabilities } from '@/src/ddd/domain/organizations/entities/organization';
+import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
 
 // AIDEV-NOTE: Authenticated user role for RLS policies
 export const authenticatedRole = pgRole('authenticated', {

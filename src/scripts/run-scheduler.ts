@@ -5,23 +5,23 @@ import {
   getTaskQueueService,
   getSchedulerService,
   taskSchedulingContainer
-} from "@/src/ddd/application/di/scheduling-container";
+} from "@/ddd/application/di/scheduling-container";
 import { 
   getIndexingDomainService, 
   getAgentTaskApplicationService, 
   initializeDI,
   getIndexingQueueService,
   getRagIndexRepository 
-} from "@/src/ddd/application/di/container";
-import { createNotificationClient, rawClient } from "@/src/lib/db/client";
-import { contextAwareDb } from "@/src/lib/db/simple-context-proxy";
-import { withSystemContext } from "@/src/lib/db/system-context";
-import { TaskId } from "@/src/ddd/domain/tasks/value-objects/task-id";
-import { OrganizationId } from "@/src/ddd/domain/shared/value-objects";
-import type { DomainType } from "@/src/ddd/domain/rag/value-objects";
-import type { RagReindexEvent, TaskEvent } from "@/src/ddd/domain/scheduling";
-import { DatabaseEventTriggerConfig, TriggerConfigFromJSON } from "@/src/ddd/domain/scheduling/value-objects/trigger-config";
-import { getAgentRepository } from "@/src/ddd/application/di/container";
+} from "@/ddd/application/di/container";
+import { createNotificationClient, rawClient } from "@/lib/db/client";
+import { contextAwareDb } from "@/lib/db/simple-context-proxy";
+import { withSystemContext } from "@/lib/db/system-context";
+import { TaskId } from "@/ddd/domain/tasks/value-objects/task-id";
+import { OrganizationId } from "@/ddd/domain/shared/value-objects";
+import type { DomainType } from "@/ddd/domain/rag/value-objects";
+import type { RagReindexEvent, TaskEvent } from "@/ddd/domain/scheduling";
+import { DatabaseEventTriggerConfig, TriggerConfigFromJSON } from "@/ddd/domain/scheduling/value-objects/trigger-config";
+import { getAgentRepository } from "@/ddd/application/di/container";
 import postgres from "postgres";
 
 /**
@@ -242,7 +242,7 @@ class EventDrivenScheduler {
    * Create a default RAG index for an organization (extracted from domain service logic)
    */
   private async createDefaultIndex(organizationId: OrganizationId) {
-    const { RagIndex } = await import('@/src/ddd/domain/rag/entities/rag-index');
+    const { RagIndex } = await import('@/ddd/domain/rag/entities/rag-index');
     
     const defaultIndex = RagIndex.create({
       name: 'Organization Knowledge Base',

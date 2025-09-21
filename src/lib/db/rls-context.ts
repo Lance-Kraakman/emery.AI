@@ -15,7 +15,7 @@
 import { sql } from 'drizzle-orm';
 import type { DbClient } from './client';
 import type { PgTransaction } from 'drizzle-orm/pg-core';
-import { OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 type DrizzleTransaction = PgTransaction<any, any, any>;
 

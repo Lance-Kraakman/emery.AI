@@ -11,7 +11,7 @@ export { TeamId } from './team-id';
 export { ChatId } from './chat-id';
 export { ChatMessageId } from './chat-message-id';
 // Task-related value objects moved to tasks domain
-export { TaskId } from '@/src/ddd/domain/tasks/value-objects/task-id';
+export { TaskId } from '@/ddd/domain/tasks/value-objects/task-id';
 export { OrganizationId } from './organization-id';
 export { InvitationId } from './invitation-id';
 export { FieldId } from './field-id';
@@ -26,7 +26,7 @@ export { InvitationToken } from './invitation-token';
 // Domain Status Value Objects
 export { AgentStatus, AGENT_STATUS } from './agent-status';
 // Task status moved to tasks domain
-export { TaskStatus, TASK_STATUS } from '@/src/ddd/domain/tasks/value-objects/task-status';
+export { TaskStatus, TASK_STATUS } from '@/ddd/domain/tasks/value-objects/task-status';
 
 // Naming & Identifier Value Objects
 export { FieldName } from './field-name';

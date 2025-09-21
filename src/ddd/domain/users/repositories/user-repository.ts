@@ -8,14 +8,14 @@ import type {
   UserOrganization,
   CreateUserOrganizationData
 } from '../entities/user';
-import type { Organization } from '@/src/ddd/domain/organizations/entities/organization';
+import type { Organization } from '@/ddd/domain/organizations/entities/organization';
 import { 
   UserId, 
   OrganizationId, 
   EmailAddress, 
   ApiKey
-} from '@/src/ddd/domain/shared/value-objects';
-import { SystemRoleType } from '@/src/ddd/domain/rbac/entities/role';
+} from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType } from '@/ddd/domain/rbac/entities/role';
 
 export interface IUserRepository {
   // Basic CRUD operations

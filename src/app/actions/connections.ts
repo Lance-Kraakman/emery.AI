@@ -4,10 +4,10 @@
 // Provides same interface for frontend components but uses new DDD architecture
 
 import { requireAuth } from "./permissions";
-import { getConnectionApplicationService } from "@/src/ddd/application/di/container";
-import { UserId, OrganizationId } from "@/src/ddd/domain/shared/value-objects";
-import { AppName, ConnectionId } from "@/src/ddd/domain/connections/value-objects";
-import { ConnectionMapper, type ConnectionDTO } from "@/src/app/mappers/connection-mapper";
+import { getConnectionApplicationService } from "@/ddd/application/di/container";
+import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
+import { AppName, ConnectionId } from "@/ddd/domain/connections/value-objects";
+import { ConnectionMapper, type ConnectionDTO } from "@/app/mappers/connection-mapper";
 import type { Result } from "./types";
 
 /**
@@ -547,7 +547,7 @@ export async function getAgentsNeedingConnections(): Promise<Result<AgentConnect
     const session = await requireAuth();
 
     // Import agent services
-    const { getAgentApplicationService } = await import('@/src/ddd/application/di/container');
+    const { getAgentApplicationService } = await import('@/ddd/application/di/container');
     const agentService = getAgentApplicationService();
     const connectionService = getConnectionApplicationService();
 
@@ -689,7 +689,7 @@ export async function validateAgentConnections(
   try {
     const session = await requireAuth();
 
-    const { getAgentApplicationService } = await import('@/src/ddd/application/di/container');
+    const { getAgentApplicationService } = await import('@/ddd/application/di/container');
     const agentService = getAgentApplicationService();
 
     // Get agent details

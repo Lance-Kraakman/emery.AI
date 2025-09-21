@@ -1,5 +1,5 @@
-import { auth } from "@/src/lib/auth";
-import { checkSetupStatus } from "@/src/app/actions/setup";
+import { auth } from "@/lib/auth";
+import { checkSetupStatus } from "@/app/actions/setup";
 import { redirect } from "next/navigation";
 import { SetupForm } from "./SetupForm";
 

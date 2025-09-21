@@ -1,7 +1,7 @@
 'use client'
 
 import { Plus } from 'lucide-react'
-import { Button } from '@/src/components/ui/button'
+import { Button } from '@/components/ui/button'
 
 /**
  * Simplified ChatPlusButton - Temporary stub for the new system

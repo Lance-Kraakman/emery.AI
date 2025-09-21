@@ -1,11 +1,11 @@
 'use server'
 
-import { getOrganizationRepository } from "@/src/ddd/application/di/container";
-import type { CreateOrganizationData } from "@/src/ddd/domain/organizations/entities/organization";
-import { auth } from "@/src/lib/auth";
+import { getOrganizationRepository } from "@/ddd/application/di/container";
+import type { CreateOrganizationData } from "@/ddd/domain/organizations/entities/organization";
+import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import type { Result } from "./types";
-import { OrganizationName, UserId } from "@/src/ddd/domain/shared/value-objects";
+import { OrganizationName, UserId } from "@/ddd/domain/shared/value-objects";
 
 export async function createOrganization(formData: FormData): Promise<Result> {
   const session = await auth();

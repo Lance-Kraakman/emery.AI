@@ -3,15 +3,15 @@
 import React from 'react';
 import { useForm } from '@tanstack/react-form';
 import { useState } from 'react';
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper';
-import type { TeamDTO } from '@/src/app/mappers/team-mapper';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
-import { Textarea } from '@/src/components/ui/textarea';
-import { Checkbox } from '@/src/components/ui/checkbox';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/src/components/ui/dialog';
-import { ScrollArea } from '@/src/components/ui/scroll-area';
-import { createTeamAction, updateTeam } from '@/src/app/actions/teams';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { TeamDTO } from '@/app/mappers/team-mapper';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { createTeamAction, updateTeam } from '@/app/actions/teams';
 
 // AIDEV-NOTE: Restored team form dialog with updated DTOs and modern patterns
 

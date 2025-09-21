@@ -2,8 +2,8 @@
 
 import React, { useEffect, useCallback } from 'react';
 import { X } from 'lucide-react';
-import { Button } from '@/src/components/ui/button';
-import { cn } from '@/src/lib/utils';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 export interface BaseModalProps {
   isOpen: boolean;

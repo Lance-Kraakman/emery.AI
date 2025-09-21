@@ -2,14 +2,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { Plus, Calendar, User, CheckCircle, Clock, XCircle } from 'lucide-react';
-import { Button } from '@/src/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
-import { Badge } from '@/src/components/ui/badge';
-import { Loading } from '@/src/components/ui/loading';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Loading } from '@/components/ui/loading';
 import { BaseModal } from './BaseModal';
 import TaskFormDialog from '../TaskFormDialog';
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper';
-import { getTasks } from '@/src/app/actions/tasks';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import { getTasks } from '@/app/actions/tasks';
 
 interface ActivityDetailsModalProps {
   isOpen: boolean;

@@ -4,8 +4,8 @@
  * These are NOT domain mappings - those belong in app/mappers/
  */
 
-import type { DomainType } from '@/src/ddd/domain/rag/value-objects'
-import { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config'
+import type { DomainType } from '@/ddd/domain/rag/value-objects'
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config'
 
 export interface ChatMessageRequest {
   role: 'user' | 'assistant' | 'system'

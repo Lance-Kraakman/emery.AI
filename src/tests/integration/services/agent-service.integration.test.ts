@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { getAgentApplicationService, getAgentRepository } from '@/src/ddd/application/di/container';
-import { OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
-import type { CreateAgentCommand } from '@/src/ddd/application/services/agents/agent-application-service';
+import { getAgentApplicationService, getAgentRepository } from '@/ddd/application/di/container';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import type { CreateAgentCommand } from '@/ddd/application/services/agents/agent-application-service';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';
 import type { TestContext } from '../shared/test-setup';

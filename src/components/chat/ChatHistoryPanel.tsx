@@ -9,13 +9,13 @@
 
 import React, { useState, useEffect } from 'react'
 import { Plus, Search, ChevronLeft, ChevronRight, History, Loader2 } from 'lucide-react'
-import { Button } from '@/src/components/ui/button'
-import { Input } from '@/src/components/ui/input'
-import { ScrollArea } from '@/src/components/ui/scroll-area'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { ChatSessionItem } from './ChatSessionItem'
-import { getChatSessions, createNewChatSession } from '@/src/app/actions/chat-history'
-import type { ChatSessionDTO, ChatContextDTO } from '@/src/app/mappers/chat-mapper'
-import type { DomainType } from '@/src/ddd/domain/rag/value-objects'
+import { getChatSessions, createNewChatSession } from '@/app/actions/chat-history'
+import type { ChatSessionDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
+import type { DomainType } from '@/ddd/domain/rag/value-objects'
 
 interface ChatHistoryPanelProps {
   isCollapsed: boolean

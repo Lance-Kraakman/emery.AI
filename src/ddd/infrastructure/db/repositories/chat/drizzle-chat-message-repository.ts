@@ -8,13 +8,13 @@
  * for conversation management with RAG source tracking and message ordering
  */
 
-import { chatMessages } from '@/src/lib/db/schema';
+import { chatMessages } from '@/lib/db/schema';
 import { eq, and, desc, asc, ilike, sql, max, count } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import type { IChatMessageRepository } from '@/src/ddd/domain/chat/repositories/chat-message-repository';
-import type { ChatMessage, CreateChatMessageData, UpdateChatMessageData } from '@/src/ddd/domain/chat/entities/chat-message';
-import { ChatId, ChatMessageId } from '@/src/ddd/domain/shared/value-objects';
-import type { DbClient } from '@/src/lib/db/client';
+import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
+import type { ChatMessage, CreateChatMessageData, UpdateChatMessageData } from '@/ddd/domain/chat/entities/chat-message';
+import { ChatId, ChatMessageId } from '@/ddd/domain/shared/value-objects';
+import type { DbClient } from '@/lib/db/client';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 
 type ChatMessageRow = InferSelectModel<typeof chatMessages>;

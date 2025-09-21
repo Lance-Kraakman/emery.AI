@@ -7,8 +7,8 @@ import {
   EmailAddress, 
   InvitationToken, 
   InvitationId
-} from '@/src/ddd/domain/shared/value-objects';
-import { SystemRoleType, SYSTEM_ROLES } from '@/src/ddd/domain/rbac/entities/role';
+} from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 
 export class Invitation {
   private constructor(

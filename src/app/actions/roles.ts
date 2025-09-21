@@ -6,14 +6,14 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { withAuthContext } from '@/src/lib/auth/with-context';
+import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
-import { db } from '@/src/lib/db/client';
-import { roles, permissions, rolePermissions, userRoles } from '@/src/lib/db/schema';
+import { db } from '@/lib/db/client';
+import { roles, permissions, rolePermissions, userRoles } from '@/lib/db/schema';
 import { eq, and, or, isNull, sql } from 'drizzle-orm';
-import { SystemRoleType, SYSTEM_ROLES } from '@/src/ddd/domain/rbac/entities/role';
-import { getRBACRepository } from '@/src/ddd/application/di/container';
-import { Permission } from '@/src/ddd/domain/shared/value-objects/permission';
+import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
+import { getRBACRepository } from '@/ddd/application/di/container';
+import { Permission } from '@/ddd/domain/shared/value-objects/permission';
 
 export interface CustomRole {
   id: number;

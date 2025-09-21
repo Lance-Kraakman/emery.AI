@@ -2,13 +2,13 @@
 
 import { useForm } from '@tanstack/react-form'
 import React, { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/src/components/ui/dialog"
-import { Button } from "@/src/components/ui/button"
-import { Input } from "@/src/components/ui/input"
-import { Label } from "@/src/components/ui/label"
-import { Textarea } from "@/src/components/ui/textarea"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Loader2 } from "lucide-react"
-import { createDatabase } from "@/src/app/actions/databases"
+import { createDatabase } from "@/app/actions/databases"
 
 interface CreateDatabaseDialogProps {
   isOpen: boolean

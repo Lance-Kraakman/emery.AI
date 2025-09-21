@@ -18,22 +18,22 @@ import {
   Code,
   Lightbulb
 } from 'lucide-react'
-import { Button } from '@/src/components/ui/button'
-import { useLayout } from '@/src/components/layout/LayoutProvider'
+import { Button } from '@/components/ui/button'
+import { useLayout } from '@/components/layout/LayoutProvider'
 import { ChatCanvas } from './ChatCanvas'
 import CustomChatInput from './CustomChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
-import { createChatContextForPage } from '@/src/components/layout/types'
-import type { DomainType } from '@/src/ddd/domain/rag/value-objects'
-import { useEmery } from '@/src/contexts/EmeryStoreProvider'
+import { createChatContextForPage } from '@/components/layout/types'
+import type { DomainType } from '@/ddd/domain/rag/value-objects'
+import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { ToolPanel } from './ToolPanel'
-import { resolveReferences } from '@/src/app/actions/references'
-import { ReferenceCategory } from '@/src/ddd/domain/chat/value-objects/reference-types'
+import { resolveReferences } from '@/app/actions/references'
+import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
-import type { DocumentFieldValue, FileFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values'
-import { fetchDocumentArtifactData, fetchFileArtifactData, getFileDownloadUrl } from '@/src/app/actions/artifacts'
-import { mapReferenceToolToDTO, type ReferenceToolDTO } from '@/src/app/mappers/reference-tool-mapper'
-import type { ToolDTO } from '@/src/app/mappers/tool-mapper'
+import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
+import { fetchDocumentArtifactData, fetchFileArtifactData, getFileDownloadUrl } from '@/app/actions/artifacts'
+import { mapReferenceToolToDTO, type ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper'
+import type { ToolDTO } from '@/app/mappers/tool-mapper'
 
 /**
  * EmeryChat - Main chat component with LlamaIndex integration

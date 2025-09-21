@@ -7,9 +7,9 @@
  * Uses proper DTOs for clean boundary separation between domain and UI.
  */
 
-import { auth } from '@/src/lib/auth'
-import { getChatApplicationService } from '@/src/ddd/application/di/container'
-import { OrganizationId, UserId, ChatId } from '@/src/ddd/domain/shared/value-objects'
+import { auth } from '@/lib/auth'
+import { getChatApplicationService } from '@/ddd/application/di/container'
+import { OrganizationId, UserId, ChatId } from '@/ddd/domain/shared/value-objects'
 import { 
   ChatMapper,
   type ChatContextDTO, 
@@ -18,9 +18,9 @@ import {
   type ChatWithMessagesDTO,
   type ChatActionResult,
   type CreateChatSessionDTO
-} from '@/src/app/mappers/chat-mapper'
-import { ChatUtils } from '@/src/ddd/domain/chat/entities/chat'
-import type { DomainType } from '@/src/ddd/domain/rag/value-objects'
+} from '@/app/mappers/chat-mapper'
+import { ChatUtils } from '@/ddd/domain/chat/entities/chat'
+import type { DomainType } from '@/ddd/domain/rag/value-objects'
 
 /**
  * Get chat sessions for a given context (domain + user)

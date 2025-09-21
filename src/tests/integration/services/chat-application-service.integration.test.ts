@@ -1,13 +1,13 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { 
   getChatApplicationService
-} from '@/src/ddd/application/di/container';
+} from '@/ddd/application/di/container';
 import { testClient } from '../shared/integration-helpers';
-import { OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { TestCase } from '../../shared/types';
-import type { CreateChatCommand } from '@/src/ddd/application/services/chat/chat-application-service';
+import type { CreateChatCommand } from '@/ddd/application/services/chat/chat-application-service';
 import type { TestContext } from '../shared/test-setup';
-import { ChatId } from '@/src/ddd/domain/shared/value-objects';
+import { ChatId } from '@/ddd/domain/shared/value-objects';
 import { initializeTestDI } from '../shared/test-setup';
 
 // AIDEV-NOTE: Chat Application Service integration tests focusing on core DDD functionality

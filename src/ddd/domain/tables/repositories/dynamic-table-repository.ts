@@ -4,12 +4,12 @@
 import type { 
   DynamicTable, 
 } from '../entities/dynamic-table';
-import type { RowQueryOptions } from '@/src/ddd/infrastructure/db/types/table-persistence';
+import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
 import type { Row } from '../value-objects/row';
-import { TableId, DatabaseId, OrganizationId } from '@/src/ddd/domain/shared/value-objects';
+import { TableId, DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 // AIDEV-NOTE: CreateDynamicTableData moved to application service
-import type { CreateDynamicTableData } from '@/src/ddd/application/services/tables/table-application-service';
+import type { CreateDynamicTableData } from '@/ddd/application/services/tables/table-application-service';
 
 export interface IDynamicTableRepository {
   // Table CRUD - just the basics

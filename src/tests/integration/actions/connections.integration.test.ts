@@ -6,8 +6,8 @@ import {
   checkRequiredConnections,
   getConnectionSummary,
   canUseApp
-} from '@/src/app/actions/connections';
-import { initializeDI } from '@/src/ddd/application/di/container';
+} from '@/app/actions/connections';
+import { initializeDI } from '@/ddd/application/di/container';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';
 import type { TestContext } from '../shared/test-setup';

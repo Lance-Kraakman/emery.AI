@@ -1,7 +1,7 @@
 import { Client } from 'pg';
-import { initializeDI } from '@/src/ddd/application/di/container';
-import { db, rawClient } from '@/src/lib/db/client';
-import { organizations, users, userOrganizations, agents, tasks } from '@/src/lib/db/schema';
+import { initializeDI } from '@/ddd/application/di/container';
+import { db, rawClient } from '@/lib/db/client';
+import { organizations, users, userOrganizations, agents, tasks } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import type { TestCase } from '../../shared/types';
 

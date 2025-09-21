@@ -2,10 +2,10 @@
 
 import { useForm } from '@tanstack/react-form';
 import { Save, X } from 'lucide-react';
-import type { FieldDTO } from '@/src/app/mappers/field-mapper';
-import { Button } from '@/src/components/ui/button';
-import { Label } from '@/src/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import FieldInput from './FieldInput';
 
 interface RowFormProps {

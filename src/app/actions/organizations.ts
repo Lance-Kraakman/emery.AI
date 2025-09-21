@@ -1,9 +1,9 @@
 "use server";
 
-import { getOrganizationRepository } from "@/src/ddd/application/di/container";
+import { getOrganizationRepository } from "@/ddd/application/di/container";
 // import { getOrganizationRepository } from "@/lib/application/di/container";
 import { revalidatePath } from "next/cache";
-import { OrganizationId } from "@/src/ddd/domain/shared/value-objects";
+import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required

@@ -1,12 +1,12 @@
 'use client';
 
 import React, { ReactNode } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
-import { Badge } from '@/src/components/ui/badge';
-import { Button } from '@/src/components/ui/button';
-import { ScrollArea } from '@/src/components/ui/scroll-area';
-import { Loading } from '@/src/components/ui/loading';
-import { EmptyState } from '@/src/components/ui/empty-state';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Loading } from '@/components/ui/loading';
+import { EmptyState } from '@/components/ui/empty-state';
 import { 
   Activity, 
   Clock, 

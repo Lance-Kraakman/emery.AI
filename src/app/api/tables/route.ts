@@ -7,10 +7,10 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest } from 'next/server';
-import { authenticateRequest } from '@/src/lib/auth/test-auth';
-import { getTableApplicationService } from "@/src/ddd/application/di/container";
-import { DatabaseId, OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
-import type { CreateTableCommand } from '@/src/ddd/application/services/tables/table-application-service';
+import { authenticateRequest } from '@/lib/auth/test-auth';
+import { getTableApplicationService } from "@/ddd/application/di/container";
+import { DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import type { CreateTableCommand } from '@/ddd/application/services/tables/table-application-service';
 
 /**
  * Create a new table using TableApplicationService

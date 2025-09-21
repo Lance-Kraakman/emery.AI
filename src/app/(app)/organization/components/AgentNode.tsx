@@ -4,11 +4,11 @@
 
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
-import { Badge } from '@/src/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Bot, User, Activity, CheckCircle, Clock, XCircle } from 'lucide-react';
-import type { Agent } from '@/src/ddd/domain/agents/entities/agent';
-import type { TaskDTO } from '@/src/app/mappers/task-mapper';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import type { TaskDTO } from '@/app/mappers/task-mapper';
 
 interface AgentNodeData extends Agent {
   type: 'agent';
