@@ -1,9 +1,9 @@
 'use client'
 
 import React, { ReactNode } from 'react'
-import { Button } from '@/src/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { ChevronLeft } from 'lucide-react'
-import { useLayout } from '@/src/components/layout/LayoutProvider'
+import { useLayout } from '@/components/layout/LayoutProvider'
 
 /**
  * BasePage - Base page structure for all page types

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from "react";
-import { createOrganization } from "@/src/app/actions/setup";
+import { createOrganization } from "@/app/actions/setup";
 import { useRouter } from "next/navigation";
 
 export function SetupForm() {

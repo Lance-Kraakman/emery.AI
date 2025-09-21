@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
-import { auth } from '@/src/lib/auth';
-import { db } from '@/src/lib/db/client';
-import { tasks, agents } from '@/src/lib/db/schema';
+import { auth } from '@/lib/auth';
+import { db } from '@/lib/db/client';
+import { tasks, agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 /**

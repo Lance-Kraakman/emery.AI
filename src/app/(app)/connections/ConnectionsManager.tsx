@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { getUserOAuthConnections, getAppConnectionUrl, disconnectOAuthAccount, getUserConnectionsWithDuplicates } from '@/src/app/actions/connections';
-import { Button } from '@/src/components/ui/button';
+import { getUserOAuthConnections, getAppConnectionUrl, disconnectOAuthAccount, getUserConnectionsWithDuplicates } from '@/app/actions/connections';
+import { Button } from '@/components/ui/button';
 import { UnifiedConnectionsGrid } from './components/UnifiedConnectionsGrid';
-import { ConnectionDTO as Connection } from '@/src/app/mappers/connection-mapper';
+import { ConnectionDTO as Connection } from '@/app/mappers/connection-mapper';
 
 const AVAILABLE_APPS = [
   { id: 'slack', name: 'Slack', description: 'Send messages, create channels, and more', icon: '/icons/slack.svg' },

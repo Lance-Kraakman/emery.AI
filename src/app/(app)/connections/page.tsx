@@ -1,5 +1,5 @@
 import React from "react";
-import { auth } from "@/src/lib/auth";
+import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { ConnectionsManager } from "./ConnectionsManager";
 

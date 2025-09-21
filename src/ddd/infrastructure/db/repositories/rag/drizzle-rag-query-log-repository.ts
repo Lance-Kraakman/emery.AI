@@ -3,12 +3,12 @@
 
 import { eq, and, sql, desc } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import type { DbClient } from '@/src/lib/db/client';
-import { ragQueryLogs } from '@/src/lib/db/schema';
+import type { DbClient } from '@/lib/db/client';
+import { ragQueryLogs } from '@/lib/db/schema';
 
 
-import { RagIndexId, SearchQuery } from '@/src/ddd/domain/rag/value-objects';
-import { QueryAnalytics, QueryLogEntry, RagQueryLogRepository } from '@/src/ddd/domain/rag/repositories/rag-query-log-repository';
+import { RagIndexId, SearchQuery } from '@/ddd/domain/rag/value-objects';
+import { QueryAnalytics, QueryLogEntry, RagQueryLogRepository } from '@/ddd/domain/rag/repositories/rag-query-log-repository';
 
 type RagQueryLogRow = InferSelectModel<typeof ragQueryLogs>;
 

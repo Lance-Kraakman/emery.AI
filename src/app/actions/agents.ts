@@ -3,15 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { withAuthContext } from '@/src/lib/auth/with-context';
-import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/src/lib/schemas";
+import { withAuthContext } from '@/lib/auth/with-context';
+import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
 import type { Result, CreateAgentData, CreateAgentClientData } from "./types";
-import { getAgentApplicationService } from "@/src/ddd/application/di/container";
-import type { CreateAgentCommand, UpdateAgentCommand, AgentFilters } from "@/src/ddd/application/services/agents/agent-application-service";
-import type { CapabilityConfig } from "@/src/ddd/domain/agents/entities/agent";
-import { AgentId, OrganizationId, UserId, AgentStatus } from '@/src/ddd/domain/shared/value-objects';
-import { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config';
-import { AgentMapper, type AgentDTO } from "@/src/app/mappers/agent-mapper";
+import { getAgentApplicationService } from "@/ddd/application/di/container";
+import type { CreateAgentCommand, UpdateAgentCommand, AgentFilters } from "@/ddd/application/services/agents/agent-application-service";
+import type { CapabilityConfig } from "@/ddd/domain/agents/entities/agent";
+import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import { AgentMapper, type AgentDTO } from "@/app/mappers/agent-mapper";
 
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
 

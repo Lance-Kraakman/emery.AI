@@ -4,13 +4,13 @@
 // Integrates with chat domain services for proper reference resolution
 
 import { requireAuth } from "./permissions";
-import { OrganizationId } from "@/src/ddd/domain/shared/value-objects";
-import { getToolSearchApplicationService } from "@/src/ddd/application/di/container";
-import { ReferenceMapper, type ReferenceDTO, type ReferencePanelStateDTO } from "@/src/app/mappers/reference-mapper";
-import { ToolMapper, type ToolSearchResultDTO } from "@/src/app/mappers/tool-mapper";
-import { ReferenceToolMapper, type ReferenceToolDTO } from "@/src/app/mappers/reference-tool-mapper";
-import { ReferenceCategory } from "@/src/ddd/domain/chat/value-objects/reference-types";
-import type { ReferenceTool } from "@/src/ddd/domain/tools/entities/reference-tool";
+import { OrganizationId } from "@/ddd/domain/shared/value-objects";
+import { getToolSearchApplicationService } from "@/ddd/application/di/container";
+import { ReferenceMapper, type ReferenceDTO, type ReferencePanelStateDTO } from "@/app/mappers/reference-mapper";
+import { ToolMapper, type ToolSearchResultDTO } from "@/app/mappers/tool-mapper";
+import { ReferenceToolMapper, type ReferenceToolDTO } from "@/app/mappers/reference-tool-mapper";
+import { ReferenceCategory } from "@/ddd/domain/chat/value-objects/reference-types";
+import type { ReferenceTool } from "@/ddd/domain/tools/entities/reference-tool";
 import type { Result } from "./types";
 
 /**

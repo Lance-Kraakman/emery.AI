@@ -2,12 +2,12 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest } from 'next/server';
-import { authenticateRequest } from '@/src/lib/auth/test-auth';
-import { db } from '@/src/lib/db/client';
-import { agents } from '@/src/lib/db/schema';
+import { authenticateRequest } from '@/lib/auth/test-auth';
+import { db } from '@/lib/db/client';
+import { agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { getUserConnections } from '@/src/lib/pipedream/users';
-import { getAvailableActionsForAgent } from '@/src/lib/pipedream/agents';
+import { getUserConnections } from '@/lib/pipedream/users';
+import { getAvailableActionsForAgent } from '@/lib/pipedream/agents';
 
 export interface AgentCapabilities {
   agent_id: number;

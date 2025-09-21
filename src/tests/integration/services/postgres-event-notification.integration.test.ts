@@ -12,15 +12,15 @@
 
 import { describe, test, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import postgres from 'postgres';
-import { taskSchedulingContainer } from '@/src/ddd/application/di/scheduling-container';
-import { getAgentApplicationService, getAgentTaskApplicationService } from '@/src/ddd/application/di/container';
+import { taskSchedulingContainer } from '@/ddd/application/di/scheduling-container';
+import { getAgentApplicationService, getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import { testClient } from '../shared/integration-helpers';
 import type { TestContext } from '../shared/test-setup';
 import { initializeTestDI } from '../shared/test-setup';
-import { contextAwareDb } from '@/src/lib/db/simple-context-proxy';
-import { rawClient } from '@/src/lib/db/client';
-import { contextManager } from '@/src/lib/db/context-manager';
-import { AgentId } from '@/src/ddd/domain/shared/value-objects';
+import { contextAwareDb } from '@/lib/db/simple-context-proxy';
+import { rawClient } from '@/lib/db/client';
+import { contextManager } from '@/lib/db/context-manager';
+import { AgentId } from '@/ddd/domain/shared/value-objects';
 
 describe('PostgreSQL Event Notification Integration Tests', () => {
   let testContext: TestContext;

@@ -1,9 +1,9 @@
 import React from "react"
-import { auth } from "@/src/lib/auth"
+import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { SignInButton } from "./SignInButton"
 import { EmailSignInForm } from "./EmailSignInForm"
-import { Separator } from "@/src/components/ui/separator"
+import { Separator } from "@/components/ui/separator"
 
 export default async function SignInPage() {
   const session = await auth()

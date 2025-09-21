@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
-import { Checkbox } from '@/src/components/ui/checkbox';
-import { Label } from '@/src/components/ui/label';
-import type { BooleanFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import type { BooleanFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 interface BooleanFieldInputProps {
   value: BooleanFieldValue;

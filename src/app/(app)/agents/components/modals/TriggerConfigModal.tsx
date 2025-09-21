@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { BaseModal } from './BaseModal';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
-import { Textarea } from '@/src/components/ui/textarea';
-import { Label } from '@/src/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
-import { Badge } from '@/src/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/src/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Calendar,
   Database,
@@ -21,9 +21,9 @@ import {
   CheckCircle2,
   Info
 } from 'lucide-react';
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper';
-import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/src/ddd/domain/scheduling/value-objects/trigger-config';
-import { updateAgentFromClient } from '@/src/app/actions/agents';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { updateAgentFromClient } from '@/app/actions/agents';
 import { TableSelector } from '../TableSelector';
 import ScheduleManager from '../ScheduleManager';
 import {

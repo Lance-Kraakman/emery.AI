@@ -9,29 +9,29 @@
  * AIDEV-NOTE: Hybrid repository implementation using both Drizzle and S3,
  * focused on data access only. Business logic handled by DynamicTableService.
  */
-import type { DbClient } from '@/src/lib/db/client';
-import { tables, fields } from '@/src/lib/db/schema';
+import type { DbClient } from '@/lib/db/client';
+import { tables, fields } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { s3Client, BUCKET_NAME, ensureBucketExists } from '@/src/lib/s3/client';
+import { s3Client, BUCKET_NAME, ensureBucketExists } from '@/lib/s3/client';
 import { GetObjectCommand, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
-import { TableId, DatabaseId, OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import { TableId, DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { 
   IDynamicTableRepository
-} from '@/src/ddd/domain/tables/repositories/dynamic-table-repository';
-import type { CreateDynamicTableData } from '@/src/ddd/application/services/tables/table-application-service';
+} from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import type { CreateDynamicTableData } from '@/ddd/application/services/tables/table-application-service';
 import {
   DynamicTable
-} from '@/src/ddd/domain/tables/entities/dynamic-table';
-import { Row } from '@/src/ddd/domain/tables/value-objects/row';
-import type { RowQueryOptions } from '@/src/ddd/infrastructure/db/types/table-persistence';
-import { TableField, type FieldType } from '@/src/ddd/domain/tables/value-objects/table-field';
-import { S3TablePath } from '@/src/ddd/domain/tables/value-objects/s3-table-path';
-import { TableMetadata } from '@/src/ddd/domain/tables/value-objects/table-metadata';
-import { ResultHelpers } from '@/src/ddd/domain/shared/result';
-import type { DataStorageService } from '@/src/ddd/domain/tables/services/data-storage-service';
-import type { TableQueryService } from '@/src/ddd/domain/tables/services/table-query-service';
+} from '@/ddd/domain/tables/entities/dynamic-table';
+import { Row } from '@/ddd/domain/tables/value-objects/row';
+import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
+import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
+import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
+import { ResultHelpers } from '@/ddd/domain/shared/result';
+import type { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
+import type { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
 
 type TableRow = InferSelectModel<typeof tables>;
 type FieldRow = InferSelectModel<typeof fields>;

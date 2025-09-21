@@ -1,14 +1,14 @@
 // AIDEV-NOTE: Application service for RAG search operations
 // Orchestrates search domain services and manages performance monitoring
 
-import type { RagIndexRepository } from '@/src/ddd/domain/rag/repositories/rag-index-repository';
-import type { RagDocumentRepository } from '@/src/ddd/domain/rag/repositories/rag-document-repository';
-import type { VectorSearchParams } from '@/src/ddd/domain/rag/repositories/rag-document-repository';
+import type { RagIndexRepository } from '@/ddd/domain/rag/repositories/rag-index-repository';
+import type { RagDocumentRepository } from '@/ddd/domain/rag/repositories/rag-document-repository';
+import type { VectorSearchParams } from '@/ddd/domain/rag/repositories/rag-document-repository';
 import { 
   SearchDomainService, 
   type EmbeddingGenerator,
   type SearchLogger 
-} from '@/src/ddd/domain/rag/services';
+} from '@/ddd/domain/rag/services';
 
 // Define inline until exported from services
 interface SearchFilters {
@@ -20,8 +20,8 @@ interface SearchFilters {
 import { 
   type SearchRagQuery, 
   SearchRagQueryValidator 
-} from '@/src/ddd/application/services/rag/queries';
-import { Result, ResultHelpers } from '@/src/ddd/domain/shared';
+} from '@/ddd/application/services/rag/queries';
+import { Result, ResultHelpers } from '@/ddd/domain/shared';
 
 export interface SearchResult {
   documents: Array<{

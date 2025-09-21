@@ -1,4 +1,7 @@
 #!/usr/bin/env tsx
+
+import { startTestContainers, stopTestContainers } from "@/tests/integration/shared/test-infrastructure";
+
 /**
  * Test Server Wrapper Script
  * 
@@ -9,7 +12,6 @@
  * while reusing the exact same logic as CI tests.
  */
 
-import { startTestContainers, stopTestContainers } from '../src/tests/integration/shared/test-infrastructure';
 
 async function main() {
   const command = process.argv[2];

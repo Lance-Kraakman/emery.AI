@@ -1,10 +1,10 @@
 'use client';
 
 import React from 'react';
-import { Input } from '@/src/components/ui/input';
+import { Input } from '@/components/ui/input';
 import { format, parseISO, isValid } from 'date-fns';
-import { cn } from '@/src/lib/utils';
-import type { DateFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
+import { cn } from '@/lib/utils';
+import type { DateFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 interface DateFieldInputProps {
   value: DateFieldValue;

@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper';
-import { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config';
-import type { ServerConfig } from '@/src/ddd/domain/agents/entities/agent';
-import { createTask } from '@/src/app/actions/tasks';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
+import { createTask } from '@/app/actions/tasks';
 
 interface TaskFormDialogProps {
   isOpen: boolean;

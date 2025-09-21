@@ -2,14 +2,14 @@ import {
   getOrganizationRepository, 
   getUserRepository, 
   initializeDI
-} from '@/src/ddd/application/di/container';
+} from '@/ddd/application/di/container';
 import { 
   OrganizationName, 
   UserId, 
   EmailAddress, 
   OrganizationId 
-} from '@/src/ddd/domain/shared/value-objects';
-import { db, rawClient } from '@/src/lib/db/client';
+} from '@/ddd/domain/shared/value-objects';
+import { db, rawClient } from '@/lib/db/client';
 import { sql } from 'drizzle-orm';
 
 // AIDEV-NOTE: Seed data functions using domain repositories and services

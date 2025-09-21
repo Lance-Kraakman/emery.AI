@@ -6,14 +6,14 @@
 
 import { eq, and, lt, lte, desc, asc, sql, or, isNull } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import type { DbClient } from '@/src/lib/db/client';
-import { tasks } from '@/src/lib/db/schema';
-import type { ITaskRepository, CreateTaskData, UpdateTaskData } from '@/src/ddd/domain/tasks/repositories/task-repository';
-import { Task } from '@/src/ddd/domain/tasks/entities/task';
+import type { DbClient } from '@/lib/db/client';
+import { tasks } from '@/lib/db/schema';
+import type { ITaskRepository, CreateTaskData, UpdateTaskData } from '@/ddd/domain/tasks/repositories/task-repository';
+import { Task } from '@/ddd/domain/tasks/entities/task';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
-import { TaskId } from '@/src/ddd/domain/tasks/value-objects/task-id';
-import { TaskStatus, TASK_STATUS } from '@/src/ddd/domain/tasks/value-objects/task-status';
-import { AgentId, OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import { TaskId } from '@/ddd/domain/tasks/value-objects/task-id';
+import { TaskStatus, TASK_STATUS } from '@/ddd/domain/tasks/value-objects/task-status';
+import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 type TaskRow = InferSelectModel<typeof tasks>;
 

@@ -16,21 +16,21 @@
  */
 
 import { NextRequest } from 'next/server';
-import { auth } from '@/src/lib/auth';
+import { auth } from '@/lib/auth';
 
 // Import Value Objects for proper type safety
-import { OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 // Import existing chat services (DIContainer now auto-initializes)
-import { getChatApplicationService, getDynamicTableRepository, getAgentRepository } from '@/src/ddd/application/di/container';
-import type { CreateChatCommand, SendMessageCommand } from '@/src/ddd/application/services/chat/chat-application-service';
+import { getChatApplicationService, getDynamicTableRepository, getAgentRepository } from '@/ddd/application/di/container';
+import type { CreateChatCommand, SendMessageCommand } from '@/ddd/application/services/chat/chat-application-service';
 
 // Import RAG services
-import { DualContextRagService, type DomainContextOptions } from '@/src/ddd/application/services/chat/dual-context-rag-service';
+import { DualContextRagService, type DomainContextOptions } from '@/ddd/application/services/chat/dual-context-rag-service';
 
 // Import gRPC client
-import { getChatProcessingClient, type StreamingChatResponse, type ChatProcessingOptions } from '@/src/lib/grpc/chat-processing-client';
-import type { HistoryMessage } from '@/src/lib/grpc/generated/agent_worker';
+import { getChatProcessingClient, type StreamingChatResponse, type ChatProcessingOptions } from '@/lib/grpc/chat-processing-client';
+import type { HistoryMessage } from '@/lib/grpc/generated/agent_worker';
 
 export async function POST(req: NextRequest) {
   try {

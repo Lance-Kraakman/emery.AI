@@ -4,8 +4,8 @@
  * Common interfaces and types used across the scheduling domain
  */
 
-import type { AgentId, OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
-import type { TaskInstructions } from '@/src/ddd/domain/tasks/entities/task';
+import type { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 import type { TriggerConfig } from '../value-objects/trigger-config';
 
 /**

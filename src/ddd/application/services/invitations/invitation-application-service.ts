@@ -5,13 +5,13 @@
  * Handles business logic for invitation workflow, validation, and email notifications.
  */
 
-import type { IInvitationRepository } from '@/src/ddd/domain/invitations/repositories/invitation-repository';
-import type { IUserRepository } from '@/src/ddd/domain/users/repositories/user-repository';
-import type { IOrganizationRepository } from '@/src/ddd/domain/organizations/repositories/organization-repository';
-import type { IRBACRepository } from '@/src/ddd/domain/rbac/repositories/rbac-repository';
-import { OrganizationId, UserId, EmailAddress, InvitationId, InvitationToken } from '@/src/ddd/domain/shared/value-objects';
-import { SystemRoleType, SYSTEM_ROLES } from '@/src/ddd/domain/rbac/entities/role';
-import type { Result } from '@/src/ddd/domain/shared/result';
+import type { IInvitationRepository } from '@/ddd/domain/invitations/repositories/invitation-repository';
+import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
+import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
+import { OrganizationId, UserId, EmailAddress, InvitationId, InvitationToken } from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
+import type { Result } from '@/ddd/domain/shared/result';
 import type { 
   Invitation, 
   CreateInvitationData, 
@@ -20,14 +20,14 @@ import type {
   InvitationStats,
   InvitationAcceptanceResult,
   InvitationEmailContext
-} from '@/src/ddd/domain/invitations/entities/invitation';
+} from '@/ddd/domain/invitations/entities/invitation';
 import { 
   isValidInvitationRole,
   createInvitationExpiry,
   isInvitationExpired
-} from '@/src/ddd/domain/invitations/entities/invitation';
-import type { CreateUserData, CreateUserOrganizationData } from '@/src/ddd/domain/users/entities/user';
-import { sendInvitationEmail } from '@/src/lib/email';
+} from '@/ddd/domain/invitations/entities/invitation';
+import type { CreateUserData, CreateUserOrganizationData } from '@/ddd/domain/users/entities/user';
+import { sendInvitationEmail } from '@/lib/email';
 
 export interface SendInvitationCommand {
   organizationId: number;

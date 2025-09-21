@@ -3,12 +3,12 @@
 
 import { eq, and, inArray, sql, desc, ne } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import { ragIndexes } from '@/src/lib/db/schema';
-import { RagIndex } from '@/src/ddd/domain/rag/entities';
-import { RagIndexId, OrganizationId, type DomainType, type IndexStatus } from '@/src/ddd/domain/rag/value-objects';
-import type { RagIndexRepository, CreateRagIndexData, UpdateRagIndexData, RagIndexFilters } from '@/src/ddd/domain/rag/repositories/rag-index-repository';
+import { ragIndexes } from '@/lib/db/schema';
+import { RagIndex } from '@/ddd/domain/rag/entities';
+import { RagIndexId, OrganizationId, type DomainType, type IndexStatus } from '@/ddd/domain/rag/value-objects';
+import type { RagIndexRepository, CreateRagIndexData, UpdateRagIndexData, RagIndexFilters } from '@/ddd/domain/rag/repositories/rag-index-repository';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
-import type { DbClient } from '@/src/lib/db/client';
+import type { DbClient } from '@/lib/db/client';
 
 type RagIndexRow = InferSelectModel<typeof ragIndexes>;
 

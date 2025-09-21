@@ -1,14 +1,14 @@
 // AIDEV-NOTE: Application Layer DTOs - Commands and types for Server Actions
 // Re-exports domain types and defines application-specific command interfaces
-import { FieldType } from '@/src/ddd/domain/tables/value-objects/table-field';
-import type { Result } from '@/src/ddd/domain/shared/result';
-import type { Row } from '@/src/ddd/domain/tables/value-objects/row';
-import { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config';
-import type { ServerConfig, CapabilityConfig } from '@/src/ddd/domain/agents/entities/agent';
-import type { TriggerConfig } from '@/src/ddd/domain/scheduling/value-objects/trigger-config';
+import { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import type { Result } from '@/ddd/domain/shared/result';
+import type { Row } from '@/ddd/domain/tables/value-objects/row';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import type { ServerConfig, CapabilityConfig } from '@/ddd/domain/agents/entities/agent';
+import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 // Export the unified Result interface for use in Server Actions
-export type { Result } from '@/src/ddd/domain/shared/result';
+export type { Result } from '@/ddd/domain/shared/result';
 
 
 
@@ -116,23 +116,23 @@ export type {
   StepConfig,
   CapabilityConfig,
   CreateAgentData
-} from '@/src/ddd/domain/agents/entities/agent';
+} from '@/ddd/domain/agents/entities/agent';
 
 // Import tool types from tools domain
-export type { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config';
+export type { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
-export type { TriggerConfig } from '@/src/ddd/domain/scheduling/value-objects/trigger-config';
+export type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 // Import task types from domain layer
-import type { TaskInstructions } from '@/src/ddd/domain/tasks/entities/task';
+import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 
 export type {
   TaskStatus,
   TaskInstructions
-} from '@/src/ddd/domain/tasks/entities/task';
+} from '@/ddd/domain/tasks/entities/task';
 
 // Import the proper DTO type for frontend use
-export type { TaskDTO as Task } from '@/src/app/mappers/task-mapper';
+export type { TaskDTO as Task } from '@/app/mappers/task-mapper';
 
 // Server Action interface for task creation (uses primitives, converted to Value Objects in Application layer)
 export interface CreateTaskData {

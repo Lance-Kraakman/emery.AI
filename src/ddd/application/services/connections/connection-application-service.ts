@@ -1,11 +1,11 @@
 // AIDEV-NOTE: Connection Application Service - orchestrates connection business operations
 // Application layer - coordinates between domain entities and infrastructure repositories
 
-import { IConnectionRepository } from '@/src/ddd/domain/connections/repositories/connection-repository';
-import { Connection, ConnectionStatus } from '@/src/ddd/domain/connections/entities/connection';
-import { ConnectionId, AppName } from '@/src/ddd/domain/connections/value-objects';
-import { UserId } from '@/src/ddd/domain/shared/value-objects';
-import type { Result } from '@/src/ddd/domain/shared/result';
+import { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
+import { Connection, ConnectionStatus } from '@/ddd/domain/connections/entities/connection';
+import { ConnectionId, AppName } from '@/ddd/domain/connections/value-objects';
+import { UserId } from '@/ddd/domain/shared/value-objects';
+import type { Result } from '@/ddd/domain/shared/result';
 
 export class ConnectionApplicationService {
   constructor(

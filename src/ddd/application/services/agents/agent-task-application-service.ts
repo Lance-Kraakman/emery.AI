@@ -8,12 +8,12 @@
  * treats agent execution as a repository operation with pluggable implementations
  */
 
-import type { IAgentRepository } from '@/src/ddd/domain/agents/repositories/agent-repository';
-import type { ITaskRepository } from '@/src/ddd/domain/tasks/repositories/task-repository';
-import type { IAgentExecutionRepository, AgentExecutionRequest } from '@/src/ddd/domain/agents/repositories/agent-execution-repository';
-import { Task, type TaskInstructions } from '@/src/ddd/domain/tasks/entities/task';
-import { isActiveAgent, getAgentDisplayName } from '@/src/ddd/domain/agents/entities/agent';
-import { AgentId, OrganizationId, TaskId, UserId, TaskStatus, TeamId } from '@/src/ddd/domain/shared/value-objects';
+import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
+import type { IAgentExecutionRepository, AgentExecutionRequest } from '@/ddd/domain/agents/repositories/agent-execution-repository';
+import { Task, type TaskInstructions } from '@/ddd/domain/tasks/entities/task';
+import { isActiveAgent, getAgentDisplayName } from '@/ddd/domain/agents/entities/agent';
+import { AgentId, OrganizationId, TaskId, UserId, TaskStatus, TeamId } from '@/ddd/domain/shared/value-objects';
 
 export interface CreateTaskRequest {
   agentId?: AgentId; // Optional - for direct agent assignment

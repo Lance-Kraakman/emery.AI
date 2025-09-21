@@ -9,12 +9,12 @@
  * domain-specific context while maintaining organizational awareness
  */
 
-import type { SearchRagQuery } from '@/src/ddd/application/services/rag/queries/search-query';
-import { getRagSearchApplicationService, getRagIndexRepository } from '@/src/ddd/application/di/container';
-import type { IDynamicTableRepository } from '@/src/ddd/domain/tables/repositories/dynamic-table-repository';
-import type { IAgentRepository } from '@/src/ddd/domain/agents/repositories/agent-repository';
-import { OrganizationId } from '@/src/ddd/domain/rag/value-objects';
-import { AgentId, TableId } from '@/src/ddd/domain/shared/value-objects';
+import type { SearchRagQuery } from '@/ddd/application/services/rag/queries/search-query';
+import { getRagSearchApplicationService, getRagIndexRepository } from '@/ddd/application/di/container';
+import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import { OrganizationId } from '@/ddd/domain/rag/value-objects';
+import { AgentId, TableId } from '@/ddd/domain/shared/value-objects';
 
 export interface RagDocument {
   id: string;

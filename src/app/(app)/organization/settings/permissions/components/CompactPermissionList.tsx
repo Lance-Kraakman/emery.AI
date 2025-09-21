@@ -1,14 +1,14 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/src/components/ui/card";
-import { Checkbox } from "@/src/components/ui/checkbox";
-import { Badge } from "@/src/components/ui/badge";
-import { Input } from "@/src/components/ui/input";
-import { Button } from "@/src/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/src/components/ui/collapsible";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Search, ChevronDown, ChevronRight, Shield, Eye, Edit, Plus, Play, Users, Database } from "lucide-react";
-import { getAvailablePermissions } from "@/src/app/actions/roles";
+import { getAvailablePermissions } from "@/app/actions/roles";
 import { InlineScopeSelector } from "./InlineScopeSelector";
 import { ResourceSelector } from "./ResourceSelector";
 import type { PermissionAssignment } from "./PermissionSelector";

@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { BaseRepository } from './base-repository';
-import { BaseId } from '@/src/ddd/domain/shared/value-objects/base-id';
-import { OrganizationId } from '@/src/ddd/domain/shared/value-objects';
+import { BaseId } from '@/ddd/domain/shared/value-objects/base-id';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 /**
  * Drizzle-specific base repository implementation

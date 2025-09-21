@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Domain event for data changes requiring RAG reindexing
 // Represents database changes that should trigger RAG index updates
 
-import { BaseDomainEvent, createBaseDomainEvent } from '@/src/ddd/domain/shared/events/base-domain-event';
+import { BaseDomainEvent, createBaseDomainEvent } from '@/ddd/domain/shared/events/base-domain-event';
 import { OrganizationId, type DomainType } from '../value-objects';
 
 export type ChangeType = 'INSERT' | 'UPDATE' | 'DELETE';

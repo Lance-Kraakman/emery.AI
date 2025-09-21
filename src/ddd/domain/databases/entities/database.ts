@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Database domain entity
 // Represents a logical database containing tables and data
 
-import { DatabaseId, OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import { DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export interface DatabaseConfig {
   name: string;

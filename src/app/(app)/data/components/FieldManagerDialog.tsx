@@ -9,20 +9,20 @@ import {
   flexRender,
   type ColumnDef
 } from '@tanstack/react-table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/src/components/ui/dialog"
-import { Button } from "@/src/components/ui/button"
-import { Input } from "@/src/components/ui/input"
-import { Label } from "@/src/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/src/components/ui/select"
-import { Checkbox } from "@/src/components/ui/checkbox"
-import { Table as UITable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/components/ui/table"
-import { Badge } from "@/src/components/ui/badge"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Table as UITable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 import { Plus, Trash2 } from "lucide-react"
-import { createField, deleteField } from "@/src/app/actions/fields"
-import { getTables } from "@/src/app/actions/tables"
-import type { FieldType } from "@/src/ddd/domain/tables/value-objects/table-field"
-import type { TableDTO } from "@/src/app/mappers/table-mapper"
-import type { FieldDTO } from "@/src/app/mappers/field-mapper"
+import { createField, deleteField } from "@/app/actions/fields"
+import { getTables } from "@/app/actions/tables"
+import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field"
+import type { TableDTO } from "@/app/mappers/table-mapper"
+import type { FieldDTO } from "@/app/mappers/field-mapper"
 
 interface FieldManagerDialogProps {
   isOpen: boolean

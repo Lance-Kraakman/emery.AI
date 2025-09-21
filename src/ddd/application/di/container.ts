@@ -1,94 +1,94 @@
-import type { DbClient } from '@/src/lib/db/client';
-import { contextAwareDb, type ContextAwareDbClient } from '@/src/lib/db/simple-context-proxy';
-import { rawClient } from '@/src/lib/db/client';
+import type { DbClient } from '@/lib/db/client';
+import { contextAwareDb, type ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
+import { rawClient } from '@/lib/db/client';
 import type postgres from 'postgres';
 
-import { IOrganizationRepository } from '@/src/ddd/domain/organizations/repositories/organization-repository';
-import { DrizzleOrganizationRepository } from '@/src/ddd/infrastructure/db/repositories/organizations/drizzle-organization-repository';
-import { IUserRepository } from '@/src/ddd/domain/users/repositories/user-repository';
-import { DrizzleUserRepository } from '@/src/ddd/infrastructure/db/repositories/users/drizzle-user-repository';
-import { IDynamicTableRepository } from '@/src/ddd/domain/tables/repositories/dynamic-table-repository';
-import { DynamicTableRepository } from '@/src/ddd/infrastructure/db/repositories/tables/dynamic-table-repository';
-import { DataStorageService } from '@/src/ddd/domain/tables/services/data-storage-service';
-import { TableQueryService } from '@/src/ddd/domain/tables/services/table-query-service';
-import { DuckDBTableQueryService } from '@/src/ddd/infrastructure/data/duckdb-table-query-service';
-import { IFileStorageRepository } from '@/src/ddd/domain/tables/repositories/file-storage-repository';
-import { S3FileStorageRepository } from '@/src/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
+import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import { DrizzleOrganizationRepository } from '@/ddd/infrastructure/db/repositories/organizations/drizzle-organization-repository';
+import { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
+import { DrizzleUserRepository } from '@/ddd/infrastructure/db/repositories/users/drizzle-user-repository';
+import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import { DynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/dynamic-table-repository';
+import { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
+import { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
+import { DuckDBTableQueryService } from '@/ddd/infrastructure/data/duckdb-table-query-service';
+import { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
+import { S3FileStorageRepository } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
 
 // Agent domain imports
-import { IAgentRepository } from '@/src/ddd/domain/agents/repositories/agent-repository';
-import { DrizzleAgentRepository } from '@/src/ddd/infrastructure/db/repositories/agents/drizzle-agent-repository';
-import { ITaskRepository } from '@/src/ddd/domain/tasks/repositories/task-repository';
-import { DrizzleTaskRepository } from '@/src/ddd/infrastructure/db/repositories/tasks/drizzle-task-repository';
-import { IAgentExecutionRepository } from '@/src/ddd/domain/agents/repositories/agent-execution-repository';
-import { GrpcAgentExecutionRepository } from '@/src/ddd/infrastructure/execution/grpc-agent-execution-repository';
-import { AgentTaskApplicationService } from '@/src/ddd/application/services/agents/agent-task-application-service';
-import { AgentApplicationService } from '@/src/ddd/application/services/agents/agent-application-service';
-import { TeamApplicationService } from '@/src/ddd/application/services/teams/team-application-service';
-import { DatabaseApplicationService } from '@/src/ddd/application/services/database/database-application-service';
-import { UserRoleApplicationService } from '@/src/ddd/application/services/user-organizations/user-role-application-service';
-import { InvitationApplicationService } from '@/src/ddd/application/services/invitations/invitation-application-service';
+import { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import { DrizzleAgentRepository } from '@/ddd/infrastructure/db/repositories/agents/drizzle-agent-repository';
+import { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
+import { DrizzleTaskRepository } from '@/ddd/infrastructure/db/repositories/tasks/drizzle-task-repository';
+import { IAgentExecutionRepository } from '@/ddd/domain/agents/repositories/agent-execution-repository';
+import { GrpcAgentExecutionRepository } from '@/ddd/infrastructure/execution/grpc-agent-execution-repository';
+import { AgentTaskApplicationService } from '@/ddd/application/services/agents/agent-task-application-service';
+import { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
+import { TeamApplicationService } from '@/ddd/application/services/teams/team-application-service';
+import { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
+import { UserRoleApplicationService } from '@/ddd/application/services/user-organizations/user-role-application-service';
+import { InvitationApplicationService } from '@/ddd/application/services/invitations/invitation-application-service';
 
 // Team domain imports
-import { ITeamRepository } from '@/src/ddd/domain/teams/repositories/team-repository';
-import { DrizzleTeamRepository } from '@/src/ddd/infrastructure/db/repositories/teams/drizzle-team-repository';
+import { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
+import { DrizzleTeamRepository } from '@/ddd/infrastructure/db/repositories/teams/drizzle-team-repository';
 
 // Invitation domain imports
-import { IInvitationRepository } from '@/src/ddd/domain/invitations/repositories/invitation-repository';
-import { DrizzleInvitationRepository } from '@/src/ddd/infrastructure/db/repositories/invitations/drizzle-invitation-repository';
+import { IInvitationRepository } from '@/ddd/domain/invitations/repositories/invitation-repository';
+import { DrizzleInvitationRepository } from '@/ddd/infrastructure/db/repositories/invitations/drizzle-invitation-repository';
 
 // RBAC domain imports
-import { IRBACRepository } from '@/src/ddd/domain/rbac/repositories/rbac-repository';
-import { DrizzleRBACRepository } from '@/src/ddd/infrastructure/db/repositories/rbac/drizzle-rbac-repository';
+import { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
+import { DrizzleRBACRepository } from '@/ddd/infrastructure/db/repositories/rbac/drizzle-rbac-repository';
 
 // Database domain imports
-import { IDatabaseRepository } from '@/src/ddd/domain/databases/repositories/database-repository';
-import { DrizzleDatabaseRepository } from '@/src/ddd/infrastructure/db/repositories/databases/drizzle-database-repository';
+import { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
+import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/databases/drizzle-database-repository';
 
 // Tools domain imports
-import { IToolRegistryService } from '@/src/ddd/domain/tools/services/tool-registry';
-import { IToolProxyService } from '@/src/ddd/domain/tools/services/tool-proxy';
-import { StaticToolRegistry } from '@/src/ddd/infrastructure/tools/static-tool-registry';
+import { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
+import { IToolProxyService } from '@/ddd/domain/tools/services/tool-proxy';
+import { StaticToolRegistry } from '@/ddd/infrastructure/tools/static-tool-registry';
 
 // Chat domain imports
-import { IReferenceResolverService } from '@/src/ddd/domain/chat/services/reference-resolver';
+import { IReferenceResolverService } from '@/ddd/domain/chat/services/reference-resolver';
 
 // New application services for tables, fields, rows, files, and chat
-import { TableApplicationService } from '@/src/ddd/application/services/tables/table-application-service';
-import { FileUseCases } from '@/src/ddd/application/services/tables/file-application-service';
-import { DocumentApplicationService } from '@/src/ddd/application/services/tables/document-application-service';
-import { ChatApplicationService } from '@/src/ddd/application/services/chat/chat-application-service';
-import { ToolSearchApplicationService } from '@/src/ddd/application/services/tools/tool-search-application-service';
+import { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
+import { FileUseCases } from '@/ddd/application/services/tables/file-application-service';
+import { DocumentApplicationService } from '@/ddd/application/services/tables/document-application-service';
+import { ChatApplicationService } from '@/ddd/application/services/chat/chat-application-service';
+import { ToolSearchApplicationService } from '@/ddd/application/services/tools/tool-search-application-service';
 
 // Domain services
-import { DynamicTableService } from '@/src/ddd/domain/tables/services/dynamic-table-service';
+import { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 
 // Field and table services
-import { ArrowDataStorageService } from '@/src/ddd/infrastructure/arrow/arrow-data-storage-service';
+import { ArrowDataStorageService } from '@/ddd/infrastructure/arrow/arrow-data-storage-service';
 
 // Chat domain imports
-import { IChatRepository } from '@/src/ddd/domain/chat/repositories/chat-repository';
-import { DrizzleChatRepository } from '@/src/ddd/infrastructure/db/repositories/chat/drizzle-chat-repository';
-import { IChatMessageRepository } from '@/src/ddd/domain/chat/repositories/chat-message-repository';
-import { DrizzleChatMessageRepository } from '@/src/ddd/infrastructure/db/repositories/chat/drizzle-chat-message-repository';
+import { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
+import { DrizzleChatRepository } from '@/ddd/infrastructure/db/repositories/chat/drizzle-chat-repository';
+import { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
+import { DrizzleChatMessageRepository } from '@/ddd/infrastructure/db/repositories/chat/drizzle-chat-message-repository';
 
 // RAG domain imports
-import { DrizzleRagIndexRepository } from '@/src/ddd/infrastructure/db/repositories/rag/drizzle-rag-index-repository';
-import { DrizzleRagDocumentRepository } from '@/src/ddd/infrastructure/db/repositories/rag/drizzle-rag-document-repository';
-import { DrizzleRagQueryLogRepository } from '@/src/ddd/infrastructure/db/repositories/rag/drizzle-rag-query-log-repository';
-import { EmbeddingService } from '@/src/ddd/application/services/embedding-service';
-import { SearchAnalyticsService } from '@/src/ddd/application/services/search-analytics-service';
-import type { IIndexingDomainService, ISearchDomainService } from '@/src/ddd/domain/rag/services';
-import { IndexingDomainService, SearchDomainService } from '@/src/ddd/domain/rag/services';
-import { RagSearchApplicationService } from '@/src/ddd/application/services/rag/rag-search-application-service';
-import { IndexingQueueService, indexingQueueService } from '@/src/ddd/application/services/rag/indexing-queue-service';
+import { DrizzleRagIndexRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-index-repository';
+import { DrizzleRagDocumentRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-document-repository';
+import { DrizzleRagQueryLogRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-query-log-repository';
+import { EmbeddingService } from '@/ddd/application/services/embedding-service';
+import { SearchAnalyticsService } from '@/ddd/application/services/search-analytics-service';
+import type { IIndexingDomainService, ISearchDomainService } from '@/ddd/domain/rag/services';
+import { IndexingDomainService, SearchDomainService } from '@/ddd/domain/rag/services';
+import { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
+import { IndexingQueueService, indexingQueueService } from '@/ddd/application/services/rag/indexing-queue-service';
 
 // Connection domain imports
-import { IConnectionRepository } from '@/src/ddd/domain/connections/repositories/connection-repository';
-import { PipedreamConnectionRepository } from '@/src/ddd/infrastructure/external/pipedream/pipedream-connection-repository';
-import { ConnectionApplicationService } from '@/src/ddd/application/services/connections/connection-application-service';
-import { pipedreamClient } from '@/src/lib/pipedream/client';
-import { EmbeddingGeneratorService } from '@/src/ddd/domain/rag/services/embedding-generator-service';
+import { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
+import { PipedreamConnectionRepository } from '@/ddd/infrastructure/external/pipedream/pipedream-connection-repository';
+import { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service';
+import { pipedreamClient } from '@/lib/pipedream/client';
+import { EmbeddingGeneratorService } from '@/ddd/domain/rag/services/embedding-generator-service';
 import { EmbeddingGeneratorDomainService } from '../services/rag/embedding-generator-service/embedding-generator-service';
 
 
@@ -624,7 +624,7 @@ export function initializeDI(db: DbClient | ContextAwareDbClient): void {
 }
 
 // Export context manager for API routes and tests
-export { contextManager } from '@/src/lib/db/context-manager';
+export { contextManager } from '@/lib/db/context-manager';
 
 // Export container instance for direct access if needed
 export const container = DIContainer.getInstance();

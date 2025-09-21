@@ -4,9 +4,9 @@
 // Integrates with domain tool registry service for proper tool management
 
 import { requireAuth } from "./permissions";
-import { getToolRegistryService } from "@/src/ddd/application/di/container";
-import type { ToolCategory } from '@/src/ddd/domain/tools/value-objects/tool-metadata';
-import type { ToolDiscoveryOptions } from '@/src/ddd/domain/tools/services/tool-registry';
+import { getToolRegistryService } from "@/ddd/application/di/container";
+import type { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
+import type { ToolDiscoveryOptions } from '@/ddd/domain/tools/services/tool-registry';
 import type { Result } from "./types";
 
 /**

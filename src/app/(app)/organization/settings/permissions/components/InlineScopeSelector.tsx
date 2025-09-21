@@ -1,8 +1,8 @@
 'use client'
 
 import React from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/src/components/ui/select";
-import { Badge } from "@/src/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Globe, User, Users, Filter } from "lucide-react";
 
 interface ScopeOption {

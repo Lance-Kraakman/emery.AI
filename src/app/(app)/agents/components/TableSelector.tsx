@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/src/components/ui/select';
-import { getTables } from '@/src/app/actions/tables';
-import type { TableDTO } from '@/src/app/mappers/table-mapper';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getTables } from '@/app/actions/tables';
+import type { TableDTO } from '@/app/mappers/table-mapper';
 import { Loader2, Database } from 'lucide-react';
 
 interface TableSelectorProps {

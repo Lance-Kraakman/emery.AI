@@ -7,8 +7,8 @@
  * AIDEV-NOTE: Generic domain service interface for table querying (not tech-specific)
  */
 
-import type { Result } from '@/src/ddd/domain/shared/result';
-import type { TableId } from '@/src/ddd/domain/shared/value-objects';
+import type { Result } from '@/ddd/domain/shared/result';
+import type { TableId } from '@/ddd/domain/shared/value-objects';
 
 export interface QueryResult {
   rows: Array<Record<string, any>>;

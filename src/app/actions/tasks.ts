@@ -3,12 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { withAuthContext } from '@/src/lib/auth/with-context';
+import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result, CreateTaskData } from "./types";
-import { getAgentTaskApplicationService, getAgentApplicationService } from "@/src/ddd/application/di/container";
-import type { CreateTaskRequest } from "@/src/ddd/application/services/agents/agent-task-application-service";
-import { AgentId, OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
-import { taskToDTO, tasksToDTO } from '@/src/app/mappers/task-mapper';
+import { getAgentTaskApplicationService, getAgentApplicationService } from "@/ddd/application/di/container";
+import type { CreateTaskRequest } from "@/ddd/application/services/agents/agent-task-application-service";
+import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { taskToDTO, tasksToDTO } from '@/app/mappers/task-mapper';
 
 export async function createTask(data: CreateTaskData): Promise<Result> {
   return withAuthContext(async () => {

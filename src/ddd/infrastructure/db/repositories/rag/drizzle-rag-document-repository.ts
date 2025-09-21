@@ -3,14 +3,14 @@
 
 import { eq, and, inArray, sql, desc } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import { ragDocuments } from '@/src/lib/db/schema';
+import { ragDocuments } from '@/lib/db/schema';
 import { 
   RagSqlTemplates, 
   SqlExecutor, 
   type RagVectorSearchParams,
   type IndexStatisticsParams,
   type DomainTypeCountsParams
-} from '@/src/ddd/infrastructure/db/sql-templates';
+} from '@/ddd/infrastructure/db/sql-templates';
 
 import { 
   type RagDocumentRepository,
@@ -18,10 +18,10 @@ import {
   type VectorSearchParams as DomainVectorSearchParams,
   type VectorSearchResult,
   type DocumentSyncResult
-} from '@/src/ddd/domain/rag/repositories/rag-document-repository';
-import { RagDocument, type DocumentMetadata } from '@/src/ddd/domain/rag/entities';
-import { DocumentId, RagIndexId, type DomainType } from '@/src/ddd/domain/rag/value-objects';
-import type { DbClient } from '@/src/lib/db/client';
+} from '@/ddd/domain/rag/repositories/rag-document-repository';
+import { RagDocument, type DocumentMetadata } from '@/ddd/domain/rag/entities';
+import { DocumentId, RagIndexId, type DomainType } from '@/ddd/domain/rag/value-objects';
+import type { DbClient } from '@/lib/db/client';
 
 type RagDocumentRow = InferSelectModel<typeof ragDocuments>;
 

@@ -3,7 +3,7 @@
 import React from 'react';
 import { format, isValid, parseISO } from 'date-fns';
 import { Calendar } from 'lucide-react';
-import type { DateFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
+import type { DateFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 interface DateFieldDisplayProps {
   value: DateFieldValue;

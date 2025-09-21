@@ -7,17 +7,17 @@ import { z } from "zod"
 import { revalidatePath } from "next/cache"
 import { requirePermission } from "./permissions"
 import { requireCurrentOrganization } from "./user-organizations"
-import { withAuthContext } from '@/src/lib/auth/with-context';
-import { getDatabaseApplicationService } from "@/src/ddd/application/di/container"
+import { withAuthContext } from '@/lib/auth/with-context';
+import { getDatabaseApplicationService } from "@/ddd/application/di/container"
 import type { Result } from "./types"
 
 import type {
   CreateDatabaseCommand,
   UpdateDatabaseCommand,
   DatabaseFilters
-} from "@/src/ddd/application/services/database/database-application-service"
-import { UserId, DatabaseId, OrganizationId } from "@/src/ddd/domain/shared/value-objects"
-import { DatabaseMapper, type DatabaseDTO } from "@/src/app/mappers/database-mapper"
+} from "@/ddd/application/services/database/database-application-service"
+import { UserId, DatabaseId, OrganizationId } from "@/ddd/domain/shared/value-objects"
+import { DatabaseMapper, type DatabaseDTO } from "@/app/mappers/database-mapper"
 
 const createDatabaseSchema = z.object({
   name: z.string().min(1, "Database name is required"),

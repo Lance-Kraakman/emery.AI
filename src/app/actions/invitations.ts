@@ -6,12 +6,12 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { getInvitationApplicationService, getUserRoleApplicationService } from "@/src/ddd/application/di/container";
-import { withAuthContext } from '@/src/lib/auth/with-context';
+import { getInvitationApplicationService, getUserRoleApplicationService } from "@/ddd/application/di/container";
+import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
-import type { SendInvitationCommand, AcceptInvitationCommand } from "@/src/ddd/application/services/invitations/invitation-application-service";
-import { EmailAddress, OrganizationId, UserId } from "@/src/ddd/domain/shared/value-objects";
-import { SystemRoleType, SYSTEM_ROLES } from "@/src/ddd/domain/rbac/entities/role";
+import type { SendInvitationCommand, AcceptInvitationCommand } from "@/ddd/application/services/invitations/invitation-application-service";
+import { EmailAddress, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
+import { SystemRoleType, SYSTEM_ROLES } from "@/ddd/domain/rbac/entities/role";
 
 export async function inviteUser(formData: FormData): Promise<Result> {
   return withAuthContext(async () => {

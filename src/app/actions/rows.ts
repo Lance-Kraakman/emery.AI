@@ -5,12 +5,12 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
-import { withAuthContext } from '@/src/lib/auth/with-context';
-import { getTableApplicationService } from "@/src/ddd/application/di/container";
+import { withAuthContext } from '@/lib/auth/with-context';
+import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateRowCommand, UpdateRowCommand } from "./types";
-import { Row, RowId } from "@/src/ddd/domain/tables/value-objects/row";
-import { TableId, UserId } from "@/src/ddd/domain/shared/value-objects";
-import { RowMapper, type RowDTO } from "@/src/app/mappers/row-mapper";
+import { Row, RowId } from "@/ddd/domain/tables/value-objects/row";
+import { TableId, UserId } from "@/ddd/domain/shared/value-objects";
+import { RowMapper, type RowDTO } from "@/app/mappers/row-mapper";
 
 
 export async function createRow(data: CreateRowCommand, revalidateUrl?: string): Promise<Result> {

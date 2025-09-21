@@ -530,7 +530,7 @@ export function getRequiredOAuthServices(): string[] {
   ));
 }
 
-import { ConnectionDTO } from '@/src/app/mappers/connection-mapper';
+import { ConnectionDTO } from '@/app/mappers/connection-mapper';
 
 /**
  * Check if a tool is available for a user based on their OAuth connections.

@@ -1,13 +1,13 @@
 'use client'
 
 import React, { useState, useMemo } from 'react';
-import { Input } from '@/src/components/ui/input';
-import { Button } from '@/src/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/src/components/ui/select';
-import { Badge } from '@/src/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { Search, SlidersHorizontal, Grid, List } from 'lucide-react';
 import { AppConnectionCard, type AppInfo } from './AppConnectionCard';
-import { ConnectionDTO as Connection } from '@/src/app/mappers/connection-mapper';
+import { ConnectionDTO as Connection } from '@/app/mappers/connection-mapper';
 
 interface UnifiedConnectionsGridProps {
   apps: AppInfo[];

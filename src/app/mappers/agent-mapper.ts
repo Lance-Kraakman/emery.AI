@@ -1,5 +1,5 @@
-import type { Agent, AgentType, AgentSpecialization, CapabilityConfig } from '@/src/ddd/domain/agents/entities/agent';
-import { TriggerConfig } from '@/src/ddd/domain/scheduling/value-objects/trigger-config';
+import type { Agent, AgentType, AgentSpecialization, CapabilityConfig } from '@/ddd/domain/agents/entities/agent';
+import { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 export interface AgentDTO {
   id: number;

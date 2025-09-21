@@ -2,17 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { BaseModal } from './BaseModal';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
-import { Textarea } from '@/src/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/src/components/ui/select';
-import { Label } from '@/src/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { Loader2, Save, X, User } from 'lucide-react';
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper';
-import { updateAgentFromClient } from '@/src/app/actions/agents';
-import { UserSelect } from '@/src/components/ui/UserSelect';
-import { getOrganizationMembers } from '@/src/app/actions/invitations';
-import { checkPermission } from '@/src/app/actions/permissions';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import { updateAgentFromClient } from '@/app/actions/agents';
+import { UserSelect } from '@/components/ui/UserSelect';
+import { getOrganizationMembers } from '@/app/actions/invitations';
+import { checkPermission } from '@/app/actions/permissions';
 import { useSession } from 'next-auth/react';
 
 interface BasicInfoModalProps {

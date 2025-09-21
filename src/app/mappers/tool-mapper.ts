@@ -9,13 +9,13 @@
  * requires additional reference-specific mapping logic.
  */
 
-import { Tool } from '@/src/ddd/domain/tools/entities/tool'
-import { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config'
-import { ToolMetadata, ToolCategory, ConnectionType } from '@/src/ddd/domain/tools/value-objects/tool-metadata'
+import { Tool } from '@/ddd/domain/tools/entities/tool'
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config'
+import { ToolMetadata, ToolCategory, ConnectionType } from '@/ddd/domain/tools/value-objects/tool-metadata'
 import type { ReferenceToolDTO } from './reference-tool-mapper'
 
 // Export domain types for UI use
-export { ToolCategory, ConnectionType } from '@/src/ddd/domain/tools/value-objects/tool-metadata'
+export { ToolCategory, ConnectionType } from '@/ddd/domain/tools/value-objects/tool-metadata'
 
 /**
  * DTO for Tool entities in API responses

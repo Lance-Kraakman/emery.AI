@@ -8,8 +8,8 @@
  * No BS default values - all data comes from proper tool configurations.
  */
 
-import type { ReferenceTool } from '@/src/ddd/domain/tools/entities/reference-tool'
-import type { ReferenceCategory } from '@/src/ddd/domain/chat/value-objects/reference-types'
+import type { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool'
+import type { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
 
 /**
  * Reference Tool DTO for frontend consumption

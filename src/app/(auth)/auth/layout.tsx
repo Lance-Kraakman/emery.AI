@@ -1,7 +1,7 @@
 import React from 'react'
 import { Metadata } from 'next'
-import { ThemeProvider } from '@/src/components/ThemeProvider'
-import AnimatedBackground from '@/src/app/components/AnimatedBackground'
+import { ThemeProvider } from '@/components/ThemeProvider'
+import AnimatedBackground from '@/app/components/AnimatedBackground'
 
 export const metadata: Metadata = {
   title: 'Sign In - Emery',

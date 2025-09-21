@@ -13,16 +13,16 @@ import {
   type ColumnFiltersState,
   type RowSelectionState
 } from '@tanstack/react-table';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/components/ui/table"
-import { Button } from "@/src/components/ui/button"
-import { Checkbox } from "@/src/components/ui/checkbox"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Trash2 } from "lucide-react"
 import { EditableCell } from "./EditableCell"
-import { RowViewerModal } from "@/src/components/tables/RowViewerModal"
-import { RowEditorModal } from "@/src/components/tables/RowEditorModal"
-import type { FieldDTO } from "@/src/app/mappers/field-mapper"
-import type { RowDTO, TypedFieldValueDTO } from "@/src/app/mappers/row-mapper"
-import type { FieldValue as DomainFieldValue } from "@/src/ddd/domain/tables/value-objects/field-values"
+import { RowViewerModal } from "@/components/tables/RowViewerModal"
+import { RowEditorModal } from "@/components/tables/RowEditorModal"
+import type { FieldDTO } from "@/app/mappers/field-mapper"
+import type { RowDTO, TypedFieldValueDTO } from "@/app/mappers/row-mapper"
+import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 
 interface DynamicDataTableProps {
   fields: FieldDTO[];

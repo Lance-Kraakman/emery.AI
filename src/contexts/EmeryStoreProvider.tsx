@@ -18,8 +18,8 @@ import {
   appStateStore, 
   appStateSelectors,
   type DatabaseWithTables 
-} from '@/src/stores/app-state.store'
-import { storeActions } from '@/src/stores/actions'
+} from '@/stores/app-state.store'
+import { storeActions } from '@/stores/actions'
 
 // Maintain backwards compatibility with existing EmeryData interface
 export interface EmeryData {
@@ -81,7 +81,7 @@ export function EmeryStoreProvider({ children }: { children: ReactNode }) {
       }
       
       // Update app state with user data
-      import('@/src/stores/app-state.store').then(({ appStateActions }) => {
+      import('@/stores/app-state.store').then(({ appStateActions }) => {
         appStateActions.setUser(user)
       })
     }

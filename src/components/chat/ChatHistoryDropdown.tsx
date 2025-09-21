@@ -9,19 +9,19 @@
 
 import React, { useState, useEffect } from 'react'
 import { History, Plus, Search, MoreHorizontal, Archive, MessageSquare, Calendar } from 'lucide-react'
-import { Button } from '@/src/components/ui/button'
-import { Input } from '@/src/components/ui/input'
-import { ScrollArea } from '@/src/components/ui/scroll-area'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/src/components/ui/dropdown-menu'
-import { getChatSessions, createNewChatSession, archiveChatSession } from '@/src/app/actions/chat-history'
-import type { ChatSessionDTO, ChatContextDTO } from '@/src/app/mappers/chat-mapper'
-import type { DomainType } from '@/src/ddd/domain/rag/value-objects'
+} from '@/components/ui/dropdown-menu'
+import { getChatSessions, createNewChatSession, archiveChatSession } from '@/app/actions/chat-history'
+import type { ChatSessionDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
+import type { DomainType } from '@/ddd/domain/rag/value-objects'
 
 interface ChatHistoryDropdownProps {
   currentChatId?: string

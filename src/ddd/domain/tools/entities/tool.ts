@@ -12,8 +12,8 @@
 
 import { ToolConfig } from '../value-objects/tool-config'
 import { ToolMetadata, ToolCategory } from '../value-objects/tool-metadata'
-import { UserId } from '@/src/ddd/domain/shared/value-objects'
-import type { ConnectionApplicationService } from '@/src/ddd/application/services/connections/connection-application-service'
+import { UserId } from '@/ddd/domain/shared/value-objects'
+import type { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service'
 
 /**
  * Connection validation result

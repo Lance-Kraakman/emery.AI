@@ -3,7 +3,7 @@
 import React from 'react'
 import { ChatCanvas as LlamaIndexChatCanvas, useChatCanvas } from '@llamaindex/chat-ui'
 import { X, Code, FileText } from 'lucide-react'
-import { Button } from '@/src/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { DocumentArtifactViewer, FileArtifactViewer } from './artifacts'
 import { 
   isDocumentArtifact, 

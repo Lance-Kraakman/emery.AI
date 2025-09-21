@@ -13,27 +13,27 @@ export interface IndexingResult {
 }
 
 // Import domain entities directly 
-import type { Organization } from '@/src/ddd/domain/organizations/entities/organization';
-import type { DynamicTable } from '@/src/ddd/domain/tables/entities/dynamic-table';
-import type { TableField } from '@/src/ddd/domain/tables/value-objects/table-field';
-import type { FileFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
-import type { Agent } from '@/src/ddd/domain/agents/entities/agent';
-import { getCapabilitiesCount } from '@/src/ddd/domain/agents/entities/agent';
-import type { Database } from '@/src/ddd/domain/databases/entities/database';
-import type { Team } from '@/src/ddd/domain/teams/entities/team';
-import type { Task } from '@/src/ddd/domain/tasks/entities/task';
-import type { StoredFile } from '@/src/ddd/domain/tables/entities/file-storage';
+import type { Organization } from '@/ddd/domain/organizations/entities/organization';
+import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
+import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
+import type { FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import { getCapabilitiesCount } from '@/ddd/domain/agents/entities/agent';
+import type { Database } from '@/ddd/domain/databases/entities/database';
+import type { Team } from '@/ddd/domain/teams/entities/team';
+import type { Task } from '@/ddd/domain/tasks/entities/task';
+import type { StoredFile } from '@/ddd/domain/tables/entities/file-storage';
 
 // Import repository interfaces
-import type { IOrganizationRepository } from '@/src/ddd/domain/organizations/repositories/organization-repository';
-import type { IAgentRepository } from '@/src/ddd/domain/agents/repositories/agent-repository';
-import type { IDatabaseRepository } from '@/src/ddd/domain/databases/repositories/database-repository';
-import type { ITeamRepository } from '@/src/ddd/domain/teams/repositories/team-repository';
-import type { IFileStorageRepository } from '@/src/ddd/domain/tables/repositories/file-storage-repository';
-import type { IDynamicTableRepository } from '@/src/ddd/domain/tables/repositories/dynamic-table-repository';
-import type { ITaskRepository } from '@/src/ddd/domain/tasks/repositories/task-repository';
-import type { RagIndexRepository } from '@/src/ddd/domain/rag/repositories/rag-index-repository';
-import type { RagDocumentRepository } from '@/src/ddd/domain/rag/repositories/rag-document-repository';
+import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
+import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
+import type { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
+import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
+import type { RagIndexRepository } from '@/ddd/domain/rag/repositories/rag-index-repository';
+import type { RagDocumentRepository } from '@/ddd/domain/rag/repositories/rag-document-repository';
 
 // Import content processing interfaces
 import { 

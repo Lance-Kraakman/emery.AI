@@ -6,9 +6,9 @@
  * Based on emery-agents/src/emery_agents/execution/tools/tool_registry.py
  */
 
-import { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config'
-import { ToolMetadata, ToolCategory, ConnectionType } from '@/src/ddd/domain/tools/value-objects/tool-metadata'
-import type { ReferenceTool } from '@/src/ddd/domain/tools/entities/reference-tool'
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config'
+import { ToolMetadata, ToolCategory, ConnectionType } from '@/ddd/domain/tools/value-objects/tool-metadata'
+import type { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool'
 
 /**
  * Tool definition for registry

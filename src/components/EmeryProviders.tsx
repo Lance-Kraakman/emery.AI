@@ -2,17 +2,17 @@
 
 import React, { Suspense } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { EmeryStoreProvider } from '@/src/contexts/EmeryStoreProvider'
-import { CreateDatabaseDialog } from '@/src/app/(app)/data/components/CreateDatabaseDialog'
-import { CreateTableDialog } from '@/src/app/(app)/data/components/CreateTableDialog'
-import { useEmeryStore } from '@/src/contexts/EmeryStoreProvider'
+import { EmeryStoreProvider } from '@/contexts/EmeryStoreProvider'
+import { CreateDatabaseDialog } from '@/app/(app)/data/components/CreateDatabaseDialog'
+import { CreateTableDialog } from '@/app/(app)/data/components/CreateTableDialog'
+import { useEmeryStore } from '@/contexts/EmeryStoreProvider'
 import { useStore } from '@tanstack/react-store'
-import { uiStateStore, uiStateSelectors } from '@/src/stores/ui-state.store'
-import { storeActions } from '@/src/stores/actions'
-import { ThemeProvider } from '@/src/components/ThemeProvider'
-import { LayoutProvider } from '@/src/components/layout/LayoutProvider'
-import { EmeryLayout } from '@/src/components/layout/EmeryLayout'
-import { createChatContextForPage } from '@/src/components/layout/types'
+import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
+import { storeActions } from '@/stores/actions'
+import { ThemeProvider } from '@/components/ThemeProvider'
+import { LayoutProvider } from '@/components/layout/LayoutProvider'
+import { EmeryLayout } from '@/components/layout/EmeryLayout'
+import { createChatContextForPage } from '@/components/layout/types'
 
 // Create a client instance
 const queryClient = new QueryClient({
@@ -57,7 +57,7 @@ interface EmeryProvidersProps {
   children: React.ReactNode
   // Layout configuration props
   enableChat?: boolean
-  chatContext?: import('@/src/components/layout/types').ChatContextConfig
+  chatContext?: import('@/components/layout/types').ChatContextConfig
   // Page context for automatic chat configuration
   pageName?: string
 }

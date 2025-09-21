@@ -10,14 +10,14 @@
 
 import React, { useState, useEffect } from 'react'
 import { FileText, File, Database, Users, Plus, X, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
-import { Button } from '@/src/components/ui/button'
-import { ConnectionStatusDot } from '@/src/components/ui/ConnectionStatusBadge'
-import { ConnectionSummaryCard } from '@/src/components/ui/ConnectionSummaryCard'
-import { QuickConnectionSetup } from '@/src/components/ui/ConnectionSetupFlow'
-import { getToolConnectionStatus, type ToolConnectionStatus } from '@/src/app/actions/connections'
-import type { ReferenceToolDTO } from '@/src/app/mappers/reference-tool-mapper'
-import type { ToolDTO } from '@/src/app/mappers/tool-mapper'
-import { ReferenceCategory } from '@/src/ddd/domain/chat/value-objects/reference-types'
+import { Button } from '@/components/ui/button'
+import { ConnectionStatusDot } from '@/components/ui/ConnectionStatusBadge'
+import { ConnectionSummaryCard } from '@/components/ui/ConnectionSummaryCard'
+import { QuickConnectionSetup } from '@/components/ui/ConnectionSetupFlow'
+import { getToolConnectionStatus, type ToolConnectionStatus } from '@/app/actions/connections'
+import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper'
+import type { ToolDTO } from '@/app/mappers/tool-mapper'
+import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
 import { useSession } from 'next-auth/react'
 
 interface ToolPanelProps {

@@ -1,4 +1,4 @@
-import { Team } from '@/src/ddd/domain/teams/entities/team';
+import { Team } from '@/ddd/domain/teams/entities/team';
 
 export interface TeamDTO {
   id: number;

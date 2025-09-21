@@ -5,11 +5,11 @@
  * agent assignment, and organization scoping.
  */
 
-import type { ITeamRepository } from '@/src/ddd/domain/teams/repositories/team-repository';
-import type { IAgentRepository } from '@/src/ddd/domain/agents/repositories/agent-repository';
-import type { Result } from '@/src/ddd/domain/shared/result';
-import { Team } from '@/src/ddd/domain/teams/entities/team';
-import { TeamId, OrganizationId, AgentId } from '@/src/ddd/domain/shared/value-objects';
+import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
+import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import type { Result } from '@/ddd/domain/shared/result';
+import { Team } from '@/ddd/domain/teams/entities/team';
+import { TeamId, OrganizationId, AgentId } from '@/ddd/domain/shared/value-objects';
 
 export interface CreateTeamCommand {
   name: string;

@@ -4,8 +4,8 @@ import {
   OrganizationId, 
   EmailAddress, 
   ApiKey
-} from '@/src/ddd/domain/shared/value-objects';
-import { SystemRoleType } from '@/src/ddd/domain/rbac/entities/role';
+} from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType } from '@/ddd/domain/rbac/entities/role';
 
 export interface User {
   id: UserId;

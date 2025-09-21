@@ -7,8 +7,8 @@
  * AIDEV-NOTE: Domain value object for table metadata following S3TablePath pattern
  */
 
-import type { Result } from '@/src/ddd/domain/shared/result';
-import { ResultHelpers } from '@/src/ddd/domain/shared/result';
+import type { Result } from '@/ddd/domain/shared/result';
+import { ResultHelpers } from '@/ddd/domain/shared/result';
 
 export class TableMetadata {
   private constructor(

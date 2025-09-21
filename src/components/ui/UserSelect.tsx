@@ -2,21 +2,21 @@
 
 import React, { useState, useEffect } from 'react';
 import { Check, ChevronsUpDown, User } from 'lucide-react';
-import { Button } from '@/src/components/ui/button';
+import { Button } from '@/components/ui/button';
 import {
   Command,
   CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
-} from '@/src/components/ui/command';
+} from '@/components/ui/command';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/src/components/ui/popover';
-import { cn } from '@/src/lib/utils';
-import { Badge } from '@/src/components/ui/badge';
+} from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
 interface User {
   id: string;

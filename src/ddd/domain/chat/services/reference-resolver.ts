@@ -8,7 +8,7 @@
  * Abstracts the complexity of searching across agents, tables, documents, files.
  */
 
-import { OrganizationId } from '@/src/ddd/domain/shared/value-objects'
+import { OrganizationId } from '@/ddd/domain/shared/value-objects'
 import { Reference } from '../value-objects/reference'
 import { ReferenceCategory } from '../value-objects/reference-types'
 import { ReferenceSearchContext } from '../value-objects/chat-context'

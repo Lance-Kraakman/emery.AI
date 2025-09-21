@@ -10,8 +10,8 @@ import type {
   CanvasType
 } from './types'
 import { LAYOUT_BREAKPOINTS } from './types'
-import { uiStateStore, uiStateSelectors } from '@/src/stores/ui-state.store'
-import { storeActions, uiStateActions } from '@/src/stores/actions'
+import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
+import { storeActions, uiStateActions } from '@/stores/actions'
 
 /**
  * Layout Context Provider - TanStack Store-based Layout State Management

@@ -5,8 +5,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Plus, Search } from 'lucide-react';
-import { getRowsData } from '@/src/app/actions/rows';
-import { getTables } from '@/src/app/actions/tables';
+import { getRowsData } from '@/app/actions/rows';
+import { getTables } from '@/app/actions/tables';
 
 interface RelationItem {
   id: string;

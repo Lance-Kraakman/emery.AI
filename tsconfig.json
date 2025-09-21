@@ -18,11 +18,11 @@
         "name": "next"
       }
     ],
-    "baseUrl": ".",
+    "baseUrl": "./src",
     "paths": {
       "@/*": ["./*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "infra/cdk.out", "scripts/fetch-pipedream-tools.ts"]
+  "exclude": ["node_modules", "infra/cdk.out", "src/scripts/fetch-pipedream-tools.ts"]
 }

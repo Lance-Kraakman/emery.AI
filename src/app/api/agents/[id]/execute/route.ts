@@ -2,14 +2,14 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest } from 'next/server';
-import { authenticateRequest } from '@/src/lib/auth/test-auth';
-import { db } from '@/src/lib/db/client';
-import { agents } from '@/src/lib/db/schema';
+import { authenticateRequest } from '@/lib/auth/test-auth';
+import { db } from '@/lib/db/client';
+import { agents } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { getAgentTaskApplicationService } from '@/src/ddd/application/di/container';
-import type { TaskInstructions } from '@/src/ddd/domain/tasks/entities/task';
-import { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config';
-import { AgentId, OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
+import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import crypto from 'crypto';
 
 export interface AgentExecuteRequest {

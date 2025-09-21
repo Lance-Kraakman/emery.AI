@@ -1,6 +1,6 @@
-import { auth } from '@/src/lib/auth';
-import { contextManager } from '@/src/lib/db/context-manager';
-import { OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import { auth } from '@/lib/auth';
+import { contextManager } from '@/lib/db/context-manager';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 const DEBUG_AUTH_CONTEXT = process.env.DEBUG_AUTH_CONTEXT === 'true' || process.env.NODE_ENV === 'development';
 

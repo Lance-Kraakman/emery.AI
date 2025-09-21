@@ -11,12 +11,12 @@ import {
   Zap,
   Globe
 } from 'lucide-react';
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper';
-import { Badge } from '@/src/components/ui/badge';
-import { Button } from '@/src/components/ui/button';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { ConfigurationCard } from './ConfigurationCard';
 import { useModal } from './modals/ModalContext';
-import { getOrganizationMembers } from '@/src/app/actions/invitations';
+import { getOrganizationMembers } from '@/app/actions/invitations';
 import {
   isCalendarTrigger,
   isDatabaseEventTrigger,

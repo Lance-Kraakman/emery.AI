@@ -1,15 +1,15 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/src/components/ui/card";
-import { Checkbox } from "@/src/components/ui/checkbox";
-import { Badge } from "@/src/components/ui/badge";
-import { Input } from "@/src/components/ui/input";
-import { Button } from "@/src/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Search, Users, Play, Database, Loader2 } from "lucide-react";
-import { getAgents } from "@/src/app/actions/agents";
-import { getTeams } from "@/src/app/actions/teams";
-import { getOrganizationMembers } from "@/src/app/actions/user-organizations";
+import { getAgents } from "@/app/actions/agents";
+import { getTeams } from "@/app/actions/teams";
+import { getOrganizationMembers } from "@/app/actions/user-organizations";
 
 interface Resource {
   id: number;

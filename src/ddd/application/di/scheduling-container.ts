@@ -8,20 +8,20 @@
  * specifically on task scheduling and execution coordination.
  */
 
-import type { DbClient } from '@/src/lib/db/client';
-import { contextAwareDb, type ContextAwareDbClient } from '@/src/lib/db/simple-context-proxy';
-import { rawClient } from '@/src/lib/db/client';
+import type { DbClient } from '@/lib/db/client';
+import { contextAwareDb, type ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
+import { rawClient } from '@/lib/db/client';
 import type postgres from 'postgres';
 
 // Task domain imports
-import { ITaskRepository } from '@/src/ddd/domain/tasks/repositories/task-repository';
-import { DrizzleTaskRepository } from '@/src/ddd/infrastructure/db/repositories/tasks/drizzle-task-repository';
-import { ITaskQueueService, TaskQueueService } from '@/src/ddd/domain/tasks/services/task-queue-service';
-import { ISchedulerService, SchedulerService } from '@/src/ddd/domain/tasks/services/scheduler-service';
+import { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
+import { DrizzleTaskRepository } from '@/ddd/infrastructure/db/repositories/tasks/drizzle-task-repository';
+import { ITaskQueueService, TaskQueueService } from '@/ddd/domain/tasks/services/task-queue-service';
+import { ISchedulerService, SchedulerService } from '@/ddd/domain/tasks/services/scheduler-service';
 
 // Agent repository for scheduler service
-import { IAgentRepository } from '@/src/ddd/domain/agents/repositories/agent-repository';
-import { DrizzleAgentRepository } from '@/src/ddd/infrastructure/db/repositories/agents/drizzle-agent-repository';
+import { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import { DrizzleAgentRepository } from '@/ddd/infrastructure/db/repositories/agents/drizzle-agent-repository';
 
 
 /**

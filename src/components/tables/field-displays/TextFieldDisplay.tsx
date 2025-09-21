@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import type { TextFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
+import type { TextFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 interface TextFieldDisplayProps {
   value: TextFieldValue;

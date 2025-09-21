@@ -1,9 +1,9 @@
 // AIDEV-NOTE: Pipedream Connection Mapper - converts Pipedream API responses to domain entities
 // Infrastructure layer component - knows about Pipedream API structure and maps to clean domain objects
 
-import { Connection, ConnectionStatus } from '@/src/ddd/domain/connections/entities/connection';
-import { ConnectionId, AppName } from '@/src/ddd/domain/connections/value-objects';
-import { UserId } from '@/src/ddd/domain/shared/value-objects';
+import { Connection, ConnectionStatus } from '@/ddd/domain/connections/entities/connection';
+import { ConnectionId, AppName } from '@/ddd/domain/connections/value-objects';
+import { UserId } from '@/ddd/domain/shared/value-objects';
 
 export class PipedreamConnectionMapper {
   /**

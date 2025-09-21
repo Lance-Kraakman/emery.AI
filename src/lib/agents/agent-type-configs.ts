@@ -1,7 +1,7 @@
 // Agent Type Configurations for Organizational Analysis
 // Defines default tools, capabilities, and specializations for each agent type
 
-import type { AgentType, AgentSpecialization } from '@/src/ddd/domain/agents/entities/agent';
+import type { AgentType, AgentSpecialization } from '@/ddd/domain/agents/entities/agent';
 
 export interface AgentTypeConfig {
   defaultTools: string[];

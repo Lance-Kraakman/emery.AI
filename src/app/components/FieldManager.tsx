@@ -4,15 +4,15 @@
 
 import React, { useState, useTransition } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import { createFieldAction, deleteFieldAction } from '@/src/app/actions/fields';
-import type { FieldDTO } from '@/src/app/mappers/field-mapper';
-import { Button } from '@/src/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
-import { Input } from '@/src/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/src/components/ui/select';
-import { Badge } from '@/src/components/ui/badge';
-import { FormField } from '@/src/components/ui/form-field';
-import { EmptyState } from '@/src/components/ui/empty-state';
+import { createFieldAction, deleteFieldAction } from '@/app/actions/fields';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { FormField } from '@/components/ui/form-field';
+import { EmptyState } from '@/components/ui/empty-state';
 
 interface FieldManagerProps {
   tableId: number;

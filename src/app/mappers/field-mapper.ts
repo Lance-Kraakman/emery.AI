@@ -1,4 +1,4 @@
-import type { TableField, FieldType } from '@/src/ddd/domain/tables/value-objects/table-field';
+import type { TableField, FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 
 export interface FieldDTO {
   id: number;

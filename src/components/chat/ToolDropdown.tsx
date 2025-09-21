@@ -13,12 +13,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { searchAllTools } from '@/src/app/actions/references';
-import type { ReferenceToolDTO } from '@/src/app/mappers/reference-tool-mapper';
-import type { ToolDTO, ToolSearchResultDTO } from '@/src/app/mappers/tool-mapper';
-import { ReferenceCategory, REFERENCE_CATEGORY_INFO } from '@/src/ddd/domain/chat/value-objects/reference-types';
+import { searchAllTools } from '@/app/actions/references';
+import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper';
+import type { ToolDTO, ToolSearchResultDTO } from '@/app/mappers/tool-mapper';
+import { ReferenceCategory, REFERENCE_CATEGORY_INFO } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ChevronDown, Search, Loader2, FileText, Bot, Database, Table, File } from 'lucide-react';
-import { cn } from '@/src/lib/utils';
+import { cn } from '@/lib/utils';
 
 interface ToolDropdownProps {
   query: string;

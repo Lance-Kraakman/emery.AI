@@ -2,16 +2,16 @@
 
 import * as React from 'react'
 import { useSession } from 'next-auth/react'
-import { switchCurrentOrganization } from '@/src/app/actions/user-organizations'
-import { createOrganization } from '@/src/app/actions/setup'
-import { Button } from '@/src/components/ui/button'
+import { switchCurrentOrganization } from '@/app/actions/user-organizations'
+import { createOrganization } from '@/app/actions/setup'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/src/components/ui/dialog'
+} from '@/components/ui/dialog'
 import { Bot } from 'lucide-react'
 
 export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean }) {

@@ -9,15 +9,15 @@
 
 import { DuckDBConnection } from '@duckdb/node-api';
 
-import { BUCKET_NAME } from '@/src/lib/s3/client';
+import { BUCKET_NAME } from '@/lib/s3/client';
 
-import type { Result } from '@/src/ddd/domain/shared/result';
+import type { Result } from '@/ddd/domain/shared/result';
 import type { 
   TableQueryService, 
   QueryResult
-} from '@/src/ddd/domain/tables/services/table-query-service';
-import { TableId } from '@/src/ddd/domain/shared/value-objects';
-import { S3TablePath } from '@/src/ddd/domain/tables/value-objects/s3-table-path';
+} from '@/ddd/domain/tables/services/table-query-service';
+import { TableId } from '@/ddd/domain/shared/value-objects';
+import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import { DuckDB, eq, gt, gte, lt, lte, like, type QueryFilter } from './duckdb-sql-builder';
 
 export class DuckDBTableQueryService implements TableQueryService {
@@ -161,8 +161,8 @@ export class DuckDBTableQueryService implements TableQueryService {
   private async getTableS3Path(tableId: number): Promise<S3TablePath | null> {
     try {
       // Import db client dynamically to avoid circular dependencies
-      const { db } = require('@/src/lib/db/client');
-      const { tables } = require('@/src/lib/db/schema');
+      const { db } = require('@/lib/db/client');
+      const { tables } = require('@/lib/db/schema');
       const { eq } = require('drizzle-orm');
 
       // Query table metadata from PostgreSQL

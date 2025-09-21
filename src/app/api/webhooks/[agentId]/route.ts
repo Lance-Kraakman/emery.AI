@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { AgentId } from '@/src/ddd/domain/shared/value-objects';
-import { getAgentRepository, getAgentTaskApplicationService } from '@/src/ddd/application/di/container';
-import { withSystemContext } from '@/src/lib/db/system-context';
-import { WebhookTriggerConfig, TriggerConfigFromJSON } from '@/src/ddd/domain/scheduling/value-objects/trigger-config';
+import { AgentId } from '@/ddd/domain/shared/value-objects';
+import { getAgentRepository, getAgentTaskApplicationService } from '@/ddd/application/di/container';
+import { withSystemContext } from '@/lib/db/system-context';
+import { WebhookTriggerConfig, TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 // AIDEV-NOTE: Webhook API endpoint for triggering agent tasks via external HTTP calls
 // Provides multi-layer security: API key + HMAC signature + origin validation

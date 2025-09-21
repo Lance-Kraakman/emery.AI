@@ -17,13 +17,13 @@ import { orgChartActions, orgChartStore } from './organization-chart.store'
 import { formsActions, formsStore } from './forms.store'
 
 // Import server actions
-import { getCurrentOrganization } from '@/src/app/actions/user-organizations'
-import { getDatabases } from '@/src/app/actions/databases'
-import { getTables } from '@/src/app/actions/tables'
-import { getAgents } from '@/src/app/actions/agents'
-import { getTeams } from '@/src/app/actions/teams'
-import { getFields } from '@/src/app/actions/fields'
-import { getRowsData } from '@/src/app/actions/rows'
+import { getCurrentOrganization } from '@/app/actions/user-organizations'
+import { getDatabases } from '@/app/actions/databases'
+import { getTables } from '@/app/actions/tables'
+import { getAgents } from '@/app/actions/agents'
+import { getTeams } from '@/app/actions/teams'
+import { getFields } from '@/app/actions/fields'
+import { getRowsData } from '@/app/actions/rows'
 
 /**
  * Cross-store action creators for complex operations

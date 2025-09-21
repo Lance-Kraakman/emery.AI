@@ -1,5 +1,5 @@
 import * as React from "react"
-import { cn } from "@/src/lib/utils"
+import { cn } from "@/lib/utils"
 
 const TabsContext = React.createContext<{
   value: string

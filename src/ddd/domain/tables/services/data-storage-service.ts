@@ -8,12 +8,12 @@
  * Fields are accessed via table.fields - no separate fields parameter needed
  */
 
-import type { Result } from '@/src/ddd/domain/shared/result';
+import type { Result } from '@/ddd/domain/shared/result';
 import type { DynamicTable } from '../entities/dynamic-table';
 import type { Row } from '../value-objects/row';
-import type { TableId } from '@/src/ddd/domain/shared/value-objects/table-id';
-import type { DatabaseId } from '@/src/ddd/domain/shared/value-objects/database-id';
-import type { OrganizationId } from '@/src/ddd/domain/shared/value-objects/organization-id';
+import type { TableId } from '@/ddd/domain/shared/value-objects/table-id';
+import type { DatabaseId } from '@/ddd/domain/shared/value-objects/database-id';
+import type { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
 
 export interface StorageMetadata {
   format: string;

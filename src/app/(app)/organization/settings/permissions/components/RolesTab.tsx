@@ -9,13 +9,13 @@ import {
   flexRender,
   type ColumnDef
 } from '@tanstack/react-table';
-import { Button } from "@/src/components/ui/button";
-import { Input } from "@/src/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/src/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/components/ui/table";
-import { Badge } from "@/src/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { Plus, Settings, Trash2, Users, Shield, Crown, Loader2 } from "lucide-react";
-import { getOrganizationRoles, deleteCustomRole, type CustomRole } from "@/src/app/actions/roles";
+import { getOrganizationRoles, deleteCustomRole, type CustomRole } from "@/app/actions/roles";
 import { RoleWizard } from "./RoleWizard";
 import { EditRoleDialog } from "./EditRoleDialog";
 import { 
@@ -27,7 +27,7 @@ import {
   AlertDialogFooter, 
   AlertDialogHeader, 
   AlertDialogTitle 
-} from "@/src/components/ui/alert-dialog";
+} from "@/components/ui/alert-dialog";
 
 export function RolesTab() {
   const [roles, setRoles] = useState<CustomRole[]>([]);

@@ -10,9 +10,9 @@
  */
 
 import { Store } from '@tanstack/react-store'
-import type { TableDTO } from '@/src/app/mappers/table-mapper'
-import type { FieldDTO } from '@/src/app/mappers/field-mapper'
-import type { RowDTO, FieldValueDTO } from '@/src/app/mappers/row-mapper'
+import type { TableDTO } from '@/app/mappers/table-mapper'
+import type { FieldDTO } from '@/app/mappers/field-mapper'
+import type { RowDTO, FieldValueDTO } from '@/app/mappers/row-mapper'
 
 export interface DataState {
   // Current selection

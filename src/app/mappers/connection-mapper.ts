@@ -1,4 +1,4 @@
-import type { Connection } from '@/src/ddd/domain/connections/entities/connection';
+import type { Connection } from '@/ddd/domain/connections/entities/connection';
 
 export interface ConnectionDTO {
   id: string;

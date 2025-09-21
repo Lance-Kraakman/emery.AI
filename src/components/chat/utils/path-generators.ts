@@ -8,7 +8,7 @@
  * No complex caching - just ID lookups for human-readable context.
  */
 
-import { useEmery } from '@/src/contexts/EmeryStoreProvider'
+import { useEmery } from '@/contexts/EmeryStoreProvider'
 
 // Path generation results
 export interface PathInfo {

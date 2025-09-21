@@ -9,14 +9,14 @@ import {
   getRagIndexRepository,
   getEmbeddingService,
   contextManager
-} from '@/src/ddd/application/di/container';
+} from '@/ddd/application/di/container';
 import { initializeTestDI } from '../shared/test-setup';
-import type { EmbeddingGenerator } from '@/src/ddd/domain/rag/services';
+import type { EmbeddingGenerator } from '@/ddd/domain/rag/services';
 import { testClient } from '../shared/integration-helpers';
 import { createTestOrganization, type TestContext } from '../shared/test-setup';
-import type { SearchRagQuery } from '@/src/ddd/application/services/rag/queries';
-import { RagIndexId } from '@/src/ddd/domain/rag/value-objects';
-import { RagIndex, RagDocument } from '@/src/ddd/domain/rag/entities';
+import type { SearchRagQuery } from '@/ddd/application/services/rag/queries';
+import { RagIndexId } from '@/ddd/domain/rag/value-objects';
+import { RagIndex, RagDocument } from '@/ddd/domain/rag/entities';
 
 // Mock the embedding service for controlled testing
 vi.mock('@/ddd/application/services/embedding-service', () => {

@@ -14,10 +14,10 @@ import {
   ReactFlowProvider 
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import '@/src/styles/reactflow-custom.css';
+import '@/styles/reactflow-custom.css';
 
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { 
   Search, 
@@ -26,16 +26,16 @@ import {
   Activity,
   RotateCcw,
 } from 'lucide-react';
-import { getTasks } from '@/src/app/actions/tasks';
-import type { TaskDTO } from '@/src/app/mappers/task-mapper';
+import { getTasks } from '@/app/actions/tasks';
+import type { TaskDTO } from '@/app/mappers/task-mapper';
 import TeamNode from './TeamNode';
 import AgentNode from './AgentNode';
 import ActivityPanel from './ActivityPanel';
-import { useEmeryStore } from '@/src/contexts/EmeryStoreProvider';
-import { Loading } from '@/src/components/ui/loading';
-import { useOrganizationViewConfig } from '@/src/hooks/useOrganizationViewConfig';
-import { orgChartStore, orgChartSelectors } from '@/src/stores/organization-chart.store';
-import { storeActions, orgChartActions } from '@/src/stores/actions';
+import { useEmeryStore } from '@/contexts/EmeryStoreProvider';
+import { Loading } from '@/components/ui/loading';
+import { useOrganizationViewConfig } from '@/hooks/useOrganizationViewConfig';
+import { orgChartStore, orgChartSelectors } from '@/stores/organization-chart.store';
+import { storeActions, orgChartActions } from '@/stores/actions';
 
 // Define custom node types
 const nodeTypes = {

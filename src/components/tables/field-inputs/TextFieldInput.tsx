@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
-import { Input } from '@/src/components/ui/input';
-import { Textarea } from '@/src/components/ui/textarea';
-import type { TextFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import type { TextFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 interface TextFieldInputProps {
   value: TextFieldValue;

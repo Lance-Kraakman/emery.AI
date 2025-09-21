@@ -9,17 +9,17 @@ import {
   flexRender,
   type ColumnDef
 } from '@tanstack/react-table';
-import { Button } from "@/src/components/ui/button";
-import { Input } from "@/src/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/src/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/src/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/components/ui/table";
-import { Badge } from "@/src/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { UserPlus, Crown, Shield, User, Loader2, Eye, Users as TeamIcon } from "lucide-react";
-import { getOrganizationMembers, getPendingInvitations, inviteUser } from "@/src/app/actions/invitations";
-import { assignUserRole } from "@/src/app/actions/permissions";
-import type { OrganizationMember } from "@/src/ddd/domain/organizations/entities/organization";
-import { SYSTEM_ROLES, type SystemRoleType } from "@/src/ddd/domain/rbac/entities/role";
+import { getOrganizationMembers, getPendingInvitations, inviteUser } from "@/app/actions/invitations";
+import { assignUserRole } from "@/app/actions/permissions";
+import type { OrganizationMember } from "@/ddd/domain/organizations/entities/organization";
+import { SYSTEM_ROLES, type SystemRoleType } from "@/ddd/domain/rbac/entities/role";
 
 
 // DTO for UI layer - converts domain Invitation to UI-friendly format

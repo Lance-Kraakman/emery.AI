@@ -2,14 +2,14 @@
 // Creates and manages specialized agents for organizational analysis with pure agent autonomy
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/src/app/actions/permissions';
-import { getAgentApplicationService } from '@/src/ddd/application/di/container';
-import { getAgentTypeConfig, getDefaultToolsForType, getDefaultSpecializationForType } from '@/src/lib/agents/agent-type-configs';
-import type { AgentType } from '@/src/ddd/domain/agents/entities/agent';
-import type { TriggerConfig } from '@/src/ddd/domain/scheduling/value-objects/trigger-config';
-import { TriggerConfigs } from '@/src/ddd/domain/scheduling/value-objects/trigger-config';
-import { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config';
-import { OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import { requirePermission } from '@/app/actions/permissions';
+import { getAgentApplicationService } from '@/ddd/application/di/container';
+import { getAgentTypeConfig, getDefaultToolsForType, getDefaultSpecializationForType } from '@/lib/agents/agent-type-configs';
+import type { AgentType } from '@/ddd/domain/agents/entities/agent';
+import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { TriggerConfigs } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export const dynamic = 'force-dynamic';
 

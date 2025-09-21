@@ -7,7 +7,7 @@
  */
 
 import { contextManager } from './context-manager';
-import { OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 // System user created in drizzle/seeds/system-users.ts
 export const SYSTEM_USER_ID_VALUE = "bdd640fb-0667-4ad1-9c80-317fa3b1799d";

@@ -8,12 +8,12 @@
  * AIDEV-NOTE: Application service for file management - coordinates between
  * FileFieldService, storage repositories, and business rules for files connected to dynamic tables
  */
-import type { IFileStorageRepository } from '@/src/ddd/domain/tables/repositories/file-storage-repository';
-import type { DynamicTableService } from '@/src/ddd/domain/tables/services/dynamic-table-service';
-import type { Result } from '@/src/ddd/domain/shared/result';
-import { FieldId, OrganizationId, TableId } from '@/src/ddd/domain/shared/value-objects';
-import type { FileFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
-import { FileKey } from '@/src/ddd/domain/tables/entities/file-storage';
+import type { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
+import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
+import type { Result } from '@/ddd/domain/shared/result';
+import { FieldId, OrganizationId, TableId } from '@/ddd/domain/shared/value-objects';
+import type { FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
+import { FileKey } from '@/ddd/domain/tables/entities/file-storage';
 
 export interface UploadFileCommand {
   organizationId: OrganizationId;
@@ -425,7 +425,7 @@ export class FileUseCases {
   }>> {
     try {
       // Use RowApplicationService to get files from organization's table data
-      const { getRowApplicationService } = require('@/src/ddd/application/di/container');
+      const { getRowApplicationService } = require('@/ddd/application/di/container');
       const rowService = getRowApplicationService();
       const files = await rowService.getFilesByOrganization(organizationId);
       

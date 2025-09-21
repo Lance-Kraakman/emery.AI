@@ -10,14 +10,14 @@
  * while adding rich document semantics on top of the base file field system.
  */
 
-import { DocumentField } from '@/src/ddd/domain/tables/entities/document-field-entity';
-import { DocumentFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
+import { DocumentField } from '@/ddd/domain/tables/entities/document-field-entity';
+import { DocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import { FileUseCases } from './file-application-service';
-import { OrganizationId, TableId, FieldId, UserId } from '@/src/ddd/domain/shared/value-objects';
-import { Result } from '@/src/ddd/domain/shared/result';
-import { DynamicTableService } from '@/src/ddd/domain/tables/services/dynamic-table-service';
-import { IFileStorageRepository } from '@/src/ddd/domain/tables/repositories/file-storage-repository';
-import { IDynamicTableRepository } from '@/src/ddd/domain/tables/repositories/dynamic-table-repository';
+import { OrganizationId, TableId, FieldId, UserId } from '@/ddd/domain/shared/value-objects';
+import { Result } from '@/ddd/domain/shared/result';
+import { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
+import { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
+import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 
 export interface CreateTiptapDocumentCommand {
   organizationId: OrganizationId;
@@ -408,7 +408,7 @@ export class DocumentApplicationService {
    * Create document from uploaded file
    */
   async createDocumentFromFile(
-    fileFieldValue: import('@/src/ddd/domain/tables/value-objects/field-values').FileFieldValue,
+    fileFieldValue: import('@/ddd/domain/tables/value-objects/field-values').FileFieldValue,
     organizationId: OrganizationId,
     tableId: TableId,
     fieldId: FieldId,

@@ -2,9 +2,9 @@
 
 import React from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { Button } from '@/src/components/ui/button';
-import { Badge } from '@/src/components/ui/badge';
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { AgentDetailsPanel } from './AgentDetailsPanel';
 import { ModalProvider } from './modals/ModalContext';
 import { ModalManager } from './modals/ModalManager';

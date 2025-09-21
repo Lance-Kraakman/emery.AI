@@ -6,11 +6,11 @@
  * Databases serve as logical namespaces/workspaces for grouping related tables.
  */
 
-import type { IDynamicTableRepository } from '@/src/ddd/domain/tables/repositories/dynamic-table-repository';
-import type { IDatabaseRepository } from '@/src/ddd/domain/databases/repositories/database-repository';
-import { Database } from '@/src/ddd/domain/databases/entities/database';
-import type { Result } from '@/src/ddd/domain/shared/result';
-import { DatabaseId, OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
+import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
+import { Database } from '@/ddd/domain/databases/entities/database';
+import type { Result } from '@/ddd/domain/shared/result';
+import { DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export interface CreateDatabaseCommand {
   name: string;

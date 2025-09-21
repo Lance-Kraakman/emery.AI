@@ -8,8 +8,8 @@
  * domain-connected chats with dual-context RAG integration and organizational scoping
  */
 
-import { ChatId, OrganizationId, UserId } from '@/src/ddd/domain/shared/value-objects';
-import type { DomainType } from '@/src/ddd/domain/rag/value-objects';
+import { ChatId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import type { DomainType } from '@/ddd/domain/rag/value-objects';
 
 export interface ChatContextMetadata {
   ragIndexId?: string;

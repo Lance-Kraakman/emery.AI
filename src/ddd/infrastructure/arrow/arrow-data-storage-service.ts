@@ -7,11 +7,11 @@
  * AIDEV-NOTE: Refactored to use DynamicTable and Field entities instead of primitive schemas
  */
 
-import type { DataStorageService, StorageMetadata } from '@/src/ddd/domain/tables/services/data-storage-service';
-import type { DynamicTable } from '@/src/ddd/domain/tables/entities/dynamic-table';
-import type { TableField } from '@/src/ddd/domain/tables/value-objects/table-field';
-import type { Result } from '@/src/ddd/domain/shared/result';
-import { Row } from '@/src/ddd/domain/tables/value-objects/row';
+import type { DataStorageService, StorageMetadata } from '@/ddd/domain/tables/services/data-storage-service';
+import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
+import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
+import type { Result } from '@/ddd/domain/shared/result';
+import { Row } from '@/ddd/domain/tables/value-objects/row';
 
 // Apache Arrow imports for direct conversion
 import { 

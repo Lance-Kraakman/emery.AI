@@ -2,17 +2,17 @@
 
 import React, { useState } from 'react';
 import { useForm } from '@tanstack/react-form';
-import { Button } from "@/src/components/ui/button";
-import { Input } from "@/src/components/ui/input";
-import { Label } from "@/src/components/ui/label";
-import { Textarea } from "@/src/components/ui/textarea";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/src/components/ui/sheet";
-import { Badge } from "@/src/components/ui/badge";
-import { Progress } from "@/src/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { ChevronLeft, ChevronRight, Check, Plus, Users, Settings, Shield } from "lucide-react";
-import { createCustomRole } from "@/src/app/actions/roles";
+import { createCustomRole } from "@/app/actions/roles";
 import { CompactPermissionList } from "./CompactPermissionList";
-import { getAvailablePermissions } from "@/src/app/actions/roles";
+import { getAvailablePermissions } from "@/app/actions/roles";
 import type { PermissionAssignment } from "./PermissionSelector";
 
 interface RoleWizardProps {

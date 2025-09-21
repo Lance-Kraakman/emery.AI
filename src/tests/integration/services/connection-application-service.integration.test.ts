@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { getConnectionApplicationService } from '@/src/ddd/application/di/container';
-import { UserId } from '@/src/ddd/domain/shared/value-objects';
-import { AppName, ConnectionId } from '@/src/ddd/domain/connections/value-objects';
+import { getConnectionApplicationService } from '@/ddd/application/di/container';
+import { UserId } from '@/ddd/domain/shared/value-objects';
+import { AppName, ConnectionId } from '@/ddd/domain/connections/value-objects';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';
 import type { TestContext } from '../shared/test-setup';

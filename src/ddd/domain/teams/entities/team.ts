@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Team domain entity with DDD Value Objects
 // Represents a team of agents with shared purpose and goals
 
-import { TeamId, OrganizationId, AgentId } from '@/src/ddd/domain/shared/value-objects';
+import { TeamId, OrganizationId, AgentId } from '@/ddd/domain/shared/value-objects';
 
 export interface TeamConfig {
   name: string;

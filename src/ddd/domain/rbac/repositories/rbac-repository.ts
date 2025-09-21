@@ -1,9 +1,9 @@
 // AIDEV-NOTE: RBAC repository interface for permission and role management
 // Defines contracts for RBAC operations including permission checking, role management
 
-import { Permission } from '@/src/ddd/domain/shared/value-objects/permission';
-import { UserId, OrganizationId } from '@/src/ddd/domain/shared/value-objects';
-import type { Role, CreateRoleData, UpdateRoleData } from '@/src/ddd/domain/rbac/entities/role';
+import { Permission } from '@/ddd/domain/shared/value-objects/permission';
+import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import type { Role, CreateRoleData, UpdateRoleData } from '@/ddd/domain/rbac/entities/role';
 
 export interface IRBACRepository {
   // Permission checking - core RBAC functionality

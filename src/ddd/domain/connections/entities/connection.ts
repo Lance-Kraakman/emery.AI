@@ -2,7 +2,7 @@
 // Entity because it has identity (connectionId) and lifecycle (can be connected/disconnected)
 // Fetched from Pipedream API but represents a core business concept
 
-import { UserId } from '@/src/ddd/domain/shared/value-objects';
+import { UserId } from '@/ddd/domain/shared/value-objects';
 import { ConnectionId, AppName } from '../value-objects';
 
 export interface Connection {

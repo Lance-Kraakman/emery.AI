@@ -9,15 +9,15 @@
 
 import React, { useState } from 'react'
 import { MoreHorizontal, MessageSquare, Calendar, Archive, Trash2 } from 'lucide-react'
-import { Button } from '@/src/components/ui/button'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/src/components/ui/dropdown-menu'
-import type { ChatSessionDTO } from '@/src/app/mappers/chat-mapper'
-import { archiveChatSession } from '@/src/app/actions/chat-history'
+} from '@/components/ui/dropdown-menu'
+import type { ChatSessionDTO } from '@/app/mappers/chat-mapper'
+import { archiveChatSession } from '@/app/actions/chat-history'
 
 interface ChatSessionItemProps {
   session: ChatSessionDTO

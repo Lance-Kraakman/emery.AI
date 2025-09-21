@@ -1,5 +1,5 @@
-import { BaseId, OrganizationId } from '@/src/ddd/domain/shared/value-objects';
-import type { DbClient } from '@/src/lib/db/client';
+import { BaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import type { DbClient } from '@/lib/db/client';
 
 /**
  * Base repository abstract class providing standard CRUD operations

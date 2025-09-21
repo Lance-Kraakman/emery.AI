@@ -2,9 +2,9 @@
 
 import React from 'react'
 import { Search, X } from 'lucide-react'
-import { Button } from '@/src/components/ui/button'
-import { Input } from '@/src/components/ui/input'
-import { ScrollArea } from '@/src/components/ui/scroll-area'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { getCategoryIcon, getCategoryDisplayName } from '../utils/search-display-utils'
 import type { DropdownPosition, AnyMentionItem } from '../types/chat-mentions'
 

@@ -1,16 +1,16 @@
 "use client"
 
 import React, { useState } from 'react';
-import { Button } from '@/src/components/ui/button';
-import { Badge } from '@/src/components/ui/badge';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/src/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Edit3, Eye, FileText, Plus, Upload, Loader, ExternalLink, PlusCircle } from 'lucide-react';
 // AIDEV-NOTE: Layout system removed - using chat-ui artifacts only
-import type { FieldDTO } from '@/src/app/mappers/field-mapper';
-import type { DocumentFieldValue, DocumentArrayFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
+import type { DocumentFieldValue, DocumentArrayFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 // AIDEV-NOTE: DocumentField entity removed - using DTOs directly for artifacts
-import { DocumentCreationDialog } from '@/src/components/tables/dialogs/DocumentCreationDialog';
-import { createDocumentArtifact } from '@/src/components/chat/types/chat-artifacts';
+import { DocumentCreationDialog } from '@/components/tables/dialogs/DocumentCreationDialog';
+import { createDocumentArtifact } from '@/components/chat/types/chat-artifacts';
 
 interface DocumentFieldCellProps {
   field: FieldDTO;

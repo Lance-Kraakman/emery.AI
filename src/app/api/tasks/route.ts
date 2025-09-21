@@ -2,10 +2,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/src/lib/auth/test-auth';
-import { getAgentTaskApplicationService } from '@/src/ddd/application/di/container';
-import type { CreateTaskRequest } from '@/src/ddd/application/services/agents/agent-task-application-service';
-import { AgentId, UserId, OrganizationId } from '@/src/ddd/domain/shared/value-objects';
+import { authenticateRequest } from '@/lib/auth/test-auth';
+import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
+import type { CreateTaskRequest } from '@/ddd/application/services/agents/agent-task-application-service';
+import { AgentId, UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 /**
  * Get tasks list using AgentTaskApplicationService

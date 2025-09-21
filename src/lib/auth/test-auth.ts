@@ -6,10 +6,10 @@
  */
 
 import { NextRequest } from 'next/server';
-import { auth, getUserIdFromRequest } from '@/src/lib/auth';
+import { auth, getUserIdFromRequest } from '@/lib/auth';
 import { validateUserApiKey, extractApiKeyFromHeader, UserApiKeyInfo } from './user-api-keys';
-import { db } from '@/src/lib/db/client';
-import { users } from '@/src/lib/db/schema';
+import { db } from '@/lib/db/client';
+import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export interface AuthResult {

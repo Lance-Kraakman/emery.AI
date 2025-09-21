@@ -9,9 +9,9 @@
  */
 
 import { Task } from '../entities/task';
-import type { AgentId } from '@/src/ddd/domain/shared/value-objects';
-import type { TriggerConfig, TriggerType, ScheduledTask, ScheduleTaskRequest } from '@/src/ddd/domain/scheduling';
-import { CalendarTriggerConfig } from '@/src/ddd/domain/scheduling/value-objects/trigger-config';
+import type { AgentId } from '@/ddd/domain/shared/value-objects';
+import type { TriggerConfig, TriggerType, ScheduledTask, ScheduleTaskRequest } from '@/ddd/domain/scheduling';
+import { CalendarTriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { IAgentRepository } from '../../agents/repositories/agent-repository';
 
 /**

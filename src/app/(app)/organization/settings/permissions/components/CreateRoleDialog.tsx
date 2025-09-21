@@ -2,13 +2,13 @@
 
 import { useForm } from '@tanstack/react-form';
 import React, { useState, useEffect } from 'react';
-import { Button } from "@/src/components/ui/button";
-import { Input } from "@/src/components/ui/input";
-import { Label } from "@/src/components/ui/label";
-import { Textarea } from "@/src/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/src/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2, Plus } from "lucide-react";
-import { getAvailablePermissions, createCustomRole } from "@/src/app/actions/roles";
+import { getAvailablePermissions, createCustomRole } from "@/app/actions/roles";
 import { PermissionSelector, type PermissionAssignment } from "./PermissionSelector";
 
 interface CreateRoleDialogProps {

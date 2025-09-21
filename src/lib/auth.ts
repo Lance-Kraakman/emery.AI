@@ -9,9 +9,9 @@ import { users, accounts, sessions, verificationTokens, organizations, userOrgan
 import { eq } from "drizzle-orm"
 import { getServerSession } from "next-auth"
 import { getSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react"
-import { Permission, type PermissionCheck } from '@/src/ddd/domain/shared/value-objects/permission'
-import { UserId, OrganizationId } from '@/src/ddd/domain/shared/value-objects'
-import { getRBACRepository } from "@/src/ddd/application/di/container"
+import { Permission, type PermissionCheck } from '@/ddd/domain/shared/value-objects/permission'
+import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects'
+import { getRBACRepository } from "@/ddd/application/di/container"
 
 // AIDEV-NOTE: Development bypass for testing - allows tests to authenticate as specific user
 export function getTestUserId(): string {

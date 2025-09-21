@@ -1,9 +1,9 @@
 import React, { Suspense } from 'react';
-import { getTeams } from '@/src/app/actions/teams';
-import { getAgents } from '@/src/app/actions/agents';
-import { Loading } from '@/src/components/ui/loading';
-import { auth } from '@/src/lib/auth';
-import { TeamsPage as TeamsPageLayout } from '@/src/components/canvas';
+import { getTeams } from '@/app/actions/teams';
+import { getAgents } from '@/app/actions/agents';
+import { Loading } from '@/components/ui/loading';
+import { auth } from '@/lib/auth';
+import { TeamsPage as TeamsPageLayout } from '@/components/canvas';
 import TeamDashboardClient from './components/TeamDashboardClient';
 
 // AIDEV-NOTE: Teams page updated to use canvas architecture with collapsible layout

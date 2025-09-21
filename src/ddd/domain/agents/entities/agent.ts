@@ -2,15 +2,15 @@
 // Represents an AI agent with capabilities, tools, and trigger configuration
 // Uses DDD Value Objects for type-safe identity management
 
-import type { TriggerConfig } from '@/src/ddd/domain/scheduling/value-objects/trigger-config';
-import { ToolConfig } from '@/src/ddd/domain/tools/value-objects/tool-config';
+import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import {
   AgentId,
   OrganizationId,
   UserId,
   AgentStatus,
   ApiKey
-} from '@/src/ddd/domain/shared/value-objects';
+} from '@/ddd/domain/shared/value-objects';
 
 
 // Agent specialization types for organizational analysis

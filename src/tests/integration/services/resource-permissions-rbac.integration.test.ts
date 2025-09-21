@@ -13,16 +13,16 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach, beforeAll } from 'vitest';
-import { getAgentTaskApplicationService, getAgentApplicationService, getTeamApplicationService, initializeDI } from '@/src/ddd/application/di/container';
-import { AgentId, OrganizationId, UserId, TeamId } from '@/src/ddd/domain/shared/value-objects';
-import type { CreateTaskRequest } from '@/src/ddd/application/services/agents/agent-task-application-service';
-import type { CreateAgentCommand } from '@/src/ddd/application/services/agents/agent-application-service';
+import { getAgentTaskApplicationService, getAgentApplicationService, getTeamApplicationService, initializeDI } from '@/ddd/application/di/container';
+import { AgentId, OrganizationId, UserId, TeamId } from '@/ddd/domain/shared/value-objects';
+import type { CreateTaskRequest } from '@/ddd/application/services/agents/agent-task-application-service';
+import type { CreateAgentCommand } from '@/ddd/application/services/agents/agent-application-service';
 import { testClient } from '../shared/integration-helpers';
 import { createTestOrganization, createTestAgent, createTestTeam, createTestUser, initializeTestDI } from '../shared/test-setup';
 import type { TestContext } from '../shared/test-setup';
-import { agents, teams, tasks, teamMemberships, users } from '@/src/lib/db/schema';
+import { agents, teams, tasks, teamMemberships, users } from '@/lib/db/schema';
 import { eq, or } from 'drizzle-orm';
-import { contextManager } from '@/src/lib/db/context-manager';
+import { contextManager } from '@/lib/db/context-manager';
 
 // Test timeout for permission tests
 const TEST_TIMEOUT = 30000;

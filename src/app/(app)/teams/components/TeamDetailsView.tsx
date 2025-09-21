@@ -2,16 +2,16 @@
 
 import React, { useState } from 'react';
 import { Edit, Users, Target, CheckCircle, ChevronDown, ChevronRight, UserCheck, Activity, Save, X, Loader2 } from 'lucide-react';
-import type { AgentDTO } from '@/src/app/mappers/agent-mapper';
-import type { TeamDTO } from '@/src/app/mappers/team-mapper';
-import { Button } from '@/src/components/ui/button';
-import { Badge } from '@/src/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/src/components/ui/collapsible';
-import { Input } from '@/src/components/ui/input';
-import { Textarea } from '@/src/components/ui/textarea';
-import { Checkbox } from '@/src/components/ui/checkbox';
-import { updateTeam } from '@/src/app/actions/teams';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { TeamDTO } from '@/app/mappers/team-mapper';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { updateTeam } from '@/app/actions/teams';
 import TeamMembersPanel from './TeamMembersPanel';
 import TeamActivityPanel from './TeamActivityPanel';
 

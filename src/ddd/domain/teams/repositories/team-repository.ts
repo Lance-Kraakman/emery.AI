@@ -2,7 +2,7 @@
 // Defines data access operations for Team entities
 
 import type { Team } from '../entities/team';
-import { TeamId, OrganizationId, AgentId } from '@/src/ddd/domain/shared/value-objects';
+import { TeamId, OrganizationId, AgentId } from '@/ddd/domain/shared/value-objects';
 
 // Data transfer objects for repository operations
 export interface CreateTeamData {

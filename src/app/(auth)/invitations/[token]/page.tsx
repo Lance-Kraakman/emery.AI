@@ -1,8 +1,8 @@
 "use client";
 
-import { acceptInvitation } from "@/src/app/actions/invitations";
-import { Button } from "@/src/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/src/components/ui/card";
+import { acceptInvitation } from "@/app/actions/invitations";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 

@@ -3,14 +3,14 @@
 // AIDEV-NOTE: Minimal permission/auth functions - only what's actually used
 // Most files just import requireAuth and requirePermission
 
-import { auth, hasPermission as authHasPermission, requirePermission as authRequirePermission } from "@/src/lib/auth";
-import { Permission } from "@/src/ddd/domain/shared/value-objects/permission";
+import { auth, hasPermission as authHasPermission, requirePermission as authRequirePermission } from "@/lib/auth";
+import { Permission } from "@/ddd/domain/shared/value-objects/permission";
 import { revalidatePath } from "next/cache";
 // REMOVED: import { requireCurrentOrganization } from "./user-organizations"; - causes circular dependency
-import { getRBACRepository, getUserRoleApplicationService } from "@/src/ddd/application/di/container";
+import { getRBACRepository, getUserRoleApplicationService } from "@/ddd/application/di/container";
 import type { Result } from "./types";
-import { SYSTEM_ROLES, type SystemRoleType } from "@/src/ddd/domain/rbac/entities/role";
-import { OrganizationId, UserId } from "@/src/ddd/domain/shared/value-objects";
+import { SYSTEM_ROLES, type SystemRoleType } from "@/ddd/domain/rbac/entities/role";
+import { OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
 
 export async function assignUserRole(userId: string, role: SystemRoleType): Promise<Result> {
   try {
@@ -210,7 +210,7 @@ export async function checkPermission(permissionString: string): Promise<Result<
     }
 
     // Use the existing hasPermission function from lib/auth
-    const { hasPermission } = await import('@/src/lib/auth');
+    const { hasPermission } = await import('@/lib/auth');
     const hasPermissionResult = await hasPermission(
       session.user.id,
       permissionString,

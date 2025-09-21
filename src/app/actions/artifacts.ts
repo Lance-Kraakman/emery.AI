@@ -8,12 +8,12 @@
  */
 
 import { requirePermission } from "./permissions";
-import { getDocumentApplicationService, getFileApplicationService } from "@/src/ddd/application/di/container";
-import { FieldId, OrganizationId, TableId, UserId } from "@/src/ddd/domain/shared/value-objects";
+import { getDocumentApplicationService, getFileApplicationService } from "@/ddd/application/di/container";
+import { FieldId, OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/src/lib/auth";
+import { authOptions } from "@/lib/auth";
 import type { Result } from "./types";
-import type { DocumentFieldValue, FileFieldValue } from '@/src/ddd/domain/tables/value-objects/field-values';
+import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 /**
  * Fetch document artifact data from tool config

@@ -1,11 +1,11 @@
 // AIDEV-NOTE: Pipedream Connection Repository Implementation - handles all Pipedream API interactions
 // Infrastructure layer - implements domain repository interface using Pipedream Connect API
 
-import { IConnectionRepository } from '@/src/ddd/domain/connections/repositories/connection-repository';
-import { Connection, ConnectionStatus } from '@/src/ddd/domain/connections/entities/connection';
-import { ConnectionId, AppName } from '@/src/ddd/domain/connections/value-objects';
-import { UserId } from '@/src/ddd/domain/shared/value-objects';
-import { pipedreamClient, getExternalUserId } from '@/src/lib/pipedream/client';
+import { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
+import { Connection, ConnectionStatus } from '@/ddd/domain/connections/entities/connection';
+import { ConnectionId, AppName } from '@/ddd/domain/connections/value-objects';
+import { UserId } from '@/ddd/domain/shared/value-objects';
+import { pipedreamClient, getExternalUserId } from '@/lib/pipedream/client';
 import { PipedreamConnectionMapper } from './connection-mapper';
 
 export class PipedreamConnectionRepository implements IConnectionRepository {

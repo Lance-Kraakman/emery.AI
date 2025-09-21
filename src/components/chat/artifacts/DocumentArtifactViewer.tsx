@@ -24,8 +24,8 @@ import TextAlign from '@tiptap/extension-text-align'
 import { TextStyle } from '@tiptap/extension-text-style'
 import Color from '@tiptap/extension-color'
 import Highlight from '@tiptap/extension-highlight'
-import { Button } from '@/src/components/ui/button'
-import { Badge } from '@/src/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   Save,
   Edit3,
@@ -58,7 +58,7 @@ import {
 } from 'lucide-react'
 import type { DocumentArtifact } from '../types/chat-artifacts'
 import { getDocumentDisplayInfo } from '../types/chat-artifacts'
-import { fetchTiptapDocumentContent, updateTiptapDocumentContent } from '@/src/app/actions/artifacts'
+import { fetchTiptapDocumentContent, updateTiptapDocumentContent } from '@/app/actions/artifacts'
 import styles from './DocumentArtifactViewer.module.css'
 
 interface DocumentArtifactViewerProps {

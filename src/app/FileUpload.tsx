@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react'
 import { Upload, X, Download } from 'lucide-react'
-import { uploadFileAction } from '@/src/app/actions/files'
+import { uploadFileAction } from '@/app/actions/files'
 
 interface FileMetadata {
   id: string;

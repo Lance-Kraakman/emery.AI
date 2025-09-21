@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import type { TeamDTO } from '@/src/app/mappers/team-mapper';
-import { getTeamMembers, addTeamMember, removeTeamMember } from '@/src/app/actions/teams';
+import type { TeamDTO } from '@/app/mappers/team-mapper';
+import { getTeamMembers, addTeamMember, removeTeamMember } from '@/app/actions/teams';
 
 interface TeamMembersPanelProps {
   team: TeamDTO;

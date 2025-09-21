@@ -2,16 +2,16 @@ import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } fr
 import { 
   getTableApplicationService,
   getDatabaseApplicationService
-} from '@/src/ddd/application/di/container';
+} from '@/ddd/application/di/container';
 import { testClient } from '../shared/integration-helpers';
-import { OrganizationId, UserId, DatabaseId, TableId } from '@/src/ddd/domain/shared/value-objects';
-import type { TableApplicationService } from '@/src/ddd/application/services/tables/table-application-service';
-import { DynamicTable } from '@/src/ddd/domain/tables/entities/dynamic-table';
-import { TableField, type FieldType } from '@/src/ddd/domain/tables/value-objects/table-field';
+import { OrganizationId, UserId, DatabaseId, TableId } from '@/ddd/domain/shared/value-objects';
+import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
+import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
+import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { TestCase } from '../../shared/types';
 import { createTestOrganization, type TestContext, initializeTestDI } from '../shared/test-setup';
-import { Row, RowId } from '@/src/ddd/domain/tables/value-objects/row';
-import type { RowQueryOptions } from '@/src/ddd/infrastructure/db/types/table-persistence';
+import { Row, RowId } from '@/ddd/domain/tables/value-objects/row';
+import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
 
 // AIDEV-NOTE: TableApplicationService integration tests
 // Tests the application service layer for proper business logic and orchestration
