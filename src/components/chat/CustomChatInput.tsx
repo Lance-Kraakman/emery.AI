@@ -17,8 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ToolDropdown } from './ToolDropdown';
 import { resolveReferences } from '@/app/actions/references';
-import type { ReferenceDTO } from '@/app/mappers/reference-mapper';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
+import { mapReferencesToTools, extractToolReferences } from '@/app/services/reference-mapper';
 
 interface CustomChatInputProps {
   onSendMessage: (message: string) => void;
@@ -102,8 +102,30 @@ export default function CustomChatInput({
     const atMatch = beforeCursor.match(/@[^@\s]*$/);
     if (atMatch) {
       const beforeAt = beforeCursor.slice(0, atMatch.index);
-      // Get insertText from unified ToolDTO
-      const insertText = tool.insertText || `@tool:${tool.name}`;
+      // Get insertText from unified ToolDTO with proper fallback for each type
+      const getReferenceFallback = () => {
+        if (tool.type !== 'reference') return `@tool:${tool.name}`;
+
+        // Map unified ToolCategory back to reference prefixes
+        switch (tool.category) {
+          case 'documents': return `@doc:${tool.name}`;
+          case 'files': return `@file:${tool.name}`;
+          case 'agents': return `@agent:${tool.name}`;
+          case 'tables': return `@table:${tool.name}`;
+          case 'databases': return `@database:${tool.name}`;
+          default: return `@tool:${tool.name}`;
+        }
+      };
+
+      console.log('[CustomChatInput] Tool info:', {
+        name: tool.name,
+        type: tool.type,
+        category: tool.category,
+        insertText: tool.insertText,
+        fallback: getReferenceFallback()
+      });
+
+      const insertText = tool.insertText || getReferenceFallback();
       const newValue = beforeAt + insertText + ' ' + afterCursor;
       setInputValue(newValue);
 
@@ -125,51 +147,23 @@ export default function CustomChatInput({
     setShowDropdown(false);
   };
 
-  // Extract tool references from message text
-  const extractToolReferences = (text: string): string[] => {
-    const toolRegex = /@(tool|doc|file|table|agent|database):[^\s]+/g;
-    return text.match(toolRegex) || [];
-  };
 
-  // Send message with tool resolution
+  // Send message with simple reference mapping
   const handleSendMessage = async () => {
     if (inputValue.trim() && !disabled) {
       const message = inputValue.trim();
 
-      // Check for manual tool references that need resolution
-      const toolReferences = extractToolReferences(message);
-      if (toolReferences.length > 0) {
-        try {
-          const result = await resolveReferences(toolReferences);
-          if (result.success && result.data) {
-            // Merge with existing selected tools
-            const allTools = [...selectedTools];
+      // Use simple reference mapping
+      const { mappedMessage, toolReferences } = mapReferencesToTools(message);
 
-            // Add new resolved tools (avoid duplicates)
-            // Note: This uses legacy reference resolution, would need enhancement for full ReferenceTool support
-            result.data.resolvedReferences.forEach(newTool => {
-              const exists = allTools.some(existing => {
-                const existingInsertText = existing.insertText || `@tool:${existing.name}`;
-                return existingInsertText === newTool.insertText;
-              });
-              if (!exists) {
-                // TODO: Convert ReferenceDTO to ToolDTO for proper typing
-                // For now, keeping this section for backward compatibility
-                console.warn('Manual reference resolution needs ToolDTO conversion');
-              }
-            });
+      console.log('[CustomChatInput] Reference mapping:', {
+        original: message,
+        mapped: mappedMessage,
+        references: toolReferences
+      });
 
-            // Update tools (keeping existing since resolved refs need conversion)
-            // setSelectedTools(allTools);
-            // onToolsChange?.(allTools);
-          }
-        } catch (error) {
-          console.error('Error resolving tool references:', error);
-        }
-      }
-
-      // Send message
-      onSendMessage(message);
+      // Send the mapped message (e.g., "@doc:myfile.pdf" becomes "@tool:document_reader")
+      onSendMessage(mappedMessage);
       setInputValue('');
       setShowDropdown(false);
 
