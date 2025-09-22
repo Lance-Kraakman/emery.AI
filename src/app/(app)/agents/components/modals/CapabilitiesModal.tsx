@@ -26,7 +26,6 @@ import type { CapabilityConfig, StepConfig } from '@/ddd/domain/agents/entities/
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import { ToolDropdown } from '@/components/chat/ToolDropdown';
-import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 
 interface CapabilitiesModalProps {
@@ -279,11 +278,13 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
     }
   };
 
-  const handleToolSelect = (tool: ReferenceToolDTO | ToolDTO) => {
+  const handleToolSelect = (tool: ToolDTO) => {
     if (!editingToolInfo || !tool) return;
 
     const { stepIndex, toolIndex } = editingToolInfo;
-    const toolName = 'insertText' in tool ? tool.insertText : `@tool:${tool.name || 'Unknown Tool'}`;
+
+    // All tools from dropdown are now ToolDTO
+    const toolName = `@tool:${tool.name}`;
 
     if (toolIndex === -1) {
       // This is for instructions field - insert at cursor position AND add to tools array

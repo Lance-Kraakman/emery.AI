@@ -10,9 +10,11 @@
 
 import type { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool'
 import type { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
+import type { ToolDTO } from './tool-mapper'
 
 /**
  * Reference Tool DTO for frontend consumption
+ * @deprecated Use unified ToolDTO from tool-mapper instead
  * Aligns with ReferenceTool domain model
  */
 export interface ReferenceToolDTO {
@@ -70,74 +72,34 @@ export interface ReferenceToolDTO {
 }
 
 /**
- * Map ReferenceTool domain object to DTO
+ * Map ReferenceTool domain object to unified ToolDTO
  */
-export function mapReferenceToolToDTO(referenceTool: ReferenceTool): ReferenceToolDTO {
+export function mapReferenceToolToDTO(referenceTool: ReferenceTool): ToolDTO {
   const displayInfo = referenceTool.getChatDisplayInfo()
-  const toolMetadata = referenceTool.getToolDisplayInfo()
 
-  // Base DTO structure
-  const dto: ReferenceToolDTO = {
-    toolName: referenceTool.toolConfig.name,
-    toolVersion: referenceTool.toolConfig.version,
-    id: referenceTool.reference.id,
-    insertText: displayInfo.insertText,
+  return {
+    name: referenceTool.toolConfig.name,
     displayName: displayInfo.displayName,
     description: displayInfo.description,
-    category: displayInfo.category as ReferenceCategory,
-    supportsArtifacts: displayInfo.supportsArtifacts,
-    config: {
-      organizationId: 0 // Will be set below based on tool type
-    },
-    metadata: {
-      toolCategory: toolMetadata.category,
-      requiresConnection: toolMetadata.requiresConnection,
-      connectionType: referenceTool.toolConfig.connectionType
-    }
+    category: referenceTool.toolMetadata.category, // Unified categories
+    version: referenceTool.toolConfig.version,
+    icon: referenceTool.toolMetadata.icon,
+    tags: referenceTool.toolMetadata.tags,
+    requiresConnection: referenceTool.requiresConnection(),
+    connectionType: referenceTool.toolMetadata.connectionType,
+    supportsArtifacts: referenceTool.supportsArtifacts(),
+    type: 'reference',
+    config: referenceTool.toolConfig.config,
+    id: referenceTool.reference.id,
+    insertText: displayInfo.insertText,
+    organizationId: referenceTool.getOrganizationId()
   }
-
-  // Set type-specific configuration based on tool type
-  if (referenceTool.toolConfig.isAgentTool()) {
-    const agentConfig = referenceTool.toolConfig.getAgentConfig()!
-    dto.config.agentId = agentConfig.agentId
-    dto.config.agentOwnerId = agentConfig.ownerId
-    dto.config.organizationId = agentConfig.organizationId
-  } else if (referenceTool.toolConfig.isTableTool()) {
-    const tableConfig = referenceTool.toolConfig.getTableConfig()!
-    dto.config.tableId = tableConfig.tableId
-    dto.config.tableName = tableConfig.tableName
-    dto.config.organizationId = tableConfig.organizationId
-  } else if (referenceTool.toolConfig.isDocumentTool()) {
-    const docConfig = referenceTool.toolConfig.getDocumentConfig()!
-    dto.config.documentId = docConfig.documentId
-    dto.config.documentFilename = docConfig.filename
-    dto.config.documentMimeType = docConfig.mimeType
-    dto.config.organizationId = docConfig.organizationId
-    dto.config.documentTableId = docConfig.tableId
-    dto.config.documentFieldId = docConfig.fieldId
-    dto.config.documentRowId = docConfig.rowId
-  } else if (referenceTool.toolConfig.isFileTool()) {
-    const fileConfig = referenceTool.toolConfig.getFileConfig()!
-    dto.config.fileId = fileConfig.fileId
-    dto.config.filename = fileConfig.filename
-    dto.config.fileMimeType = fileConfig.mimeType
-    dto.config.organizationId = fileConfig.organizationId
-    dto.config.fileTableId = fileConfig.tableId
-    dto.config.fileFieldId = fileConfig.fieldId
-    dto.config.fileRowId = fileConfig.rowId
-  } else if (referenceTool.toolConfig.isDatabaseTool()) {
-    const dbConfig = referenceTool.toolConfig.getDatabaseConfig()!
-    dto.config.databaseId = dbConfig.databaseId
-    dto.config.organizationId = dbConfig.organizationId
-  }
-
-  return dto
 }
 
 /**
- * Map array of ReferenceTool objects to DTOs
+ * Map array of ReferenceTool objects to unified ToolDTOs
  */
-export function mapReferenceToolsToDTO(referenceTools: ReferenceTool[]): ReferenceToolDTO[] {
+export function mapReferenceToolsToDTO(referenceTools: ReferenceTool[]): ToolDTO[] {
   return referenceTools.map(mapReferenceToolToDTO)
 }
 
@@ -146,16 +108,16 @@ export function mapReferenceToolsToDTO(referenceTools: ReferenceTool[]): Referen
  */
 export class ReferenceToolMapper {
   /**
-   * Convert ReferenceTool entity to DTO
+   * Convert ReferenceTool entity to unified ToolDTO
    */
-  static toDTO(referenceTool: ReferenceTool): ReferenceToolDTO {
+  static toDTO(referenceTool: ReferenceTool): ToolDTO {
     return mapReferenceToolToDTO(referenceTool)
   }
 
   /**
-   * Convert multiple ReferenceTool entities to DTOs
+   * Convert multiple ReferenceTool entities to unified ToolDTOs
    */
-  static toDTOs(referenceTools: ReferenceTool[]): ReferenceToolDTO[] {
+  static toDTOs(referenceTools: ReferenceTool[]): ToolDTO[] {
     return mapReferenceToolsToDTO(referenceTools)
   }
 }

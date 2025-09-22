@@ -31,9 +31,16 @@ export class ReferenceTool extends Tool {
     public readonly reference: Reference
   ) {
     super(toolConfig, toolMetadata)
-    // Ensure this is a REFERENCES category tool
-    if (toolMetadata.category !== ToolCategory.REFERENCES) {
-      throw new Error('ReferenceTool must have REFERENCES category')
+    // Ensure this is a reference category tool (documents, files, agents, tables, databases)
+    const referenceCategories = [
+      ToolCategory.DOCUMENTS,
+      ToolCategory.FILES,
+      ToolCategory.AGENTS,
+      ToolCategory.TABLES,
+      ToolCategory.DATABASES
+    ];
+    if (!referenceCategories.includes(toolMetadata.category)) {
+      throw new Error(`ReferenceTool must have a reference category (documents, files, agents, tables, databases), got: ${toolMetadata.category}`)
     }
 
     // Ensure the tool name matches the reference concept
@@ -53,7 +60,7 @@ export class ReferenceTool extends Tool {
     description?: string
   ): ReferenceTool {
     const toolConfig = ToolConfig.agent(`agent-${agentId}`, agentId, organizationId, ownerId)
-    const toolMetadata = ToolMetadata.reference(
+    const toolMetadata = ToolMetadata.agent(
       `agent-${agentId}`,
       agentName,
       description || `${agentName} agent`,
@@ -75,7 +82,7 @@ export class ReferenceTool extends Tool {
     description?: string
   ): ReferenceTool {
     const toolConfig = ToolConfig.table(`table-${tableId}`, tableId, organizationId, tableName)
-    const toolMetadata = ToolMetadata.reference(
+    const toolMetadata = ToolMetadata.table(
       `table-${tableId}`,
       tableName,
       description || `Table in ${databaseName}`,
@@ -101,7 +108,7 @@ export class ReferenceTool extends Tool {
     databaseName?: string
   ): ReferenceTool {
     const toolConfig = ToolConfig.document(`doc-${documentId}`, documentId, filename, mimeType, organizationId, tableId, fieldId, rowId)
-    const toolMetadata = ToolMetadata.reference(
+    const toolMetadata = ToolMetadata.document(
       `doc-${documentId}`,
       filename,
       `Document in ${tableName} table`,
@@ -127,7 +134,7 @@ export class ReferenceTool extends Tool {
     databaseName?: string
   ): ReferenceTool {
     const toolConfig = ToolConfig.file(`file-${fileId}`, fileId, filename, mimeType, organizationId, tableId, fieldId, rowId)
-    const toolMetadata = ToolMetadata.reference(
+    const toolMetadata = ToolMetadata.file(
       `file-${fileId}`,
       filename,
       `File in ${tableName} table (${mimeType})`,
@@ -148,7 +155,7 @@ export class ReferenceTool extends Tool {
     description?: string
   ): ReferenceTool {
     const toolConfig = ToolConfig.database(`database-${databaseId}`, databaseId, organizationId)
-    const toolMetadata = ToolMetadata.reference(
+    const toolMetadata = ToolMetadata.database(
       `database-${databaseId}`,
       databaseName,
       description || `Database - ${databaseName}`,
@@ -177,6 +184,28 @@ export class ReferenceTool extends Tool {
     }
     if (this.toolConfig.isDatabaseTool()) {
       return this.toolConfig.getDatabaseConfig()!.databaseId
+    }
+    throw new Error('Unknown reference tool type')
+  }
+
+  /**
+   * Get the organization ID from the tool config
+   */
+  getOrganizationId(): number {
+    if (this.toolConfig.isAgentTool()) {
+      return this.toolConfig.getAgentConfig()!.organizationId
+    }
+    if (this.toolConfig.isTableTool()) {
+      return this.toolConfig.getTableConfig()!.organizationId
+    }
+    if (this.toolConfig.isDocumentTool()) {
+      return this.toolConfig.getDocumentConfig()!.organizationId
+    }
+    if (this.toolConfig.isFileTool()) {
+      return this.toolConfig.getFileConfig()!.organizationId
+    }
+    if (this.toolConfig.isDatabaseTool()) {
+      return this.toolConfig.getDatabaseConfig()!.organizationId
     }
     throw new Error('Unknown reference tool type')
   }
@@ -273,7 +302,14 @@ export class ReferenceTool extends Tool {
  * Type guard to check if a Tool is a ReferenceTool
  */
 export function isReferenceTool(toolMetadata: ToolMetadata): boolean {
-  return toolMetadata.category === ToolCategory.REFERENCES
+  const referenceCategories = [
+    ToolCategory.DOCUMENTS,
+    ToolCategory.FILES,
+    ToolCategory.AGENTS,
+    ToolCategory.TABLES,
+    ToolCategory.DATABASES
+  ];
+  return referenceCategories.includes(toolMetadata.category)
 }
 
 /**

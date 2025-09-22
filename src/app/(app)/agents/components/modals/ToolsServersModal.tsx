@@ -28,7 +28,6 @@ import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import { ToolDropdown } from '@/components/chat/ToolDropdown';
-import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 
 interface ToolsServersModalProps {
@@ -65,8 +64,8 @@ export function ToolsServersModal({ isOpen, onClose, agent, onUpdate }: ToolsSer
     }
   }, [isOpen, agent]);
 
-  const handleAddSelectedTool = (selectedTool: ReferenceToolDTO | ToolDTO) => {
-    const toolName = 'insertText' in selectedTool ? selectedTool.insertText : `@tool:${selectedTool.name}`;
+  const handleAddSelectedTool = (selectedTool: ToolDTO) => {
+    const toolName = selectedTool.insertText || `@tool:${selectedTool.name}`;
 
     // Check if tool already exists
     const exists = tools.some(tool => tool.name === toolName);

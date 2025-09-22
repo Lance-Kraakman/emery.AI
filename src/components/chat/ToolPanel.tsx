@@ -15,44 +15,43 @@ import { ConnectionStatusDot } from '@/components/ui/ConnectionStatusBadge'
 import { ConnectionSummaryCard } from '@/components/ui/ConnectionSummaryCard'
 import { QuickConnectionSetup } from '@/components/ui/ConnectionSetupFlow'
 import { getToolConnectionStatus, type ToolConnectionStatus } from '@/app/actions/connections'
-import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
-import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
+import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata'
 import { useSession } from 'next-auth/react'
 
 interface ToolPanelProps {
-  tools?: (ReferenceToolDTO | ToolDTO)[] // Selected tools
-  onToolClick: (tool: ReferenceToolDTO | ToolDTO) => void // Handle tool click (artifact opening, etc.)
+  tools?: ToolDTO[] // Selected tools
+  onToolClick: (tool: ToolDTO) => void // Handle tool click (artifact opening, etc.)
   onAddTool?: () => void // Trigger @ dropdown for adding tools
-  onRemoveTool?: (tool: ReferenceToolDTO | ToolDTO) => void // Remove tool from selection
+  onRemoveTool?: (tool: ToolDTO) => void // Remove tool from selection
   isLoading?: boolean
   className?: string
   showConnectionStatus?: boolean // Show connection status indicators
 }
 
 interface ToolCardProps {
-  tool: ReferenceToolDTO | ToolDTO
+  tool: ToolDTO
   onClick: () => void
   onRemove?: () => void
   connectionStatus?: ToolConnectionStatus | null
 }
 
 function ToolCard({ tool, onClick, onRemove, connectionStatus }: ToolCardProps) {
-  const isReferenceTool = 'toolName' in tool;
+  const isReferenceTool = tool.type === 'reference';
 
   // Determine icon based on tool category
   const getIcon = () => {
     if (isReferenceTool) {
       switch (tool.category) {
-        case ReferenceCategory.DOC:
+        case ToolCategory.DOCUMENTS:
           return <FileText className="h-4 w-4 text-blue-600" />
-        case ReferenceCategory.FILE:
+        case ToolCategory.FILES:
           return <File className="h-4 w-4 text-green-600" />
-        case ReferenceCategory.TABLE:
+        case ToolCategory.TABLES:
           return <Database className="h-4 w-4 text-purple-600" />
-        case ReferenceCategory.AGENT:
+        case ToolCategory.AGENTS:
           return <Users className="h-4 w-4 text-orange-600" />
-        case ReferenceCategory.DATABASE:
+        case ToolCategory.DATABASES:
           return <Database className="h-4 w-4 text-gray-600" />
         default:
           return <FileText className="h-4 w-4 text-gray-600" />
@@ -175,9 +174,9 @@ export function ToolPanel({
 
       // Convert DTOs to simple tool objects for connection checking
       const simpleTools = tools.map(tool => ({
-        name: ('name' in tool ? tool.name : tool.toolName) || tool.displayName,
+        name: tool.name || tool.displayName,
         displayName: tool.displayName,
-        requiredApps: 'requiredApps' in tool ? tool.requiredApps || [] : []
+        requiredApps: tool.requiredApps || []
       }));
 
       const result = await getToolConnectionStatus(simpleTools, session?.user?.id);
@@ -193,8 +192,8 @@ export function ToolPanel({
   };
 
   // Find connection status for a specific tool
-  const getConnectionStatus = (tool: ReferenceToolDTO | ToolDTO) => {
-    const toolName = 'name' in tool ? tool.name : tool.toolName;
+  const getConnectionStatus = (tool: ToolDTO) => {
+    const toolName = tool.name;
     return connectionStatuses.find(status =>
       status.toolName === toolName || status.toolName === tool.displayName
     ) || null;

@@ -12,51 +12,53 @@
 import { Tool } from '@/ddd/domain/tools/entities/tool'
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config'
 import { ToolMetadata, ToolCategory, ConnectionType } from '@/ddd/domain/tools/value-objects/tool-metadata'
-import type { ReferenceToolDTO } from './reference-tool-mapper'
 
 // Export domain types for UI use
 export { ToolCategory, ConnectionType } from '@/ddd/domain/tools/value-objects/tool-metadata'
 
 /**
- * DTO for Tool entities in API responses
+ * Universal DTO for all tool types (system and reference tools)
+ * Replaces separate ToolDTO and ReferenceToolDTO interfaces
  */
 export interface ToolDTO {
+  // Core identification
   name: string
   displayName: string
   description: string
   category: ToolCategory
   version: string
-  requiresConnection: boolean
-  connectionType: ConnectionType
-  requiredApps?: readonly string[]
+
+  // UI properties
   icon?: string
   tags: readonly string[]
+  requiresConnection: boolean
+  connectionType: ConnectionType
+  supportsArtifacts: boolean
+
+  // Tool type discrimination
+  type: 'system' | 'reference'
+
+  // Configuration (varies by tool type)
   config: Record<string, any>
+
+  // System tool properties
+  requiredApps?: readonly string[]
+
+  // Reference tool properties (optional, only for reference tools)
+  id?: string              // For @ mentions and reference identification
+  insertText?: string      // For @ mentions in chat
+  organizationId?: number  // For reference tools scoped to organization
 }
 
 /**
- * DTO for tool search results that include both types
+ * DTO for unified tool search results
  */
 export interface ToolSearchResultDTO {
-  referenceTools: ReferenceToolDTO[]
-  systemTools: ToolDTO[]
+  tools: ToolDTO[]  // Single unified array of all tool types
   hasMore: boolean
   totalCount: number
 }
 
-/**
- * Simplified DTO for tool display in UI components
- */
-export interface ToolDisplayDTO {
-  name: string
-  displayName: string
-  description: string
-  category: ToolCategory
-  icon?: string
-  requiresConnection: boolean
-  supportsArtifacts: boolean
-  type: 'system' | 'reference'  // Discriminator for UI rendering
-}
 
 
 export class ToolMapper {
@@ -70,28 +72,15 @@ export class ToolMapper {
       description: tool.toolMetadata.description,
       category: tool.toolMetadata.category,
       version: tool.getVersion(),
-      requiresConnection: tool.requiresConnection(),
-      connectionType: tool.toolMetadata.connectionType,
-      requiredApps: tool.toolMetadata.requiredApps,
       icon: tool.toolMetadata.icon,
       tags: tool.toolMetadata.tags,
-      config: tool.toolConfig.config
-    }
-  }
-
-  /**
-   * Convert Tool entity to display DTO for UI components
-   */
-  static toDisplayDTO(tool: Tool): ToolDisplayDTO {
-    return {
-      name: tool.getName(),
-      displayName: tool.toolMetadata.displayName,
-      description: tool.toolMetadata.description,
-      category: tool.toolMetadata.category,
-      icon: tool.toolMetadata.icon,
       requiresConnection: tool.requiresConnection(),
+      connectionType: tool.toolMetadata.connectionType,
       supportsArtifacts: tool.supportsArtifacts(),
-      type: 'system'
+      type: 'system',
+      config: tool.toolConfig.config,
+      requiredApps: tool.toolMetadata.requiredApps
+      // Reference tool properties remain undefined for system tools
     }
   }
 
@@ -100,13 +89,6 @@ export class ToolMapper {
    */
   static toDTOs(tools: Tool[]): ToolDTO[] {
     return tools.map(tool => this.toDTO(tool))
-  }
-
-  /**
-   * Convert multiple Tool entities to display DTOs
-   */
-  static toDisplayDTOs(tools: Tool[]): ToolDisplayDTO[] {
-    return tools.map(tool => this.toDisplayDTO(tool))
   }
 
   /**
