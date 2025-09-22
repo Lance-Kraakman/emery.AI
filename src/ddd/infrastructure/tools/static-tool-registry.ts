@@ -1,13 +1,15 @@
 /**
  * Static Tool Registry Implementation
  *
- * Basic implementation of tool registry that provides a curated set of tools.
- * Future versions can extend this to support dynamic tool discovery.
+ * Updated implementation that reads from unified registry and Pipedream metadata files.
+ * Provides a complete tool catalog including system tools, OAuth integrations, and Pipedream tools.
  *
- * AIDEV-NOTE: Simple implementation to get agents using proper tool registry.
- * Can be extended later with database storage, Python tool discovery, etc.
+ * AIDEV-NOTE: Fixed to read from unified registry instead of hardcoded tools.
+ * Integrates both public/tools-registry.json and Pipedream metadata files.
  */
 
+import fs from 'fs';
+import path from 'path';
 import type {
   IToolRegistryService,
   ToolDiscoveryOptions,
@@ -19,104 +21,204 @@ import { ToolMetadata, ToolCategory, ConnectionType } from '@/ddd/domain/tools/v
 import { Tool } from '@/ddd/domain/tools/entities/tool';
 
 export class StaticToolRegistry implements IToolRegistryService {
-  private readonly tools: ToolMetadata[] = [
-    // Base system tools
-    ToolMetadata.utility(
-      'python_repl',
-      'Python REPL',
-      'Execute Python code in a sandboxed environment',
-      ['python', 'code', 'calculation']
-    ),
-    ToolMetadata.utility(
-      'web_search',
-      'Web Search',
-      'Search the web for current information',
-      ['search', 'web', 'research']
-    ),
-    ToolMetadata.utility(
-      'data_analyzer',
-      'Data Analyzer',
-      'Analyze CSV, JSON, and other data formats',
-      ['data', 'analysis', 'csv', 'json']
-    ),
+  private tools: ToolMetadata[] | null = null;
+  private isLoading = false;
 
-    // OAuth app tools
-    ToolMetadata.oauthApp(
-      'slack_send_message',
-      'Slack Message',
-      'Send messages to Slack channels and users',
-      ['slack'],
-      undefined,
-      ['slack', 'messaging', 'communication']
-    ),
-    ToolMetadata.oauthApp(
-      'gmail_send_email',
-      'Gmail Email',
-      'Send emails via Gmail',
-      ['gmail'],
-      undefined,
-      ['email', 'gmail', 'communication']
-    ),
-    ToolMetadata.oauthApp(
-      'github_repo_manager',
-      'GitHub Repository',
-      'Manage GitHub repositories, issues, and pull requests',
-      ['github'],
-      undefined,
-      ['github', 'repository', 'code', 'version-control']
-    ),
-    ToolMetadata.oauthApp(
-      'google_sheets',
-      'Google Sheets',
-      'Read and write Google Sheets spreadsheets',
-      ['google-sheets'],
-      undefined,
-      ['spreadsheet', 'data', 'google', 'sheets']
-    ),
+  /**
+   * Load tools from unified registry and Pipedream metadata
+   */
+  private async loadTools(): Promise<ToolMetadata[]> {
+    if (this.tools) {
+      console.log('[StaticToolRegistry] Using cached tools');
+      return this.tools;
+    }
 
-    // Organizational tools
-    ToolMetadata.organizational(
-      'measurement_tracker',
-      'Measurement Tracker',
-      'Track and calculate organizational measurements',
-      ['measurement', 'kpi', 'tracking']
-    ),
-    ToolMetadata.organizational(
-      'process_analyzer',
-      'Process Analyzer',
-      'Analyze business processes and workflows',
-      ['process', 'workflow', 'analysis']
-    ),
-    ToolMetadata.organizational(
-      'report_generator',
-      'Report Generator',
-      'Generate reports from organizational data',
-      ['report', 'document', 'generation']
-    ),
+    if (this.isLoading) {
+      console.log('[StaticToolRegistry] Loading already in progress, waiting...');
+      // Simple wait for loading to complete
+      while (this.isLoading && !this.tools) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      return this.tools || [];
+    }
 
-    // Reference tools (will be populated dynamically from user data)
-    ToolMetadata.reference(
-      'document_reader',
-      'Document Reader',
-      'Read and analyze documents from your organization',
-      ['document', 'read', 'analysis']
-    ),
-    ToolMetadata.reference(
-      'file_reader',
-      'File Reader',
-      'Read and process files from your tables',
-      ['file', 'read', 'process']
-    ),
-    ToolMetadata.reference(
-      'table_query',
-      'Table Query',
-      'Query data from your organization tables',
-      ['table', 'query', 'data']
-    )
-  ];
+    this.isLoading = true;
+    console.log('[StaticToolRegistry] Loading tools from unified registry and Pipedream metadata...');
+
+    try {
+      const allTools: ToolMetadata[] = [];
+
+      // 1. Load from unified registry (public/tools-registry.json)
+      const unifiedTools = await this.loadUnifiedRegistryTools();
+      console.log(`[StaticToolRegistry] Loaded ${unifiedTools.length} tools from unified registry`);
+      allTools.push(...unifiedTools);
+
+      // 2. Load from Pipedream metadata
+      const pipedreamTools = await this.loadPipedreamTools();
+      console.log(`[StaticToolRegistry] Loaded ${pipedreamTools.length} tools from Pipedream metadata`);
+      allTools.push(...pipedreamTools);
+
+      console.log(`[StaticToolRegistry] Total loaded tools: ${allTools.length}`);
+      this.tools = allTools;
+      return allTools;
+    } catch (error) {
+      console.error('[StaticToolRegistry] Error loading tools:', error);
+      // Return empty array if loading fails
+      this.tools = [];
+      return [];
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  /**
+   * Load tools from unified registry JSON file
+   */
+  private async loadUnifiedRegistryTools(): Promise<ToolMetadata[]> {
+    try {
+      const registryPath = path.join(process.cwd(), 'public', 'tools-registry.json');
+      console.log('[StaticToolRegistry] Loading unified registry from:', registryPath);
+
+      if (!fs.existsSync(registryPath)) {
+        console.warn('[StaticToolRegistry] Unified registry file not found at:', registryPath);
+        return [];
+      }
+
+      const registryContent = fs.readFileSync(registryPath, 'utf8');
+      const registry = JSON.parse(registryContent);
+
+      const curatedTools = registry.curated_tools || [];
+      console.log(`[StaticToolRegistry] Found ${curatedTools.length} curated tools in registry`);
+
+      return curatedTools.map((tool: any) => this.createToolMetadataFromRegistry(tool));
+    } catch (error) {
+      console.error('[StaticToolRegistry] Error loading unified registry:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Load tools from Pipedream metadata
+   */
+  private async loadPipedreamTools(): Promise<ToolMetadata[]> {
+    try {
+      const pipedreamPath = path.join(process.cwd(), 'emery-agents', 'src', 'emery_agents', 'execution', 'tools', 'pipedream_metadata.json');
+      console.log('[StaticToolRegistry] Loading Pipedream metadata from:', pipedreamPath);
+
+      if (!fs.existsSync(pipedreamPath)) {
+        console.warn('[StaticToolRegistry] Pipedream metadata file not found at:', pipedreamPath);
+        return [];
+      }
+
+      const pipedreamContent = fs.readFileSync(pipedreamPath, 'utf8');
+      const pipedreamMetadata = JSON.parse(pipedreamContent);
+
+      const toolIds = Object.keys(pipedreamMetadata);
+      console.log(`[StaticToolRegistry] Found ${toolIds.length} Pipedream tools in metadata`);
+
+      return toolIds.map(toolId => this.createToolMetadataFromPipedream(toolId, pipedreamMetadata[toolId]));
+    } catch (error) {
+      console.error('[StaticToolRegistry] Error loading Pipedream metadata:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Create ToolMetadata from unified registry entry
+   */
+  private createToolMetadataFromRegistry(registryTool: any): ToolMetadata {
+    const category = this.mapCategoryFromRegistry(registryTool.category);
+    const connectionType = registryTool.implementation?.requires_auth
+      ? ConnectionType.OAUTH
+      : ConnectionType.NONE;
+
+    if (registryTool.implementation?.type === 'pipedream') {
+      // OAuth-based app integration
+      return ToolMetadata.oauthApp(
+        registryTool.id,
+        registryTool.display_name,
+        registryTool.description,
+        [registryTool.app], // Required apps array
+        registryTool.ui_config?.icon,
+        registryTool.tags || []
+      );
+    } else if (category === ToolCategory.UTILITIES) {
+      // Utility tool
+      return ToolMetadata.utility(
+        registryTool.id,
+        registryTool.display_name,
+        registryTool.description,
+        registryTool.tags || []
+      );
+    } else if (category === ToolCategory.ORGANIZATIONAL) {
+      // Organizational tool
+      return ToolMetadata.organizational(
+        registryTool.id,
+        registryTool.display_name,
+        registryTool.description,
+        registryTool.tags || []
+      );
+    } else {
+      // Default tool metadata
+      return new ToolMetadata(
+        registryTool.id,
+        registryTool.display_name,
+        registryTool.description,
+        category,
+        registryTool.implementation?.requires_auth || false,
+        connectionType,
+        registryTool.implementation?.requires_auth ? [registryTool.app] : [],
+        registryTool.ui_config?.icon,
+        registryTool.tags || []
+      );
+    }
+  }
+
+  /**
+   * Create ToolMetadata from Pipedream metadata entry
+   */
+  private createToolMetadataFromPipedream(toolId: string, pipedreamTool: any): ToolMetadata {
+    const appName = pipedreamTool.app || 'pipedream';
+    const displayName = pipedreamTool.name || toolId;
+    const description = pipedreamTool.description || `${displayName} integration via Pipedream`;
+
+    // Most Pipedream tools are OAuth integrations
+    return ToolMetadata.oauthApp(
+      toolId,
+      displayName,
+      description,
+      [appName],
+      undefined, // No icon specified in Pipedream metadata
+      [appName, 'pipedream', 'integration']
+    );
+  }
+
+  /**
+   * Map registry category to domain ToolCategory
+   */
+  private mapCategoryFromRegistry(registryCategory: string): ToolCategory {
+    switch (registryCategory?.toLowerCase()) {
+      case 'apps':
+      case 'app':
+      case 'oauth_integration':
+        return ToolCategory.APPS;
+      case 'utility':
+      case 'utilities':
+        return ToolCategory.UTILITIES;
+      case 'organizational':
+        return ToolCategory.ORGANIZATIONAL;
+      case 'base':
+      case 'system':
+        return ToolCategory.BASE;
+      default:
+        return ToolCategory.UTILITIES;
+    }
+  }
+
 
   async discoverTools(options: ToolDiscoveryOptions): Promise<ToolDiscoveryResult> {
-    let filteredTools = [...this.tools];
+    const allTools = await this.loadTools();
+    let filteredTools = [...allTools];
 
     // Filter by category
     if (options.category) {
@@ -155,7 +257,8 @@ export class StaticToolRegistry implements IToolRegistryService {
   }
 
   async getToolMetadata(toolName: string): Promise<ToolMetadata | null> {
-    return this.tools.find(tool => tool.name === toolName) || null;
+    const allTools = await this.loadTools();
+    return allTools.find(tool => tool.name === toolName) || null;
   }
 
   async checkToolAvailability(toolName: string, organizationId?: number): Promise<ToolAvailability> {
@@ -177,11 +280,13 @@ export class StaticToolRegistry implements IToolRegistryService {
   }
 
   async getToolsByCategory(category: ToolCategory): Promise<ToolMetadata[]> {
-    return this.tools.filter(tool => tool.category === category);
+    const allTools = await this.loadTools();
+    return allTools.filter(tool => tool.category === category);
   }
 
   async searchTools(query: string, limit = 20): Promise<ToolMetadata[]> {
-    const results = this.tools
+    const allTools = await this.loadTools();
+    const results = allTools
       .filter(tool => tool.matchesSearch(query))
       .slice(0, limit);
 
@@ -214,7 +319,8 @@ export class StaticToolRegistry implements IToolRegistryService {
   }
 
   async getAvailableCategories(): Promise<ToolCategory[]> {
-    const categories = new Set(this.tools.map(tool => tool.category));
+    const allTools = await this.loadTools();
+    const categories = new Set(allTools.map(tool => tool.category));
     return Array.from(categories);
   }
 

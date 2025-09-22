@@ -28,11 +28,10 @@ import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { ToolPanel } from './ToolPanel'
 import { resolveReferences } from '@/app/actions/references'
-import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
+import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
 import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
 import { fetchDocumentArtifactData, fetchFileArtifactData, getFileDownloadUrl } from '@/app/actions/artifacts'
-import { mapReferenceToolToDTO, type ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 
 /**
@@ -202,10 +201,10 @@ function ChatSuggestions({
 
 // Component that can access useChatCanvas hook inside ChatSection
 interface ChatContentWithCanvasProps {
-  selectedTools: (ReferenceToolDTO | ToolDTO)[]
-  onToolsChange: (tools: (ReferenceToolDTO | ToolDTO)[]) => void
+  selectedTools: ToolDTO[]
+  onToolsChange: (tools: ToolDTO[]) => void
   onAddTool: () => void
-  onRemoveTool: (tool: ReferenceToolDTO | ToolDTO) => void
+  onRemoveTool: (tool: ToolDTO) => void
   showSuggestions: boolean
   selectedSuggestionIndex: number
   onSuggestionClick: (suggestion: string) => void
@@ -233,16 +232,16 @@ function ChatContentWithCanvas({
   const { openArtifactInCanvas } = useChatCanvas()
 
   // Handle tool click using canvas hook
-  const handleToolClick = async (tool: ReferenceToolDTO | ToolDTO) => {
+  const handleToolClick = async (tool: ToolDTO) => {
     console.log('Tool clicked:', tool)
 
-    // Only handle reference tools for artifact opening
-    if (!('toolName' in tool)) {
+    // Only handle reference tools for artifact opening (check via category or insertText pattern)
+    if (!tool.insertText?.includes('@') || tool.insertText?.startsWith('@tool:')) {
       console.log('System tool clicked:', tool.name)
       return
     }
 
-    if (tool.category === ReferenceCategory.DOC) {
+    if (tool.category === ToolCategory.DOCUMENTS) {
       // Fetch real document data using DTO config
       const result = await fetchDocumentArtifactData(
         tool.config.documentId!,
@@ -265,7 +264,7 @@ function ChatContentWithCanvas({
       } else {
         console.error('Failed to fetch document data:', result.error)
       }
-    } else if (tool.category === ReferenceCategory.FILE) {
+    } else if (tool.category === ToolCategory.FILES) {
       // Fetch real file data using DTO config
       const fileResult = await fetchFileArtifactData(
         tool.config.fileId!,
@@ -372,7 +371,7 @@ export function EmeryChat({ handler }: EmeryChatProps) {
   const [isClient, setIsClient] = useState(false)
 
   // Tools state for @ tool selection
-  const [selectedTools, setSelectedTools] = useState<(ReferenceToolDTO | ToolDTO)[]>([])
+  const [selectedTools, setSelectedTools] = useState<ToolDTO[]>([])
 
   // Handle chat history updates (callback for forcing refresh)
   const handleChatHistoryUpdate = () => {
@@ -528,7 +527,7 @@ export function EmeryChat({ handler }: EmeryChatProps) {
   }
 
   // Handle tool changes from chat input
-  const handleToolsChange = (tools: (ReferenceToolDTO | ToolDTO)[]) => {
+  const handleToolsChange = (tools: ToolDTO[]) => {
     setSelectedTools(tools)
   }
 
@@ -548,16 +547,15 @@ export function EmeryChat({ handler }: EmeryChatProps) {
   }
 
   // Handle removing tool from panel
-  const handleRemoveTool = (toolToRemove: ReferenceToolDTO | ToolDTO) => {
-    // Remove from selected tools
+  const handleRemoveTool = (toolToRemove: ToolDTO) => {
+    // Remove from selected tools using unified ToolDTO comparison
     const updatedTools = selectedTools.filter(tool => {
-      if ('toolName' in tool && 'toolName' in toolToRemove) {
+      // For reference tools, use id if available, otherwise use insertText
+      if (tool.id && toolToRemove.id) {
         return tool.id !== toolToRemove.id
       }
-      if (!('toolName' in tool) && !('toolName' in toolToRemove)) {
-        return tool.name !== toolToRemove.name
-      }
-      return true
+      // For system tools or fallback, use name
+      return tool.name !== toolToRemove.name
     })
     setSelectedTools(updatedTools)
 

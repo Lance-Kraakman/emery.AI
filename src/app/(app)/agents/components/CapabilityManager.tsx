@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ToolDropdown } from '@/components/chat/ToolDropdown';
-import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 
 // AIDEV-NOTE: Capability manager with full CRUD functionality
@@ -181,11 +180,20 @@ export default function CapabilityManager({
   };
 
   // Handle tool selection from dropdown
-  const handleToolSelect = (tool: ReferenceToolDTO | ToolDTO) => {
+  const handleToolSelect = (tool: ToolDTO) => {
     if (!editingStepToolIndex) return;
 
     const { stepIndex, toolIndex } = editingStepToolIndex;
-    const toolName = 'insertText' in tool ? tool.insertText : `@tool:${tool.name}`;
+
+    // All tools from dropdown are now ToolDTO
+    const toolName = `@tool:${tool.name}`;
+
+    // Handle OAuth requirements for tools that require connection
+    if (tool.requiresConnection && tool.connectionType === 'oauth') {
+      // TODO: Check if user has connected the required OAuth provider
+      // For now, allow selection but the backend will handle auth validation
+      console.log(`Tool ${tool.displayName} requires OAuth authentication`);
+    }
 
     // Update the tool with selected name
     handleUpdateStepTool(stepIndex, toolIndex, 'name', toolName);

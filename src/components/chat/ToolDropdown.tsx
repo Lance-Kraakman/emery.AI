@@ -13,9 +13,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { searchAllTools } from '@/app/actions/references';
-import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper';
-import type { ToolDTO, ToolSearchResultDTO } from '@/app/mappers/tool-mapper';
+import { searchAllTools } from '@/app/actions/tools';
+import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import { ReferenceCategory, REFERENCE_CATEGORY_INFO } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ChevronDown, Search, Loader2, FileText, Bot, Database, Table, File } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -24,7 +23,7 @@ interface ToolDropdownProps {
   query: string;
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (tool: ReferenceToolDTO | ToolDTO) => void;
+  onSelect: (tool: ToolDTO) => void;
   position?: {
     top: number;
     left: number;
@@ -66,29 +65,24 @@ export function ToolDropdown({
     setIsClient(true);
   }, []);
 
-  // Search tools using enhanced DDD action
+  // Search all tools (reference tools + system tools)
   const {
     data: searchResult,
     isLoading,
     error
   } = useQuery({
-    queryKey: ['search-all-tools', query, selectedCategories],
+    queryKey: ['search-all-tools', query],
     queryFn: async () => {
       try {
-        console.log(`[ToolDropdown] Searching with query: "${query}", categories:`, selectedCategories);
-        const result = await searchAllTools({
-          query,
-          categories: selectedCategories.length > 0 ? selectedCategories : undefined,
-          limit: 20,
-          offset: 0
-        });
+        console.log(`[ToolDropdown] Searching tools with query: "${query}"`);
+        const result = await searchAllTools({ query, limit: 20 });
 
         if (!result.success) {
           console.error('[ToolDropdown] Search failed:', result.error);
           throw new Error(result.error);
         }
 
-        console.log('[ToolDropdown] Search successful:', result.data?.referenceTools?.length || 0, 'reference tools,', result.data?.systemTools?.length || 0, 'system tools found');
+        console.log('[ToolDropdown] Found', result.data?.tools?.length || 0, 'tools');
         return result.data;
       } catch (error) {
         console.error('[ToolDropdown] Search error:', error);
@@ -100,11 +94,8 @@ export function ToolDropdown({
     retry: 1,
   });
 
-  // Combine and categorize all tools
-  const allTools: (ReferenceToolDTO | ToolDTO)[] = [
-    ...(searchResult?.systemTools ?? []),
-    ...(searchResult?.referenceTools ?? [])
-  ];
+  // Use tools from search result
+  const allTools = searchResult?.tools || [];
 
   // Handle category filter toggle
   const toggleCategory = (category: ReferenceCategory) => {
@@ -267,32 +258,25 @@ export function ToolDropdown({
           <>
             {allTools.map((tool, index) => {
               try {
-                // Check if it's a reference tool or system tool
-                const isReferenceTool = 'toolName' in tool;
-
-                // Create display info based on tool type
-                const displayInfo = isReferenceTool ? {
-                  displayName: tool.displayName || 'Unknown Tool',
-                  description: tool.description || 'Tool description not available',
-                  insertText: tool.insertText || '@unknown',
-                  category: tool.category || ReferenceCategory.DOC,
-                  supportsArtifacts: tool.supportsArtifacts || false
-                } : {
-                  displayName: tool.displayName || 'Unknown Tool',
-                  description: tool.description || 'Tool description not available',
+                // Simple tool display using ToolDTO interface
+                const displayInfo = {
+                  displayName: tool.displayName,
+                  description: tool.description,
                   insertText: `@tool:${tool.name}`,
                   category: tool.category,
-                  supportsArtifacts: false
+                  requiresConnection: tool.requiresConnection,
+                  icon: tool.icon
                 };
 
-                const Icon = isReferenceTool
-                  ? (categoryIcons[displayInfo.category as ReferenceCategory] || FileText)
-                  : FileText; // Default for system tools
+                // Use tool icon or default
+                let Icon = FileText; // Default icon
+                if (tool.icon) {
+                  // For now, use default icon. Could map emoji to icons later
+                  Icon = FileText;
+                }
+
                 const isSelected = index === selectedIndex;
-                // Create unique key based on tool type and ID/name + index to ensure uniqueness
-                const toolId = isReferenceTool
-                  ? `ref-${tool.toolName || 'unknown'}-${tool.id || 'no-id'}-${index}`
-                  : `sys-${tool.name || 'unknown'}-${index}`;
+                const toolId = `tool-${tool.name}-${index}`;
 
                 return (
                   <button
@@ -308,7 +292,7 @@ export function ToolDropdown({
                     <div className="flex items-start gap-3">
                       <div className={cn(
                         'p-1 rounded-md flex-shrink-0',
-                        categoryColors[displayInfo.category as ReferenceCategory] || 'text-gray-600 bg-gray-50'
+                        'text-gray-600 bg-gray-50' // Simple styling
                       )}>
                         <Icon className="w-3 h-3" />
                       </div>
@@ -322,9 +306,9 @@ export function ToolDropdown({
                         <div className="text-xs text-gray-400 mt-1 font-mono">
                           {displayInfo.insertText}
                         </div>
-                        {displayInfo.supportsArtifacts && (
-                          <div className="text-xs text-blue-500 mt-1">
-                            Can open as artifact
+                        {displayInfo.requiresConnection && (
+                          <div className="text-xs text-orange-500 mt-1">
+                            Requires OAuth connection
                           </div>
                         )}
                       </div>

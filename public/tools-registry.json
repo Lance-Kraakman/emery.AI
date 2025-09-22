@@ -1,0 +1,576 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "generated_at": "2025-01-17T13:30:00Z",
+    "description": "Unified tool registry mapping frontend tool names to backend implementations",
+    "total_curated_tools": 15
+  },
+  "curated_tools": [
+    {
+      "id": "python_repl",
+      "display_name": "Python REPL",
+      "description": "Execute Python code in a sandboxed environment",
+      "category": "utility",
+      "app": "native",
+      "tags": ["python", "code", "execution", "calculation"],
+      "ui_config": {
+        "icon": "🐍",
+        "insert_text": "@tool:python_repl",
+        "supports_artifacts": true,
+        "preview_description": "Run Python code and see results"
+      },
+      "implementation": {
+        "type": "native",
+        "backend_class": "PythonReplTool",
+        "requires_auth": false
+      },
+      "parameters": {
+        "code": {
+          "type": "string",
+          "description": "Python code to execute",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "github_list_repos",
+      "display_name": "List GitHub Repositories",
+      "description": "List repositories for the authenticated user",
+      "category": "oauth_integration",
+      "app": "github",
+      "tags": ["github", "repositories", "development", "list"],
+      "ui_config": {
+        "icon": "📁",
+        "insert_text": "@tool:github_list_repos",
+        "supports_artifacts": false,
+        "preview_description": "Lists your GitHub repositories"
+      },
+      "implementation": {
+        "type": "pipedream",
+        "pipedream_tool_id": "github-mcp",
+        "requires_auth": true,
+        "auth_provider": "github",
+        "api_config": {
+          "method": "GET",
+          "endpoint": "/user/repos"
+        }
+      },
+      "parameters": {
+        "type": {
+          "type": "string",
+          "description": "Type of repositories to list (all, owner, member)",
+          "required": false,
+          "default": "owner"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort repositories by (created, updated, pushed, full_name)",
+          "required": false,
+          "default": "updated"
+        },
+        "per_page": {
+          "type": "number",
+          "description": "Number of repositories per page (max 100)",
+          "required": false,
+          "default": 30
+        }
+      }
+    },
+    {
+      "id": "github_repo_manager",
+      "display_name": "GitHub Repository Manager",
+      "description": "Manage GitHub repositories, issues, and pull requests",
+      "category": "oauth_integration",
+      "app": "github",
+      "tags": ["github", "repository", "code", "version-control", "management"],
+      "ui_config": {
+        "icon": "⚙️",
+        "insert_text": "@tool:github_repo_manager",
+        "supports_artifacts": false,
+        "preview_description": "Manage GitHub repositories and resources"
+      },
+      "implementation": {
+        "type": "pipedream",
+        "pipedream_tool_id": "github-mcp",
+        "requires_auth": true,
+        "auth_provider": "github"
+      },
+      "parameters": {
+        "action": {
+          "type": "string",
+          "description": "Action to perform (list_repos, create_repo, get_repo, list_issues, create_issue)",
+          "required": true
+        },
+        "repository": {
+          "type": "string",
+          "description": "Repository name (owner/repo format)",
+          "required": false
+        },
+        "data": {
+          "type": "object",
+          "description": "Additional data for the action",
+          "required": false
+        }
+      }
+    },
+    {
+      "id": "slack_send_message",
+      "display_name": "Send Slack Message",
+      "description": "Send messages to Slack channels and users",
+      "category": "oauth_integration",
+      "app": "slack",
+      "tags": ["slack", "messaging", "communication"],
+      "ui_config": {
+        "icon": "💬",
+        "insert_text": "@tool:slack_send_message",
+        "supports_artifacts": false,
+        "preview_description": "Send message to Slack channel or user"
+      },
+      "implementation": {
+        "type": "pipedream",
+        "pipedream_tool_id": "slack-mcp",
+        "requires_auth": true,
+        "auth_provider": "slack",
+        "api_config": {
+          "method": "POST",
+          "endpoint": "/chat.postMessage"
+        }
+      },
+      "parameters": {
+        "channel": {
+          "type": "string",
+          "description": "Channel ID or name",
+          "required": true
+        },
+        "text": {
+          "type": "string",
+          "description": "Message text",
+          "required": true
+        },
+        "username": {
+          "type": "string",
+          "description": "Bot username",
+          "required": false
+        }
+      }
+    },
+    {
+      "id": "gmail_send_email",
+      "display_name": "Send Gmail Email",
+      "description": "Send emails via Gmail",
+      "category": "oauth_integration",
+      "app": "gmail",
+      "tags": ["email", "gmail", "communication"],
+      "ui_config": {
+        "icon": "📧",
+        "insert_text": "@tool:gmail_send_email",
+        "supports_artifacts": false,
+        "preview_description": "Send email through Gmail"
+      },
+      "implementation": {
+        "type": "pipedream",
+        "pipedream_tool_id": "gmail-mcp",
+        "requires_auth": true,
+        "auth_provider": "gmail",
+        "api_config": {
+          "method": "POST",
+          "endpoint": "/gmail/v1/users/me/messages/send"
+        }
+      },
+      "parameters": {
+        "to": {
+          "type": "string",
+          "description": "Recipient email address",
+          "required": true
+        },
+        "subject": {
+          "type": "string",
+          "description": "Email subject",
+          "required": true
+        },
+        "body": {
+          "type": "string",
+          "description": "Email body",
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "google_sheets",
+      "display_name": "Google Sheets",
+      "description": "Read and write Google Sheets spreadsheets",
+      "category": "oauth_integration",
+      "app": "google-sheets",
+      "tags": ["spreadsheet", "data", "google", "sheets"],
+      "ui_config": {
+        "icon": "📊",
+        "insert_text": "@tool:google_sheets",
+        "supports_artifacts": true,
+        "preview_description": "Work with Google Sheets data"
+      },
+      "implementation": {
+        "type": "pipedream",
+        "pipedream_tool_id": "google_sheets-mcp",
+        "requires_auth": true,
+        "auth_provider": "google-sheets"
+      },
+      "parameters": {
+        "action": {
+          "type": "string",
+          "description": "Action to perform (read, write, create, update)",
+          "required": true
+        },
+        "spreadsheet_id": {
+          "type": "string",
+          "description": "Google Sheets spreadsheet ID",
+          "required": true
+        },
+        "range": {
+          "type": "string",
+          "description": "Cell range (e.g., A1:C10)",
+          "required": false
+        }
+      }
+    },
+    {
+      "id": "web_search",
+      "display_name": "Web Search",
+      "description": "Search the web for current information",
+      "category": "utility",
+      "app": "native",
+      "tags": ["search", "web", "research", "information"],
+      "ui_config": {
+        "icon": "🔍",
+        "insert_text": "@tool:web_search",
+        "supports_artifacts": false,
+        "preview_description": "Search the web for information"
+      },
+      "implementation": {
+        "type": "native",
+        "backend_class": "WebSearchTool",
+        "requires_auth": false
+      },
+      "parameters": {
+        "query": {
+          "type": "string",
+          "description": "Search query",
+          "required": true
+        },
+        "max_results": {
+          "type": "number",
+          "description": "Maximum number of results",
+          "required": false,
+          "default": 10
+        }
+      }
+    },
+    {
+      "id": "data_analyzer",
+      "display_name": "Data Analyzer",
+      "description": "Analyze CSV, JSON, and other data formats",
+      "category": "utility",
+      "app": "native",
+      "tags": ["data", "analysis", "csv", "json"],
+      "ui_config": {
+        "icon": "📈",
+        "insert_text": "@tool:data_analyzer",
+        "supports_artifacts": true,
+        "preview_description": "Analyze data files and generate insights"
+      },
+      "implementation": {
+        "type": "native",
+        "backend_class": "DataAnalyzerTool",
+        "requires_auth": false
+      },
+      "parameters": {
+        "data": {
+          "type": "string",
+          "description": "Data to analyze (CSV, JSON, or raw text)",
+          "required": true
+        },
+        "analysis_type": {
+          "type": "string",
+          "description": "Type of analysis to perform",
+          "required": false
+        }
+      }
+    },
+    {
+      "id": "measurement_tracker",
+      "display_name": "Measurement Tracker",
+      "description": "Track and calculate organizational measurements",
+      "category": "organizational",
+      "app": "native",
+      "tags": ["measurement", "kpi", "tracking", "metrics"],
+      "ui_config": {
+        "icon": "📏",
+        "insert_text": "@tool:measurement_tracker",
+        "supports_artifacts": true,
+        "preview_description": "Track organizational KPIs and metrics"
+      },
+      "implementation": {
+        "type": "native",
+        "backend_class": "MeasurementTrackerTool",
+        "requires_auth": false
+      },
+      "parameters": {
+        "metric_name": {
+          "type": "string",
+          "description": "Name of the metric to track",
+          "required": true
+        },
+        "value": {
+          "type": "number",
+          "description": "Value to record",
+          "required": true
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Timestamp for the measurement",
+          "required": false
+        }
+      }
+    },
+    {
+      "id": "document_reader",
+      "display_name": "Document Reader",
+      "description": "Read and analyze documents from your organization",
+      "category": "reference",
+      "app": "native",
+      "tags": ["document", "read", "analysis", "file"],
+      "ui_config": {
+        "icon": "📄",
+        "insert_text": "@tool:document_reader",
+        "supports_artifacts": true,
+        "preview_description": "Read and analyze organization documents"
+      },
+      "implementation": {
+        "type": "native",
+        "backend_class": "DocumentReaderTool",
+        "requires_auth": false
+      },
+      "parameters": {
+        "document_id": {
+          "type": "string",
+          "description": "Document ID or path",
+          "required": true
+        },
+        "action": {
+          "type": "string",
+          "description": "Action to perform (read, summarize, search)",
+          "required": false,
+          "default": "read"
+        }
+      }
+    },
+    {
+      "id": "table_query",
+      "display_name": "Table Query",
+      "description": "Query data from your organization tables",
+      "category": "reference",
+      "app": "native",
+      "tags": ["table", "query", "data", "sql"],
+      "ui_config": {
+        "icon": "🗂️",
+        "insert_text": "@tool:table_query",
+        "supports_artifacts": true,
+        "preview_description": "Query organization table data"
+      },
+      "implementation": {
+        "type": "native",
+        "backend_class": "TableQueryTool",
+        "requires_auth": false
+      },
+      "parameters": {
+        "table_name": {
+          "type": "string",
+          "description": "Name of the table to query",
+          "required": true
+        },
+        "query": {
+          "type": "string",
+          "description": "SQL query or filter criteria",
+          "required": false
+        },
+        "limit": {
+          "type": "number",
+          "description": "Maximum number of rows to return",
+          "required": false,
+          "default": 100
+        }
+      }
+    },
+    {
+      "id": "notion_database",
+      "display_name": "Notion Database",
+      "description": "Query and update Notion databases",
+      "category": "oauth_integration",
+      "app": "notion",
+      "tags": ["notion", "database", "productivity", "notes"],
+      "ui_config": {
+        "icon": "📝",
+        "insert_text": "@tool:notion_database",
+        "supports_artifacts": true,
+        "preview_description": "Work with Notion databases"
+      },
+      "implementation": {
+        "type": "pipedream",
+        "pipedream_tool_id": "notion-mcp",
+        "requires_auth": true,
+        "auth_provider": "notion"
+      },
+      "parameters": {
+        "action": {
+          "type": "string",
+          "description": "Action to perform (query, create, update)",
+          "required": true
+        },
+        "database_id": {
+          "type": "string",
+          "description": "Notion database ID",
+          "required": true
+        },
+        "filter": {
+          "type": "object",
+          "description": "Query filter",
+          "required": false
+        }
+      }
+    },
+    {
+      "id": "discord_message",
+      "display_name": "Discord Message",
+      "description": "Send messages to Discord channels",
+      "category": "oauth_integration",
+      "app": "discord",
+      "tags": ["discord", "messaging", "gaming", "community"],
+      "ui_config": {
+        "icon": "🎮",
+        "insert_text": "@tool:discord_message",
+        "supports_artifacts": false,
+        "preview_description": "Send message to Discord channel"
+      },
+      "implementation": {
+        "type": "pipedream",
+        "pipedream_tool_id": "discord-mcp",
+        "requires_auth": true,
+        "auth_provider": "discord"
+      },
+      "parameters": {
+        "channel_id": {
+          "type": "string",
+          "description": "Discord channel ID",
+          "required": true
+        },
+        "content": {
+          "type": "string",
+          "description": "Message content",
+          "required": true
+        },
+        "embed": {
+          "type": "object",
+          "description": "Rich embed object",
+          "required": false
+        }
+      }
+    },
+    {
+      "id": "linear_issue",
+      "display_name": "Linear Issue",
+      "description": "Create and manage Linear issues",
+      "category": "oauth_integration",
+      "app": "linear",
+      "tags": ["linear", "issues", "project-management", "development"],
+      "ui_config": {
+        "icon": "📋",
+        "insert_text": "@tool:linear_issue",
+        "supports_artifacts": false,
+        "preview_description": "Create and manage Linear issues"
+      },
+      "implementation": {
+        "type": "pipedream",
+        "pipedream_tool_id": "linear-mcp",
+        "requires_auth": true,
+        "auth_provider": "linear"
+      },
+      "parameters": {
+        "action": {
+          "type": "string",
+          "description": "Action to perform (create, update, list, get)",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "description": "Issue title",
+          "required": false
+        },
+        "description": {
+          "type": "string",
+          "description": "Issue description",
+          "required": false
+        },
+        "team_id": {
+          "type": "string",
+          "description": "Linear team ID",
+          "required": false
+        }
+      }
+    },
+    {
+      "id": "airtable_base",
+      "display_name": "Airtable Base",
+      "description": "Query and update Airtable bases and records",
+      "category": "oauth_integration",
+      "app": "airtable",
+      "tags": ["airtable", "database", "records", "collaboration"],
+      "ui_config": {
+        "icon": "🗃️",
+        "insert_text": "@tool:airtable_base",
+        "supports_artifacts": true,
+        "preview_description": "Work with Airtable data"
+      },
+      "implementation": {
+        "type": "pipedream",
+        "pipedream_tool_id": "airtable_oauth-mcp",
+        "requires_auth": true,
+        "auth_provider": "airtable"
+      },
+      "parameters": {
+        "action": {
+          "type": "string",
+          "description": "Action to perform (list, create, update, delete)",
+          "required": true
+        },
+        "base_id": {
+          "type": "string",
+          "description": "Airtable base ID",
+          "required": true
+        },
+        "table_name": {
+          "type": "string",
+          "description": "Table name within the base",
+          "required": true
+        },
+        "data": {
+          "type": "object",
+          "description": "Record data for create/update operations",
+          "required": false
+        }
+      }
+    }
+  ],
+  "pipedream_config": {
+    "enabled": true,
+    "metadata_path": "./emery-agents/src/emery_agents/execution/tools/pipedream_metadata.json",
+    "load_strategy": "curated_only",
+    "fallback_enabled": false,
+    "mcp_suffix": "-mcp",
+    "description": "Pipedream tools use generic MCP tools with custom API configurations for flexibility"
+  },
+  "categories": {
+    "utility": "General purpose tools for code execution, data analysis, and web search",
+    "oauth_integration": "Third-party service integrations requiring OAuth authentication",
+    "organizational": "Tools for tracking organizational metrics and processes",
+    "reference": "Tools for accessing organization-specific data and documents"
+  }
+}

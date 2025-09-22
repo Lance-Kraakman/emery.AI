@@ -11,8 +11,7 @@ import { QuickConnectionSetup } from '@/components/ui/ConnectionSetupFlow'
 import { getToolConnectionStatus, type ToolConnectionStatus } from '@/app/actions/connections'
 import type { ToolDTO, ToolSearchResultDTO } from '@/app/mappers/tool-mapper'
 import { ToolCategory } from '@/app/mappers/tool-mapper'
-import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper'
-import { searchAllTools } from '@/app/actions/references'
+import { searchAllTools } from '@/app/actions/tools'
 import { TOOL_CATEGORY_INFO, getCategoryInfo } from '@/ddd/domain/tools/value-objects/tool-metadata'
 import { useSession } from 'next-auth/react'
 
@@ -25,28 +24,27 @@ export interface ResolvedReference {
 interface ToolSelectionPanelProps {
   isVisible: boolean
   onClose: () => void
-  onSelectTool: (tool: ToolDTO | ReferenceToolDTO) => void
+  onSelectTool: (tool: ToolDTO) => void
   onResolveReference?: (reference: ResolvedReference) => void
   currentOrganizationId: number
 }
 
 interface ToolCardProps {
-  tool: ToolDTO | ReferenceToolDTO
+  tool: ToolDTO
   isSelected: boolean
   onToggle: () => void
-  onOpenArtifact?: (tool: ToolDTO | ReferenceToolDTO) => void
+  onOpenArtifact?: (tool: ToolDTO) => void
   connectionStatus?: ToolConnectionStatus | null
 }
 
 type ConnectionFilter = 'all' | 'connected' | 'needs-setup';
 
 function ToolCard({ tool, isSelected, onToggle, onOpenArtifact, connectionStatus }: ToolCardProps) {
-  const isReferenceTool = 'toolName' in tool
-  const displayName = isReferenceTool ? tool.displayName : tool.displayName
-  const description = isReferenceTool ? tool.description : tool.description
-  const toolCategory = isReferenceTool ? ToolCategory.REFERENCES : tool.category
-  const requiresConnection = isReferenceTool ? tool.metadata.requiresConnection : tool.requiresConnection
-  const supportsArtifacts = isReferenceTool ? tool.supportsArtifacts : false
+  const displayName = tool.displayName
+  const description = tool.description
+  const toolCategory = tool.category
+  const requiresConnection = tool.requiresConnection
+  const supportsArtifacts = tool.supportsArtifacts
 
   const categoryInfo = getCategoryInfo(toolCategory)
 
@@ -121,12 +119,12 @@ function ToolCard({ tool, isSelected, onToggle, onOpenArtifact, connectionStatus
 
 interface CategorySectionProps {
   category: ToolCategory
-  tools: (ToolDTO | ReferenceToolDTO)[]
-  selectedTools: (ToolDTO | ReferenceToolDTO)[]
-  onToolSelect: (tool: ToolDTO | ReferenceToolDTO) => void
-  onToolDeselect: (tool: ToolDTO | ReferenceToolDTO) => void
-  onOpenArtifact?: (tool: ToolDTO | ReferenceToolDTO) => void
-  getConnectionStatus?: (tool: ToolDTO | ReferenceToolDTO) => ToolConnectionStatus | null
+  tools: ToolDTO[]
+  selectedTools: ToolDTO[]
+  onToolSelect: (tool: ToolDTO) => void
+  onToolDeselect: (tool: ToolDTO) => void
+  onOpenArtifact?: (tool: ToolDTO) => void
+  getConnectionStatus?: (tool: ToolDTO) => ToolConnectionStatus | null
 }
 
 function CategorySection({
@@ -210,7 +208,7 @@ export default function ToolSelectionPanel({
   const [toolData, setToolData] = useState<ToolSearchResultDTO | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedTools, setSelectedTools] = useState<(ToolDTO | ReferenceToolDTO)[]>([])
+  const [selectedTools, setSelectedTools] = useState<ToolDTO[]>([])
   const [searchQuery, setSearchQuery] = useState('')
 
   // Connection status state
@@ -257,12 +255,12 @@ export default function ToolSelectionPanel({
     try {
       setIsLoadingConnections(true)
 
-      // Combine all tools from toolData
-      const allTools = [...toolData.systemTools, ...toolData.referenceTools]
+      // Use unified tools array from toolData
+      const allTools = toolData.tools
 
       // Convert to simple tool objects for connection checking
       const simpleTools = allTools.map(tool => ({
-        name: ('name' in tool ? tool.name : tool.toolName) || tool.displayName,
+        name: tool.name || tool.displayName,
         displayName: tool.displayName,
         requiredApps: 'requiredApps' in tool ? tool.requiredApps || [] : []
       }))
@@ -290,14 +288,13 @@ export default function ToolSelectionPanel({
   }, [searchQuery, isVisible])
 
   // Helper functions
-  const getConnectionStatus = (tool: ToolDTO | ReferenceToolDTO) => {
-    const toolName = 'name' in tool ? tool.name : tool.toolName;
+  const getConnectionStatus = (tool: ToolDTO) => {
     return connectionStatuses.find(status =>
-      status.toolName === toolName || status.toolName === tool.displayName
+      status.toolName === tool.name || status.toolName === tool.displayName
     ) || null
   }
 
-  const filterToolsByConnection = (tools: (ToolDTO | ReferenceToolDTO)[]) => {
+  const filterToolsByConnection = (tools: ToolDTO[]) => {
     if (connectionFilter === 'all') return tools
 
     return tools.filter(tool => {
@@ -325,39 +322,30 @@ export default function ToolSelectionPanel({
     window.open('/connections?setup=' + encodeURIComponent(appName), '_blank')
   }
 
-  const handleToolSelect = (tool: ToolDTO | ReferenceToolDTO) => {
+  const handleToolSelect = (tool: ToolDTO) => {
     setSelectedTools(prev => [...prev, tool])
     onSelectTool(tool)
   }
 
-  const handleToolDeselect = (tool: ToolDTO | ReferenceToolDTO) => {
+  const handleToolDeselect = (tool: ToolDTO) => {
     setSelectedTools(prev => prev.filter(t => {
-      if ('toolName' in tool && 'toolName' in t) {
-        return !(t.toolName === tool.toolName && t.id === tool.id)
+      // For reference tools, use id; for system tools, use name
+      if (tool.id && t.id) {
+        return t.id !== tool.id
       }
-      if (!('toolName' in tool) && !('toolName' in t)) {
-        return t.name !== tool.name
-      }
-      return true
+      return t.name !== tool.name
     }))
   }
 
   if (!isVisible) return null
 
   const organizeToolsByCategory = (data: ToolSearchResultDTO) => {
-    const categoryMap = new Map<ToolCategory, (ToolDTO | ReferenceToolDTO)[]>()
+    const categoryMap = new Map<ToolCategory, ToolDTO[]>()
 
-    // Add system tools
-    data.systemTools.forEach(tool => {
+    // Add all tools using their unified category property
+    data.tools.forEach(tool => {
       const existing = categoryMap.get(tool.category) || []
       categoryMap.set(tool.category, [...existing, tool])
-    })
-
-    // Add reference tools - all reference tools go to REFERENCES category
-    data.referenceTools.forEach(tool => {
-      const category = ToolCategory.REFERENCES
-      const existing = categoryMap.get(category) || []
-      categoryMap.set(category, [...existing, tool])
     })
 
     return categoryMap
@@ -474,7 +462,7 @@ export default function ToolSelectionPanel({
                 );
               })}
 
-              {toolData.systemTools.length === 0 && toolData.referenceTools.length === 0 && (
+              {toolData.tools.length === 0 && (
                 <div className="text-center py-8 text-muted-foreground text-sm">
                   No tools or references available
                 </div>

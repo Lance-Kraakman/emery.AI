@@ -15,7 +15,7 @@ import type { Result } from "./types";
 
 /**
  * Complete tool search that returns both reference tools and system tools
- * This is the new recommended method for tool search
+ * @deprecated Use searchAllTools from @/app/actions/tools instead
  */
 export async function searchAllTools(options: {
   query: string;
@@ -47,15 +47,15 @@ export async function searchAllTools(options: {
       hasMore: searchResult.hasMore
     });
 
-    // Map to DTOs
+    // Map to unified ToolDTO array
     const referenceToolDTOs = ReferenceToolMapper.toDTOs(searchResult.referenceTools);
     const systemToolDTOs = ToolMapper.toDTOs(searchResult.systemTools);
+    const allTools = [...referenceToolDTOs, ...systemToolDTOs];
 
     return {
       success: true,
       data: {
-        referenceTools: referenceToolDTOs,
-        systemTools: systemToolDTOs,
+        tools: allTools,
         hasMore: searchResult.hasMore,
         totalCount: searchResult.totalCount
       }
@@ -66,8 +66,7 @@ export async function searchAllTools(options: {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to search tools',
       data: {
-        referenceTools: [],
-        systemTools: [],
+        tools: [],
         hasMore: false,
         totalCount: 0
       }
@@ -77,6 +76,7 @@ export async function searchAllTools(options: {
 
 /**
  * Search reference tools only (agents, docs, files, tables, databases)
+ * @deprecated This function returns old ReferenceToolDTO format - use searchAllTools from tools.ts instead
  * Used by ToolDropdown.tsx
  */
 export async function searchReferenceTools(options: {
@@ -114,8 +114,10 @@ export async function searchReferenceTools(options: {
       hasMore: searchResult.hasMore
     });
 
-    // Convert domain objects to DTOs for client components
-    const referenceToolDTOs = ReferenceToolMapper.toDTOs(searchResult.referenceTools);
+    // Convert domain objects to legacy ReferenceToolDTO format for backward compatibility
+    const referenceToolDTOs = searchResult.referenceTools.map(referenceTool =>
+      mapReferenceToolToLegacyDTO(referenceTool)
+    );
 
     return {
       success: true,
@@ -136,6 +138,34 @@ export async function searchReferenceTools(options: {
         ? 'Authentication required'
         : 'Failed to search reference tools'
     };
+  }
+}
+
+/**
+ * Legacy mapping function for backward compatibility
+ * @deprecated Use unified ToolDTO from ReferenceToolMapper instead
+ */
+function mapReferenceToolToLegacyDTO(referenceTool: ReferenceTool): ReferenceToolDTO {
+  const displayInfo = referenceTool.getChatDisplayInfo()
+  const toolMetadata = referenceTool.getToolDisplayInfo()
+
+  return {
+    toolName: referenceTool.toolConfig.name,
+    toolVersion: referenceTool.toolConfig.version,
+    id: referenceTool.reference.id,
+    insertText: displayInfo.insertText,
+    displayName: displayInfo.displayName,
+    description: displayInfo.description,
+    category: displayInfo.category as ReferenceCategory,
+    supportsArtifacts: displayInfo.supportsArtifacts,
+    config: {
+      organizationId: referenceTool.getOrganizationId()
+    },
+    metadata: {
+      toolCategory: toolMetadata.category,
+      requiresConnection: toolMetadata.requiresConnection,
+      connectionType: referenceTool.toolConfig.connectionType
+    }
   }
 }
 

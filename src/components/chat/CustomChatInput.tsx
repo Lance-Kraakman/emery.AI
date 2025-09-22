@@ -18,12 +18,11 @@ import { Input } from '@/components/ui/input';
 import { ToolDropdown } from './ToolDropdown';
 import { resolveReferences } from '@/app/actions/references';
 import type { ReferenceDTO } from '@/app/mappers/reference-mapper';
-import type { ReferenceToolDTO } from '@/app/mappers/reference-tool-mapper';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 
 interface CustomChatInputProps {
   onSendMessage: (message: string) => void;
-  onToolsChange?: (tools: (ReferenceToolDTO | ToolDTO)[]) => void;
+  onToolsChange?: (tools: ToolDTO[]) => void;
   placeholder?: string;
   className?: string;
   disabled?: boolean;
@@ -40,7 +39,7 @@ export default function CustomChatInput({
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownQuery, setDropdownQuery] = useState('');
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
-  const [selectedTools, setSelectedTools] = useState<(ReferenceToolDTO | ToolDTO)[]>([]);
+  const [selectedTools, setSelectedTools] = useState<ToolDTO[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -94,7 +93,7 @@ export default function CustomChatInput({
   };
 
   // Handle tool selection - add to selected tools and update input
-  const handleToolSelect = (tool: ReferenceToolDTO | ToolDTO) => {
+  const handleToolSelect = (tool: ToolDTO) => {
     const cursorPos = inputRef.current?.selectionStart || 0;
     const beforeCursor = inputValue.slice(0, cursorPos);
     const afterCursor = inputValue.slice(cursorPos);
@@ -103,8 +102,8 @@ export default function CustomChatInput({
     const atMatch = beforeCursor.match(/@[^@\s]*$/);
     if (atMatch) {
       const beforeAt = beforeCursor.slice(0, atMatch.index);
-      // Get insertText based on tool type
-      const insertText = 'insertText' in tool ? tool.insertText : `@tool:${tool.name}`;
+      // Get insertText from unified ToolDTO
+      const insertText = tool.insertText || `@tool:${tool.name}`;
       const newValue = beforeAt + insertText + ' ' + afterCursor;
       setInputValue(newValue);
 
@@ -114,7 +113,7 @@ export default function CustomChatInput({
       onToolsChange?.(updatedTools);
 
       // Position cursor after inserted text
-      const newCursorPos = beforeAt.length + insertText.length + 1;
+      const newCursorPos = beforeAt.length + (insertText?.length || 0) + 1;
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
@@ -150,13 +149,13 @@ export default function CustomChatInput({
             // Note: This uses legacy reference resolution, would need enhancement for full ReferenceTool support
             result.data.resolvedReferences.forEach(newTool => {
               const exists = allTools.some(existing => {
-                const existingInsertText = 'insertText' in existing ? existing.insertText : `@tool:${existing.name}`;
+                const existingInsertText = existing.insertText || `@tool:${existing.name}`;
                 return existingInsertText === newTool.insertText;
               });
               if (!exists) {
-                // TODO: Convert ReferenceDTO to ReferenceTool for proper typing
+                // TODO: Convert ReferenceDTO to ToolDTO for proper typing
                 // For now, keeping this section for backward compatibility
-                console.warn('Manual reference resolution needs ReferenceTool conversion');
+                console.warn('Manual reference resolution needs ToolDTO conversion');
               }
             });
 

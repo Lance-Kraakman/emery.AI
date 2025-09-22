@@ -135,9 +135,9 @@ export class ToolSearchApplicationService {
   }
 
   /**
-   * Search system tools from tool registry
-   * These are execution tools like python_repl, web_search, etc.
-   * Returns proper Tool instances (no more architectural abuse!)
+   * Search system tools using the existing tool registry service
+   * These are execution tools like python_repl, web_search, OAuth tools, etc.
+   * Returns proper Tool instances following DDD patterns
    */
   private async searchSystemTools(
     query: string,
@@ -146,25 +146,18 @@ export class ToolSearchApplicationService {
     console.log(`[ToolSearchService] Searching system tools for: "${query}"`);
 
     try {
-      // Use the proper tool registry service to search tools
+      // Use the existing tool registry service to search tools
       const toolMetadataList = await this.toolRegistryService.searchTools(query, 20);
+      console.log(`[ToolSearchService] Found ${toolMetadataList.length} tool metadata entries`);
 
-      console.log(`[ToolSearchService] Found ${toolMetadataList.length} system tools`);
+      // Convert ToolMetadata to Tool instances
+      const tools = toolMetadataList.map(metadata =>
+        this.toolRegistryService.createTool(metadata)
+      );
 
-      // Convert ToolMetadata to proper Tool instances
-      const systemTools: Tool[] = [];
+      console.log(`[ToolSearchService] Created ${tools.length} system tools`);
 
-      for (const toolMetadata of toolMetadataList) {
-        try {
-          // Create proper Tool instances from metadata
-          const tool = Tool.fromMetadata(toolMetadata);
-          systemTools.push(tool);
-        } catch (error) {
-          console.error(`[ToolSearchService] Error creating tool for ${toolMetadata.name}:`, error);
-        }
-      }
-
-      return systemTools;
+      return tools;
     } catch (error) {
       console.error(`[ToolSearchService] Error searching system tools:`, error);
       return [];

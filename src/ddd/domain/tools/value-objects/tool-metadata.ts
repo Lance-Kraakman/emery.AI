@@ -16,13 +16,21 @@
 
 /**
  * Tool categories for organization and filtering
+ * Unified system that includes both execution tools and data reference tools
  */
 export enum ToolCategory {
-  REFERENCES = 'references',    // Document, file, and data references
+  // Execution tools
   APPS = 'apps',               // External application integrations (Slack, Gmail, etc.)
   UTILITIES = 'utilities',     // General utility tools (calculator, web search, etc.)
   ORGANIZATIONAL = 'organizational', // Internal organizational tools (measurements, KPIs, etc.)
-  BASE = 'base'               // Core system tools (Python REPL, file operations, etc.)
+  BASE = 'base',              // Core system tools (Python REPL, file operations, etc.)
+
+  // Data reference tools (formerly ReferenceCategory)
+  DOCUMENTS = 'documents',     // Document references from tables
+  FILES = 'files',            // File references from tables
+  AGENTS = 'agents',          // AI agent references
+  TABLES = 'tables',          // Database table references
+  DATABASES = 'databases'     // Database references
 }
 
 /**
@@ -131,9 +139,9 @@ export class ToolMetadata {
   }
 
   /**
-   * Create tool metadata for reference tools
+   * Create tool metadata for document reference tools
    */
-  static reference(
+  static document(
     name: string,
     displayName: string,
     description: string,
@@ -143,10 +151,98 @@ export class ToolMetadata {
       name,
       displayName,
       description,
-      ToolCategory.REFERENCES,
+      ToolCategory.DOCUMENTS,
       false,
       ConnectionType.NONE,
-      [], // No required apps
+      [],
+      undefined,
+      tags
+    )
+  }
+
+  /**
+   * Create tool metadata for file reference tools
+   */
+  static file(
+    name: string,
+    displayName: string,
+    description: string,
+    tags: string[] = []
+  ): ToolMetadata {
+    return new ToolMetadata(
+      name,
+      displayName,
+      description,
+      ToolCategory.FILES,
+      false,
+      ConnectionType.NONE,
+      [],
+      undefined,
+      tags
+    )
+  }
+
+  /**
+   * Create tool metadata for agent reference tools
+   */
+  static agent(
+    name: string,
+    displayName: string,
+    description: string,
+    tags: string[] = []
+  ): ToolMetadata {
+    return new ToolMetadata(
+      name,
+      displayName,
+      description,
+      ToolCategory.AGENTS,
+      false,
+      ConnectionType.NONE,
+      [],
+      undefined,
+      tags
+    )
+  }
+
+  /**
+   * Create tool metadata for table reference tools
+   */
+  static table(
+    name: string,
+    displayName: string,
+    description: string,
+    tags: string[] = []
+  ): ToolMetadata {
+    return new ToolMetadata(
+      name,
+      displayName,
+      description,
+      ToolCategory.TABLES,
+      false,
+      ConnectionType.NONE,
+      [],
+      undefined,
+      tags
+    )
+  }
+
+  /**
+   * Create tool metadata for database reference tools
+   */
+  static database(
+    name: string,
+    displayName: string,
+    description: string,
+    tags: string[] = []
+  ): ToolMetadata {
+    return new ToolMetadata(
+      name,
+      displayName,
+      description,
+      ToolCategory.DATABASES,
+      false,
+      ConnectionType.NONE,
+      [],
       undefined,
       tags
     )
@@ -258,12 +354,6 @@ export interface ToolCategoryInfo {
  * Standard tool category information for UI display
  */
 export const TOOL_CATEGORY_INFO: Record<ToolCategory, ToolCategoryInfo> = {
-  [ToolCategory.REFERENCES]: {
-    category: ToolCategory.REFERENCES,
-    label: 'References',
-    description: 'Documents, files, and data references from your organization',
-    icon: 'database'
-  },
   [ToolCategory.APPS]: {
     category: ToolCategory.APPS,
     label: 'Apps',
@@ -287,6 +377,36 @@ export const TOOL_CATEGORY_INFO: Record<ToolCategory, ToolCategoryInfo> = {
     label: 'System',
     description: 'Core system tools and operations',
     icon: 'terminal'
+  },
+  [ToolCategory.DOCUMENTS]: {
+    category: ToolCategory.DOCUMENTS,
+    label: 'Documents',
+    description: 'Document references from your organization',
+    icon: 'file-text'
+  },
+  [ToolCategory.FILES]: {
+    category: ToolCategory.FILES,
+    label: 'Files',
+    description: 'File references from your tables',
+    icon: 'file'
+  },
+  [ToolCategory.AGENTS]: {
+    category: ToolCategory.AGENTS,
+    label: 'Agents',
+    description: 'AI agent references',
+    icon: 'bot'
+  },
+  [ToolCategory.TABLES]: {
+    category: ToolCategory.TABLES,
+    label: 'Tables',
+    description: 'Database table references',
+    icon: 'table'
+  },
+  [ToolCategory.DATABASES]: {
+    category: ToolCategory.DATABASES,
+    label: 'Databases',
+    description: 'Database references',
+    icon: 'database'
   }
 } as const
 

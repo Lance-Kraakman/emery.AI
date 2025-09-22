@@ -14,6 +14,7 @@
 
 import { ToolConfig } from '../value-objects/tool-config'
 import { ToolMetadata, ToolCategory } from '../value-objects/tool-metadata'
+import type { Tool } from '../entities/tool'
 
 /**
  * Tool discovery options
@@ -84,6 +85,11 @@ export interface IToolRegistryService {
    * Get all available categories
    */
   getAvailableCategories(): Promise<ToolCategory[]>
+
+  /**
+   * Create a Tool instance from ToolMetadata
+   */
+  createTool(metadata: ToolMetadata, customConfig?: Record<string, any>): Tool
 
   /**
    * AIDEV-TODO: Add gRPC tool discovery methods
