@@ -55,7 +55,10 @@ export class ToolMetadata {
     public readonly connectionType: ConnectionType,
     public readonly requiredApps: readonly string[] = [], // Apps like 'gmail', 'slack', 'github'
     public readonly icon?: string,
-    public readonly tags: readonly string[] = []
+    public readonly tags: readonly string[] = [],
+    // Auto-binding fields for reference-to-execution mapping
+    public readonly mapsToReferences: readonly string[] = [], // ["@doc:", "@document:"]
+    public readonly autoBindParameter?: string // "document_id", "table_name", etc.
   ) {
     if (!name?.trim()) {
       throw new Error('Tool name is required')
@@ -319,6 +322,26 @@ export class ToolMetadata {
     )
   }
 
+  /**
+   * Check if this tool supports auto-binding for a specific reference prefix
+   */
+  supportsReference(prefix: string): boolean {
+    return this.mapsToReferences.includes(prefix);
+  }
+
+  /**
+   * Check if this tool can auto-bind any references
+   */
+  get supportsAutoBinding(): boolean {
+    return this.mapsToReferences.length > 0 && !!this.autoBindParameter;
+  }
+
+  /**
+   * Get all reference prefixes this tool can handle
+   */
+  get supportedReferences(): readonly string[] {
+    return this.mapsToReferences;
+  }
 
   /**
    * Check if this metadata equals another
@@ -335,7 +358,10 @@ export class ToolMetadata {
       this.requiredApps.every((app, index) => app === other.requiredApps[index]) &&
       this.icon === other.icon &&
       this.tags.length === other.tags.length &&
-      this.tags.every((tag, index) => tag === other.tags[index])
+      this.tags.every((tag, index) => tag === other.tags[index]) &&
+      this.mapsToReferences.length === other.mapsToReferences.length &&
+      this.mapsToReferences.every((ref, index) => ref === other.mapsToReferences[index]) &&
+      this.autoBindParameter === other.autoBindParameter
     )
   }
 }

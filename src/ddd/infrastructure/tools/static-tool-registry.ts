@@ -25,6 +25,16 @@ export class StaticToolRegistry implements IToolRegistryService {
   private isLoading = false;
 
   /**
+   * Clear cached tools and force reload on next request
+   * Useful for debugging cache issues
+   */
+  public clearCache(): void {
+    console.log('[StaticToolRegistry] Clearing cache and forcing reload...');
+    this.tools = null;
+    this.isLoading = false;
+  }
+
+  /**
    * Load tools from unified registry and Pipedream metadata
    */
   private async loadTools(): Promise<ToolMetadata[]> {
@@ -76,23 +86,65 @@ export class StaticToolRegistry implements IToolRegistryService {
    */
   private async loadUnifiedRegistryTools(): Promise<ToolMetadata[]> {
     try {
-      const registryPath = path.join(process.cwd(), 'public', 'tools-registry.json');
-      console.log('[StaticToolRegistry] Loading unified registry from:', registryPath);
+      // Try multiple possible locations for tools-registry.json
+      const possiblePaths = [
+        path.join(process.cwd(), 'src', 'public', 'tools-registry.json'),
+        path.join(process.cwd(), 'public', 'tools-registry.json'),
+        path.join(__dirname, '..', '..', '..', '..', 'src', 'public', 'tools-registry.json'),
+        path.join(__dirname, '..', '..', '..', '..', 'public', 'tools-registry.json')
+      ];
 
-      if (!fs.existsSync(registryPath)) {
-        console.warn('[StaticToolRegistry] Unified registry file not found at:', registryPath);
+      let registryPath: string | null = null;
+      for (const candidate of possiblePaths) {
+        console.log('[StaticToolRegistry] Checking path:', candidate);
+        if (fs.existsSync(candidate)) {
+          registryPath = candidate;
+          console.log('[StaticToolRegistry] Found registry at:', registryPath);
+          break;
+        }
+      }
+
+      if (!registryPath) {
+        console.error('[StaticToolRegistry] CRITICAL: Unified registry file not found in any of these locations:');
+        possiblePaths.forEach(p => console.log('[StaticToolRegistry]   -', p));
+        console.log('[StaticToolRegistry] Current working directory:', process.cwd());
+        console.log('[StaticToolRegistry] __dirname:', __dirname);
+        console.log('[StaticToolRegistry] Directory contents:', fs.readdirSync(process.cwd()));
         return [];
       }
 
+      console.log('[StaticToolRegistry] Registry file exists, reading content...');
       const registryContent = fs.readFileSync(registryPath, 'utf8');
+      console.log('[StaticToolRegistry] Registry content length:', registryContent.length);
+
+      console.log('[StaticToolRegistry] Parsing JSON...');
       const registry = JSON.parse(registryContent);
+      console.log('[StaticToolRegistry] JSON parsed successfully, keys:', Object.keys(registry));
 
       const curatedTools = registry.curated_tools || [];
       console.log(`[StaticToolRegistry] Found ${curatedTools.length} curated tools in registry`);
 
-      return curatedTools.map((tool: any) => this.createToolMetadataFromRegistry(tool));
+      if (curatedTools.length === 0) {
+        console.error('[StaticToolRegistry] CRITICAL: No curated_tools found in registry');
+        console.log('[StaticToolRegistry] Registry structure:', JSON.stringify(registry, null, 2).substring(0, 500));
+      }
+
+      console.log('[StaticToolRegistry] Converting curated tools to ToolMetadata...');
+      const toolMetadataArray = curatedTools.map((tool: any, index: number) => {
+        try {
+          console.log(`[StaticToolRegistry] Converting tool ${index + 1}/${curatedTools.length}: ${tool.id}`);
+          return this.createToolMetadataFromRegistry(tool);
+        } catch (conversionError) {
+          console.error(`[StaticToolRegistry] Error converting tool ${tool.id}:`, conversionError);
+          throw conversionError;
+        }
+      });
+
+      console.log(`[StaticToolRegistry] Successfully converted ${toolMetadataArray.length} tools from unified registry`);
+      return toolMetadataArray;
     } catch (error) {
-      console.error('[StaticToolRegistry] Error loading unified registry:', error);
+      console.error('[StaticToolRegistry] CRITICAL ERROR loading unified registry:', error);
+      console.error('[StaticToolRegistry] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       return [];
     }
   }
@@ -102,23 +154,69 @@ export class StaticToolRegistry implements IToolRegistryService {
    */
   private async loadPipedreamTools(): Promise<ToolMetadata[]> {
     try {
-      const pipedreamPath = path.join(process.cwd(), 'emery-agents', 'src', 'emery_agents', 'execution', 'tools', 'pipedream_metadata.json');
-      console.log('[StaticToolRegistry] Loading Pipedream metadata from:', pipedreamPath);
+      // Try multiple possible locations for pipedream_metadata.json
+      const possiblePaths = [
+        path.join(process.cwd(), 'src', 'public', 'pipedream_metadata.json'),
+        path.join(process.cwd(), 'public', 'pipedream_metadata.json'),
+        path.join(__dirname, '..', '..', '..', '..', 'src', 'public', 'pipedream_metadata.json'),
+        path.join(__dirname, '..', '..', '..', '..', 'public', 'pipedream_metadata.json')
+      ];
 
-      if (!fs.existsSync(pipedreamPath)) {
-        console.warn('[StaticToolRegistry] Pipedream metadata file not found at:', pipedreamPath);
+      let pipedreamPath: string | null = null;
+      for (const candidate of possiblePaths) {
+        console.log('[StaticToolRegistry] Checking Pipedream path:', candidate);
+        if (fs.existsSync(candidate)) {
+          pipedreamPath = candidate;
+          console.log('[StaticToolRegistry] Found Pipedream metadata at:', pipedreamPath);
+          break;
+        }
+      }
+
+      if (!pipedreamPath) {
+        console.error('[StaticToolRegistry] CRITICAL: Pipedream metadata file not found in any of these locations:');
+        possiblePaths.forEach(p => console.log('[StaticToolRegistry]   -', p));
+        console.log('[StaticToolRegistry] Checking emery-agents directory...');
+        const emeryAgentsPath = path.join(process.cwd(), 'emery-agents');
+        if (fs.existsSync(emeryAgentsPath)) {
+          console.log('[StaticToolRegistry] emery-agents directory exists');
+          const srcPath = path.join(emeryAgentsPath, 'src');
+          if (fs.existsSync(srcPath)) {
+            console.log('[StaticToolRegistry] src directory exists');
+          } else {
+            console.log('[StaticToolRegistry] src directory does not exist');
+          }
+        } else {
+          console.log('[StaticToolRegistry] emery-agents directory does not exist');
+        }
         return [];
       }
 
+      console.log('[StaticToolRegistry] Pipedream metadata file exists, reading content...');
       const pipedreamContent = fs.readFileSync(pipedreamPath, 'utf8');
+      console.log('[StaticToolRegistry] Pipedream content length:', pipedreamContent.length);
+
+      console.log('[StaticToolRegistry] Parsing Pipedream JSON...');
       const pipedreamMetadata = JSON.parse(pipedreamContent);
 
       const toolIds = Object.keys(pipedreamMetadata);
       console.log(`[StaticToolRegistry] Found ${toolIds.length} Pipedream tools in metadata`);
 
-      return toolIds.map(toolId => this.createToolMetadataFromPipedream(toolId, pipedreamMetadata[toolId]));
+      console.log('[StaticToolRegistry] Converting Pipedream tools to ToolMetadata...');
+      const pipedreamToolMetadata = toolIds.map((toolId, index) => {
+        try {
+          console.log(`[StaticToolRegistry] Converting Pipedream tool ${index + 1}/${toolIds.length}: ${toolId}`);
+          return this.createToolMetadataFromPipedream(toolId, pipedreamMetadata[toolId]);
+        } catch (conversionError) {
+          console.error(`[StaticToolRegistry] Error converting Pipedream tool ${toolId}:`, conversionError);
+          throw conversionError;
+        }
+      });
+
+      console.log(`[StaticToolRegistry] Successfully converted ${pipedreamToolMetadata.length} Pipedream tools`);
+      return pipedreamToolMetadata;
     } catch (error) {
-      console.error('[StaticToolRegistry] Error loading Pipedream metadata:', error);
+      console.error('[StaticToolRegistry] CRITICAL ERROR loading Pipedream metadata:', error);
+      console.error('[StaticToolRegistry] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       return [];
     }
   }
@@ -285,11 +383,37 @@ export class StaticToolRegistry implements IToolRegistryService {
   }
 
   async searchTools(query: string, limit = 20): Promise<ToolMetadata[]> {
+    console.log(`[StaticToolRegistry] === SEARCH TOOLS START ===`);
+    console.log(`[StaticToolRegistry] searchTools called with query: "${query}", limit: ${limit}`);
+    console.log(`[StaticToolRegistry] Current cache state - tools: ${this.tools ? this.tools.length : 'null'}, isLoading: ${this.isLoading}`);
+
     const allTools = await this.loadTools();
+    console.log(`[StaticToolRegistry] loadTools returned ${allTools.length} tools`);
+
+    if (allTools.length === 0) {
+      console.error(`[StaticToolRegistry] CRITICAL: loadTools returned 0 tools - this indicates a cache or loading issue`);
+      console.log(`[StaticToolRegistry] Cache state after loadTools - tools: ${this.tools ? this.tools.length : 'null'}`);
+      console.log(`[StaticToolRegistry] Attempting to clear cache and reload...`);
+      this.clearCache();
+      const reloadedTools = await this.loadTools();
+      console.log(`[StaticToolRegistry] After cache clear and reload: ${reloadedTools.length} tools`);
+      return reloadedTools.slice(0, limit); // Return early with whatever we got
+    }
+
+    if (allTools.length > 0) {
+      console.log(`[StaticToolRegistry] First few tools:`, allTools.slice(0, 3).map(t => ({ name: t.name, category: t.category })));
+    }
+
     const results = allTools
-      .filter(tool => tool.matchesSearch(query))
+      .filter(tool => {
+        const matches = tool.matchesSearch(query);
+        console.log(`[StaticToolRegistry] Tool "${tool.name}" ${matches ? 'MATCHES' : 'does not match'} query "${query}"`);
+        return matches;
+      })
       .slice(0, limit);
 
+    console.log(`[StaticToolRegistry] searchTools returning ${results.length} results`);
+    console.log(`[StaticToolRegistry] === SEARCH TOOLS END ===`);
     return results;
   }
 

@@ -11,11 +11,12 @@
  * ReferenceTool provides type-safe configs and unified tool/reference architecture.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { searchAllTools } from '@/app/actions/tools';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import { ReferenceCategory, REFERENCE_CATEGORY_INFO } from '@/ddd/domain/chat/value-objects/reference-types';
+import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
 import { ChevronDown, Search, Loader2, FileText, Bot, Database, Table, File } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -47,6 +48,49 @@ const categoryColors = {
   [ReferenceCategory.DATABASE]: 'text-gray-600 bg-gray-50',
 } as const;
 
+// Helper functions for @ prefix filtering
+function detectCategoryFromQuery(query: string): ReferenceCategory | null {
+  const trimmed = query.trim().toLowerCase();
+  if (trimmed === '@doc' || trimmed === '@document') return ReferenceCategory.DOC;
+  if (trimmed === '@file') return ReferenceCategory.FILE;
+  if (trimmed === '@agent') return ReferenceCategory.AGENT;
+  if (trimmed === '@table') return ReferenceCategory.TABLE;
+  if (trimmed === '@database') return ReferenceCategory.DATABASE;
+  return null;
+}
+
+function getUnifiedCategory(referenceCategory: ReferenceCategory): ToolCategory {
+  switch (referenceCategory) {
+    case ReferenceCategory.DOC: return ToolCategory.DOCUMENTS;
+    case ReferenceCategory.FILE: return ToolCategory.FILES;
+    case ReferenceCategory.AGENT: return ToolCategory.AGENTS;
+    case ReferenceCategory.TABLE: return ToolCategory.TABLES;
+    case ReferenceCategory.DATABASE: return ToolCategory.DATABASES;
+    default: return ToolCategory.BASE;
+  }
+}
+
+// Helper function to get correct insertText for tools
+function getToolInsertText(tool: ToolDTO): string {
+  // Use tool's insertText if available
+  if (tool.insertText) return tool.insertText;
+
+  // Generate category-specific insert text for reference tools
+  if (tool.type === 'reference') {
+    switch (tool.category) {
+      case 'documents': return `@doc:${tool.name}`;
+      case 'files': return `@file:${tool.name}`;
+      case 'agents': return `@agent:${tool.name}`;
+      case 'tables': return `@table:${tool.name}`;
+      case 'databases': return `@database:${tool.name}`;
+      default: return `@tool:${tool.name}`;
+    }
+  }
+
+  // System tools use @tool: prefix
+  return `@tool:${tool.name}`;
+}
+
 export function ToolDropdown({
   query,
   isOpen,
@@ -60,29 +104,43 @@ export function ToolDropdown({
   const [focusedCategoryIndex, setFocusedCategoryIndex] = useState(-1);
   const [isInCategoryMode, setIsInCategoryMode] = useState(false);
 
+  // Infinite scroll state
+  const [allTools, setAllTools] = useState<ToolDTO[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   // Fix hydration mismatch by ensuring client-side rendering
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // Search all tools (reference tools + system tools)
+  // Initial search query (resets on query change)
   const {
-    data: searchResult,
+    data: initialSearchResult,
     isLoading,
     error
   } = useQuery({
-    queryKey: ['search-all-tools', query],
+    queryKey: ['search-all-tools-initial', query],
     queryFn: async () => {
       try {
-        console.log(`[ToolDropdown] Searching tools with query: "${query}"`);
-        const result = await searchAllTools({ query, limit: 20 });
+        console.log(`[ToolDropdown] Initial search for query: "${query}"`);
+
+        const result = await searchAllTools({ query, limit: 20, offset: 0 });
 
         if (!result.success) {
           console.error('[ToolDropdown] Search failed:', result.error);
           throw new Error(result.error);
         }
 
-        console.log('[ToolDropdown] Found', result.data?.tools?.length || 0, 'tools');
+        console.log('[ToolDropdown] Initial search found', result.data?.tools?.length || 0, 'tools');
+        console.log('[ToolDropdown] Initial search result:', {
+          toolsCount: result.data?.tools?.length || 0,
+          hasMore: result.data?.hasMore,
+          totalCount: result.data?.totalCount,
+          tools: result.data?.tools?.map(t => ({ name: t.name, type: t.type, category: t.category }))
+        });
         return result.data;
       } catch (error) {
         console.error('[ToolDropdown] Search error:', error);
@@ -94,8 +152,83 @@ export function ToolDropdown({
     retry: 1,
   });
 
-  // Use tools from search result
-  const allTools = searchResult?.tools || [];
+  // Reset tools and state when query changes
+  useEffect(() => {
+    if (initialSearchResult) {
+      setAllTools(initialSearchResult.tools || []);
+      setHasMore(initialSearchResult.hasMore || false);
+      setOffset(initialSearchResult.tools?.length || 0);
+      setSelectedIndex(0);
+      console.log(`[ToolDropdown] Reset state for new query:`, {
+        toolsCount: (initialSearchResult.tools || []).length,
+        hasMore: initialSearchResult.hasMore,
+        totalCount: initialSearchResult.totalCount,
+        searchResult: initialSearchResult
+      });
+    }
+  }, [initialSearchResult]);
+
+  // Load more tools function
+  const loadMoreTools = useCallback(async () => {
+    if (isLoadingMore || !hasMore || !isClient) return;
+
+    setIsLoadingMore(true);
+    try {
+      console.log(`[ToolDropdown] Loading more tools with offset: ${offset}, query: "${query}"`);
+
+      const result = await searchAllTools({ query, limit: 20, offset });
+
+      console.log(`[ToolDropdown] Load more result:`, {
+        success: result.success,
+        toolsCount: result.data?.tools?.length || 0,
+        hasMore: result.data?.hasMore,
+        totalCount: result.data?.totalCount,
+        offset: offset,
+        query: query
+      });
+
+      if (result.success && result.data) {
+        const newTools = result.data.tools || [];
+        setAllTools(prev => {
+          const newTotal = [...prev, ...newTools];
+          console.log(`[ToolDropdown] Loaded ${newTools.length} more tools. Total: ${newTotal.length}, hasMore: ${result.data?.hasMore}`);
+          return newTotal;
+        });
+        setHasMore(result.data.hasMore || false);
+        setOffset(prev => prev + newTools.length);
+      } else {
+        console.error('[ToolDropdown] Load more failed:', result.error);
+      }
+    } catch (error) {
+      console.error('[ToolDropdown] Error loading more tools:', error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [query, offset, hasMore, isLoadingMore, isClient]);
+
+  // Scroll detection for infinite scroll
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const container = e.currentTarget;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+
+    // Trigger load more when within 100px of bottom
+    const nearBottom = scrollTop + clientHeight >= scrollHeight - 100;
+
+    console.log(`[ToolDropdown] Scroll detection:`, {
+      scrollTop: Math.round(scrollTop),
+      scrollHeight,
+      clientHeight,
+      nearBottom,
+      hasMore,
+      isLoadingMore,
+      totalTools: allTools.length
+    });
+
+    if (nearBottom && hasMore && !isLoadingMore) {
+      console.log(`[ToolDropdown] Triggering loadMoreTools from scroll`);
+      loadMoreTools();
+    }
+  }, [hasMore, isLoadingMore, loadMoreTools, allTools.length]);
 
   // Handle category filter toggle
   const toggleCategory = (category: ReferenceCategory) => {
@@ -108,10 +241,6 @@ export function ToolDropdown({
     });
   };
 
-  // Reset selected index when query changes
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
 
   // Handle keyboard navigation
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -173,7 +302,8 @@ export function ToolDropdown({
           const category = allCategories[focusedCategoryIndex];
           toggleCategory(category);
         } else if (allTools[selectedIndex]) {
-          onSelect(allTools[selectedIndex]);
+          const selectedTool = allTools[selectedIndex];
+          onSelect({...selectedTool, insertText: getToolInsertText(selectedTool)});
         }
         break;
       case 'Escape':
@@ -240,7 +370,11 @@ export function ToolDropdown({
       </div>
 
       {/* Results */}
-      <div className="flex-1 overflow-y-auto">
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto"
+        onScroll={handleScroll}
+      >
         {isLoading ? (
           <div className="flex items-center justify-center p-4">
             <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -262,7 +396,7 @@ export function ToolDropdown({
                 const displayInfo = {
                   displayName: tool.displayName,
                   description: tool.description,
-                  insertText: `@tool:${tool.name}`,
+                  insertText: getToolInsertText(tool),
                   category: tool.category,
                   requiresConnection: tool.requiresConnection,
                   icon: tool.icon
@@ -282,7 +416,7 @@ export function ToolDropdown({
                   <button
                     key={toolId}
                     data-tool-item-index={index}
-                    onClick={() => onSelect(tool)}
+                    onClick={() => onSelect({...tool, insertText: displayInfo.insertText})}
                     onMouseEnter={() => setSelectedIndex(index)}
                     className={cn(
                       'w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-50 last:border-b-0 transition-colors',
@@ -324,6 +458,14 @@ export function ToolDropdown({
                 );
               }
             })}
+
+            {/* Loading more indicator */}
+            {isLoadingMore && (
+              <div className="flex items-center justify-center p-4 border-t border-gray-100">
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                <span className="text-sm text-gray-500">Loading more tools...</span>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -333,6 +475,7 @@ export function ToolDropdown({
         {allTools.length > 0 && (
           <>
             {allTools.length} tool{allTools.length !== 1 ? 's' : ''}
+            {hasMore && ' • Scroll for more'}
           </>
         )}
       </div>

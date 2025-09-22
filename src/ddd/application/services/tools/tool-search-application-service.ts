@@ -68,9 +68,11 @@ export class ToolSearchApplicationService {
     console.log(`[ToolSearchService] Searching for query: "${query}", categories:`, categories);
 
     // Search both reference tools and system tools in parallel
+    // For system tools, we need to search with a higher limit since pagination happens after combining
+    const systemToolsLimit = Math.max(limit * 10, 1000); // Get more system tools to enable proper pagination
     const [referenceToolsResult, systemTools] = await Promise.all([
       this.searchOnlyReferenceTools(options),
-      this.searchSystemTools(query, categories)
+      this.searchSystemTools(query, categories, systemToolsLimit)
     ]);
 
     console.log(`[ToolSearchService] Found ${referenceToolsResult.referenceTools.length} reference tools, ${systemTools.length} system tools`);
@@ -141,24 +143,32 @@ export class ToolSearchApplicationService {
    */
   private async searchSystemTools(
     query: string,
-    categories: ReferenceCategory[] | undefined
+    categories: ReferenceCategory[] | undefined,
+    limit: number = 20
   ): Promise<Tool[]> {
-    console.log(`[ToolSearchService] Searching system tools for: "${query}"`);
+    console.log(`[ToolSearchService] === STARTING SYSTEM TOOLS SEARCH ===`);
+    console.log(`[ToolSearchService] Query: "${query}"`);
+    console.log(`[ToolSearchService] Categories:`, categories);
+    console.log(`[ToolSearchService] Tool registry service:`, !!this.toolRegistryService);
 
     try {
       // Use the existing tool registry service to search tools
-      const toolMetadataList = await this.toolRegistryService.searchTools(query, 20);
+      console.log(`[ToolSearchService] Calling toolRegistryService.searchTools("${query}", ${limit})`);
+      const toolMetadataList = await this.toolRegistryService.searchTools(query, limit);
       console.log(`[ToolSearchService] Found ${toolMetadataList.length} tool metadata entries`);
 
       // Convert ToolMetadata to Tool instances
-      const tools = toolMetadataList.map(metadata =>
-        this.toolRegistryService.createTool(metadata)
-      );
+      const tools = toolMetadataList.map((metadata, index) => {
+        console.log(`[ToolSearchService] Creating tool ${index + 1}:`, metadata.name);
+        return this.toolRegistryService.createTool(metadata);
+      });
 
       console.log(`[ToolSearchService] Created ${tools.length} system tools`);
+      console.log(`[ToolSearchService] === SYSTEM TOOLS SEARCH COMPLETE ===`);
 
       return tools;
     } catch (error) {
+      console.error(`[ToolSearchService] === SYSTEM TOOLS SEARCH FAILED ===`);
       console.error(`[ToolSearchService] Error searching system tools:`, error);
       return [];
     }
