@@ -49,6 +49,7 @@ import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/
 import { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
 import { IToolProxyService } from '@/ddd/domain/tools/services/tool-proxy';
 import { StaticToolRegistry } from '@/ddd/infrastructure/tools/static-tool-registry';
+import { DatabaseToolRegistry } from '@/ddd/infrastructure/tools/database-tool-registry';
 
 // Chat domain imports
 import { IReferenceResolverService } from '@/ddd/domain/chat/services/reference-resolver';
@@ -345,7 +346,10 @@ export class DIContainer {
     );
 
     // Initialize tool registry service
-    const toolRegistryService = new StaticToolRegistry();
+    // Use DatabaseToolRegistry if DATABASE_URL is available, otherwise fallback to StaticToolRegistry
+    const toolRegistryService = process.env.DATABASE_URL
+      ? new DatabaseToolRegistry()
+      : new StaticToolRegistry();
     this.repositories.set('IToolRegistryService', toolRegistryService);
 
     // Initialize ToolSearchApplicationService with proper dependencies (replaces ReferenceApplicationService)
