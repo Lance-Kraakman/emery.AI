@@ -2,23 +2,21 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { getUserOAuthConnections, getAppConnectionUrl, disconnectOAuthAccount, getUserConnectionsWithDuplicates } from '@/app/actions/connections';
+import { getUserOAuthConnections, getAppConnectionUrl, disconnectOAuthAccount, getUserConnectionsWithDuplicates, getAvailableApps } from '@/app/actions/connections';
 import { Button } from '@/components/ui/button';
 import { UnifiedConnectionsGrid } from './components/UnifiedConnectionsGrid';
 import { ConnectionDTO as Connection } from '@/app/mappers/connection-mapper';
 
-const AVAILABLE_APPS = [
-  { id: 'slack', name: 'Slack', description: 'Send messages, create channels, and more', icon: '/icons/slack.svg' },
-  { id: 'gmail', name: 'Gmail', description: 'Send emails, read inbox, and manage labels', icon: '/icons/gmail.svg' },
-  { id: 'github', name: 'GitHub', description: 'Manage repositories, issues, and pull requests', icon: '/icons/github.svg' },
-  { id: 'google-sheets', name: 'Google Sheets', description: 'Read and write to spreadsheets', icon: '/icons/google-sheets.svg' },
-  { id: 'discord', name: 'Discord', description: 'Send messages and manage servers', icon: '/icons/discord.svg' },
-  { id: 'twitter', name: 'Twitter', description: 'Post tweets and manage your timeline', icon: '/icons/twitter.svg' },
-];
-
 export function ConnectionsManager() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [allConnections, setAllConnections] = useState<Connection[]>([]);
+  const [availableApps, setAvailableApps] = useState<Array<{
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    icon: string;
+  }>>([]);
   const [showAllDuplicates, setShowAllDuplicates] = useState(false);
   const [duplicateCount, setDuplicateCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -28,6 +26,7 @@ export function ConnectionsManager() {
 
   useEffect(() => {
     loadConnections();
+    loadAvailableApps();
   }, []);
 
   // Handle successful connection redirect
@@ -87,6 +86,24 @@ export function ConnectionsManager() {
       setLoading(false);
     }
   }, []); // No dependencies needed since it only uses external functions and setters
+
+  const loadAvailableApps = useCallback(async () => {
+    try {
+      console.log('📱 Loading available apps from database...');
+      const result = await getAvailableApps();
+
+      if (result.success) {
+        console.log(`📱 Loaded ${result.data.length} available apps`);
+        setAvailableApps(result.data);
+      } else {
+        console.error('❌ Failed to load available apps:', result.error);
+        setError(result.error || 'Failed to load available apps');
+      }
+    } catch (err) {
+      console.error('❌ Error loading available apps:', err);
+      setError('Failed to load available apps');
+    }
+  }, []);
 
   const handleDisconnectAccount = async (accountId: string) => {
     console.log('🗑️ Disconnect button clicked for account:', accountId);
@@ -192,7 +209,7 @@ export function ConnectionsManager() {
 
       {/* Unified Connections Grid */}
       <UnifiedConnectionsGrid
-        apps={AVAILABLE_APPS}
+        apps={availableApps}
         connections={connections}
         allConnections={allConnections}
         showAllDuplicates={showAllDuplicates}

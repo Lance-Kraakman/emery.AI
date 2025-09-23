@@ -865,3 +865,69 @@ export const chatMessages: any = pgTable("chat_messages", {
     using: sql`EXISTS (SELECT 1 FROM chats c WHERE c.id = chat_id AND c.organization_id = current_setting('app.current_organization_id')::integer)`,
   }),
 ]);
+
+// Tool definition data types for JSONB storage
+export interface SystemToolDefinitionData {
+  type: "system";
+  implementation: {
+    backend_class: string;
+    requires_auth: boolean;
+  };
+  ui_config: {
+    insert_text: string;
+    supports_artifacts?: boolean;
+    icon?: string;
+  };
+  parameters: {
+    [key: string]: {
+      type: string;
+      description?: string;
+      required: boolean;
+    };
+  };
+}
+
+export interface OAuthToolDefinitionData {
+  type: "oauth";
+  implementation: {
+    pipedream_key: string;
+    requires_auth: boolean;
+  };
+  ui_config: {
+    insert_text: string;
+    icon?: string;
+  };
+  parameters: {
+    [key: string]: {
+      type: string;
+      description?: string;
+      required: boolean;
+    };
+  };
+}
+
+export type ToolDefinitionData = SystemToolDefinitionData | OAuthToolDefinitionData;
+
+// Simplified app types table
+export const appTypes = pgTable("app_types", {
+  id: text("id").primaryKey(),                    // e.g., "emery", "slack", "github"
+  name: text("name").notNull(),                   // e.g., "Emery", "Slack", "GitHub"
+  description: text("description"),               // e.g., "Built-in system tools"
+  category: text("category"),                     // e.g., "system", "communication", "productivity"
+  iconUrl: text("icon_url"),                     // e.g., "/icons/emery.svg"
+  supportsOAuth: boolean("supports_oauth").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Tools table with required appId
+export const tools = pgTable("tools", {
+  id: text("id").primaryKey(),                           // e.g., "python_repl", "slack-send-message"
+  displayName: text("display_name").notNull(),           // e.g., "Python REPL", "Send Slack Message"
+  description: text("description"),                      // Tool description
+  category: text("category"),                            // e.g., "utility", "communication"
+  appId: text("app_id").notNull().references(() => appTypes.id), // Always references an app - "emery" for system tools
+  icon: text("icon"),                                    // Icon or emoji
+  config: jsonb("config").$type<ToolDefinitionData>().notNull(), // Typed JSONB configuration
+  createdAt: timestamp("created_at").defaultNow(),
+});

@@ -84,13 +84,6 @@ export class Tool {
   }
 
   /**
-   * Get the tool version
-   */
-  getVersion(): string {
-    return this.toolConfig.version
-  }
-
-  /**
    * Check if this tool can be used in chat interfaces
    */
   canBeUsedInChat(): boolean {
@@ -170,7 +163,6 @@ export class Tool {
   static fromMetadata(toolMetadata: ToolMetadata, customConfig: Record<string, any> = {}): Tool {
     const toolConfig = ToolConfig.create(
       toolMetadata.name,
-      '1.0',
       {
         displayName: toolMetadata.displayName,
         description: toolMetadata.description,

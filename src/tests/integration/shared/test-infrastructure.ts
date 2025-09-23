@@ -137,9 +137,17 @@ async function runDatabaseSeeds(): Promise<void> {
   execSync(`${baseEnv} npx tsx src/drizzle/seeds/system-users.ts`, { stdio: 'inherit', cwd: process.cwd() });
   console.log('✅ System users seeding completed');
 
-  console.log('🔐 Assigning system user roles...');  
+  console.log('🔐 Assigning system user roles...');
   execSync(`${baseEnv} npx tsx src/drizzle/seeds/system-role-assignments.ts`, { stdio: 'inherit', cwd: process.cwd() });
   console.log('✅ System role assignments completed');
+
+  console.log('📱 Seeding app types...');
+  execSync(`${baseEnv} npx tsx src/drizzle/seeds/app-types.ts`, { stdio: 'inherit', cwd: process.cwd() });
+  console.log('✅ App types seeding completed');
+
+  console.log('🔧 Seeding tools...');
+  execSync(`${baseEnv} npx tsx src/drizzle/seeds/tools.ts`, { stdio: 'inherit', cwd: process.cwd() });
+  console.log('✅ Tools seeding completed');
 
   console.log('✅ All database seeding completed successfully');
 }

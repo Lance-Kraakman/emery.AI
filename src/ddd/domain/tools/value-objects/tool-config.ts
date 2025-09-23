@@ -118,14 +118,10 @@ export type ToolConfigData =
 export class ToolConfig {
   constructor(
     public readonly name: string,
-    public readonly version: string,
     public readonly config: ToolConfigData
   ) {
     if (!name?.trim()) {
       throw new Error('Tool name is required and cannot be empty')
-    }
-    if (!version?.trim()) {
-      throw new Error('Tool version is required and cannot be empty')
     }
     if (typeof config !== 'object' || config === null) {
       throw new Error('Tool config must be a valid object')
@@ -135,15 +131,15 @@ export class ToolConfig {
   /**
    * Create a ToolConfig with standard defaults
    */
-  static create(name: string, version: string = '1.0', config: ToolConfigData = {}): ToolConfig {
-    return new ToolConfig(name, version, config)
+  static create(name: string, config: ToolConfigData = {}): ToolConfig {
+    return new ToolConfig(name, config)
   }
 
   /**
    * Create a basic tool configuration for common tools
    */
   static basic(name: string, config: BaseToolConfig = {}): ToolConfig {
-    return new ToolConfig(name, '1.0', config)
+    return new ToolConfig(name, config)
   }
 
   /**
@@ -161,7 +157,7 @@ export class ToolConfig {
       organizationId,
       ownerId
     }
-    return new ToolConfig(name, version, config)
+    return new ToolConfig(name, config)
   }
 
   /**
@@ -179,7 +175,7 @@ export class ToolConfig {
       organizationId,
       ...(tableName && { tableName })
     }
-    return new ToolConfig(name, version, config)
+    return new ToolConfig(name, config)
   }
 
   /**
@@ -205,7 +201,7 @@ export class ToolConfig {
       fieldId,
       rowId
     }
-    return new ToolConfig(name, version, config)
+    return new ToolConfig(name, config)
   }
 
   /**
@@ -231,7 +227,7 @@ export class ToolConfig {
       fieldId,
       rowId
     }
-    return new ToolConfig(name, version, config)
+    return new ToolConfig(name, config)
   }
 
   /**
@@ -247,7 +243,7 @@ export class ToolConfig {
       databaseId,
       organizationId
     }
-    return new ToolConfig(name, version, config)
+    return new ToolConfig(name, config)
   }
 
   /**
@@ -265,7 +261,7 @@ export class ToolConfig {
       organizationId,
       userId
     }
-    return new ToolConfig(name, version, config)
+    return new ToolConfig(name, config)
   }
 
   /**
@@ -283,7 +279,7 @@ export class ToolConfig {
       organizationId,
       userId
     }
-    return new ToolConfig(name, version, config)
+    return new ToolConfig(name, config)
   }
 
   /**
@@ -372,7 +368,6 @@ export class ToolConfig {
   withConfig(additionalConfig: Partial<ToolConfigData>): ToolConfig {
     return new ToolConfig(
       this.name,
-      this.version,
       { ...this.config, ...additionalConfig }
     )
   }
@@ -388,16 +383,15 @@ export class ToolConfig {
    * Check if this tool is exactly the same as another (name + version)
    */
   equals(other: ToolConfig): boolean {
-    return this.name === other.name && this.version === other.version
+    return this.name === other.name
   }
 
   /**
    * Convert to plain object for serialization
    */
-  toPlain(): { name: string; version: string; config: ToolConfigData } {
+  toPlain(): { name: string; config: ToolConfigData } {
     return {
       name: this.name,
-      version: this.version,
       config: { ...this.config }
     }
   }
@@ -405,36 +399,10 @@ export class ToolConfig {
   /**
    * Create from plain object (for deserialization)
    */
-  static fromPlain(plain: { name: string; version?: string; config?: ToolConfigData }): ToolConfig {
+  static fromPlain(plain: { name: string; config?: ToolConfigData }): ToolConfig {
     return new ToolConfig(
       plain.name,
-      plain.version || '1.0',
       plain.config || {}
     )
-  }
-}
-
-// Legacy interface for backward compatibility during migration
-export interface ToolConfigInterface {
-  name: string;
-  version?: string;
-  config?: ToolConfigData;
-}
-
-/**
- * Convert legacy interface to ToolConfig value object
- */
-export function toolConfigFromInterface(config: ToolConfigInterface): ToolConfig {
-  return ToolConfig.create(config.name, config.version, config.config)
-}
-
-/**
- * Convert ToolConfig value object to legacy interface
- */
-export function toolConfigToInterface(toolConfig: ToolConfig): ToolConfigInterface {
-  return {
-    name: toolConfig.name,
-    version: toolConfig.version,
-    config: toolConfig.config
   }
 }

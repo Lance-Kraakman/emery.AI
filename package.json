@@ -34,6 +34,9 @@
     "test:scheduler": "npx tsx src/scripts/test-scheduler-system.ts",
     "seed:test": "npx tsx src/scripts/seed-test-data.ts",
     "seed:clean": "npx tsx src/scripts/seed-test-data.ts --clean",
+    "seed:apps": "npx tsx src/drizzle/seeds/app-types.ts",
+    "seed:tools": "npx tsx src/drizzle/seeds/tools.ts",
+    "seed:all": "npm run seed:apps && npm run seed:tools",
     "test:agent-execution": "node src/scripts/test-agent-execution.js"
   },
   "packageManager": "pnpm@10.14.0",

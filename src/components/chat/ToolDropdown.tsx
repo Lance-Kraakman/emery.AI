@@ -341,7 +341,7 @@ export function ToolDropdown({
     >
       {/* Category Filters */}
       <div className="p-3 border-b border-gray-100">
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pb-1">
           {allCategories.map((category, index) => {
             const Icon = categoryIcons[category];
             const categoryInfo = REFERENCE_CATEGORY_INFO[category];
@@ -353,7 +353,7 @@ export function ToolDropdown({
                 key={category}
                 onClick={() => toggleCategory(category)}
                 className={cn(
-                  'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors',
+                  'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0',
                   isSelected
                     ? categoryColors[category]
                     : 'text-gray-500 bg-gray-50 hover:bg-gray-100',
