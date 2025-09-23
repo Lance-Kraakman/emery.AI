@@ -101,11 +101,11 @@ export class DatabaseToolRegistry implements IToolRegistryService {
     const config = tool.config as ToolDefinitionData;
 
     // Determine connection type
-    let connectionType: ConnectionType = 'none';
+    let connectionType: ConnectionType = ConnectionType.NONE;
     if (config.type === 'oauth') {
-      connectionType = 'oauth';
+      connectionType = ConnectionType.OAUTH;
     } else if (config.implementation.requires_auth) {
-      connectionType = 'api_key';
+      connectionType = ConnectionType.API_KEY;
     }
 
     // Determine tool category
@@ -116,17 +116,13 @@ export class DatabaseToolRegistry implements IToolRegistryService {
       tool.displayName,
       tool.description || '',
       category,
+      connectionType !== ConnectionType.NONE, // requiresConnection
       connectionType,
+      app?.id ? [app.id] : [], // requiredApps
       tool.icon || '🔧',
-      {
-        app: app?.name || 'Unknown',
-        appId: tool.appId,
-        supportsOAuth: app?.supportsOAuth || false,
-        insertText: config.ui_config?.insert_text || `@tool:${tool.id}`,
-        supportsArtifacts: config.ui_config?.supports_artifacts || false,
-        implementation: config.implementation,
-        parameters: config.parameters || {},
-      }
+      [], // tags
+      [], // mapsToReferences
+      undefined // autoBindParameter
     );
   }
 
@@ -135,27 +131,34 @@ export class DatabaseToolRegistry implements IToolRegistryService {
    */
   private mapCategoryToToolCategory(category: string): ToolCategory {
     const categoryMap: Record<string, ToolCategory> = {
-      'utility': ToolCategory.UTILITY,
-      'communication': ToolCategory.COMMUNICATION,
-      'productivity': ToolCategory.PRODUCTIVITY,
-      'reference': ToolCategory.REFERENCE,
-      'data': ToolCategory.DATA,
-      'crm': ToolCategory.PRODUCTIVITY,
-      'payments': ToolCategory.UTILITY,
-      'ecommerce': ToolCategory.PRODUCTIVITY,
-      'marketing': ToolCategory.COMMUNICATION,
-      'social': ToolCategory.COMMUNICATION,
-      'ai': ToolCategory.UTILITY,
-      'system': ToolCategory.UTILITY,
+      'utility': ToolCategory.UTILITIES,
+      'communication': ToolCategory.APPS,
+      'productivity': ToolCategory.APPS,
+      'reference': ToolCategory.DOCUMENTS,
+      'data': ToolCategory.TABLES,
+      'crm': ToolCategory.APPS,
+      'payments': ToolCategory.APPS,
+      'ecommerce': ToolCategory.APPS,
+      'marketing': ToolCategory.APPS,
+      'social': ToolCategory.APPS,
+      'ai': ToolCategory.UTILITIES,
+      'system': ToolCategory.BASE,
     };
 
-    return categoryMap[category.toLowerCase()] || ToolCategory.OTHER;
+    return categoryMap[category.toLowerCase()] || ToolCategory.UTILITIES;
   }
 
   /**
-   * Search tools with optional filtering and pagination
+   * Search tools by query (interface required method)
    */
-  async searchTools(
+  async searchTools(query: string, limit: number = 50): Promise<ToolMetadata[]> {
+    return this.searchToolsInternal(query, limit, 0);
+  }
+
+  /**
+   * Internal search with full options (for discoverTools)
+   */
+  private async searchToolsInternal(
     query?: string,
     limit: number = 50,
     offset: number = 0,
@@ -176,12 +179,9 @@ export class DatabaseToolRegistry implements IToolRegistryService {
 
       // Add category filter if specified
       if (options?.category) {
-        whereConditions.push(eq(tools.category, options.category));
-      }
-
-      // Add app filter if specified
-      if (options?.appId) {
-        whereConditions.push(eq(tools.appId, options.appId));
+        // Convert ToolCategory enum to string
+        const categoryStr = options.category.toString();
+        whereConditions.push(eq(tools.category, categoryStr));
       }
 
       // Build the query
@@ -198,14 +198,14 @@ export class DatabaseToolRegistry implements IToolRegistryService {
 
       // Apply where conditions if any
       if (whereConditions.length > 0) {
-        dbQuery = dbQuery.where(and(...whereConditions));
+        const results = await dbQuery.where(and(...whereConditions));
+        console.log(`[DatabaseToolRegistry] Found ${results.length} tools matching criteria`);
+        return results.map(({ tool, app }) => this.convertToToolMetadata(tool, app));
+      } else {
+        const results = await dbQuery;
+        console.log(`[DatabaseToolRegistry] Found ${results.length} tools matching criteria`);
+        return results.map(({ tool, app }) => this.convertToToolMetadata(tool, app));
       }
-
-      const results = await dbQuery;
-
-      console.log(`[DatabaseToolRegistry] Found ${results.length} tools matching criteria`);
-
-      return results.map(({ tool, app }) => this.convertToToolMetadata(tool, app));
 
     } catch (error) {
       console.error('[DatabaseToolRegistry] Error searching tools:', error);
@@ -221,9 +221,9 @@ export class DatabaseToolRegistry implements IToolRegistryService {
   }
 
   /**
-   * Check tool availability (for backwards compatibility)
+   * Check tool availability (interface required method)
    */
-  async getToolAvailability(toolName: string): Promise<ToolAvailability> {
+  async checkToolAvailability(toolName: string, organizationId?: number): Promise<ToolAvailability> {
     try {
       const tool = await this.db
         .select()
@@ -231,33 +231,65 @@ export class DatabaseToolRegistry implements IToolRegistryService {
         .where(eq(tools.id, toolName))
         .limit(1);
 
-      return tool.length > 0
-        ? ToolAvailability.AVAILABLE
-        : ToolAvailability.NOT_FOUND;
+      if (tool.length === 0) {
+        return {
+          available: false,
+          reason: 'Tool not found'
+        };
+      }
+
+      return {
+        available: true,
+        connectionRequired: tool[0].config.type === 'oauth',
+        connectionConfigured: false // Would need to check user connections
+      };
     } catch (error) {
       console.error(`[DatabaseToolRegistry] Error checking availability for ${toolName}:`, error);
-      return ToolAvailability.NOT_FOUND;
+      return {
+        available: false,
+        reason: 'Error checking availability'
+      };
     }
   }
 
   /**
-   * Create tool instances (for backwards compatibility)
+   * Get tools by category (interface required method)
    */
-  async createToolInstances(toolConfigs: ToolConfig[]): Promise<Tool[]> {
-    const tools: Tool[] = [];
+  async getToolsByCategory(category: ToolCategory): Promise<ToolMetadata[]> {
+    return this.searchToolsInternal(undefined, 50, 0, { category });
+  }
 
-    for (const config of toolConfigs) {
-      try {
-        const metadata = await this.getToolMetadata(config.name);
-        if (metadata) {
-          tools.push(new Tool(metadata, config));
-        }
-      } catch (error) {
-        console.error(`[DatabaseToolRegistry] Error creating tool instance for ${config.name}:`, error);
-      }
+  /**
+   * Validate tool configuration (interface required method)
+   */
+  async validateToolConfig(config: ToolConfig): Promise<{ valid: boolean; errors?: string[] }> {
+    // Basic validation - could be enhanced
+    const errors: string[] = [];
+
+    if (!config.name) {
+      errors.push('Tool name is required');
     }
 
-    return tools;
+    if (!config.config) {
+      errors.push('Tool configuration is required');
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors: errors.length > 0 ? errors : undefined
+    };
+  }
+
+  /**
+   * Create a Tool instance (interface required method)
+   */
+  createTool(metadata: ToolMetadata, customConfig?: Record<string, any>): Tool {
+    // Create a ToolConfig from ToolMetadata
+    const toolConfig = new ToolConfig(
+      metadata.name,
+      customConfig || {}
+    );
+    return new Tool(metadata, toolConfig);
   }
 
   /**
@@ -289,31 +321,31 @@ export class DatabaseToolRegistry implements IToolRegistryService {
   }
 
   /**
-   * Discover tools with pagination and filtering
+   * Discover tools with pagination and filtering (interface required method)
    */
   async discoverTools(options: ToolDiscoveryOptions = {}): Promise<ToolDiscoveryResult> {
     const {
-      query,
+      searchQuery,
       limit = 50,
       offset = 0,
-      category,
-      appId
+      category
     } = options;
 
     try {
       // Get tools with the specified criteria
-      const toolsFound = await this.searchTools(query, limit + 1, offset, { category, appId });
+      const toolsFound = await this.searchToolsInternal(searchQuery, limit + 1, offset, { category });
 
       // Check if there are more tools available
       const hasMore = toolsFound.length > limit;
       const tools = hasMore ? toolsFound.slice(0, limit) : toolsFound;
 
+      // Get total count (simplified for now)
+      const totalCount = tools.length + (hasMore ? 1 : 0);
+
       return {
         tools,
         hasMore,
-        total: tools.length, // For now, return current batch size
-        offset,
-        limit
+        totalCount
       };
 
     } catch (error) {
@@ -321,26 +353,29 @@ export class DatabaseToolRegistry implements IToolRegistryService {
       return {
         tools: [],
         hasMore: false,
-        total: 0,
-        offset,
-        limit
+        totalCount: 0
       };
     }
   }
 
   /**
-   * Get available categories from database
+   * Get available categories from database (interface required method)
    */
-  async getAvailableCategories(): Promise<string[]> {
+  async getAvailableCategories(): Promise<ToolCategory[]> {
     try {
       const categories = await this.db
         .selectDistinct({ category: tools.category })
         .from(tools)
         .where(eq(tools.category, tools.category)); // Filter out nulls
 
-      return categories
+      const categoryStrings = categories
         .map(row => row.category)
-        .filter(Boolean)
+        .filter(Boolean) as string[];
+
+      // Map strings back to ToolCategory enums
+      return categoryStrings
+        .map(cat => this.mapCategoryToToolCategory(cat))
+        .filter((value, index, self) => self.indexOf(value) === index) // Remove duplicates
         .sort();
 
     } catch (error) {
@@ -363,7 +398,13 @@ export class DatabaseToolRegistry implements IToolRegistryService {
         .from(appTypes)
         .orderBy(appTypes.name);
 
-      return apps.filter(app => app.category); // Filter out nulls
+      return apps
+        .filter(app => app.category) // Filter out nulls
+        .map(app => ({
+          id: app.id,
+          name: app.name,
+          category: app.category as string // Type assertion since we filtered nulls
+        }));
 
     } catch (error) {
       console.error('[DatabaseToolRegistry] Error getting apps:', error);
