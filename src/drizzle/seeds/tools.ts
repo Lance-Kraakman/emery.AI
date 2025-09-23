@@ -72,7 +72,9 @@ async function loadCuratedTools(): Promise<CuratedTool[]> {
   const registryPath = path.join(process.cwd(), 'src', 'public', 'tools-registry.json');
 
   if (!fs.existsSync(registryPath)) {
-    throw new Error(`Tools registry file not found at ${registryPath}`);
+    console.log('Tools registry file not found, using built-in system tools only');
+    // Return built-in system tools as CuratedTool format
+    return getBuiltInSystemTools();
   }
 
   console.log(`Loading curated tools from ${registryPath}...`);
@@ -81,6 +83,64 @@ async function loadCuratedTools(): Promise<CuratedTool[]> {
 
   console.log(`Loaded ${registry.curated_tools.length} curated tools`);
   return registry.curated_tools;
+}
+
+function getBuiltInSystemTools(): CuratedTool[] {
+  // Define essential system tools that were in tools-registry.json
+  return [
+    {
+      id: 'python_repl',
+      display_name: 'Python REPL',
+      description: 'Execute Python code in a sandboxed environment',
+      category: 'utility',
+      app: 'emery',
+      tags: ['python', 'code', 'execution', 'calculation'],
+      ui_config: {
+        icon: '🐍',
+        insert_text: '@tool:python_repl',
+        supports_artifacts: true,
+        preview_description: 'Run Python code and see results'
+      },
+      implementation: {
+        type: 'system',
+        backend_class: 'PythonReplTool',
+        requires_auth: false
+      },
+      parameters: {
+        code: {
+          type: 'string',
+          description: 'Python code to execute',
+          required: true
+        }
+      }
+    },
+    {
+      id: 'web_search',
+      display_name: 'Web Search',
+      description: 'Search the web for current information',
+      category: 'reference',
+      app: 'emery',
+      tags: ['search', 'web', 'information', 'research'],
+      ui_config: {
+        icon: '🔍',
+        insert_text: '@tool:web_search',
+        supports_artifacts: false,
+        preview_description: 'Search the web for information'
+      },
+      implementation: {
+        type: 'system',
+        backend_class: 'WebSearchTool',
+        requires_auth: false
+      },
+      parameters: {
+        query: {
+          type: 'string',
+          description: 'Search query',
+          required: true
+        }
+      }
+    }
+  ];
 }
 
 async function loadPipedreamMetadata(): Promise<Record<string, PipedreamTool>> {
