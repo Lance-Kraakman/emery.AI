@@ -143,7 +143,7 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
   const handleAddStepTool = (stepIndex: number) => {
     if (!editingCapability) return;
 
-    const newTool = ToolConfig.create('@', '1.0', {}); // Start with @ to trigger dropdown
+    const newTool = ToolConfig.create('@', {}); // Start with @ to trigger dropdown
     const updatedSteps = editingCapability.steps?.map((step, i) =>
       i === stepIndex
         ? { ...step, tools: [...(step.tools || []), newTool] }
@@ -233,7 +233,7 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
         ? {
             ...step,
             tools: step.tools?.map((tool, ti) =>
-              ti === toolIndex ? ToolConfig.create(toolName, tool.version, tool.config) : tool
+              ti === toolIndex ? ToolConfig.create(toolName, tool.config) : tool
             ) || []
           }
         : step
@@ -301,7 +301,7 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
           const newValue = beforeCursor.slice(0, atIndex) + toolName + ' ' + afterCursor;
 
           // Create a ToolConfig for the step's tools array
-          const newTool = ToolConfig.create(toolName, '1.0', {});
+          const newTool = ToolConfig.create(toolName, {});
 
           // Update both instructions and add tool to step
           if (!editingCapability) return;

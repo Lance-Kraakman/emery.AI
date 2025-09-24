@@ -57,7 +57,7 @@ export interface AgentData {
 export function mapToolToProto(tool: ToolConfig): ToolConfigProto {
   return {
     name: tool.name,
-    version: tool.version || '',
+    version: '', // Empty version since ToolConfig no longer has version
     config: tool.config || {}
   };
 }

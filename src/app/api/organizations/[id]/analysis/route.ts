@@ -71,7 +71,6 @@ export async function POST(
           tools: getDefaultToolsForType(agentType).map(toolName =>
             ToolConfig.create(
               toolName,
-              '1.0',
               toolName.includes('_api') ? { organization_id: organizationId.toString() } : {}
             )
           ),

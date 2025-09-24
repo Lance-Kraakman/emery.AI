@@ -122,7 +122,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
     try {
       const result = await createToolConfigFromMetadata(toolMetadata.name);
       if (result.success && result.data) {
-        const newTool = ToolConfig.create(result.data.name, result.data.version, result.data.config);
+        const newTool = ToolConfig.create(result.data.name, result.data.config);
         form.setFieldValue('tools', [...(form.getFieldValue('tools') || []), newTool]);
         setShowToolSelector(false);
       } else {
@@ -149,15 +149,13 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
         // Create a new ToolConfig with updated field
         const updatedData = {
           name: tool.name,
-          version: tool.version,
           config: tool.config
         };
 
         if (field === 'name') updatedData.name = value || '';
-        if (field === 'version') updatedData.version = value || '1.0';
         if (field === 'config') updatedData.config = value ? JSON.parse(value) : {};
 
-        return ToolConfig.create(updatedData.name, updatedData.version, updatedData.config);
+        return ToolConfig.create(updatedData.name, updatedData.config);
       }
       return tool;
     });
@@ -360,9 +358,9 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                     </div>
                     <div className="flex gap-2">
                       <Input
-                        value={tool.version || ''}
-                        onChange={(e) => updateTool(index, 'version', e.target.value)}
-                        placeholder="Version (optional)"
+                        value={JSON.stringify(tool.config)}
+                        onChange={(e) => updateTool(index, 'config', e.target.value)}
+                        placeholder="Tool configuration (JSON)"
                         className="text-xs flex-1"
                       />
                     </div>

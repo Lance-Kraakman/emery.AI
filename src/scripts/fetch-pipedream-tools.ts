@@ -42,37 +42,37 @@ async function fetchAndSavePipedreamTools() {
   try {
     // Get all apps using cursor-based pagination (Pipedream standard)
     let uniqueApps = new Set<string>();
-    
+
     console.log(`  🔄 Cursor-based pagination (Pipedream standard)...`);
     const limit = 100;
     let cursor: string | undefined = undefined;
     let hasMore = true;
     let pageCount = 0;
     const maxPages = 100; // Safety limit
-    
+
     while (hasMore && pageCount < maxPages) {
       pageCount++;
       const cursorInfo = cursor ? ` (cursor: ${cursor.substring(0, 20)}...)` : ' (initial request)';
       console.log(`  📄 Fetching apps page ${pageCount}${cursorInfo} (${uniqueApps.size} unique apps)...`);
-      
+
       try {
         // Use cursor-based pagination - the proper Pipedream way
         const requestParams: any = { limit };
         if (cursor) {
           requestParams.after = cursor; // Use 'after' cursor for next page
         }
-        
+
         const response = await pipedreamClient.apps.list(requestParams);
-        
+
         // Handle Pipedream SDK response structure (wrapped with pagination info)
         let appsData: any[] = [];
         let pageInfo: any = null;
-        
+
         if (response && typeof response === 'object') {
-          // SDK wraps response in special object with data and page info
+          // SDK wraps response in special object with data and response.page_info (original structure)
           appsData = response.data || [];
-          pageInfo = (response as any).page_info || null;
-          
+          pageInfo = (response as any).response?.page_info || (response as any).page_info || null;
+
           // Log pagination info on first page
           if (pageCount === 1 && pageInfo) {
             console.log(`    🎯 Total apps available: ${pageInfo.total_count}`);
@@ -82,13 +82,13 @@ async function fetchAndSavePipedreamTools() {
           // Fallback for direct array response
           appsData = response;
         }
-        
+
         if (!Array.isArray(appsData) || appsData.length === 0) {
           console.log(`  ✅ No more apps found on page ${pageCount}`);
           hasMore = false;
           break;
         }
-        
+
         // Extract and track unique apps
         let newAppsThisPage = 0;
         for (const app of appsData) {
@@ -100,10 +100,10 @@ async function fetchAndSavePipedreamTools() {
             }
           }
         }
-        
+
         console.log(`    📈 Found ${newAppsThisPage} new apps on page ${pageCount} (total: ${uniqueApps.size})`);
-        
-        // Handle cursor for next page
+
+        // Handle cursor for next page (original logic)
         if (pageInfo && pageInfo.end_cursor) {
           cursor = pageInfo.end_cursor;
           hasMore = pageInfo.has_next_page !== false; // Continue if has_next_page is true or undefined
@@ -123,20 +123,20 @@ async function fetchAndSavePipedreamTools() {
             hasMore = false;
           }
         }
-        
+
       } catch (error) {
         console.error(`  ❌ Error on page ${pageCount}:`, error);
-        hasMore = false;
+        throw error; // Fail fast, no fallbacks
       }
     }
-    
+
     if (pageCount >= maxPages) {
       console.log(`  ⚠️  Reached maximum pages (${maxPages}), stopping pagination`);
     }
-    
+
     // Convert back to array
     allApps = Array.from(uniqueApps);
-    console.log(`  ✅ Cursor pagination discovered ${allApps.length} unique apps in ${pageCount} pages`);
+    console.log(`  ✅ Pagination discovered ${allApps.length} unique apps in ${pageCount} pages`);
   } catch (error) {
     console.error('❌ Failed to discover apps via API:', error);
     console.warn('⚠️  Falling back to known popular apps');
@@ -282,17 +282,68 @@ async function fetchAndSavePipedreamTools() {
     console.log(statusMsg);
   }
   
-  // Save the metadata to JSON file
-  const outputDir = path.join(process.cwd(), 'emery-agents', 'src', 'emery_agents', 'execution', 'tools');
-  const outputPath = path.join(outputDir, 'pipedream_metadata.json');
-  
-  // Ensure the directory exists
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
+  // Save the metadata to TypeScript files for both frontend and backend
+
+  // Frontend TypeScript output (for seeding)
+  const frontendOutputDir = path.join(process.cwd(), 'src', 'ddd', 'domain', 'tools', 'config');
+  const frontendOutputPath = path.join(frontendOutputDir, 'pipedream-tools.generated.ts');
+
+  // Backend JSON output (for Python workers - keep for compatibility)
+  const backendOutputDir = path.join(process.cwd(), 'emery-agents', 'src', 'emery_agents', 'execution', 'tools');
+  const backendOutputPath = path.join(backendOutputDir, 'pipedream_metadata.json');
+
+  // Ensure directories exist
+  if (!fs.existsSync(frontendOutputDir)) {
+    fs.mkdirSync(frontendOutputDir, { recursive: true });
   }
-  
-  // Write the JSON file with proper formatting
-  fs.writeFileSync(outputPath, JSON.stringify(toolMetadata, null, 2));
+  if (!fs.existsSync(backendOutputDir)) {
+    fs.mkdirSync(backendOutputDir, { recursive: true });
+  }
+
+  // Generate TypeScript content for frontend
+  const tsContent = `/**
+ * Auto-generated Pipedream Tools Metadata
+ *
+ * Generated by: fetch-pipedream-tools.ts
+ * Generated at: ${new Date().toISOString()}
+ * Total tools: ${Object.keys(toolMetadata).length}
+ *
+ * DO NOT EDIT MANUALLY - This file is auto-generated
+ */
+
+export interface PipedreamToolMetadata {
+  id: string;
+  app: string;
+  name: string;
+  description: string;
+  type: 'action' | 'mcp';
+  inputs: Record<string, {
+    type: string;
+    description: string;
+    required: boolean;
+  }>;
+}
+
+export const PIPEDREAM_TOOLS = ${JSON.stringify(toolMetadata, null, 2)} as const;
+
+export type PipedreamToolId = keyof typeof PIPEDREAM_TOOLS;
+
+export const PIPEDREAM_TOOLS_ARRAY = Object.values(PIPEDREAM_TOOLS);
+
+export const PIPEDREAM_TOOLS_BY_APP = Object.values(PIPEDREAM_TOOLS).reduce((acc, tool) => {
+  if (!acc[tool.app]) {
+    acc[tool.app] = [];
+  }
+  acc[tool.app].push(tool);
+  return acc;
+}, {} as Record<string, PipedreamToolMetadata[]>);
+`;
+
+  // Write TypeScript file for frontend
+  fs.writeFileSync(frontendOutputPath, tsContent);
+
+  // Write JSON file for backend (Python workers)
+  fs.writeFileSync(backendOutputPath, JSON.stringify(toolMetadata, null, 2));
   
   // Print summary
   console.log('\n' + '='.repeat(70));
@@ -302,7 +353,8 @@ async function fetchAndSavePipedreamTools() {
   console.log(`📦 Specific action tools: ${totalActions}`);
   console.log(`🔧 Generic MCP tools: ${totalMcpTools}`);
   console.log(`🎯 Total tools created: ${totalActions + totalMcpTools}`);
-  console.log(`📁 Output file: ${outputPath}`);
+  console.log(`📁 Frontend output: ${frontendOutputPath}`);
+  console.log(`📁 Backend output: ${backendOutputPath}`);
   
   if (failedApps.length > 0) {
     console.log(`\n⚠️  Failed apps (${failedApps.length}):`);

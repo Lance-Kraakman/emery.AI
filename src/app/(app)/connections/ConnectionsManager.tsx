@@ -92,7 +92,7 @@ export function ConnectionsManager() {
       console.log('📱 Loading available apps from database...');
       const result = await getAvailableApps();
 
-      if (result.success) {
+      if (result.success && result.data) {
         console.log(`📱 Loaded ${result.data.length} available apps`);
         setAvailableApps(result.data);
       } else {

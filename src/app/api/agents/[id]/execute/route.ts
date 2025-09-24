@@ -80,7 +80,7 @@ export async function POST(
 
     // Convert tools to ToolConfig instances
     const toolConfigs = tools?.map(tool =>
-      ToolConfig.create(tool.name, tool.version || '1.0', tool.config || {})
+      ToolConfig.create(tool.name, tool.config || {})
     );
 
     // Generate execution ID for tracking (UUID format for database compatibility)

@@ -122,7 +122,16 @@ export class DatabaseToolRegistry implements IToolRegistryService {
       tool.icon || '🔧',
       [], // tags
       [], // mapsToReferences
-      undefined // autoBindParameter
+      undefined, // autoBindParameter
+      {
+        app: app?.name || 'Unknown',
+        appId: tool.appId,
+        supportsOAuth: app?.supportsOAuth || false,
+        insertText: config.ui_config?.insert_text || `@tool:${tool.id}`,
+        supportsArtifacts: (config.ui_config && 'supports_artifacts' in config.ui_config) ? config.ui_config.supports_artifacts || false : false,
+        implementation: config.implementation,
+        parameters: config.parameters || {},
+      }
     );
   }
 
@@ -289,7 +298,7 @@ export class DatabaseToolRegistry implements IToolRegistryService {
       metadata.name,
       customConfig || {}
     );
-    return new Tool(metadata, toolConfig);
+    return new Tool(toolConfig, metadata);
   }
 
   /**

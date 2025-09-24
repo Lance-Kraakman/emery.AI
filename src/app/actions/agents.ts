@@ -138,7 +138,7 @@ export async function createAgentAction(formData: FormData): Promise<Result> {
         ? toolsStr.split(',')
             .map(t => t.trim())
             .filter(t => t)
-            .map(toolName => ToolConfig.create(toolName, '1.0', {})) // Create proper ToolConfig instances
+            .map(toolName => ToolConfig.create(toolName, {})) // Create proper ToolConfig instances
         : undefined;
       
       const servers = serversStr 

@@ -169,18 +169,27 @@ interface AppTypeData {
 }
 
 async function loadPipedreamMetadata(): Promise<Record<string, PipedreamTool>> {
-  const metadataPath = path.join(process.cwd(), 'src', 'public', 'pipedream_metadata.json');
+  const tsPath = path.join(process.cwd(), 'src', 'ddd', 'domain', 'tools', 'config', 'pipedream-tools.generated.ts');
 
-  if (!fs.existsSync(metadataPath)) {
-    throw new Error(`Pipedream metadata file not found at ${metadataPath}`);
+  if (!fs.existsSync(tsPath)) {
+    throw new Error(
+      `Pipedream tools not generated. Run: pnpm tsx src/scripts/fetch-pipedream-tools.ts\n` +
+      `Expected file: ${tsPath}`
+    );
   }
 
-  console.log(`Loading Pipedream metadata from ${metadataPath}...`);
-  const content = fs.readFileSync(metadataPath, 'utf-8');
-  const metadata = JSON.parse(content);
+  console.log('Loading Pipedream metadata from TypeScript config...');
 
-  console.log(`Loaded ${Object.keys(metadata).length} Pipedream tools`);
-  return metadata;
+  // Dynamic import - fail fast if it doesn't work
+  const pipedreamModule = await import(tsPath.replace('.ts', '.js'));
+  const { PIPEDREAM_TOOLS } = pipedreamModule;
+
+  if (!PIPEDREAM_TOOLS || typeof PIPEDREAM_TOOLS !== 'object') {
+    throw new Error(`Invalid PIPEDREAM_TOOLS export in ${tsPath}`);
+  }
+
+  console.log(`Loaded ${Object.keys(PIPEDREAM_TOOLS).length} Pipedream tools from TypeScript`);
+  return PIPEDREAM_TOOLS;
 }
 
 function extractAppStats(metadata: Record<string, PipedreamTool>): Record<string, number> {

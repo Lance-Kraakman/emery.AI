@@ -10,6 +10,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { BUILT_IN_TOOLS, type BuiltInToolConfig } from '@/ddd/domain/tools/config/built-in-tools';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { tools, appTypes, type SystemToolDefinitionData, type OAuthToolDefinitionData } from '@/lib/db/schema';
@@ -24,32 +25,8 @@ if (!connectionString) {
 const client = postgres(connectionString, { max: 1 });
 const db = drizzle(client);
 
-interface CuratedTool {
-  id: string;
-  display_name: string;
-  description: string;
-  category: string;
-  app: string;
-  tags: string[];
-  ui_config: {
-    icon: string;
-    insert_text: string;
-    supports_artifacts?: boolean;
-    preview_description?: string;
-  };
-  implementation: {
-    type: string;
-    backend_class: string;
-    requires_auth: boolean;
-  };
-  parameters: {
-    [key: string]: {
-      type: string;
-      description: string;
-      required: boolean;
-    };
-  };
-}
+// Use the BuiltInToolConfig type instead of separate interface
+type CuratedTool = BuiltInToolConfig;
 
 interface PipedreamTool {
   app: string;
@@ -69,93 +46,34 @@ interface ToolData {
 }
 
 async function loadCuratedTools(): Promise<CuratedTool[]> {
-  const registryPath = path.join(process.cwd(), 'src', 'public', 'tools-registry.json');
-
-  if (!fs.existsSync(registryPath)) {
-    console.log('Tools registry file not found, using built-in system tools only');
-    // Return built-in system tools as CuratedTool format
-    return getBuiltInSystemTools();
-  }
-
-  console.log(`Loading curated tools from ${registryPath}...`);
-  const content = fs.readFileSync(registryPath, 'utf-8');
-  const registry = JSON.parse(content);
-
-  console.log(`Loaded ${registry.curated_tools.length} curated tools`);
-  return registry.curated_tools;
+  console.log('Loading built-in tools from TypeScript config...');
+  console.log(`Loaded ${BUILT_IN_TOOLS.length} built-in tools`);
+  return BUILT_IN_TOOLS;
 }
 
-function getBuiltInSystemTools(): CuratedTool[] {
-  // Define essential system tools that were in tools-registry.json
-  return [
-    {
-      id: 'python_repl',
-      display_name: 'Python REPL',
-      description: 'Execute Python code in a sandboxed environment',
-      category: 'utility',
-      app: 'emery',
-      tags: ['python', 'code', 'execution', 'calculation'],
-      ui_config: {
-        icon: '🐍',
-        insert_text: '@tool:python_repl',
-        supports_artifacts: true,
-        preview_description: 'Run Python code and see results'
-      },
-      implementation: {
-        type: 'system',
-        backend_class: 'PythonReplTool',
-        requires_auth: false
-      },
-      parameters: {
-        code: {
-          type: 'string',
-          description: 'Python code to execute',
-          required: true
-        }
-      }
-    },
-    {
-      id: 'web_search',
-      display_name: 'Web Search',
-      description: 'Search the web for current information',
-      category: 'reference',
-      app: 'emery',
-      tags: ['search', 'web', 'information', 'research'],
-      ui_config: {
-        icon: '🔍',
-        insert_text: '@tool:web_search',
-        supports_artifacts: false,
-        preview_description: 'Search the web for information'
-      },
-      implementation: {
-        type: 'system',
-        backend_class: 'WebSearchTool',
-        requires_auth: false
-      },
-      parameters: {
-        query: {
-          type: 'string',
-          description: 'Search query',
-          required: true
-        }
-      }
-    }
-  ];
-}
 
 async function loadPipedreamMetadata(): Promise<Record<string, PipedreamTool>> {
-  const metadataPath = path.join(process.cwd(), 'src', 'public', 'pipedream_metadata.json');
+  const tsPath = path.join(process.cwd(), 'src', 'ddd', 'domain', 'tools', 'config', 'pipedream-tools.generated.ts');
 
-  if (!fs.existsSync(metadataPath)) {
-    throw new Error(`Pipedream metadata file not found at ${metadataPath}`);
+  if (!fs.existsSync(tsPath)) {
+    throw new Error(
+      `Pipedream tools not generated. Run: pnpm tsx src/scripts/fetch-pipedream-tools.ts\n` +
+      `Expected file: ${tsPath}`
+    );
   }
 
-  console.log(`Loading Pipedream metadata from ${metadataPath}...`);
-  const content = fs.readFileSync(metadataPath, 'utf-8');
-  const metadata = JSON.parse(content);
+  console.log('Loading Pipedream metadata from TypeScript config...');
 
-  console.log(`Loaded ${Object.keys(metadata).length} Pipedream tools`);
-  return metadata;
+  // Dynamic import - fail fast if it doesn't work
+  const pipedreamModule = await import(tsPath.replace('.ts', '.js'));
+  const { PIPEDREAM_TOOLS } = pipedreamModule;
+
+  if (!PIPEDREAM_TOOLS || typeof PIPEDREAM_TOOLS !== 'object') {
+    throw new Error(`Invalid PIPEDREAM_TOOLS export in ${tsPath}`);
+  }
+
+  console.log(`Loaded ${Object.keys(PIPEDREAM_TOOLS).length} Pipedream tools from TypeScript`);
+  return PIPEDREAM_TOOLS;
 }
 
 function convertCuratedToolToDatabase(tool: CuratedTool): ToolData {

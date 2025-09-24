@@ -71,7 +71,7 @@ export function ToolsServersModal({ isOpen, onClose, agent, onUpdate }: ToolsSer
     const exists = tools.some(tool => tool.name === toolName);
     if (exists) return;
 
-    const newTool = ToolConfig.create(toolName, '1.0', {});
+    const newTool = ToolConfig.create(toolName, {});
     setTools([...tools, newTool]);
     setShowToolDropdown(false);
     setDropdownQuery('');
@@ -242,7 +242,7 @@ export function ToolsServersModal({ isOpen, onClose, agent, onUpdate }: ToolsSer
                               <div>
                                 <div className="font-medium text-sm">{tool.name}</div>
                                 <div className="text-xs text-muted-foreground">
-                                  Version: {tool.version}
+                                  Config: {JSON.stringify(tool.config)}
                                 </div>
                               </div>
                             </div>
