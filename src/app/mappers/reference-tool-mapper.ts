@@ -82,7 +82,7 @@ export function mapReferenceToolToDTO(referenceTool: ReferenceTool): ToolDTO {
     displayName: displayInfo.displayName,
     description: displayInfo.description,
     category: referenceTool.toolMetadata.category, // Unified categories
-    version: referenceTool.toolConfig.version,
+    version: '', // Empty version since ToolConfig no longer has version
     icon: referenceTool.toolMetadata.icon,
     tags: referenceTool.toolMetadata.tags,
     requiresConnection: referenceTool.requiresConnection(),

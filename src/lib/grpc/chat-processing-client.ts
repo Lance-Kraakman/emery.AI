@@ -101,7 +101,11 @@ export class ChatProcessingClient {
       user_id: userId,
       organization_id: organizationId,
       conversation_history: conversationHistory,
-      tools: options.tools || [] // Add tools from options
+      tools: (options.tools || []).map(tool => ({
+        name: tool.name,
+        version: '', // Empty version since ToolConfig no longer has version
+        config: tool.config || {}
+      })) // Add tools from options
     };
 
     // Add context if provided

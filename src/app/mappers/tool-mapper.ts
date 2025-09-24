@@ -71,7 +71,7 @@ export class ToolMapper {
       displayName: tool.toolMetadata.displayName,
       description: tool.toolMetadata.description,
       category: tool.toolMetadata.category,
-      version: tool.getVersion(),
+      version: '', // Empty version since Tool no longer has getVersion()
       icon: tool.toolMetadata.icon,
       tags: tool.toolMetadata.tags,
       requiresConnection: tool.requiresConnection(),
@@ -95,7 +95,7 @@ export class ToolMapper {
    * Create Tool entity from DTO (for deserialization)
    */
   static fromDTO(dto: ToolDTO): Tool {
-    const toolConfig = ToolConfig.create(dto.name, dto.version, dto.config)
+    const toolConfig = ToolConfig.create(dto.name, dto.config)
     const toolMetadata = new ToolMetadata(
       dto.name,
       dto.displayName,

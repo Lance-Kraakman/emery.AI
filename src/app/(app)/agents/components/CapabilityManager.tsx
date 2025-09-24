@@ -124,7 +124,7 @@ export default function CapabilityManager({
 
   const handleAddStepTool = (stepIndex: number) => {
     if (!editingCapability) return;
-    const newTool: ToolConfig = ToolConfig.create('', '1.0', {});
+    const newTool: ToolConfig = ToolConfig.create('', {});
     const updatedStep = {
       ...editingCapability.steps[stepIndex],
       tools: [...(editingCapability.steps[stepIndex].tools || []), newTool]
@@ -218,11 +218,9 @@ export default function CapabilityManager({
         // Create new ToolConfig with updated field
         const updatedConfig = { ...tool.config };
         if (field === 'name') {
-          return ToolConfig.create(value || '', tool.version, tool.config);
-        } else if (field === 'version') {
-          return ToolConfig.create(tool.name, value || '1.0', tool.config);
+          return ToolConfig.create(value || '', tool.config);
         } else if (field === 'config') {
-          return ToolConfig.create(tool.name, tool.version, { ...tool.config, ...(value ? JSON.parse(value) : {}) });
+          return ToolConfig.create(tool.name, { ...tool.config, ...(value ? JSON.parse(value) : {}) });
         }
         return tool;
       }

@@ -58,7 +58,17 @@ export class ToolMetadata {
     public readonly tags: readonly string[] = [],
     // Auto-binding fields for reference-to-execution mapping
     public readonly mapsToReferences: readonly string[] = [], // ["@doc:", "@document:"]
-    public readonly autoBindParameter?: string // "document_id", "table_name", etc.
+    public readonly autoBindParameter?: string, // "document_id", "table_name", etc.
+    // Extended metadata for implementation details
+    public readonly extra?: {
+      app?: string;
+      appId?: string;
+      supportsOAuth?: boolean;
+      insertText?: string;
+      supportsArtifacts?: boolean;
+      implementation?: any;
+      parameters?: Record<string, any>;
+    }
   ) {
     if (!name?.trim()) {
       throw new Error('Tool name is required')
@@ -78,7 +88,8 @@ export class ToolMetadata {
     name: string,
     displayName: string,
     description: string,
-    tags: string[] = []
+    tags: string[] = [],
+    extra?: ToolMetadata['extra']
   ): ToolMetadata {
     return new ToolMetadata(
       name,
@@ -89,7 +100,10 @@ export class ToolMetadata {
       ConnectionType.NONE,
       [], // No required apps
       undefined,
-      tags
+      tags,
+      [], // mapsToReferences
+      undefined, // autoBindParameter
+      extra
     )
   }
 
@@ -102,7 +116,8 @@ export class ToolMetadata {
     description: string,
     requiredApps: string[] = [],
     icon?: string,
-    tags: string[] = []
+    tags: string[] = [],
+    extra?: ToolMetadata['extra']
   ): ToolMetadata {
     return new ToolMetadata(
       name,
@@ -113,7 +128,10 @@ export class ToolMetadata {
       ConnectionType.OAUTH,
       requiredApps,
       icon,
-      tags
+      tags,
+      [], // mapsToReferences
+      undefined, // autoBindParameter
+      extra
     )
   }
 
@@ -126,7 +144,8 @@ export class ToolMetadata {
     description: string,
     requiredApps: string[] = [],
     icon?: string,
-    tags: string[] = []
+    tags: string[] = [],
+    extra?: ToolMetadata['extra']
   ): ToolMetadata {
     return new ToolMetadata(
       name,
@@ -137,7 +156,10 @@ export class ToolMetadata {
       ConnectionType.API_KEY,
       requiredApps,
       icon,
-      tags
+      tags,
+      [], // mapsToReferences
+      undefined, // autoBindParameter
+      extra
     )
   }
 
@@ -159,7 +181,10 @@ export class ToolMetadata {
       ConnectionType.NONE,
       [],
       undefined,
-      tags
+      tags,
+      [], // mapsToReferences
+      undefined, // autoBindParameter
+      undefined // extra
     )
   }
 
@@ -181,7 +206,10 @@ export class ToolMetadata {
       ConnectionType.NONE,
       [],
       undefined,
-      tags
+      tags,
+      [], // mapsToReferences
+      undefined, // autoBindParameter
+      undefined // extra
     )
   }
 
@@ -203,7 +231,10 @@ export class ToolMetadata {
       ConnectionType.NONE,
       [],
       undefined,
-      tags
+      tags,
+      [], // mapsToReferences
+      undefined, // autoBindParameter
+      undefined // extra
     )
   }
 
@@ -225,7 +256,10 @@ export class ToolMetadata {
       ConnectionType.NONE,
       [],
       undefined,
-      tags
+      tags,
+      [], // mapsToReferences
+      undefined, // autoBindParameter
+      undefined // extra
     )
   }
 
@@ -247,7 +281,10 @@ export class ToolMetadata {
       ConnectionType.NONE,
       [],
       undefined,
-      tags
+      tags,
+      [], // mapsToReferences
+      undefined, // autoBindParameter
+      undefined // extra
     )
   }
 
@@ -269,7 +306,10 @@ export class ToolMetadata {
       ConnectionType.NONE,
       [], // No required apps
       undefined,
-      tags
+      tags,
+      [], // mapsToReferences
+      undefined, // autoBindParameter
+      undefined // extra
     )
   }
 

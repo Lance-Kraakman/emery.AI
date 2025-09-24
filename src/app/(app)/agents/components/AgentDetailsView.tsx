@@ -264,7 +264,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
   const addToolFromRegistry = async (toolMetadata: ToolMetadataDTO) => {
     const result = await createToolConfigFromMetadata(toolMetadata.name);
     if (result.success && result.data) {
-      const newTool = ToolConfig.create(result.data.name, result.data.version, result.data.config);
+      const newTool = ToolConfig.create(result.data.name, result.data.config);
       setEditFormData(prev => ({
         ...prev,
         tools: [...prev.tools, newTool]
@@ -455,7 +455,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                     <div key={index} className="flex items-center justify-between p-2 border rounded-md bg-muted/20">
                       <div className="flex-1">
                         <div className="font-medium text-sm">{tool.name}</div>
-                        <div className="text-xs text-muted-foreground">v{tool.version}</div>
+                        <div className="text-xs text-muted-foreground">Config: {JSON.stringify(tool.config)}</div>
                       </div>
                       <Button
                         type="button"

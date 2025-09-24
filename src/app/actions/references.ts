@@ -151,7 +151,7 @@ function mapReferenceToolToLegacyDTO(referenceTool: ReferenceTool): ReferenceToo
 
   return {
     toolName: referenceTool.toolConfig.name,
-    toolVersion: referenceTool.toolConfig.version,
+    toolVersion: '', // Empty version since ToolConfig no longer has version
     id: referenceTool.reference.id,
     insertText: displayInfo.insertText,
     displayName: displayInfo.displayName,
