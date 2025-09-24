@@ -7,9 +7,9 @@ Maintains backward compatibility with legacy tools.
 """
 
 from typing import Any, Dict, List
-from .....domain.tools.repositories.tool_registry_repository import IToolRegistryRepository
-from .....core.entities import ToolConfig
-from ...tools.unified_tool_loader import UnifiedToolLoader
+from emery_agents.domain.tools.repositories.tool_registry_repository import IToolRegistryRepository
+from emery_agents.core.entities import ToolConfig
+from emery_agents.infrastructure.tools.unified_tool_loader import UnifiedToolLoader
 
 
 class ToolRegistryRepository(IToolRegistryRepository):

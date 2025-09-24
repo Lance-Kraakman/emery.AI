@@ -6,11 +6,18 @@ Wires up domain interfaces with infrastructure implementations.
 """
 
 from typing import Dict, Any, Type
-from ...domain.agents.repositories.agent_repository import IAgentRepository
-from ...domain.agents.repositories.task_repository import ITaskRepository
-from ...domain.execution.repositories.execution_repository import IExecutionRepository
-from ...domain.tools.repositories.tool_registry_repository import IToolRegistryRepository
-from ...application.services.agent_task_service import AgentTaskApplicationService
+from emery_agents.domain.agents.repositories.agent_repository import IAgentRepository
+from emery_agents.domain.agents.repositories.task_repository import ITaskRepository
+from emery_agents.domain.execution.repositories.execution_repository import IExecutionRepository
+from emery_agents.domain.tools.repositories.tool_registry_repository import IToolRegistryRepository
+from emery_agents.application.services.agent_task_service import AgentTaskApplicationService
+
+# Import infrastructure implementations at top level
+from emery_agents.infrastructure.db.repositories.tools.tool_registry_repository import ToolRegistryRepository
+from emery_agents.infrastructure.execution.smolagents_execution_repository import SmolAgentsExecutionRepository
+from emery_agents.infrastructure.ai.smolagents_model_provider import SmolagentsModelProvider
+from emery_agents.infrastructure.repositories.mock_agent_repository import MockAgentRepository
+from emery_agents.infrastructure.repositories.mock_task_repository import MockTaskRepository
 
 
 class Container:
@@ -47,28 +54,19 @@ class Container:
         """Initialize with default pure infrastructure implementations."""
         if self._initialized:
             return
-        
-        # Import pure infrastructure implementations (no bridge pattern)
-        from ...infrastructure.db.repositories.tools.tool_registry_repository import ToolRegistryRepository
-        from ...infrastructure.execution.smolagents_execution_repository import SmolAgentsExecutionRepository
-        from ...infrastructure.ai.smolagents_model_provider import SmolagentsModelProvider
-        
-        # Create dependencies first
+
+        # Create dependencies first (imports are now at top level)
         tool_registry_repo = ToolRegistryRepository()
         model_provider = SmolagentsModelProvider()
-        
+
         # Register pure implementations
         self.register_repository(IToolRegistryRepository, tool_registry_repo)
         self.register_repository(IExecutionRepository, SmolAgentsExecutionRepository(tool_registry_repo, model_provider))
-        
-        # TODO: Add agent and task repository implementations
-        # For now, create mock implementations for testing
-        from ...infrastructure.repositories.mock_agent_repository import MockAgentRepository
-        from ...infrastructure.repositories.mock_task_repository import MockTaskRepository
-        
+
+        # Register mock implementations for testing
         self.register_repository(IAgentRepository, MockAgentRepository())
         self.register_repository(ITaskRepository, MockTaskRepository())
-        
+
         self._initialized = True
 
 
