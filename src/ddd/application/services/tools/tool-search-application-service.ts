@@ -69,31 +69,37 @@ export class ToolSearchApplicationService {
     console.log(`[ToolSearchService] Searching for query: "${query}", categories:`, categories);
 
     // Search both reference tools and system tools in parallel
-    // For system tools, we need to search with a higher limit since pagination happens after combining
+    // Get ALL results first, then apply unified pagination
     const [referenceToolsResult, systemTools] = await Promise.all([
-      this.searchOnlyReferenceTools(options),
-      this.searchSystemTools(query, categories, 20)
+      this.searchOnlyReferenceTools({ ...options, limit: 1000, offset: 0 }),
+      this.searchSystemTools(query, categories, 1000)
     ]);
 
     console.log(`[ToolSearchService] Found ${referenceToolsResult.referenceTools.length} reference tools, ${systemTools.length} system tools`);
-
-    // Apply pagination to combined results
-    const allTools = [
-      ...referenceToolsResult.referenceTools,
-      ...systemTools
-    ];
 
     // Sort by relevance
     const sortedReferenceTools = this.sortReferenceToolsByRelevance(referenceToolsResult.referenceTools, query);
     const sortedSystemTools = this.sortSystemToolsByRelevance(systemTools, query);
 
-    // Apply pagination
-    const paginatedReferenceTools = sortedReferenceTools.slice(offset, Math.min(offset + limit, sortedReferenceTools.length));
-    const remainingLimit = limit - paginatedReferenceTools.length;
-    const paginatedSystemTools = remainingLimit > 0 ? sortedSystemTools.slice(0, remainingLimit) : [];
+    // Combine all results
+    const allTools = [...sortedReferenceTools, ...sortedSystemTools];
+    const totalItems = allTools.length;
 
-    const totalItems = sortedReferenceTools.length + sortedSystemTools.length;
+    // Apply unified pagination
+    const paginatedTools = allTools.slice(offset, offset + limit);
     const hasMore = offset + limit < totalItems;
+
+    // Separate paginated results back into reference and system tools
+    const paginatedReferenceTools: ReferenceTool[] = [];
+    const paginatedSystemTools: Tool[] = [];
+
+    for (const tool of paginatedTools) {
+      if (tool instanceof ReferenceTool) {
+        paginatedReferenceTools.push(tool);
+      } else {
+        paginatedSystemTools.push(tool);
+      }
+    }
 
     return {
       referenceTools: paginatedReferenceTools,
