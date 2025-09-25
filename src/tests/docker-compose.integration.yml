@@ -77,7 +77,7 @@ services:
 
   agent-integration:
     build:
-      context: ../emery-agents
+      context: ../../emery-agents
       dockerfile: Dockerfile
     container_name: emery-integration-agent
     ports:

@@ -21,6 +21,7 @@ import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { ToolMetadata, ToolCategory, ConnectionType } from '@/ddd/domain/tools/value-objects/tool-metadata';
 import { Tool } from '@/ddd/domain/tools/entities/tool';
 import { tools, appTypes, type ToolDefinitionData } from '@/lib/db/schema';
+import { toolResolverService } from '@/ddd/domain/tools/services/tool-resolver-service';
 
 export class DatabaseToolRegistry implements IToolRegistryService {
   private db: ReturnType<typeof drizzle>;
@@ -139,22 +140,7 @@ export class DatabaseToolRegistry implements IToolRegistryService {
    * Map database category to ToolCategory enum
    */
   private mapCategoryToToolCategory(category: string): ToolCategory {
-    const categoryMap: Record<string, ToolCategory> = {
-      'utility': ToolCategory.UTILITIES,
-      'communication': ToolCategory.APPS,
-      'productivity': ToolCategory.APPS,
-      'reference': ToolCategory.DOCUMENTS,
-      'data': ToolCategory.TABLES,
-      'crm': ToolCategory.APPS,
-      'payments': ToolCategory.APPS,
-      'ecommerce': ToolCategory.APPS,
-      'marketing': ToolCategory.APPS,
-      'social': ToolCategory.APPS,
-      'ai': ToolCategory.UTILITIES,
-      'system': ToolCategory.BASE,
-    };
-
-    return categoryMap[category.toLowerCase()] || ToolCategory.UTILITIES;
+    return toolResolverService.mapDatabaseCategoryToToolCategory(category);
   }
 
   /**

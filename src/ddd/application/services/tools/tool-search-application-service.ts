@@ -22,6 +22,7 @@ import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persis
 import { RowMapper, type DocumentFieldValue, type FileFieldValue } from '@/app/mappers/row-mapper';
 import { isDocumentArray, isFileArray } from '@/ddd/domain/tables/value-objects/field-values';
 import type { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
+import { toolResolverService, type SearchCategoryType, type SearchHandlerType, SEARCH_CATEGORIES } from '@/ddd/domain/tools/services/tool-resolver-service';
 
 export interface SearchReferencesOptions {
   query: string;
@@ -69,10 +70,9 @@ export class ToolSearchApplicationService {
 
     // Search both reference tools and system tools in parallel
     // For system tools, we need to search with a higher limit since pagination happens after combining
-    const systemToolsLimit = Math.max(limit * 10, 1000); // Get more system tools to enable proper pagination
     const [referenceToolsResult, systemTools] = await Promise.all([
       this.searchOnlyReferenceTools(options),
-      this.searchSystemTools(query, categories, systemToolsLimit)
+      this.searchSystemTools(query, categories, 20)
     ]);
 
     console.log(`[ToolSearchService] Found ${referenceToolsResult.referenceTools.length} reference tools, ${systemTools.length} system tools`);
@@ -178,40 +178,21 @@ export class ToolSearchApplicationService {
 
   /**
    * Determine which categories to search based on query pattern
+   * Uses ToolResolverService for centralized logic
    */
   private determineSearchCategories(
-    query: string, 
-    explicitCategories?: ('doc' | 'file' | 'agent' | 'table' | 'database')[]
-  ): ('doc' | 'file' | 'agent' | 'table' | 'database')[] {
-    if (explicitCategories) {
-      return explicitCategories;
-    }
-
-    // Auto-detect based on query pattern
-    const cleanQuery = query.trim().toLowerCase();
-    
-    if (cleanQuery.startsWith('@doc:') || cleanQuery.startsWith('@file:')) {
-      return ['doc', 'file'];
-    } else if (cleanQuery.startsWith('@agent:')) {
-      return ['agent'];
-    } else if (cleanQuery.startsWith('@table:')) {
-      return ['table'];
-    } else if (cleanQuery.startsWith('@database:')) {
-      return ['database'];
-    } else if (cleanQuery === '@' || cleanQuery === '') {
-      // Search all categories when just @ or empty
-      return ['doc', 'file', 'agent', 'table', 'database'];
-    }
-    
-    // Default to documents and agents for partial queries
-    return ['doc', 'file', 'agent'];
+    query: string,
+    explicitCategories?: SearchCategoryType[]
+  ): SearchCategoryType[] {
+    return toolResolverService.determineSearchCategories(query, explicitCategories);
   }
 
   /**
    * Search within a specific category returning ReferenceTool objects
+   * Now uses ToolResolverService for type-safe category handling
    */
   private async searchToolsByCategory(
-    category: 'doc' | 'file' | 'agent' | 'table' | 'database',
+    category: SearchCategoryType,
     query: string,
     organizationId: OrganizationId,
     limit: number,
@@ -220,7 +201,10 @@ export class ToolSearchApplicationService {
     const searchText = this.extractSearchText(query);
 
     try {
-      switch (category) {
+      // Use ToolResolverService to determine the appropriate handler
+      const handler = toolResolverService.getCategorySearchHandler(category);
+
+      switch (handler) {
         case 'agent':
           return await this.searchAgentTools(searchText, organizationId, limit, offset);
 
@@ -230,15 +214,14 @@ export class ToolSearchApplicationService {
         case 'database':
           return await this.searchDatabaseTools(searchText, organizationId, limit, offset);
 
-        case 'doc':
-        case 'file':
+        case 'document':
           return await this.searchDocumentTools(searchText, organizationId, limit, offset);
 
         default:
           return [];
       }
     } catch (error) {
-      console.error(`Error searching ${category} tools:`, error);
+      console.error(`Error searching ${category} tools (handler: ${toolResolverService.getCategorySearchHandler(category)}):`, error);
       return [];
     }
   }

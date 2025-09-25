@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { ToolDropdown } from './ToolDropdown';
 import { resolveReferences } from '@/app/actions/references';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
-import { mapReferencesToTools, extractToolReferences } from '@/app/services/reference-mapper';
+import { toolResolverService } from '@/ddd/domain/tools/services/tool-resolver-service';
 
 interface CustomChatInputProps {
   onSendMessage: (message: string) => void;
@@ -154,7 +154,7 @@ export default function CustomChatInput({
       const message = inputValue.trim();
 
       // Use simple reference mapping
-      const { mappedMessage, toolReferences } = mapReferencesToTools(message);
+      const { mappedMessage, toolReferences } = toolResolverService.mapReferencesToTools(message);
 
       console.log('[CustomChatInput] Reference mapping:', {
         original: message,
