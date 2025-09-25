@@ -62,6 +62,56 @@ export class DocumentApplicationService {
   ) {}
 
   /**
+   * Get a document field value from the database
+   * This provides the actual document data with proper mimeType, name, etc.
+   */
+  async getDocumentFieldValue(
+    documentId: string,
+    organizationId: OrganizationId,
+    tableId: TableId,
+    fieldId: FieldId
+  ): Promise<Result<DocumentFieldValue>> {
+    try {
+      const documentData = await this.findDocumentInTable(
+        documentId,
+        organizationId,
+        tableId,
+        fieldId
+      );
+
+      if (!documentData) {
+        return { success: false, error: 'Document not found' };
+      }
+
+      // Create a complete DocumentFieldValue with the actual data from the database
+      const documentFieldValue: DocumentFieldValue = {
+        id: documentId,
+        name: documentData.name,
+        size: 0, // Size can be retrieved from S3 if needed
+        mimeType: documentData.mimeType,
+        s3Key: documentData.s3Key,
+        uploadedAt: new Date().toISOString(), // TODO: Get real upload date if needed
+        documentMetadata: {
+          title: documentData.name,
+          version: 1,
+          documentType: documentData.mimeType === 'application/vnd.tiptap+json' ? 'tiptap' : 'file'
+        }
+      };
+
+      return {
+        success: true,
+        data: documentFieldValue
+      };
+    } catch (error) {
+      console.error('[DOCUMENT-APP-SERVICE] Error getting document field value:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get document field value'
+      };
+    }
+  }
+
+  /**
    * Private helper to find document data in table rows
    */
   private async findDocumentInTable(

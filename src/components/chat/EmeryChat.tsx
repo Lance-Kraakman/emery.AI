@@ -31,7 +31,7 @@ import { resolveReferences } from '@/app/actions/references'
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
 import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
-import { fetchDocumentArtifactData, fetchFileArtifactData, getFileDownloadUrl } from '@/app/actions/artifacts'
+import { fetchFileArtifactData, getFileDownloadUrl, getDocumentFieldValue } from '@/app/actions/artifacts'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 
 /**
@@ -242,12 +242,13 @@ function ChatContentWithCanvas({
     }
 
     if (tool.category === ToolCategory.DOCUMENTS) {
-      // Fetch real document data using DTO config
-      const result = await fetchDocumentArtifactData(
+      // Fetch real document data using server action
+      // Note: DocumentToolConfig uses tableId/fieldId, not documentTableId/documentFieldId
+      const result = await getDocumentFieldValue(
         tool.config.documentId!,
         tool.config.organizationId,
-        tool.config.documentFilename!,
-        tool.config.documentMimeType!
+        tool.config.tableId!,
+        tool.config.fieldId!
       )
 
       if (result.success && result.data) {
@@ -255,8 +256,8 @@ function ChatContentWithCanvas({
         const artifact = createDocumentArtifact(
           result.data,
           tool.config.organizationId,
-          tool.config.documentTableId!,
-          tool.config.documentFieldId!,
+          tool.config.tableId!,
+          tool.config.fieldId!,
           'view'
         )
         openArtifactInCanvas(artifact)

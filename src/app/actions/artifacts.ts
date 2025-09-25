@@ -16,42 +16,32 @@ import type { Result } from "./types";
 import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 /**
- * Fetch document artifact data from tool config
+ * Fetch document field value using domain service
+ * This replaces the old fetchDocumentArtifactData with proper domain logic
  */
-export async function fetchDocumentArtifactData(
+export async function getDocumentFieldValue(
   documentId: string,
   organizationId: number,
-  filename: string,
-  mimeType: string
+  tableId: number,
+  fieldId: number
 ): Promise<Result<DocumentFieldValue>> {
   try {
     await requirePermission("data:view");
 
-    // Create DocumentFieldValue with real metadata
-    // Content will be fetched by DocumentArtifactViewer when needed
-    const documentField: DocumentFieldValue = {
-      id: documentId,
-      name: filename,
-      size: 0, // Size is handled by file system
-      mimeType: mimeType,
-      s3Key: documentId, // Document ID is the storage key
-      uploadedAt: new Date().toISOString(), // TODO: Get real upload date if needed
-      documentMetadata: {
-        title: filename,
-        version: 1.0, // TODO: Get real version if needed
-        documentType: mimeType === 'application/vnd.tiptap+json' ? 'tiptap' : 'file'
-      }
-    }
+    const documentService = getDocumentApplicationService();
+    const result = await documentService.getDocumentFieldValue(
+      documentId,
+      OrganizationId.fromNumber(organizationId),
+      TableId.fromNumber(tableId),
+      FieldId.fromNumber(fieldId)
+    );
 
-    return {
-      success: true,
-      data: documentField
-    };
+    return result;
   } catch (error) {
-    console.error("Error fetching document artifact data:", error);
+    console.error("Error getting document field value:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to fetch document data"
+      error: error instanceof Error ? error.message : "Failed to get document field value"
     };
   }
 }
