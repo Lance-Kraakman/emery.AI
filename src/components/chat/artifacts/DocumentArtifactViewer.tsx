@@ -96,28 +96,11 @@ export function DocumentArtifactViewer({
   // Load TipTap content for TipTap documents
   useEffect(() => {
     const loadContent = async () => {
-      console.log('[DocumentArtifactViewer] Load content check:', {
-        documentType: documentField.documentMetadata?.documentType,
-        mimeType: documentField.mimeType,
-        isLoadingContent,
-        contentLoaded,
-        loadAttempts
-      });
-
-      // More flexible TipTap detection for content loading
+      // Simple TipTap detection - now that domain service provides correct data
       const isTipTap = (
         documentField.documentMetadata?.documentType === 'tiptap' ||
-        documentField.mimeType === 'application/vnd.tiptap+json' ||
-        documentField.name?.includes('.tiptap') ||
-        !!documentField.documentMetadata?.tiptapMetadata ||
-        (documentField.documentMetadata?.title && !documentField.name?.includes('.')) ||
-        // AGGRESSIVE FALLBACK: If we have a document artifact opened through tool interaction
-        // but no clear indicators, assume it's TipTap if it's not clearly a file
-        (!documentField.name && !documentField.mimeType && documentField.id &&
-         mode === 'view') // Only for view mode to be safe
+        documentField.mimeType === 'application/vnd.tiptap+json'
       );
-
-      console.log('[DocumentArtifactViewer] Content loading TipTap check:', isTipTap);
 
       if (isTipTap && !isLoadingContent && !contentLoaded && loadAttempts < 3) {
         setIsLoadingContent(true)
@@ -162,7 +145,8 @@ export function DocumentArtifactViewer({
         } finally {
           setIsLoadingContent(false)
         }
-      } else if (!isTipTap) {
+      } else if (!(documentField.documentMetadata?.documentType === 'tiptap' ||
+                   documentField.mimeType === 'application/vnd.tiptap+json')) {
         // For non-TipTap documents, show document info
         setContent(`<p><em>Document: ${documentField.name}</em></p><p>Type: ${documentField.mimeType}</p>`)
       } else if (loadAttempts >= 3) {
@@ -401,50 +385,8 @@ export function DocumentArtifactViewer({
 
       {/* Editor Content */}
       <div className={styles.editorWrapper}>
-        {(() => {
-          // Debug logging
-          console.log('[DocumentArtifactViewer] Debug document field:', {
-            documentType: documentField.documentMetadata?.documentType,
-            mimeType: documentField.mimeType,
-            hasMetadata: !!documentField.documentMetadata,
-            name: documentField.name,
-            title: documentField.documentMetadata?.title,
-            tiptapMetadata: documentField.documentMetadata?.tiptapMetadata,
-            nameIncludesDot: documentField.name?.includes('.'),
-            nameIncludesTiptap: documentField.name?.includes('.tiptap'),
-            documentField: JSON.stringify(documentField, null, 2)
-          });
-
-          // More flexible TipTap detection
-          const isTipTap = (
-            documentField.documentMetadata?.documentType === 'tiptap' ||
-            documentField.mimeType === 'application/vnd.tiptap+json' ||
-            // Fallback: If filename suggests it's a TipTap file or no clear file extension
-            documentField.name?.includes('.tiptap') ||
-            // If we have tiptapMetadata, it's definitely a TipTap document
-            !!documentField.documentMetadata?.tiptapMetadata ||
-            // If it has a document title and no clear file extension, treat as TipTap
-            (documentField.documentMetadata?.title && !documentField.name?.includes('.')) ||
-            // AGGRESSIVE FALLBACK: If we have a document artifact opened through tool interaction
-            // but no clear indicators, assume it's TipTap if it's not clearly a file
-            (!documentField.name && !documentField.mimeType && documentField.id &&
-             mode === 'view') // Only for view mode to be safe
-          );
-
-          console.log('[DocumentArtifactViewer] TipTap detection logic:', {
-            condition1: documentField.documentMetadata?.documentType === 'tiptap',
-            condition2: documentField.mimeType === 'application/vnd.tiptap+json',
-            condition3: documentField.name?.includes('.tiptap'),
-            condition4: !!documentField.documentMetadata?.tiptapMetadata,
-            condition5: (documentField.documentMetadata?.title && !documentField.name?.includes('.')),
-            condition6: (!documentField.name && !documentField.mimeType && documentField.id && mode === 'view'),
-            finalResult: isTipTap
-          });
-
-          console.log('[DocumentArtifactViewer] Is TipTap document?', isTipTap);
-
-          return isTipTap;
-        })() ? (
+        {(documentField.documentMetadata?.documentType === 'tiptap' ||
+          documentField.mimeType === 'application/vnd.tiptap+json') ? (
           // TipTap editor for editable documents
           <>
             {editor ? (
