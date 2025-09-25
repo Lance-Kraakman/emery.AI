@@ -12,6 +12,7 @@ import { ReferenceToolMapper, type ReferenceToolDTO } from "@/app/mappers/refere
 import { ReferenceCategory } from "@/ddd/domain/chat/value-objects/reference-types";
 import type { ReferenceTool } from "@/ddd/domain/tools/entities/reference-tool";
 import type { Result } from "./types";
+import { toolResolverService } from "@/ddd/domain/tools/services/tool-resolver-service";
 
 /**
  * Complete tool search that returns both reference tools and system tools
@@ -187,7 +188,7 @@ export async function resolveReferences(referenceTexts: string[]): Promise<Resul
     for (const refText of referenceTexts) {
       try {
         // Extract category and search term from reference text
-        const { category, searchTerm } = parseReferenceText(refText);
+        const { category, searchTerm } = toolResolverService.parseReferenceText(refText);
 
         if (!category || !searchTerm) {
           console.warn(`[ReferenceActions] Could not parse reference: ${refText}`);
@@ -274,27 +275,3 @@ export async function resolveReferences(referenceTexts: string[]): Promise<Resul
   }
 }
 
-/**
- * Parse reference text to extract category and search term
- */
-function parseReferenceText(refText: string): { category: ReferenceCategory | null; searchTerm: string } {
-  const text = refText.trim();
-
-  if (text.startsWith('@doc:')) {
-    return { category: ReferenceCategory.DOC, searchTerm: text.substring(5) };
-  }
-  if (text.startsWith('@file:')) {
-    return { category: ReferenceCategory.FILE, searchTerm: text.substring(6) };
-  }
-  if (text.startsWith('@agent:')) {
-    return { category: ReferenceCategory.AGENT, searchTerm: text.substring(7) };
-  }
-  if (text.startsWith('@table:')) {
-    return { category: ReferenceCategory.TABLE, searchTerm: text.substring(7) };
-  }
-  if (text.startsWith('@database:')) {
-    return { category: ReferenceCategory.DATABASE, searchTerm: text.substring(10) };
-  }
-
-  return { category: null, searchTerm: text };
-}
