@@ -50,11 +50,21 @@ export default function CustomChatInput({
 
     setInputValue(value);
 
-    // Find @ symbol before cursor
+    // Find @ symbol before cursor - allow spaces in search but exclude completed tool references
     const beforeCursor = value.slice(0, cursorPos);
-    const atMatch = beforeCursor.match(/@([^@\s]*)$/);
+    const atMatch = beforeCursor.match(/@([^@]*)$/);
 
-    if (atMatch) {
+    // Don't show dropdown if we're in a completed tool reference
+    const isCompletedTool = atMatch && (
+      atMatch[0].startsWith('@tool:') ||
+      atMatch[0].startsWith('@doc:') ||
+      atMatch[0].startsWith('@file:') ||
+      atMatch[0].startsWith('@agent:') ||
+      atMatch[0].startsWith('@table:') ||
+      atMatch[0].startsWith('@database:')
+    );
+
+    if (atMatch && !isCompletedTool) {
       const query = atMatch[1] || '';
       setDropdownQuery(query);
       setShowDropdown(true);
@@ -98,8 +108,8 @@ export default function CustomChatInput({
     const beforeCursor = inputValue.slice(0, cursorPos);
     const afterCursor = inputValue.slice(cursorPos);
 
-    // Find and replace the @ query with the full tool reference
-    const atMatch = beforeCursor.match(/@[^@\s]*$/);
+    // Find and replace the @ query with the full tool reference - allow spaces
+    const atMatch = beforeCursor.match(/@[^@]*$/);
     if (atMatch) {
       const beforeAt = beforeCursor.slice(0, atMatch.index);
       // Get insertText from unified ToolDTO with proper fallback for each type

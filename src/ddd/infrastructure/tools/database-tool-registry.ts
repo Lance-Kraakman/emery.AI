@@ -10,7 +10,7 @@
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { eq, like, and, desc } from 'drizzle-orm';
+import { eq, like, and, desc, or, ilike } from 'drizzle-orm';
 import type {
   IToolRegistryService,
   ToolDiscoveryOptions,
@@ -164,12 +164,34 @@ export class DatabaseToolRegistry implements IToolRegistryService {
     try {
       let whereConditions = [];
 
-      // Add search query condition
+      // Add multi-field search query condition with enhanced matching
       if (query && query.trim()) {
-        const searchTerm = `%${query.trim()}%`;
-        whereConditions.push(
-          like(tools.displayName, searchTerm)
-        );
+        const searchQuery = query.trim().toLowerCase();
+
+        // Split query into words for multi-word support
+        const searchWords = searchQuery.split(/\s+/).filter(word => word.length > 0);
+
+        if (searchWords.length > 0) {
+          // For each word, search across multiple fields using OR conditions
+          const wordConditions = searchWords.map(word => {
+            const searchTerm = `%${word}%`;
+            return or(
+              ilike(tools.id, searchTerm),              // Search tool ID (e.g., "gmail-send-email")
+              ilike(tools.displayName, searchTerm),     // Search display name (e.g., "Send Email")
+              ilike(tools.description, searchTerm),     // Search description
+              ilike(appTypes.name, searchTerm)          // Search app name (e.g., "gmail")
+            );
+          });
+
+          // All words must match (AND condition across words)
+          if (wordConditions.length === 1) {
+            whereConditions.push(wordConditions[0]);
+          } else {
+            whereConditions.push(and(...wordConditions));
+          }
+
+          console.log(`[DatabaseToolRegistry] Multi-field search for "${searchQuery}" (${searchWords.length} words)`);
+        }
       }
 
       // Add category filter if specified
@@ -177,6 +199,35 @@ export class DatabaseToolRegistry implements IToolRegistryService {
         // Convert ToolCategory enum to string
         const categoryStr = options.category.toString();
         whereConditions.push(eq(tools.category, categoryStr));
+      }
+
+      // Add app filter if specified
+      if (options?.appId) {
+        whereConditions.push(eq(appTypes.id, options.appId));
+      }
+
+      // Add connection requirement filters
+      if (options?.requiresConnection !== undefined) {
+        if (options.requiresConnection) {
+          // Only tools that require connections (OAuth or API key)
+          whereConditions.push(eq(appTypes.supportsOAuth, true));
+        } else {
+          // Only tools that don't require connections
+          whereConditions.push(eq(appTypes.supportsOAuth, false));
+        }
+      }
+
+      // Add connected-only filter (requires user connections check)
+      if (options?.connectedOnly && options?.userId) {
+        console.log(`[DatabaseToolRegistry] Filtering for connected-only tools for user ${options.userId}`);
+        // This would require a subquery or join with user connections table
+        // For now, just filter for OAuth-enabled apps (tools that CAN have connections)
+        whereConditions.push(eq(appTypes.supportsOAuth, true));
+
+        // TODO: Add actual user connection checking by joining with connections table
+        // This would be something like:
+        // JOIN user_connections ON user_connections.app_id = app_types.id
+        // WHERE user_connections.user_id = options.userId AND user_connections.status = 'active'
       }
 
       // Build the query

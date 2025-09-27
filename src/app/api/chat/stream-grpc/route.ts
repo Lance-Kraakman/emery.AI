@@ -20,10 +20,15 @@ import { auth } from '@/lib/auth';
 
 // Import Value Objects for proper type safety
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
-import { getChatApplicationService, getDynamicTableRepository, getAgentRepository } from '@/ddd/application/di/container';
+import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository } from '@/ddd/application/di/container';
 import type { CreateChatCommand, SendMessageCommand } from '@/ddd/application/services/chat/chat-application-service';
+import type { EnrichToolsWithUserApiKeyCommand } from '@/ddd/application/services/tools/tool-configuration-application-service';
+
+// Import user API key utilities
+import { assignApiKeyToUser } from '@/lib/auth/user-api-keys';
 
 // Import RAG services
 import { DualContextRagService, type DomainContextOptions } from '@/ddd/application/services/chat/dual-context-rag-service';
@@ -78,7 +83,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Parse request
+    // 2. Parse request and get user's agent API key for tools
     const { messages, chatId, domainType, domainId, tools = [] } = await req.json();
     const latestMessage = messages[messages.length - 1]?.content;
 
@@ -86,6 +91,14 @@ export async function POST(req: NextRequest) {
       toolCount: tools.length,
       toolNames: tools.map((t: any) => t.name)
     });
+
+    if (!currentOrganizationId) {
+      console.error('[CHAT-GRPC-API] No current organization found for user:', userId);
+      return new Response(
+        JSON.stringify({ error: 'No organization context available' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
     
     if (!latestMessage) {
       return new Response(
@@ -197,6 +210,62 @@ export async function POST(req: NextRequest) {
       resolvedDomainId = null;
     }
 
+    // 5.1 Enrich tools with user API key for chat-based tool execution
+    let enrichedTools: any[] = tools;
+    if (tools.length > 0 && userId) {
+      try {
+        console.log('[CHAT-GRPC-API] Starting tool enrichment with user API key');
+
+        // Get user's API key from repository
+        const userRepository = getUserRepository();
+        const user = await userRepository.findById(UserId.fromString(userId));
+
+        let userApiKey: string | null = null;
+        if (user && user.apiKey) {
+          userApiKey = user.apiKey.value;
+          console.log('[CHAT-GRPC-API] Found existing user API key');
+        } else {
+          console.log('[CHAT-GRPC-API] No user API key found, generating new one');
+          // Generate API key for user if they don't have one
+          userApiKey = await assignApiKeyToUser(userId);
+          console.log('[CHAT-GRPC-API] Generated new user API key');
+        }
+
+        if (userApiKey) {
+          // Convert plain tools to ToolConfig Value Objects
+          const toolConfigs = tools.map((tool: any) => ToolConfig.fromPlain(tool));
+
+          // Use application service to enrich tools with user API key
+          const toolConfigService = getToolConfigurationApplicationService();
+          const enrichCommand: EnrichToolsWithUserApiKeyCommand = {
+            tools: toolConfigs,
+            userApiKey: userApiKey
+          };
+
+          const enrichResult = await toolConfigService.enrichToolsWithUserApiKey(enrichCommand);
+
+          if (enrichResult.success && enrichResult.data) {
+            // Convert back to plain objects for gRPC transmission
+            enrichedTools = enrichResult.data.enrichedTools.map((tc: ToolConfig) => tc.toPlain());
+
+            console.log('[CHAT-GRPC-API] Tool enrichment result:', {
+              toolCount: enrichedTools.length,
+              userApiKeyProvided: enrichResult.data.userApiKeyProvided,
+              toolNames: enrichedTools.map(t => t.name)
+            });
+          } else {
+            console.error('[CHAT-GRPC-API] Failed to enrich tools with user API key:', enrichResult.error);
+            // Continue with original tools if enrichment fails
+          }
+        } else {
+          console.warn('[CHAT-GRPC-API] Could not obtain user API key for tool enrichment');
+        }
+      } catch (error) {
+        console.error('[CHAT-GRPC-API] Error during tool enrichment:', error);
+        // Continue with original tools if enrichment fails
+      }
+    }
+
     const processingOptions: ChatProcessingOptions = {
       domainType: resolvedDomainType,
       domainId: resolvedDomainId,
@@ -204,7 +273,7 @@ export async function POST(req: NextRequest) {
       ragThreshold: 0.3,
       maxRagDocs: 5,
       primaryRagWeight: 0.7,
-      tools: tools // NEW: Add tools to processing options
+      tools: enrichedTools // DDD-enriched tools with user API key authentication
     };
 
     console.log('[CHAT-GRPC-API] Chat processing options:', processingOptions);

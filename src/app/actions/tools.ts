@@ -12,34 +12,50 @@
 
 import { requireAuth } from "./permissions";
 import type { Result } from "./types";
-import { OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { ToolMapper, type ToolDTO, type ToolSearchResultDTO } from '@/app/mappers/tool-mapper';
 import { ReferenceToolMapper } from '@/app/mappers/reference-tool-mapper';
 import { getToolSearchApplicationService } from '@/ddd/application/di/container';
+import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
+import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
 
 /**
  * Search all tools (both reference and system tools)
  */
 export async function searchAllTools(options: {
   query: string;
-  categories?: any[]; // Will be filtered by domain service
+  categories?: string[]; // Reference category names to filter by (documents, files, agents, etc.)
+  toolCategories?: string[]; // Tool category names to filter by (apps, utilities, etc.)
+  appId?: string; // Filter by specific app (e.g., "gmail", "slack")
+  connectedOnly?: boolean; // Only show tools with active connections
+  requiresConnection?: boolean; // Only show tools that require connections
   limit?: number;
   offset?: number;
 }): Promise<Result<ToolSearchResultDTO>> {
   try {
     const session = await requireAuth();
 
-    const { query, limit = 20, offset = 0 } = options;
+    const { query, categories, toolCategories, appId, connectedOnly, requiresConnection, limit = 20, offset = 0 } = options;
 
     console.log(`[ToolActions] Searching all tools with query: "${query}"`);
 
     // Get the tool search application service from DI container
     const toolSearchService = getToolSearchApplicationService();
 
+    // Convert string arrays to proper enums
+    const referenceCategories = categories?.map(cat => cat as ReferenceCategory);
+    const toolCategoryEnums = toolCategories?.map(cat => cat as ToolCategory);
+
     // Search using application service
     const searchResult = await toolSearchService.searchAllTools({
       query,
+      categories: referenceCategories,
+      toolCategories: toolCategoryEnums,
+      appId,
+      connectedOnly,
+      requiresConnection,
       organizationId: OrganizationId.fromNumber(session.user.currentOrganizationId),
+      userId: UserId.fromString(session.user.id),
       limit,
       offset
     });

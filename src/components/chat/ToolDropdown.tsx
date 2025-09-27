@@ -14,6 +14,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { searchAllTools } from '@/app/actions/tools';
+import { getAvailableApps } from '@/app/actions/connections';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import { ReferenceCategory, REFERENCE_CATEGORY_INFO } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
@@ -100,6 +101,9 @@ export function ToolDropdown({
 }: ToolDropdownProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectedCategories, setSelectedCategories] = useState<ReferenceCategory[]>([]);
+  const [selectedApp, setSelectedApp] = useState<string>('');
+  const [connectedOnly, setConnectedOnly] = useState(false);
+  const [requiresConnection, setRequiresConnection] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [focusedCategoryIndex, setFocusedCategoryIndex] = useState(-1);
   const [isInCategoryMode, setIsInCategoryMode] = useState(false);
@@ -122,12 +126,32 @@ export function ToolDropdown({
     isLoading,
     error
   } = useQuery({
-    queryKey: ['search-all-tools-initial', query],
+    queryKey: ['search-all-tools-initial', query, selectedCategories, selectedApp, connectedOnly, requiresConnection],
     queryFn: async () => {
       try {
         console.log(`[ToolDropdown] Initial search for query: "${query}"`);
 
-        const result = await searchAllTools({ query, limit: 20, offset: 0 });
+        // Map ReferenceCategory to ToolCategory for unified search
+        const toolCategories = selectedCategories.length > 0 ? selectedCategories.map(refCat => {
+          switch (refCat) {
+            case ReferenceCategory.DOC: return 'documents';
+            case ReferenceCategory.FILE: return 'files';
+            case ReferenceCategory.AGENT: return 'agents';
+            case ReferenceCategory.TABLE: return 'tables';
+            case ReferenceCategory.DATABASE: return 'databases';
+            default: return refCat;
+          }
+        }) : undefined;
+
+        const result = await searchAllTools({
+          query,
+          toolCategories,
+          appId: selectedApp || undefined,
+          connectedOnly,
+          requiresConnection,
+          limit: 20,
+          offset: 0
+        });
 
         if (!result.success) {
           console.error('[ToolDropdown] Search failed:', result.error);
@@ -149,6 +173,33 @@ export function ToolDropdown({
     },
     enabled: isOpen && isClient,
     staleTime: 30 * 1000, // 30 seconds
+    retry: 1,
+  });
+
+  // Query for available apps
+  const {
+    data: availableAppsResult,
+    isLoading: isLoadingApps,
+  } = useQuery({
+    queryKey: ['available-apps'],
+    queryFn: async () => {
+      try {
+        console.log('[ToolDropdown] Loading available apps...');
+        const result = await getAvailableApps();
+
+        if (!result.success) {
+          console.error('[ToolDropdown] Failed to load apps:', result.error);
+          throw new Error(result.error);
+        }
+
+        console.log(`[ToolDropdown] Loaded ${result.data?.length || 0} available apps`);
+        return result.data || [];
+      } catch (error) {
+        console.error('[ToolDropdown] Error loading apps:', error);
+        throw error;
+      }
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes - apps don't change often
     retry: 1,
   });
 
@@ -176,7 +227,27 @@ export function ToolDropdown({
     try {
       console.log(`[ToolDropdown] Loading more tools with offset: ${offset}, query: "${query}"`);
 
-      const result = await searchAllTools({ query, limit: 20, offset });
+      // Map ReferenceCategory to ToolCategory for unified search
+      const toolCategories = selectedCategories.length > 0 ? selectedCategories.map(refCat => {
+        switch (refCat) {
+          case ReferenceCategory.DOC: return 'documents';
+          case ReferenceCategory.FILE: return 'files';
+          case ReferenceCategory.AGENT: return 'agents';
+          case ReferenceCategory.TABLE: return 'tables';
+          case ReferenceCategory.DATABASE: return 'databases';
+          default: return refCat;
+        }
+      }) : undefined;
+
+      const result = await searchAllTools({
+        query,
+        toolCategories,
+        appId: selectedApp || undefined,
+        connectedOnly,
+        requiresConnection,
+        limit: 20,
+        offset
+      });
 
       console.log(`[ToolDropdown] Load more result:`, {
         success: result.success,
@@ -251,57 +322,53 @@ export function ToolDropdown({
     switch (e.key) {
       case 'Tab':
         e.preventDefault();
-        if (!isInCategoryMode) {
-          setIsInCategoryMode(true);
-          setFocusedCategoryIndex(0);
+        // Tab key should select the current tool and close dropdown
+        if (allTools[selectedIndex]) {
+          const selectedTool = allTools[selectedIndex];
+          onSelect({...selectedTool, insertText: getToolInsertText(selectedTool)});
         } else {
-          setFocusedCategoryIndex(prev =>
-            prev < allCategories.length - 1 ? prev + 1 : 0
-          );
+          // If no tool is selected, close dropdown without selection
+          onClose();
         }
         break;
       case 'ArrowDown':
         e.preventDefault();
+        // Remove category mode logic since Tab no longer enters category mode
         if (isInCategoryMode) {
           setIsInCategoryMode(false);
           setFocusedCategoryIndex(-1);
-          setSelectedIndex(0);
-        } else {
-          setSelectedIndex(prev => {
-            const newIndex = Math.min(prev + 1, allTools.length - 1);
-            // Scroll into view
-            setTimeout(() => {
-              const element = document.querySelector(`[data-tool-item-index="${newIndex}"]`);
-              element?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-            }, 0);
-            return newIndex;
-          });
         }
+        setSelectedIndex(prev => {
+          const newIndex = Math.min(prev + 1, allTools.length - 1);
+          // Scroll into view
+          setTimeout(() => {
+            const element = document.querySelector(`[data-tool-item-index="${newIndex}"]`);
+            element?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }, 0);
+          return newIndex;
+        });
         break;
       case 'ArrowUp':
         e.preventDefault();
+        // Remove category mode logic since Tab no longer enters category mode
         if (isInCategoryMode) {
           setIsInCategoryMode(false);
           setFocusedCategoryIndex(-1);
-          setSelectedIndex(allTools.length - 1);
-        } else {
-          setSelectedIndex(prev => {
-            const newIndex = Math.max(prev - 1, 0);
-            // Scroll into view
-            setTimeout(() => {
-              const element = document.querySelector(`[data-tool-item-index="${newIndex}"]`);
-              element?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-            }, 0);
-            return newIndex;
-          });
         }
+        setSelectedIndex(prev => {
+          const newIndex = Math.max(prev - 1, 0);
+          // Scroll into view
+          setTimeout(() => {
+            const element = document.querySelector(`[data-tool-item-index="${newIndex}"]`);
+            element?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }, 0);
+          return newIndex;
+        });
         break;
       case 'Enter':
         e.preventDefault();
-        if (isInCategoryMode && focusedCategoryIndex >= 0) {
-          const category = allCategories[focusedCategoryIndex];
-          toggleCategory(category);
-        } else if (allTools[selectedIndex]) {
+        // Enter key selects the currently highlighted tool
+        if (allTools[selectedIndex]) {
           const selectedTool = allTools[selectedIndex];
           onSelect({...selectedTool, insertText: getToolInsertText(selectedTool)});
         }
@@ -366,6 +433,53 @@ export function ToolDropdown({
               </button>
             );
           })}
+        </div>
+      </div>
+
+      {/* Advanced Filters */}
+      <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
+        <div className="flex items-center gap-3 text-xs">
+          {/* App Filter */}
+          <div className="flex items-center gap-1">
+            <label className="text-gray-600">App:</label>
+            <select
+              value={selectedApp}
+              onChange={(e) => setSelectedApp(e.target.value)}
+              className="text-xs border border-gray-200 rounded px-1 py-0.5 bg-white"
+              disabled={isLoadingApps}
+            >
+              <option value="">
+                {isLoadingApps ? 'Loading...' : 'All'}
+              </option>
+              {availableAppsResult?.map((app) => (
+                <option key={app.id} value={app.id}>
+                  {app.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Connected Only Checkbox */}
+          <label className="flex items-center gap-1 text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={connectedOnly}
+              onChange={(e) => setConnectedOnly(e.target.checked)}
+              className="w-3 h-3"
+            />
+            Connected only
+          </label>
+
+          {/* Requires Connection Checkbox */}
+          <label className="flex items-center gap-1 text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={requiresConnection}
+              onChange={(e) => setRequiresConnection(e.target.checked)}
+              className="w-3 h-3"
+            />
+            Needs auth
+          </label>
         </div>
       </div>
 

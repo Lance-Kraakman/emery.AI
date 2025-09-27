@@ -158,6 +158,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             # Always use ToolCallingAgent - handles RAG context and tools
             tools_to_use = request.tools if hasattr(request, 'tools') and request.tools else []
+            logger.info(f"📨 Request tools received: {len(tools_to_use)} tools")
+            if tools_to_use:
+                for i, tool in enumerate(tools_to_use):
+                    logger.info(f"  Tool {i}: name={tool.name}, config_keys={list(tool.config.keys()) if tool.config else 'none'}")
+            else:
+                logger.info("  No tools received from frontend")
+
             async for chunk in self._stream_tool_calling_agent_response(
                 conversation_messages,
                 tools_to_use,
@@ -339,25 +346,61 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
     def _convert_tools_to_smolagents(self, tools: List['agent_worker_pb2.ToolConfig']) -> List[Any]:
         """Convert protobuf ToolConfig objects to smolagents tools."""
-        if not tools or not self.tool_registry:
+        if not tools:
+            logger.info("No tools provided to convert")
+            return []
+
+        if not self.tool_registry:
+            logger.error("❌ Tool registry not available - tools cannot be loaded")
             return []
 
         try:
             core_tool_configs = []
+            logger.info(f"🔧 Converting {len(tools)} tools to smolagents format...")
+
             for tool_config in tools:
-                logger.info(f"Converting tool: {tool_config.name} (version: {tool_config.version})")
+                logger.info(f"Converting tool: {tool_config.name}")
+                logger.info(f"  Config keys: {list(tool_config.config.keys()) if tool_config.config else 'none'}")
+                logger.info(f"  Config values: {dict(tool_config.config) if tool_config.config else {}}")
+
+                # Handle tool name conversion for Pipedream tools
+                # Frontend sends "gmail-create-draft", Python expects "gmail_create_draft"
+                tool_name = tool_config.name
+                if '-' in tool_name:
+                    converted_name = tool_name.replace("-", "_")
+                    logger.info(f"Converting tool name: {tool_name} -> {converted_name}")
+                    tool_name = converted_name
 
                 core_config = CoreToolConfig(
-                    name=tool_config.name,
-                    version=tool_config.version,
+                    name=tool_name,
+                    version=tool_config.version or '',
                     config=dict(tool_config.config) if tool_config.config else {}
                 )
                 core_tool_configs.append(core_config)
+                logger.info(f"  Created CoreToolConfig: name={core_config.name}, config={core_config.config}")
 
-            return self.tool_registry.load_tools(core_tool_configs)
+            logger.info(f"🚀 Calling tool_registry.load_tools with {len(core_tool_configs)} configs...")
+            smolagents_tools = []
+
+            for core_config in core_tool_configs:
+                try:
+                    logger.info(f"🔧 Loading individual tool: {core_config.name}")
+                    tool_instance = self.tool_registry.load_tool(core_config)
+                    smolagents_tools.append(tool_instance)
+                    logger.info(f"✅ Successfully loaded tool: {core_config.name}")
+                except Exception as tool_error:
+                    logger.error(f"❌ Failed to load tool {core_config.name}: {tool_error}")
+                    logger.error(f"❌ Tool config was: {core_config.config}")
+                    import traceback
+                    logger.error(f"❌ Tool loading traceback: {traceback.format_exc()}")
+
+            logger.info(f"✅ Successfully converted {len(smolagents_tools)} out of {len(tools)} tools")
+            return smolagents_tools
 
         except Exception as tool_error:
             logger.error(f"❌ Failed to convert tools: {tool_error}")
+            import traceback
+            logger.error(f"❌ Tool conversion traceback: {traceback.format_exc()}")
             return []
 
     def _create_agent_with_model_provider(self, smolagents_tools: List[Any]) -> ToolCallingAgent:

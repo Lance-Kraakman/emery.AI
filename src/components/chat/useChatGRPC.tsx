@@ -10,10 +10,40 @@ import { createChatStreamRequest, type ChatContextOptions } from './types/chat-r
 import { loadChatWithFullHistory, getCurrentChatSession } from '@/app/actions/chat-history'
 import type { ChatMessageDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
-// TODO: Replace with new tool validation logic
 
 interface ChatMessage extends Message {
   id: string
+}
+
+/**
+ * Extract tool references from message content
+ * Finds patterns like @tool:gmail-create-draft and converts them to tool configs
+ */
+function extractToolReferencesFromMessage(message: string): Array<{name: string, version: string, config: any}> {
+  const toolReferences: Array<{name: string, version: string, config: any}> = []
+
+  // Match @tool:xxx patterns
+  const toolMatches = message.match(/@tool:([a-zA-Z0-9_-]+)/g)
+
+  if (toolMatches) {
+    for (const match of toolMatches) {
+      const toolName = match.replace('@tool:', '')
+
+      // Create basic tool config for the referenced tool
+      // The Python side will resolve this to the actual tool implementation
+      toolReferences.push({
+        name: toolName,
+        version: '', // Empty version for now
+        config: {
+          // Basic config that will be used by PipedreamTool
+          agent_api_key: '', // Will be filled by Python service
+          base_url: 'http://localhost:3000' // Default base URL
+        }
+      })
+    }
+  }
+
+  return toolReferences
 }
 
 // Extended ChatHandler interface with scroll functionality, persistence, and tool management
@@ -179,20 +209,40 @@ export function useChatGRPC(
         domainId: contextOptions?.domainId || chatContext?.domainId
       }
 
-      // AIDEV-NOTE: Use helper function for consistent request structure with tools
-      // Extract tool data for gRPC request - only name, version, and config are needed
-      const toolData = selectedTools.map(tool => ({
+      // AIDEV-NOTE: Extract tools from both UI selection AND message content
+
+      // 1. Get explicitly selected tools from UI
+      const selectedToolData = selectedTools.map(tool => ({
         name: tool.name,
         version: tool.version,
         config: tool.config
       }))
+
+      // 2. Extract tool references from message content (e.g., @tool:gmail-create-draft)
+      const messageToolReferences = extractToolReferencesFromMessage(userMessage.content)
+      console.log('[CHAT-GRPC-HOOK] Extracted tool references from message:', messageToolReferences)
+
+      // Debug: Log individual tool configs
+      messageToolReferences.forEach((tool, index) => {
+        console.log(`[CHAT-GRPC-HOOK] Tool ${index}: name=${tool.name}, config=`, tool.config)
+      })
+
+      // 3. Combine all tools (avoid duplicates by name)
+      const allTools = [...selectedToolData]
+      for (const toolRef of messageToolReferences) {
+        if (!allTools.find(t => t.name === toolRef.name)) {
+          allTools.push(toolRef)
+        }
+      }
+
+      console.log('[CHAT-GRPC-HOOK] Final tool list for gRPC:', allTools)
 
       const requestBody = {
         messages: chatMessages,
         chatId: currentChatId,
         ...(chatContextOptions?.domainType ? { domainType: chatContextOptions.domainType } : {}),
         ...(chatContextOptions?.domainId ? { domainId: chatContextOptions.domainId } : {}),
-        tools: toolData
+        tools: allTools
       }
       
       // Call the gRPC-based streaming chat API

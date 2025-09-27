@@ -12,6 +12,7 @@ services:
       - ORGANIZATION_ID=test-org
       - HF_TOKEN=${HF_TOKEN:-}
       - PYTHONPATH=/usr/src/app/src
+      - USE_PIPEDREAM_TOOLS=true
     volumes:
       # Mount source code for development testing
       - ./src:/usr/src/app/src:ro
