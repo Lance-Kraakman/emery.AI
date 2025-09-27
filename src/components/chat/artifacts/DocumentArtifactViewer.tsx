@@ -31,7 +31,6 @@ import {
   Edit3,
   Eye,
   FileText,
-  Clock,
   User,
   Calendar,
   Hash,
@@ -54,7 +53,8 @@ import {
   Undo,
   Redo,
   Palette,
-  X
+  X,
+  Clock
 } from 'lucide-react'
 import type { DocumentArtifact } from '../types/chat-artifacts'
 import { getDocumentDisplayInfo } from '../types/chat-artifacts'
@@ -88,10 +88,30 @@ export function DocumentArtifactViewer({
   const [contentLoaded, setContentLoaded] = useState(false)
   const [isUpdatingEditor, setIsUpdatingEditor] = useState(false)
 
+  // Simple auto-save state (TipTap standard pattern)
+  const [contentRecentlyChanged, setContentRecentlyChanged] = useState(false)
+
+
   // Initialize title
   useEffect(() => {
     setDocumentTitle(displayInfo.title)
   }, [displayInfo.title])
+
+  // Prevent accidental navigation away from unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges || contentRecentlyChanged) {
+        e.preventDefault()
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?'
+        return 'You have unsaved changes. Are you sure you want to leave?'
+      }
+    }
+
+    if (hasChanges || contentRecentlyChanged) {
+      window.addEventListener('beforeunload', handleBeforeUnload)
+      return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [hasChanges, contentRecentlyChanged])
 
   // Load TipTap content for TipTap documents
   useEffect(() => {
@@ -172,10 +192,10 @@ export function DocumentArtifactViewer({
     documentField.mimeType
   ])
 
-  // Create a stable document key for comparison
+  // Create a stable document key for comparison - use only document ID to prevent unnecessary reloads
   const documentKey = useMemo(() =>
-    `${documentField.id}-${artifact.data.tableId}-${artifact.data.fieldId}`,
-    [documentField.id, artifact.data.tableId, artifact.data.fieldId]
+    `${documentField.id}`,
+    [documentField.id]
   )
 
   // Reset content loaded flag when document changes
@@ -224,6 +244,9 @@ export function DocumentArtifactViewer({
         const newContent = editor.getJSON()
         setContent(newContent)
         setHasChanges(true)
+
+        // Set flag for auto-save (TipTap standard pattern)
+        setContentRecentlyChanged(true)
       }
     }
   }, [isEditing]) // Only recreate when editing state changes
@@ -279,6 +302,34 @@ export function DocumentArtifactViewer({
       editor.setEditable(isEditing)
     }
   }, [editor, isEditing])
+
+  // Simple interval-based auto-save (TipTap standard pattern)
+  useEffect(() => {
+    const saveInterval = setInterval(async () => {
+      if (editor && contentRecentlyChanged && isEditing) {
+        try {
+          const currentContent = editor.getJSON()
+          const result = await updateTiptapDocumentContent(
+            documentField.id,
+            artifact.data.organizationId,
+            artifact.data.tableId,
+            artifact.data.fieldId,
+            currentContent
+          )
+
+          if (result.success) {
+            setContentRecentlyChanged(false)
+            setHasChanges(false)
+          }
+        } catch (error) {
+          console.error('Auto-save failed:', error)
+          // Keep contentRecentlyChanged true so user knows there are unsaved changes
+        }
+      }
+    }, 3000) // Save every 3 seconds
+
+    return () => clearInterval(saveInterval)
+  }, [editor, contentRecentlyChanged, isEditing, documentField.id, artifact.data.organizationId, artifact.data.tableId, artifact.data.fieldId])
 
   // Handle save
   const handleSave = useCallback(async () => {
@@ -348,10 +399,16 @@ export function DocumentArtifactViewer({
               </Badge>
             )}
 
-            {hasChanges && (
+            {/* Simple auto-save status (TipTap standard pattern) */}
+            {!contentRecentlyChanged && !hasChanges ? (
+              <Badge variant="outline" className="text-xs border-green-500/50 bg-green-50 text-green-700">
+                <Clock className="w-3 h-3 mr-1" />
+                Auto-saved
+              </Badge>
+            ) : (
               <Badge variant="outline" className="text-xs border-accent/50 bg-accent/10 text-accent-foreground">
                 <span className="w-1.5 h-1.5 rounded-full bg-accent mr-1.5"></span>
-                unsaved
+                Unsaved changes
               </Badge>
             )}
           </div>

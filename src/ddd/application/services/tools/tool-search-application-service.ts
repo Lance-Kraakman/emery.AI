@@ -9,7 +9,7 @@
  * Now searches both reference data AND hardcoded tools for @ mentions.
  */
 
-import { OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { Reference } from '@/ddd/domain/chat/value-objects/reference';
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool';
@@ -27,9 +27,14 @@ import { toolResolverService, type SearchCategoryType, type SearchHandlerType, S
 export interface SearchReferencesOptions {
   query: string;
   categories?: ReferenceCategory[];
+  toolCategories?: ToolCategory[]; // Use existing ToolCategory enum for filtering
+  appId?: string; // Simple string for app filtering
+  connectedOnly?: boolean; // Only show tools with active connections
+  requiresConnection?: boolean; // Only show tools that require connections
   limit?: number;
   offset?: number;
   organizationId: OrganizationId;
+  userId?: UserId; // User ID for connection filtering
 }
 
 /**
@@ -64,15 +69,15 @@ export class ToolSearchApplicationService {
    * This is the new recommended method for tool search
    */
   async searchAllTools(options: SearchReferencesOptions): Promise<SearchToolsResult> {
-    const { query, categories, limit = 20, offset = 0, organizationId } = options;
+    const { query, categories, toolCategories, appId, connectedOnly, requiresConnection, limit = 20, offset = 0, organizationId, userId } = options;
 
-    console.log(`[ToolSearchService] Searching for query: "${query}", categories:`, categories);
+    console.log(`[ToolSearchService] Searching for query: "${query}", categories:`, categories, 'toolCategories:', toolCategories, 'appId:', appId, 'connectedOnly:', connectedOnly, 'requiresConnection:', requiresConnection);
 
     // Search both reference tools and system tools in parallel
     // Get ALL results first, then apply unified pagination
     const [referenceToolsResult, systemTools] = await Promise.all([
       this.searchOnlyReferenceTools({ ...options, limit: 1000, offset: 0 }),
-      this.searchSystemTools(query, categories, 1000)
+      this.searchSystemTools(query, toolCategories, appId, connectedOnly, requiresConnection, 1000, organizationId, userId)
     ]);
 
     console.log(`[ToolSearchService] Found ${referenceToolsResult.referenceTools.length} reference tools, ${systemTools.length} system tools`);
@@ -149,22 +154,41 @@ export class ToolSearchApplicationService {
    */
   private async searchSystemTools(
     query: string,
-    categories: ReferenceCategory[] | undefined,
-    limit: number = 20
+    toolCategories: ToolCategory[] | undefined,
+    appId: string | undefined,
+    connectedOnly: boolean | undefined,
+    requiresConnection: boolean | undefined,
+    limit: number = 20,
+    organizationId?: OrganizationId,
+    userId?: UserId
   ): Promise<Tool[]> {
     console.log(`[ToolSearchService] === STARTING SYSTEM TOOLS SEARCH ===`);
     console.log(`[ToolSearchService] Query: "${query}"`);
-    console.log(`[ToolSearchService] Categories:`, categories);
+    console.log(`[ToolSearchService] ToolCategories:`, toolCategories);
+    console.log(`[ToolSearchService] AppId:`, appId);
+    console.log(`[ToolSearchService] ConnectedOnly:`, connectedOnly);
+    console.log(`[ToolSearchService] RequiresConnection:`, requiresConnection);
     console.log(`[ToolSearchService] Tool registry service:`, !!this.toolRegistryService);
 
     try {
-      // Use the existing tool registry service to search tools
-      console.log(`[ToolSearchService] Calling toolRegistryService.searchTools("${query}", ${limit})`);
-      const toolMetadataList = await this.toolRegistryService.searchTools(query, limit);
-      console.log(`[ToolSearchService] Found ${toolMetadataList.length} tool metadata entries`);
+      // Use the tool registry service with enhanced filtering options
+      const toolDiscoveryOptions = {
+        searchQuery: query,
+        category: toolCategories?.[0], // For now, use first category if provided
+        appId,
+        connectedOnly,
+        requiresConnection,
+        userId: userId?.value,
+        organizationId: organizationId?.value,
+        limit
+      };
+
+      console.log(`[ToolSearchService] Calling toolRegistryService.discoverTools with options:`, toolDiscoveryOptions);
+      const discoveryResult = await this.toolRegistryService.discoverTools(toolDiscoveryOptions);
+      console.log(`[ToolSearchService] Found ${discoveryResult.tools.length} tool metadata entries`);
 
       // Convert ToolMetadata to Tool instances
-      const tools = toolMetadataList.map((metadata, index) => {
+      const tools = discoveryResult.tools.map((metadata, index) => {
         console.log(`[ToolSearchService] Creating tool ${index + 1}:`, metadata.name);
         return this.toolRegistryService.createTool(metadata);
       });

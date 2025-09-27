@@ -24,6 +24,10 @@ export interface ToolDiscoveryOptions {
   requiresConnection?: boolean
   searchQuery?: string
   tags?: string[]
+  appId?: string // Filter by specific app
+  connectedOnly?: boolean // Only show tools with active connections
+  userId?: string // User ID for connection filtering
+  organizationId?: number // Organization ID for connection filtering
   limit?: number
   offset?: number
 }

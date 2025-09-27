@@ -48,6 +48,9 @@ import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/
 // Tools domain imports
 import { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
 import { IToolProxyService } from '@/ddd/domain/tools/services/tool-proxy';
+import { IToolConfigurationService } from '@/ddd/domain/tools/services/tool-configuration-service';
+import { ToolConfigurationDomainService } from '@/ddd/domain/tools/services/tool-configuration-domain-service';
+import { ToolConfigurationApplicationService } from '@/ddd/application/services/tools/tool-configuration-application-service';
 import { DatabaseToolRegistry } from '@/ddd/infrastructure/tools/database-tool-registry';
 
 // Chat domain imports
@@ -137,6 +140,8 @@ interface RepositoryRegistry {
   // Tools domain services
   IToolRegistryService: IToolRegistryService;
   IToolProxyService: IToolProxyService;
+  IToolConfigurationService: IToolConfigurationService;
+  ToolConfigurationApplicationService: ToolConfigurationApplicationService;
 
   // Chat domain services
   IReferenceResolverService: IReferenceResolverService;
@@ -351,6 +356,15 @@ export class DIContainer {
     const toolRegistryService = new DatabaseToolRegistry();
     this.repositories.set('IToolRegistryService', toolRegistryService);
 
+    // Initialize Tool Configuration Services
+    const toolConfigurationService = new ToolConfigurationDomainService();
+    const toolConfigurationApplicationService = new ToolConfigurationApplicationService(
+      agentRepository,
+      toolConfigurationService
+    );
+    this.repositories.set('IToolConfigurationService', toolConfigurationService);
+    this.repositories.set('ToolConfigurationApplicationService', toolConfigurationApplicationService);
+
     // Initialize ToolSearchApplicationService with proper dependencies (replaces ReferenceApplicationService)
     const toolSearchApplicationService = new ToolSearchApplicationService(
       tableApplicationService,
@@ -530,6 +544,7 @@ type ServiceMap = {
 
   // Tool Services
   IToolRegistryService: IToolRegistryService;
+  ToolConfigurationApplicationService: ToolConfigurationApplicationService;
 };
 
 // Generate getter functions dynamically
@@ -586,6 +601,7 @@ export const getFileApplicationService = createGetter('FileApplicationService');
 export const getDocumentApplicationService = createGetter('DocumentApplicationService');
 export const getChatApplicationService = createGetter('ChatApplicationService');
 export const getToolSearchApplicationService = createGetter('ToolSearchApplicationService');
+export const getToolConfigurationApplicationService = createGetter('ToolConfigurationApplicationService');
 // Note: getReferenceApplicationService replaced by getToolSearchApplicationService
 
 // RAG service getters
