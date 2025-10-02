@@ -35,8 +35,8 @@ function extractToolReferencesFromMessage(message: string): Array<{name: string,
         name: toolName,
         version: '', // Empty version for now
         config: {
-          // Basic config that will be used by PipedreamTool
-          agent_api_key: '', // Will be filled by Python service
+          // Basic config that will be enriched by server with user's API key
+          api_key: '', // Will be filled by server-side enrichment
           base_url: 'http://localhost:3000' // Default base URL
         }
       })

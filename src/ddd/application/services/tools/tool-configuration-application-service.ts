@@ -123,7 +123,9 @@ export class ToolConfigurationApplicationService {
       const invalidTools: string[] = [];
 
       for (const tool of tools) {
-        if (this.toolConfigurationService.hasValidAuthentication(tool)) {
+        // Simple validation: check if tool has any authentication
+        const config = tool.config as any;
+        if (config.api_key || config.oauth_token) {
           validTools.push(tool.name);
         } else {
           invalidTools.push(tool.name);
@@ -158,10 +160,12 @@ export class ToolConfigurationApplicationService {
     [toolName: string]: 'api_key' | 'oauth' | 'none';
   }>> {
     try {
+      // AIDEV-NOTE: This method is deprecated - auth requirements should come from database metadata
+      // For now, return 'api_key' as default for all tools (safe default)
       const requirements: { [toolName: string]: 'api_key' | 'oauth' | 'none' } = {};
 
       for (const toolName of toolNames) {
-        requirements[toolName] = this.toolConfigurationService.getRequiredAuthType(toolName);
+        requirements[toolName] = 'api_key'; // Safe default - tool will validate if it actually needs it
       }
 
       return {
