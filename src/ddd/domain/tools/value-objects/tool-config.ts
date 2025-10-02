@@ -95,8 +95,7 @@ export interface OAuthToolConfig extends BaseToolConfig {
  * API Key tool configuration - for API-based integrations
  */
 export interface ApiKeyToolConfig extends BaseToolConfig {
-  agent_api_key: string
-  api_key?: string
+  api_key: string
   organizationId: number
   userId: string
   endpoint?: string
@@ -275,7 +274,7 @@ export class ToolConfig {
     version: string = '1.0'
   ): ToolConfig {
     const config: ApiKeyToolConfig = {
-      agent_api_key: apiKey,
+      api_key: apiKey,
       organizationId,
       userId
     }
@@ -287,7 +286,7 @@ export class ToolConfig {
    */
   get requiresConnection(): boolean {
     const config = this.config as any
-    return !!(config.agent_api_key || config.oauth_token || config.api_key)
+    return !!(config.api_key || config.oauth_token)
   }
 
   /**
@@ -296,7 +295,7 @@ export class ToolConfig {
   get connectionType(): 'oauth' | 'api_key' | 'none' {
     const config = this.config as any
     if (config.oauth_token) return 'oauth'
-    if (config.agent_api_key || config.api_key) return 'api_key'
+    if (config.api_key) return 'api_key'
     return 'none'
   }
 
@@ -328,7 +327,7 @@ export class ToolConfig {
   }
 
   isApiKeyTool(): this is ToolConfig & { config: ApiKeyToolConfig } {
-    return 'agent_api_key' in this.config && typeof this.config.agent_api_key === 'string'
+    return 'api_key' in this.config && typeof this.config.api_key === 'string'
   }
 
   /**

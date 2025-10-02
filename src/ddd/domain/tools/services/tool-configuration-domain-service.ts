@@ -24,10 +24,10 @@ export class ToolConfigurationDomainService implements IToolConfigurationService
   /**
    * Validate that a tool configuration has required authentication
    * @param toolConfig - Tool configuration to validate
-   * @param connectionType - Optional connection type from tool metadata (from database)
+   * @param connectionType - Connection type from tool metadata (required, from database)
    */
-  hasValidAuthentication(toolConfig: ToolConfig, connectionType?: ConnectionType): boolean {
-    const authType = this.getRequiredAuthType(toolConfig.name, connectionType);
+  hasValidAuthentication(toolConfig: ToolConfig, connectionType: ConnectionType): boolean {
+    const authType = this.getRequiredAuthType(connectionType);
 
     switch (authType) {
       case 'api_key':
@@ -43,60 +43,35 @@ export class ToolConfigurationDomainService implements IToolConfigurationService
 
   /**
    * Get the authentication type required for a tool
-   * @param toolName - Name of the tool
-   * @param connectionType - Optional connection type from tool metadata (database source of truth)
+   * @param connectionType - Connection type from tool metadata (database is source of truth)
    */
-  getRequiredAuthType(toolName: string, connectionType?: ConnectionType): 'api_key' | 'oauth' | 'none' {
-    // AIDEV-NOTE: Prefer database metadata (connectionType) over name patterns
-    // Database is the source of truth for tool authentication requirements
-    if (connectionType) {
-      switch (connectionType) {
-        case ConnectionType.API_KEY:
-          return 'api_key';
-        case ConnectionType.OAUTH:
-          return 'oauth';
-        case ConnectionType.NONE:
-          return 'none';
-      }
+  getRequiredAuthType(connectionType: ConnectionType): 'api_key' | 'oauth' | 'none' {
+    // AIDEV-NOTE: Database metadata is the ONLY source of truth for tool authentication
+    // No fallback logic - if metadata is missing, that's an error state
+    switch (connectionType) {
+      case ConnectionType.API_KEY:
+        return 'api_key';
+      case ConnectionType.OAUTH:
+        return 'oauth';
+      case ConnectionType.NONE:
+        return 'none';
     }
-
-    // Fallback: Use name patterns only when metadata not available
-    // This maintains backwards compatibility for tools not yet in database
-    const lowerName = toolName.toLowerCase();
-
-    // Internal tools typically don't require external authentication
-    if (this.isInternalTool(lowerName)) {
-      return 'none';
-    }
-
-    // Default to API key for external tools when metadata unavailable
-    return 'api_key';
   }
 
   /**
    * Enrich a single tool configuration with authentication
+   * AIDEV-NOTE: Simplified - just add API key if tool doesn't already have auth
+   * Tool implementations will use their metadata to determine if they need it
    */
   private enrichSingleTool(tool: ToolConfig, agentApiKey: string): ToolConfig {
-    const authType = this.getRequiredAuthType(tool.name);
-
-    // If tool already has valid authentication, preserve it
-    if (this.hasValidAuthentication(tool)) {
+    // If tool already has authentication (API key or OAuth), preserve it
+    const config = tool.config as any;
+    if (config.api_key || config.oauth_token) {
       return tool;
     }
 
-    // Add authentication based on required type
-    switch (authType) {
-      case 'api_key':
-        return this.addApiKeyAuthentication(tool, agentApiKey);
-      case 'oauth':
-        // OAuth tokens should be handled separately - don't override
-        return tool;
-      case 'none':
-        // No authentication required
-        return tool;
-      default:
-        return tool;
-    }
+    // Add API key authentication for tools that don't have any auth yet
+    return this.addApiKeyAuthentication(tool, agentApiKey);
   }
 
   /**
@@ -108,20 +83,6 @@ export class ToolConfigurationDomainService implements IToolConfigurationService
       api_key: agentApiKey,
       base_url: this.getDefaultBaseUrl()
     });
-  }
-
-  /**
-   * Check if a tool is an internal tool
-   * AIDEV-NOTE: This is a fallback for when database metadata is unavailable
-   */
-  private isInternalTool(toolName: string): boolean {
-    // Business rule: Internal tools typically have specific prefixes
-    const internalPrefixes = [
-      'agent_', 'table_', 'document_', 'file_', 'database_',
-      'crud_', 'internal_', 'system_'
-    ];
-
-    return internalPrefixes.some(prefix => toolName.startsWith(prefix));
   }
 
   /**

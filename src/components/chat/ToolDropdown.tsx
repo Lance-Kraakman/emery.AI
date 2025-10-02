@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Tool Dropdown Component
+ * Toolbox Component (Tool Dropdown)
  *
  * Unified dropdown for selecting ReferenceTool objects with proper domain typing.
  * Uses enhanced DDD searchReferenceTools action with Tool domain integration.
@@ -405,6 +405,8 @@ export function ToolDropdown({
         left: position?.left || 0,
       }}
       data-tool-dropdown
+      aria-label="Toolbox"
+      role="dialog"
     >
       {/* Category Filters */}
       <div className="p-3 border-b border-gray-100">
@@ -438,14 +440,14 @@ export function ToolDropdown({
 
       {/* Advanced Filters */}
       <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex items-center gap-2 text-xs flex-wrap">
           {/* App Filter */}
-          <div className="flex items-center gap-1">
-            <label className="text-gray-600">App:</label>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <label className="text-gray-600 whitespace-nowrap">App:</label>
             <select
               value={selectedApp}
               onChange={(e) => setSelectedApp(e.target.value)}
-              className="text-xs border border-gray-200 rounded px-1 py-0.5 bg-white"
+              className="text-xs border border-gray-200 rounded px-2 py-1 bg-white min-w-[80px]"
               disabled={isLoadingApps}
             >
               <option value="">
@@ -460,7 +462,7 @@ export function ToolDropdown({
           </div>
 
           {/* Connected Only Checkbox */}
-          <label className="flex items-center gap-1 text-gray-600 cursor-pointer">
+          <label className="flex items-center gap-1 text-gray-600 cursor-pointer flex-shrink-0 whitespace-nowrap">
             <input
               type="checkbox"
               checked={connectedOnly}
@@ -471,7 +473,7 @@ export function ToolDropdown({
           </label>
 
           {/* Requires Connection Checkbox */}
-          <label className="flex items-center gap-1 text-gray-600 cursor-pointer">
+          <label className="flex items-center gap-1 text-gray-600 cursor-pointer flex-shrink-0 whitespace-nowrap">
             <input
               type="checkbox"
               checked={requiresConnection}
