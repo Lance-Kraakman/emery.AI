@@ -11,6 +11,7 @@
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { IToolConfigurationService } from '@/ddd/domain/tools/services/tool-configuration-service';
+import { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { Result } from '@/ddd/domain/shared/result';
 
@@ -39,7 +40,8 @@ export interface EnrichToolsWithUserApiKeyResult {
 export class ToolConfigurationApplicationService {
   constructor(
     private readonly agentRepository: IAgentRepository,
-    private readonly toolConfigurationService: IToolConfigurationService
+    private readonly toolConfigurationService: IToolConfigurationService,
+    private readonly toolRegistryService: IToolRegistryService
   ) {}
 
   /**
@@ -123,9 +125,16 @@ export class ToolConfigurationApplicationService {
       const invalidTools: string[] = [];
 
       for (const tool of tools) {
-        // Simple validation: check if tool has any authentication
-        const config = tool.config as any;
-        if (config.api_key || config.oauth_token) {
+        // Get tool metadata from database to determine required authentication type
+        const metadata = await this.toolRegistryService.getToolMetadata(tool.name);
+        if (!metadata) {
+          // Tool not found in registry - treat as invalid
+          invalidTools.push(tool.name);
+          continue;
+        }
+
+        // Use domain service with ConnectionType from database metadata
+        if (this.toolConfigurationService.hasValidAuthentication(tool, metadata.connectionType)) {
           validTools.push(tool.name);
         } else {
           invalidTools.push(tool.name);
@@ -160,12 +169,19 @@ export class ToolConfigurationApplicationService {
     [toolName: string]: 'api_key' | 'oauth' | 'none';
   }>> {
     try {
-      // AIDEV-NOTE: This method is deprecated - auth requirements should come from database metadata
-      // For now, return 'api_key' as default for all tools (safe default)
       const requirements: { [toolName: string]: 'api_key' | 'oauth' | 'none' } = {};
 
       for (const toolName of toolNames) {
-        requirements[toolName] = 'api_key'; // Safe default - tool will validate if it actually needs it
+        // Get tool metadata from database
+        const metadata = await this.toolRegistryService.getToolMetadata(toolName);
+        if (!metadata) {
+          // Tool not found - default to 'none' (no auth required if tool doesn't exist)
+          requirements[toolName] = 'none';
+          continue;
+        }
+
+        // Use domain service with ConnectionType from database metadata
+        requirements[toolName] = this.toolConfigurationService.getRequiredAuthType(metadata.connectionType);
       }
 
       return {
