@@ -168,27 +168,13 @@ function getSidebarWidth(state: string, isMobile: boolean): string {
   }
 }
 
-// Utility function for chat width based on state
-function getChatWidth(state: string): string {
-  switch (state) {
-    case 'collapsed':
-      return 'w-12' // Just show minimal collapsed width
-    case 'expanded':
-      return 'w-96' // Full chat width
-    case 'hidden':
-      return 'w-0' // Hidden
-    default:
-      return 'w-96'
-  }
-}
-
 // Loading skeletons
 function SidebarSkeleton() {
   return (
     <div className="w-64 h-full bg-card border-r border-border animate-pulse">
-      <div className="p-4 space-y-4">
+      <div>
         <div className="h-8 bg-muted rounded" />
-        <div className="space-y-2">
+        <div>
           <div className="h-6 bg-muted rounded" />
           <div className="h-6 bg-muted rounded" />
           <div className="h-6 bg-muted rounded" />
@@ -201,9 +187,9 @@ function SidebarSkeleton() {
 function ChatSkeleton() {
   return (
     <div className="h-full bg-card border-l border-border animate-pulse">
-      <div className="p-4 space-y-4">
+      <div >
         <div className="h-8 bg-muted rounded" />
-        <div className="flex-1 space-y-2">
+        <div className="flex-1">
           <div className="h-16 bg-muted rounded" />
           <div className="h-16 bg-muted rounded" />
           <div className="h-16 bg-muted rounded" />
@@ -213,5 +199,3 @@ function ChatSkeleton() {
     </div>
   )
 }
-
-// Removed duplicate React import

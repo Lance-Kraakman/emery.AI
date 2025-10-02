@@ -253,6 +253,16 @@ export async function POST(req: NextRequest) {
               userApiKeyProvided: enrichResult.data.userApiKeyProvided,
               toolNames: enrichedTools.map(t => t.name)
             });
+
+            // Debug: Log first tool's config to verify api_key is present
+            if (enrichedTools.length > 0) {
+              console.log('[CHAT-GRPC-API] First enriched tool config sample:', {
+                name: enrichedTools[0].name,
+                hasApiKey: !!enrichedTools[0].config?.api_key,
+                apiKeyPresent: enrichedTools[0].config?.api_key ? 'YES' : 'NO',
+                configKeys: Object.keys(enrichedTools[0].config || {})
+              });
+            }
           } else {
             console.error('[CHAT-GRPC-API] Failed to enrich tools with user API key:', enrichResult.error);
             // Continue with original tools if enrichment fails

@@ -9,6 +9,7 @@
  */
 
 import { ToolConfig } from '../value-objects/tool-config';
+import { ConnectionType } from '../value-objects/tool-metadata';
 import { IToolConfigurationService } from './tool-configuration-service';
 
 export class ToolConfigurationDomainService implements IToolConfigurationService {
@@ -22,13 +23,15 @@ export class ToolConfigurationDomainService implements IToolConfigurationService
 
   /**
    * Validate that a tool configuration has required authentication
+   * @param toolConfig - Tool configuration to validate
+   * @param connectionType - Optional connection type from tool metadata (from database)
    */
-  hasValidAuthentication(toolConfig: ToolConfig): boolean {
-    const authType = this.getRequiredAuthType(toolConfig.name);
+  hasValidAuthentication(toolConfig: ToolConfig, connectionType?: ConnectionType): boolean {
+    const authType = this.getRequiredAuthType(toolConfig.name, connectionType);
 
     switch (authType) {
       case 'api_key':
-        return toolConfig.isApiKeyTool() && !!toolConfig.getApiKeyConfig()?.agent_api_key;
+        return toolConfig.isApiKeyTool() && !!toolConfig.getApiKeyConfig()?.api_key;
       case 'oauth':
         return toolConfig.isOAuthTool() && !!toolConfig.getOAuthConfig()?.oauth_token;
       case 'none':
@@ -40,22 +43,33 @@ export class ToolConfigurationDomainService implements IToolConfigurationService
 
   /**
    * Get the authentication type required for a tool
+   * @param toolName - Name of the tool
+   * @param connectionType - Optional connection type from tool metadata (database source of truth)
    */
-  getRequiredAuthType(toolName: string): 'api_key' | 'oauth' | 'none' {
-    // Business rule: Tool name patterns that require specific auth types
-    const lowerName = toolName.toLowerCase();
-
-    // Tools that use Pipedream proxy require API key authentication
-    if (this.isPipedreamTool(lowerName)) {
-      return 'api_key';
+  getRequiredAuthType(toolName: string, connectionType?: ConnectionType): 'api_key' | 'oauth' | 'none' {
+    // AIDEV-NOTE: Prefer database metadata (connectionType) over name patterns
+    // Database is the source of truth for tool authentication requirements
+    if (connectionType) {
+      switch (connectionType) {
+        case ConnectionType.API_KEY:
+          return 'api_key';
+        case ConnectionType.OAUTH:
+          return 'oauth';
+        case ConnectionType.NONE:
+          return 'none';
+      }
     }
+
+    // Fallback: Use name patterns only when metadata not available
+    // This maintains backwards compatibility for tools not yet in database
+    const lowerName = toolName.toLowerCase();
 
     // Internal tools typically don't require external authentication
     if (this.isInternalTool(lowerName)) {
       return 'none';
     }
 
-    // Default to API key for external tools
+    // Default to API key for external tools when metadata unavailable
     return 'api_key';
   }
 
@@ -91,33 +105,14 @@ export class ToolConfigurationDomainService implements IToolConfigurationService
   private addApiKeyAuthentication(tool: ToolConfig, agentApiKey: string): ToolConfig {
     // Use the existing ToolConfig.withConfig method to add authentication
     return tool.withConfig({
-      agent_api_key: agentApiKey,
+      api_key: agentApiKey,
       base_url: this.getDefaultBaseUrl()
     });
   }
 
   /**
-   * Check if a tool is a Pipedream-based tool
-   */
-  private isPipedreamTool(toolName: string): boolean {
-    // Business rule: Pipedream tools typically have app prefixes or are in known list
-    const pipedreamApps = [
-      'gmail', 'slack', 'github', 'google-sheets', 'google-drive', 'google-docs',
-      'google-calendar', 'notion', 'trello', 'discord', 'linear', 'dropbox',
-      'airtable', 'hubspot', 'salesforce', 'jira', 'microsoft-teams', 'outlook',
-      'zoom', 'stripe', 'twitter', 'facebook', 'instagram', 'linkedin', 'youtube'
-    ];
-
-    // Check if tool name starts with known app names
-    return pipedreamApps.some(app =>
-      toolName.startsWith(app + '-') ||
-      toolName.startsWith(app + '_') ||
-      toolName === app
-    );
-  }
-
-  /**
    * Check if a tool is an internal tool
+   * AIDEV-NOTE: This is a fallback for when database metadata is unavailable
    */
   private isInternalTool(toolName: string): boolean {
     // Business rule: Internal tools typically have specific prefixes

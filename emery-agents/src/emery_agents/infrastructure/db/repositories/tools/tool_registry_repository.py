@@ -19,13 +19,13 @@ class ToolRegistryRepository(IToolRegistryRepository):
         """Initialize with unified tool loader."""
         self.unified_loader = UnifiedToolLoader()
 
-    def load_tool(self, tool_config: ToolConfig) -> Any:
+    def load_tool(self, tool_config: ToolConfig, api_key: str = "", api_key_mode: str = "agent") -> Any:
         """Load a tool instance from ToolConfig using unified registry."""
-        return self.unified_loader.load_tool(tool_config)
-    
-    def load_tools(self, tool_configs: List[ToolConfig]) -> List[Any]:
+        return self.unified_loader.load_tool(tool_config, api_key, api_key_mode)
+
+    def load_tools(self, tool_configs: List[ToolConfig], api_key: str = "", api_key_mode: str = "agent") -> List[Any]:
         """Load multiple tools from configurations using unified loader."""
-        return self.unified_loader.load_tools(tool_configs)
+        return self.unified_loader.load_tools(tool_configs, api_key, api_key_mode)
     
     def list_available_tools(self) -> List[str]:
         """List all available tool names from unified registry."""
@@ -40,13 +40,13 @@ class ToolRegistryRepository(IToolRegistryRepository):
 
         return {
             "name": tool_config["id"],
-            "display_name": tool_config["display_name"],
+            "display_name": tool_config["name"],
             "description": tool_config["description"],
-            "category": tool_config["category"],
+            "category": "utility",  # Default category for Emery tools
             "app": tool_config["app"],
-            "tags": tool_config["tags"],
+            "tags": [],  # Default empty tags
             "available": True,
-            "implementation_type": tool_config["implementation"]["type"]
+            "implementation_type": tool_config.get("type", "action")
         }
     
     def is_tool_available(self, tool_name: str) -> bool:

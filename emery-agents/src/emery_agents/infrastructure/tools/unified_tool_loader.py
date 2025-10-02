@@ -1,7 +1,7 @@
 """
 Unified Tool Loader
 
-Loads tools from the unified tools registry JSON file that serves as the single
+Loads tools from the unified metadata JSON file that serves as the single
 source of truth for both frontend and backend tool configurations.
 """
 
@@ -14,82 +14,56 @@ from ...core.entities import ToolConfig
 
 
 class UnifiedToolLoader:
-    """Loads tools from the unified registry and Pipedream metadata."""
+    """Loads tools from the unified metadata containing both Pipedream and Emery tools."""
 
-    def __init__(self, registry_path: Optional[str] = None, pipedream_metadata_path: Optional[str] = None):
-        """Initialize with paths to registry and pipedream metadata."""
-        # Default paths
-        if registry_path is None:
-            registry_path = self._get_default_registry_path()
-        if pipedream_metadata_path is None:
-            pipedream_metadata_path = self._get_default_pipedream_metadata_path()
+    def __init__(self, metadata_path: Optional[str] = None):
+        """Initialize with path to unified metadata file."""
+        if metadata_path is None:
+            metadata_path = self._get_default_metadata_path()
 
-        self.registry_path = registry_path
-        self.pipedream_metadata_path = pipedream_metadata_path
-
-        # Load registries
-        self.registry = self._load_registry()
-        self.pipedream_metadata = self._load_pipedream_metadata()
-
-        # Create tool lookup
+        self.metadata_path = metadata_path
+        self.unified_metadata = self._load_unified_metadata()
         self.tool_lookup = self._build_tool_lookup()
 
-    def _get_default_registry_path(self) -> str:
-        """Get default path to unified registry."""
-        # Look for registry in shared folder relative to this file
+    def _get_default_metadata_path(self) -> str:
+        """Get default path to unified metadata file."""
         current_dir = Path(__file__).parent
-        # Go up to project root and find shared folder
-        project_root = current_dir.parent.parent.parent.parent.parent  # Navigate to orchastrate root
-        registry_path = project_root / "public" / "tools-registry.json"
-        return str(registry_path)
-
-    def _get_default_pipedream_metadata_path(self) -> str:
-        """Get default path to pipedream metadata."""
-        current_dir = Path(__file__).parent
-        metadata_path = current_dir / "pipedream_metadata.json"
+        # Navigate to execution/tools directory where the metadata is generated
+        metadata_path = current_dir.parent.parent / "execution" / "tools" / "unified_metadata.json"
         return str(metadata_path)
 
-    def _load_registry(self) -> Dict[str, Any]:
-        """Load the unified tools registry."""
+    def _load_unified_metadata(self) -> Dict[str, Any]:
+        """Load the unified metadata file."""
         try:
-            with open(self.registry_path, 'r') as f:
-                registry = json.load(f)
-            print(f"✅ Loaded unified registry with {len(registry['curated_tools'])} curated tools")
-            return registry
-        except FileNotFoundError:
-            print(f"⚠️  Registry not found at {self.registry_path}, using empty registry")
-            return {"curated_tools": [], "pipedream_config": {"enabled": False}}
-        except json.JSONDecodeError as e:
-            print(f"❌ Invalid JSON in registry: {e}")
-            return {"curated_tools": [], "pipedream_config": {"enabled": False}}
-
-    def _load_pipedream_metadata(self) -> Dict[str, Any]:
-        """Load pipedream metadata if enabled."""
-        if not self.registry.get("pipedream_config", {}).get("enabled", False):
-            return {}
-
-        try:
-            with open(self.pipedream_metadata_path, 'r') as f:
+            with open(self.metadata_path, 'r') as f:
                 metadata = json.load(f)
-            print(f"✅ Loaded Pipedream metadata with {len(metadata)} tools")
+
+            pipedream_count = len(metadata.get("pipedream_tools", {}))
+            emery_count = len(metadata.get("emery_tools", {}))
+            print(f"✅ Loaded unified metadata: {pipedream_count} Pipedream tools, {emery_count} Emery tools")
             return metadata
         except FileNotFoundError:
-            print(f"⚠️  Pipedream metadata not found at {self.pipedream_metadata_path}")
-            return {}
+            print(f"⚠️  Unified metadata not found at {self.metadata_path}, using empty metadata")
+            return {"pipedream_tools": {}, "emery_tools": {}}
         except json.JSONDecodeError as e:
-            print(f"❌ Invalid JSON in pipedream metadata: {e}")
-            return {}
+            print(f"❌ Invalid JSON in unified metadata: {e}")
+            return {"pipedream_tools": {}, "emery_tools": {}}
 
     def _build_tool_lookup(self) -> Dict[str, Dict[str, Any]]:
         """Build a lookup table of tool ID to tool configuration."""
         lookup = {}
 
-        for tool in self.registry.get("curated_tools", []):
-            lookup[tool["id"]] = tool
+        # Add Pipedream tools
+        for tool_id, tool_config in self.unified_metadata.get("pipedream_tools", {}).items():
+            lookup[tool_id] = {**tool_config, "source": "pipedream"}
+
+        # Add Emery tools
+        for tool_id, tool_config in self.unified_metadata.get("emery_tools", {}).items():
+            lookup[tool_id] = {**tool_config, "source": "emery"}
 
         return lookup
 
-    def get_available_tools(self) -> List[str]:
+    def get_available_tools(self, api_key_mode: str = "agent") -> List[str]:
         """Get list of available tool IDs."""
         return list(self.tool_lookup.keys())
 
@@ -97,117 +71,172 @@ class UnifiedToolLoader:
         """Get tool configuration by ID."""
         return self.tool_lookup.get(tool_id)
 
-    def load_tool(self, tool_config: ToolConfig) -> Any:
-        """Load a tool instance from ToolConfig using unified registry."""
-        tool_name = tool_config.name
+    def load_tool(self, tool_config: ToolConfig, api_key: str = "", api_key_mode: str = "agent") -> Any:
+        """Load a tool instance from ToolConfig using unified metadata."""
+        # Convert tool name from hyphen to underscore format for lookup (frontend uses hyphens, backend uses underscores)
+        tool_name_lookup = tool_config.name.replace("-", "_")
 
-        # Look up tool in unified registry
-        unified_tool = self.get_tool_config(tool_name)
+        # Look up tool in unified metadata
+        unified_tool = self.get_tool_config(tool_name_lookup)
         if not unified_tool:
-            raise ValueError(f"Tool '{tool_name}' not found in unified registry")
+            # Try original name if hyphen version not found
+            unified_tool = self.get_tool_config(tool_config.name)
+            if not unified_tool:
+                raise ValueError(f"Tool '{tool_config.name}' (also tried '{tool_name_lookup}') not found in unified metadata")
 
-        implementation = unified_tool["implementation"]
+        source = unified_tool["source"]
 
-        if implementation["type"] == "pipedream":
-            return self._load_pipedream_tool(tool_config, unified_tool)
-        elif implementation["type"] == "native":
-            return self._load_native_tool(tool_config, unified_tool)
+        if source == "pipedream":
+            return self._load_pipedream_tool(tool_config, unified_tool, api_key, api_key_mode)
+        elif source == "emery":
+            return self._load_emery_tool(tool_config, unified_tool, api_key, api_key_mode)
         else:
-            raise ValueError(f"Unknown implementation type: {implementation['type']}")
+            raise ValueError(f"Unknown tool source: {source}")
 
-    def _load_pipedream_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any]) -> Any:
+    def _load_pipedream_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load a Pipedream tool using the unified configuration."""
-        implementation = unified_tool["implementation"]
-        pipedream_tool_id = implementation["pipedream_tool_id"]
+        from ...execution.tools.pipedream_tools import PipedreamTool
 
-        # Check if pipedream tool exists
-        if pipedream_tool_id not in self.pipedream_metadata:
-            raise ValueError(f"Pipedream tool '{pipedream_tool_id}' not found in metadata")
+        if not api_key:
+            raise ValueError(f"API key required for Pipedream tool '{tool_config.name}'")
 
-        pipedream_tool = self.pipedream_metadata[pipedream_tool_id]
+        # Create a new ToolConfig with the API key in the config
+        enhanced_config = ToolConfig(
+            name=tool_config.name,
+            version=tool_config.version,
+            config={**tool_config.config, "api_key": api_key}
+        )
 
-        # Import and create the appropriate Pipedream tool
-        if pipedream_tool["type"] == "mcp":
-            return self._create_mcp_tool(tool_config, unified_tool, pipedream_tool)
-        else:
-            return self._create_specific_pipedream_tool(tool_config, unified_tool, pipedream_tool)
+        # Create Pipedream tool with enhanced config containing API key
+        return PipedreamTool(
+            tool_id=unified_tool["id"],
+            config=enhanced_config
+        )
 
-    def _create_mcp_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], pipedream_tool: Dict[str, Any]) -> Any:
-        """Create an MCP (generic API) tool."""
-        from ...execution.tools.pipedream_tools import create_mcp_tool
+    def _load_emery_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load an Emery tool using the unified configuration."""
+        tool_id = unified_tool["id"]
 
-        app_name = pipedream_tool["app"]
-        tool_name = unified_tool["display_name"]
-
-        # Create the MCP tool with the app configuration
-        return create_mcp_tool(app_name, tool_name, tool_config)
-
-    def _create_specific_pipedream_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], pipedream_tool: Dict[str, Any]) -> Any:
-        """Create a specific Pipedream action tool."""
-        from ...execution.tools.pipedream_tools import create_pipedream_action_tool
-
-        # Create the specific action tool
-        return create_pipedream_action_tool(pipedream_tool, tool_config)
-
-    def _load_native_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any]) -> Any:
-        """Load a native tool using the unified configuration."""
-        implementation = unified_tool["implementation"]
-        backend_class = implementation["backend_class"]
-
-        # Map backend class names to actual tool loaders
-        native_tool_mapping = {
-            "PythonReplTool": self._load_python_repl_tool,
-            "WebSearchTool": self._load_web_search_tool,
-            "DataAnalyzerTool": self._load_data_analyzer_tool,
-            "MeasurementTrackerTool": self._load_measurement_tracker_tool,
-            "DocumentReaderTool": self._load_document_reader_tool,
-            "TableQueryTool": self._load_table_query_tool,
+        # Map tool IDs to their implementations
+        emery_tool_mapping = {
+            "file_reader": self._load_file_reader_tool,
+            "calculator": self._load_calculator_tool,
+            "document_reader": self._load_document_reader_tool,
+            "table_query": self._load_table_query_tool,
+            "agent_crud": self._load_agent_crud_tool,
+            "document_crud": self._load_document_crud_tool,
+            "file_crud": self._load_file_crud_tool,
+            "table_crud": self._load_table_crud_tool,
+            "team_crud": self._load_team_crud_tool,
+            "database_crud": self._load_database_crud_tool,
+            "emery_database": self._load_emery_database_tool,
+            "table_schema": self._load_table_schema_tool,
+            "table_data": self._load_table_data_tool,
+            "measurement_api": self._load_measurement_api_tool,
+            "kpi_api": self._load_kpi_api_tool,
+            "analysis_api": self._load_analysis_api_tool,
+            "process_api": self._load_process_api_tool,
         }
 
-        loader_func = native_tool_mapping.get(backend_class)
+        loader_func = emery_tool_mapping.get(tool_id)
         if not loader_func:
-            raise ValueError(f"Unknown native tool class: {backend_class}")
+            raise ValueError(f"Unknown Emery tool ID: {tool_id}")
 
-        return loader_func(tool_config, unified_tool)
+        return loader_func(tool_config, unified_tool, api_key, api_key_mode)
 
-    def _load_python_repl_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any]) -> Any:
-        """Load Python REPL tool."""
-        from ...execution.tools.base_tools import load_python_repl_tool
-        return load_python_repl_tool(tool_config)
+    # Emery tool loaders
+    def _load_file_reader_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load File Reader tool."""
+        from ...execution.tools.base_tools import load_file_reader
+        return load_file_reader(tool_config)
 
-    def _load_web_search_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any]) -> Any:
-        """Load web search tool."""
-        from ...execution.tools.base_tools import load_web_search_tool
-        return load_web_search_tool(tool_config)
+    def _load_calculator_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load Calculator tool."""
+        from ...execution.tools.base_tools import load_calculator
+        return load_calculator(tool_config)
 
-    def _load_data_analyzer_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any]) -> Any:
-        """Load data analyzer tool."""
-        from ...execution.tools.mock_data_tools import load_data_analyzer_tool
-        return load_data_analyzer_tool(tool_config)
+    def _load_document_reader_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load Document Reader tool."""
+        from ...execution.tools.base_tools import load_document_reader
+        return load_document_reader(tool_config)
 
-    def _load_measurement_tracker_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any]) -> Any:
-        """Load measurement tracker tool."""
-        from ...execution.tools.organizational_tools import load_measurement_tracker_tool
-        return load_measurement_tracker_tool(tool_config)
+    def _load_table_query_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load Table Query tool."""
+        from ...execution.tools.base_tools import load_table_query
+        return load_table_query(tool_config)
 
-    def _load_document_reader_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any]) -> Any:
-        """Load document reader tool."""
-        from ...execution.tools.base_tools import load_document_reader_tool
-        return load_document_reader_tool(tool_config)
+    def _load_agent_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load Agent CRUD tool."""
+        from ...execution.tools.crud_tools import load_agent_crud
+        return load_agent_crud(tool_config)
 
-    def _load_table_query_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any]) -> Any:
-        """Load table query tool."""
-        from ...execution.tools.base_tools import load_table_query_tool
-        return load_table_query_tool(tool_config)
+    def _load_document_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load Document CRUD tool."""
+        from ...execution.tools.crud_tools import load_document_crud
+        return load_document_crud(tool_config)
 
+    def _load_file_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load File CRUD tool."""
+        from ...execution.tools.crud_tools import load_file_crud
+        return load_file_crud(tool_config)
 
-    def load_tools(self, tool_configs: List[ToolConfig]) -> List[Any]:
+    def _load_table_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load Table CRUD tool."""
+        from ...execution.tools.crud_tools import load_table_crud
+        return load_table_crud(tool_config)
+
+    def _load_team_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load Team CRUD tool."""
+        from ...execution.tools.crud_tools import load_team_crud
+        return load_team_crud(tool_config)
+
+    def _load_database_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load Database CRUD tool."""
+        from ...execution.tools.crud_tools import load_database_crud
+        return load_database_crud(tool_config)
+
+    def _load_emery_database_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load Emery Database tool."""
+        from ...execution.tools.organizational_tools import EmeryDatabaseTool
+        return EmeryDatabaseTool(tool_config.name, tool_config.description)
+
+    def _load_table_schema_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load Table Schema tool."""
+        from ...execution.tools.organizational_tools import TableSchemaTool
+        return TableSchemaTool(tool_config.name, tool_config.description)
+
+    def _load_table_data_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load Table Data tool."""
+        from ...execution.tools.organizational_tools import TableDataTool
+        return TableDataTool(tool_config.name, tool_config.description)
+
+    def _load_measurement_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load Measurement API tool."""
+        from ...execution.tools.api_tools import MeasurementAPITool
+        return MeasurementAPITool(tool_config.name, tool_config.description)
+
+    def _load_kpi_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load KPI API tool."""
+        from ...execution.tools.api_tools import KPIAPITool
+        return KPIAPITool(tool_config.name, tool_config.description)
+
+    def _load_analysis_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load Analysis API tool."""
+        from ...execution.tools.api_tools import AnalysisAPITool
+        return AnalysisAPITool(tool_config.name, tool_config.description)
+
+    def _load_process_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+        """Load Process API tool."""
+        from ...execution.tools.api_tools import ProcessAPITool
+        return ProcessAPITool(tool_config.name, tool_config.description)
+
+    def load_tools(self, tool_configs: List[ToolConfig], api_key: str = "", api_key_mode: str = "agent") -> List[Any]:
         """Load multiple tools from configurations."""
         tools = []
 
         for tool_config in tool_configs:
             try:
-                tool = self.load_tool(tool_config)
+                tool = self.load_tool(tool_config, api_key, api_key_mode)
                 tools.append(tool)
                 print(f"✅ Loaded tool: {tool_config.name}")
             except Exception as e:
@@ -219,20 +248,19 @@ class UnifiedToolLoader:
     def list_tools_by_category(self, category: str) -> List[Dict[str, Any]]:
         """List tools filtered by category."""
         return [
-            tool for tool in self.registry.get("curated_tools", [])
+            tool for tool in self.tool_lookup.values()
             if tool.get("category") == category
         ]
 
     def search_tools(self, query: str) -> List[Dict[str, Any]]:
-        """Search tools by name, description, or tags."""
+        """Search tools by name, description."""
         query_lower = query.lower()
         results = []
 
-        for tool in self.registry.get("curated_tools", []):
-            # Search in name, description, and tags
-            if (query_lower in tool.get("display_name", "").lower() or
-                query_lower in tool.get("description", "").lower() or
-                any(query_lower in tag.lower() for tag in tool.get("tags", []))):
+        for tool in self.tool_lookup.values():
+            # Search in name and description
+            if (query_lower in tool.get("name", "").lower() or
+                query_lower in tool.get("description", "").lower()):
                 results.append(tool)
 
         return results

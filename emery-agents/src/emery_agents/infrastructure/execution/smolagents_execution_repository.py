@@ -313,18 +313,18 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
             ])
             
             if is_pipedream_tool:
-                # Extract agent API key from context environment
-                agent_api_key = context.environment.get("agent_api_key")
+                # Extract API key from context environment
+                api_key = context.environment.get("api_key")
                 base_url = context.environment.get("base_url", os.getenv("NEXTJS_BASE_URL", "http://localhost:3000"))
-                
-                if agent_api_key:
+
+                if api_key:
                     config = {
-                        "agent_api_key": agent_api_key,  # Already a Value Object from context
+                        "api_key": api_key,  # Already a Value Object from context
                         "base_url": base_url
                     }
                     logger.info(f"[EXECUTION] Configured Pipedream tool {tool_name} with API key context")
                 else:
-                    logger.warning(f"[EXECUTION] Pipedream tool {tool_name} missing agent_api_key in context")
+                    logger.warning(f"[EXECUTION] Pipedream tool {tool_name} missing api_key in context")
             
             tool_configs.append(ToolConfig(
                 name=tool_name,

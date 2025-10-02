@@ -90,6 +90,7 @@ import { IndexingQueueService, indexingQueueService } from '@/ddd/application/se
 import { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
 import { PipedreamConnectionRepository } from '@/ddd/infrastructure/external/pipedream/pipedream-connection-repository';
 import { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service';
+import { OAuthProxyApplicationService } from '@/ddd/application/services/connections/oauth-proxy-application-service';
 import { pipedreamClient } from '@/lib/pipedream/client';
 import { EmbeddingGeneratorService } from '@/ddd/domain/rag/services/embedding-generator-service';
 import { EmbeddingGeneratorDomainService } from '../services/rag/embedding-generator-service/embedding-generator-service';
@@ -171,6 +172,7 @@ interface RepositoryRegistry {
   // Connection domain services (nullable during build when Pipedream not configured)
   IConnectionRepository: IConnectionRepository | null;
   ConnectionApplicationService: ConnectionApplicationService | null;
+  OAuthProxyApplicationService: OAuthProxyApplicationService | null;
 }
 
 export class DIContainer {
@@ -430,17 +432,23 @@ export class DIContainer {
     // Register connection services - skip if Pipedream client not available during build
     if (!pipedreamClient) {
       console.warn('⚠️ Pipedream client not configured, skipping connection services registration. Set PIPEDREAM_PROJECT_ID, PIPEDREAM_CLIENT_ID, and PIPEDREAM_CLIENT_SECRET for full functionality.');
-      
+
       // Register null services for graceful degradation
       this.repositories.set('IConnectionRepository', null);
       this.repositories.set('ConnectionApplicationService', null);
+      this.repositories.set('OAuthProxyApplicationService', null);
     } else {
       const connectionRepository = new PipedreamConnectionRepository();
       const connectionApplicationService = new ConnectionApplicationService(connectionRepository);
-      
+      const oauthProxyApplicationService = new OAuthProxyApplicationService(
+        agentRepository, // Inject repository dependency
+        pipedreamClient
+      );
+
       this.repositories.set('IConnectionRepository', connectionRepository);
       this.repositories.set('ConnectionApplicationService', connectionApplicationService);
-      
+      this.repositories.set('OAuthProxyApplicationService', oauthProxyApplicationService);
+
       console.log('✅ Connection services registered with Pipedream client');
     }
 
@@ -631,6 +639,14 @@ export const getConnectionApplicationService = (): ConnectionApplicationService 
   const service = diContainer.get('ConnectionApplicationService');
   if (!service) {
     throw new Error('Connection services not available. Pipedream client not configured. This is expected during build time.');
+  }
+  return service;
+};
+
+export const getOAuthProxyApplicationService = (): OAuthProxyApplicationService => {
+  const service = diContainer.get('OAuthProxyApplicationService');
+  if (!service) {
+    throw new Error('OAuth proxy service not available. Pipedream client not configured. This is expected during build time.');
   }
   return service;
 };

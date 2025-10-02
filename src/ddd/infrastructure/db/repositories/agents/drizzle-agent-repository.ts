@@ -145,4 +145,34 @@ export class DrizzleAgentRepository
 
     return !record;
   }
+
+  async findByApiKey(apiKey: ApiKey): Promise<Agent | null> {
+    try {
+      const [record] = await this.db
+        .select()
+        .from(agents)
+        .where(eq(agents.apiKey, apiKey.value))
+        .limit(1);
+
+      if (!record) {
+        return null;
+      }
+
+      return this.fromPersistence(record);
+    } catch (error) {
+      console.error('Error finding agent by API key:', error);
+      return null;
+    }
+  }
+
+  async updateLastUsed(id: AgentId): Promise<void> {
+    try {
+      await this.db
+        .update(agents)
+        .set({ lastUsedAt: new Date() })
+        .where(eq(agents.id, id.value));
+    } catch (error) {
+      console.error('Error updating agent last used:', error);
+    }
+  }
 }

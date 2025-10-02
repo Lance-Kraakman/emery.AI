@@ -42,10 +42,10 @@ class PipedreamTool(Tool):
         self.output_type = "object"
         
         # Use ApiKey Value Object for type safety
-        api_key = config.config.get("agent_api_key") if config and config.config else None
+        api_key = config.config.get("api_key") if config and config.config else None
         if not api_key:
-            raise ValueError("agent_api_key required")
-        
+            raise ValueError("api_key required")
+
         self.agent_api_key = ApiKey(api_key) if isinstance(api_key, str) else api_key
         self.base_url = config.config.get("base_url", "http://localhost:3000")
         
