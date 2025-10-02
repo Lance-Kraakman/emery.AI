@@ -7,7 +7,6 @@
  * 
  * Run with: pnpm tsx scripts/fetch-pipedream-tools.ts
  */
-
 import { pipedreamClient } from '@/lib/pipedream/client';
 import fs from 'fs';
 import path from 'path';
@@ -25,10 +24,47 @@ interface SimplifiedToolMetadata {
   }>;
 }
 
+// Retry helper function with exponential backoff
+async function retryWithBackoff<T>(
+  operation: () => Promise<T>,
+  appSlug: string,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      const isTimeout = error?.message?.includes('timeout') || error?.statusCode === undefined;
+      const isLastAttempt = attempt === maxRetries;
+
+      if (isTimeout && !isLastAttempt) {
+        const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
+        console.log(`    🔄 Retry ${attempt}/${maxRetries} for ${appSlug} after ${delay}ms delay...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      // Re-throw error on last attempt or non-timeout errors
+      throw error;
+    }
+  }
+
+  // This should never be reached, but TypeScript requires it
+  throw new Error('Retry logic error');
+}
+
 async function fetchAndSavePipedreamTools() {
   if (!pipedreamClient) {
-    console.error('❌ Pipedream client not configured. Please set PIPEDREAM_PROJECT_ID, PIPEDREAM_CLIENT_ID, and PIPEDREAM_CLIENT_SECRET environment variables.');
-    process.exit(1);
+    console.warn('⚠️  Pipedream client not configured. Using fallback mode with empty Pipedream tools.');
+    console.warn('    To fetch Pipedream tools, set PIPEDREAM_PROJECT_ID, PIPEDREAM_CLIENT_ID, and PIPEDREAM_CLIENT_SECRET environment variables.');
+
+    // Create empty toolMetadata for fallback mode
+    const toolMetadata: Record<string, SimplifiedToolMetadata> = {};
+
+    // Skip Pipedream fetching and go directly to Emery tools generation
+    await generateUnifiedMetadata(toolMetadata, 0, 0, [], 0);
+    return;
   }
 
   console.log('🚀 Starting comprehensive Pipedream tool metadata fetch...\n');
@@ -141,16 +177,7 @@ async function fetchAndSavePipedreamTools() {
     console.error('❌ Failed to discover apps via API:', error);
     console.warn('⚠️  Falling back to known popular apps');
     // Fallback to a larger set of known apps
-    allApps = [
-      'gmail', 'slack', 'github', 'google-drive', 'google-sheets', 'google-docs', 
-      'google-calendar', 'notion', 'trello', 'discord', 'linear', 'dropbox', 
-      'airtable', 'hubspot', 'salesforce', 'jira', 'microsoft-teams', 'outlook', 
-      'zoom', 'stripe', 'twitter', 'facebook', 'instagram', 'linkedin', 'youtube',
-      'shopify', 'woocommerce', 'wordpress', 'mailchimp', 'sendgrid', 'twilio',
-      'aws', 'google-cloud', 'azure', 'mongodb', 'postgresql', 'mysql', 'redis',
-      'asana', 'monday', 'clickup', 'basecamp', 'todoist', 'calendly', 'typeform',
-      'google-forms', 'zapier', 'ifttt', 'webhook', 'rss', 'email'
-    ];
+    throw Error("cannot fetch apps")
   }
   
   // Remove duplicates and sort
@@ -182,12 +209,14 @@ async function fetchAndSavePipedreamTools() {
     let components: any = null;
     
     try {
-      // List all actions for this app - get more actions per app
-      components = await pipedreamClient.components.list({
-        app: appSlug,
-        type: 'action',
-        limit: 200  // Get up to 200 actions per app
-      });
+      // List all actions for this app with retry logic
+      components = await retryWithBackoff(async () => {
+        return await pipedreamClient.components.list({
+          app: appSlug,
+          type: 'action',
+          limit: 200  // Get up to 200 actions per app
+        });
+      }, appSlug);
       
       // Handle response structure variations
       const actions = Array.isArray(components) ? components : (components?.data || []);
@@ -280,107 +309,396 @@ async function fetchAndSavePipedreamTools() {
       ? `  ✅ ${appSlug}: ${actionsCount} actions + 1 MCP tool`
       : `  🔧 ${appSlug}: 0 actions + 1 MCP tool`;
     console.log(statusMsg);
+
+    // Add a small delay between apps to help with rate limiting
+    if (processedApps < appsToProcess.length) {
+      await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay between apps
+    }
   }
-  
-  // Save the metadata to TypeScript files for both frontend and backend
 
-  // Frontend TypeScript output (for seeding)
-  const frontendOutputDir = path.join(process.cwd(), 'src', 'ddd', 'domain', 'tools', 'config');
-  const frontendOutputPath = path.join(frontendOutputDir, 'pipedream-tools.generated.ts');
+  // Generate unified metadata with the fetched tools
+  await generateUnifiedMetadata(toolMetadata, totalActions, totalMcpTools, failedApps, targetApps.length);
+}
 
-  // Backend JSON output (for Python workers - keep for compatibility)
+async function generateUnifiedMetadata(
+  toolMetadata: Record<string, SimplifiedToolMetadata>,
+  totalActions: number,
+  totalMcpTools: number,
+  failedApps: string[],
+  processedAppsCount: number
+) {
+  // Add Emery backend tools (hardcoded from actual Python implementations)
+  const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
+    // Base Tools (from base_tools.py)
+    "file_reader": {
+      id: "file_reader",
+      app: "emery",
+      name: "File Reader",
+      description: "Read files from storage",
+      type: "action",
+      inputs: {
+        file_path: {
+          type: "string",
+          description: "Path to the file to read",
+          required: true
+        }
+      }
+    },
+    "calculator": {
+      id: "calculator",
+      app: "emery",
+      name: "Calculator",
+      description: "Mathematical calculations",
+      type: "action",
+      inputs: {
+        expression: {
+          type: "string",
+          description: "Mathematical expression to evaluate",
+          required: true
+        }
+      }
+    },
+    "document_reader": {
+      id: "document_reader",
+      app: "emery",
+      name: "Document Reader",
+      description: "Read documents",
+      type: "action",
+      inputs: {
+        document_id: {
+          type: "string",
+          description: "Document ID to read",
+          required: true
+        }
+      }
+    },
+    "table_query": {
+      id: "table_query",
+      app: "emery",
+      name: "Table Query",
+      description: "Query table data",
+      type: "action",
+      inputs: {
+        query: {
+          type: "string",
+          description: "SQL query to execute",
+          required: true
+        }
+      }
+    },
+
+    // CRUD Tools (from crud_tools.py)
+    "agent_crud": {
+      id: "agent_crud",
+      app: "emery",
+      name: "Agent Management",
+      description: "Create, read, update, delete agents",
+      type: "action",
+      inputs: {
+        operation: {
+          type: "string",
+          description: "CRUD operation (create, read, update, delete)",
+          required: true
+        },
+        agent_data: {
+          type: "object",
+          description: "Agent data for the operation",
+          required: false
+        }
+      }
+    },
+    "document_crud": {
+      id: "document_crud",
+      app: "emery",
+      name: "Document Management",
+      description: "Manage organization documents",
+      type: "action",
+      inputs: {
+        operation: {
+          type: "string",
+          description: "CRUD operation (create, read, update, delete)",
+          required: true
+        },
+        document_data: {
+          type: "object",
+          description: "Document data for the operation",
+          required: false
+        }
+      }
+    },
+    "file_crud": {
+      id: "file_crud",
+      app: "emery",
+      name: "File Management",
+      description: "Manage organization files",
+      type: "action",
+      inputs: {
+        operation: {
+          type: "string",
+          description: "CRUD operation (create, read, update, delete)",
+          required: true
+        },
+        file_data: {
+          type: "object",
+          description: "File data for the operation",
+          required: false
+        }
+      }
+    },
+    "table_crud": {
+      id: "table_crud",
+      app: "emery",
+      name: "Table Management",
+      description: "Manage data tables",
+      type: "action",
+      inputs: {
+        operation: {
+          type: "string",
+          description: "CRUD operation (create, read, update, delete)",
+          required: true
+        },
+        table_data: {
+          type: "object",
+          description: "Table data for the operation",
+          required: false
+        }
+      }
+    },
+    "team_crud": {
+      id: "team_crud",
+      app: "emery",
+      name: "Team Management",
+      description: "Manage organization teams",
+      type: "action",
+      inputs: {
+        operation: {
+          type: "string",
+          description: "CRUD operation (create, read, update, delete)",
+          required: true
+        },
+        team_data: {
+          type: "object",
+          description: "Team data for the operation",
+          required: false
+        }
+      }
+    },
+    "database_crud": {
+      id: "database_crud",
+      app: "emery",
+      name: "Database Management",
+      description: "Manage databases",
+      type: "action",
+      inputs: {
+        operation: {
+          type: "string",
+          description: "CRUD operation (create, read, update, delete)",
+          required: true
+        },
+        database_data: {
+          type: "object",
+          description: "Database data for the operation",
+          required: false
+        }
+      }
+    },
+
+    // Organizational Tools (from organizational_tools.py)
+    "emery_database": {
+      id: "emery_database",
+      app: "emery",
+      name: "Database Access",
+      description: "Direct database access",
+      type: "action",
+      inputs: {
+        query: {
+          type: "string",
+          description: "Database query to execute",
+          required: true
+        }
+      }
+    },
+    "table_schema": {
+      id: "table_schema",
+      app: "emery",
+      name: "Table Schema",
+      description: "Get table schema information",
+      type: "action",
+      inputs: {
+        table_name: {
+          type: "string",
+          description: "Name of the table",
+          required: true
+        }
+      }
+    },
+    "table_data": {
+      id: "table_data",
+      app: "emery",
+      name: "Table Data",
+      description: "Access table data",
+      type: "action",
+      inputs: {
+        table_name: {
+          type: "string",
+          description: "Name of the table",
+          required: true
+        },
+        filters: {
+          type: "object",
+          description: "Filters to apply to the data",
+          required: false
+        }
+      }
+    },
+
+    // API Tools (from api_tools.py)
+    "measurement_api": {
+      id: "measurement_api",
+      app: "emery",
+      name: "Measurement API",
+      description: "Measurement data operations",
+      type: "action",
+      inputs: {
+        operation: {
+          type: "string",
+          description: "API operation to perform",
+          required: true
+        },
+        data: {
+          type: "object",
+          description: "Data for the operation",
+          required: false
+        }
+      }
+    },
+    "kpi_api": {
+      id: "kpi_api",
+      app: "emery",
+      name: "KPI API",
+      description: "KPI management",
+      type: "action",
+      inputs: {
+        operation: {
+          type: "string",
+          description: "API operation to perform",
+          required: true
+        },
+        data: {
+          type: "object",
+          description: "Data for the operation",
+          required: false
+        }
+      }
+    },
+    "analysis_api": {
+      id: "analysis_api",
+      app: "emery",
+      name: "Analysis API",
+      description: "Data analysis operations",
+      type: "action",
+      inputs: {
+        operation: {
+          type: "string",
+          description: "API operation to perform",
+          required: true
+        },
+        data: {
+          type: "object",
+          description: "Data for the operation",
+          required: false
+        }
+      }
+    },
+    "process_api": {
+      id: "process_api",
+      app: "emery",
+      name: "Process API",
+      description: "Process management",
+      type: "action",
+      inputs: {
+        operation: {
+          type: "string",
+          description: "API operation to perform",
+          required: true
+        },
+        data: {
+          type: "object",
+          description: "Data for the operation",
+          required: false
+        }
+      }
+    }
+  };
+
+  // Create unified metadata structure
+  const unifiedMetadata = {
+    pipedream_tools: toolMetadata,
+    emery_tools: EMERY_BACKEND_TOOLS
+  };
+
+  // Backend unified JSON output (for Python workers)
   const backendOutputDir = path.join(process.cwd(), 'emery-agents', 'src', 'emery_agents', 'execution', 'tools');
-  const backendOutputPath = path.join(backendOutputDir, 'pipedream_metadata.json');
+  const backendOutputPath = path.join(backendOutputDir, 'unified_metadata.json');
 
-  // Ensure directories exist
-  if (!fs.existsSync(frontendOutputDir)) {
-    fs.mkdirSync(frontendOutputDir, { recursive: true });
-  }
+  // Ensure backend directory exists
   if (!fs.existsSync(backendOutputDir)) {
     fs.mkdirSync(backendOutputDir, { recursive: true });
   }
 
-  // Generate TypeScript content for frontend
-  const tsContent = `/**
- * Auto-generated Pipedream Tools Metadata
- *
- * Generated by: fetch-pipedream-tools.ts
- * Generated at: ${new Date().toISOString()}
- * Total tools: ${Object.keys(toolMetadata).length}
- *
- * DO NOT EDIT MANUALLY - This file is auto-generated
- */
-
-export interface PipedreamToolMetadata {
-  id: string;
-  app: string;
-  name: string;
-  description: string;
-  type: 'action' | 'mcp';
-  inputs: Record<string, {
-    type: string;
-    description: string;
-    required: boolean;
-  }>;
-}
-
-export const PIPEDREAM_TOOLS = ${JSON.stringify(toolMetadata, null, 2)} as const;
-
-export type PipedreamToolId = keyof typeof PIPEDREAM_TOOLS;
-
-export const PIPEDREAM_TOOLS_ARRAY = Object.values(PIPEDREAM_TOOLS);
-
-export const PIPEDREAM_TOOLS_BY_APP = Object.values(PIPEDREAM_TOOLS).reduce((acc, tool) => {
-  if (!acc[tool.app]) {
-    acc[tool.app] = [];
-  }
-  acc[tool.app].push(tool);
-  return acc;
-}, {} as Record<string, PipedreamToolMetadata[]>);
-`;
-
-  // Write TypeScript file for frontend
-  fs.writeFileSync(frontendOutputPath, tsContent);
-
-  // Write JSON file for backend (Python workers)
-  fs.writeFileSync(backendOutputPath, JSON.stringify(toolMetadata, null, 2));
+  // Write unified JSON file for backend (Python workers and frontend seeding)
+  fs.writeFileSync(backendOutputPath, JSON.stringify(unifiedMetadata, null, 2));
   
   // Print summary
+  const totalPipedreamTools = totalActions + totalMcpTools;
+  const totalEmeryTools = Object.keys(EMERY_BACKEND_TOOLS).length;
+  const totalAllTools = totalPipedreamTools + totalEmeryTools;
+
   console.log('\n' + '='.repeat(70));
-  console.log('📊 COMPREHENSIVE PIPEDREAM TOOL FETCH SUMMARY');
+  console.log('📊 UNIFIED TOOL METADATA GENERATION SUMMARY');
   console.log('='.repeat(70));
-  console.log(`✅ Successfully processed: ${targetApps.length} apps`);
-  console.log(`📦 Specific action tools: ${totalActions}`);
-  console.log(`🔧 Generic MCP tools: ${totalMcpTools}`);
-  console.log(`🎯 Total tools created: ${totalActions + totalMcpTools}`);
-  console.log(`📁 Frontend output: ${frontendOutputPath}`);
-  console.log(`📁 Backend output: ${backendOutputPath}`);
-  
+  console.log(`✅ Successfully processed: ${processedAppsCount} Pipedream apps`);
+  console.log(`📦 Pipedream action tools: ${totalActions}`);
+  console.log(`🔧 Pipedream MCP tools: ${totalMcpTools}`);
+  console.log(`🎯 Total Pipedream tools: ${totalPipedreamTools}`);
+  console.log(`⚙️  Emery backend tools: ${totalEmeryTools}`);
+  console.log(`🎯 TOTAL UNIFIED TOOLS: ${totalAllTools}`);
+  console.log(`📁 Unified output: ${backendOutputPath}`);
+
   if (failedApps.length > 0) {
     console.log(`\n⚠️  Failed apps (${failedApps.length}):`);
     failedApps.forEach(app => console.log(`  - ${app}`));
   }
-  
-  console.log('\n✨ Comprehensive Pipedream tool metadata fetch complete!');
-  console.log(`🎉 Created tools for ALL ${targetApps.length} discovered apps`);
-  console.log(`📈 Coverage: ${Math.round(((totalActions + totalMcpTools) / (targetApps.length * 2)) * 100)}% of maximum possible tools`);
-  
+
+  console.log('\n✨ Unified tool metadata generation complete!');
+  console.log(`🎉 Single source file contains both Pipedream and Emery tools`);
+  console.log(`📈 Ready for frontend seeding and backend tool loading`);
+
   // Show example tools by type
-  const actionTools = Object.keys(toolMetadata).filter(id => toolMetadata[id].type === 'action').slice(0, 3);
-  const mcpTools = Object.keys(toolMetadata).filter(id => toolMetadata[id].type === 'mcp').slice(0, 3);
-  
-  if (actionTools.length > 0) {
-    console.log('\n📝 Example specific action tools:');
-    actionTools.forEach(toolId => {
+  const pipedreamActionTools = Object.keys(toolMetadata).filter(id => toolMetadata[id].type === 'action').slice(0, 3);
+  const pipedreamMcpTools = Object.keys(toolMetadata).filter(id => toolMetadata[id].type === 'mcp').slice(0, 3);
+  const emeryTools = Object.keys(EMERY_BACKEND_TOOLS).slice(0, 3);
+
+  if (pipedreamActionTools.length > 0) {
+    console.log('\n📝 Example Pipedream action tools:');
+    pipedreamActionTools.forEach(toolId => {
       const tool = toolMetadata[toolId];
       console.log(`  - ${toolId}: ${tool.name} (${Object.keys(tool.inputs).length} inputs)`);
     });
   }
-  
-  if (mcpTools.length > 0) {
-    console.log('\n🔧 Example generic MCP tools:');
-    mcpTools.forEach(toolId => {
+
+  if (pipedreamMcpTools.length > 0) {
+    console.log('\n🔧 Example Pipedream MCP tools:');
+    pipedreamMcpTools.forEach(toolId => {
       const tool = toolMetadata[toolId];
+      console.log(`  - ${toolId}: ${tool.name} (${Object.keys(tool.inputs).length} inputs)`);
+    });
+  }
+
+  if (emeryTools.length > 0) {
+    console.log('\n⚙️  Example Emery backend tools:');
+    emeryTools.forEach(toolId => {
+      const tool = EMERY_BACKEND_TOOLS[toolId];
       console.log(`  - ${toolId}: ${tool.name} (${Object.keys(tool.inputs).length} inputs)`);
     });
   }

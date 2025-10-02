@@ -2,7 +2,7 @@
 // Defines data access operations for Agent entities
 
 import type { Agent } from '../entities/agent';
-import type { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import type { AgentId, OrganizationId, UserId, ApiKey } from '@/ddd/domain/shared/value-objects';
 
 // Data transfer objects for repository operations
 export interface CreateAgentData {
@@ -84,5 +84,15 @@ export interface IAgentRepository {
    * Find all agents with trigger configurations (active and inactive)
    */
   findAgentsWithTriggers(organizationId?: OrganizationId): Promise<Agent[]>;
+
+  /**
+   * Find agent by API key
+   */
+  findByApiKey(apiKey: ApiKey): Promise<Agent | null>;
+
+  /**
+   * Update agent's last used timestamp
+   */
+  updateLastUsed(id: AgentId): Promise<void>;
 
 }

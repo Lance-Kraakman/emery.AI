@@ -44,10 +44,10 @@ class TestPipedreamToolsIntegration:
             
             if test_tool_name:
                 tool_config = ToolConfig(
-                    name=test_tool_name, 
+                    name=test_tool_name,
                     version="1.0",
                     config={
-                        "agent_api_key": "agent_prod_abc123def456xyz789",
+                        "api_key": "agent_prod_abc123def456xyz789",
                         "base_url": "http://localhost:3000"
                     }
                 )
@@ -98,9 +98,9 @@ class TestPipedreamToolExecution:
         """Test ActiveCampaign tool with successful proxy response."""
         tool_config = ToolConfig(
             name="activecampaign_create_contact",
-            version="1.0", 
+            version="1.0",
             config={
-                "agent_api_key": "agent_prod_abc123def456xyz789",
+                "api_key": "agent_prod_abc123def456xyz789",
                 "base_url": "http://localhost:3000"
             }
         )
@@ -141,7 +141,7 @@ class TestPipedreamToolExecution:
             name="gmail_send_email",
             version="1.0",
             config={
-                "agent_api_key": "agent_prod_invalid123def456xyz",
+                "api_key": "agent_prod_invalid123def456xyz",
                 "base_url": "http://localhost:3000"
             }
         )
@@ -168,7 +168,7 @@ class TestPipedreamToolExecution:
             name="slack_send_message_to_channel",
             version="1.0",
             config={
-                "agent_api_key": "agent_prod_abc123def456xyz789",
+                "api_key": "agent_prod_abc123def456xyz789",
                 "base_url": "http://localhost:3000"
             }
         )
@@ -198,15 +198,15 @@ class TestExecutionContextIntegration:
             agent_id=AgentId(123),
             organization_id=OrganizationId(1),
             environment={
-                "agent_api_key": ApiKey("agent_prod_abc123def456xyz789"),
+                "api_key": ApiKey("agent_prod_abc123def456xyz789"),
                 "base_url": "http://localhost:3000"
             }
         )
-        
+
         # Verify context has the required environment variables
-        assert "agent_api_key" in context.environment
-        assert isinstance(context.environment["agent_api_key"], ApiKey)
-        assert context.environment["agent_api_key"].value == "agent_prod_abc123def456xyz789"
+        assert "api_key" in context.environment
+        assert isinstance(context.environment["api_key"], ApiKey)
+        assert context.environment["api_key"].value == "agent_prod_abc123def456xyz789"
     
     def test_tool_config_creation_with_context(self):
         """Test tool config creation with execution context."""
@@ -228,24 +228,24 @@ class TestExecutionContextIntegration:
             instructions="Send an email",
             available_tools=["gmail_send_email", "calculator"],
             environment={
-                "agent_api_key": ApiKey("agent_prod_abc456def789xyz123"),
+                "api_key": ApiKey("agent_prod_abc456def789xyz123"),
                 "base_url": "http://localhost:3000"
             }
         )
-        
+
         # Test tool config creation
         tool_configs = execution_repo._create_tool_configs_with_context(
-            context.available_tools, 
+            context.available_tools,
             context
         )
-        
+
         # Verify tool configs
         assert len(tool_configs) == 2
-        
+
         # Find Gmail tool config
         gmail_config = next((tc for tc in tool_configs if tc.name == "gmail_send_email"), None)
         assert gmail_config is not None
-        assert gmail_config.config["agent_api_key"].value == "agent_prod_abc456def789xyz123"
+        assert gmail_config.config["api_key"].value == "agent_prod_abc456def789xyz123"
         assert gmail_config.config["base_url"] == "http://localhost:3000"
         
         # Find non-Pipedream tool config
@@ -270,7 +270,7 @@ class TestPipedreamToolsWithRealProxy:
             name="gmail_send_email",
             version="1.0",
             config={
-                "agent_api_key": ApiKey("real_agent_api_key_here"),
+                "api_key": ApiKey("real_agent_api_key_here"),
                 "base_url": "http://localhost:3000"
             }
         )

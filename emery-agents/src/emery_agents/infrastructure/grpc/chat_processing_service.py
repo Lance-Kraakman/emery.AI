@@ -61,13 +61,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self.rag_processor = RagProcessor()
             logger.info("✅ RagProcessor initialized successfully")
 
-            # Tool registry for converting ToolConfig to smolagents tools
+            # Tool registry repository for converting ToolConfig to smolagents tools
             try:
-                from ...execution.tools.tool_registry import ToolRegistry
-                self.tool_registry = ToolRegistry()
-                logger.info("✅ ToolRegistry initialized successfully")
+                from ...infrastructure.db.repositories.tools.tool_registry_repository import ToolRegistryRepository
+                self.tool_registry = ToolRegistryRepository()
+                logger.info("✅ ToolRegistryRepository initialized successfully")
             except ImportError as tool_error:
-                logger.warning(f"⚠️ ToolRegistry not available: {tool_error}")
+                logger.warning(f"⚠️ ToolRegistryRepository not available: {tool_error}")
                 self.tool_registry = None
 
             logger.info("✅ ChatProcessingService initialized successfully")
@@ -363,13 +363,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 logger.info(f"  Config keys: {list(tool_config.config.keys()) if tool_config.config else 'none'}")
                 logger.info(f"  Config values: {dict(tool_config.config) if tool_config.config else {}}")
 
-                # Handle tool name conversion for Pipedream tools
-                # Frontend sends "gmail-create-draft", Python expects "gmail_create_draft"
+                # Keep original tool name - let UnifiedToolLoader handle name resolution
                 tool_name = tool_config.name
-                if '-' in tool_name:
-                    converted_name = tool_name.replace("-", "_")
-                    logger.info(f"Converting tool name: {tool_name} -> {converted_name}")
-                    tool_name = converted_name
 
                 core_config = CoreToolConfig(
                     name=tool_name,
@@ -385,7 +380,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             for core_config in core_tool_configs:
                 try:
                     logger.info(f"🔧 Loading individual tool: {core_config.name}")
-                    tool_instance = self.tool_registry.load_tool(core_config)
+                    # For chat system, use user API key mode - extract API key from enriched config
+                    api_key = core_config.config.get('api_key', '')
+                    logger.info(f"  Extracted API key from config: present={bool(api_key)}")
+                    tool_instance = self.tool_registry.load_tool(core_config, api_key=api_key, api_key_mode="user")
                     smolagents_tools.append(tool_instance)
                     logger.info(f"✅ Successfully loaded tool: {core_config.name}")
                 except Exception as tool_error:

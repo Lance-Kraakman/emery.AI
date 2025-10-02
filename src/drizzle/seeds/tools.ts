@@ -1,16 +1,15 @@
 #!/usr/bin/env tsx
 
 /**
- * Seed Tools from Registry and Pipedream Metadata
+ * Seed Tools from Unified Metadata JSON
  *
  * This script populates the tools table with:
- * 1. System tools from tools-registry.json (appId: "emery")
- * 2. OAuth tools from Pipedream metadata (appId: matching app)
+ * 1. Emery backend tools from unified_metadata.json (appId: "emery")
+ * 2. Pipedream tools from unified_metadata.json (appId: matching app)
  */
 
 import fs from 'fs';
 import path from 'path';
-import { BUILT_IN_TOOLS, type BuiltInToolConfig } from '@/ddd/domain/tools/config/built-in-tools';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { tools, appTypes, type SystemToolDefinitionData, type OAuthToolDefinitionData } from '@/lib/db/schema';
@@ -25,14 +24,23 @@ if (!connectionString) {
 const client = postgres(connectionString, { max: 1 });
 const db = drizzle(client);
 
-// Use the BuiltInToolConfig type instead of separate interface
-type CuratedTool = BuiltInToolConfig;
-
-interface PipedreamTool {
+// Interface matching the unified metadata structure
+interface UnifiedToolMetadata {
+  id: string;
   app: string;
   name: string;
-  description?: string;
-  type?: string;
+  description: string;
+  type: 'action' | 'mcp';
+  inputs: Record<string, {
+    type: string;
+    description: string;
+    required: boolean;
+  }>;
+}
+
+interface UnifiedMetadataFile {
+  pipedream_tools: Record<string, UnifiedToolMetadata>;
+  emery_tools: Record<string, UnifiedToolMetadata>;
 }
 
 interface ToolData {
@@ -45,87 +53,93 @@ interface ToolData {
   config: SystemToolDefinitionData | OAuthToolDefinitionData;
 }
 
-async function loadCuratedTools(): Promise<CuratedTool[]> {
-  console.log('Loading built-in tools from TypeScript config...');
-  console.log(`Loaded ${BUILT_IN_TOOLS.length} built-in tools`);
-  return BUILT_IN_TOOLS;
-}
+async function loadUnifiedMetadata(): Promise<UnifiedMetadataFile> {
+  const jsonPath = path.join(process.cwd(), 'emery-agents', 'src', 'emery_agents', 'execution', 'tools', 'unified_metadata.json');
 
-
-async function loadPipedreamMetadata(): Promise<Record<string, PipedreamTool>> {
-  const tsPath = path.join(process.cwd(), 'src', 'ddd', 'domain', 'tools', 'config', 'pipedream-tools.generated.ts');
-
-  if (!fs.existsSync(tsPath)) {
+  if (!fs.existsSync(jsonPath)) {
     throw new Error(
-      `Pipedream tools not generated. Run: pnpm tsx src/scripts/fetch-pipedream-tools.ts\n` +
-      `Expected file: ${tsPath}`
+      `Unified metadata not generated. Run: pnpm tsx src/scripts/fetch-pipedream-tools.ts\n` +
+      `Expected file: ${jsonPath}`
     );
   }
 
-  console.log('Loading Pipedream metadata from TypeScript config...');
+  console.log('Loading unified metadata from JSON file...');
 
-  // Dynamic import - fail fast if it doesn't work
-  const pipedreamModule = await import(tsPath.replace('.ts', '.js'));
-  const { PIPEDREAM_TOOLS } = pipedreamModule;
+  const fileContent = fs.readFileSync(jsonPath, 'utf-8');
+  const unifiedMetadata: UnifiedMetadataFile = JSON.parse(fileContent);
 
-  if (!PIPEDREAM_TOOLS || typeof PIPEDREAM_TOOLS !== 'object') {
-    throw new Error(`Invalid PIPEDREAM_TOOLS export in ${tsPath}`);
+  if (!unifiedMetadata || typeof unifiedMetadata !== 'object') {
+    throw new Error(`Invalid unified metadata in ${jsonPath}`);
   }
 
-  console.log(`Loaded ${Object.keys(PIPEDREAM_TOOLS).length} Pipedream tools from TypeScript`);
-  return PIPEDREAM_TOOLS;
+  if (!unifiedMetadata.pipedream_tools || !unifiedMetadata.emery_tools) {
+    throw new Error(`Missing required sections in unified metadata: pipedream_tools and emery_tools`);
+  }
+
+  const pipedreamCount = Object.keys(unifiedMetadata.pipedream_tools).length;
+  const emeryCount = Object.keys(unifiedMetadata.emery_tools).length;
+  console.log(`Loaded ${pipedreamCount} Pipedream tools and ${emeryCount} Emery tools from unified JSON`);
+
+  return unifiedMetadata;
 }
 
-function convertCuratedToolToDatabase(tool: CuratedTool): ToolData {
+function convertEmeryToolToDatabase(tool: UnifiedToolMetadata): ToolData {
   const config: SystemToolDefinitionData = {
     type: "system",
     implementation: {
-      backend_class: tool.implementation.backend_class,
-      requires_auth: tool.implementation.requires_auth,
+      backend_class: tool.id, // Use tool ID as backend class name
+      requires_auth: true, // Emery tools require authentication
     },
     ui_config: {
-      insert_text: tool.ui_config.insert_text,
-      supports_artifacts: tool.ui_config.supports_artifacts,
-      icon: tool.ui_config.icon,
+      insert_text: `@tool:${tool.id}`,
+      supports_artifacts: false, // Default to false, can be overridden
+      icon: "⚙️", // Default icon for Emery tools
     },
-    parameters: tool.parameters,
+    parameters: tool.inputs,
   };
 
   return {
     id: tool.id,
-    displayName: tool.display_name,
+    displayName: tool.name,
     description: tool.description,
-    category: tool.category,
-    appId: "emery", // All system tools belong to emery app
-    icon: tool.ui_config.icon,
+    category: getCategoryFromToolType(tool.id),
+    appId: "emery", // All Emery tools belong to emery app
+    icon: "⚙️",
     config,
   };
 }
 
-function convertPipedreamToolToDatabase(toolKey: string, tool: PipedreamTool): ToolData {
+function convertPipedreamToolToDatabase(tool: UnifiedToolMetadata): ToolData {
   const config: OAuthToolDefinitionData = {
     type: "oauth",
     implementation: {
-      pipedream_key: toolKey,
+      pipedream_key: tool.id,
       requires_auth: true,
     },
     ui_config: {
-      insert_text: `@${tool.app}:${tool.name.toLowerCase().replace(/\s+/g, '-')}`,
+      insert_text: `@tool:${tool.id}`,
     },
-    parameters: {
-      // Default parameters - will be populated from Pipedream schema if available
-    },
+    parameters: tool.inputs,
   };
 
   return {
-    id: toolKey,
+    id: tool.id,
     displayName: tool.name,
-    description: tool.description || `${tool.name} tool for ${tool.app}`,
+    description: tool.description,
     category: getCategoryFromApp(tool.app),
     appId: tool.app,
     icon: getIconFromApp(tool.app),
     config,
   };
+}
+
+function getCategoryFromToolType(toolId: string): string {
+  if (toolId.includes('crud')) return 'management';
+  if (toolId.includes('api')) return 'integration';
+  if (toolId.includes('database') || toolId.includes('table')) return 'data';
+  if (toolId.includes('file') || toolId.includes('document')) return 'storage';
+  if (toolId.includes('team')) return 'collaboration';
+  return 'utility';
 }
 
 function getCategoryFromApp(appId: string): string {
@@ -157,16 +171,17 @@ function getIconFromApp(appId: string): string {
 
 async function seedTools(): Promise<void> {
   try {
-    console.log('🔧 Starting tools seeding...');
+    console.log('🔧 Starting tools seeding from unified metadata...');
 
-    // Load curated tools (system tools)
-    const curatedTools = await loadCuratedTools();
-    const systemToolsData = curatedTools.map(convertCuratedToolToDatabase);
+    // Load unified metadata (both Emery and Pipedream tools)
+    const unifiedMetadata = await loadUnifiedMetadata();
 
-    console.log(`📦 Processing ${systemToolsData.length} system tools...`);
+    // Process Emery backend tools
+    const emeryToolsData = Object.values(unifiedMetadata.emery_tools).map(convertEmeryToolToDatabase);
+    console.log(`📦 Processing ${emeryToolsData.length} Emery backend tools...`);
 
-    // Insert system tools
-    for (const toolData of systemToolsData) {
+    // Insert Emery tools
+    for (const toolData of emeryToolsData) {
       try {
         const existing = await db.select().from(tools).where(eq(tools.id, toolData.id)).limit(1);
 
@@ -183,43 +198,43 @@ async function seedTools(): Promise<void> {
             })
             .where(eq(tools.id, toolData.id));
 
-          console.log(`  ✅ Updated system tool: ${toolData.displayName}`);
+          console.log(`  ✅ Updated Emery tool: ${toolData.displayName}`);
         } else {
           // Insert new
           await db.insert(tools).values(toolData);
-          console.log(`  ✅ Inserted system tool: ${toolData.displayName}`);
+          console.log(`  ✅ Inserted Emery tool: ${toolData.displayName}`);
         }
       } catch (error) {
         console.error(`  ❌ Error processing ${toolData.displayName}:`, error);
       }
     }
 
-    // Load Pipedream tools (OAuth tools) - process ALL available tools
-    const pipedreamMetadata = await loadPipedreamMetadata();
+    // Process Pipedream tools (OAuth tools) - process ALL available tools
+    const pipedreamTools = unifiedMetadata.pipedream_tools;
 
     // Get available apps from database instead of hardcoded list
     const availableApps = await db.select({ id: appTypes.id }).from(appTypes);
     const appIds = new Set(availableApps.map(app => app.id));
 
     console.log(`🔗 Found ${appIds.size} apps in database to process tools for`);
-    console.log(`📦 Processing ALL ${Object.keys(pipedreamMetadata).length} Pipedream tools (no limits)`);
+    console.log(`📦 Processing ALL ${Object.keys(pipedreamTools).length} Pipedream tools (no limits)`);
 
     const oauthToolsData: ToolData[] = [];
     let processedCount = 0;
     let matchedCount = 0;
     const BATCH_SIZE = 1000;
 
-    for (const [toolKey, tool] of Object.entries(pipedreamMetadata)) {
+    for (const [toolKey, tool] of Object.entries(pipedreamTools)) {
       processedCount++;
 
       // Only process tools for apps that exist in our app_types table
       if (appIds.has(tool.app)) {
-        oauthToolsData.push(convertPipedreamToolToDatabase(toolKey, tool));
+        oauthToolsData.push(convertPipedreamToolToDatabase(tool));
         matchedCount++;
 
         // Progress logging for large datasets
         if (matchedCount % BATCH_SIZE === 0) {
-          console.log(`  📈 Processed ${matchedCount} matching tools (${processedCount}/${Object.keys(pipedreamMetadata).length} total scanned)`);
+          console.log(`  📈 Processed ${matchedCount} matching tools (${processedCount}/${Object.keys(pipedreamTools).length} total scanned)`);
         }
       }
     }
@@ -279,10 +294,10 @@ async function seedTools(): Promise<void> {
     const systemTools = totalTools.filter(tool => tool.appId === 'emery');
     const oauthTools = totalTools.filter(tool => tool.appId !== 'emery');
 
-    console.log(`\n🎉 Tools seeding complete!`);
+    console.log(`\n🎉 Unified tools seeding complete!`);
     console.log(`Total tools in database: ${totalTools.length}`);
-    console.log(`System tools (emery): ${systemTools.length}`);
-    console.log(`OAuth tools: ${oauthTools.length}`);
+    console.log(`Emery backend tools: ${systemTools.length}`);
+    console.log(`Pipedream OAuth tools: ${oauthTools.length}`);
 
   } catch (error) {
     console.error('❌ Error seeding tools:', error);

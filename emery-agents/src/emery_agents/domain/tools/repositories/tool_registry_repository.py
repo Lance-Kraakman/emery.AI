@@ -14,29 +14,33 @@ class IToolRegistryRepository(ABC):
     """Repository interface for tool registry operations."""
     
     @abstractmethod
-    def load_tool(self, tool_config: ToolConfig) -> Any:
+    def load_tool(self, tool_config: ToolConfig, api_key: str = "", api_key_mode: str = "agent") -> Any:
         """
         Load a single tool instance from configuration.
-        
+
         Args:
             tool_config: Tool configuration
-            
+            api_key: API key for tool authentication
+            api_key_mode: Mode of API key usage ('user' or 'agent')
+
         Returns:
             Tool instance for execution framework
-            
+
         Raises:
             ValueError: If tool not found or cannot be loaded
         """
         pass
-    
+
     @abstractmethod
-    def load_tools(self, tool_configs: List[ToolConfig]) -> List[Any]:
+    def load_tools(self, tool_configs: List[ToolConfig], api_key: str = "", api_key_mode: str = "agent") -> List[Any]:
         """
         Load multiple tools from configurations.
-        
+
         Args:
             tool_configs: List of tool configurations
-            
+            api_key: API key for tool authentication
+            api_key_mode: Mode of API key usage ('user' or 'agent')
+
         Returns:
             List of tool instances
         """
