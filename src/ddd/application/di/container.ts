@@ -362,7 +362,8 @@ export class DIContainer {
     const toolConfigurationService = new ToolConfigurationDomainService();
     const toolConfigurationApplicationService = new ToolConfigurationApplicationService(
       agentRepository,
-      toolConfigurationService
+      toolConfigurationService,
+      toolRegistryService
     );
     this.repositories.set('IToolConfigurationService', toolConfigurationService);
     this.repositories.set('ToolConfigurationApplicationService', toolConfigurationApplicationService);
