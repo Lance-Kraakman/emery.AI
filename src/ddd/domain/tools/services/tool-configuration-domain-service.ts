@@ -91,7 +91,6 @@ export class ToolConfigurationDomainService implements IToolConfigurationService
   private getDefaultBaseUrl(): string {
     // Business rule: Default to localhost for development, production URL for production
     if (typeof window !== 'undefined') {
-      // Browser environment
       return window.location.origin;
     }
 
