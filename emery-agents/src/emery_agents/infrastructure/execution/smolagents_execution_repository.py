@@ -320,7 +320,8 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
                 if api_key:
                     config = {
                         "api_key": api_key,  # Already a Value Object from context
-                        "base_url": base_url
+                        "base_url": base_url,
+                        "api_key_mode": "agent"  # Agent execution uses agent mode
                     }
                     logger.info(f"[EXECUTION] Configured Pipedream tool {tool_name} with API key context")
                 else:

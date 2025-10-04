@@ -79,22 +79,11 @@ export class ToolConfigurationDomainService implements IToolConfigurationService
    */
   private addApiKeyAuthentication(tool: ToolConfig, agentApiKey: string): ToolConfig {
     // Use the existing ToolConfig.withConfig method to add authentication
+    // AIDEV-NOTE: Do not set base_url - let Python worker read from NEXTJS_BASE_URL environment variable
+    // This allows Docker containers to use service names (e.g., app-integration:3000)
     return tool.withConfig({
       api_key: agentApiKey,
-      base_url: this.getDefaultBaseUrl()
+      api_key_mode: 'user'  // Chat flow uses user API keys
     });
-  }
-
-  /**
-   * Get default base URL for tool proxy
-   */
-  private getDefaultBaseUrl(): string {
-    // Business rule: Default to localhost for development, production URL for production
-    if (typeof window !== 'undefined') {
-      return window.location.origin;
-    }
-
-    // Server environment
-    return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   }
 }

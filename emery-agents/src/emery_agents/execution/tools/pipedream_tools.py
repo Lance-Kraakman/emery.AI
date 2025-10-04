@@ -6,6 +6,7 @@ Uses Value Objects for type safety and static metadata for simplicity.
 """
 
 import json
+import os
 import requests
 import inspect
 from pathlib import Path
@@ -47,8 +48,12 @@ class PipedreamTool(Tool):
             raise ValueError("api_key required")
 
         self.agent_api_key = ApiKey(api_key) if isinstance(api_key, str) else api_key
-        self.base_url = config.config.get("base_url", "http://localhost:3000")
-        
+        self.base_url = config.config.get("base_url") or os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
+        self.api_key_mode = config.config.get("api_key_mode", "user")  # Default to user for chat flow
+
+        # Required by smolagents Tool base class
+        self.is_initialized = True
+
         # Create forward method with proper signature for smolagents
         self._setup_forward_method(metadata["inputs"])
     
@@ -131,14 +136,19 @@ class PipedreamTool(Tool):
         parts = self.tool_id.split("-", 1)
         service = parts[0]
         action = parts[1].replace("-", "_") if len(parts) > 1 else "default"
-        
+
         response = requests.post(
-            f"{self.base_url}/api/agents/proxy",
+            f"{self.base_url}/api/connections/proxy",
             headers={
                 "Authorization": f"Bearer {api_key_value}",
                 "Content-Type": "application/json"
             },
-            json={"service": service, "action": action, "params": kwargs},
+            json={
+                "service": service,
+                "action": action,
+                "params": kwargs,
+                "api_key_mode": self.api_key_mode  # Use mode from config
+            },
             timeout=30
         )
         

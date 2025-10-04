@@ -90,6 +90,7 @@ services:
       WORKER_ADDRESS: 50051
       ORGANIZATION_ID: default
       USE_PIPEDREAM_TOOLS: true
+      NEXTJS_BASE_URL: http://app-integration:3000
     depends_on:
       postgres-integration:
         condition: service_healthy
