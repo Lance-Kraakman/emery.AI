@@ -23,9 +23,9 @@ export class ApiKey {
   }
 
   private isValid(key: string): boolean {
-    // API key format: key_[32 hex characters]
-    const keyRegex = /^key_[a-f0-9]{32}$/;
-    return keyRegex.test(key);
+    // Accept any non-empty string as valid API key
+    // Supports both internal format (key_xxx) and external OAuth keys
+    return key.length > 0;
   }
 
   static fromString(value: string): ApiKey {
