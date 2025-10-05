@@ -64,7 +64,7 @@ export function getEmbeddingModel(modelOverride?: string) {
   // Use direct HuggingFace Serverless API for embeddings (bypasses router issues)
   const hfClient = new InferenceClient(hfToken, {
     // Use direct model endpoint instead of router to avoid provider selection issues
-    endpointUrl: `https://d5dbt5o5chwagd2v.us-east-1.aws.endpoints.huggingface.cloud`,
+    endpointUrl: `https://cq8xpkgutl12uji0.us-east-1.aws.endpoints.huggingface.cloud`,
     retry_on_error: true,
   })
   

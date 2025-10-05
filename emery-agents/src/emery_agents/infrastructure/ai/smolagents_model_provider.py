@@ -127,7 +127,7 @@ class SmolagentsModelProvider:
     def __init__(self):
         """Initialize with custom endpoint and token."""
         self.hf_token = self._get_hf_token()
-        self.endpoint_url = 'https://tpn5ewnxy4r17v9c.us-east-1.aws.endpoints.huggingface.cloud/v1'
+        self.endpoint_url = 'https://dxv8q9ubsizxcp4v.us-east-1.aws.endpoints.huggingface.cloud/v1'
 
         # Simple model config - all point to custom endpoint for now
         self.models = {

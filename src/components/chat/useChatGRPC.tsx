@@ -35,9 +35,9 @@ function extractToolReferencesFromMessage(message: string): Array<{name: string,
         name: toolName,
         version: '', // Empty version for now
         config: {
-          // Basic config that will be enriched by server with user's API key
+          // Basic config that will be enriched by server with user's API key and runtime settings
           api_key: '', // Will be filled by server-side enrichment
-          base_url: 'http://localhost:3000' // Default base URL
+          // AIDEV-NOTE: Don't set base_url here - Python worker reads from NEXTJS_BASE_URL environment
         }
       })
     }
