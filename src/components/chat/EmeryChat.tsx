@@ -28,6 +28,7 @@ import { createChatContextForPage } from '@/components/layout/types'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { ToolPanel } from './ToolPanel'
+import { useChatHandler } from './ChatProvider'
 import { resolveReferences } from '@/app/actions/references'
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
@@ -358,15 +359,15 @@ function ChatContentWithCanvas({
 }
 
 
-interface EmeryChatProps {
-  handler: any; // Chat handler from layout
-}
-
-export function EmeryChat({ handler }: EmeryChatProps) {
+// AIDEV-NOTE: Handler now comes from ChatProvider context, not props
+export function EmeryChat() {
   // ALL HOOKS MUST BE CALLED FIRST - NO CONDITIONAL RETURNS BEFORE THIS POINT
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { data: session } = useSession()
+
+  // Get chat handler from context
+  const handler = useChatHandler()
 
   // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders
   const chatState = useStore(uiStateStore, uiStateSelectors.chatState)

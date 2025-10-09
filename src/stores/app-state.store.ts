@@ -316,15 +316,15 @@ export const appStateSelectors = {
   teams: (state: AppState) => state.teams,
   
   // Derived data selectors
-  allTables: (state: AppState) => state.databases.flatMap(db => db.tables),
-  getAgentById: (agentId: number) => (state: AppState) => 
+  allTables: (state: AppState) => (state.databases || []).flatMap(db => db.tables),
+  getAgentById: (agentId: number) => (state: AppState) =>
     state.agents.find(agent => agent.id === agentId),
-  getTeamById: (teamId: number) => (state: AppState) => 
+  getTeamById: (teamId: number) => (state: AppState) =>
     state.teams.find(team => team.id === teamId),
-  getDatabaseById: (databaseId: number) => (state: AppState) => 
+  getDatabaseById: (databaseId: number) => (state: AppState) =>
     state.databases.find(db => db.id === databaseId),
-  getTableById: (tableId: number) => (state: AppState) => 
-    state.databases.flatMap(db => db.tables).find(table => table.id === tableId),
+  getTableById: (tableId: number) => (state: AppState) =>
+    (state.databases || []).flatMap(db => db.tables).find(table => table.id === tableId),
   
   // Status selectors
   isLoading: (state: AppState) => state.isLoading,
