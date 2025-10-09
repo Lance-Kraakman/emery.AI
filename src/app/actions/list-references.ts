@@ -114,16 +114,19 @@ async function getTableReferences(
   query: string,
   categories: string[]
 ): Promise<SimpleReference[]> {
-  if (!emeryData?.databases) return [];
+  // Defensive check for SSR/build time when emeryData might be undefined or malformed
+  if (!emeryData?.databases || !Array.isArray(emeryData.databases)) {
+    return [];
+  }
 
   const tableAppService = getTableApplicationService();
   const references: SimpleReference[] = [];
 
-  // Get all tables from all databases
-  const allTables = emeryData.databases.flatMap((db: any) => 
-    (db.tables || []).map((table: any) => ({ 
-      ...table, 
-      databaseName: db.name 
+  // Get all tables from all databases with additional safety check
+  const allTables = (emeryData.databases || []).flatMap((db: any) =>
+    (db?.tables || []).map((table: any) => ({
+      ...table,
+      databaseName: db?.name || 'Unknown'
     }))
   );
 
