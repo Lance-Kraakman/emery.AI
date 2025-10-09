@@ -48,7 +48,21 @@ interface LayoutContextValue {
 const LayoutContext = createContext<LayoutContextValue | undefined>(undefined)
 
 // Custom hook to use layout context
+/**
+ * @deprecated Use fine-grained store subscriptions instead:
+ *
+ * ```tsx
+ * import { useStore } from '@tanstack/react-store'
+ * import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
+ *
+ * const sidebarState = useStore(uiStateStore, uiStateSelectors.sidebarState)
+ * const toggleSidebar = uiStateActions.toggleSidebar
+ * ```
+ *
+ * This prevents unnecessary re-renders when unrelated state changes.
+ */
 export function useLayout(): LayoutContextValue {
+  console.warn('[useLayout] DEPRECATED: Use fine-grained store subscriptions instead. See LayoutProvider.tsx for migration guide.')
   const context = useContext(LayoutContext)
   if (!context) {
     throw new Error('useLayout must be used within a LayoutProvider')

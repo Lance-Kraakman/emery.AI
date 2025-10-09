@@ -6,7 +6,8 @@ import { Loading } from '@/components/ui/loading'
 import { EmeryChat } from '@/components/chat/EmeryChat'
 import { ChatSection, useChatCanvas } from '@llamaindex/chat-ui'
 import { ChatCanvas } from '@/components/chat/ChatCanvas'
-import { useLayout } from './LayoutProvider'
+import { useStore } from '@tanstack/react-store'
+import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
 import type { EmeryLayoutProps, ChatContextConfig } from './types'
 import { useChatGRPC } from '@/components/chat/useChatGRPC'
 
@@ -34,21 +35,20 @@ function EmeryLayoutInner({
   chatContext,
   enableChat = true
 }: EmeryLayoutInnerProps) {
-  const {
-    sidebarState,
-    chatState,
-    isMobile,
-    setChatContext,
-    setSidebarState,
-    setChatState
-  } = useLayout()
+  // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders when unrelated state changes
+  const sidebarState = useStore(uiStateStore, uiStateSelectors.sidebarState)
+  const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
+  const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
+  const setChatContext = uiStateActions.setChatContext
+  const setSidebarState = uiStateActions.setSidebarState
+  const setChatState = uiStateActions.setChatState
 
   // Set chat context when provided
   React.useEffect(() => {
     if (chatContext) {
       setChatContext(chatContext)
     }
-  }, [chatContext, setChatContext])
+  }, [setChatContext]) // AIDEV-NOTE: Removed chatContext to prevent infinite re-render loop
 
   // Create basic chat handler for canvas functionality in main content
   const canvasHandler = useChatGRPC({
