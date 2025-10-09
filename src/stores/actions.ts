@@ -354,7 +354,7 @@ export const storeActions = {
     )
 
     // Search tables
-    results.tables = appState.databases.flatMap(db => db.tables).filter(table =>
+    results.tables = (appState.databases || []).flatMap(db => db.tables).filter(table =>
       table.name.toLowerCase().includes(lowerQuery)
     )
 

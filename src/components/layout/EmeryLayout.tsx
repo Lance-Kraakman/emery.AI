@@ -9,7 +9,7 @@ import { ChatCanvas } from '@/components/chat/ChatCanvas'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
 import type { EmeryLayoutProps, ChatContextConfig } from './types'
-import { useChatGRPC } from '@/components/chat/useChatGRPC'
+import { ChatProvider, useChatHandler } from '@/components/chat/ChatProvider'
 
 /** p p
  * EmeryLayout - Core layout component with canvas expansion logic
@@ -50,20 +50,14 @@ function EmeryLayoutInner({
     }
   }, [setChatContext]) // AIDEV-NOTE: Removed chatContext to prevent infinite re-render loop
 
-  // Create basic chat handler for canvas functionality in main content
-  const canvasHandler = useChatGRPC({
-    domainType: chatContext?.domainType,
-    domainId: chatContext?.domainId,
-    chatId: undefined
-  })
-
   // Component that conditionally renders canvas or main content
-  function MainContentWithCanvas({ children }: { children: React.ReactNode }) {
+  // AIDEV-NOTE: Memoized to prevent re-renders when chat messages update
+  const MainContentWithCanvas = React.memo(function MainContentWithCanvas({ children }: { children: React.ReactNode }) {
     const { displayedArtifact } = useChatCanvas()
 
     // Show canvas when artifact is displayed, otherwise show children
     return displayedArtifact ? <div className="h-full"><ChatCanvas /></div> : <>{children}</>
-  }
+  })
 
   // Calculate responsive classes
   const sidebarWidth = getSidebarWidth(sidebarState, isMobile)
@@ -95,49 +89,52 @@ function EmeryLayoutInner({
       </aside>
 
       {/* Main Content Area + Chat - 3-panel layout wrapped in ChatSection */}
+      {/* AIDEV-NOTE: ChatSection provides LlamaIndex artifact context, ChatProvider isolates chat handler */}
       <ChatSection
-        handler={canvasHandler}
+        handler={{} as any} // Dummy handler for ChatSection context only
         className="flex-1 flex min-h-0 overflow-hidden h-screen"
         autoOpenCanvas={false}
       >
-        <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
-          {/* Main Content Area with Canvas */}
-          <main className="flex-1 overflow-y-auto h-full">
-            <MainContentWithCanvas>
-              {children || (
-                <div className="h-full flex items-center justify-center p-6">
-                  <div className="text-center text-muted-foreground">
-                    <p>Select a page from the sidebar to get started</p>
+        <ChatProvider chatContext={chatContext}>
+          <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
+            {/* Main Content Area with Canvas */}
+            <main className="flex-1 overflow-y-auto h-full">
+              <MainContentWithCanvas>
+                {children || (
+                  <div className="h-full flex items-center justify-center p-6">
+                    <div className="text-center text-muted-foreground">
+                      <p>Select a page from the sidebar to get started</p>
+                    </div>
                   </div>
-                </div>
-              )}
-            </MainContentWithCanvas>
-          </main>
+                )}
+              </MainContentWithCanvas>
+            </main>
 
-          {/* Chat Area - always visible */}
-          {enableChat && (
-            <div className="w-96 border-l border-border">
-              <Suspense fallback={<ChatSkeleton />}>
-                <EmeryChat handler={canvasHandler} />
-              </Suspense>
-            </div>
-          )}
-        </div>
+            {/* Chat Area - always visible */}
+            {enableChat && (
+              <div className="w-96 border-l border-border">
+                <Suspense fallback={<ChatSkeleton />}>
+                  <EmeryChat />
+                </Suspense>
+              </div>
+            )}
+          </div>
+        </ChatProvider>
       </ChatSection>
 
-      {/* Mobile Chat Overlay - Remove since EmeryChat handles everything */}
+      {/* Mobile Chat Overlay */}
       {isMobile && enableChat && chatState === 'expanded' && (
-        <>
+        <ChatProvider chatContext={chatContext}>
           <div
             className="fixed inset-0 bg-black/50 z-20"
             onClick={() => setChatState('collapsed')}
           />
           <div className="fixed right-0 top-0 h-screen w-80 z-30 bg-card border-l border-border">
             <Suspense fallback={<ChatSkeleton />}>
-              <EmeryChat handler={canvasHandler} />
+              <EmeryChat />
             </Suspense>
           </div>
-        </>
+        </ChatProvider>
       )}
     </div>
   )
