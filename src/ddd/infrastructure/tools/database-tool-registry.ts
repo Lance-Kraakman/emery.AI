@@ -112,6 +112,9 @@ export class DatabaseToolRegistry implements IToolRegistryService {
     // Determine tool category
     const category = this.mapCategoryToToolCategory(tool.category || 'other');
 
+    // Icon priority: tool-specific icon > app icon URL > default emoji
+    const toolIcon = tool.icon || app?.iconUrl || '🔧';
+
     return new ToolMetadata(
       tool.id,
       tool.displayName,
@@ -120,13 +123,14 @@ export class DatabaseToolRegistry implements IToolRegistryService {
       connectionType !== ConnectionType.NONE, // requiresConnection
       connectionType,
       app?.id ? [app.id] : [], // requiredApps
-      tool.icon || '🔧',
+      toolIcon, // Use icon with fallback to app icon
       [], // tags
       [], // mapsToReferences
       undefined, // autoBindParameter
       {
         app: app?.name || 'Unknown',
         appId: tool.appId,
+        appIconUrl: app?.iconUrl || undefined, // NEW: Include app icon URL separately (convert null to undefined)
         supportsOAuth: app?.supportsOAuth || false,
         insertText: config.ui_config?.insert_text || `@tool:${tool.id}`,
         supportsArtifacts: (config.ui_config && 'supports_artifacts' in config.ui_config) ? config.ui_config.supports_artifacts || false : false,
@@ -141,6 +145,50 @@ export class DatabaseToolRegistry implements IToolRegistryService {
    */
   private mapCategoryToToolCategory(category: string): ToolCategory {
     return toolResolverService.mapDatabaseCategoryToToolCategory(category);
+  }
+
+  /**
+   * Get icon for a specific tool (with app fallback)
+   * Priority: tool.icon > app.iconUrl > default emoji
+   */
+  async getToolIcon(toolId: string): Promise<string> {
+    try {
+      const result = await this.db
+        .select({
+          toolIcon: tools.icon,
+          appIconUrl: appTypes.iconUrl,
+        })
+        .from(tools)
+        .leftJoin(appTypes, eq(tools.appId, appTypes.id))
+        .where(eq(tools.id, toolId))
+        .limit(1);
+
+      if (!result[0]) return '🔧'; // Default emoji
+
+      // Priority: tool icon > app icon > default
+      return result[0].toolIcon || result[0].appIconUrl || '🔧';
+    } catch (error) {
+      console.error('[DatabaseToolRegistry] Error getting tool icon:', error);
+      return '🔧';
+    }
+  }
+
+  /**
+   * Get app icon URL
+   */
+  async getAppIcon(appId: string): Promise<string | null> {
+    try {
+      const result = await this.db
+        .select({ iconUrl: appTypes.iconUrl })
+        .from(appTypes)
+        .where(eq(appTypes.id, appId))
+        .limit(1);
+
+      return result[0]?.iconUrl || null;
+    } catch (error) {
+      console.error('[DatabaseToolRegistry] Error getting app icon:', error);
+      return null;
+    }
   }
 
   /**

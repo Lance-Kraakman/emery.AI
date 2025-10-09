@@ -629,17 +629,8 @@ export async function getConnectionSetupUrl(
 
     console.log(`[ConnectionSetupUrl] Setting up connection for ${appName}, redirect: ${redirectPath}`);
 
-    // Validate app name first to provide better error messages
-    try {
-      AppName.fromString(appName);
-    } catch (error) {
-      const supportedApps = AppName.getAllSupported().join(', ');
-      console.error(`[ConnectionSetupUrl] Unsupported app: ${appName}`);
-      return {
-        success: false,
-        error: `"${appName}" is not supported. Available apps: ${supportedApps}`
-      };
-    }
+    // AIDEV-NOTE: Removed hardcoded validation - apps are validated against database
+    // If app doesn't exist in database, the connection will fail gracefully later
 
     // Use existing getAppConnectionUrl function
     const result = await getAppConnectionUrl({

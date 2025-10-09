@@ -74,6 +74,7 @@ async function fetchAndSavePipedreamTools() {
   // First, discover ALL available apps
   console.log('🔍 Discovering all available Pipedream apps...');
   let allApps: string[] = [];
+  const appIconMapping = new Map<string, string>(); // Store app icons from Pipedream CDN
   
   try {
     // Get all apps using cursor-based pagination (Pipedream standard)
@@ -125,7 +126,7 @@ async function fetchAndSavePipedreamTools() {
           break;
         }
 
-        // Extract and track unique apps
+        // Extract and track unique apps with their icon URLs
         let newAppsThisPage = 0;
         for (const app of appsData) {
           const appSlug = app.key || app.slug || app.name_slug || app.id;
@@ -133,6 +134,11 @@ async function fetchAndSavePipedreamTools() {
             if (!uniqueApps.has(appSlug)) {
               uniqueApps.add(appSlug);
               newAppsThisPage++;
+            }
+            // Capture icon URL from Pipedream CDN
+            const iconUrl = app.img_src || app.icon_url;
+            if (iconUrl && typeof iconUrl === 'string') {
+              appIconMapping.set(appSlug, iconUrl);
             }
           }
         }
@@ -316,8 +322,8 @@ async function fetchAndSavePipedreamTools() {
     }
   }
 
-  // Generate unified metadata with the fetched tools
-  await generateUnifiedMetadata(toolMetadata, totalActions, totalMcpTools, failedApps, targetApps.length);
+  // Generate unified metadata with the fetched tools and app icons
+  await generateUnifiedMetadata(toolMetadata, totalActions, totalMcpTools, failedApps, targetApps.length, appIconMapping);
 }
 
 async function generateUnifiedMetadata(
@@ -325,7 +331,8 @@ async function generateUnifiedMetadata(
   totalActions: number,
   totalMcpTools: number,
   failedApps: string[],
-  processedAppsCount: number
+  processedAppsCount: number,
+  appIconMapping: Map<string, string>
 ) {
   // Add Emery backend tools (hardcoded from actual Python implementations)
   const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
@@ -631,8 +638,9 @@ async function generateUnifiedMetadata(
     }
   };
 
-  // Create unified metadata structure
+  // Create unified metadata structure with app icons from Pipedream CDN
   const unifiedMetadata = {
+    app_icons: Object.fromEntries(appIconMapping), // Pipedream CDN icon URLs
     pipedream_tools: toolMetadata,
     emery_tools: EMERY_BACKEND_TOOLS
   };
@@ -653,11 +661,13 @@ async function generateUnifiedMetadata(
   const totalPipedreamTools = totalActions + totalMcpTools;
   const totalEmeryTools = Object.keys(EMERY_BACKEND_TOOLS).length;
   const totalAllTools = totalPipedreamTools + totalEmeryTools;
+  const totalAppIcons = appIconMapping.size;
 
   console.log('\n' + '='.repeat(70));
   console.log('📊 UNIFIED TOOL METADATA GENERATION SUMMARY');
   console.log('='.repeat(70));
   console.log(`✅ Successfully processed: ${processedAppsCount} Pipedream apps`);
+  console.log(`🎨 Captured app icons: ${totalAppIcons} CDN URLs`);
   console.log(`📦 Pipedream action tools: ${totalActions}`);
   console.log(`🔧 Pipedream MCP tools: ${totalMcpTools}`);
   console.log(`🎯 Total Pipedream tools: ${totalPipedreamTools}`);
