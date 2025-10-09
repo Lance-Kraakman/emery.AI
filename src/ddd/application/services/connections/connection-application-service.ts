@@ -315,12 +315,12 @@ export class ConnectionApplicationService {
             return true; // If normalization fails, consider it missing
           }
         })
-        .filter(app => AppName.getAllSupported().includes(app)) // Only supported apps
+        // AIDEV-NOTE: Removed hardcoded getAllSupported() filter - all apps from database are valid
         .map(app => {
           try {
             return AppName.fromString(app);
           } catch (error) {
-            console.warn(`[ConnectionService] Skipping unsupported app: ${app}`);
+            console.warn(`[ConnectionService] Failed to create AppName for '${app}':`, error);
             return null;
           }
         })

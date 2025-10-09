@@ -168,7 +168,10 @@ interface AppTypeData {
   supportsOAuth: boolean;
 }
 
-async function loadPipedreamMetadata(): Promise<Record<string, PipedreamTool>> {
+async function loadPipedreamMetadata(): Promise<{
+  tools: Record<string, PipedreamTool>;
+  appIcons: Record<string, string>;
+}> {
   const tsPath = path.join(process.cwd(), 'src', 'ddd', 'domain', 'tools', 'config', 'pipedream-tools.generated.ts');
 
   if (!fs.existsSync(tsPath)) {
@@ -189,7 +192,27 @@ async function loadPipedreamMetadata(): Promise<Record<string, PipedreamTool>> {
   }
 
   console.log(`Loaded ${Object.keys(PIPEDREAM_TOOLS).length} Pipedream tools from TypeScript`);
-  return PIPEDREAM_TOOLS;
+
+  // Also load app icons from unified metadata JSON
+  const jsonPath = path.join(process.cwd(), 'emery-agents', 'src', 'emery_agents', 'execution', 'tools', 'unified_metadata.json');
+  let appIcons: Record<string, string> = {};
+
+  if (fs.existsSync(jsonPath)) {
+    try {
+      const unifiedMetadata = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+      appIcons = unifiedMetadata.app_icons || {};
+      console.log(`Loaded ${Object.keys(appIcons).length} app icon URLs from unified metadata`);
+    } catch (error) {
+      console.warn('Could not load app icons from unified metadata:', error);
+    }
+  } else {
+    console.warn('Unified metadata not found - app icons will use fallback');
+  }
+
+  return {
+    tools: PIPEDREAM_TOOLS,
+    appIcons
+  };
 }
 
 function extractAppStats(metadata: Record<string, PipedreamTool>): Record<string, number> {
@@ -204,7 +227,7 @@ function extractAppStats(metadata: Record<string, PipedreamTool>): Record<string
   return appStats;
 }
 
-function generateAppTypeData(appId: string): AppTypeData {
+function generateAppTypeData(appId: string, cdnIconUrl?: string): AppTypeData {
   const metadata = APP_METADATA[appId];
 
   // Generate fallback data for apps not in our metadata
@@ -217,12 +240,15 @@ function generateAppTypeData(appId: string): AppTypeData {
 
   const appData = metadata || fallbackData;
 
+  // Icon priority: 1) hardcoded local, 2) Pipedream CDN, 3) generated local path
+  const iconUrl = metadata?.iconUrl || cdnIconUrl || `/icons/${appId}.svg`;
+
   return {
     id: appId,
     name: appData.name,
     description: appData.description,
     category: appData.category,
-    iconUrl: appData.iconUrl,
+    iconUrl,
     supportsOAuth: appData.supportsOAuth !== false, // Default to true
   };
 }
@@ -331,8 +357,8 @@ async function seedAppTypes(): Promise<void> {
     });
     console.log(`Found ${systemAppIds.length} system apps: ${systemAppIds.join(', ')}`);
 
-    // STEP 2: Load Pipedream metadata for OAuth apps
-    const metadata = await loadPipedreamMetadata();
+    // STEP 2: Load Pipedream metadata for OAuth apps with icon URLs
+    const { tools: metadata, appIcons } = await loadPipedreamMetadata();
 
     // Extract OAuth app statistics from Pipedream metadata
     const appStats = extractAppStats(metadata);
@@ -375,7 +401,9 @@ async function seedAppTypes(): Promise<void> {
 
     // Generate app type data for ALL apps (system first, then OAuth, then discovered)
     const allAppIds = [...systemAppIds, ...oauthAppIds, ...additionalApps];
-    const appTypeData: AppTypeData[] = allAppIds.map(appId => generateAppTypeData(appId));
+    const appTypeData: AppTypeData[] = allAppIds.map(appId =>
+      generateAppTypeData(appId, appIcons[appId]) // Pass CDN icon URL
+    );
 
     console.log(`\n🗃️  Preparing to insert ${appTypeData.length} app types (${systemAppIds.length} system + ${oauthAppIds.length} OAuth + ${additionalApps.length} discovered)...`);
 

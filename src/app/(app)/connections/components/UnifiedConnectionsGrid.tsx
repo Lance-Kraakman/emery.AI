@@ -42,7 +42,7 @@ export function UnifiedConnectionsGrid({
 }: UnifiedConnectionsGridProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<FilterType>('all');
-  const [sort, setSort] = useState<SortType>('name');
+  const [sort, setSort] = useState<SortType>('status');
   const [viewType, setViewType] = useState<ViewType>('grid');
 
   // Use the appropriate connections list based on duplicate toggle

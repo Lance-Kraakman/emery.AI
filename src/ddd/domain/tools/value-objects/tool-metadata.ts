@@ -63,6 +63,7 @@ export class ToolMetadata {
     public readonly extra?: {
       app?: string;
       appId?: string;
+      appIconUrl?: string; // NEW: App icon URL (CDN or local path)
       supportsOAuth?: boolean;
       insertText?: string;
       supportsArtifacts?: boolean;

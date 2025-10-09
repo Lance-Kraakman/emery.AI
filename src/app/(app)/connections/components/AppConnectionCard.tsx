@@ -158,35 +158,23 @@ export function AppConnectionCard({
   return (
     <Card className={`transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${isConnected ? 'ring-1 ring-green-200 bg-green-50/30' : ''} ${className}`}>
       <CardContent className="p-4">
-        <div className="space-y-4">
-          {/* App Header */}
-          <div className="flex items-start justify-between">
-            <div className="flex items-center space-x-3 flex-1 min-w-0">
-              <div className="flex-shrink-0">
-                <img
-                  className="w-10 h-10 rounded-lg ring-1 ring-border"
-                  src={app.icon}
-                  alt={app.name}
-                  onError={(e) => {
-                    // Fallback to a simple colored circle with first letter
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = 'none';
-                    target.nextElementSibling?.classList.remove('hidden');
-                  }}
-                />
-                <div className="hidden w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
-                  {app.name.charAt(0)}
-                </div>
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-medium text-sm truncate">{app.name}</h3>
-                <Badge
-                  variant={status.variant}
-                  className="text-xs flex items-center gap-1 w-fit mt-1"
-                >
-                  {status.icon}
-                  {status.label}
-                </Badge>
+        <div className="space-y-3">
+          {/* Top Row: Icon + Menu */}
+          <div className="flex items-center justify-between">
+            <div className="flex-shrink-0">
+              <img
+                className="w-10 h-10 rounded-lg ring-1 ring-border"
+                src={app.icon}
+                alt={app.name}
+                onError={(e) => {
+                  // Fallback to a simple colored circle with first letter
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  target.nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+              <div className="hidden w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
+                {app.name.charAt(0)}
               </div>
             </div>
 
@@ -229,6 +217,18 @@ export function AppConnectionCard({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+
+          {/* Full Width App Name */}
+          <h3 className="font-medium text-sm line-clamp-2">{app.name}</h3>
+
+          {/* Status Badge */}
+          <Badge
+            variant={status.variant}
+            className="text-xs flex items-center gap-1 w-fit"
+          >
+            {status.icon}
+            {status.label}
+          </Badge>
 
           {/* Status Description */}
           <div className="space-y-2">
