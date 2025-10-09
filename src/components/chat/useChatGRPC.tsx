@@ -5,7 +5,8 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { ChatHandler, Message } from '@llamaindex/chat-ui'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
-import { useLayout } from '@/components/layout/LayoutProvider'
+import { useStore } from '@tanstack/react-store'
+import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
 import { createChatStreamRequest, type ChatContextOptions } from './types/chat-requests'
 import { loadChatWithFullHistory, getCurrentChatSession } from '@/app/actions/chat-history'
 import type { ChatMessageDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
@@ -87,7 +88,8 @@ export function useChatGRPC(
   const [isClient, setIsClient] = useState(false)
   const [currentChatId, setCurrentChatId] = useState<string | undefined>()
   const scrollRef = useRef<HTMLDivElement>(null)
-  const { chatContext } = useLayout()
+  // AIDEV-NOTE: Use fine-grained store subscription instead of useLayout()
+  const chatContext = useStore(uiStateStore, uiStateSelectors.chatContext)
 
   // Tool management state
   const [selectedTools, setSelectedTools] = useState<ToolDTO[]>([])

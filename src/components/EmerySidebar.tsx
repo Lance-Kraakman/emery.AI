@@ -31,7 +31,6 @@ import { useEmeryStore } from "@/contexts/EmeryStoreProvider"
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
 import { storeActions, uiStateActions } from '@/stores/actions'
-import { useLayout } from "@/components/layout/LayoutProvider"
 
 const navItems = [
   { href: "/mission-control", label: "Mission Control", icon: Target },
@@ -68,9 +67,11 @@ export function EmerySidebar() {
   const searchParams = useSearchParams()
   const { data: sessionData } = useSession()
   const { data, isLoading } = useEmeryStore()
-  // Use TanStack Store for collapsible state management
+  // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders
   const globalOpenCollapsibles = useStore(uiStateStore, uiStateSelectors.openCollapsibles)
-  const { sidebarState, toggleSidebar, isMobile } = useLayout()
+  const sidebarState = useStore(uiStateStore, uiStateSelectors.sidebarState)
+  const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
+  const toggleSidebar = uiStateActions.toggleSidebar
   // Use store state instead of local state
   const openCollapsibles = globalOpenCollapsibles
   

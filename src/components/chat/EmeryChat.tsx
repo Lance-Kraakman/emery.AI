@@ -19,7 +19,8 @@ import {
   Lightbulb
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useLayout } from '@/components/layout/LayoutProvider'
+import { useStore } from '@tanstack/react-store'
+import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
 import { ChatCanvas } from './ChatCanvas'
 import CustomChatInput from './CustomChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
@@ -67,9 +68,13 @@ function EmeryChatHeader({
   onNewChat, 
   onChatHistoryUpdate,
   userId,
-  organizationId 
+  organizationId
 }: EmeryChatHeaderProps) {
-  const { chatState, toggleChat, canvasState, toggleCanvas } = useLayout()
+  // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders
+  const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
+  const canvasState = useStore(uiStateStore, uiStateSelectors.canvasState)
+  const toggleChat = uiStateActions.toggleChat
+  const toggleCanvas = uiStateActions.toggleCanvas
   
   // Determine context subtitle based on domain
   const getSubtitle = () => {
@@ -362,7 +367,15 @@ export function EmeryChat({ handler }: EmeryChatProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { data: session } = useSession()
-  const { chatState, canvasState, isMobile, chatContext, toggleCanvas, setChatContext } = useLayout()
+
+  // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders
+  const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
+  const canvasState = useStore(uiStateStore, uiStateSelectors.canvasState)
+  const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
+  const chatContext = useStore(uiStateStore, uiStateSelectors.chatContext)
+  const toggleCanvas = uiStateActions.toggleCanvas
+  const setChatContext = uiStateActions.setChatContext
+
   const { data: emeryData } = useEmery()
 
   // Chat session state
@@ -422,7 +435,7 @@ export function EmeryChat({ handler }: EmeryChatProps) {
       const detectedContext = createChatContextForPage(pageName, domainId, domainName)
       setChatContext(detectedContext)
     }
-  }, [pathname, searchParams, chatContext, setChatContext])
+  }, [pathname, searchParams, setChatContext]) // AIDEV-NOTE: Removed chatContext to prevent infinite re-render loop
 
   // Update currentChatId when handler provides one
   useEffect(() => {

@@ -3,7 +3,8 @@
 import React, { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft } from 'lucide-react'
-import { useLayout } from '@/components/layout/LayoutProvider'
+import { useStore } from '@tanstack/react-store'
+import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
 
 /**
  * BasePage - Base page structure for all page types
@@ -25,15 +26,23 @@ interface BasePageProps {
   className?: string
 }
 
-export function BasePage({ 
-  title, 
-  subtitle, 
-  icon, 
-  children, 
+export function BasePage({
+  title,
+  subtitle,
+  icon,
+  children,
   headerActions,
   className = ''
 }: BasePageProps) {
-  const { canvasState, toggleCanvas } = useLayout()
+  // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders
+  // when unrelated state (like chatContext) changes
+  const canvasState = useStore(uiStateStore, uiStateSelectors.canvasState)
+  const toggleCanvas = uiStateActions.toggleCanvas
+
+  // AIDEV-NOTE: Debug logging to track re-renders
+  React.useEffect(() => {
+    console.log('[BasePage] Re-rendered for page:', title, 'canvasState:', canvasState)
+  })
 
   // Note: Visibility now controlled by EmeryChat's conditional layout
   // BasePage always renders and lets EmeryChat decide when to show it
