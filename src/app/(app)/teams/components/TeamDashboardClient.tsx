@@ -17,8 +17,6 @@ import { teamsStore, teamsSelectors } from '@/stores/teams.store';
 import { useEmeryOrganization } from '@/contexts/EmeryStoreProvider';
 import { storeActions, teamsActions } from '@/stores/actions';
 
-// AIDEV-NOTE: Teams dashboard migrated to TanStack Store for better state management and performance
-
 interface TeamDashboardClientProps {
   initialTeams: TeamDTO[];
   agents: AgentDTO[];
@@ -28,7 +26,6 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
   const currentOrganization = useEmeryOrganization();
   
   // Use TanStack Store with fine-grained subscriptions
-  const teams = useStore(teamsStore, teamsSelectors.teams);
   const selectedTeam = useStore(teamsStore, teamsSelectors.selectedTeam);
   const searchQuery = useStore(teamsStore, teamsSelectors.searchQuery);
   const loading = useStore(teamsStore, teamsSelectors.loading);
@@ -179,6 +176,7 @@ export default function TeamDashboardClient({ initialTeams, agents }: TeamDashbo
         team={editingTeam}
         agents={agents}
         onUpdate={refreshTeams}
+        organizationId={currentOrganization?.id || 0}
       />
     </div>
   );
