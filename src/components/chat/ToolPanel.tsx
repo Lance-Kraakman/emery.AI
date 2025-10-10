@@ -200,11 +200,11 @@ export function ToolPanel({
   };
 
   // Calculate connection summary
-  const connectionSummary = connectionStatuses.length > 0 ? {
-    connected: connectionStatuses.filter(s => s.isConnected || s.connectionType === 'none').length,
-    total: connectionStatuses.length,
-    needsConnection: connectionStatuses.filter(s => !s.isConnected && s.connectionType !== 'none').length,
-    missingApps: [...new Set(connectionStatuses.flatMap(s => s.missingApps))]
+  const connectionSummary = (connectionStatuses || []).length > 0 ? {
+    connected: (connectionStatuses || []).filter(s => s.isConnected || s.connectionType === 'none').length,
+    total: (connectionStatuses || []).length,
+    needsConnection: (connectionStatuses || []).filter(s => !s.isConnected && s.connectionType !== 'none').length,
+    missingApps: [...new Set((connectionStatuses || []).flatMap(s => s.missingApps))]
   } : null;
 
   const handleSetupConnection = (appName: string) => {

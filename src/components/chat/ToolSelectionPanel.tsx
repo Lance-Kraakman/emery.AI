@@ -309,13 +309,13 @@ export default function ToolSelectionPanel({
   }
 
   const getConnectionSummary = () => {
-    if (connectionStatuses.length === 0) return null
+    if ((connectionStatuses || []).length === 0) return null
 
-    const connected = connectionStatuses.filter(s => s.isConnected || s.connectionType === 'none').length
-    const needsSetup = connectionStatuses.filter(s => !s.isConnected && s.connectionType !== 'none').length
-    const missingApps = [...new Set(connectionStatuses.flatMap(s => s.missingApps))]
+    const connected = (connectionStatuses || []).filter(s => s.isConnected || s.connectionType === 'none').length
+    const needsSetup = (connectionStatuses || []).filter(s => !s.isConnected && s.connectionType !== 'none').length
+    const missingApps = [...new Set((connectionStatuses || []).flatMap(s => s.missingApps))]
 
-    return { connected, total: connectionStatuses.length, needsSetup, missingApps }
+    return { connected, total: (connectionStatuses || []).length, needsSetup, missingApps }
   }
 
   const handleSetupConnection = (appName: string) => {
