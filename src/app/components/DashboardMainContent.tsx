@@ -41,16 +41,16 @@ export default function DashboardMainContent() {
               <div className="rounded-lg border p-6">
                 <h3 className="font-semibold mb-2">Tables</h3>
                 <p className="text-2xl font-bold text-primary">
-                  {data.databases.reduce((acc, db) => acc + db.tables.length, 0)}
+                  {(data?.databases || []).reduce((acc, db) => acc + db.tables.length, 0)}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Across {data.databases.length} database{data.databases.length !== 1 ? 's' : ''}
+                  Across {(data?.databases || []).length} database{(data?.databases || []).length !== 1 ? 's' : ''}
                 </p>
               </div>
-              
+
               <div className="rounded-lg border p-6">
                 <h3 className="font-semibold mb-2">Agents</h3>
-                <p className="text-2xl font-bold text-primary">{data.agents.length}</p>
+                <p className="text-2xl font-bold text-primary">{(data?.agents || []).length}</p>
                 <p className="text-sm text-muted-foreground">Active automation agents</p>
               </div>
               
@@ -64,7 +64,7 @@ export default function DashboardMainContent() {
             <div className="space-y-6">
               <div>
                 <h2 className="text-xl font-semibold mb-4">Recent Tables</h2>
-                {data.databases.length === 0 ? (
+                {(data?.databases || []).length === 0 ? (
                   <div className="rounded-lg border p-6 text-center">
                     <p className="text-muted-foreground mb-4">No tables yet</p>
                     <p className="text-sm text-muted-foreground">

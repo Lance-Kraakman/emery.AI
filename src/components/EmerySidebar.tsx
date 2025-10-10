@@ -92,21 +92,21 @@ export function EmerySidebar() {
     } else if (settingsPaths.includes(pathname)) {
       uiStateActions.setOpenCollapsibles(["Settings"])
     } else if (pathname?.startsWith("/data")) {
-      uiStateActions.setOpenCollapsibles(["Data", ...data.databases.map(db => db.id.toString())])
+      uiStateActions.setOpenCollapsibles(["Data", ...(data?.databases || []).map(db => db.id.toString())])
     } else {
       uiStateActions.setOpenCollapsibles([])
     }
-  }, [pathname, data.databases])
+  }, [pathname, data?.databases])
 
   // Remove local toggle function - use layout context instead
 
   const toggleCollapsible = (id: string) => {
     // Don't allow collapsible toggling when sidebar is collapsed or on mobile
     if (isCollapsed || isMobile) return
-    
+
     const isOpen = openCollapsibles.includes(id)
     if (id === "Data") {
-      const dbIds = data.databases.map(db => db.id.toString())
+      const dbIds = (data?.databases || []).map(db => db.id.toString())
       const newCollapsibles = isOpen
         ? openCollapsibles.filter(item => item !== id && !dbIds.includes(item))
         : [...openCollapsibles, id, ...dbIds]
@@ -209,10 +209,10 @@ export function EmerySidebar() {
                           <CollapsibleContent className="pl-7 py-1 space-y-1">
                             {isLoading ? (
                               <div className="text-xs text-muted-foreground px-3 py-2">Loading tables...</div>
-                            ) : data.databases.length === 0 ? (
+                            ) : (data?.databases || []).length === 0 ? (
                               <div className="text-xs text-muted-foreground px-3 py-2">No databases yet</div>
                             ) : (
-                              data.databases.map(db => (
+                              (data?.databases || []).map(db => (
                                 <Collapsible 
                                   key={db.id} 
                                   defaultOpen={pathname?.startsWith("/mission-control") && searchParams?.has('tableId')} 

@@ -251,44 +251,6 @@ export const storeActions = {
   },
 
   /**
-   * Data synchronization between stores
-   * AIDEV-TODO: Complete agent-team synchronization implementation with proper type consistency
-   */
-  // syncAgentToTeams(agentId: number, teamIds: number[]) {
-  //   // Update agent in app state
-  //   const appState = appStateStore.state
-  //   const agent = appState.agents.find(a => a.id === agentId)
-  //   
-  //   if (agent) {
-  //     // AIDEV-TODO: AgentDTO doesn't have teamIds property - need to define agent-team relationship properly
-  //     // appStateActions.updateAgent(agentId.toString(), { teamIds })
-  //     // agentsActions.updateAgent(agentId.toString(), { teamIds })
-  //   }
-  //   
-  //   // Update teams to include this agent
-  //   const teamsState = teamsStore.state
-  //   teamsState.teams.forEach(team => {
-  //     if (teamIds.includes(team.id)) {
-  //       // Add agent to team
-  //       const currentAgentIds = team.agentIds || []
-  //       if (!currentAgentIds.includes(agentId.toString())) {
-  //         teamsActions.updateTeam(team.id, {
-  //           agentIds: [...currentAgentIds, agentId.toString()]
-  //         })
-  //       }
-  //     } else {
-  //       // Remove agent from team
-  //       const currentAgentIds = team.agentIds || []
-  //       if (currentAgentIds.includes(agentId.toString())) {
-  //         teamsActions.updateTeam(team.id, {
-  //           agentIds: currentAgentIds.filter(id => id !== agentId.toString())
-  //         })
-  //       }
-  //     }
-  //   })
-  // },
-
-  /**
    * UI state management shortcuts
    */
   toggleSidebar() {

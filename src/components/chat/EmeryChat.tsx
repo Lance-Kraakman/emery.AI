@@ -610,21 +610,29 @@ export function EmeryChat() {
         />
         
         {/* Chat content area - takes remaining height after header */}
+        {/* AIDEV-NOTE: ChatSection provides LlamaIndex canvas context for reference tools */}
+        {/* Real handler from ChatProvider ensures messages array is always defined (no SSR flatMap errors) */}
         <div className="flex-1 min-h-0 overflow-hidden" suppressHydrationWarning>
-          <ChatContentWithCanvas
-            selectedTools={selectedTools}
-            onToolsChange={handleToolsChange}
-            onAddTool={handleAddTool}
-            onRemoveTool={handleRemoveTool}
-            showSuggestions={showSuggestions}
-            selectedSuggestionIndex={selectedSuggestionIndex}
-            onSuggestionClick={handleSuggestionClick}
-            onKeyDown={handleKeyDown}
-            isClient={isClient}
+          <ChatSection
             handler={handler}
-            setShowSuggestions={setShowSuggestions}
-            chatContext={chatContext}
-          />
+            className="h-full"
+            autoOpenCanvas={false}
+          >
+            <ChatContentWithCanvas
+              selectedTools={selectedTools}
+              onToolsChange={handleToolsChange}
+              onAddTool={handleAddTool}
+              onRemoveTool={handleRemoveTool}
+              showSuggestions={showSuggestions}
+              selectedSuggestionIndex={selectedSuggestionIndex}
+              onSuggestionClick={handleSuggestionClick}
+              onKeyDown={handleKeyDown}
+              isClient={isClient}
+              handler={handler}
+              setShowSuggestions={setShowSuggestions}
+              chatContext={chatContext}
+            />
+          </ChatSection>
         </div>
       </div>
     </div>
