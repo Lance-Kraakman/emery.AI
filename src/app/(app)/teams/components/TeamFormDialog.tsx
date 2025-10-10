@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { createTeamAction, updateTeam } from '@/app/actions/teams';
+import { createTeamFromClient, updateTeamFromClient } from '@/app/actions/teams';
 
 // AIDEV-NOTE: Restored team form dialog with updated DTOs and modern patterns
 
@@ -21,6 +21,7 @@ interface TeamFormDialogProps {
   team?: TeamDTO | null;
   agents: AgentDTO[];
   onUpdate: () => void;
+  organizationId: number;
 }
 
 interface FormFieldProps {
@@ -46,7 +47,7 @@ function FormField({ label, required, description, children }: FormFieldProps) {
   );
 }
 
-export default function TeamFormDialog({ isOpen, onClose, team, agents, onUpdate }: TeamFormDialogProps) {
+export default function TeamFormDialog({ isOpen, onClose, team, agents, onUpdate, organizationId }: TeamFormDialogProps) {
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm({
@@ -74,18 +75,20 @@ export default function TeamFormDialog({ isOpen, onClose, team, agents, onUpdate
             agentIds: value.agentIds,
           };
           
-          result = await updateTeam(team.id, data);
+          result = await updateTeamFromClient(team.id, data);
         } else {
-          // Create new team - convert to FormData for server action
-          const formData = new FormData();
-          formData.append('name', value.name);
-          formData.append('purpose', value.purpose);
-          formData.append('description', value.description);
-          formData.append('responsibilities', value.responsibilities);
-          formData.append('goals', value.goals);
-          formData.append('agentIds', value.agentIds.join(','));
+          // Create new team - use client data directly
+          const data = {
+            organizationId,
+            name: value.name,
+            purpose: value.purpose,
+            description: value.description,
+            responsibilities: value.responsibilities?.split(',').map(r => r.trim()).filter(r => r) || [],
+            goals: value.goals?.split(',').map(g => g.trim()).filter(g => g) || [],
+            agentIds: value.agentIds,
+          };
           
-          result = await createTeamAction(formData);
+          result = await createTeamFromClient(data);
         }
         
         if (!result.success) {
