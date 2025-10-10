@@ -12,7 +12,7 @@ export default function DashboardMainContent() {
   
   // Find the selected table
   const selectedTable = tableId
-    ? (data.databases || [])
+    ? (data?.databases || [])
         .flatMap(db => db.tables)
         .find(table => table.id.toString() === tableId)
     : null
@@ -76,7 +76,7 @@ export default function DashboardMainContent() {
                   </div>
                 ) : (
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {(data.databases || [])
+                    {(data?.databases || [])
                       .flatMap(db => db.tables)
                       .slice(0, 6)
                       .map(table => (
