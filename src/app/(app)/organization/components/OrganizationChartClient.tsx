@@ -45,7 +45,7 @@ const nodeTypes = {
 
 export default function OrganizationChartClient() {
   const { data, currentOrganization, isLoading } = useEmeryStore();
-  const { agents, teams } = data;
+  const { agents = [], teams = [] } = data || {};
   
   // Use TanStack Store for organization chart state
   const tasks = useStore(orgChartStore, orgChartSelectors.tasks);

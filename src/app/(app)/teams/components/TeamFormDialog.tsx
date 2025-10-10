@@ -27,6 +27,7 @@ interface FormFieldProps {
   label: string;
   required?: boolean;
   description?: string;
+  error?: string;
   children: React.ReactNode;
 }
 
@@ -100,170 +101,182 @@ export default function TeamFormDialog({ isOpen, onClose, team, agents, onUpdate
     },
   });
 
-  const toggleAgentSelection = (agentId: string, currentValue: string[]) => {
-    return currentValue.includes(agentId) 
-      ? currentValue.filter(id => id !== agentId)
-      : [...currentValue, agentId];
-  };
+
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh]">
+      <DialogContent className="max-w-2xl flex flex-col h-[90vh]">
         <DialogHeader>
-          <DialogTitle>{team ? 'Edit Team' : 'Create New Team'}</DialogTitle>
+          <DialogTitle>{team ? 'Edit Team' : 'Create Team'}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          form.handleSubmit();
-        }} className="space-y-4">
-          {error && (
-            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
-              {error}
-            </div>
-          )}
-          
-          <form.Field
-            name="name"
-            validators={{
-              onChange: ({ value }) => !value || value.trim() === '' ? 'Name is required' : undefined,
+        
+        <ScrollArea className="flex-1">
+          <form 
+            className="space-y-4 p-4" 
+            onSubmit={(e) => {
+              e.preventDefault();
+              form.handleSubmit();
             }}
           >
-            {(field) => (
-              <FormField label="Name" required>
-                <Input
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="e.g., Sales Team"
-                  disabled={form.state.isSubmitting}
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <div className="text-sm text-destructive">
-                    {field.state.meta.errors[0]}
-                  </div>
+            <div className="space-y-4">
+              {/* Name Field */}
+              <form.Field
+                name="name"
+              >
+                {(fieldApi) => (
+                  <FormField 
+                    label="Name"
+                    required
+                    description="The name of the team"
+                    error={fieldApi.state.meta.errors?.[0]}
+                  >
+                    <Input
+                      value={fieldApi.state.value || ''}
+                      onChange={(e) => fieldApi.handleChange(e.target.value)}
+                      placeholder="e.g., Marketing Team"
+                    />
+                  </FormField>
                 )}
-              </FormField>
-            )}
-          </form.Field>
-          
-          <form.Field name="purpose">
-            {(field) => (
-              <FormField label="Purpose">
-                <Input
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="e.g., Drive revenue growth"
-                  disabled={form.state.isSubmitting}
-                />
-              </FormField>
-            )}
-          </form.Field>
-          
-          <form.Field name="description">
-            {(field) => (
-              <FormField label="Description">
-                <Textarea
-                  rows={3}
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="Provide a detailed description of the team..."
-                  disabled={form.state.isSubmitting}
-                />
-              </FormField>
-            )}
-          </form.Field>
-          
-          <form.Field name="responsibilities">
-            {(field) => (
-              <FormField 
-                label="Responsibilities"
-                description="Separate multiple responsibilities with commas"
-              >
-                <Textarea
-                  rows={2}
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="e.g., Lead generation, Customer outreach, Sales reporting"
-                  disabled={form.state.isSubmitting}
-                />
-              </FormField>
-            )}
-          </form.Field>
-          
-          <form.Field name="goals">
-            {(field) => (
-              <FormField 
-                label="Goals"
-                description="Separate multiple goals with commas"
-              >
-                <Textarea
-                  rows={2}
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="e.g., Increase revenue by 20%, Improve customer satisfaction"
-                  disabled={form.state.isSubmitting}
-                />
-              </FormField>
-            )}
-          </form.Field>
-          
-          <form.Field name="agentIds">
-            {(field) => (
-              <FormField 
-                label="Team Agents"
-                description={`Selected: ${field.state.value.length} agent${field.state.value.length !== 1 ? 's' : ''}`}
-              >
-                <ScrollArea className="h-40 border rounded-md p-3">
-                  {agents.length > 0 ? (
-                    <div className="space-y-3">
-                      {agents.map((agent) => (
-                        <div key={agent.id} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`agent-${agent.id}`}
-                            checked={field.state.value.includes(agent.id.toString())}
-                            onCheckedChange={() => field.handleChange(
-                              toggleAgentSelection(agent.id.toString(), field.state.value)
-                            )}
-                            disabled={form.state.isSubmitting}
-                          />
-                          <label
-                            htmlFor={`agent-${agent.id}`}
-                            className="text-sm cursor-pointer flex-1"
-                          >
-                            <span className="font-medium">{agent.name}</span>
-                            {agent.role && (
-                              <span className="text-muted-foreground"> - {agent.role}</span>
-                            )}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No agents available</p>
-                  )}
-                </ScrollArea>
-              </FormField>
-            )}
-          </form.Field>
+              </form.Field>
 
-          
-          <div className="flex justify-end space-x-2 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={form.state.isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={form.state.isSubmitting}
-            >
-              {form.state.isSubmitting ? 'Saving...' : (team ? 'Update Team' : 'Create Team')}
-            </Button>
-          </div>
-        </form>
+              {/* Purpose Field */}
+              <form.Field
+                name="purpose"
+              >
+                {(fieldApi) => (
+                  <FormField 
+                    label="Purpose"
+                    description="The purpose and mission of the team"
+                    error={fieldApi.state.meta.errors?.[0]}
+                  >
+                    <Textarea
+                      value={fieldApi.state.value || ''}
+                      onChange={(e) => fieldApi.handleChange(e.target.value)}
+                      placeholder="Describe the team's purpose and mission"
+                      rows={3}
+                    />
+                  </FormField>
+                )}
+              </form.Field>
+
+              {/* Description Field */}
+              <form.Field
+                name="description"
+              >
+                {(fieldApi) => (
+                  <FormField 
+                    label="Description"
+                    description="Team description"
+                    error={fieldApi.state.meta.errors?.[0]}
+                  >
+                    <Textarea
+                      value={fieldApi.state.value || ''}
+                      onChange={(e) => fieldApi.handleChange(e.target.value)}
+                      placeholder="Describe the team's purpose"
+                      rows={3}
+                    />
+                  </FormField>
+                )}
+              </form.Field>
+
+              {/* Responsibilities Field */}
+              <form.Field
+                name="responsibilities"
+              >
+                {(fieldApi) => (
+                  <FormField 
+                    label="Responsibilities"
+                    description="Team responsibilities (comma-separated)"
+                    error={fieldApi.state.meta.errors?.[0]}
+                  >
+                    <Textarea
+                      value={fieldApi.state.value || ''}
+                      onChange={(e) => fieldApi.handleChange(e.target.value)}
+                      placeholder="e.g., Customer support, Technical support, Product feedback"
+                      rows={3}
+                    />
+                  </FormField>
+                )}
+              </form.Field>
+
+              {/* Goals Field */}
+              <form.Field
+                name="goals"
+              >
+                {(fieldApi) => (
+                  <FormField 
+                    label="Goals"
+                    description="Team goals (comma-separated)"
+                    error={fieldApi.state.meta.errors?.[0]}
+                  >
+                    <Textarea
+                      value={fieldApi.state.value || ''}
+                      onChange={(e) => fieldApi.handleChange(e.target.value)}
+                      placeholder="e.g., Improve customer satisfaction, Reduce response time"
+                      rows={3}
+                    />
+                  </FormField>
+                )}
+              </form.Field>
+
+              {/* Agents Selection */}
+              <form.Field
+                name="agentIds"
+              >
+                {(fieldApi) => (
+                  <FormField 
+                    label="Team Members"
+                    description="Select agents to be part of this team"
+                    error={fieldApi.state.meta.errors?.[0]}
+                  >
+                    <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
+                      {agents.map((agent) => {
+                        const agentIdStr = agent.id.toString();
+                        return (
+                          <div key={agent.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={agentIdStr}
+                              checked={fieldApi.state.value?.includes(agentIdStr) || false}
+                              onCheckedChange={(checked) => {
+                                const currentIds = fieldApi.state.value || [];
+                                if (checked) {
+                                  fieldApi.handleChange([...currentIds, agentIdStr]);
+                                } else {
+                                  fieldApi.handleChange(currentIds.filter(id => id !== agentIdStr));
+                                }
+                              }}
+                            />
+                            <label htmlFor={agentIdStr} className="text-sm cursor-pointer">
+                              {agent.name}
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </FormField>
+                )}
+              </form.Field>
+            </div>
+          </form>
+        </ScrollArea>
+        
+        <div className="flex justify-end space-x-2 pt-4 border-t mt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={form.state.isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            onClick={() => form.handleSubmit()}
+            disabled={form.state.isSubmitting}
+          >
+            {form.state.isSubmitting ? 'Saving...' : (team ? 'Update Team' : 'Create Team')}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

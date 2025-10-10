@@ -16,6 +16,8 @@ export type LayoutBreakpoint = 'mobile' | 'tablet' | 'desktop'
 
 // Import ChatContextConfig and canvas types from layout types to avoid duplication
 import type { ChatContextConfig, CanvasType } from '@/components/layout/types'
+// Import artifact types for canvas display
+import type { EmeryArtifact } from '@/components/chat/types/chat-artifacts'
 
 export interface UIState {
   // Layout state (from LayoutProvider)
@@ -25,7 +27,10 @@ export interface UIState {
   canvasType: CanvasType
   breakpoint: LayoutBreakpoint
   isMobile: boolean
-  
+
+  // Canvas/Artifact state
+  displayedArtifact: EmeryArtifact | null
+
   // Context states
   chatContext: ChatContextConfig | undefined
   
@@ -99,7 +104,10 @@ const initialState: UIState = {
   canvasType: 'chat',
   breakpoint: 'desktop',
   isMobile: false,
-  
+
+  // Canvas/Artifact state
+  displayedArtifact: null,
+
   // Context states
   chatContext: undefined,
   
@@ -233,6 +241,30 @@ export const uiStateActions = {
   // Canvas type actions
   setCanvasType: (canvasType: CanvasType) => {
     uiStateStore.setState((state) => ({ ...state, canvasType }))
+  },
+
+  // Canvas/Artifact actions
+  openArtifact: (artifact: EmeryArtifact) => {
+    uiStateStore.setState((state) => ({
+      ...state,
+      displayedArtifact: artifact,
+      canvasState: 'expanded' // Auto-expand canvas when artifact is opened
+    }))
+  },
+
+  closeArtifact: () => {
+    uiStateStore.setState((state) => ({
+      ...state,
+      displayedArtifact: null,
+      canvasState: 'collapsed'
+    }))
+  },
+
+  updateArtifact: (artifact: EmeryArtifact) => {
+    uiStateStore.setState((state) => ({
+      ...state,
+      displayedArtifact: artifact
+    }))
   },
 
   // Context actions
@@ -425,6 +457,9 @@ export const uiStateSelectors = {
   breakpoint: (state: UIState) => state.breakpoint,
   isMobile: (state: UIState) => state.isMobile,
   
+  // Canvas/Artifact selectors
+  displayedArtifact: (state: UIState) => state.displayedArtifact,
+
   // Context selectors
   chatContext: (state: UIState) => state.chatContext,
   

@@ -31,7 +31,7 @@ export function DataViewsClientSimplified() {
 
   // Find the initial table across all databases
   const findTableById = (id: number): TableDTO | undefined => {
-    for (const database of data.databases) {
+    for (const database of (data?.databases || [])) {
       const table = database.tables.find(t => t.id === id)
       if (table) return table
     }
@@ -239,8 +239,8 @@ export function DataViewsClientSimplified() {
         <CardHeader>
           <CardTitle>Welcome to Data</CardTitle>
           <CardDescription>
-            {data.databases.length === 0 
-              ? "Create your first database and table to get started using the sidebar." 
+            {(data?.databases || []).length === 0
+              ? "Create your first database and table to get started using the sidebar."
               : "Select a table from the sidebar to view its data."
             }
           </CardDescription>
@@ -289,8 +289,8 @@ export function DataViewsClientSimplified() {
       <div className="py-4 px-6 border-b">
         <h1 className="text-2xl font-bold">Data</h1>
         <p className="text-muted-foreground">
-          {selectedTable 
-            ? `Viewing ${selectedTable.name} in ${data.databases.find(db => db.id === selectedTable.databaseId)?.name || 'Unknown Database'}`
+          {selectedTable
+            ? `Viewing ${selectedTable.name} in ${(data?.databases || []).find(db => db.id === selectedTable.databaseId)?.name || 'Unknown Database'}`
             : 'Select a table from the sidebar to view its data'
           }
         </p>

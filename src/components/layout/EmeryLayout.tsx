@@ -3,13 +3,12 @@
 import React, { Suspense } from 'react'
 import { EmerySidebar } from '@/components/EmerySidebar'
 import { Loading } from '@/components/ui/loading'
-import { EmeryChat } from '@/components/chat/EmeryChat'
-import { ChatSection, useChatCanvas } from '@llamaindex/chat-ui'
 import { ChatCanvas } from '@/components/chat/ChatCanvas'
+import { EmeryChat } from '@/components/chat/EmeryChat'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
 import type { EmeryLayoutProps, ChatContextConfig } from './types'
-import { ChatProvider, useChatHandler } from '@/components/chat/ChatProvider'
+import { ChatProvider } from '@/components/chat/ChatProvider'
 
 /** p p
  * EmeryLayout - Core layout component with canvas expansion logic
@@ -39,6 +38,7 @@ function EmeryLayoutInner({
   const sidebarState = useStore(uiStateStore, uiStateSelectors.sidebarState)
   const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
   const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
+  const displayedArtifact = useStore(uiStateStore, uiStateSelectors.displayedArtifact)
   const setChatContext = uiStateActions.setChatContext
   const setSidebarState = uiStateActions.setSidebarState
   const setChatState = uiStateActions.setChatState
@@ -52,9 +52,8 @@ function EmeryLayoutInner({
 
   // Component that conditionally renders canvas or main content
   // AIDEV-NOTE: Memoized to prevent re-renders when chat messages update
+  // Now reads artifact from TanStack store instead of LlamaIndex ChatCanvas context
   const MainContentWithCanvas = React.memo(function MainContentWithCanvas({ children }: { children: React.ReactNode }) {
-    const { displayedArtifact } = useChatCanvas()
-
     // Show canvas when artifact is displayed, otherwise show children
     return displayedArtifact ? <div className="h-full"><ChatCanvas /></div> : <>{children}</>
   })
@@ -88,39 +87,33 @@ function EmeryLayoutInner({
         </Suspense>
       </aside>
 
-      {/* Main Content Area + Chat - 3-panel layout wrapped in ChatSection */}
-      {/* AIDEV-NOTE: ChatSection provides LlamaIndex artifact context, ChatProvider isolates chat handler */}
-      <ChatSection
-        handler={{} as any} // Dummy handler for ChatSection context only
-        className="flex-1 flex min-h-0 overflow-hidden h-screen"
-        autoOpenCanvas={false}
-      >
-        <ChatProvider chatContext={chatContext}>
-          <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
-            {/* Main Content Area with Canvas */}
-            <main className="flex-1 overflow-y-auto h-full">
-              <MainContentWithCanvas>
-                {children || (
-                  <div className="h-full flex items-center justify-center p-6">
-                    <div className="text-center text-muted-foreground">
-                      <p>Select a page from the sidebar to get started</p>
-                    </div>
-                  </div>
-                )}
-              </MainContentWithCanvas>
-            </main>
-
-            {/* Chat Area - always visible */}
-            {enableChat && (
-              <div className="w-96 border-l border-border">
-                <Suspense fallback={<ChatSkeleton />}>
-                  <EmeryChat />
-                </Suspense>
+      {/* Main Content Area + Chat - 3-panel layout */}
+      {/* AIDEV-NOTE: Artifact state managed by TanStack store, ChatSection only wraps chat UI */}
+      <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
+        {/* Main Content Area with Canvas */}
+        <main className="flex-1 overflow-y-auto h-full">
+          <MainContentWithCanvas>
+            {children || (
+              <div className="h-full flex items-center justify-center p-6">
+                <div className="text-center text-muted-foreground">
+                  <p>Select a page from the sidebar to get started</p>
+                </div>
               </div>
             )}
+          </MainContentWithCanvas>
+        </main>
+
+        {/* Chat Area - wrapped in ChatProvider */}
+        {enableChat && (
+          <div className="w-96 border-l border-border">
+            <ChatProvider chatContext={chatContext}>
+              <Suspense fallback={<ChatSkeleton />}>
+                <EmeryChat />
+              </Suspense>
+            </ChatProvider>
           </div>
-        </ChatProvider>
-      </ChatSection>
+        )}
+      </div>
 
       {/* Mobile Chat Overlay */}
       {isMobile && enableChat && chatState === 'expanded' && (
