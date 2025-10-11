@@ -106,6 +106,13 @@ export interface BulkCreateRowsCommand {
   createdBy?: UserId;
 }
 
+export interface SearchTableRowsCommand {
+  tableId: TableId;
+  query: string;
+  limit?: number;
+  organizationId: OrganizationId;
+}
+
 // Use unified Result interface from domain shared types
 export type TableApplicationServiceResult<T = any> = Result<T>;
 
@@ -645,6 +652,49 @@ export class TableApplicationService {
   // ========================================
 
   /**
+   * Validate relation fields in a row
+   */
+  private async validateRelationFields(
+    table: any, // DynamicTable type
+    data: any // Row type
+  ): Promise<{ valid: boolean; error?: string }> {
+    const relationFields = table.fields.filter((field: any) => field.type === 'relation');
+
+    for (const field of relationFields) {
+      if (!field.relatedTableId) {
+        continue;
+      }
+
+      const fieldValue = data.getFieldValue(field.getColumnName());
+      if (!fieldValue || fieldValue.isNull()) {
+        if (field.required) {
+          return { valid: false, error: `${field.name} is required` };
+        }
+        continue;
+      }
+
+      const relations = fieldValue.value as any[];
+      
+      // Validate each relation ID exists
+      for (const relation of relations) {
+        const row = await this.dynamicTableRepository.getRow(
+          field.relatedTableId!,
+          relation.id.toString()
+        );
+        
+        if (!row) {
+          return { 
+            valid: false, 
+            error: `Related record ${relation.id} not found in table ${field.relatedTableId.value}` 
+          };
+        }
+      }
+    }
+
+    return { valid: true };
+  }
+
+  /**
    * Create a new row in a table
    */
   async createRow(command: CreateRowCommand): Promise<TableApplicationServiceResult<Row>> {
@@ -655,6 +705,12 @@ export class TableApplicationService {
       const table = await this.dynamicTableService.getTable(tableId);
       if (!table) {
         return ResultHelpers.failure(`Table ${tableId.value} not found`);
+      }
+
+      // Validate relation fields
+      const relationValidation = await this.validateRelationFields(table, data);
+      if (!relationValidation.valid) {
+        return ResultHelpers.failure(relationValidation.error || 'Relation validation failed');
       }
 
       // Insert row using repository
@@ -679,6 +735,12 @@ export class TableApplicationService {
       const table = await this.dynamicTableService.getTable(tableId);
       if (!table) {
         return ResultHelpers.failure(`Table ${tableId.value} not found`);
+      }
+
+      // Validate relation fields
+      const relationValidation = await this.validateRelationFields(table, data);
+      if (!relationValidation.valid) {
+        return ResultHelpers.failure(relationValidation.error || 'Relation validation failed');
       }
 
       // Update row using repository
@@ -775,6 +837,52 @@ export class TableApplicationService {
     } catch (error) {
       console.error('[TABLE-APP-SERVICE] Error checking if table has rows:', error);
       return false;
+    }
+  }
+
+  /**
+   * Search for rows in a table based on a query string
+   * Uses the existing getRows method with text search filters
+   */
+  async searchTableRows(command: SearchTableRowsCommand): Promise<TableApplicationServiceResult<Row[]>> {
+    try {
+      const { tableId, query, limit = 20, organizationId } = command;
+
+      // Verify table exists and user has access
+      const table = await this.dynamicTableService.getTable(tableId);
+      if (!table) {
+        return ResultHelpers.failure(`Table ${tableId.value} not found`);
+      }
+
+      // Verify organization access
+      if (!table.organizationId.equals(organizationId)) {
+        return ResultHelpers.failure('Access denied: Table belongs to different organization');
+      }
+
+      // Build text search filters using existing RowQueryOptions
+      const textFields = table.fields
+        .filter(field => field.type === 'text')
+        .map(field => field.getColumnName());
+
+      // Create filters for text search across all text fields
+      const searchFilters = textFields.map(fieldName => ({
+        field: fieldName,
+        operator: 'ilike' as const, // case-insensitive LIKE
+        value: `%${query}%`
+      }));
+
+      // Use existing findRows method with search filters
+      const rows = await this.dynamicTableRepository.findRows(tableId, {
+        limit,
+        offset: 0,
+        filters: searchFilters
+      });
+
+      return ResultHelpers.success(rows);
+
+    } catch (error) {
+      console.error('[TABLE-APP-SERVICE] Error searching table rows:', error);
+      return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to search table rows');
     }
   }
 

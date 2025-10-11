@@ -15,6 +15,7 @@ import { PlusCircle, ExternalLink } from "lucide-react"
 import { DocumentFieldCell } from "./DocumentFieldCell"
 import { FileTypeDetector } from "@/ddd/domain/tables/services/file-type-detector"
 import { createFileArtifact, createDocumentArtifact } from "@/components/chat/types/chat-artifacts"
+import { RelationFieldInput } from "@/components/tables/field-inputs"
 
 interface EditableCellProps {
   field: FieldDTO;
@@ -355,26 +356,17 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         </div>
       )
 
-
     case "relation":
       return (
-        <div className="p-1">
-          <Input
-            type="text"
-            value={typeof editValue === 'object' && editValue !== null ? JSON.stringify(editValue) : String(editValue || "")}
-            onChange={(e) => {
-              try {
-                const parsed = JSON.parse(e.target.value)
-                setEditValue(parsed)
-              } catch {
-                setEditValue(e.target.value)
-              }
+        <div className="p-1 min-w-[200px]">
+          <RelationFieldInput
+            value={(editValue as any) || []}
+            onChange={(newValue) => {
+              setEditValue(newValue);
+              handleSave(); // Auto-save on change
             }}
-            onBlur={handleSave}
-            onKeyDown={handleKeyDown}
-            className="h-7 text-xs font-mono"
-            autoFocus
-            placeholder="JSON relation data"
+            relatedTableId={field.relatedTableId || undefined}
+            required={field.required || false}
           />
         </div>
       )
