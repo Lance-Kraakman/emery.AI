@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useEffect } from "react"
 import { 
   useReactTable, 
   getCoreRowModel, 
@@ -107,15 +107,27 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
   }
 
   const loadTables = async () => {
-    if (newFieldType === 'relation' && availableTables.length === 0) {
+    if (newFieldType === 'relation') {
       try {
+        console.log('[FieldManagerDialog] Loading tables for relation field...');
         const tables = await getTables()
-        setAvailableTables(tables.filter(t => t.id !== tableId)) // Exclude current table
+        console.log('[FieldManagerDialog] Loaded tables:', tables.length);
+        const filteredTables = tables.filter(t => t.id !== tableId); // Exclude current table
+        console.log('[FieldManagerDialog] Filtered tables (excluding current):', filteredTables.length);
+        setAvailableTables(filteredTables)
       } catch (error) {
         console.error("Failed to load tables:", error)
+        setAvailableTables([]) // Set empty array on error
       }
     }
   }
+
+  // Load tables when relation type is selected
+  useEffect(() => {
+    if (newFieldType === 'relation') {
+      loadTables()
+    }
+  }, [newFieldType])
 
   const handleClose = () => {
     setIsAddingField(false)
@@ -292,16 +304,31 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
                     onValueChange={(value) => setNewFieldRelatedTableId(parseInt(value))}
                   >
                     <SelectTrigger id="relatedTable">
-                      <SelectValue placeholder="Select table to relate to..." />
+                      <SelectValue placeholder={
+                        availableTables.length === 0 
+                          ? "No tables available..." 
+                          : "Select table to relate to..."
+                      } />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableTables.map((table) => (
-                        <SelectItem key={table.id} value={table.id.toString()}>
-                          {table.name}
-                        </SelectItem>
-                      ))}
+                      {availableTables.length === 0 ? (
+                        <div className="px-2 py-1 text-sm text-muted-foreground">
+                          No tables found. Create some tables first.
+                        </div>
+                      ) : (
+                        availableTables.map((table) => (
+                          <SelectItem key={table.id} value={table.id.toString()}>
+                            {table.name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
+                  {availableTables.length === 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      Debug: No tables loaded. Check console for errors.
+                    </div>
+                  )}
                 </div>
               )}
 

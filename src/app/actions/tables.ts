@@ -173,3 +173,79 @@ export async function deleteTableAction(formData: FormData) {
   // Note: revalidatePath is handled in the main deleteTable function
   return result;
 }
+
+/**
+ * Search for rows in a table for relation field selection
+ */
+export async function searchTableRows(tableId: number, query: string, limit: number = 20): Promise<Result> {
+  try {
+    console.log('[searchTableRows] Starting search:', { tableId, query, limit });
+    const session = await requirePermission("data:view");
+    const currentOrg = await requireCurrentOrganization();
+    
+    if (!tableId) {
+      console.error('[searchTableRows] No tableId provided');
+      return {
+        success: false,
+        error: "tableId is required",
+      };
+    }
+
+    // Use TableApplicationService for search
+    const tableApplicationService = getTableApplicationService();
+    
+    const result = await tableApplicationService.searchTableRows({
+      tableId: TableId.fromNumber(tableId),
+      query,
+      limit,
+      organizationId: OrganizationId.fromNumber(currentOrg.id)
+    });
+
+    if (!result.success || !result.data) {
+      return {
+        success: false,
+        error: result.error || "Failed to search table rows",
+      };
+    }
+
+    // Convert Row entities to relation format for UI
+    const relations = result.data.map(row => ({
+      id: row.id.value,
+      value: resolveDisplayValue(row)
+    }));
+
+    console.log('[searchTableRows] Converted relations:', relations);
+
+    return {
+      success: true,
+      data: relations,
+    };
+  } catch (error) {
+    console.error('[searchTableRows] Error searching table rows:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to search table rows",
+    };
+  }
+}
+
+/**
+ * Helper function to resolve display value from a Row entity
+ * Uses the first text field as display value, or falls back to other fields
+ */
+function resolveDisplayValue(row: any): string {
+  // Try to find a text field to use as display value
+  const textField = row.fieldValues?.find((fv: any) => fv.fieldType === 'text' && fv.value);
+  if (textField && textField.value) {
+    return textField.value as string;
+  }
+  
+  // Fallback to first non-null field
+  const firstField = row.fieldValues?.find((fv: any) => fv.value !== null && fv.value !== undefined);
+  if (firstField && firstField.value) {
+    return String(firstField.value);
+  }
+  
+  // Final fallback
+  return `Record ${row.id.value}`;
+}
