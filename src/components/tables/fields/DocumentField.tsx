@@ -6,7 +6,8 @@ import type { FieldBadgeItem } from './FieldBadgeList';
 import type { DocumentArrayFieldValue, DocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Edit3, Upload } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Edit3, Upload, PlusCircle } from 'lucide-react';
 import { DocumentCreationDialog } from '@/components/tables/dialogs/DocumentCreationDialog';
 
 interface DocumentFieldProps {
@@ -19,6 +20,7 @@ interface DocumentFieldProps {
   tableId?: number;
   compact?: boolean;
   disabled?: boolean;
+  readOnly?: boolean;
 }
 
 /**
@@ -46,10 +48,10 @@ export function DocumentField({
   organizationId = 1,
   tableId = 1,
   compact = false,
-  disabled = false
+  disabled = false,
+  readOnly = false
 }: DocumentFieldProps) {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
   const documents = Array.isArray(value) ? value : [];
@@ -125,42 +127,46 @@ export function DocumentField({
       console.error('Failed to upload file:', error);
     } finally {
       setIsCreating(false);
-      setShowDropdown(false);
     }
   }, [documents, onChange, organizationId, tableId, field?.id]);
 
-  // Handle add button click (edit mode)
-  const handleAddClick = useCallback(() => {
-    setShowDropdown(true);
-  }, []);
-
   return (
-    <div className="relative">
+    <div className="flex items-center gap-1.5">
       <FieldBadgeList
         items={badgeItems}
         isEditMode={isEditMode}
         compact={compact}
         maxVisible={compact ? 2 : 3}
-        showAddButton={isEditMode}
-        onAdd={handleAddClick}
+        showAddButton={false}
         onRemove={isEditMode ? handleRemoveDocument : undefined}
         onItemClick={!isEditMode ? handleDocumentClick : undefined}
         disabled={disabled || isCreating}
         emptyMessage={compact ? undefined : `No ${(field?.name || 'documents').toLowerCase()}`}
       />
 
-      {/* Document actions dropdown (edit mode only) */}
-      {isEditMode && (
-        <DropdownMenu open={showDropdown} onOpenChange={setShowDropdown}>
+      {/* Document actions dropdown with + button */}
+      {onChange && !readOnly && (
+        <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <div className="hidden" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={`
+                ${compact ? 'h-5 w-5' : 'h-6 w-6'}
+                hover:bg-accent hover:text-accent-foreground
+                flex-shrink-0
+              `}
+              onClick={(e) => e.stopPropagation()}
+              disabled={disabled || isCreating}
+              title="Add document"
+            >
+              <PlusCircle className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuItem
-              onClick={() => {
-                setShowDropdown(false);
-                setShowCreateDialog(true);
-              }}
+              onClick={() => setShowCreateDialog(true)}
               disabled={isCreating || !field}
             >
               <Edit3 className="w-4 h-4 mr-2" />
@@ -168,7 +174,6 @@ export function DocumentField({
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {
-                setShowDropdown(false);
                 // Trigger file input
                 const input = document.getElementById(`doc-upload-${field?.id || 'unknown'}`);
                 input?.click();
@@ -183,21 +188,19 @@ export function DocumentField({
       )}
 
       {/* Hidden file input for upload */}
-      {isEditMode && (
-        <input
-          id={`doc-upload-${field?.id || 'unknown'}`}
-          type="file"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handleFileUpload(file);
-            e.target.value = ''; // Reset input
-          }}
-        />
-      )}
+      <input
+        id={`doc-upload-${field?.id || 'unknown'}`}
+        type="file"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileUpload(file);
+          e.target.value = ''; // Reset input
+        }}
+      />
 
       {/* Document creation dialog */}
-      {isEditMode && field && (
+      {field && (
         <DocumentCreationDialog
           isOpen={showCreateDialog}
           onClose={() => setShowCreateDialog(false)}

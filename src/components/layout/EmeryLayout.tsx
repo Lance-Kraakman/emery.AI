@@ -3,7 +3,7 @@
 import React, { Suspense } from 'react'
 import { EmerySidebar } from '@/components/EmerySidebar'
 import { Loading } from '@/components/ui/loading'
-import { ChatCanvas } from '@/components/chat/ChatCanvas'
+import { EmeryCanvas } from '@/components/chat/EmeryCanvas'
 import { EmeryChat } from '@/components/chat/EmeryChat'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
@@ -52,10 +52,10 @@ function EmeryLayoutInner({
 
   // Component that conditionally renders canvas or main content
   // AIDEV-NOTE: Memoized to prevent re-renders when chat messages update
-  // Now reads artifact from TanStack store instead of LlamaIndex ChatCanvas context
+  // Now reads artifact from TanStack store and uses EmeryCanvas (no ChatCanvasProvider needed)
   const MainContentWithCanvas = React.memo(function MainContentWithCanvas({ children }: { children: React.ReactNode }) {
     // Show canvas when artifact is displayed, otherwise show children
-    return displayedArtifact ? <div className="h-full"><ChatCanvas /></div> : <>{children}</>
+    return displayedArtifact ? <div className="h-full"><EmeryCanvas /></div> : <>{children}</>
   })
 
   // Calculate responsive classes
