@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     name: 'persistent-integration',
     environment: 'node',
-    setupFiles: ['./tests/integration/setup.ts'],
+    setupFiles: ['./src/tests/integration/setup.ts'],
     // NO globalSetup - assumes containers are already running
     testTimeout: 60000,  // Increased timeout for embedding API calls
     hookTimeout: 10000,  // Much shorter since no container startup
@@ -20,9 +20,9 @@ export default defineConfig({
     // No retry needed - more stable with persistent server
     retry: 0,
     // Include integration tests only
-    include: ['tests/integration/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-    // Exclude unit test patterns  
-    exclude: ['__tests__/**/*', 'tests/rls/**/*', 'tests/unit/**/*'],
+    include: ['src/tests/integration/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    // Exclude unit test patterns
+    exclude: ['__tests__/**/*', 'src/tests/rls/**/*', 'src/tests/unit/**/*'],
     // More concise reporter for faster dev feedback
     reporters: ['basic'],
     // No coverage for fast development testing
@@ -56,8 +56,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './'),
-      '~': path.resolve(__dirname, './')
+      '@': path.resolve(__dirname, './src'),
+      '~': path.resolve(__dirname, './src')
     }
   }
 })

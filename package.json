@@ -15,7 +15,7 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:integration:server": "npx tsx src/scripts/test-server-wrapper.ts start",
-    "test:integration:dev": "vitest --config vitest.config.persistent.ts tests/integration/",
+    "test:integration:dev": "vitest --config vitest.config.persistent.ts src/tests/integration/",
     "test:integration:file": "vitest --config vitest.config.persistent.ts --run",
     "test:integration:stop": "npx tsx src/scripts/test-server-wrapper.ts stop",
     "db:generate": "drizzle-kit generate",
