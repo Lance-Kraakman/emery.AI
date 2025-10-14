@@ -3,7 +3,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, X, File, FileText, Link } from 'lucide-react';
+import { PlusCircle, X } from 'lucide-react';
 
 export type FieldBadgeType = 'relation' | 'file' | 'document';
 
@@ -53,22 +53,6 @@ export function FieldBadgeList({
 }: FieldBadgeListProps) {
   const itemsArray = Array.isArray(items) ? items : [];
 
-  // Get icon based on badge type
-  const getBadgeIcon = (type?: FieldBadgeType) => {
-    const iconClass = compact ? 'h-3 w-3' : 'h-3.5 w-3.5';
-
-    switch (type) {
-      case 'document':
-        return <FileText className={iconClass} />;
-      case 'file':
-        return <File className={iconClass} />;
-      case 'relation':
-        return <Link className={iconClass} />;
-      default:
-        return null;
-    }
-  };
-
   // If empty and not in edit mode, show empty message
   if (itemsArray.length === 0 && !isEditMode) {
     if (emptyMessage) {
@@ -103,7 +87,6 @@ export function FieldBadgeList({
             }}
             title={item.label}
           >
-            {getBadgeIcon(item.type)}
             <span className="truncate max-w-[120px]">{item.label}</span>
           </Badge>
 
@@ -144,8 +127,8 @@ export function FieldBadgeList({
         </Badge>
       )}
 
-      {/* Add button (edit mode only) */}
-      {isEditMode && showAddButton && onAdd && (
+      {/* Add button (shows in compact mode always, or in edit mode) */}
+      {showAddButton && onAdd && (compact || isEditMode) && (
         <Button
           type="button"
           variant="ghost"

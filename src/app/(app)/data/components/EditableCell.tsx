@@ -17,6 +17,7 @@ import { FileField } from "@/components/tables/fields/FileField"
 import { RelationField } from "@/components/tables/fields/RelationField"
 import { FileTypeDetector } from "@/ddd/domain/tables/services/file-type-detector"
 import { createFileArtifact, createDocumentArtifact } from "@/components/chat/types/chat-artifacts"
+import { uiStateActions } from "@/stores/ui-state.store"
 
 interface EditableCellProps {
   field: FieldDTO;
@@ -45,13 +46,13 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
       const fileName = file.name || file.filename || 'Unknown File'
       const fileUrl = file.url || file.downloadUrl
       const mimeType = file.mimeType || file.contentType
-      
+
       console.log('Opening file:', { fileName, fileUrl, mimeType, file })
-      
+
       // Create appropriate artifact using LlamaIndex chat-ui system
       if (FileTypeDetector.isTiptapDocument(mimeType)) {
         console.log('Creating TipTap document artifact for:', fileName)
-        
+
         // Create document artifact from file
         const documentFieldValue = {
           ...file,
@@ -61,7 +62,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
             documentType: 'tiptap' as const
           }
         }
-        
+
         const documentArtifact = createDocumentArtifact(
           documentFieldValue,
           organizationId,
@@ -70,15 +71,15 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
           'edit', // TipTap documents are editable
           fileUrl
         )
-        
-        console.log('Created document artifact:', documentArtifact)
-        // AIDEV-TODO: Show artifact in LlamaIndex canvas programmatically
-        // For now, artifacts are created but need to be shown via chat interaction
-        
+
+        console.log('Opening document artifact in canvas:', documentArtifact)
+        // Use global UI state to open artifact (works from any component)
+        uiStateActions.openArtifact(documentArtifact)
+
       } else {
         const viewerType = FileTypeDetector.detectViewerType(fileName, mimeType)
         console.log('Creating file viewer artifact for:', { viewerType, fileName, fileUrl })
-        
+
         const fileArtifact = createFileArtifact(
           file,
           tableId,
@@ -86,15 +87,15 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
           viewerType,
           fileUrl
         )
-        
-        console.log('Created file artifact:', fileArtifact)
-        // AIDEV-TODO: Show artifact in LlamaIndex canvas programmatically
-        // For now, artifacts are created but need to be shown via chat interaction
+
+        console.log('Opening file artifact in canvas:', fileArtifact)
+        // Use global UI state to open artifact (works from any component)
+        uiStateActions.openArtifact(fileArtifact)
       }
-      
+
     } catch (error) {
       console.error('Error opening file:', error, file)
-      
+
       // Fallback: open file externally if we have a URL
       const fileUrl = file.url || file.downloadUrl
       if (fileUrl) {
@@ -215,9 +216,13 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         return (
           <RelationField
             value={(value as RelationArrayFieldValue) || []}
+            onChange={(newValue) => {
+              onSave?.(newValue);
+            }}
             isEditMode={false}
             compact={true}
             fieldName={field.name}
+            relatedTableId={field.relatedTableId || undefined}
             onRelationClick={(relation) => {
               console.log('Relation clicked:', relation);
               // TODO: Implement relation navigation/management
@@ -229,6 +234,9 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         return (
           <FileField
             value={(value as FileArrayFieldValue) || []}
+            onChange={(newValue) => {
+              onSave?.(newValue);
+            }}
             isEditMode={false}
             compact={true}
             fieldName={field.name}
@@ -240,9 +248,14 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         return (
           <DocumentField
             value={value as DocumentArrayFieldValue || []}
+            onChange={(newValue) => {
+              onSave?.(newValue);
+            }}
             isEditMode={false}
             compact={true}
             field={field}
+            organizationId={organizationId}
+            tableId={tableId}
             onDocumentOpen={handleFileOpen}
           />
         )
@@ -303,7 +316,7 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
           <Input
             type="number"
             value={typeof editValue === 'number' ? editValue.toString() : ""}
-            onChange={(e) => setEditValue(e.target.value ? Number(e.target.value) : "")}
+            onChange={(e) => setEditValue(e.target.value ? Number(e.target.value) : null)}
             onBlur={handleSave}
             onKeyDown={handleKeyDown}
             className="h-7 text-xs"

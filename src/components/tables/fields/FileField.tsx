@@ -18,6 +18,7 @@ interface FileFieldProps {
   compact?: boolean;
   disabled?: boolean;
   fieldName?: string;
+  readOnly?: boolean;
 }
 
 /**
@@ -46,7 +47,8 @@ export function FileField({
   allowedTypes,
   compact = false,
   disabled = false,
-  fieldName
+  fieldName,
+  readOnly = false
 }: FileFieldProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -123,8 +125,8 @@ export function FileField({
           isEditMode={isEditMode}
           compact={compact}
           maxVisible={compact ? 2 : 3}
-          showAddButton={isEditMode && canAddMore}
-          onAdd={handleAddClick}
+          showAddButton={canAddMore && !readOnly}
+          onAdd={onChange && !readOnly ? handleAddClick : undefined}
           onRemove={isEditMode ? handleRemoveFile : undefined}
           onItemClick={!isEditMode ? handleFileClick : undefined}
           disabled={disabled || isUploading || !canAddMore}
@@ -162,22 +164,20 @@ export function FileField({
       )}
 
       {/* Hidden file input */}
-      {isEditMode && (
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept={acceptedTypes}
-          onChange={(e) => {
-            if (e.target.files && e.target.files.length > 0) {
-              handleFileSelect(e.target.files);
-            }
-            e.target.value = ''; // Reset input
-          }}
-          className="hidden"
-          disabled={disabled || isUploading || !canAddMore}
-        />
-      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept={acceptedTypes}
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            handleFileSelect(e.target.files);
+          }
+          e.target.value = ''; // Reset input
+        }}
+        className="hidden"
+        disabled={disabled || isUploading || !canAddMore}
+      />
     </div>
   );
 }

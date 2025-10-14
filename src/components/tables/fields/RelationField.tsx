@@ -14,6 +14,7 @@ import { getRowsData } from '@/app/actions/rows';
 import { getFields } from '@/app/actions/fields';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { RowDTO } from '@/app/mappers/row-mapper';
+import CellRenderer from '@/app/components/CellRenderer';
 
 interface RelationFieldProps {
   value: RelationArrayFieldValue;
@@ -26,6 +27,7 @@ interface RelationFieldProps {
   disabled?: boolean;
   fieldName?: string;
   required?: boolean;
+  readOnly?: boolean;
 }
 
 /**
@@ -55,7 +57,8 @@ export function RelationField({
   compact = false,
   disabled = false,
   fieldName,
-  required
+  required,
+  readOnly = false
 }: RelationFieldProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -163,18 +166,20 @@ export function RelationField({
         isEditMode={isEditMode}
         compact={compact}
         maxVisible={compact ? 2 : 3}
-        showAddButton={isEditMode}
-        onAdd={handleAddClick}
+        showAddButton={!readOnly}
+        onAdd={onChange && relatedTableId && !readOnly ? handleAddClick : undefined}
         onRemove={isEditMode ? handleRemoveRelation : undefined}
         onItemClick={!isEditMode ? handleRelationClick : undefined}
         disabled={disabled || !relatedTableId}
         emptyMessage={compact ? undefined : `No ${fieldName?.toLowerCase() || 'relations'}`}
       />
 
-      {/* Relation selector dialog (edit mode only) */}
-      {isEditMode && (
-        <Dialog open={isOpen && !!relatedTableId} onOpenChange={setIsOpen}>
-          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+      {/* Relation selector dialog */}
+      <Dialog open={isOpen && !!relatedTableId} onOpenChange={setIsOpen}>
+          <DialogContent
+            className="max-w-6xl max-h-[90vh] overflow-y-auto"
+            onDoubleClick={(e) => e.stopPropagation()}
+          >
             <DialogHeader>
               <DialogTitle>Select Related Record</DialogTitle>
             </DialogHeader>
@@ -267,15 +272,10 @@ export function RelationField({
                               </TableCell>
                               {tableData.fields.slice(0, 8).map((field) => {
                                 const fieldValue = row.fieldValues.find(fv => fv.fieldSlug === field.name)?.value;
-                                const displayValue = fieldValue ?
-                                  (typeof fieldValue === 'object' && fieldValue !== null ?
-                                    JSON.stringify(fieldValue) :
-                                    String(fieldValue)) :
-                                  null;
 
                                 return (
                                   <TableCell key={field.id} className="p-2 truncate">
-                                    {displayValue || <span className="text-muted-foreground italic">—</span>}
+                                    <CellRenderer field={field} value={fieldValue} readOnly={true} />
                                   </TableCell>
                                 );
                               })}
@@ -318,7 +318,6 @@ export function RelationField({
             </div>
           </DialogContent>
         </Dialog>
-      )}
     </div>
   );
 }

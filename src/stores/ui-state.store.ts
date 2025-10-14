@@ -16,8 +16,8 @@ export type LayoutBreakpoint = 'mobile' | 'tablet' | 'desktop'
 
 // Import ChatContextConfig and canvas types from layout types to avoid duplication
 import type { ChatContextConfig, CanvasType } from '@/components/layout/types'
-// Import artifact types for canvas display
-import type { EmeryArtifact } from '@/components/chat/types/chat-artifacts'
+// Import artifact types for canvas display (both custom Emery and standard LlamaIndex)
+import type { Artifact } from '@llamaindex/chat-ui'
 
 export interface UIState {
   // Layout state (from LayoutProvider)
@@ -28,8 +28,8 @@ export interface UIState {
   breakpoint: LayoutBreakpoint
   isMobile: boolean
 
-  // Canvas/Artifact state
-  displayedArtifact: EmeryArtifact | null
+  // Canvas/Artifact state (supports both Emery custom and standard LlamaIndex artifacts)
+  displayedArtifact: Artifact | null
 
   // Context states
   chatContext: ChatContextConfig | undefined
@@ -243,8 +243,8 @@ export const uiStateActions = {
     uiStateStore.setState((state) => ({ ...state, canvasType }))
   },
 
-  // Canvas/Artifact actions
-  openArtifact: (artifact: EmeryArtifact) => {
+  // Canvas/Artifact actions (supports both Emery and standard LlamaIndex artifacts)
+  openArtifact: (artifact: Artifact) => {
     uiStateStore.setState((state) => ({
       ...state,
       displayedArtifact: artifact,
@@ -260,7 +260,7 @@ export const uiStateActions = {
     }))
   },
 
-  updateArtifact: (artifact: EmeryArtifact) => {
+  updateArtifact: (artifact: Artifact) => {
     uiStateStore.setState((state) => ({
       ...state,
       displayedArtifact: artifact
