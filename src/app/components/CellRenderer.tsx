@@ -2,9 +2,9 @@
 
 import React from 'react'
 import type { FieldDTO } from '@/app/mappers/field-mapper';
-import { RelationFieldDisplay } from '@/components/tables/field-displays/RelationFieldDisplay';
-import { FileFieldDisplay } from '@/components/tables/field-displays/FileFieldDisplay';
-import { DocumentFieldDisplay } from '@/components/tables/field-displays/DocumentFieldDisplay';
+import { RelationField } from '@/components/tables/fields/RelationField';
+import { FileField } from '@/components/tables/fields/FileField';
+import { DocumentField } from '@/components/tables/fields/DocumentField';
 
 interface CellRendererProps {
   field: FieldDTO;
@@ -73,10 +73,12 @@ export default function CellRenderer({ field, value }: CellRendererProps) {
       );
       
     case 'relation':
-      // Use the new RelationFieldDisplay component for consistent UI
+      // Use unified RelationField component (display mode)
       return (
-        <RelationFieldDisplay 
-          value={value || []} 
+        <RelationField
+          value={value || []}
+          isEditMode={false}
+          compact={true}
           fieldName={field.name}
           onRelationClick={(relation) => {
             console.log('Relation clicked:', relation);
@@ -84,23 +86,27 @@ export default function CellRenderer({ field, value }: CellRendererProps) {
           }}
         />
       );
-      
+
     case 'file':
-      // Use the new FileFieldDisplay component for consistent UI
+      // Use unified FileField component (display mode)
       return (
-        <FileFieldDisplay 
-          value={value || []} 
+        <FileField
+          value={value || []}
+          isEditMode={false}
+          compact={true}
           fieldName={field.name}
           onFileOpen={handleFileOpen}
         />
       );
-      
+
     case 'document':
-      // Use the new DocumentFieldDisplay component for consistent UI
+      // Use unified DocumentField component (display mode)
       return (
-        <DocumentFieldDisplay 
-          value={value || []} 
-          fieldName={field.name}
+        <DocumentField
+          value={value || []}
+          isEditMode={false}
+          compact={true}
+          field={field}
           onDocumentOpen={handleFileOpen}
         />
       );
