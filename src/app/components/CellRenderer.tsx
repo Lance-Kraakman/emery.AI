@@ -2,6 +2,9 @@
 
 import React from 'react'
 import type { FieldDTO } from '@/app/mappers/field-mapper';
+import { RelationFieldDisplay } from '@/components/tables/field-displays/RelationFieldDisplay';
+import { FileFieldDisplay } from '@/components/tables/field-displays/FileFieldDisplay';
+import { DocumentFieldDisplay } from '@/components/tables/field-displays/DocumentFieldDisplay';
 
 interface CellRendererProps {
   field: FieldDTO;
@@ -10,6 +13,26 @@ interface CellRendererProps {
 
 export default function CellRenderer({ field, value }: CellRendererProps) {
   if (value === null || value === undefined) return <span className="text-gray-500">-</span>;
+
+  // Handle file/document opening logic
+  const handleFileOpen = (file: any) => {
+    try {
+      const fileName = file.name || file.filename || 'Unknown File'
+      const fileUrl = file.url || file.downloadUrl
+      const mimeType = file.mimeType || file.contentType
+      
+      console.log('Opening file:', { fileName, fileUrl, mimeType, file })
+      
+      // Fallback: open file externally if we have a URL
+      if (fileUrl) {
+        window.open(fileUrl, '_blank')
+      } else {
+        alert('Unable to open file - no URL available')
+      }
+    } catch (error) {
+      console.error('Error opening file:', error, file)
+    }
+  };
   
   switch (field.type) {
     case 'boolean':
@@ -50,43 +73,36 @@ export default function CellRenderer({ field, value }: CellRendererProps) {
       );
       
     case 'relation':
-      if (!Array.isArray(value) || value.length === 0) {
-        return <span className="text-gray-500">-</span>;
-      }
+      // Use the new RelationFieldDisplay component for consistent UI
       return (
-        <div className="space-y-1">
-          {value.slice(0, 3).map((item: any, index: number) => (
-            <div 
-              key={item.id || index} 
-              className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded inline-block mr-1"
-            >
-              {item.value || item.id || 'Unknown'}
-            </div>
-          ))}
-          {value.length > 3 && (
-            <div className="text-xs text-gray-500">+{value.length - 3} more</div>
-          )}
-        </div>
+        <RelationFieldDisplay 
+          value={value || []} 
+          fieldName={field.name}
+          onRelationClick={(relation) => {
+            console.log('Relation clicked:', relation);
+            // TODO: Implement relation navigation/management
+          }}
+        />
       );
       
     case 'file':
-      if (!value?.files || !Array.isArray(value.files) || value.files.length === 0) {
-        return <span className="text-gray-500">-</span>;
-      }
+      // Use the new FileFieldDisplay component for consistent UI
       return (
-        <div className="space-y-1">
-          {value.files.slice(0, 2).map((file: any, index: number) => (
-            <div 
-              key={file.id || index} 
-              className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded inline-block mr-1"
-            >
-              {file.name || 'File'}
-            </div>
-          ))}
-          {value.files.length > 2 && (
-            <div className="text-xs text-gray-500">+{value.files.length - 2} more files</div>
-          )}
-        </div>
+        <FileFieldDisplay 
+          value={value || []} 
+          fieldName={field.name}
+          onFileOpen={handleFileOpen}
+        />
+      );
+      
+    case 'document':
+      // Use the new DocumentFieldDisplay component for consistent UI
+      return (
+        <DocumentFieldDisplay 
+          value={value || []} 
+          fieldName={field.name}
+          onDocumentOpen={handleFileOpen}
+        />
       );
       
     case 'number':
