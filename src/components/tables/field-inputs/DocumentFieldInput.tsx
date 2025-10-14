@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Edit3, Upload, ExternalLink, PlusCircle, Trash2 } from 'lucide-react';
+import { FieldInput } from '@/components/tables/FieldInput';
+import type { LabelDisplayItem } from '@/components/tables/LabelDisplay';
 import type { DocumentArrayFieldValue, DocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import { DocumentCreationDialog } from '@/components/tables/dialogs/DocumentCreationDialog';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
@@ -19,6 +21,18 @@ interface DocumentFieldInputProps {
   tableId?: number;
 }
 
+// Helper function to convert document data to LabelDisplayItem format
+const documentsToLabelItems = (documents: DocumentArrayFieldValue): LabelDisplayItem[] => {
+  if (!Array.isArray(documents)) return [];
+  
+  return documents.map((document: any) => ({
+    id: document.id || document.name,
+    value: document.documentMetadata?.title || document.name || 'Untitled Document',
+    type: 'document' as const,
+    metadata: document
+  }));
+};
+
 export function DocumentFieldInput({
   value,
   onChange,
@@ -29,10 +43,13 @@ export function DocumentFieldInput({
   tableId = 1
 }: DocumentFieldInputProps) {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
   const [hoveredDocumentIndex, setHoveredDocumentIndex] = useState<number | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const dropdownMenuRef = useRef<HTMLButtonElement>(null);
 
   const documents = Array.isArray(value) ? value : [];
+  const items = documentsToLabelItems(documents);
 
   const handleDocumentCreated = useCallback((document: DocumentFieldValue, shouldOpen: boolean) => {
     const newDocuments = [...documents, document];
@@ -98,63 +115,41 @@ export function DocumentFieldInput({
   }, [field?.id]);
 
   return (
-    <div className="space-y-3">
-      {/* Document badges display */}
-      <div className="flex flex-wrap gap-2">
-        {documents.map((doc, idx) => {
-          const displayName = doc.documentMetadata?.title || doc.name;
-
-          return (
-            <div
-              key={doc.id || idx}
-              className="relative flex items-center gap-2"
-              onMouseEnter={() => setHoveredDocumentIndex(idx)}
-              onMouseLeave={() => setHoveredDocumentIndex(null)}
+    <FieldInput
+      items={items}
+      onAdd={() => {
+        // Show dropdown menu
+        setShowDropdown(true);
+      }}
+      onRemove={handleRemoveDocument}
+      error={error}
+      requiredMessage={required ? 'At least one document is required' : undefined}
+    >
+      {/* Document actions dropdown */}
+      <div className="flex items-center gap-2">
+        <DropdownMenu open={showDropdown} onOpenChange={setShowDropdown}>
+          <DropdownMenuTrigger asChild ref={dropdownMenuRef}>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              disabled={isCreating}
             >
-              <Badge variant="outline" className="text-xs">
-                {displayName}
-              </Badge>
-
-              {/* Action buttons on hover */}
-              {hoveredDocumentIndex === idx && (
-                <div className="flex gap-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleQuickOpen(doc)}
-                    className="h-6 w-6 p-0"
-                    title="Open document"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleRemoveDocument(idx)}
-                    className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                    title="Remove document"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* Add button */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-6 w-6" disabled={isCreating}>
-              <PlusCircle className="h-4 w-4" />
+              <PlusCircle className="h-4 w-4 mr-2" />
+              Add Document
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
-            <DropdownMenuItem onClick={handleCreateDocument} disabled={isCreating}>
+            <DropdownMenuItem onClick={() => {
+              setShowDropdown(false);
+              handleCreateDocument();
+            }} disabled={isCreating}>
               <Edit3 className="w-4 h-4 mr-2" />
-              Add Document
+              Create Document
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleUploadFile} disabled={isCreating}>
+            <DropdownMenuItem onClick={() => {
+              setShowDropdown(false);
+              handleUploadFile();
+            }} disabled={isCreating}>
               <Upload className="w-4 h-4 mr-2" />
               Upload File
             </DropdownMenuItem>
@@ -173,18 +168,6 @@ export function DocumentFieldInput({
         }}
       />
 
-      {/* Error display */}
-      {error && (
-        <div className="text-sm text-destructive">{error}</div>
-      )}
-
-      {/* Required validation */}
-      {required && documents.length === 0 && (
-        <div className="text-sm text-muted-foreground">
-          At least one document is required
-        </div>
-      )}
-
       {/* Document creation dialog */}
       {field && (
         <DocumentCreationDialog
@@ -196,6 +179,6 @@ export function DocumentFieldInput({
           onDocumentCreated={handleDocumentCreated}
         />
       )}
-    </div>
+    </FieldInput>
   );
 }

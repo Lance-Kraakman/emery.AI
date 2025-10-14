@@ -22,6 +22,7 @@ interface LabelDisplayProps {
   showPlusButton?: boolean;
   onRemove?: (index: number) => void;
   onAdd?: () => void;
+  onItemClick?: (item: LabelDisplayItem, index: number) => void; // New click handler for badges
   disabled?: boolean;
 }
 
@@ -56,6 +57,7 @@ export function LabelDisplay({
   showPlusButton = false,
   onRemove,
   onAdd,
+  onItemClick,
   disabled = false
 }: LabelDisplayProps) {
   const itemsArray = Array.isArray(items) ? items : [];
@@ -67,9 +69,14 @@ export function LabelDisplay({
         <div key={item.id || index} className="group relative">
           <Badge 
             variant="outline" 
-            className={`text-xs ${compact ? 'text-[10px]' : 'text-xs'} ${
+            className={`text-xs ${compact ? 'text-[10px]' : 'text-xs'} cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors ${
               onRemove ? 'pr-6' : ''
             }`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onItemClick?.(item, index);
+            }}
+            title={item.type === 'file' || item.type === 'document' ? 'Click to open' : 'View details'}
           >
             {getBadgeContent(item)}
           </Badge>
@@ -84,7 +91,7 @@ export function LabelDisplay({
                 e.stopPropagation();
                 onRemove(index);
               }}
-              className={`absolute -right-1 -top-1 h-4 w-4 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-background border rounded-full ${
+              className={`absolute -right-1 -top-1 h-4 w-4 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-background border rounded-full shadow-sm hover:bg-destructive hover:text-destructive-foreground ${
                 compact ? 'h-3 w-3' : 'h-4 w-4'
               }`}
             >
@@ -110,12 +117,13 @@ export function LabelDisplay({
           type="button"
           variant="ghost"
           size="icon"
-          className={`${compact ? 'h-5 w-5' : 'h-6 w-6'}`}
+          className={`${compact ? 'h-5 w-5' : 'h-6 w-6'} hover:bg-accent hover:text-accent-foreground`}
           onClick={(e) => {
             e.stopPropagation();
             onAdd?.();
           }}
           disabled={disabled}
+          title="Add new item"
         >
           <PlusCircle className={`${compact ? 'h-3 w-3' : 'h-4 w-4'}`} />
         </Button>

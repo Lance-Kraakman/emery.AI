@@ -103,15 +103,13 @@ function EmeryLayoutInner({
           </MainContentWithCanvas>
         </main>
 
-        {/* Chat Area - wrapped in ChatProvider */}
+        {/* Chat Area - EmeryChat controls its own width based on chatState */}
         {enableChat && (
-          <div className="w-96 border-l border-border">
-            <ChatProvider chatContext={chatContext}>
-              <Suspense fallback={<ChatSkeleton />}>
-                <EmeryChat />
-              </Suspense>
-            </ChatProvider>
-          </div>
+          <ChatProvider chatContext={chatContext}>
+            <Suspense fallback={<ChatSkeleton />}>
+              <EmeryChat />
+            </Suspense>
+          </ChatProvider>
         )}
       </div>
 

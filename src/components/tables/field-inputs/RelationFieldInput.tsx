@@ -4,10 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Search, PlusCircle, X, Loader2 } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { LabelDisplay, relationsToLabelItems } from '@/components/tables/LabelDisplay';
+import { FieldInput } from '@/components/tables/FieldInput';
+import { relationsToLabelItems } from '@/components/tables/LabelDisplay';
 import type { RelationArrayFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import { getRowsData } from '@/app/actions/rows';
 import { getFields } from '@/app/actions/fields';
@@ -120,20 +121,16 @@ export function RelationFieldInput({
   };
 
   return (
-    <div className="space-y-3">
-      {/* Main Input Area - Using LabelDisplay component */}
-      <LabelDisplay
-        items={relationsToLabelItems(relations)}
-        isEditMode={isEditMode}
-        showPlusButton={isEditMode}
-        onRemove={handleRemoveRelation}
-        onAdd={() => setIsOpen(true)}
-        disabled={!relatedTableId}
-      />
-
-      {/* Status Messages */}
-            {/* Status Messages - All removed for clean interface */}
-
+    <FieldInput
+      items={relationsToLabelItems(relations)}
+      onAdd={() => setIsOpen(true)}
+      onRemove={handleRemoveRelation}
+      error={error}
+      isEditMode={isEditMode}
+      disabled={!relatedTableId}
+      showPlusButton={isEditMode}
+      requiredMessage={required ? `At least one ${relatedTableId ? 'relation' : 'field'} is required` : undefined}
+    >
       {/* Table Selection Popup Dialog */}
       <Dialog open={isOpen && !!relatedTableId} onOpenChange={setIsOpen}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
@@ -148,12 +145,22 @@ export function RelationFieldInput({
                 <div className="text-sm font-medium text-muted-foreground">
                   Currently Selected:
                 </div>
-                <LabelDisplay
-                  items={relationsToLabelItems(relations)}
-                  isEditMode={true}
-                  compact={true}
-                  onRemove={handleRemoveRelation}
-                />
+                <div className="flex flex-wrap gap-1">
+                  {relationsToLabelItems(relations).map((item, index) => (
+                    <div
+                      key={item.id}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground rounded-md text-sm"
+                    >
+                      <span>{item.value}</span>
+                      <button
+                        onClick={() => handleRemoveRelation(index)}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -291,6 +298,6 @@ export function RelationFieldInput({
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </FieldInput>
   );
 }

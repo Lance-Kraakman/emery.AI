@@ -8,11 +8,14 @@ import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { FileMetadata } from "@/types/db"
-import type { FieldValue as DomainFieldValue, DocumentArrayFieldValue, FileFieldValue, FileArrayFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
+import type { FieldValue as DomainFieldValue, DocumentArrayFieldValue, FileFieldValue, FileArrayFieldValue, RelationArrayFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field"
 import { uploadFileAction } from "@/app/actions/files"
 import { PlusCircle, ExternalLink } from "lucide-react"
-import { DocumentFieldCell } from "./DocumentFieldCell"
+import { RelationFieldDisplay } from "@/components/tables/field-displays/RelationFieldDisplay"
+import { FileFieldDisplay } from "@/components/tables/field-displays/FileFieldDisplay"
+import { DocumentFieldDisplay } from "@/components/tables/field-displays/DocumentFieldDisplay"
+import { DocumentFieldInput } from "@/components/tables/field-inputs"
 import { FileTypeDetector } from "@/ddd/domain/tables/services/file-type-detector"
 import { createFileArtifact, createDocumentArtifact } from "@/components/chat/types/chat-artifacts"
 import { RelationFieldInput } from "@/components/tables/field-inputs"
@@ -23,23 +26,10 @@ interface EditableCellProps {
   organizationId: number;
   tableId: number;
   onSave?: (value: DomainFieldValue) => void;
-  onCancel?: (value: DomainFieldValue) => void;
+  onCancel?: (value: DomainFieldValue) => void;  
 }
 
 export function EditableCell({ field, value, organizationId, tableId, onSave, onCancel }: EditableCellProps) {
-  // Handle document fields completely separately - they manage their own state  
-  if (field.type === "document") {
-    return (
-      <DocumentFieldCell
-        field={field}
-        value={value as DocumentArrayFieldValue}
-        organizationId={organizationId}
-        tableId={tableId}
-        onSave={onSave || (() => {})}
-      />
-    )
-  }
-
   // AIDEV-NOTE: Canvas integration will be replaced with LlamaIndex chat-ui artifacts
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(value)
@@ -116,7 +106,6 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
       }
     }
   }
-
 
   const handleSave = () => {
     onSave?.(editValue)
@@ -224,70 +213,33 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         }
         return <span>{textValue}</span>
       case "relation":
-        // Handle relation data with proper type narrowing
-        if (Array.isArray(value)) {
-          return (
-            <div className="flex flex-wrap gap-1">
-              {value.slice(0, 3).map((item: any, idx: number) => (
-                <Badge key={idx} variant="secondary" className="text-xs">
-                  {item.value || item.title || item.name || item.id || "Related"}
-                </Badge>
-              ))}
-              {value.length > 3 && (
-                <Badge variant="outline" className="text-xs">
-                  +{value.length - 3} more
-                </Badge>
-              )}
-            </div>
-          )
-        }
-        return <span className="text-muted-foreground italic text-xs">No relation</span>
-      case "file":
-        // File fields are always arrays in DTO
-        if (Array.isArray(value)) {
-          return (
-            <div className="flex flex-wrap gap-1">
-              {value.slice(0, 2).map((file: any, idx: number) => (
-                <div 
-                  key={idx} 
-                  className="relative"
-                  onMouseEnter={() => setHoveredFileIndex(idx)}
-                  onMouseLeave={() => setHoveredFileIndex(null)}
-                >
-                  <Badge variant="outline" className="text-xs">
-                    {file.name || file.filename || "File"}
-                  </Badge>
-                  {hoveredFileIndex === idx && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleFileOpen(file)}
-                      className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-white shadow-sm border-gray-200 hover:bg-gray-50 z-10"
-                      title="Open file"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-              {value.length > 2 && (
-                <Badge variant="outline" className="text-xs">
-                  +{value.length - 2} more
-                </Badge>
-              )}
-            </div>
-          )
-        }
-        return <span className="text-muted-foreground italic text-xs">No files</span>
-      case "document":
-        // Handle document fields - delegate to DocumentFieldCell
+        // Use our new RelationFieldDisplay component
         return (
-          <DocumentFieldCell
-            field={field}
-            value={value as DocumentArrayFieldValue}
-            organizationId={organizationId}
-            tableId={tableId}
-            onSave={onSave || (() => {})}
+          <RelationFieldDisplay 
+            value={(value as RelationArrayFieldValue) || []} 
+            fieldName={field.name}
+            onRelationClick={(relation) => {
+              console.log('Relation clicked:', relation);
+              // TODO: Implement relation navigation/management
+            }}
+          />
+        )
+      case "file":
+        // Use our new FileFieldDisplay component
+        return (
+          <FileFieldDisplay 
+            value={(value as FileArrayFieldValue) || []} 
+            fieldName={field.name}
+            onFileOpen={handleFileOpen}
+          />
+        )
+      case "document":
+        // Handle document fields using our new Display component
+        return (
+          <DocumentFieldDisplay
+            value={value as DocumentArrayFieldValue || []}
+            fieldName={field.name}
+            onDocumentOpen={handleFileOpen}
           />
         )
       default:
@@ -405,14 +357,17 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
       )
 
     case "document":
-      // Document fields use DocumentFieldCell component - no separate edit mode needed
+      // Document fields use DocumentFieldInput component in edit mode
       return (
-        <DocumentFieldCell
+        <DocumentFieldInput
+          value={value as DocumentArrayFieldValue || []}
+          onChange={(newValue) => {
+            setEditValue(newValue);
+            handleSave();
+          }}
           field={field}
-          value={value as DocumentArrayFieldValue}
           organizationId={organizationId}
           tableId={tableId}
-          onSave={onSave || (() => {})}
         />
       )
 

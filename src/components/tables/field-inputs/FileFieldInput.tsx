@@ -4,6 +4,8 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Upload, Trash2, File } from 'lucide-react';
+import { FieldInput } from '@/components/tables/FieldInput';
+import type { LabelDisplayItem } from '@/components/tables/LabelDisplay';
 import type { FileArrayFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 interface FileFieldInputProps {
@@ -14,6 +16,18 @@ interface FileFieldInputProps {
   maxFiles?: number;
   error?: string;
 }
+
+// Helper function to convert file data to LabelDisplayItem format
+const filesToLabelItems = (files: FileArrayFieldValue): LabelDisplayItem[] => {
+  if (!Array.isArray(files)) return [];
+  
+  return files.map((file: any) => ({
+    id: file.id || file.name,
+    value: file.name || file.filename || 'Unknown File',
+    type: 'file' as const,
+    metadata: file
+  }));
+};
 
 export function FileFieldInput({
   value,
@@ -52,25 +66,45 @@ export function FileFieldInput({
   };
 
   const acceptedTypes = allowedTypes?.join(',') || '*/*';
+  const items = filesToLabelItems(files);
 
   return (
-    <div className="space-y-3">
+    <FieldInput
+      items={items}
+      onAdd={() => {
+        // Trigger file input click
+        const fileInput = document.getElementById('file-upload-input') as HTMLInputElement;
+        fileInput?.click();
+      }}
+      onRemove={handleRemoveFile}
+      error={error}
+      showPlusButton={files.length < maxFiles}
+      requiredMessage={required ? 'At least one file is required' : undefined}
+    >
+      {/* Hidden file input */}
+      <input
+        id="file-upload-input"
+        type="file"
+        multiple
+        accept={acceptedTypes}
+        onChange={handleFileSelect}
+        className="hidden"
+        disabled={files.length >= maxFiles}
+      />
+
+      {/* File upload button */}
       <div className="flex items-center gap-2">
         <Button
           type="button"
           variant="outline"
-          className="relative"
+          onClick={() => {
+            const fileInput = document.getElementById('file-upload-input') as HTMLInputElement;
+            fileInput?.click();
+          }}
+          disabled={files.length >= maxFiles}
         >
           <Upload className="h-4 w-4 mr-2" />
           Upload Files
-          <input
-            type="file"
-            multiple
-            accept={acceptedTypes}
-            onChange={handleFileSelect}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            disabled={files.length >= maxFiles}
-          />
         </Button>
 
         {maxFiles > 1 && (
@@ -80,52 +114,11 @@ export function FileFieldInput({
         )}
       </div>
 
-      {files.length > 0 && (
-        <div className="space-y-2 border rounded-md p-3">
-          {files.map((file, index) => (
-            <div key={file.id || index} className="flex items-center justify-between p-2 bg-muted rounded">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <File className="h-4 w-4 text-muted-foreground" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">
-                    {file.name}
-                  </div>
-                  {file.size && (
-                    <div className="text-xs text-muted-foreground">
-                      {(file.size / 1024).toFixed(1)} KB
-                    </div>
-                  )}
-                </div>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => handleRemoveFile(index)}
-                className="h-8 w-8 p-0"
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-
       {allowedTypes && allowedTypes.length > 0 && (
         <div className="text-xs text-muted-foreground">
           Accepted types: {allowedTypes.join(', ')}
         </div>
       )}
-
-      {error && (
-        <div className="text-sm text-destructive">{error}</div>
-      )}
-
-      {required && files.length === 0 && (
-        <div className="text-sm text-muted-foreground">
-          At least one file is required
-        </div>
-      )}
-    </div>
+    </FieldInput>
   );
 }

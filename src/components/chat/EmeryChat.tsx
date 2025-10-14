@@ -492,7 +492,7 @@ export function EmeryChat() {
   // Collapsed state - just show header with expand button
   if (chatState === 'collapsed') {
     return (
-      <div className="w-12 h-full flex flex-col bg-card border-l border-border">
+      <div className="w-12 h-full flex flex-col bg-card border-l border-border flex-shrink-0">
         <EmeryChatHeader 
           domainType={chatContext?.domainType}
           domainName={chatContext?.domainName}
@@ -595,7 +595,7 @@ export function EmeryChat() {
   const isFullWidth = canvasState === 'collapsed'
   
   return (
-    <div className={`flex bg-card border-l border-border ${isFullWidth ? 'h-screen' : 'h-full'}`}>
+    <div className={`flex bg-card border-l border-border flex-shrink-0 ${isFullWidth ? 'h-screen' : 'h-full'}`}>
       {/* Chat Section - now full width without sidebar */}
       <div className={`flex flex-col ${isFullWidth ? 'h-screen' : 'h-full'} ${isFullWidth ? 'flex-1' : 'w-96'}`}>
         <EmeryChatHeader 

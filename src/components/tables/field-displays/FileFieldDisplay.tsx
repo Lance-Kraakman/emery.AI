@@ -1,96 +1,57 @@
 'use client';
 
 import React from 'react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Download, File, FileText, Image, Video, Music } from 'lucide-react';
+import { FieldInput } from '@/components/tables/FieldInput';
+import type { LabelDisplayItem } from '@/components/tables/LabelDisplay';
 import type { FileArrayFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
 interface FileFieldDisplayProps {
   value: FileArrayFieldValue;
   fieldName: string;
+  onFileOpen?: (file: any) => void; // Add file open handler
 }
 
-function getFileIcon(mimeType?: string, fileName?: string) {
-  if (!mimeType && !fileName) return <File className="h-4 w-4" />;
+// Helper function to convert file data to LabelDisplayItem format
+const filesToLabelItems = (files: FileArrayFieldValue): LabelDisplayItem[] => {
+  if (!Array.isArray(files)) return [];
+  
+  return files.map((file: any) => ({
+    id: file.id || file.name,
+    value: file.name || file.filename || 'Unknown File',
+    type: 'file' as const,
+    metadata: file
+  }));
+};
 
-  const type = mimeType || '';
-  const name = fileName || '';
+export function FileFieldDisplay({ value, fieldName, onFileOpen }: FileFieldDisplayProps) {
+  // Convert file data to LabelDisplayItem format
+  const items = filesToLabelItems(value);
+  
+  // Create field-specific messages
+  const emptyMessage = `No ${fieldName.toLowerCase()} uploaded`;
+  const count = value?.length || 0;
+  const countMessage = `${count} ${count === 1 ? 'file' : 'files'} uploaded`;
 
-  if (type.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(name)) {
-    return <Image className="h-4 w-4" />;
-  }
-  if (type.startsWith('video/') || /\.(mp4|webm|ogg|avi|mov)$/i.test(name)) {
-    return <Video className="h-4 w-4" />;
-  }
-  if (type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a)$/i.test(name)) {
-    return <Music className="h-4 w-4" />;
-  }
-  if (type.includes('text') || /\.(txt|md|csv)$/i.test(name)) {
-    return <FileText className="h-4 w-4" />;
-  }
-
-  return <File className="h-4 w-4" />;
-}
-
-function formatFileSize(bytes?: number): string {
-  if (!bytes || bytes === 0) return '0 B';
-
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`;
-}
-
-export function FileFieldDisplay({ value, fieldName }: FileFieldDisplayProps) {
-  if (!value || !Array.isArray(value) || value.length === 0) {
-    return (
-      <div className="text-muted-foreground italic">
-        No {fieldName.toLowerCase()}
-      </div>
-    );
-  }
+  const handleFileClick = (item: LabelDisplayItem) => {
+    if (onFileOpen && item.metadata) {
+      onFileOpen(item.metadata);
+    } else {
+      // Fallback: try to open file in new window if it has a URL
+      const fileUrl = item.metadata?.url || item.metadata?.downloadUrl;
+      if (fileUrl) {
+        window.open(fileUrl, '_blank');
+      }
+    }
+  };
 
   return (
-    <div className="space-y-3">
-      {value.map((file, index) => (
-        <div key={file.id || index} className="flex items-center justify-between p-3 border rounded-lg bg-background">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="text-muted-foreground">
-              {getFileIcon(file.mimeType, file.name)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-medium text-foreground truncate">
-                {file.name || 'Unnamed file'}
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                {file.mimeType && (
-                  <Badge variant="outline" className="text-xs">
-                    {file.mimeType}
-                  </Badge>
-                )}
-                {file.size && (
-                  <span>{formatFileSize(file.size)}</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {file.s3Key && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                // TODO: Implement S3 URL generation for download
-                console.log('Download file:', file.s3Key);
-              }}
-              className="flex items-center gap-1"
-            >
-              <Download className="h-3 w-3" />
-              Download
-            </Button>
-          )}
-        </div>
-      ))}
-    </div>
+    <FieldInput
+      items={items}
+      isEditMode={false}
+      showPlusButton={true} // Always show (+) button
+      onItemClick={handleFileClick}
+      onAdd={() => {}} // Required but not used in read-only mode
+      onRemove={() => {}} // Required but not used in read-only mode
+    />
   );
 }

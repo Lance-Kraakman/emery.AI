@@ -17,7 +17,7 @@ import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { Row } from '@/ddd/domain/tables/value-objects/row';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import CellRenderer from './CellRenderer';
+import { EditableCell } from '@/app/(app)/data/components/EditableCell';
 import FieldInput from './FieldInput';
 
 interface RowTableProps {
@@ -75,9 +75,16 @@ export default function RowTable({
               tableId={tableId}
             />
           ) : (
-            <CellRenderer 
+            <EditableCell 
               field={field} 
               value={rowData[`field_${field.id}`]} 
+              organizationId={organizationId}
+              tableId={tableId}
+              onSave={(newValue) => {
+                // Handle save when editing inline (if needed)
+                // For now, just trigger edit mode
+                onStartEdit(row);
+              }}
             />
           );
         },
