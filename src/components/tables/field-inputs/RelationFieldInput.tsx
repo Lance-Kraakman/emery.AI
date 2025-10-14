@@ -4,9 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Search, Plus, X, Loader2 } from 'lucide-react';
+import { Search, PlusCircle, X, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { LabelDisplay, relationsToLabelItems } from '@/components/tables/LabelDisplay';
 import type { RelationArrayFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import { getRowsData } from '@/app/actions/rows';
 import { getFields } from '@/app/actions/fields';
@@ -20,6 +21,7 @@ interface RelationFieldInputProps {
   required?: boolean;
   multiple?: boolean;
   error?: string;
+  isEditMode?: boolean; // New prop to control PlusCircle visibility
 }
 
 export function RelationFieldInput({
@@ -27,8 +29,9 @@ export function RelationFieldInput({
   onChange,
   relatedTableId,
   required,
-  multiple = true,
-  error
+  multiple = false, // Default to single relations
+  error,
+  isEditMode = true // Default to edit mode for backward compatibility
 }: RelationFieldInputProps) {
   const relations = Array.isArray(value) ? value : [];
   const [isOpen, setIsOpen] = useState(false);
@@ -41,7 +44,7 @@ export function RelationFieldInput({
 
   // Load table data when popup opens
   useEffect(() => {
-    if (isOpen && relatedTableId && !tableData) {
+    if (isOpen && relatedTableId) {
       loadTableData();
     }
   }, [isOpen, relatedTableId]);
@@ -91,11 +94,11 @@ export function RelationFieldInput({
       if (!exists) {
         onChange([...relations, newRelation]);
       }
+      // Don't close dialog for multiple relations - let user select more
     } else {
       onChange([newRelation]);
+      setIsOpen(false); // Only close for single relations
     }
-
-    setIsOpen(false);
   };
 
   // Helper function to resolve display value from row data
@@ -118,84 +121,18 @@ export function RelationFieldInput({
 
   return (
     <div className="space-y-3">
-      {/* Main Input Area - Exact FileFieldInput Pattern */}
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="relative"
-          onClick={() => setIsOpen(true)}
-          disabled={!relatedTableId}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Record
-        </Button>
-
-        {multiple && (
-          <Badge variant="secondary" className="text-xs">
-            {relations.length}
-          </Badge>
-        )}
-      </div>
-
-      {/* Selected Relations Display */}
-      {relations.length > 0 && (
-        <div className="space-y-2 border rounded-md p-3">
-          <div className="text-sm font-medium text-muted-foreground">
-            Selected Relations:
-          </div>
-          {relations.map((relation, index) => (
-            <div key={relation.id || index} className="flex items-center justify-between p-2 bg-muted rounded">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <Badge variant="outline" className="text-xs">
-                  {relation.id}
-                </Badge>
-                <span className="text-sm truncate">
-                  {relation.value || `Record ${relation.id}`}
-                </span>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => handleRemoveRelation(index)}
-                className="h-6 w-6 p-0"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Main Input Area - Using LabelDisplay component */}
+      <LabelDisplay
+        items={relationsToLabelItems(relations)}
+        isEditMode={isEditMode}
+        showPlusButton={isEditMode}
+        onRemove={handleRemoveRelation}
+        onAdd={() => setIsOpen(true)}
+        disabled={!relatedTableId}
+      />
 
       {/* Status Messages */}
-      {relatedTableId && (
-        <div className="text-xs text-muted-foreground">
-          Linking to table ID: {relatedTableId} {relations.length > 0 && `(• ${relations.length} selected)`}
-        </div>
-      )}
-
-      {!relatedTableId && (
-        <div className="text-xs text-destructive">
-          No related table configured - edit field settings to select a table
-        </div>
-      )}
-
-      {!multiple && relations.length > 0 && (
-        <div className="text-xs text-muted-foreground">
-          Only one relation allowed. Remove existing to add another.
-        </div>
-      )}
-
-      {error && (
-        <div className="text-sm text-destructive">{error}</div>
-      )}
-
-      {required && relations.length === 0 && (
-        <div className="text-sm text-muted-foreground">
-          At least one relation is required
-        </div>
-      )}
+            {/* Status Messages - All removed for clean interface */}
 
       {/* Table Selection Popup Dialog */}
       <Dialog open={isOpen && !!relatedTableId} onOpenChange={setIsOpen}>
@@ -205,6 +142,21 @@ export function RelationFieldInput({
           </DialogHeader>
           
           <div className="space-y-4">
+            {/* Currently Selected Relations - Using same UI as table cells */}
+            {relations.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-muted-foreground">
+                  Currently Selected:
+                </div>
+                <LabelDisplay
+                  items={relationsToLabelItems(relations)}
+                  isEditMode={true}
+                  compact={true}
+                  onRemove={handleRemoveRelation}
+                />
+              </div>
+            )}
+
             {/* Search Input */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -319,11 +271,22 @@ export function RelationFieldInput({
               <span>
                 {tableData ? `${tableData.rows.length} record${tableData.rows.length === 1 ? '' : 's'} available` : 'Loading...'}
               </span>
-              {multiple && (
-                <span>
-                  {relations.length} selected
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {multiple && (
+                  <span>
+                    {relations.length} selected
+                  </span>
+                )}
+                {multiple && relations.length > 0 && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Done
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </DialogContent>
