@@ -12,13 +12,11 @@ import type { FieldValue as DomainFieldValue, DocumentArrayFieldValue, FileField
 import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field"
 import { uploadFileAction } from "@/app/actions/files"
 import { PlusCircle, ExternalLink } from "lucide-react"
-import { RelationFieldDisplay } from "@/components/tables/field-displays/RelationFieldDisplay"
-import { FileFieldDisplay } from "@/components/tables/field-displays/FileFieldDisplay"
-import { DocumentFieldDisplay } from "@/components/tables/field-displays/DocumentFieldDisplay"
-import { DocumentFieldInput } from "@/components/tables/field-inputs"
+import { DocumentField } from "@/components/tables/fields/DocumentField"
+import { FileField } from "@/components/tables/fields/FileField"
+import { RelationField } from "@/components/tables/fields/RelationField"
 import { FileTypeDetector } from "@/ddd/domain/tables/services/file-type-detector"
 import { createFileArtifact, createDocumentArtifact } from "@/components/chat/types/chat-artifacts"
-import { RelationFieldInput } from "@/components/tables/field-inputs"
 
 interface EditableCellProps {
   field: FieldDTO;
@@ -213,10 +211,12 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
         }
         return <span>{textValue}</span>
       case "relation":
-        // Use our new RelationFieldDisplay component
+        // Use unified RelationField component (display mode)
         return (
-          <RelationFieldDisplay 
-            value={(value as RelationArrayFieldValue) || []} 
+          <RelationField
+            value={(value as RelationArrayFieldValue) || []}
+            isEditMode={false}
+            compact={true}
             fieldName={field.name}
             onRelationClick={(relation) => {
               console.log('Relation clicked:', relation);
@@ -225,20 +225,24 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
           />
         )
       case "file":
-        // Use our new FileFieldDisplay component
+        // Use unified FileField component (display mode)
         return (
-          <FileFieldDisplay 
-            value={(value as FileArrayFieldValue) || []} 
+          <FileField
+            value={(value as FileArrayFieldValue) || []}
+            isEditMode={false}
+            compact={true}
             fieldName={field.name}
             onFileOpen={handleFileOpen}
           />
         )
       case "document":
-        // Handle document fields using our new Display component
+        // Use unified DocumentField component (display mode)
         return (
-          <DocumentFieldDisplay
+          <DocumentField
             value={value as DocumentArrayFieldValue || []}
-            fieldName={field.name}
+            isEditMode={false}
+            compact={true}
+            field={field}
             onDocumentOpen={handleFileOpen}
           />
         )
@@ -311,13 +315,16 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
     case "relation":
       return (
         <div className="p-1 min-w-[200px]">
-          <RelationFieldInput
-            value={(editValue as any) || []}
+          <RelationField
+            value={(editValue as RelationArrayFieldValue) || []}
             onChange={(newValue) => {
               setEditValue(newValue);
-              handleSave(); // Auto-save on change
+              onSave?.(newValue);
             }}
+            isEditMode={true}
+            compact={true}
             relatedTableId={field.relatedTableId || undefined}
+            multiple={false}
             required={field.required || false}
           />
         </div>
@@ -325,50 +332,38 @@ export function EditableCell({ field, value, organizationId, tableId, onSave, on
 
     case "file":
       return (
-        <div className="p-1 flex items-center gap-1">
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files?.[0]) {
-                handleFileSelect(e.target.files[0])
-              }
+        <div className="p-1 min-w-[200px]">
+          <FileField
+            value={(editValue as FileArrayFieldValue) || []}
+            onChange={(newValue) => {
+              setEditValue(newValue);
+              onSave?.(newValue);
             }}
-            disabled={uploading}
+            isEditMode={true}
+            compact={true}
+            onFileOpen={handleFileOpen}
+            maxFiles={10}
           />
-          <div className="flex flex-wrap gap-1">
-            {Array.isArray(value) && value.map((file: any, idx: number) => (
-              <Badge key={idx} variant="outline" className="text-xs">
-                {file.name || file.filename || "File"}
-              </Badge>
-            ))}
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-          >
-            <PlusCircle className="h-4 w-4" />
-          </Button>
         </div>
       )
 
     case "document":
-      // Document fields use DocumentFieldInput component in edit mode
       return (
-        <DocumentFieldInput
-          value={value as DocumentArrayFieldValue || []}
-          onChange={(newValue) => {
-            setEditValue(newValue);
-            handleSave();
-          }}
-          field={field}
-          organizationId={organizationId}
-          tableId={tableId}
-        />
+        <div className="p-1 min-w-[200px]">
+          <DocumentField
+            value={(editValue as DocumentArrayFieldValue) || []}
+            onChange={(newValue) => {
+              setEditValue(newValue);
+              onSave?.(newValue);
+            }}
+            isEditMode={true}
+            compact={true}
+            field={field}
+            organizationId={organizationId}
+            tableId={tableId}
+            onDocumentOpen={handleFileOpen}
+          />
+        </div>
       )
 
     default:

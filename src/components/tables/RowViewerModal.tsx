@@ -6,15 +6,10 @@ import { Button } from '@/components/ui/button';
 import { BaseModal } from '@/app/(app)/agents/components/modals/BaseModal';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import {
-  TextFieldDisplay,
-  NumberFieldDisplay,
-  BooleanFieldDisplay,
-  DateFieldDisplay,
-  FileFieldDisplay,
-  DocumentFieldDisplay,
-  RelationFieldDisplay
-} from './field-displays';
+import { Checkbox } from '@/components/ui/checkbox';
+import { DocumentField } from './fields/DocumentField';
+import { FileField } from './fields/FileField';
+import { RelationField } from './fields/RelationField';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { RowDTO, TypedFieldValueDTO } from '@/app/mappers/row-mapper';
 import type {
@@ -102,19 +97,48 @@ export function RowViewerModal({
 
     switch (field.type) {
       case 'text':
-        return <TextFieldDisplay value={value as string} fieldName={field.name} />;
+        return value ? <div>{value as string}</div> : <span className="text-muted-foreground italic">—</span>;
       case 'number':
-        return <NumberFieldDisplay value={value as number} fieldName={field.name} />;
+        return value !== null && value !== undefined ? (
+          <div>{(value as number).toLocaleString()}</div>
+        ) : (
+          <span className="text-muted-foreground italic">—</span>
+        );
       case 'boolean':
-        return <BooleanFieldDisplay value={value as boolean} fieldName={field.name} />;
+        return <Checkbox checked={value as boolean || false} disabled />;
       case 'date':
-        return <DateFieldDisplay value={value as DateFieldValue} fieldName={field.name} />;
+        return value ? (
+          <div>{new Date(value as string).toLocaleDateString()}</div>
+        ) : (
+          <span className="text-muted-foreground italic">—</span>
+        );
       case 'file':
-        return <FileFieldDisplay value={value as FileArrayFieldValue} fieldName={field.name} />;
+        return (
+          <FileField
+            value={(value as FileArrayFieldValue) || []}
+            isEditMode={false}
+            compact={false}
+            fieldName={field.name}
+          />
+        );
       case 'document':
-        return <DocumentFieldDisplay value={value as DocumentArrayFieldValue} fieldName={field.name} />;
+        return (
+          <DocumentField
+            value={(value as DocumentArrayFieldValue) || []}
+            isEditMode={false}
+            compact={false}
+            field={field}
+          />
+        );
       case 'relation':
-        return <RelationFieldDisplay value={value as RelationArrayFieldValue} fieldName={field.name} />;
+        return (
+          <RelationField
+            value={(value as RelationArrayFieldValue) || []}
+            isEditMode={false}
+            compact={false}
+            fieldName={field.name}
+          />
+        );
       default:
         return (
           <div className="text-muted-foreground italic">

@@ -7,15 +7,12 @@ import { BaseModal } from '@/app/(app)/agents/components/modals/BaseModal';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import {
-  TextFieldInput,
-  NumberFieldInput,
-  BooleanFieldInput,
-  DateFieldInput,
-  FileFieldInput,
-  DocumentFieldInput,
-  RelationFieldInput
-} from './field-inputs';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { DocumentField } from './fields/DocumentField';
+import { FileField } from './fields/FileField';
+import { RelationField } from './fields/RelationField';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { RowDTO, TypedFieldValueDTO, FieldValueDTO } from '@/app/mappers/row-mapper';
 import type {
@@ -224,61 +221,85 @@ export function RowEditorModal({
 
     switch (field.type) {
       case 'text':
+        const isMultiline = field.metadata?.multiline as boolean;
         return (
-          <TextFieldInput
-            {...commonProps}
-            value={value as string || ''}
-            placeholder={`Enter ${field.name.toLowerCase()}`}
-            multiline={field.metadata?.multiline as boolean}
-          />
+          <div className="space-y-2">
+            {isMultiline ? (
+              <Textarea
+                value={value as string || ''}
+                onChange={(e) => commonProps.onChange(e.target.value)}
+                placeholder={`Enter ${field.name.toLowerCase()}`}
+                className={error ? 'border-destructive' : ''}
+              />
+            ) : (
+              <Input
+                type="text"
+                value={value as string || ''}
+                onChange={(e) => commonProps.onChange(e.target.value)}
+                placeholder={`Enter ${field.name.toLowerCase()}`}
+                className={error ? 'border-destructive' : ''}
+              />
+            )}
+            {error && <div className="text-sm text-destructive">{error}</div>}
+          </div>
         );
       case 'number':
         return (
-          <NumberFieldInput
-            {...commonProps}
-            value={value as number}
-            min={field.metadata?.min as number}
-            max={field.metadata?.max as number}
-            step={field.metadata?.step as number}
-          />
+          <div className="space-y-2">
+            <Input
+              type="number"
+              value={value as number ?? ''}
+              onChange={(e) => commonProps.onChange(e.target.value ? Number(e.target.value) : null)}
+              min={field.metadata?.min as number}
+              max={field.metadata?.max as number}
+              step={field.metadata?.step as number}
+              className={error ? 'border-destructive' : ''}
+            />
+            {error && <div className="text-sm text-destructive">{error}</div>}
+          </div>
         );
       case 'boolean':
         return (
-          <BooleanFieldInput
-            value={value as boolean || false}
-            onChange={commonProps.onChange}
-            required={commonProps.required}
-            error={commonProps.error}
-            label={`Enable ${field.name}`}
-          />
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              checked={value as boolean || false}
+              onCheckedChange={(checked) => commonProps.onChange(checked)}
+            />
+            <Label>Enable {field.name}</Label>
+            {error && <div className="text-sm text-destructive ml-2">{error}</div>}
+          </div>
         );
       case 'date':
         return (
-          <DateFieldInput
-            value={value as DateFieldValue}
-            onChange={commonProps.onChange}
-            required={commonProps.required}
-            error={commonProps.error}
-          />
+          <div className="space-y-2">
+            <Input
+              type="date"
+              value={value as string || ''}
+              onChange={(e) => commonProps.onChange(e.target.value)}
+              className={error ? 'border-destructive' : ''}
+            />
+            {error && <div className="text-sm text-destructive">{error}</div>}
+          </div>
         );
       case 'file':
         return (
-          <FileFieldInput
+          <FileField
             value={value as FileArrayFieldValue || []}
             onChange={commonProps.onChange}
-            required={commonProps.required}
-            error={commonProps.error}
+            isEditMode={true}
+            compact={false}
+            fieldName={field.name}
             allowedTypes={field.metadata?.allowedTypes as string[]}
             maxFiles={field.metadata?.maxFiles as number}
           />
         );
       case 'document':
         return (
-          <DocumentFieldInput
+          <DocumentField
             value={value as DocumentArrayFieldValue || []}
             onChange={commonProps.onChange}
-            required={commonProps.required}
-            error={commonProps.error}
+            isEditMode={true}
+            compact={false}
             field={field}
             organizationId={1} // TODO: Get from context/props
             tableId={1} // TODO: Get from context/props
@@ -286,13 +307,15 @@ export function RowEditorModal({
         );
       case 'relation':
         return (
-          <RelationFieldInput
+          <RelationField
             value={value as RelationArrayFieldValue || []}
             onChange={commonProps.onChange}
-            required={commonProps.required}
-            error={commonProps.error}
+            isEditMode={true}
+            compact={false}
+            fieldName={field.name}
             relatedTableId={field.relatedTableId || undefined}
             multiple={field.metadata?.multiple !== false}
+            required={field.required || false}
           />
         );
       default:
