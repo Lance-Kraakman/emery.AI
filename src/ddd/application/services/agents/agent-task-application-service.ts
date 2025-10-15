@@ -161,6 +161,14 @@ export class AgentTaskApplicationService {
       });
 
       // 4. Execute via execution repository
+      console.log(`[AGENT-TASK-SERVICE-DEBUG] Task execution request:`, {
+        taskId: task.id.value.substring(0, 8),
+        taskCapabilityName: task.capabilityName,
+        taskCapabilityNameType: typeof task.capabilityName,
+        convertedCapabilityName: task.capabilityName || undefined,
+        willPassCapabilityName: !!(task.capabilityName || undefined)
+      });
+
       const executionRequest: AgentExecutionRequest = {
         agentId: task.agentId.value,
         instructions: task.instructions.instructions,

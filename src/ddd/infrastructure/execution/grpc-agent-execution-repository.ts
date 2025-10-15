@@ -28,8 +28,17 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
     const { agentId, instructions, capabilityName, tools, servers, executionId, organizationId, timeoutSeconds, onProgress } = request;
 
     console.log(`[GRPC-EXECUTION-REPO] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
+    console.log(`[GRPC-EXECUTION-REPO-DEBUG] Capability routing:`, {
+      capabilityName,
+      capabilityNameType: typeof capabilityName,
+      capabilityNameTruthy: !!capabilityName,
+      capabilityNameLength: capabilityName?.length,
+      willUseCapabilityMode: !!capabilityName
+    });
     if (capabilityName) {
       console.log(`[GRPC-EXECUTION-REPO] Capability-based execution: ${capabilityName}`);
+    } else {
+      console.log(`[GRPC-EXECUTION-REPO] Instruction-based execution (no capability name)`);
     }
 
     try {
