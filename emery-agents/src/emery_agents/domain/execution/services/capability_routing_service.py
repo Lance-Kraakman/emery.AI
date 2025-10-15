@@ -115,19 +115,13 @@ class CapabilityRoutingService:
             if hasattr(step, 'tools') and step.tools:
                 all_tools.extend([tool.name for tool in step.tools])
 
-        # Extract agent API key from agent config for tool authentication
-        environment = {}
-        if hasattr(request.agent_config, 'api_key') and request.agent_config.api_key:
-            environment['api_key'] = request.agent_config.api_key
-
         return ExecutionContext(
             mode=ExecutionMode.CAPABILITY_BASED,
             instructions=capability.description,
             available_tools=list(set(all_tools)),  # Remove duplicates
             agent_id=AgentId(request.agent_id) if hasattr(request, 'agent_id') and request.agent_id else None,
             organization_id=self._parse_organization_id(request.organization_id),
-            capability_name=request.capability_name,
-            environment=environment
+            capability_name=request.capability_name
         )
     
     def _create_instruction_context(self, request: TaskRequest) -> ExecutionContext:

@@ -104,7 +104,6 @@ message AgentConfig {
   repeated ToolConfig tools = 5;
   repeated ServerConfig servers = 6;
   repeated CapabilityConfig capabilities = 7;
-  string api_key = 8;  // Agent API key for tool authentication (uses agent owner's OAuth credentials)
 }
 
 // Capability configuration with steps

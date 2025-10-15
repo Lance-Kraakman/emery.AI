@@ -1,15 +1,15 @@
-import type { 
-  IAgentExecutionRepository, 
-  AgentExecutionRequest, 
-  AgentExecutionResult, 
-  ExecutionStatus, 
-  WorkerHealth 
+import type {
+  IAgentExecutionRepository,
+  AgentExecutionRequest,
+  AgentExecutionResult,
+  ExecutionStatus,
+  WorkerHealth
 } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import { workerRegistry } from '@/lib/grpc/client';
 import type { TaskProgress } from '@/lib/grpc/client';
 import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/lib/grpc/proto-mappers';
-import { getAgentDisplayName, getCapabilitiesCount } from '@/ddd/domain/agents/entities/agent';
+import { getAgentDisplayName, getCapabilitiesCount, type Agent } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, UserId, OrganizationId, TaskStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
@@ -48,13 +48,16 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       // 3. Get worker client for organization
       const workerClient = workerRegistry.getWorkerForOrganization(organizationIdStr);
 
-      // 4. Create proto task request - use capability mode if capabilityName provided
+      // 4. Enrich agent with API key in tools (following chat pattern)
+      const enrichedAgent = this.enrichAgentTools(agent);
+
+      // 5. Create proto task request - use capability mode if capabilityName provided
       const taskRequest = capabilityName
         ? createTaskRequest({
             taskId: executionId,
             agentId: agent.id.value,
             capabilityName: capabilityName, // Use capability-based execution
-            agent: agent,
+            agent: enrichedAgent, // Use enriched agent with API key in tool configs
             triggerData: {}, // Empty for proto compatibility
             organizationId: organizationIdStr,
             ownerId: agent.ownerId.value,
@@ -65,12 +68,12 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
             agentId: agent.id.value,
             instructionConfig: { // Use instruction-based execution
               instructions,
-              tools: (tools || []).map(tool =>
+              tools: this.enrichTools((tools || []).map(tool =>
                 tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
-              ),
+              ), agent.apiKey?.value),
               servers: servers || []
             },
-            agent: agent,
+            agent: enrichedAgent,
             triggerData: {}, // Empty for proto compatibility
             organizationId: organizationIdStr,
             ownerId: agent.ownerId.value,
@@ -271,5 +274,72 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       console.error(`[GRPC-EXECUTION-REPO] Error checking execution availability for org ${organizationId}:`, error);
       return false;
     }
+  }
+
+  /**
+   * Enrich tools with agent API key (following chat pattern)
+   * Adds api_key to tool.config for OAuth proxy authentication
+   */
+  private enrichTools(tools: ToolConfig[], agentApiKey?: string): ToolConfig[] {
+    if (!agentApiKey) {
+      return tools;
+    }
+
+    return tools.map(tool => {
+      const config = tool.config as any;
+
+      // If tool already has authentication, preserve it
+      if (config.api_key || config.oauth_token) {
+        return tool;
+      }
+
+      // Add API key with agent mode for OAuth proxy
+      return tool.withConfig({
+        ...config,
+        api_key: agentApiKey,
+        api_key_mode: 'agent'  // Agent mode uses agent owner's credentials
+      });
+    });
+  }
+
+  /**
+   * Enrich agent with API key in all tool configs (for capability execution)
+   * Clones agent and enriches capability step tools with API key
+   */
+  private enrichAgentTools(agent: Agent): Agent {
+    if (!agent.apiKey) {
+      return agent;
+    }
+
+    const agentApiKey = agent.apiKey.value;
+
+    // Clone agent with enriched capabilities
+    return {
+      ...agent,
+      capabilities: agent.capabilities?.map(cap => ({
+        ...cap,
+        steps: cap.steps.map(step => ({
+          ...step,
+          tools: step.tools?.map(tool => {
+            const config = tool.config as any;
+
+            // If tool already has authentication, preserve it
+            if (config?.api_key || config?.oauth_token) {
+              return tool;
+            }
+
+            // Add API key with agent mode
+            return ToolConfig.fromPlain({
+              name: tool.name,
+              config: {
+                ...(config || {}),
+                api_key: agentApiKey,
+                api_key_mode: 'agent'
+              }
+            });
+          })
+        }))
+      }))
+    };
   }
 }
