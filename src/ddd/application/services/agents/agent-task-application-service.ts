@@ -164,6 +164,7 @@ export class AgentTaskApplicationService {
       const executionRequest: AgentExecutionRequest = {
         agentId: task.agentId.value,
         instructions: task.instructions.instructions,
+        capabilityName: task.capabilityName, // Pass capability name for capability-based execution
         tools: task.instructions.tools,
         servers: task.instructions.servers,
         executionId: task.id.value,

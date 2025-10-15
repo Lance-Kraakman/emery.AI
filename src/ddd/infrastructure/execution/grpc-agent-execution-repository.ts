@@ -25,43 +25,57 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
    * Execute agent via gRPC worker
    */
   async executeAgent(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
-    const { agentId, instructions, tools, servers, executionId, organizationId, timeoutSeconds, onProgress } = request;
+    const { agentId, instructions, capabilityName, tools, servers, executionId, organizationId, timeoutSeconds, onProgress } = request;
 
     console.log(`[GRPC-EXECUTION-REPO] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
-    
+    if (capabilityName) {
+      console.log(`[GRPC-EXECUTION-REPO] Capability-based execution: ${capabilityName}`);
+    }
+
     try {
       // 1. Load agent configuration (delegated to agent repository)
       const agent = await this.agentRepository.findById(AgentId.fromNumber(agentId));
       if (!agent) {
         throw new Error(`Agent ${agentId} not found`);
       }
-      
+
       // 2. Determine organization context
       const targetOrganizationId = organizationId || agent.organizationId;
       const organizationIdStr = targetOrganizationId.toString();
-      
+
       console.log(`[GRPC-EXECUTION-REPO] Using agent: ${getAgentDisplayName(agent)} with ${getCapabilitiesCount(agent)} capabilities`);
-      
+
       // 3. Get worker client for organization
       const workerClient = workerRegistry.getWorkerForOrganization(organizationIdStr);
-      
-      // 4. Create proto task request
-      const taskRequest = createTaskRequest({
-        taskId: executionId,
-        agentId: agent.id.value,
-        instructionConfig: {
-          instructions,
-          tools: (tools || []).map(tool =>
-            tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
-          ),
-          servers: servers || []
-        },
-        agent: agent,
-        triggerData: {}, // Empty for proto compatibility
-        organizationId: organizationIdStr,
-        ownerId: agent.ownerId.value,
-        timeoutSeconds: timeoutSeconds || 300
-      });
+
+      // 4. Create proto task request - use capability mode if capabilityName provided
+      const taskRequest = capabilityName
+        ? createTaskRequest({
+            taskId: executionId,
+            agentId: agent.id.value,
+            capabilityName: capabilityName, // Use capability-based execution
+            agent: agent,
+            triggerData: {}, // Empty for proto compatibility
+            organizationId: organizationIdStr,
+            ownerId: agent.ownerId.value,
+            timeoutSeconds: timeoutSeconds || 300
+          })
+        : createTaskRequest({
+            taskId: executionId,
+            agentId: agent.id.value,
+            instructionConfig: { // Use instruction-based execution
+              instructions,
+              tools: (tools || []).map(tool =>
+                tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
+              ),
+              servers: servers || []
+            },
+            agent: agent,
+            triggerData: {}, // Empty for proto compatibility
+            organizationId: organizationIdStr,
+            ownerId: agent.ownerId.value,
+            timeoutSeconds: timeoutSeconds || 300
+          });
       
       // 5. Initialize execution tracking
       let finalStatus: 'completed' | 'failed' | 'in_progress' = 'in_progress';

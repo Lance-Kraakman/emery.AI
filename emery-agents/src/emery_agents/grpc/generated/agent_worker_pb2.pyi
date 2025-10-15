@@ -139,7 +139,7 @@ class ErrorResponse(_message.Message):
     def __init__(self, code: _Optional[str] = ..., message: _Optional[str] = ..., details: _Optional[str] = ...) -> None: ...
 
 class AgentConfig(_message.Message):
-    __slots__ = ("name", "role", "description", "persona", "tools", "servers", "capabilities")
+    __slots__ = ("name", "role", "description", "persona", "tools", "servers", "capabilities", "api_key")
     NAME_FIELD_NUMBER: _ClassVar[int]
     ROLE_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -147,6 +147,7 @@ class AgentConfig(_message.Message):
     TOOLS_FIELD_NUMBER: _ClassVar[int]
     SERVERS_FIELD_NUMBER: _ClassVar[int]
     CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
+    API_KEY_FIELD_NUMBER: _ClassVar[int]
     name: str
     role: str
     description: str
@@ -154,7 +155,8 @@ class AgentConfig(_message.Message):
     tools: _containers.RepeatedCompositeFieldContainer[ToolConfig]
     servers: _containers.RepeatedCompositeFieldContainer[ServerConfig]
     capabilities: _containers.RepeatedCompositeFieldContainer[CapabilityConfig]
-    def __init__(self, name: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., persona: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., capabilities: _Optional[_Iterable[_Union[CapabilityConfig, _Mapping]]] = ...) -> None: ...
+    api_key: str
+    def __init__(self, name: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., persona: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., capabilities: _Optional[_Iterable[_Union[CapabilityConfig, _Mapping]]] = ..., api_key: _Optional[str] = ...) -> None: ...
 
 class CapabilityConfig(_message.Message):
     __slots__ = ("name", "description", "steps")
