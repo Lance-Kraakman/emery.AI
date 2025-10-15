@@ -1,24 +1,42 @@
-"""Core agent execution components."""
+"""Core module for simple domain entities and types."""
+
+from .entities import (
+    ToolConfig,
+    ServerConfig, 
+    StepConfig,
+    CapabilityConfig,
+    AgentConfig,
+    InstructionConfig,
+    TriggerData,
+    TaskRequest,
+    TaskProgress,
+    WorkerInfo,
+    CancelTaskRequest,
+    CancelTaskResponse,
+    ErrorResponse,
+)
 
 from .types import (
-    Agent, StepExecution,
-    StepType, TriggerType, TaskStatus, Task,
-    CapabilityConfig, TriggerConfig, ExecutionContext,
-    ToolConfig, ServerConfig, StepConfig
-    # AIDEV-NOTE: Updated to new Task-based model - removed TaskExecution
+    StepType,
+    TaskStatus, 
+    WorkerStatus,
 )
 
 __all__ = [
-    "Agent",
-    "StepExecution",
-    "StepType",
-    "TriggerType", 
-    "TaskStatus",
-    "Task",
-    "CapabilityConfig",
-    "TriggerConfig",
-    "ExecutionContext",
     "ToolConfig",
     "ServerConfig",
-    "StepConfig",
+    "StepConfig", 
+    "CapabilityConfig",
+    "AgentConfig",
+    "InstructionConfig",
+    "TriggerData",
+    "TaskRequest",
+    "TaskProgress",
+    "WorkerInfo",
+    "CancelTaskRequest",
+    "CancelTaskResponse",
+    "ErrorResponse",
+    "StepType",
+    "TaskStatus",
+    "WorkerStatus",
 ]

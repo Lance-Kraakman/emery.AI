@@ -1,40 +1,49 @@
 """
-Emery Agents - Agent execution system for Emery.
+Emery Agents - Pure agent execution service for protobuf requests.
 
 This package provides:
-- Multi-step agent workflow execution
-- Integration with smolagents for AI capabilities  
-- MCP server integration via Pipedream Connect
-- Execution tracking and reporting
+- Simple protobuf-compatible execution service
+- Core domain entities matching protobuf schema exactly
+- Smolagents integration with streaming progress
+- Dual execution modes: capability-based and instruction-based
 """
 
-from .core.types import (
-    Agent, StepExecution,
-    StepType, TriggerType, TaskStatus, Task,
-    CapabilityConfig, TriggerConfig, ExecutionContext,
-    ToolConfig, ServerConfig, StepConfig
+# Core entities matching protobuf
+from .core.entities import (
+    TaskRequest, TaskProgress, AgentConfig, CapabilityConfig, 
+    StepConfig, ToolConfig, ServerConfig, InstructionConfig,
+    WorkerInfo, CancelTaskRequest, CancelTaskResponse
 )
-from .integrations.smolagents import SmolAgentsOrchestrator
+from .core.types import StepType, TaskStatus, WorkerStatus
 
-__version__ = "0.1.0"
+# DDD Application services
+from .application.di.container import container
+from .domain.execution.services.capability_routing_service import CapabilityRoutingService
+
+__version__ = "2.0.0-protobuf"
 __author__ = "Lance Kraakman"
 __email__ = "lance@aifactory.nz"
 
 __all__ = [
-    # Core types
-    "Agent",
-    "StepExecution",
-    "StepType",
-    "TriggerType",
-    "TaskStatus",
-    "Task",
+    # Core entities
+    "TaskRequest",
+    "TaskProgress", 
+    "AgentConfig",
     "CapabilityConfig",
-    "TriggerConfig",
-    "ExecutionContext",
+    "StepConfig",
     "ToolConfig",
     "ServerConfig",
-    "StepConfig",
+    "InstructionConfig",
+    "WorkerInfo",
+    "CancelTaskRequest",
+    "CancelTaskResponse",
     
-    # Integrations
-    "SmolAgentsOrchestrator",
+    # Core types
+    "StepType",
+    "TaskStatus", 
+    "WorkerStatus",
+    
+    # DDD Application services
+    "container",
+    "CapabilityRoutingService",
 ]

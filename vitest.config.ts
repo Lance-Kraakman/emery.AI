@@ -32,6 +32,11 @@ export default defineConfig({
         '**/*.config.{js,ts}',
         '**/vitest.setup.ts'
       ],
+      include: [
+        'ddd/application/**/*.ts',
+        'ddd/domain/**/*.ts',
+        'lib/**/*.ts'
+      ]
     },
   },
   resolve: {

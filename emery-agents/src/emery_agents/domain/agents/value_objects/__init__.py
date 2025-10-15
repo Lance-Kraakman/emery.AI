@@ -1,0 +1,1 @@
+"""Agent-specific value objects."""

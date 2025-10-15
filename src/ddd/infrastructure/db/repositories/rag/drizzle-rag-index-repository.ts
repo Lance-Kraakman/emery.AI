@@ -1,0 +1,220 @@
+// AIDEV-NOTE: Drizzle implementation of RagIndexRepository
+// Provides concrete database operations using existing schema
+
+import { eq, and, inArray, sql, desc, ne } from 'drizzle-orm';
+import type { InferSelectModel } from 'drizzle-orm';
+import { ragIndexes } from '@/lib/db/schema';
+import { RagIndex } from '@/ddd/domain/rag/entities';
+import { RagIndexId, OrganizationId, type DomainType, type IndexStatus } from '@/ddd/domain/rag/value-objects';
+import type { RagIndexRepository, CreateRagIndexData, UpdateRagIndexData, RagIndexFilters } from '@/ddd/domain/rag/repositories/rag-index-repository';
+import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
+import type { DbClient } from '@/lib/db/client';
+
+type RagIndexRow = InferSelectModel<typeof ragIndexes>;
+
+export class DrizzleRagIndexRepository
+  extends DrizzleBaseRepository<RagIndex, RagIndexId, CreateRagIndexData, UpdateRagIndexData, RagIndexRow>
+  implements RagIndexRepository {
+  
+  protected readonly table = ragIndexes;
+  protected readonly idColumn = ragIndexes.id;
+  protected readonly organizationColumn = ragIndexes.organizationId;
+
+  async create(data: CreateRagIndexData): Promise<RagIndex> {
+    const [record] = await this.db
+      .insert(ragIndexes)
+      .values({
+        id: data.id,
+        name: data.name,
+        description: data.description,
+        organizationId: data.organizationId,
+        agentId: data.agentId,
+        domainTypes: data.domainTypes,
+        domainFilters: data.domainFilters,
+        embeddingModel: data.embeddingModel,
+        embeddingDimensions: data.embeddingDimensions,
+        status: data.status,
+        documentCount: data.documentCount,
+        createdAt: data.createdAt,
+        lastIndexedAt: data.lastIndexedAt,
+        updatedAt: new Date()
+      })
+      .returning();
+    
+    return this.fromPersistence(record);
+  }
+  
+  async update(id: RagIndexId, data: UpdateRagIndexData): Promise<RagIndex> {
+    const updateData = {
+      ...data,
+      updatedAt: new Date()
+    };
+    
+    const [record] = await this.db
+      .update(ragIndexes)
+      .set(updateData)
+      .where(eq(ragIndexes.id, id.value))
+      .returning();
+    
+    if (!record) {
+      throw new Error(`RagIndex with id ${id.value} not found`);
+    }
+    
+    return this.fromPersistence(record);
+  }
+
+  // Inherits findById from base class
+  // Inherits findByOrganization from base class
+  // Inherits delete from base class
+
+  async findByAgent(agentId: number): Promise<RagIndex[]> {
+    const records = await this.db
+      .select()
+      .from(ragIndexes)
+      .where(eq(ragIndexes.agentId, agentId))
+      .orderBy(desc(ragIndexes.createdAt));
+
+    return records.map((record: RagIndexRow) => this.fromPersistence(record));
+  }
+
+  async findByFilters(filters: RagIndexFilters): Promise<RagIndex[]> {
+    const conditions = [];
+
+    if (filters.organizationId) {
+      conditions.push(eq(ragIndexes.organizationId, filters.organizationId.value));
+    }
+
+    if (filters.agentId) {
+      conditions.push(eq(ragIndexes.agentId, filters.agentId));
+    }
+
+    if (filters.status && filters.status.length > 0) {
+      conditions.push(inArray(ragIndexes.status, filters.status));
+    }
+
+    // Domain types filter using JSONB operations
+    if (filters.domainTypes && filters.domainTypes.length > 0) {
+      for (const domainType of filters.domainTypes) {
+        conditions.push(sql`${ragIndexes.domainTypes} @> ${JSON.stringify([domainType])}`);
+      }
+    }
+
+    const records = await this.db
+      .select()
+      .from(ragIndexes)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(ragIndexes.createdAt));
+
+    return records.map((record: RagIndexRow) => this.fromPersistence(record));
+  }
+
+  async exists(id: RagIndexId): Promise<boolean> {
+    const [record] = await this.db
+      .select({ id: ragIndexes.id })
+      .from(ragIndexes)
+      .where(eq(ragIndexes.id, id.value))
+      .limit(1);
+
+    return !!record;
+  }
+
+  async isNameUnique(
+    organizationId: OrganizationId, 
+    name: string, 
+    excludeId?: RagIndexId
+  ): Promise<boolean> {
+    const conditions = [
+      eq(ragIndexes.organizationId, organizationId.value),
+      eq(ragIndexes.name, name)
+    ];
+
+    if (excludeId) {
+      conditions.push(ne(ragIndexes.id, excludeId.value));
+    }
+
+    const [record] = await this.db
+      .select({ id: ragIndexes.id })
+      .from(ragIndexes)
+      .where(and(...conditions))
+      .limit(1);
+
+    return !record; // Name is unique if no record found
+  }
+
+  // Legacy save method - kept for backward compatibility during transition
+  async save(index: RagIndex): Promise<void> {
+    const persistence = index.toPersistence();
+    
+    // Use PostgreSQL UPSERT (ON CONFLICT) to handle both create and update
+    await this.db.insert(ragIndexes).values({
+      id: persistence.id,
+      name: persistence.name,
+      description: persistence.description,
+      organizationId: persistence.organizationId,
+      agentId: persistence.agentId,
+      domainTypes: persistence.domainTypes,
+      domainFilters: persistence.domainFilters,
+      embeddingModel: persistence.embeddingModel,
+      embeddingDimensions: persistence.embeddingDimensions,
+      status: persistence.status,
+      documentCount: persistence.documentCount,
+      createdAt: persistence.createdAt,
+      lastIndexedAt: persistence.lastIndexedAt,
+      updatedAt: new Date()
+    }).onConflictDoUpdate({
+      target: ragIndexes.id,
+      set: {
+        name: persistence.name,
+        description: persistence.description,
+        domainTypes: persistence.domainTypes,
+        domainFilters: persistence.domainFilters,
+        status: persistence.status,
+        documentCount: persistence.documentCount,
+        lastIndexedAt: persistence.lastIndexedAt,
+        updatedAt: new Date()
+      }
+    });
+  }
+
+
+  async countByOrganization(organizationId: OrganizationId): Promise<number> {
+    const [result] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(ragIndexes)
+      .where(eq(ragIndexes.organizationId, organizationId.value));
+
+    return result.count;
+  }
+
+  async findIndexesNeedingReindexing(): Promise<RagIndex[]> {
+    const records = await this.db
+      .select()
+      .from(ragIndexes)
+      .where(inArray(ragIndexes.status, ['error', 'created']))
+      .orderBy(desc(ragIndexes.createdAt));
+
+    return records.map((record: RagIndexRow) => this.fromPersistence(record));
+  }
+
+  protected fromPersistence(record: RagIndexRow): RagIndex {
+    return RagIndex.fromPersistence({
+      id: record.id,
+      organizationId: record.organizationId,
+      name: record.name,
+      description: record.description || undefined,
+      agentId: record.agentId || undefined,
+      domainTypes: (record.domainTypes as DomainType[]) || [],
+      domainFilters: record.domainFilters || undefined,
+      embeddingModel: record.embeddingModel || 'sentence-transformers/all-mpnet-base-v2',
+      embeddingDimensions: record.embeddingDimensions || 768,
+      status: record.status as IndexStatus,
+      documentCount: record.documentCount || 0,
+      createdAt: record.createdAt || new Date(),
+      lastIndexedAt: record.lastIndexedAt || undefined
+    });
+  }
+  
+  protected toPersistence(ragIndex: RagIndex): any {
+    return ragIndex.toPersistence();
+  }
+}
