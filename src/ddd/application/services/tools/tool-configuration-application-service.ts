@@ -37,6 +37,16 @@ export interface EnrichToolsWithUserApiKeyResult {
   userApiKeyProvided: boolean;
 }
 
+export interface EnrichToolsWithAgentApiKeyCommand {
+  tools: ToolConfig[];
+  agentApiKey: string;
+}
+
+export interface EnrichToolsWithAgentApiKeyResult {
+  enrichedTools: ToolConfig[];
+  agentApiKeyProvided: boolean;
+}
+
 export class ToolConfigurationApplicationService {
   constructor(
     private readonly agentRepository: IAgentRepository,
@@ -254,6 +264,77 @@ export class ToolConfigurationApplicationService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to enrich tools with user API key'
+      };
+    }
+  }
+
+  /**
+   * Enrich tool configurations with agent API key
+   *
+   * Use Case: Agent wants to execute tools using the agent's own API key (not user's).
+   * This service enriches tools with the agent's API key for OAuth proxy access in agent mode.
+   * The OAuth proxy will use the agent owner's credentials instead of user credentials.
+   *
+   * @param command - Command containing tools to enrich and agent API key
+   * @returns Result with enriched tools using agent API key
+   */
+  async enrichToolsWithAgentApiKey(command: EnrichToolsWithAgentApiKeyCommand): Promise<Result<EnrichToolsWithAgentApiKeyResult>> {
+    try {
+      // 1. Validate input
+      if (!command.tools || command.tools.length === 0) {
+        return {
+          success: true,
+          data: {
+            enrichedTools: [],
+            agentApiKeyProvided: false
+          }
+        };
+      }
+
+      if (!command.agentApiKey) {
+        console.log('[ToolConfigurationApplicationService] No agent API key provided');
+        return {
+          success: true,
+          data: {
+            enrichedTools: command.tools, // Return original tools without enrichment
+            agentApiKeyProvided: false
+          }
+        };
+      }
+
+      console.log(`[ToolConfigurationApplicationService] Enriching ${command.tools.length} tools with agent API key (mode: agent)`);
+
+      // 2. Enrich tools with agent API key and agent mode
+      const enrichedTools = command.tools.map(tool => {
+        const config = tool.config as any;
+
+        // If tool already has authentication, preserve it
+        if (config.api_key || config.oauth_token) {
+          return tool;
+        }
+
+        // Add API key with agent mode for OAuth proxy
+        return tool.withConfig({
+          api_key: command.agentApiKey,
+          api_key_mode: 'agent'  // KEY DIFFERENCE: Agent mode uses agent owner's credentials
+        });
+      });
+
+      console.log(`[ToolConfigurationApplicationService] Successfully enriched ${enrichedTools.length} tools with agent API key`);
+
+      return {
+        success: true,
+        data: {
+          enrichedTools,
+          agentApiKeyProvided: true
+        }
+      };
+
+    } catch (error) {
+      console.error('[ToolConfigurationApplicationService] Failed to enrich tools with agent API key:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to enrich tools with agent API key'
       };
     }
   }
