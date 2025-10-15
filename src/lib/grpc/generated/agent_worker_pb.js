@@ -2453,8 +2453,7 @@ proto.emery.agents.AgentConfig.toObject = function(includeInstance, msg) {
     serversList: jspb.Message.toObjectList(msg.getServersList(),
     proto.emery.agents.ServerConfig.toObject, includeInstance),
     capabilitiesList: jspb.Message.toObjectList(msg.getCapabilitiesList(),
-    proto.emery.agents.CapabilityConfig.toObject, includeInstance),
-    apiKey: jspb.Message.getFieldWithDefault(msg, 8, "")
+    proto.emery.agents.CapabilityConfig.toObject, includeInstance)
   };
 
   if (includeInstance) {
@@ -2521,10 +2520,6 @@ proto.emery.agents.AgentConfig.deserializeBinaryFromReader = function(msg, reade
       var value = new proto.emery.agents.CapabilityConfig;
       reader.readMessage(value,proto.emery.agents.CapabilityConfig.deserializeBinaryFromReader);
       msg.addCapabilities(value);
-      break;
-    case 8:
-      var value = /** @type {string} */ (reader.readString());
-      msg.setApiKey(value);
       break;
     default:
       reader.skipField();
@@ -2605,13 +2600,6 @@ proto.emery.agents.AgentConfig.serializeBinaryToWriter = function(message, write
       7,
       f,
       proto.emery.agents.CapabilityConfig.serializeBinaryToWriter
-    );
-  }
-  f = message.getApiKey();
-  if (f.length > 0) {
-    writer.writeString(
-      8,
-      f
     );
   }
 };
@@ -2800,24 +2788,6 @@ proto.emery.agents.AgentConfig.prototype.addCapabilities = function(opt_value, o
  */
 proto.emery.agents.AgentConfig.prototype.clearCapabilitiesList = function() {
   return this.setCapabilitiesList([]);
-};
-
-
-/**
- * optional string api_key = 8;
- * @return {string}
- */
-proto.emery.agents.AgentConfig.prototype.getApiKey = function() {
-  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 8, ""));
-};
-
-
-/**
- * @param {string} value
- * @return {!proto.emery.agents.AgentConfig} returns this
- */
-proto.emery.agents.AgentConfig.prototype.setApiKey = function(value) {
-  return jspb.Message.setProto3StringField(this, 8, value);
 };
 
 

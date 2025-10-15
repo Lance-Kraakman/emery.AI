@@ -115,8 +115,7 @@ export function mapAgentToProto(agent: Agent): AgentConfigProto {
     persona: agent.persona || '',
     tools: agent.tools?.filter(tool => tool !== null && tool !== undefined)?.map(mapToolToProto) || [],
     servers: agent.servers?.filter(server => server !== null && server !== undefined)?.map(mapServerToProto) || [],
-    capabilities: agent.capabilities?.filter(capability => capability !== null && capability !== undefined)?.map(mapCapabilityToProto) || [],
-    api_key: agent.apiKey?.value || ''  // Include agent API key for tool authentication
+    capabilities: agent.capabilities?.filter(capability => capability !== null && capability !== undefined)?.map(mapCapabilityToProto) || []
   };
 }
 
