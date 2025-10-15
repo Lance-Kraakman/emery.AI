@@ -1,0 +1,1 @@
+"""Integration tests - test complete DDD flows from application to infrastructure."""

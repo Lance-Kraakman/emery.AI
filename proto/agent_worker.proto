@@ -27,6 +27,7 @@ message TaskRequest {
   string organization_id = 6;      // Organization for multi-tenant routing
   string owner_id = 7;             // Agent owner ID for OAuth credentials
   int32 timeout_seconds = 8;       // Task execution timeout (default: 300)
+  string name = 10;
 }
 
 // Streaming progress updates during task execution
@@ -153,4 +154,95 @@ message InstructionConfig {
   string instructions = 1;           // Natural language instructions
   repeated ToolConfig tools = 2;     // Optional tools for this task
   repeated ServerConfig servers = 3; // Optional servers for this task
+}
+
+// gRPC Chat Processing Service - AI operations only (stateless)
+service ChatProcessingService {
+  // Process a message and stream AI response (no database operations)
+  rpc ProcessMessage(ProcessMessageRequest) returns (stream ProcessMessageResponse);
+}
+
+// Request for AI message processing
+message ProcessMessageRequest {
+  // Input message for AI processing
+  string message_content = 1;        // User message content
+  string user_id = 2;                // User identifier for context
+  int32 organization_id = 3;         // Organization for multi-tenant routing
+
+  // Context for RAG and domain-specific processing
+  ChatContext context = 4;
+
+  // Conversation history (passed from Next.js database)
+  repeated HistoryMessage conversation_history = 5;
+
+  // Tools for ToolCallingAgent execution (can be empty)
+  repeated ToolConfig tools = 6;
+}
+
+// Streaming response from AI processing
+message ProcessMessageResponse {
+  // Standard oneof pattern for different response types
+  oneof response {
+    ContentChunk content_chunk = 1;    // AI-generated streaming content
+    RagContext rag_context = 2;       // RAG sources and context
+    ProcessingComplete complete = 3;   // Processing finished marker
+    ProcessingError error = 4;        // Processing error
+  }
+
+  int64 timestamp = 5;               // Response timestamp
+}
+
+// Simple conversation history message (passed TO gRPC, not managed BY it)
+message HistoryMessage {
+  string role = 1;                   // user, assistant, system
+  string content = 2;                // message content
+  int64 timestamp = 3;               // when it was created
+}
+
+// Streaming content chunk
+message ContentChunk {
+  string content = 1;                // Text content chunk
+  int32 sequence = 2;                // Sequence number for ordering
+}
+
+// RAG context information
+message RagContext {
+  repeated RagSource sources = 1;    // List of RAG sources used
+  string context_summary = 2;        // Summary of context used
+  int32 total_sources = 3;           // Total number of sources found
+}
+
+message RagSource {
+  string document_id = 1;            // Source document identifier
+  string title = 2;                  // Source document title
+  float similarity = 3;              // Similarity score
+  string domain_type = 4;            // Domain type (table, agent, file, etc.)
+  string excerpt = 5;                // Relevant text excerpt
+}
+
+// Processing completion marker
+message ProcessingComplete {
+  string model_used = 1;             // AI model used for generation
+  int32 total_tokens = 2;            // Total tokens processed
+  int32 processing_time_ms = 3;      // Processing time in milliseconds
+  map<string, string> metadata = 4; // Additional processing metadata
+}
+
+// Processing error information
+message ProcessingError {
+  string error_code = 1;             // Error code (RAG_FAILED, MODEL_ERROR, etc.)
+  string error_message = 2;          // Human-readable error message
+  map<string, string> error_details = 3; // Additional error context
+}
+
+// Chat context configuration for AI processing
+message ChatContext {
+  string domain_type = 1;            // Domain type (table, agent, file, team, workflow)
+  int32 domain_id = 2;               // Domain entity identifier
+  bool enable_rag = 3;               // Enable RAG context retrieval
+  float rag_threshold = 4;           // RAG similarity threshold (default: 0.3)
+  int32 max_rag_docs = 5;            // Maximum RAG documents to retrieve (default: 5)
+  float primary_rag_weight = 6;      // Weight for domain-specific RAG (default: 0.7)
+  string assembled_rag_context = 7;  // Pre-assembled RAG context from Next.js DualContextRagService
+  repeated string rag_sources = 8;   // RAG source summary for metadata
 }

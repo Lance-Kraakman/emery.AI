@@ -1,0 +1,219 @@
+/**
+ * Row Value Objects
+ * 
+ * Domain value objects for table row data that encapsulate business rules
+ * and provide type safety for row operations in dynamic tables.
+ * 
+ * AIDEV-NOTE: Updated to use type-safe FieldValue system instead of generic `any` types.
+ * Works with new field-values.ts type definitions for better type safety.
+ */
+
+import crypto from 'crypto';
+import type { FieldValue as TypedFieldValue } from './field-values';
+import type { TableField } from './table-field';
+import { TableId } from '../../shared/value-objects';
+
+export class RowId {
+  constructor(private readonly _value: string) {
+    if (!_value || _value.trim().length === 0) {
+      throw new Error('RowId cannot be empty');
+    }
+    if (_value.length > 255) {
+      throw new Error('RowId cannot exceed 255 characters');
+    }
+  }
+
+  static fromString(value: string): RowId {
+    return new RowId(value);
+  }
+
+  get value(): string {
+    return this._value;
+  }
+
+  equals(other: RowId): boolean {
+    return this._value === other._value;
+  }
+
+  toString(): string {
+    return this._value;
+  }
+}
+
+export class FieldValue {
+  constructor(
+    public readonly fieldSlug: string,
+    public readonly value: TypedFieldValue | null | undefined,
+    public readonly fieldType: string
+  ) {
+    if (!fieldSlug || fieldSlug.trim().length === 0) {
+      throw new Error('Field slug cannot be empty');
+    }
+  }
+
+  isNull(): boolean {
+    return this.value === null || this.value === undefined;
+  }
+
+  equals(other: FieldValue): boolean {
+    return this.fieldSlug === other.fieldSlug && 
+           this.value === other.value &&
+           this.fieldType === other.fieldType;
+  }
+}
+
+export class Row {
+  public readonly id: RowId;
+  public readonly tableId: number;
+  public readonly fieldValues: ReadonlyArray<FieldValue>;
+
+  constructor(
+    id: string | RowId,
+    tableId: number,
+    fieldValues: FieldValue[]
+  ) {
+    this.id = id instanceof RowId ? id : new RowId(id);
+    this.tableId = tableId;
+    this.fieldValues = Object.freeze([...fieldValues]);
+
+    if (tableId <= 0) {
+      throw new Error('Table ID must be positive');
+    }
+  }
+
+  getFieldValue(fieldSlug: string): FieldValue | undefined {
+    return this.fieldValues.find(fv => fv.fieldSlug === fieldSlug);
+  }
+
+  hasField(fieldSlug: string): boolean {
+    return this.fieldValues.some(fv => fv.fieldSlug === fieldSlug);
+  }
+
+
+  toPlainObject(): Record<string, any> {
+    const obj: Record<string, any> = {
+      id: this.id.value  // Include row ID in the returned data
+    };
+
+    for (const fieldValue of this.fieldValues) {
+      // CRITICAL FIX: Ensure complex objects are properly serialized, not stringified
+      const value = fieldValue.value;
+      
+      // For complex field types, ensure they remain as objects/arrays
+      if (fieldValue.fieldType === 'file' || fieldValue.fieldType === 'document' || fieldValue.fieldType === 'relation') {
+        // These should already be plain objects/arrays from domain value objects
+        obj[fieldValue.fieldSlug] = value;
+      } else if (fieldValue.fieldType === 'date' && value instanceof Date) {
+        // Convert Date objects to ISO strings
+        obj[fieldValue.fieldSlug] = value.toISOString();
+      } else {
+        // For primitive types, use as-is
+        obj[fieldValue.fieldSlug] = value;
+      }
+    }
+
+    return obj;
+  }
+
+  static fromPlainObject(
+    data: Record<string, any> & { id?: string }, 
+    tableId: number,
+    tableFields: TableField[]
+  ): Row {
+    // Validate required fields
+    for (const field of tableFields) {
+      if (field.required && (!data[field.name] || data[field.name] === '')) {
+        throw new Error(`${field.name} is required`);
+      }
+    }
+
+    const fieldValues: FieldValue[] = [];
+    
+    for (const field of tableFields) {
+      const value = data[field.name];
+      
+      // Skip undefined/null optional fields
+      if ((value === undefined || value === null) && !field.required) {
+        continue;
+      }
+
+      // Validate data type for non-null values
+      if (value !== undefined && value !== null) {
+        Row.validateFieldValue(field, value);
+      }
+
+      fieldValues.push(new FieldValue(field.name, value, field.type));
+    }
+
+    return new Row(
+      data.id || crypto.randomUUID(),
+      tableId,
+      fieldValues
+    );
+  }
+
+  private static validateFieldValue(field: TableField, value: any): void {
+    switch (field.type) {
+      case 'number':
+        if (typeof value !== 'number' && (typeof value !== 'string' || isNaN(Number(value)))) {
+          throw new Error(`${field.name} must be a number`);
+        }
+        break;
+
+      case 'file':
+        if (Array.isArray(value)) {
+          for (let i = 0; i < value.length; i++) {
+            const file = value[i];
+            if (!file || typeof file !== 'object') {
+              throw new Error(`${field.name}[${i}] must be an object`);
+            }
+            
+            // Validate required file properties
+            const requiredFileProps = ['id', 'name', 'size', 'mimeType', 's3Key', 'uploadedAt'];
+            for (const prop of requiredFileProps) {
+              if (!file[prop]) {
+                throw new Error(`${field.name}[${i}] missing required field: ${prop}`);
+              }
+            }
+          }
+        }
+        break;
+    }
+  }
+}
+
+export class RowCollection {
+  public readonly rows: ReadonlyArray<Row>;
+  public readonly totalCount: number;
+
+  constructor(rows: Row[], totalCount?: number) {
+    this.rows = Object.freeze([...rows]);
+    this.totalCount = totalCount ?? rows.length;
+  }
+
+  isEmpty(): boolean {
+    return this.rows.length === 0;
+  }
+
+  first(): Row | undefined {
+    return this.rows[0];
+  }
+
+  findById(id: string | RowId): Row | undefined {
+    const searchId = id instanceof RowId ? id.value : id;
+    return this.rows.find(row => row.id.value === searchId);
+  }
+
+  filterByField(fieldSlug: string, value: any): RowCollection {
+    const filteredRows = this.rows.filter(row => {
+      const fieldValue = row.getFieldValue(fieldSlug);
+      return fieldValue?.value === value;
+    });
+    return new RowCollection(filteredRows);
+  }
+
+  toPlainObjects(): Record<string, any>[] {
+    return this.rows.map(row => row.toPlainObject());
+  }
+
+}

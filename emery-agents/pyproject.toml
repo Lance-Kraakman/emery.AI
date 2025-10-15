@@ -21,6 +21,10 @@ dependencies = [
     "smolagents>=1.20.0",
     "jinja2>=3.1.6",
     "python-dotenv>=1.1.1",
+    "torch>=2.0.0",
+    "transformers>=4.30.0",
+    "Pillow>=10.0.0",
+    "requests>=2.30.0",
 ]
 
 [project.optional-dependencies]
@@ -32,11 +36,18 @@ dev = [
     "isort>=5.12.0",
     "flake8>=6.1.0",
 ]
-smolagents = [
-    "smolagents>=0.1.0",
+# MLX features only available on macOS (Apple Silicon)
+macos = [
+    "smolagents[dev]>=1.20.0",
+]
+# Full smolagents with all features for compatible platforms
+full = [
+    "smolagents[dev]>=1.20.0",
+    "mlx>=0.28.0; sys_platform == 'darwin'",
+    "mlx-lm>=0.26.1; sys_platform == 'darwin'",
 ]
 all = [
-    "emery-agents[dev,smolagents]"
+    "emery-agents[dev]"
 ]
 
 [build-system]
@@ -81,8 +92,10 @@ asyncio_mode = "auto"
 markers = [
     "integration: marks tests as integration tests",
     "smolagents: marks tests that require smolagents and HF_TOKEN",
-    "grpc: marks tests that require gRPC dependencies"
+    "grpc: marks tests that require gRPC dependencies",
+    "real_execution: marks tests that execute real agents with AI models",
+    "slow: marks tests that take a long time to execute (30s+)"
 ]
 
 [project.scripts]
-emery-worker = "emery_agents.grpc.main:main"
+emery-worker = "emery_agents.infrastructure.grpc.main:main"

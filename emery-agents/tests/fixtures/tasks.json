@@ -72,5 +72,455 @@
     "startedAt": "2024-01-13T14:20:00Z",
     "completedAt": "2024-01-13T14:35:00Z",
     "error": "API authentication failed in step 2"
+  },
+  {
+    "id": "task_007",
+    "agentId": 4,
+    "name": "Comprehensive Website Organizational Analysis",
+    "instructions": {
+      "instructions": "Analyze the provided website to create a detailed organizational intelligence report that can be used to populate OrganizationAnalysisCapabilities structure. Let the analysis discover the industry and business model, then adapt the depth and focus accordingly.",
+      "tools": [{"name": "analysis_api"}, {"name": "kpi_api"}],
+      "context": {
+        "target_website": "https://stripe.com",
+        "analysis_requirements": {
+          "discover_automatically": [
+            "industry_classification", 
+            "business_model_type",
+            "company_size_indicators",
+            "organizational_complexity_level"
+          ],
+          "analysis_depth": "comprehensive_with_adaptation",
+          "output_structure": "OrganizationAnalysisCapabilities_compatible"
+        },
+        "expected_deliverables": {
+          "website_analysis": "Complete analysis of discovered business characteristics",
+          "business_classification": "Industry-specific insights based on discovery",
+          "key_insights": "Tailored processes and measurements for discovered business type",
+          "confidence_assessment": "Analysis reliability and areas of uncertainty",
+          "implementation_recommendations": "Next steps based on discovered organizational characteristics"
+        },
+        "success_criteria": {
+          "adaptivity": "Analysis adapts depth and focus based on discovered business type",
+          "completeness": "All discoverable organizational characteristics identified",
+          "actionability": "Recommendations are specific to the discovered context",
+          "confidence": "Clear assessment of analysis reliability"
+        }
+      }
+    },
+    "capabilityName": "adaptive_website_analysis",
+    "status": "pending"
+  },
+  {
+    "id": "task_008", 
+    "agentId": 4,
+    "name": "SaaS Industry Comprehensive Benchmark Analysis",
+    "instructions": {
+      "instructions": "Create a comprehensive industry benchmark analysis for SaaS companies that provides detailed metrics, best practices, and implementation guidance for organizational analysis capabilities. Focus on providing actionable benchmarks that can inform measurement framework design.",
+      "tools": [{"name": "analysis_api"}],
+      "context": {
+        "industry_profile": {
+          "industry": "saas",
+          "company_size": "medium",
+          "employee_range": "50-200",
+          "revenue_range": "$5M-$50M ARR",
+          "business_model": "b2b_saas",
+          "region": "global",
+          "maturity_stage": "growth"
+        },
+        "benchmark_requirements": {
+          "key_metrics": ["mrr_growth_rate", "customer_acquisition_cost", "customer_lifetime_value", "churn_rate", "net_revenue_retention"],
+          "process_benchmarks": ["customer_onboarding_time", "support_response_time", "feature_deployment_cycle", "sales_cycle_length"],
+          "operational_metrics": ["uptime_percentage", "api_response_time", "customer_satisfaction_score"],
+          "financial_ratios": ["gross_margin", "customer_acquisition_payback_period", "revenue_per_employee"]
+        },
+        "analysis_depth": {
+          "industry_trends": "5-year outlook with key drivers",
+          "competitive_landscape": "market positioning factors",
+          "regulatory_environment": "compliance requirements and standards",
+          "technology_trends": "emerging technologies and adoption patterns"
+        },
+        "expected_deliverables": {
+          "industry_overview": "trends, challenges, opportunities",
+          "performance_benchmarks": "specific metrics with percentile ranges",
+          "process_standards": "typical workflows and best practices",
+          "implementation_guidance": "priorities, timeline, resource requirements"
+        }
+      }
+    },
+    "capabilityName": "industry_benchmarking_analysis",
+    "status": "pending"
+  },
+  {
+    "id": "task_009",
+    "agentId": 5,
+    "name": "Design Comprehensive E-commerce Measurement Framework",
+    "instructions": {
+      "instructions": "Create a detailed measurement framework for a large e-commerce company that maps to OrganizationAnalysisCapabilities.measurementFramework structure. Design both measurement definitions and KPI framework with complete implementation guidance including data sources, collection methods, and calculation schedules.",
+      "tools": [{"name": "kpi_api"}, {"name": "measurement_api"}],
+      "context": {
+        "company_profile": {
+          "industry": "ecommerce",
+          "company_size": "large",
+          "employee_count": 500,
+          "revenue_range": "$100M-$500M",
+          "business_model": "b2c_marketplace",
+          "geographic_scope": "global",
+          "technology_stack": "microservices, cloud_native",
+          "customer_segments": ["consumers", "small_businesses", "enterprises"]
+        },
+        "business_context": {
+          "primary_channels": ["web_platform", "mobile_app", "api_integrations"],
+          "key_processes": ["order_fulfillment", "customer_acquisition", "inventory_management", "customer_support"],
+          "competitive_pressures": ["delivery_speed", "product_selection", "pricing", "customer_experience"],
+          "growth_stage": "scaling_operations"
+        },
+        "measurement_requirements": {
+          "financial_kpis": ["gross_merchandise_value", "take_rate", "customer_lifetime_value", "customer_acquisition_cost"],
+          "operational_kpis": ["conversion_rate", "cart_abandonment_rate", "average_order_value", "inventory_turnover"],
+          "customer_kpis": ["net_promoter_score", "customer_satisfaction", "repeat_purchase_rate", "customer_retention"],
+          "technical_kpis": ["site_performance", "mobile_app_rating", "api_reliability", "security_incidents"]
+        },
+        "data_ecosystem": {
+          "existing_systems": ["order_management", "inventory_system", "crm", "analytics_platform"],
+          "data_sources": ["transactional_db", "user_behavior_tracking", "customer_support_tickets", "financial_systems"],
+          "collection_capabilities": ["real_time", "batch_processing", "api_integrations", "manual_surveys"]
+        },
+        "expected_deliverables": {
+          "measurement_definitions": "10-12 detailed measurements with data sources",
+          "kpi_framework": "6-8 high-impact KPIs with thresholds and calculations",
+          "implementation_roadmap": "phased approach with timelines and dependencies",
+          "validation_framework": "quality checks and validation rules"
+        }
+      }
+    },
+    "capabilityName": "comprehensive_kpi_framework_design",
+    "status": "pending"
+  },
+  {
+    "id": "task_010",
+    "agentId": 5,
+    "name": "Create Fintech Measurement Definitions with Data Sources",
+    "instructions": {
+      "instructions": "Create detailed measurement definitions for a fintech company focusing on transaction processing, compliance, and security metrics. Include complete data source configurations, collection instructions, and validation frameworks that support KPI calculations and regulatory reporting.",
+      "tools": [{"name": "measurement_api"}],
+      "context": {
+        "company_profile": {
+          "industry": "fintech",
+          "sub_sector": "payment_processing",
+          "company_size": "medium",
+          "transaction_volume": "10M_monthly",
+          "regulatory_scope": ["PCI_DSS", "SOX", "GDPR", "AML"],
+          "business_model": "transaction_fees_subscription"
+        },
+        "measurement_focus_areas": {
+          "transaction_metrics": ["success_rate", "processing_time", "volume", "value", "failure_reasons"],
+          "security_metrics": ["fraud_detection_accuracy", "false_positive_rate", "security_incidents", "compliance_score"],
+          "operational_metrics": ["system_uptime", "api_response_time", "customer_onboarding_time", "support_resolution_time"],
+          "financial_metrics": ["revenue_recognition", "cost_per_transaction", "margin_per_customer", "regulatory_costs"]
+        },
+        "data_requirements": {
+          "real_time_needs": ["transaction_monitoring", "fraud_detection", "system_health"],
+          "batch_processing": ["financial_reconciliation", "compliance_reporting", "trend_analysis"],
+          "data_retention": {"transaction_data": "7_years", "user_data": "account_lifetime", "system_logs": "2_years"},
+          "data_quality": {"accuracy": "99.9%", "completeness": "100%", "timeliness": "real_time_or_t+1"}
+        },
+        "regulatory_requirements": {
+          "PCI_DSS": ["transaction_monitoring", "access_logging", "vulnerability_scanning"],
+          "AML": ["transaction_pattern_analysis", "customer_due_diligence", "suspicious_activity_reporting"],
+          "GDPR": ["data_processing_records", "consent_tracking", "breach_notifications"],
+          "SOX": ["financial_controls", "audit_trails", "segregation_of_duties"]
+        },
+        "expected_outputs": {
+          "measurement_definitions": "8-10 measurements with complete specifications",
+          "data_source_mapping": "detailed configuration for each measurement",
+          "validation_rules": "comprehensive quality and compliance checks",
+          "collection_schedules": "optimized timing for operational efficiency"
+        }
+      }
+    },
+    "capabilityName": "measurement_definition_creation",
+    "status": "pending"
+  },
+  {
+    "id": "task_011",
+    "agentId": 6,
+    "name": "Estimate SaaS Company Processes",
+    "instructions": {
+      "instructions": "Estimate the key business processes for a medium-sized SaaS company",
+      "tools": [{"name": "analysis_api"}],
+      "context": {
+        "industry": "saas",
+        "company_size": "medium",
+        "business_model": "b2b"
+      }
+    },
+    "capabilityName": "process_estimation",
+    "status": "pending"
+  },
+  {
+    "id": "task_012",
+    "agentId": 6, 
+    "name": "Analyze Process Improvements",
+    "instructions": {
+      "instructions": "Analyze the provided process data and recommend specific improvements with priorities",
+      "tools": [{"name": "analysis_api"}],
+      "context": {
+        "processes": [
+          {
+            "name": "Customer Onboarding",
+            "current_duration": 120,
+            "steps": [{"name": "Account Setup", "duration_minutes": 30}, {"name": "Documentation", "duration_minutes": 60}, {"name": "Training", "duration_minutes": 30}],
+            "error_rate": 8
+          }
+        ]
+      }
+    },
+    "capabilityName": "improvement_analysis",
+    "status": "pending"
+  },
+  {
+    "id": "task_013",
+    "agentId": 7,
+    "name": "Create Optimized Reporting Schedule",
+    "instructions": {
+      "instructions": "Create an optimized reporting schedule for a multi-department organization based on measurement frequencies and stakeholder needs",
+      "tools": [{"name": "analysis_api"}],
+      "context": {
+        "organization_size": "large",
+        "measurements": [
+          {"name": "daily_sales", "frequency": "daily"},
+          {"name": "customer_satisfaction", "frequency": "weekly"},
+          {"name": "financial_performance", "frequency": "monthly"}
+        ],
+        "stakeholders": ["executives", "department_heads", "board"]
+      }
+    },
+    "capabilityName": "reporting_optimization",
+    "status": "pending"
+  },
+  {
+    "id": "task_014",
+    "agentId": 7,
+    "name": "Analyze KPI Performance Trends",
+    "instructions": {
+      "instructions": "Analyze KPI trends for an organization and provide insights on performance patterns",
+      "tools": [{"name": "kpi_api"}],
+      "context": {
+        "organization_id": 1,
+        "analysis_period": "monthly"
+      }
+    },
+    "capabilityName": "trend_analysis_setup",
+    "status": "pending"
+  },
+  {
+    "id": "task_015",
+    "agentId": 4,
+    "name": "Analyze Shopify Website Business Model",
+    "instructions": {
+      "instructions": "Analyze the Shopify website (https://shopify.com) to determine their business model and industry characteristics",
+      "tools": [{"name": "analysis_api"}]
+    },
+    "capabilityName": "website_business_analysis",
+    "status": "pending"
+  },
+  {
+    "id": "task_016", 
+    "agentId": 5,
+    "name": "Create Manufacturing KPI Framework",
+    "instructions": {
+      "instructions": "Create a KPI framework for a large manufacturing company focusing on operational efficiency metrics",
+      "tools": [{"name": "kpi_api"}],
+      "context": {
+        "industry": "manufacturing",
+        "company_size": "large",
+        "business_model": "b2b"
+      }
+    },
+    "capabilityName": "kpi_framework_creation", 
+    "status": "pending"
+  },
+  {
+    "id": "task_017",
+    "agentId": 4,
+    "name": "Initialize Organizational Context for Stripe Analysis",
+    "instructions": {
+      "instructions": "Use emery_database to create organization with name='Stripe Analysis Project', website='https://stripe.com'. Then use table_data to create a row in tableId=4 with field_40='website_analysis', field_41='https://stripe.com', field_42='fintech'. Return the organization_id.",
+      "tools": [{"name": "emery_database"}, {"name": "table_data"}],
+      "context": {
+        "target_website": "https://stripe.com",
+        "organization_profile": {
+          "name": "Stripe Analysis Project",
+          "website": "https://stripe.com",
+          "analysis_type": "comprehensive_organizational_intelligence"
+        },
+        "expected_outputs": {
+          "organization_created": "New organization record with initialized context",
+          "context_stored": "Analysis context stored in Analysis_Results table for subsequent tasks",
+          "organization_id": "ID for use in follow-up analysis tasks"
+        }
+      }
+    },
+    "capabilityName": null, 
+    "status": "pending"
+  },
+  {
+    "id": "task_018",
+    "agentId": 4,
+    "name": "Analyze Stripe Website with Context Persistence",
+    "instructions": {
+      "instructions": "Step 1: Call analysis_api tool with action='analyze_website' and website_url='https://stripe.com'. Step 2: Store the results using table_data tool with action='create_row', tableId=4, and row_data containing field_42='fintech', field_43='payment_processing_platform', field_44='analysis_completed'.",
+      "tools": [{"name": "analysis_api"}, {"name": "table_data"}],
+      "context": {
+        "target_website": "https://stripe.com",
+        "analysis_requirements": {
+          "discover_automatically": ["industry_classification", "business_model_type"],
+          "analysis_depth": "comprehensive",
+          "context_persistence": "store_in_analysis_results_table"
+        },
+        "expected_deliverables": {
+          "website_analysis": "Complete analysis stored with row ID for retrieval",
+          "business_classification": "Industry-specific insights persisted to database"
+        }
+      }
+    },
+    "capabilityName": null,
+    "status": "pending"
+  },
+  {
+    "id": "task_019", 
+    "agentId": 5,
+    "name": "Create Stripe Measurement Framework from Stored Context",
+    "instructions": {
+      "instructions": "Retrieve the Stripe analysis results from the Analysis_Results table, then create a comprehensive measurement framework based on the discovered business characteristics. Use table_data to get previous analysis, kpi_api to design framework, then store the framework back to Analysis_Results table.",
+      "tools": [{"name": "table_data"}, {"name": "kpi_api"}, {"name": "emery_database"}],
+      "context": {
+        "context_retrieval": {
+          "source_table": "Analysis_Results",
+          "search_criteria": {"field_41": "https://stripe.com", "field_40": "website_analysis"},
+          "required_fields": ["industry_classification", "business_model", "key_insights"]
+        },
+        "framework_requirements": {
+          "adapt_to_discovered_context": "Use industry and business model from previous analysis",
+          "measurement_focus": "Financial services/payment processing specific metrics",
+          "integration_requirements": "Framework must map to OrganizationAnalysisCapabilities structure"
+        },
+        "expected_deliverables": {
+          "context_aware_framework": "Measurement framework tailored to discovered Stripe characteristics",
+          "kpi_definitions": "5-8 KPIs specific to payment processing business model",
+          "framework_persistence": "Complete framework stored in Analysis_Results for final compilation"
+        }
+      }
+    },
+    "capabilityName": "context_adaptive_framework_design",
+    "status": "pending"
+  },
+  {
+    "id": "task_healthcare_001",
+    "agentId": 8,
+    "name": "Generate Residential Aged Care Report",
+    "instructions": {
+      "instructions": "Generate a comprehensive residential aged care placement report for Margaret Thompson (Client ID: HCC001). First, read the client data from /Users/lancekraakman/orchastrate/emery-agents/tests/fixtures/healthcare_data.json to get Margaret's complete information. Then generate a detailed professional report and save it to /Users/lancekraakman/orchastrate/emery-agents/outputs/healthcare_reports/aged_care/ using filename format: Margaret_Thompson_aged_care_report_YYYYMMDD.md",
+      "tools": [{"name": "file_reader"}, {"name": "document_generator"}, {"name": "file_writer"}],
+      "context": {
+        "client_data_path": "/Users/lancekraakman/orchastrate/emery-agents/tests/fixtures/healthcare_data.json",
+        "client_id": "HCC001",
+        "template_path": "/Users/lancekraakman/orchastrate/emery-agents/tests/fixtures/drcare_templates/aged_care_template.json",
+        "assessment_focus": "High urgency placement due to safety concerns at home",
+        "report_requirements": {
+          "include_facility_matching": true,
+          "financial_assessment": true,
+          "implementation_timeline": true,
+          "care_level_recommendation": "Level 3 or higher"
+        }
+      }
+    },
+    "capabilityName": "residential_aged_care_report",
+    "status": "pending"
+  },
+  {
+    "id": "task_healthcare_002", 
+    "agentId": 8,
+    "name": "Create Life Plan Report",
+    "instructions": {
+      "instructions": "Create a comprehensive life plan report for Robert and Joan Wilson (Client ID: HCC002). First, read their client data from the healthcare_data.json file to understand their current health status, care levels, and couple preferences. Then develop a detailed long-term strategy for healthcare, accommodation, and financial planning that keeps them together as they age.",
+      "tools": [{"name": "file_reader"}, {"name": "document_generator"}, {"name": "file_writer"}],
+      "context": {
+        "client_data_path": "/Users/lancekraakman/orchastrate/emery-agents/tests/fixtures/healthcare_data.json",
+        "client_id": "HCC002",
+        "template_path": "/Users/lancekraakman/orchastrate/emery-agents/tests/fixtures/drcare_templates/life_plan_template.json",
+        "planning_focus": "Couple planning with different care levels",
+        "report_requirements": {
+          "financial_projection_years": 10,
+          "accommodation_options": "Together preference priority",
+          "healthcare_pathway": "Progressive care planning",
+          "contingency_scenarios": true
+        }
+      }
+    },
+    "capabilityName": "life_plan_report",
+    "status": "pending"
+  },
+  {
+    "id": "task_healthcare_003",
+    "agentId": 8,
+    "name": "Produce Executive Summary Report",
+    "instructions": {
+      "instructions": "Create a concise executive summary report for William Chen (Client ID: HCC003). First, read his client data from the healthcare_data.json file to understand his recently widowed situation, early-stage dementia, and cultural preferences. Then create a focused executive summary highlighting key decisions needed and immediate actions required for his proactive planning while cognitive function allows.",
+      "tools": [{"name": "file_reader"}, {"name": "document_generator"}, {"name": "file_writer"}],
+      "context": {
+        "client_data_path": "/Users/lancekraakman/orchastrate/emery-agents/tests/fixtures/healthcare_data.json",
+        "client_id": "HCC003",
+        "template_path": "/Users/lancekraakman/orchastrate/emery-agents/tests/fixtures/drcare_templates/executive_summary_template.json",
+        "summary_focus": "Planning ahead while cognitive function allows",
+        "report_requirements": {
+          "word_limit_enforcement": true,
+          "decision_timeline": "6-month planning window",
+          "cultural_considerations": "Chinese cultural preferences",
+          "urgency_level": "Moderate - proactive planning"
+        }
+      }
+    },
+    "capabilityName": "executive_summary_report", 
+    "status": "pending"
+  },
+  {
+    "id": "task_healthcare_004",
+    "agentId": 8,
+    "name": "Complete Healthcare Documentation Workflow",
+    "instructions": {
+      "instructions": "Execute a complete healthcare documentation workflow: generate an aged care report for Margaret Thompson, create a life plan for the Wilson couple, and produce an executive summary for William Chen. This tests the full range of DRCare report capabilities in sequence.",
+      "tools": [{"name": "file_reader"}, {"name": "document_generator"}],
+      "context": {
+        "workflow_sequence": [
+          {
+            "step": 1,
+            "task": "aged_care_report",
+            "client_id": "HCC001",
+            "priority": "High urgency placement"
+          },
+          {
+            "step": 2,
+            "task": "life_plan_report", 
+            "client_id": "HCC002",
+            "priority": "Couple planning coordination"
+          },
+          {
+            "step": 3,
+            "task": "executive_summary",
+            "client_id": "HCC003",
+            "priority": "Proactive planning"
+          }
+        ],
+        "quality_requirements": {
+          "professional_formatting": true,
+          "compliance_standards": "Healthcare documentation guidelines",
+          "confidentiality": "Patient privacy maintained",
+          "completeness": "All sections must be populated"
+        }
+      }
+    },
+    "capabilityName": "residential_aged_care_report",
+    "status": "pending"
   }
 ]

@@ -66,7 +66,7 @@ async def main():
         description="Helps with email tasks",
         persona="Helpful email assistant",
         agent_type=AgentType.TOOL_CALLING_AGENT,
-        model="claude-3-sonnet-20240229",
+        model="Qwen/Qwen2.5-14B-Instruct",
         steps=[
             AgentStep(
                 id="step1",
@@ -148,7 +148,7 @@ EMERY_API_KEY=your_agent_api_key
 
 # Optional
 EMERY_AGENTS_LOG_LEVEL=INFO
-SMOLAGENTS_MODEL=claude-3-sonnet-20240229
+SMOLAGENTS_MODEL=Qwen/Qwen2.5-72B-Instruct
 ```
 
 ### OAuth Integration
