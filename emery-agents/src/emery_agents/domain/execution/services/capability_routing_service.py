@@ -115,13 +115,16 @@ class CapabilityRoutingService:
             if hasattr(step, 'tools') and step.tools:
                 all_tools.extend([tool.name for tool in step.tools])
 
+        # AIDEV-NOTE: Pass full capability configuration to preserve multi-step execution
+        # The capability object contains all step configurations with tools and instructions
         return ExecutionContext(
             mode=ExecutionMode.CAPABILITY_BASED,
             instructions=capability.description,
             available_tools=list(set(all_tools)),  # Remove duplicates
             agent_id=AgentId(request.agent_id) if hasattr(request, 'agent_id') and request.agent_id else None,
             organization_id=self._parse_organization_id(request.organization_id),
-            capability_name=request.capability_name
+            capability_name=request.capability_name,
+            capability=capability  # Pass full capability for execution
         )
     
     def _create_instruction_context(self, request: TaskRequest) -> ExecutionContext:

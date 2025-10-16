@@ -137,6 +137,7 @@ export class AgentTaskApplicationService {
     if (!task) {
       throw new Error(`Task ${taskId} not found`);
     }
+    console.log(`[AGENT-TASK-SERVICE] Loaded task ${JSON.stringify(task, null, 4)}`);
 
     if (!task.isPending) {
       throw new Error(`Task ${taskId} is not pending (status: ${task.status})`);

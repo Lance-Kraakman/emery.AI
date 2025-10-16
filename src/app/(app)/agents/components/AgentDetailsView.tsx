@@ -2,10 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Edit, ChevronDown, ChevronRight, Activity, Cog, Save, X, Loader2, Calendar, Plus, Trash2 } from 'lucide-react';
-import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { AgentDTO, ToolConfigDTO, CapabilityConfigDTO } from '@/app/mappers/agent-mapper';
 import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-import type { ServerConfig, CapabilityConfig } from '@/ddd/domain/agents/entities/agent';
+import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import { discoverTools, createToolConfigFromMetadata, type ToolMetadataDTO } from '@/app/actions/tool-registry';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -47,9 +46,9 @@ interface EditFormData {
   persona: string;
   status: string;
   trigger: TriggerConfig;
-  tools: ToolConfig[];
+  tools: ToolConfigDTO[];
   servers: ServerConfig[];
-  capabilities: CapabilityConfig[];
+  capabilities: CapabilityConfigDTO[];
 }
 
 export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetailsViewProps) {
@@ -65,9 +64,9 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
     persona: agent.persona || '',
     status: agent.status || 'active',
     trigger: agent.trigger || TriggerConfigs.manual(),
-    tools: (agent.tools as ToolConfig[]) || [],
-    servers: (agent.servers as ServerConfig[]) || [],
-    capabilities: (agent.capabilities as CapabilityConfig[]) || []
+    tools: agent.tools || [],
+    servers: agent.servers || [],
+    capabilities: agent.capabilities || []
   });
 
   const handleEdit = () => {
@@ -79,9 +78,9 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       persona: agent.persona || '',
       status: agent.status || 'active',
       trigger: agent.trigger || TriggerConfigs.manual(),
-      tools: (agent.tools as ToolConfig[]) || [],
-      servers: (agent.servers as ServerConfig[]) || [],
-      capabilities: (agent.capabilities as CapabilityConfig[]) || []
+      tools: agent.tools || [],
+      servers: agent.servers || [],
+      capabilities: agent.capabilities || []
     });
   };
 
@@ -94,9 +93,9 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       persona: agent.persona || '',
       status: agent.status || 'active',
       trigger: agent.trigger || TriggerConfigs.manual(),
-      tools: (agent.tools as ToolConfig[]) || [],
-      servers: (agent.servers as ServerConfig[]) || [],
-      capabilities: (agent.capabilities as CapabilityConfig[]) || []
+      tools: agent.tools || [],
+      servers: agent.servers || [],
+      capabilities: agent.capabilities || []
     });
   };
 
@@ -264,10 +263,14 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
   const addToolFromRegistry = async (toolMetadata: ToolMetadataDTO) => {
     const result = await createToolConfigFromMetadata(toolMetadata.name);
     if (result.success && result.data) {
-      const newTool = ToolConfig.create(result.data.name, result.data.config);
+      // Create plain DTO instead of ToolConfig instance (for Next.js serialization)
+      const newToolDTO: ToolConfigDTO = {
+        name: result.data.name,
+        config: result.data.config
+      };
       setEditFormData(prev => ({
         ...prev,
-        tools: [...prev.tools, newTool]
+        tools: [...prev.tools, newToolDTO]
       }));
     }
     setIsToolSelectorOpen(false);

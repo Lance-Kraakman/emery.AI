@@ -96,9 +96,32 @@ export async function addCapabilityToAgent(agentId: number, capability: Capabili
 
 // Helper function for creating agents from client data (with plain types)
 export async function createAgentFromClient(data: CreateAgentClientData): Promise<Result> {
+  // Convert plain tools to ToolConfig instances (filter out nulls first)
+  const tools = data.tools
+    ?.filter(tool => tool !== null && tool !== undefined)
+    ?.map(plainTool => ToolConfig.fromPlain(plainTool));
+
+  // Convert plain capabilities to domain CapabilityConfig with ToolConfig instances
+  const capabilities = data.capabilities?.map(plainCap => ({
+    name: plainCap.name,
+    description: plainCap.description,
+    steps: plainCap.steps.map(plainStep => ({
+      type: plainStep.type,
+      instructions: plainStep.instructions,
+      model: plainStep.model,
+      // Convert plain tool configs to ToolConfig instances (filter out nulls first!)
+      tools: plainStep.tools
+        ?.filter(tool => tool !== null && tool !== undefined)
+        ?.map(plainTool => ToolConfig.fromPlain(plainTool)) || [],
+      servers: plainStep.servers || []
+    }))
+  }));
+
   // Convert client data to domain data format
   const domainData: CreateAgentData = {
     ...data,
+    tools,
+    capabilities,
     status: data.status ? AgentStatus.fromString(data.status) : AgentStatus.active(),
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
     ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,
@@ -108,13 +131,54 @@ export async function createAgentFromClient(data: CreateAgentClientData): Promis
 
 // Helper function for updating agents from client data (with plain types)
 export async function updateAgentFromClient(agentId: number, data: Partial<CreateAgentClientData>, revalidateUrl?: string): Promise<Result> {
+  console.log('[updateAgentFromClient] Received plain data:', JSON.stringify({
+    agentId,
+    capabilities: data.capabilities,
+    capabilitiesCount: data.capabilities?.length || 0
+  }, null, 2));
+
+  // Convert plain tools to ToolConfig instances
+  const tools = data.tools?.map(plainTool =>
+    ToolConfig.fromPlain(plainTool)
+  );
+
+  // Convert plain capabilities to domain CapabilityConfig with ToolConfig instances
+  const capabilities = data.capabilities?.map(plainCap => ({
+    name: plainCap.name,
+    description: plainCap.description,
+    steps: plainCap.steps.map(plainStep => ({
+      type: plainStep.type,
+      instructions: plainStep.instructions,
+      model: plainStep.model,
+      // Convert plain tool configs to ToolConfig instances
+      tools: plainStep.tools?.map(plainTool =>
+        ToolConfig.fromPlain(plainTool)
+      ) || [],
+      servers: plainStep.servers || []
+    }))
+  }));
+
   // Convert client data to domain data format
   const domainData: Partial<CreateAgentData> = {
     ...data,
+    tools,
+    capabilities,
     status: data.status ? AgentStatus.fromString(data.status) : undefined,
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
     ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,
   };
+
+  console.log('[updateAgentFromClient] Converted to domain data with ToolConfig instances:', JSON.stringify({
+    capabilities: domainData.capabilities?.map(c => ({
+      name: c.name,
+      steps: c.steps.map(s => ({
+        type: s.type,
+        toolsCount: s.tools?.length || 0,
+        tools: s.tools?.map(t => ({ name: t.name, isToolConfig: t instanceof ToolConfig }))
+      }))
+    }))
+  }, null, 2));
+
   return updateAgent(agentId, domainData, revalidateUrl);
 }
 
@@ -249,6 +313,19 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
           : undefined;
       })()
     };
+
+    console.log('[updateAgent] UpdateAgentCommand capabilities:', JSON.stringify({
+      capabilitiesCount: command.capabilities?.length || 0,
+      capabilities: command.capabilities?.map(c => ({
+        name: c.name,
+        stepsCount: c.steps.length,
+        steps: c.steps.map(s => ({
+          type: s.type,
+          toolsCount: s.tools?.length || 0,
+          tools: s.tools?.map(t => ({ name: t.name, config: t.config }))
+        }))
+      }))
+    }, null, 2));
 
     const result = await agentApplicationService.updateAgent(command);
 
