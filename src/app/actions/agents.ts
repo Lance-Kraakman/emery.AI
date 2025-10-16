@@ -5,13 +5,13 @@ import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
-import type { Result, CreateAgentData, CreateAgentClientData } from "./types";
+import { type Result, type CreateAgentData, type CreateAgentClientData } from "./types";
 import { getAgentApplicationService } from "@/ddd/application/di/container";
 import type { CreateAgentCommand, UpdateAgentCommand, AgentFilters } from "@/ddd/application/services/agents/agent-application-service";
 import type { CapabilityConfig } from "@/ddd/domain/agents/entities/agent";
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { AgentMapper, type AgentDTO } from "@/app/mappers/agent-mapper";
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
 
@@ -137,10 +137,25 @@ export async function updateAgentFromClient(agentId: number, data: Partial<Creat
     capabilitiesCount: data.capabilities?.length || 0
   }, null, 2));
 
-  // Convert plain tools to ToolConfig instances
-  const tools = data.tools?.map(plainTool =>
-    ToolConfig.fromPlain(plainTool)
-  );
+  // Log detailed tool information for debugging
+  if (data.capabilities) {
+    data.capabilities.forEach((cap, capIndex) => {
+      console.log(`[updateAgentFromClient] Capability ${capIndex} "${cap.name}":`);
+      cap.steps.forEach((step, stepIndex) => {
+        console.log(`[updateAgentFromClient]   Step ${stepIndex} (${step.type}): ${step.tools?.length || 0} tools`);
+        step.tools?.forEach((tool, toolIndex) => {
+          console.log(`[updateAgentFromClient]     Tool ${toolIndex}:`, JSON.stringify(tool));
+          console.log(`[updateAgentFromClient]     Tool ${toolIndex} name: "${tool?.name}"`, tool?.name === '@tool:' ? '(EMPTY PLACEHOLDER)' : '');
+          console.log(`[updateAgentFromClient]     Tool ${toolIndex} is null/undefined:`, tool === null || tool === undefined);
+        });
+      });
+    });
+  }
+
+  // Convert plain tools to ToolConfig instances (filter out nulls first)
+  const tools = data.tools
+    ?.filter(tool => tool !== null && tool !== undefined)
+    ?.map(plainTool => ToolConfig.fromPlain(plainTool));
 
   // Convert plain capabilities to domain CapabilityConfig with ToolConfig instances
   const capabilities = data.capabilities?.map(plainCap => ({
@@ -150,10 +165,10 @@ export async function updateAgentFromClient(agentId: number, data: Partial<Creat
       type: plainStep.type,
       instructions: plainStep.instructions,
       model: plainStep.model,
-      // Convert plain tool configs to ToolConfig instances
-      tools: plainStep.tools?.map(plainTool =>
-        ToolConfig.fromPlain(plainTool)
-      ) || [],
+      // Convert plain tool configs to ToolConfig instances (filter out nulls first!)
+      tools: plainStep.tools
+        ?.filter(tool => tool !== null && tool !== undefined)
+        ?.map(plainTool => ToolConfig.fromPlain(plainTool)) || [],
       servers: plainStep.servers || []
     }))
   }));

@@ -70,6 +70,7 @@ export default function CapabilityManager({
       steps: editingCapability.steps.map(step => {
         const originalTools = step.tools;
         const filteredTools = step.tools?.filter(tool => {
+          console.log(`[CapabilityManager] Filtering tool: ${JSON.stringify(tool)}`);
           // Remove null/undefined
           if (!tool) {
             console.log('[CapabilityManager] Filtering out null/undefined tool');
@@ -82,7 +83,7 @@ export default function CapabilityManager({
           }
           // Keep all valid tools with proper names
           const isValid = tool.name && tool.name.length > 7;
-          console.log(`[CapabilityManager] Tool "${tool.name}" - valid: ${isValid}`);
+          console.log(`[CapabilityManager] Tool "${tool.name}" - valid: ${isValid} (length: ${tool.name?.length || 0})`);
           return isValid;
         }) || [];
 
@@ -162,10 +163,12 @@ export default function CapabilityManager({
     if (!editingCapability) return;
     // Create empty tool placeholder as plain DTO - will be filled via @tool: dropdown
     const newTool: ToolConfigDTO = { name: '@tool:', config: {} };
+    console.log('[CapabilityManager] handleAddStepTool - Creating new tool:', JSON.stringify(newTool));
     const updatedStep = {
       ...editingCapability.steps[stepIndex],
       tools: [...(editingCapability.steps[stepIndex].tools || []), newTool]
     };
+    console.log('[CapabilityManager] handleAddStepTool - Updated step tools:', JSON.stringify(updatedStep.tools));
     handleUpdateStep(stepIndex, updatedStep);
   };
 
@@ -250,11 +253,14 @@ export default function CapabilityManager({
 
   const handleUpdateStepTool = (stepIndex: number, toolIndex: number, field: keyof ToolConfigDTO, value: string) => {
     if (!editingCapability) return;
+    console.log(`[CapabilityManager] handleUpdateStepTool - step:${stepIndex} tool:${toolIndex} field:${field} value:"${value}"`);
     const updatedTools = editingCapability.steps[stepIndex].tools?.map((tool, i) => {
       if (i === toolIndex) {
         // Create new plain tool DTO with updated field
         if (field === 'name') {
-          return { name: value || '', config: tool.config };
+          const updatedTool = { name: value || '', config: tool.config };
+          console.log('[CapabilityManager] handleUpdateStepTool - Updated tool name:', JSON.stringify(updatedTool));
+          return updatedTool;
         } else if (field === 'config') {
           return { name: tool.name, config: { ...tool.config, ...(value ? JSON.parse(value) : {}) } };
         }
@@ -266,6 +272,7 @@ export default function CapabilityManager({
       ...editingCapability.steps[stepIndex],
       tools: updatedTools
     };
+    console.log('[CapabilityManager] handleUpdateStepTool - Step tools after update:', JSON.stringify(updatedStep.tools));
     handleUpdateStep(stepIndex, updatedStep);
   };
 
