@@ -94,9 +94,16 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
             
             # Handle capability-based execution
             if context.is_capability_mode:
-                # Create capability from context (would come from domain routing service)
-                capability = self._create_capability_from_context(context)
-                
+                # AIDEV-NOTE: Capability MUST be provided in context for capability-based execution
+                # Fail fast if capability is missing - don't create stub capability
+                if not context.capability:
+                    error_msg = f"Capability-based execution requires context.capability to be set. Got capability_name='{context.capability_name}' but no capability object."
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+
+                capability = context.capability
+                logger.info(f"Using actual capability '{capability.name}' with {len(capability.steps)} steps")
+
                 yield {
                     "status": "in_progress",
                     "step_id": "capability_setup",
@@ -106,7 +113,7 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
                     "timestamp_ms": int(time.time() * 1000),
                     "progress_percent": 20.0
                 }
-                
+
                 # Create smolagents agent for this capability
                 smolagents_agent = await self._create_capability_agent(capability, context_id)
                 
@@ -212,27 +219,6 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
     def _generate_context_id(self, context: ExecutionContext) -> str:
         """Generate unique ID for execution context."""
         return f"ctx_{hash(context.instructions + str(context.available_tools)) % 10000}"
-    
-    def _create_capability_from_context(self, context: ExecutionContext) -> CapabilityConfig:
-        """Create capability configuration from execution context."""
-        # Create tool configs with enhanced context for Pipedream tools
-        tool_configs = self._create_tool_configs_with_context(context.available_tools, context)
-        
-        # Create single step capability
-        step = StepConfig(
-            id="execution_step",
-            type=StepType.TOOL_STEP if tool_configs else StepType.CODE_STEP,
-            instructions=context.instructions,
-            model="Qwen/Qwen2.5-14B-Instruct",  # AIDEV-NOTE: Will be replaced by model provider in step agent creation
-            tools=tool_configs,
-            servers=[]
-        )
-        
-        return CapabilityConfig(
-            name=context.capability_name or "dynamic_capability",
-            description=f"Generated capability: {context.instructions[:100]}...",
-            steps=[step]
-        )
     
     async def _create_direct_execution_agent(self, context: ExecutionContext) -> Union[CodeAgent, ToolCallingAgent]:
         """

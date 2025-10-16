@@ -110,7 +110,17 @@ export class AgentFactory {
       ),
       servers: record.servers || [],
       trigger: record.trigger,
-      capabilities: record.capabilities || [],
+      capabilities: (record.capabilities || []).map((cap: any) => ({
+        ...cap,
+        steps: (cap.steps || []).map((step: any) => ({
+          ...step,
+          tools: (step.tools || [])
+            .filter((tool: any) => tool !== null && tool !== undefined)
+            .map((tool: any) =>
+              tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
+            )
+        }))
+      })),
       databaseId: record.databaseId,
       status: AgentStatus.fromString(record.status),
       organizationId: OrganizationId.fromNumber(record.organizationId),
@@ -133,7 +143,15 @@ export class AgentFactory {
       tools: agent.tools.map(tool => tool.toPlain()),
       servers: agent.servers,
       trigger: agent.trigger,
-      capabilities: agent.capabilities,
+      capabilities: agent.capabilities.map(cap => ({
+        ...cap,
+        steps: cap.steps.map(step => ({
+          ...step,
+          tools: step.tools?.map(tool =>
+            tool instanceof ToolConfig ? tool.toPlain() : tool
+          ) || []
+        }))
+      })),
       databaseId: agent.databaseId,
       status: agent.status.value,
       organizationId: agent.organizationId.value,

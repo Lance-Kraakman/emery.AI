@@ -2,9 +2,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Settings, Plus, Edit, Trash2, Save, X } from 'lucide-react';
-import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-import type { CapabilityConfig, StepConfig, ServerConfig } from '@/ddd/domain/agents/entities/agent';
+import type { AgentDTO, ToolConfigDTO, CapabilityConfigDTO, StepConfigDTO } from '@/app/mappers/agent-mapper';
+import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,20 +18,20 @@ import type { ToolDTO } from '@/app/mappers/tool-mapper';
 
 interface CapabilityManagerProps {
   agent?: AgentDTO;  // Optional for creation mode
-  capabilities?: CapabilityConfig[];  // Alternative for creation mode
+  capabilities?: CapabilityConfigDTO[];  // Alternative for creation mode
   isEditable?: boolean;
-  onCapabilitiesChange?: (capabilities: CapabilityConfig[]) => void;
+  onCapabilitiesChange?: (capabilities: CapabilityConfigDTO[]) => void;
 }
 
-export default function CapabilityManager({ 
-  agent, 
+export default function CapabilityManager({
+  agent,
   capabilities: propCapabilities,
   isEditable = false,
-  onCapabilitiesChange 
+  onCapabilitiesChange
 }: CapabilityManagerProps) {
-  const initialCapabilities = (propCapabilities || agent?.capabilities || []) as CapabilityConfig[];
+  const initialCapabilities = (propCapabilities || agent?.capabilities || []) as CapabilityConfigDTO[];
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editingCapability, setEditingCapability] = useState<CapabilityConfig | null>(null);
+  const [editingCapability, setEditingCapability] = useState<CapabilityConfigDTO | null>(null);
   const [toolInput, setToolInput] = useState('');
   const [editingStepIndex, setEditingStepIndex] = useState<number | null>(null);
   const [showToolDropdown, setShowToolDropdown] = useState(false);
@@ -45,7 +44,7 @@ export default function CapabilityManager({
   const capabilities = initialCapabilities;
 
   const handleAdd = () => {
-    const newCapability: CapabilityConfig = {
+    const newCapability: CapabilityConfigDTO = {
       name: 'New Capability',
       description: '',
       steps: []
@@ -63,15 +62,52 @@ export default function CapabilityManager({
   const handleSave = () => {
     if (!editingCapability || !onCapabilitiesChange || editingIndex === null) return;
 
+    console.log('[CapabilityManager] handleSave - BEFORE cleaning:', JSON.stringify(editingCapability, null, 2));
+
+    // Filter out invalid tools (null, undefined, empty placeholders) before saving
+    const cleanedCapability = {
+      ...editingCapability,
+      steps: editingCapability.steps.map(step => {
+        const originalTools = step.tools;
+        const filteredTools = step.tools?.filter(tool => {
+          // Remove null/undefined
+          if (!tool) {
+            console.log('[CapabilityManager] Filtering out null/undefined tool');
+            return false;
+          }
+          // Remove empty placeholder @tool:
+          if (tool.name === '@tool:') {
+            console.log('[CapabilityManager] Filtering out empty placeholder @tool:');
+            return false;
+          }
+          // Keep all valid tools with proper names
+          const isValid = tool.name && tool.name.length > 7;
+          console.log(`[CapabilityManager] Tool "${tool.name}" - valid: ${isValid}`);
+          return isValid;
+        }) || [];
+
+        console.log(`[CapabilityManager] Step tools: ${originalTools?.length || 0} → ${filteredTools.length}`);
+        return {
+          ...step,
+          tools: filteredTools
+        };
+      })
+    };
+
+    console.log('[CapabilityManager] handleSave - AFTER cleaning:', JSON.stringify(cleanedCapability, null, 2));
+
     const newCapabilities = [...capabilities];
     if (editingIndex === -1) {
       // Adding new capability
-      newCapabilities.push(editingCapability);
+      console.log('[CapabilityManager] Adding NEW capability');
+      newCapabilities.push(cleanedCapability);
     } else {
       // Updating existing capability
-      newCapabilities[editingIndex] = editingCapability;
+      console.log(`[CapabilityManager] Updating capability at index ${editingIndex}`);
+      newCapabilities[editingIndex] = cleanedCapability;
     }
-    
+
+    console.log('[CapabilityManager] Calling onCapabilitiesChange with:', JSON.stringify(newCapabilities, null, 2));
     onCapabilitiesChange(newCapabilities);
     setEditingCapability(null);
     setEditingIndex(null);
@@ -92,7 +128,7 @@ export default function CapabilityManager({
 
   const handleAddStep = () => {
     if (!editingCapability) return;
-    const newStep: StepConfig = {
+    const newStep: StepConfigDTO = {
       type: 'TOOL_STEP',
       instructions: 'New step instructions',
       tools: [],
@@ -112,11 +148,11 @@ export default function CapabilityManager({
     });
   };
 
-  const handleUpdateStep = (stepIndex: number, updatedStep: Partial<StepConfig>) => {
+  const handleUpdateStep = (stepIndex: number, updatedStep: Partial<StepConfigDTO>) => {
     if (!editingCapability) return;
     setEditingCapability({
       ...editingCapability,
-      steps: editingCapability.steps?.map((step, i) => 
+      steps: editingCapability.steps?.map((step, i) =>
         i === stepIndex ? { ...step, ...updatedStep } : step
       ) || []
     });
@@ -124,7 +160,8 @@ export default function CapabilityManager({
 
   const handleAddStepTool = (stepIndex: number) => {
     if (!editingCapability) return;
-    const newTool: ToolConfig = ToolConfig.create('', {});
+    // Create empty tool placeholder as plain DTO - will be filled via @tool: dropdown
+    const newTool: ToolConfigDTO = { name: '@tool:', config: {} };
     const updatedStep = {
       ...editingCapability.steps[stepIndex],
       tools: [...(editingCapability.steps[stepIndex].tools || []), newTool]
@@ -211,16 +248,15 @@ export default function CapabilityManager({
     handleUpdateStep(stepIndex, updatedStep);
   };
 
-  const handleUpdateStepTool = (stepIndex: number, toolIndex: number, field: keyof ToolConfig, value: string) => {
+  const handleUpdateStepTool = (stepIndex: number, toolIndex: number, field: keyof ToolConfigDTO, value: string) => {
     if (!editingCapability) return;
     const updatedTools = editingCapability.steps[stepIndex].tools?.map((tool, i) => {
       if (i === toolIndex) {
-        // Create new ToolConfig with updated field
-        const updatedConfig = { ...tool.config };
+        // Create new plain tool DTO with updated field
         if (field === 'name') {
-          return ToolConfig.create(value || '', tool.config);
+          return { name: value || '', config: tool.config };
         } else if (field === 'config') {
-          return ToolConfig.create(tool.name, { ...tool.config, ...(value ? JSON.parse(value) : {}) });
+          return { name: tool.name, config: { ...tool.config, ...(value ? JSON.parse(value) : {}) } };
         }
         return tool;
       }
@@ -369,7 +405,7 @@ export default function CapabilityManager({
                             </div>
                           ))}
                           {(!step.tools || step.tools.length === 0) && (
-                            <div className="text-xs text-muted-foreground">No tools - click "+" to add tools</div>
+                            <div className="text-xs text-muted-foreground">No tools - click "+" to add</div>
                           )}
                         </div>
                       </div>
