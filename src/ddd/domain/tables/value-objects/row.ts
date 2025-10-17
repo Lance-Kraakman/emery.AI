@@ -121,8 +121,10 @@ export class Row {
     tableFields: TableField[]
   ): Row {
     // Validate required fields
+    // AIDEV-NOTE: Allow empty strings for legacy data - RowMapper.applyDefaults() will fix them
+    // Only fail on undefined (field completely missing)
     for (const field of tableFields) {
-      if (field.required && (!data[field.name] || data[field.name] === '')) {
+      if (field.required && data[field.name] === undefined) {
         throw new Error(`${field.name} is required`);
       }
     }

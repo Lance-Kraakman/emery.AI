@@ -29,7 +29,7 @@
 
 "use client"
 
-import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react'
+import React, { useMemo, useCallback, useState, useEffect, useRef, useReducer } from 'react'
 import {
   DataSheetGrid,
   keyColumn,
@@ -52,6 +52,57 @@ import { DocumentField } from '@/components/tables/fields/DocumentField'
 import { FileTypeDetector } from '@/ddd/domain/tables/services/file-type-detector'
 import { createFileArtifact, createDocumentArtifact } from '@/components/chat/types/chat-artifacts'
 import { uiStateActions } from '@/stores/ui-state.store'
+
+// ============================================================================
+// REDUCER PATTERN - Event-Driven Sync
+// ============================================================================
+
+/**
+ * Grid state - minimal, just tracks display data and sync status
+ * TanStack Query manages server state, we just track local UI state
+ */
+interface GridState {
+  data: DSGRow[]              // Current displayed data
+  isSyncing: boolean          // Is a save operation in progress?
+}
+
+/**
+ * Grid actions - map 1:1 to user events and mutations
+ */
+type GridAction =
+  | { type: 'SET_DATA'; payload: DSGRow[] }           // Server data loaded
+  | { type: 'CELL_CHANGED'; payload: { rowId: string; fieldId: number; value: any } }
+  | { type: 'ROW_ADDED'; payload: DSGRow }
+  | { type: 'START_SYNC' }
+  | { type: 'SYNC_COMPLETE' }
+
+/**
+ * Reducer - handles state transitions
+ * Note: We don't update data here for changes, TanStack Query handles that via optimistic updates
+ */
+function gridReducer(state: GridState, action: GridAction): GridState {
+  switch (action.type) {
+    case 'SET_DATA':
+      return { ...state, data: action.payload }
+
+    case 'CELL_CHANGED':
+    case 'ROW_ADDED':
+      // Don't update state here - TanStack Query mutation handles optimistic update
+      // Just track that we're syncing
+      return { ...state, isSyncing: true }
+
+    case 'START_SYNC':
+      return { ...state, isSyncing: true }
+
+    case 'SYNC_COMPLETE':
+      return { ...state, isSyncing: false }
+
+    default:
+      return state
+  }
+}
+
+// ============================================================================
 
 interface DynamicDataSheetGridProps {
   fields: FieldDTO[];
@@ -268,15 +319,20 @@ export function DynamicDataSheetGrid({
   isLoading = false,
   error = null
 }: DynamicDataSheetGridProps) {
-  const [localData, setLocalData] = useState<DSGRow[]>(rows)
-  const [isUpdating, setIsUpdating] = useState(false)
+  // Use reducer for state management
+  const [state, dispatch] = useReducer(gridReducer, {
+    data: rows,
+    isSyncing: false
+  })
+
   const [containerHeight, setContainerHeight] = useState(400)
   const containerRef = useRef<HTMLDivElement>(null)
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // No more debounceTimer!
 
-  // Sync local data with props
+  // Sync server data to state (TanStack Query manages server state)
   useEffect(() => {
-    setLocalData(rows)
+    dispatch({ type: 'SET_DATA', payload: rows })
+    dispatch({ type: 'SYNC_COMPLETE' })  // Server update means sync is done
   }, [rows])
 
   // Update container height
@@ -378,89 +434,72 @@ export function DynamicDataSheetGrid({
     })
   }, [fields, organizationId, tableId, onUpdateRow])
 
-  // Simplified onChange following react-datasheet-grid best practices
+  /**
+   * Event-driven onChange - immediately dispatch actions for changes
+   * No debouncing - mutations fire immediately, TanStack Query handles optimistic updates
+   */
   const handleChange = useCallback((newData: Record<string, any>[]) => {
-    // Cast to DSGRow for type safety
     const dsgRows = newData as DSGRow[]
+    const oldData = state.data
 
-    // Update local state immediately for responsive UI (optimistic update)
-    setLocalData(dsgRows)
+    // AIDEV-NOTE: Diff algorithm to find what changed
+    // react-datasheet-grid gives us the full array on every change, so we diff to find deltas
 
-    // Debounce server sync to avoid excessive API calls
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current)
-    }
-
-    debounceTimer.current = setTimeout(() => {
-      syncChangesToServer(dsgRows)
-    }, 500)
-  }, [])
-
-  // Sync changes to server - separated for clarity
-  const syncChangesToServer = useCallback(async (currentData: DSGRow[]) => {
-    if (isUpdating) return
-    setIsUpdating(true)
-
-    try {
-      // Track existing rows from server (source of truth)
-      const existingRowIds = new Set(rows.map(r => r.id))
-      const oldDataMap = new Map(rows.map(row => [row.id, row]))
-
-      for (const row of currentData) {
-        // Guard against invalid rows
-        if (!row?.id) {
-          console.warn('[DynamicDataSheetGrid] Skipping row without ID:', row)
-          continue
-        }
-
-        // Check if row exists on server (robust pattern - no string matching)
-        if (!existingRowIds.has(row.id)) {
-          // NEW ROW - not in server data, create it
-          try {
-            await onAddRow(dsgRowToPlainObject(row))
-          } catch (error) {
-            console.error('Failed to create row:', error)
-            // Don't block other operations on failure
-          }
-        } else {
-          // EXISTING ROW - check for changes
-          const oldRow = oldDataMap.get(row.id)
-          if (oldRow && hasRowChanged(row, oldRow)) {
-            const changes = getChangedFields(row, oldRow, fields)
-
-            for (const change of changes) {
-              try {
-                await onUpdateRow(row.id, change.fieldId, change.value)
-              } catch (error) {
-                console.error(`Failed to update field ${change.fieldId}:`, error)
-              }
-            }
-          }
-        }
+    // 1. Find new rows (in newData but not in oldData)
+    const oldIds = new Set(oldData.map(r => r.id))
+    const newRows = dsgRows.filter(row => {
+      if (!row.id) {
+        console.warn('[DynamicDataSheetGrid] Row missing ID, generating:', row)
+        row.id = crypto.randomUUID()  // Defensive: ensure ID exists
       }
-    } catch (error) {
-      console.error('Error syncing data to server:', error)
-      // Revert to server data on fatal error
-      setLocalData(rows)
-    } finally {
-      setIsUpdating(false)
-    }
-  }, [rows, fields, onUpdateRow, onAddRow, isUpdating])
+      return !oldIds.has(row.id)
+    })
 
-  const handleAddRow = useCallback(() => {
-    if (!isUpdating) {
-      // Create new row with defaults and add to grid
-      const newRow = createEmptyDSGRow(fields)
-      setLocalData([...localData, newRow])
-      // onChange will handle server sync automatically
-    }
-  }, [isUpdating, fields, localData])
+    // 2. Find changed cells (compare rows by ID)
+    const changes: Array<{ rowId: string; fieldId: number; value: any }> = []
+
+    dsgRows.forEach(newRow => {
+      if (!newRow.id) return  // Skip rows without IDs
+
+      const oldRow = oldData.find(r => r.id === newRow.id)
+      if (!oldRow) return  // New row, handled above
+
+      // Compare each field
+      fields.forEach(field => {
+        if (newRow[field.name] !== oldRow[field.name]) {
+          changes.push({
+            rowId: newRow.id,
+            fieldId: field.id,
+            value: newRow[field.name]
+          })
+        }
+      })
+    })
+
+    // 3. Dispatch actions immediately (no setTimeout!)
+    newRows.forEach(row => {
+      dispatch({ type: 'ROW_ADDED', payload: row })
+      // Call mutation - TanStack Query handles optimistic update
+      onAddRow(dsgRowToPlainObject(row)).catch(err => {
+        console.error('Failed to add row:', err)
+        // TanStack Query will rollback optimistic update on error
+      })
+    })
+
+    changes.forEach(change => {
+      dispatch({ type: 'CELL_CHANGED', payload: change })
+      // Call mutation - TanStack Query handles optimistic update
+      onUpdateRow(change.rowId, change.fieldId, change.value)
+    })
+
+  }, [state.data, fields, onAddRow, onUpdateRow])
 
   const handleDeleteRow = useCallback((rowId: string) => {
-    if (!isUpdating) {
+    if (!state.isSyncing) {
+      dispatch({ type: 'START_SYNC' })
       onDeleteRow(rowId)
     }
-  }, [onDeleteRow, isUpdating])
+  }, [onDeleteRow, state.isSyncing])
 
   // Show loading state
   if (isLoading) {
@@ -487,9 +526,10 @@ export function DynamicDataSheetGrid({
       {/* DataSheetGrid - fills remaining space */}
       <div ref={containerRef} className="flex-1 border border-border rounded-md overflow-hidden">
         <DataSheetGrid
-          value={localData}
+          value={state.data}
           onChange={handleChange}
           columns={columns}
+          createRow={() => createEmptyDSGRow(fields)}  // ✅ CRITICAL: Preserves IDs
           lockRows={false}
           rowKey="id"
           height={containerHeight}
@@ -502,7 +542,7 @@ export function DynamicDataSheetGrid({
       </div>
 
       {/* Status indicator */}
-      {isUpdating && (
+      {state.isSyncing && (
         <div className="flex justify-start items-center px-4 py-2 border-t border-border flex-shrink-0">
           <div className="text-xs text-muted-foreground">
             Saving changes...
