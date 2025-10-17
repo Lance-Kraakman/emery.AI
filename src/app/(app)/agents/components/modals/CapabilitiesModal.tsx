@@ -21,7 +21,7 @@ import {
   Play,
   Code2
 } from 'lucide-react';
-import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { AgentDTO, CapabilityConfigDTO, StepConfigDTO, ToolConfigDTO } from '@/app/mappers/agent-mapper';
 import type { CapabilityConfig, StepConfig } from '@/ddd/domain/agents/entities/agent';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { updateAgentFromClient } from '@/app/actions/agents';
@@ -284,7 +284,8 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
     const { stepIndex, toolIndex } = editingToolInfo;
 
     // All tools from dropdown are now ToolDTO
-    const toolName = `@tool:${tool.name}`;
+    // Strip @tool: prefix to keep backend consistent
+    const toolName = tool.name;
 
     if (toolIndex === -1) {
       // This is for instructions field - insert at cursor position AND add to tools array
@@ -341,8 +342,52 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
     try {
       setIsSaving(true);
 
+      console.log('[CapabilitiesModal] handleSaveAll - capabilities before conversion:', JSON.stringify(capabilities, null, 2));
+      
+      // Log detailed tool information
+      capabilities.forEach((cap, capIndex) => {
+        console.log(`[CapabilitiesModal] handleSaveAll - Capability ${capIndex}:`, cap.name);
+        cap.steps?.forEach((step, stepIndex) => {
+          console.log(`[CapabilitiesModal] handleSaveAll - Step ${stepIndex}:`, step.type, 'tools:', step.tools);
+          step.tools?.forEach((tool, toolIndex) => {
+            console.log(`[CapabilitiesModal] handleSaveAll - Tool ${toolIndex}:`, {
+              value: tool,
+              type: typeof tool,
+              isFunction: typeof tool === 'function',
+              constructor: tool?.constructor?.name,
+              keys: tool && typeof tool === 'object' ? Object.keys(tool) : 'N/A'
+            });
+          });
+        });
+      });
+
+      // Convert domain capabilities to DTOs before sending to server action
+      const capabilitiesDTO: CapabilityConfigDTO[] = capabilities.map(cap => ({
+        name: cap.name,
+        description: cap.description,
+        steps: cap.steps.map(step => ({
+          type: step.type,
+          instructions: step.instructions,
+          model: step.model,
+          // Convert ToolConfig domain objects to DTOs
+          tools: step.tools?.map(tool => {
+            if (tool instanceof ToolConfig) {
+              return tool.toPlain(); // Convert to plain DTO
+            } else if (tool && typeof tool === 'object' && Object.getPrototypeOf(tool) === Object.prototype) {
+              return tool as ToolConfigDTO; // Already a plain object
+            } else {
+              console.warn('[CapabilitiesModal] Invalid tool found:', tool);
+              return null;
+            }
+          }).filter((tool): tool is ToolConfigDTO => tool !== null) || [],
+          servers: step.servers || []
+        }))
+      }));
+
+      console.log('[CapabilitiesModal] handleSaveAll - capabilitiesDTO after conversion:', JSON.stringify(capabilitiesDTO, null, 2));
+
       const result = await updateAgentFromClient(agent.id, {
-        capabilities
+        capabilities: capabilitiesDTO
       });
 
       if (!result.success) {

@@ -135,13 +135,6 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
     const session = await requirePermission("data:manage");
     const { tableId, rowId, data: rowData } = data;
 
-    console.log('[ROW-UPDATE-DEBUG] updateRowData called with:', {
-      tableId,
-      rowId,
-      incomingFields: Object.keys(rowData || {}),
-      incomingData: rowData
-    });
-
     if (!tableId || !rowId) {
       return {
         success: false,
@@ -168,35 +161,16 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       RowId.fromString(rowId)
     );
 
-    console.log('[ROW-UPDATE-DEBUG] Existing row found:', !!existingRow);
-
     let mergedData = { ...rowData, id: rowId };
-    
+
     if (existingRow) {
       const existingData = existingRow.toPlainObject();
-      
-      console.log('[ROW-UPDATE-DEBUG] Existing row data:', {
-        existingFields: Object.keys(existingData),
-        existingData
-      });
-      
       // MERGE: Start with existing data, then overlay the new changes
       mergedData = { ...existingData, ...rowData, id: rowId };
-      
-      console.log('[ROW-UPDATE-DEBUG] Merged data:', {
-        mergedFields: Object.keys(mergedData),
-        mergedData
-      });
-    } else {
-      console.log('[ROW-UPDATE-DEBUG] WARNING: No existing row found, using only incoming data');
     }
 
     // Convert merged data to Row entity using table field information
     const row = Row.fromPlainObject(mergedData, tableId, table.fields);
-
-    console.log('[ROW-UPDATE-DEBUG] Row entity created with fields:', 
-      row.fieldValues.map(fv => ({ slug: fv.fieldSlug, value: fv.value }))
-    );
 
     // AIDEV-NOTE: Ensure we have a valid user ID
     if (!session.user?.id || typeof session.user.id !== 'string') {
@@ -214,14 +188,11 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
     });
 
     if (!result.success) {
-      console.log('[ROW-UPDATE-DEBUG] Update failed:', result.error);
       return {
         success: false,
         error: result.error || "Failed to update row"
       };
     }
-
-    console.log('[ROW-UPDATE-DEBUG] Update successful');
 
     // Optional revalidation with custom URL
     if (revalidateUrl) {
@@ -236,7 +207,7 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       data: rowDTO,
     };
   } catch (error) {
-    console.error("[ROW-UPDATE-DEBUG] Error updating row:", error);
+    console.error("Error updating row:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to update row",
@@ -307,6 +278,46 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
       success: false,
       error: error instanceof Error ? error.message : "Failed to delete row",
     };
+  }
+}
+
+export async function getRowsDataDSG(tableId: number, limit = 1000): Promise<any[]> {
+  try {
+    await requirePermission("data:manage");
+
+    if (!tableId) {
+      throw new Error("tableId is required");
+    }
+
+    const tableAppService = getTableApplicationService();
+
+    // Get table to access field definitions
+    const table = await tableAppService.getTable(TableId.fromNumber(tableId));
+    if (!table) {
+      throw new Error("Table not found");
+    }
+
+    const rowsData = await tableAppService.getRows(
+      TableId.fromNumber(tableId),
+      { limit, offset: 0 }
+    );
+
+    // Transform to DSG format with defaults applied (data migration)
+    const dsgData = rowsData.map(row => {
+      const plainData = row.toPlainObject();
+
+      // ARCHITECTURE NOTE: Apply defaults in application layer, not infrastructure
+      // Infrastructure (ArrowDataStorageService) returns raw data (may have empty strings, nulls)
+      // Application layer (RowMapper) fixes legacy data with valid defaults
+      const withDefaults = RowMapper.applyDefaults(plainData, table.fields);
+
+      return { id: row.id.value, ...withDefaults };
+    });
+
+    return dsgData;
+  } catch (error) {
+    console.error("Error fetching rows in DSG format:", error);
+    throw new Error(error instanceof Error ? error.message : "Failed to fetch rows");
   }
 }
 

@@ -96,9 +96,9 @@ export async function addCapabilityToAgent(agentId: number, capability: Capabili
 
 // Helper function for creating agents from client data (with plain types)
 export async function createAgentFromClient(data: CreateAgentClientData): Promise<Result> {
-  // Convert plain tools to ToolConfig instances (filter out nulls first)
+  // Convert plain tools to ToolConfig instances (filter out nulls/undefined first)
   const tools = data.tools
-    ?.filter(tool => tool !== null && tool !== undefined)
+    ?.filter(tool => tool != null) // catches both null and undefined
     ?.map(plainTool => ToolConfig.fromPlain(plainTool));
 
   // Convert plain capabilities to domain CapabilityConfig with ToolConfig instances
@@ -109,9 +109,9 @@ export async function createAgentFromClient(data: CreateAgentClientData): Promis
       type: plainStep.type,
       instructions: plainStep.instructions,
       model: plainStep.model,
-      // Convert plain tool configs to ToolConfig instances (filter out nulls first!)
+      // Convert plain tool configs to ToolConfig instances (filter out nulls/undefined first!)
       tools: plainStep.tools
-        ?.filter(tool => tool !== null && tool !== undefined)
+        ?.filter(tool => tool != null) // catches both null and undefined
         ?.map(plainTool => ToolConfig.fromPlain(plainTool)) || [],
       servers: plainStep.servers || []
     }))
@@ -152,26 +152,52 @@ export async function updateAgentFromClient(agentId: number, data: Partial<Creat
     });
   }
 
-  // Convert plain tools to ToolConfig instances (filter out nulls first)
+  // Convert plain tools to ToolConfig instances (filter out invalid tools first)
   const tools = data.tools
-    ?.filter(tool => tool !== null && tool !== undefined)
-    ?.map(plainTool => ToolConfig.fromPlain(plainTool));
+    ?.filter(tool => {
+      console.log('[updateAgentFromClient] Filtering tool:', tool);
+      const isValid = tool !== null && tool !== undefined && tool !== undefined;
+      console.log('[updateAgentFromClient] Tool is valid:', isValid);
+      return isValid;
+    })
+    ?.map(plainTool => {
+      console.log('[updateAgentFromClient] Converting tool to ToolConfig:', plainTool);
+      return ToolConfig.fromPlain(plainTool);
+    }) || [];
 
   // Convert plain capabilities to domain CapabilityConfig with ToolConfig instances
-  const capabilities = data.capabilities?.map(plainCap => ({
-    name: plainCap.name,
-    description: plainCap.description,
-    steps: plainCap.steps.map(plainStep => ({
-      type: plainStep.type,
-      instructions: plainStep.instructions,
-      model: plainStep.model,
-      // Convert plain tool configs to ToolConfig instances (filter out nulls first!)
-      tools: plainStep.tools
-        ?.filter(tool => tool !== null && tool !== undefined)
-        ?.map(plainTool => ToolConfig.fromPlain(plainTool)) || [],
-      servers: plainStep.servers || []
-    }))
-  }));
+  const capabilities = data.capabilities?.map(plainCap => {
+    console.log('[updateAgentFromClient] Processing capability:', plainCap.name);
+    return {
+      name: plainCap.name,
+      description: plainCap.description,
+      steps: plainCap.steps.map(plainStep => {
+        console.log('[updateAgentFromClient] Processing step:', plainStep.type, 'tools:', plainStep.tools);
+        // Convert plain tool configs to ToolConfig instances (filter out invalid tools first!)
+        const validTools = (plainStep.tools || [])
+          .filter(tool => {
+            console.log('[updateAgentFromClient] Filtering step tool:', tool);
+            const isValid = tool !== null && tool !== undefined && tool !== undefined;
+            console.log('[updateAgentFromClient] Step tool is valid:', isValid);
+            return isValid;
+          })
+          .map(plainTool => {
+            console.log('[updateAgentFromClient] Converting step tool to ToolConfig:', plainTool);
+            return ToolConfig.fromPlain(plainTool);
+          });
+        
+        console.log('[updateAgentFromClient] Valid tools after filtering:', validTools.length);
+        
+        return {
+          type: plainStep.type,
+          instructions: plainStep.instructions,
+          model: plainStep.model,
+          tools: validTools,
+          servers: plainStep.servers || []
+        };
+      })
+    };
+  }) || [];
 
   // Convert client data to domain data format
   const domainData: Partial<CreateAgentData> = {

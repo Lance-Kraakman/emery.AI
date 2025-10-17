@@ -233,23 +233,24 @@ export class ArrowDataStorageService implements DataStorageService {
   ): Promise<Row[]> {
     const rows: Row[] = [];
     const fields = table.fields;
-    
+
     // Convert Arrow Table back to Row objects
     for (let i = 0; i < arrowTable.numRows; i++) {
       const rowData: Record<string, any> = {};
-      
+
       // Get row ID from system fields
       const idColumn = arrowTable.getChild('id');
       if (idColumn) {
         rowData.id = idColumn.get(i);
       }
-      
+
       // Process table fields (available by field name)
       for (const field of fields) {
         const column = arrowTable.getChild(field.name);
+
         if (column) {
           let value = column.get(i);
-          
+
           // Type conversions back from Arrow to StorageData format
           switch (field.type) {
             case 'date':
@@ -271,16 +272,16 @@ export class ArrowDataStorageService implements DataStorageService {
               break;
             // Other types (text, number, boolean) are stored as-is
           }
-          
+
           rowData[field.name] = value;
         }
       }
-      
+
       // Create Row object from the data using new signature with table fields
       const row = Row.fromPlainObject(rowData, table.id.value, fields);
       rows.push(row);
     }
-    
+
     return rows;
   }
 }

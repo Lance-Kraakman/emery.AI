@@ -108,7 +108,7 @@ export interface CreateAgentClientData {
   tools?: ToolConfigDTO[];
   servers?: ServerConfig[];
   trigger?: TriggerConfig;
-  capabilities?: CapabilityConfigDTO[];
+  capabilities?: CapabilityConfigDTO[]; // Optional for agent creation, required for agent updates
   status?: string; // Plain string - converted to AgentStatus in action
   organizationId?: number;
   roleId?: number;
