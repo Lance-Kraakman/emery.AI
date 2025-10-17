@@ -12,6 +12,7 @@ import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import type { Result } from '@/ddd/domain/shared/result';
 import { Row } from '@/ddd/domain/tables/value-objects/row';
+import { RowMapper } from '@/app/mappers/row-mapper';
 
 // Apache Arrow imports for direct conversion
 import { 
@@ -277,8 +278,12 @@ export class ArrowDataStorageService implements DataStorageService {
         }
       }
 
+      // AIDEV-NOTE: Apply defaults for legacy data BEFORE domain validation
+      // Infrastructure prepares clean data, domain validates business rules
+      const withDefaults = RowMapper.applyDefaults(rowData, Array.from(fields));
+
       // Create Row object from the data using new signature with table fields
-      const row = Row.fromPlainObject(rowData, table.id.value, fields);
+      const row = Row.fromPlainObject(withDefaults, table.id.value, fields);
       rows.push(row);
     }
 
