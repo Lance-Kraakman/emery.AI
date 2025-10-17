@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useForm } from '@tanstack/react-form';
-import { Save, X, Loader2, Plus, Trash2, ChevronDown, ChevronRight, Cog, Calendar } from 'lucide-react';
+import { Save, X, Loader2, Plus, Trash2, ChevronDown, ChevronRight, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,7 +16,6 @@ import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import { discoverTools, createToolConfigFromMetadata, type ToolMetadataDTO } from '@/app/actions/tool-registry';
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
-import CapabilityManager from './CapabilityManager';
 import ScheduleManager from './ScheduleManager';
 import { getCalendarRRule, getDatabaseEventOperations, getWebhookSecret, getWebhookRequiresSignature } from './trigger-utils';
 
@@ -36,7 +35,6 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
   const [error, setError] = useState<string | null>(null);
   
   // Collapsible section states
-  const [isCapabilitiesOpen, setIsCapabilitiesOpen] = useState(false);
   const [isTriggerConfigOpen, setIsTriggerConfigOpen] = useState(false);
 
   const form = useForm({
@@ -48,7 +46,6 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
       status: 'active',
       tools: [],
       servers: [],
-      capabilities: [],
       trigger: TriggerConfigs.manual(),
       organizationId: undefined,
       roleId: undefined
@@ -66,7 +63,6 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
           status: value.status,
           tools: value.tools || [],
           servers: value.servers || [],
-          capabilities: value.capabilities || [],
           trigger: value.trigger,
           organizationId: value.organizationId,
           roleId: value.roleId
@@ -424,35 +420,6 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
           </div>
         </CardContent>
       </Card>
-
-      {/* Capabilities Section - Collapsible */}
-      <Collapsible open={isCapabilitiesOpen} onOpenChange={setIsCapabilitiesOpen}>
-        <div className="border rounded-lg">
-          <CollapsibleTrigger asChild>
-            <Button 
-              variant="ghost" 
-              className="w-full justify-between h-auto p-3 hover:bg-muted/50"
-            >
-              <div className="flex items-center gap-2">
-                <Cog size={16} />
-                <span className="font-medium text-sm">Capabilities</span>
-              </div>
-              {isCapabilitiesOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="px-3 pb-3">
-              <CapabilityManager 
-                capabilities={form.getFieldValue('capabilities') || []}
-                isEditable={true}
-                onCapabilitiesChange={(capabilities) => {
-                  form.setFieldValue('capabilities', capabilities);
-                }}
-              />
-            </div>
-          </CollapsibleContent>
-        </div>
-      </Collapsible>
 
       {/* Trigger Configuration Section - Collapsible */}
       <Collapsible open={isTriggerConfigOpen} onOpenChange={setIsTriggerConfigOpen}>

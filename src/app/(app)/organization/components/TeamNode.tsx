@@ -64,11 +64,15 @@ export default function TeamNode({ data, selected }: TeamNodeProps) {
             <div>
               <p className="text-xs font-medium text-blue-700 mb-1">Goals:</p>
               <div className="flex flex-wrap gap-1">
-                {data.goals.slice(0, 2).map((goal, index) => (
-                  <Badge key={index} variant="secondary" className="text-xs bg-blue-100 text-blue-700">
-                    {goal.length > 20 ? `${goal.substring(0, 20)}...` : goal}
-                  </Badge>
-                ))}
+                {data.goals.slice(0, 2).map((goal, index) => {
+                  // Handle both string and object formats (object may have 'steps' property)
+                  const goalText = typeof goal === 'string' ? goal : (goal as any)?.description || JSON.stringify(goal);
+                  return (
+                    <Badge key={index} variant="secondary" className="text-xs bg-blue-100 text-blue-700">
+                      {goalText.length > 20 ? `${goalText.substring(0, 20)}...` : goalText}
+                    </Badge>
+                  );
+                })}
                 {data.goals.length > 2 && (
                   <Badge variant="outline" className="text-xs text-blue-600">
                     +{data.goals.length - 2} more
@@ -83,11 +87,15 @@ export default function TeamNode({ data, selected }: TeamNodeProps) {
             <div>
               <p className="text-xs font-medium text-blue-700 mb-1">Key Responsibilities:</p>
               <div className="flex flex-wrap gap-1">
-                {data.responsibilities.slice(0, 2).map((responsibility, index) => (
-                  <Badge key={index} variant="outline" className="text-xs text-blue-600">
-                    {responsibility.length > 15 ? `${responsibility.substring(0, 15)}...` : responsibility}
-                  </Badge>
-                ))}
+                {data.responsibilities.slice(0, 2).map((responsibility, index) => {
+                  // Handle both string and object formats
+                  const respText = typeof responsibility === 'string' ? responsibility : (responsibility as any)?.description || JSON.stringify(responsibility);
+                  return (
+                    <Badge key={index} variant="outline" className="text-xs text-blue-600">
+                      {respText.length > 15 ? `${respText.substring(0, 15)}...` : respText}
+                    </Badge>
+                  );
+                })}
                 {data.responsibilities.length > 2 && (
                   <Badge variant="outline" className="text-xs text-blue-600">
                     +{data.responsibilities.length - 2} more

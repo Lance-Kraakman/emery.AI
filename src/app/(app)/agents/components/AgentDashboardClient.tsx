@@ -10,7 +10,6 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loading } from '@/components/ui/loading';
-import AgentDetailsView from './AgentDetailsView';
 import { NewAgentDetailsView } from './NewAgentDetailsView';
 import AgentCreateView from './AgentCreateView';
 import { agentsStore, agentsSelectors } from '@/stores/agents.store';

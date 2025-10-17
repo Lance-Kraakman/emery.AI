@@ -9,17 +9,17 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Settings, Plus, Search, TableIcon as Table, Database } from "lucide-react"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
-import { DynamicDataTable } from "./components/DynamicDataTable"
+import { DynamicDataSheetGrid } from "./components/DynamicDataSheetGrid"
 import { FieldManagerDialog } from "./components/FieldManagerDialog"
 import { useEmery } from "@/contexts/EmeryStoreProvider"
 import { dataStore, dataSelectors } from '@/stores/data-management.store'
 import { storeActions, dataActions } from '@/stores/actions'
 import type { TableDTO } from "@/app/mappers/table-mapper"
 import { getFields } from "@/app/actions/fields"
-import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
-import type { FieldDTO } from "@/app/mappers/field-mapper"
-import type { RowDTO } from "@/app/mappers/row-mapper"
+import { getRowsDataDSG, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
 import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
+import type { FieldDTO } from "@/app/mappers/field-mapper"
+import type { DSGRow } from "@/app/mappers/dsg-mapper"
 
 export function DataViewsClientSimplified() {
   const searchParams = useSearchParams()
@@ -66,24 +66,27 @@ export function DataViewsClientSimplified() {
     staleTime: 1000 * 60 * 5, // 5 minutes
   })
 
-  // TanStack Query for rows  
-  const rowsQuery = useQuery({
+  // TanStack Query for rows
+  const rowsQuery = useQuery<DSGRow[]>({
     queryKey: ['rows', selectedTableId],
-    queryFn: () => selectedTableId ? getRowsData(selectedTableId, 1000) : Promise.resolve([]),
+    queryFn: () => selectedTableId ? getRowsDataDSG(selectedTableId, 1000) : Promise.resolve([]),
     enabled: !!selectedTableId,
     staleTime: 1000 * 60 * 2, // 2 minutes
   })
 
-  const fields = fieldsQuery.data || []
-  const rows = rowsQuery.data || []
+  const fields: FieldDTO[] = fieldsQuery.data || []
+  const rows: DSGRow[] = rowsQuery.data || []
+
   const loading = fieldsQuery.isLoading || rowsQuery.isLoading
   const error = fieldsQuery.error || rowsQuery.error
 
   // TanStack Mutations for optimistic updates
   const updateRowMutation = useMutation({
+    // Built-in columns (textColumn, floatColumn, etc.) handle normalization automatically
+    // Values from grid are already in correct format - no custom normalization needed
     mutationFn: async ({ rowId, fieldId, value }: { rowId: string, fieldId: number, value: DomainFieldValue }) => {
       if (!selectedTableId) throw new Error('No table selected')
-      
+
       const field = fields.find(f => f.id === fieldId)
       if (!field) throw new Error('Field not found')
 
@@ -91,36 +94,30 @@ export function DataViewsClientSimplified() {
         tableId: selectedTableId,
         rowId,
         data: { [field.name]: value },
-      });
+      })
     },
     onMutate: async ({ rowId, fieldId, value }) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['rows', selectedTableId] })
-      
+
       // Snapshot the previous value
       const previousRows = queryClient.getQueryData(['rows', selectedTableId])
-      
+
       // Find the field to get its info
       const field = fields.find(f => f.id === fieldId)
       if (!field) return { previousRows }
 
-      // Optimistically update the cache
-      queryClient.setQueryData(['rows', selectedTableId], (oldRows: RowDTO[] | undefined) => {
+      // Optimistically update the cache with the value from built-in column
+      queryClient.setQueryData(['rows', selectedTableId], (oldRows: any[] | undefined) => {
         if (!oldRows) return []
         return oldRows.map(row => {
           if (row.id === rowId) {
-            const updatedFieldValues = [...row.fieldValues].map(fv =>
-              fv.fieldSlug === field.name 
-                ? { fieldSlug: field.name, value, fieldType: field.type }
-                : fv
-            );
-            const hasField = row.fieldValues.some(fv => fv.fieldSlug === field.name);
-            if (!hasField) {
-              updatedFieldValues.push({ fieldSlug: field.name, value, fieldType: field.type });
+            return {
+              ...row,
+              [field.name]: value
             }
-            return { ...row, fieldValues: updatedFieldValues };
           }
-          return row;
+          return row
         })
       })
 
@@ -134,30 +131,36 @@ export function DataViewsClientSimplified() {
       console.error("Failed to update row:", err)
     },
     onSettled: () => {
-      // Refetch after mutation
-      queryClient.invalidateQueries({ queryKey: ['rows', selectedTableId] })
+      // Don't automatically refetch - let the optimistic update persist
+      // This prevents race conditions where the server data overwrites the correct UI state
+      // Users can manually refresh if needed
+      // queryClient.invalidateQueries({ queryKey: ['rows', selectedTableId] })
     },
   })
 
   const addRowMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (initialData?: Record<string, any>) => {
       if (!selectedTableId) throw new Error('No table selected')
-      
-      const rowData: Record<string, any> = {}
+
+      const rowData: Record<string, any> = initialData || {}
+
+      // Only add defaults for optional (non-required) fields
+      // Required fields are left undefined so domain validation can enforce them
       fields.forEach(field => {
-        if (field.required || field.type === 'text') {
+        if (rowData[field.name] === undefined && !field.required) {
           switch (field.type) {
             case 'number':
-              rowData[field.name] = 0
+              rowData[field.name] = null
               break
             case 'boolean':
               rowData[field.name] = false
               break
             case 'date':
-              rowData[field.name] = new Date().toISOString().split('T')[0]
+              rowData[field.name] = null
               break
-            default:
+            case 'text':
               rowData[field.name] = ""
+              break
           }
         }
       })
@@ -166,8 +169,17 @@ export function DataViewsClientSimplified() {
     },
     onSuccess: (result) => {
       if (result.success && result.data) {
-        queryClient.setQueryData(['rows', selectedTableId], (oldRows: RowDTO[] | undefined) => {
-          return oldRows ? [...oldRows, result.data] : [result.data]
+        // Convert the returned RowDTO to DSG format for the cache
+        const dsgRow = {
+          id: result.data.id,
+          ...result.data.fieldValues.reduce((acc: Record<string, any>, fv: any) => {
+            acc[fv.fieldSlug] = fv.value
+            return acc
+          }, {} as Record<string, any>)
+        }
+        
+        queryClient.setQueryData(['rows', selectedTableId], (oldRows: any[] | undefined) => {
+          return oldRows ? [...oldRows, dsgRow] : [dsgRow]
         })
       }
     },
@@ -185,7 +197,7 @@ export function DataViewsClientSimplified() {
       await queryClient.cancelQueries({ queryKey: ['rows', selectedTableId] })
       const previousRows = queryClient.getQueryData(['rows', selectedTableId])
       
-      queryClient.setQueryData(['rows', selectedTableId], (oldRows: RowDTO[] | undefined) => {
+      queryClient.setQueryData(['rows', selectedTableId], (oldRows: any[] | undefined) => {
         return oldRows ? oldRows.filter(row => row.id !== rowId) : []
       })
 
@@ -202,12 +214,13 @@ export function DataViewsClientSimplified() {
     },
   })
 
-  const handleUpdateRow = (rowId: string, fieldId: number, value: DomainFieldValue) => {
-    updateRowMutation.mutate({ rowId, fieldId, value })
+  const handleUpdateRow = async (rowId: string, fieldId: number, value: DomainFieldValue) => {
+    // Use mutateAsync so callers (like the grid) can await the server write and react to errors.
+    return updateRowMutation.mutateAsync({ rowId, fieldId, value })
   }
 
-  const handleAddRow = () => {
-    addRowMutation.mutate()
+  const handleAddRow = async (initialData?: Record<string, any>): Promise<void> => {
+    await addRowMutation.mutateAsync(initialData)
   }
 
   const handleDeleteRow = (rowId: string) => {
@@ -222,15 +235,17 @@ export function DataViewsClientSimplified() {
     }
   }
 
-  // Filter rows based on search
-  const filteredRows = rows.filter((row: RowDTO) => {
+  // Filter rows based on search - DSG format
+  const filteredRows: DSGRow[] = rows.filter((row) => {
     if (!searchTerm) return true
-    // Convert fieldValues to searchable format
-    const searchableValues = row.fieldValues.map(fv => String(fv.value));
-    searchableValues.push(row.id); // Include row ID in search
-    return searchableValues.some(value => 
+    // DSG format: flat object with field values directly
+    const searchableValues = Object.keys(row)
+      .filter(key => key !== 'id')
+      .map(key => String(row[key] || ''))
+    searchableValues.push(row.id) // Include row ID in search
+    return searchableValues.some(value =>
       value.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    )
   })
 
   const renderEmptyState = () => (
@@ -286,7 +301,7 @@ export function DataViewsClientSimplified() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="py-4 px-6 border-b">
+      <div className="py-4 px-6 border-b flex-shrink-0">
         <h1 className="text-2xl font-bold">Data</h1>
         <p className="text-muted-foreground">
           {selectedTable
@@ -296,9 +311,9 @@ export function DataViewsClientSimplified() {
         </p>
       </div>
       
-      <div className="flex-1 flex flex-col px-6">
+      <div className="flex-1 flex flex-col px-6 min-h-0">
         {selectedTable && (
-          <div className="flex items-center justify-between py-4">
+          <div className="flex items-center justify-between py-4 flex-shrink-0">
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -323,11 +338,6 @@ export function DataViewsClientSimplified() {
                     Manage Fields
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleAddRow}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Row
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={refreshTableData}>
                     Refresh Data
                   </DropdownMenuItem>
@@ -337,21 +347,21 @@ export function DataViewsClientSimplified() {
           </div>
         )}
 
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col pt-4 min-h-0">
+        {/* Main Content - fills remaining space */}
+        <div className="flex-1 flex flex-col min-h-0">
           {loading ? renderLoadingState() : 
            error ? renderErrorState() :
            !selectedTable ? renderEmptyState() : (
             <>
-              <div className="mb-4">
+              <div className="mb-4 flex-shrink-0">
                 <h2 className="text-xl font-bold">{selectedTable.name}</h2>
                 <p className="text-sm text-muted-foreground">
                   {filteredRows.length} row{filteredRows.length !== 1 ? "s" : ""}
                   {searchTerm && ` (filtered from ${rows.length})`}
                 </p>
               </div>
-              <div className="flex-1 overflow-hidden">
-                <DynamicDataTable
+              <div className="flex-1 min-h-0">
+                <DynamicDataSheetGrid
                   fields={fields}
                   rows={filteredRows}
                   organizationId={selectedTable.organizationId!}
@@ -359,6 +369,8 @@ export function DataViewsClientSimplified() {
                   onUpdateRow={handleUpdateRow}
                   onAddRow={handleAddRow}
                   onDeleteRow={handleDeleteRow}
+                  isLoading={loading}
+                  error={error ? String(error) : null}
                 />
               </div>
             </>

@@ -103,6 +103,26 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
     try {
       setIsSaving(true);
       
+      console.log('[AgentDetailsView] handleSave - editFormData before save:', JSON.stringify(editFormData, null, 2));
+      
+      // Log capabilities details
+      console.log('[AgentDetailsView] handleSave - capabilities being sent:');
+      editFormData.capabilities?.forEach((cap, capIndex) => {
+        console.log(`  Capability ${capIndex}:`, cap.name);
+        cap.steps?.forEach((step, stepIndex) => {
+          console.log(`    Step ${stepIndex}:`, step.type, 'tools:', step.tools);
+          step.tools?.forEach((tool, toolIndex) => {
+            console.log(`      Tool ${toolIndex}:`, {
+              value: tool,
+              type: typeof tool,
+              isFunction: typeof tool === 'function',
+              constructor: tool?.constructor?.name,
+              keys: tool && typeof tool === 'object' ? Object.keys(tool) : 'N/A'
+            });
+          });
+        });
+      });
+      
       const updatedAgent = {
         ...agent,
         name: editFormData.name.trim(),
@@ -111,6 +131,8 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
         persona: editFormData.persona.trim(),
         status: editFormData.status
       };
+
+      console.log('[AgentDetailsView] handleSave - Calling updateAgentFromClient with capabilities:', editFormData.capabilities);
 
       const result = await updateAgentFromClient(agent.id, {
         name: editFormData.name.trim(),

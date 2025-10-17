@@ -116,7 +116,7 @@ export class Row {
   }
 
   static fromPlainObject(
-    data: Record<string, any> & { id?: string }, 
+    data: Record<string, any> & { id?: string },
     tableId: number,
     tableFields: TableField[]
   ): Row {

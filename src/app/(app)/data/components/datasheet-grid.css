@@ -1,0 +1,170 @@
+/* React DataSheet Grid Custom Properties - Tailwind Integration */
+:root {
+  /* DSG Border Colors - match your border system */
+  --dsg-border-color: hsl(var(--border));
+  --dsg-selection-border-color: hsl(var(--primary));
+  
+  /* DSG Selection - match your primary/accent colors */
+  --dsg-selection-border-radius: var(--radius-md);
+  --dsg-selection-border-width: 2px;
+  --dsg-selection-background-color: hsl(var(--primary) / 0.1);
+  --dsg-selection-disabled-border-color: hsl(var(--muted-foreground) / 0.3);
+  --dsg-selection-disabled-background-color: hsl(var(--muted) / 0.3);
+  
+  /* DSG Corner Indicator */
+  --dsg-corner-indicator-width: 6px;
+  
+  /* DSG Header Colors - match your text system */
+  --dsg-header-text-color: hsl(var(--muted-foreground));
+  --dsg-header-active-text-color: hsl(var(--foreground));
+  
+  /* DSG Cell Backgrounds */
+  --dsg-cell-background-color: hsl(var(--background));
+  --dsg-cell-disabled-background-color: hsl(var(--muted) / 0.5);
+  
+  /* DSG Transitions - match your system */
+  --dsg-transition-duration: 150ms;
+  
+  /* DSG Expand Rows Indicator */
+  --dsg-expand-rows-indicator-width: 2px;
+  
+  /* DSG Scroll Shadow */
+  --dsg-scroll-shadow-width: 8px;
+  --dsg-scroll-shadow-color: hsl(var(--border) / 0.2);
+}
+
+.dark {
+  /* Dark mode adjustments for DSG */
+  --dsg-selection-background-color: hsl(var(--primary) / 0.2);
+  --dsg-scroll-shadow-color: hsl(var(--border) / 0.3);
+}
+
+/* Main DSG container */
+.dsg-container {
+  width: 100% !important;
+  overflow: hidden !important;
+  border: none !important;
+}
+
+/* DSG table layout */
+.dsg-table {
+  width: 100% !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  table-layout: fixed !important;
+}
+
+/* DSG Row styling */
+.dsg-row {
+  width: 100% !important;
+}
+
+/* DSG Cell styling integration */
+.dsg-cell {
+  border-right: 1px solid hsl(var(--border));
+  border-bottom: 1px solid hsl(var(--border));
+  transition: all 150ms ease;
+  background-color: hsl(var(--background));
+  padding: 8px 12px !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsg-cell:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--primary));
+  box-shadow: 0 0 0 2px hsl(var(--primary)), 0 0 0 4px hsl(var(--background));
+}
+
+/* DSG Header styling */
+.dsg-cell-header {
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  background-color: hsl(var(--muted) / 0.5);
+  padding: 8px 12px !important;
+  border-right: 1px solid hsl(var(--border));
+  border-bottom: 2px solid hsl(var(--border));
+}
+
+/* DSG Row hover styling */
+.dsg-row:hover .dsg-cell:not(.dsg-cell-selected) {
+  background-color: hsl(var(--muted) / 0.3);
+}
+
+/* DSG Selection styling */
+.dsg-cell-selected {
+  border-color: hsl(var(--primary)) !important;
+  background-color: hsl(var(--primary) / 0.1) !important;
+}
+
+/* DSG Gutter column */
+.dsg-gutter {
+  background-color: hsl(var(--muted) / 0.3);
+  border-right: 2px solid hsl(var(--border));
+  min-width: 60px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* DSG Add row button */
+.dsg-add-row {
+  background-color: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  padding: 8px;
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+  transition: all 150ms ease;
+}
+
+.dsg-add-row:hover {
+  background-color: hsl(var(--muted) / 0.5);
+  color: hsl(var(--foreground));
+}
+
+/* DSG Checkbox styling */
+.dsg-cell input[type="checkbox"] {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.25rem;
+  width: 16px;
+  height: 16px;
+}
+
+/* DSG Input styling */
+.dsg-cell input {
+  background-color: transparent;
+  border: none;
+  outline: none;
+  color: hsl(var(--foreground));
+  width: 100%;
+  padding: 0;
+  margin: 0;
+}
+
+.dsg-cell input:focus {
+  outline: none;
+}
+
+/* Custom widget container fixes */
+.dsg-cell .p-2 {
+  padding: 8px !important;
+}
+
+/* Dark mode adjustments */
+.dark .dsg-cell-selected {
+  background-color: hsl(var(--primary) / 0.2) !important;
+}
+
+.dark .dsg-gutter {
+  background-color: hsl(var(--muted) / 0.2);
+}
+
+.dark .dsg-add-row {
+  background-color: hsl(var(--background));
+}
+
+.dark .dsg-add-row:hover {
+  background-color: hsl(var(--muted) / 0.3);
+}

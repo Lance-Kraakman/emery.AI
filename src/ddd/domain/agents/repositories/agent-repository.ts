@@ -15,6 +15,7 @@ export interface CreateAgentData {
   ownerId: string;
   isActive?: boolean;
   trigger?: any | null;
+  apiKey?: string;
 }
 
 export interface UpdateAgentData {

@@ -32,8 +32,6 @@ export default function CapabilityManager({
   const initialCapabilities = (propCapabilities || agent?.capabilities || []) as CapabilityConfigDTO[];
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingCapability, setEditingCapability] = useState<CapabilityConfigDTO | null>(null);
-  const [toolInput, setToolInput] = useState('');
-  const [editingStepIndex, setEditingStepIndex] = useState<number | null>(null);
   const [showToolDropdown, setShowToolDropdown] = useState(false);
   const [dropdownQuery, setDropdownQuery] = useState('');
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
@@ -42,6 +40,25 @@ export default function CapabilityManager({
   const toolInputRef = useRef<HTMLInputElement>(null);
 
   const capabilities = initialCapabilities;
+
+  // Log whenever editingCapability changes
+  useEffect(() => {
+    console.log('[CapabilityManager] editingCapability changed:', JSON.stringify(editingCapability, null, 2));
+    
+    // Log tools in editingCapability
+    editingCapability?.steps?.forEach((step, stepIndex) => {
+      console.log(`[CapabilityManager] editingCapability changed - Step ${stepIndex} tools:`, step.tools);
+      step.tools?.forEach((tool, toolIndex) => {
+        console.log(`[CapabilityManager] editingCapability changed - Step ${stepIndex} Tool ${toolIndex}:`, {
+          value: tool,
+          type: typeof tool,
+          isFunction: typeof tool === 'function',
+          constructor: tool?.constructor?.name,
+          keys: tool && typeof tool === 'object' ? Object.keys(tool) : 'N/A'
+        });
+      });
+    });
+  }, [editingCapability]);
 
   const handleAdd = () => {
     const newCapability: CapabilityConfigDTO = {
@@ -54,26 +71,77 @@ export default function CapabilityManager({
   };
 
   const handleEdit = (index: number) => {
-    setEditingCapability({ ...capabilities[index] });
+    console.log(`[CapabilityManager] handleEdit - Editing capability at index ${index}`);
+    console.log('[CapabilityManager] handleEdit - Original capability:', JSON.stringify(capabilities[index], null, 2));
+    
+    // Log tools in original capability
+    capabilities[index].steps?.forEach((step, stepIndex) => {
+      console.log(`[CapabilityManager] handleEdit - Original step ${stepIndex} tools:`, step.tools);
+      step.tools?.forEach((tool, toolIndex) => {
+        console.log(`[CapabilityManager] handleEdit - Original tool ${toolIndex}:`, {
+          value: tool,
+          type: typeof tool,
+          isFunction: typeof tool === 'function',
+          constructor: tool?.constructor?.name,
+          keys: tool && typeof tool === 'object' ? Object.keys(tool) : 'N/A'
+        });
+      });
+    });
+    
+    const capabilityCopy = { ...capabilities[index] };
+    console.log('[CapabilityManager] handleEdit - Capability copy:', JSON.stringify(capabilityCopy, null, 2));
+    
+    // Log tools in copied capability
+    capabilityCopy.steps?.forEach((step, stepIndex) => {
+      console.log(`[CapabilityManager] handleEdit - Copied step ${stepIndex} tools:`, step.tools);
+      step.tools?.forEach((tool, toolIndex) => {
+        console.log(`[CapabilityManager] handleEdit - Copied tool ${toolIndex}:`, {
+          value: tool,
+          type: typeof tool,
+          isFunction: typeof tool === 'function',
+          constructor: tool?.constructor?.name,
+          keys: tool && typeof tool === 'object' ? Object.keys(tool) : 'N/A'
+        });
+      });
+    });
+    
+    setEditingCapability(capabilityCopy);
     setEditingIndex(index);
-    setToolInput('');
   };
 
   const handleSave = () => {
     if (!editingCapability || !onCapabilitiesChange || editingIndex === null) return;
 
     console.log('[CapabilityManager] handleSave - BEFORE cleaning:', JSON.stringify(editingCapability, null, 2));
+    
+    // Log the actual data types and values
+    console.log('[CapabilityManager] handleSave - Raw tools array:', editingCapability.steps[0]?.tools);
+    editingCapability.steps[0]?.tools?.forEach((tool, index) => {
+      console.log(`[CapabilityManager] handleSave - Tool ${index}:`, {
+        value: tool,
+        type: typeof tool,
+        constructor: tool?.constructor?.name,
+        isPlainObject: tool && typeof tool === 'object' && !tool.constructor || tool.constructor === Object,
+        isFunction: typeof tool === 'function',
+        keys: tool && typeof tool === 'object' ? Object.keys(tool) : 'N/A'
+      });
+    });
 
-    // Filter out invalid tools (null, undefined, empty placeholders) before saving
+    // Filter out invalid tools (null, undefined, functions, empty placeholders) before saving
     const cleanedCapability = {
       ...editingCapability,
       steps: editingCapability.steps.map(step => {
         const originalTools = step.tools;
         const filteredTools = step.tools?.filter(tool => {
           console.log(`[CapabilityManager] Filtering tool: ${JSON.stringify(tool)}`);
-          // Remove null/undefined
-          if (!tool) {
+          // Remove null/undefined using loose equality check
+          if (tool == null) {
             console.log('[CapabilityManager] Filtering out null/undefined tool');
+            return false;
+          }
+          // Remove functions
+          if (typeof tool === 'function') {
+            console.log('[CapabilityManager] Filtering out function tool');
             return false;
           }
           // Remove empty placeholder @tool:
@@ -109,16 +177,30 @@ export default function CapabilityManager({
     }
 
     console.log('[CapabilityManager] Calling onCapabilitiesChange with:', JSON.stringify(newCapabilities, null, 2));
+    console.log('[CapabilityManager] Final capabilities array being sent to parent:', newCapabilities);
+    
+    // Check if any tools are still non-serializable
+    newCapabilities.forEach((cap, capIndex) => {
+      cap.steps.forEach((step, stepIndex) => {
+        step.tools?.forEach((tool, toolIndex) => {
+          console.log(`[CapabilityManager] Final check - Capability ${capIndex}, Step ${stepIndex}, Tool ${toolIndex}:`, {
+            value: tool,
+            type: typeof tool,
+            isString: typeof tool === 'string',
+            isObject: typeof tool === 'object',
+            constructor: tool?.constructor?.name
+          });
+        });
+      });
+    });
     onCapabilitiesChange(newCapabilities);
     setEditingCapability(null);
     setEditingIndex(null);
-    setToolInput('');
   };
 
   const handleCancel = () => {
     setEditingCapability(null);
     setEditingIndex(null);
-    setToolInput('');
   };
 
   const handleDelete = (index: number) => {
@@ -151,24 +233,60 @@ export default function CapabilityManager({
 
   const handleUpdateStep = (stepIndex: number, updatedStep: Partial<StepConfigDTO>) => {
     if (!editingCapability) return;
-    setEditingCapability({
+    console.log(`[CapabilityManager] handleUpdateStep - stepIndex:${stepIndex}`);
+    console.log('[CapabilityManager] handleUpdateStep - updatedStep:', JSON.stringify(updatedStep, null, 2));
+    console.log('[CapabilityManager] handleUpdateStep - current step tools:', JSON.stringify(editingCapability.steps[stepIndex]?.tools, null, 2));
+    
+    // Check if updatedStep.tools contains any functions
+    if (updatedStep.tools) {
+      console.log('[CapabilityManager] handleUpdateStep - updatedStep.tools contains:');
+      updatedStep.tools.forEach((tool, i) => {
+        console.log(`  Tool ${i}:`, {
+          value: tool,
+          type: typeof tool,
+          isFunction: typeof tool === 'function',
+          constructor: tool?.constructor?.name
+        });
+      });
+    }
+    
+    const newCapability = {
       ...editingCapability,
       steps: editingCapability.steps?.map((step, i) =>
         i === stepIndex ? { ...step, ...updatedStep } : step
       ) || []
-    });
+    };
+    
+    console.log('[CapabilityManager] handleUpdateStep - new capability step tools:', JSON.stringify(newCapability.steps[stepIndex]?.tools, null, 2));
+    setEditingCapability(newCapability);
   };
 
   const handleAddStepTool = (stepIndex: number) => {
     if (!editingCapability) return;
+    console.log(`[CapabilityManager] handleAddStepTool - Adding tool to step ${stepIndex}`);
+    console.log('[CapabilityManager] handleAddStepTool - Current step tools before adding:', editingCapability.steps[stepIndex]?.tools);
+    
     // Create empty tool placeholder as plain DTO - will be filled via @tool: dropdown
     const newTool: ToolConfigDTO = { name: '@tool:', config: {} };
     console.log('[CapabilityManager] handleAddStepTool - Creating new tool:', JSON.stringify(newTool));
+    
     const updatedStep = {
       ...editingCapability.steps[stepIndex],
       tools: [...(editingCapability.steps[stepIndex].tools || []), newTool]
     };
-    console.log('[CapabilityManager] handleAddStepTool - Updated step tools:', JSON.stringify(updatedStep.tools));
+    console.log('[CapabilityManager] handleAddStepTool - Updated step tools after adding:', JSON.stringify(updatedStep.tools));
+    
+    // Log all tools in the updated step
+    updatedStep.tools?.forEach((tool, toolIndex) => {
+      console.log(`[CapabilityManager] handleAddStepTool - Tool ${toolIndex} after adding:`, {
+        value: tool,
+        type: typeof tool,
+        isFunction: typeof tool === 'function',
+        constructor: tool?.constructor?.name,
+        keys: tool && typeof tool === 'object' ? Object.keys(tool) : 'N/A'
+      });
+    });
+    
     handleUpdateStep(stepIndex, updatedStep);
   };
 
@@ -221,12 +339,19 @@ export default function CapabilityManager({
 
   // Handle tool selection from dropdown
   const handleToolSelect = (tool: ToolDTO) => {
-    if (!editingStepToolIndex) return;
+    console.log('[CapabilityManager] handleToolSelect - Tool selected:', JSON.stringify(tool, null, 2));
+    if (!editingStepToolIndex) {
+      console.log('[CapabilityManager] handleToolSelect - No editingStepToolIndex, returning');
+      return;
+    }
 
     const { stepIndex, toolIndex } = editingStepToolIndex;
+    console.log(`[CapabilityManager] handleToolSelect - stepIndex:${stepIndex}, toolIndex:${toolIndex}`);
 
     // All tools from dropdown are now ToolDTO
-    const toolName = `@tool:${tool.name}`;
+    // Strip @tool: prefix to keep backend consistent
+    const toolName = tool.name;
+    console.log(`[CapabilityManager] handleToolSelect - Generated toolName:"${toolName}"`);
 
     // Handle OAuth requirements for tools that require connection
     if (tool.requiresConnection && tool.connectionType === 'oauth') {
@@ -235,6 +360,7 @@ export default function CapabilityManager({
       console.log(`Tool ${tool.displayName} requires OAuth authentication`);
     }
 
+    console.log(`[CapabilityManager] handleToolSelect - Calling handleUpdateStepTool with name:"${toolName}"`);
     // Update the tool with selected name
     handleUpdateStepTool(stepIndex, toolIndex, 'name', toolName);
 
@@ -254,8 +380,24 @@ export default function CapabilityManager({
   const handleUpdateStepTool = (stepIndex: number, toolIndex: number, field: keyof ToolConfigDTO, value: string) => {
     if (!editingCapability) return;
     console.log(`[CapabilityManager] handleUpdateStepTool - step:${stepIndex} tool:${toolIndex} field:${field} value:"${value}"`);
+    console.log('[CapabilityManager] handleUpdateStepTool - Current tools array before update:', editingCapability.steps[stepIndex].tools);
+    
+    // Log all tools before update
+    editingCapability.steps[stepIndex].tools?.forEach((tool, i) => {
+      console.log(`[CapabilityManager] handleUpdateStepTool - Tool ${i} before update:`, {
+        value: tool,
+        type: typeof tool,
+        isFunction: typeof tool === 'function',
+        constructor: tool?.constructor?.name,
+        keys: tool && typeof tool === 'object' ? Object.keys(tool) : 'N/A'
+      });
+    });
+    
+    console.log('[CapabilityManager] handleUpdateStepTool - Current tool being updated:', editingCapability.steps[stepIndex].tools?.[toolIndex]);
+    
     const updatedTools = editingCapability.steps[stepIndex].tools?.map((tool, i) => {
       if (i === toolIndex) {
+        console.log('[CapabilityManager] handleUpdateStepTool - Found tool to update:', tool);
         // Create new plain tool DTO with updated field
         if (field === 'name') {
           const updatedTool = { name: value || '', config: tool.config };
@@ -268,6 +410,18 @@ export default function CapabilityManager({
       }
       return tool;
     }) || [];
+    
+    // Log all tools after update
+    updatedTools.forEach((tool, i) => {
+      console.log(`[CapabilityManager] handleUpdateStepTool - Tool ${i} after update:`, {
+        value: tool,
+        type: typeof tool,
+        isFunction: typeof tool === 'function',
+        constructor: tool?.constructor?.name,
+        keys: tool && typeof tool === 'object' ? Object.keys(tool) : 'N/A'
+      });
+    });
+    
     const updatedStep = {
       ...editingCapability.steps[stepIndex],
       tools: updatedTools
