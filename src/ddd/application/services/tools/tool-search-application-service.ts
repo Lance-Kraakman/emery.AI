@@ -418,8 +418,13 @@ export class ToolSearchApplicationService {
                   for (const docField of docArray) {
                     const title = docField.documentMetadata?.title || docField.name || 'Untitled Document';
 
-                    // Filter by search text if provided
-                    if (!searchText || title.toLowerCase().includes(searchText.toLowerCase())) {
+                    // AIDEV-NOTE: Search both title AND name fields since documents can have different titles than filenames
+                    // Filter by search text if provided - check both title and name
+                    const matchesSearch = !searchText ||
+                      title.toLowerCase().includes(searchText.toLowerCase()) ||
+                      (docField.name && docField.name.toLowerCase().includes(searchText.toLowerCase()));
+
+                    if (matchesSearch) {
                       allDocumentTools.push(
                         ReferenceTool.fromDocument(
                           docField.id,
