@@ -349,8 +349,7 @@ export default function CapabilityManager({
     console.log(`[CapabilityManager] handleToolSelect - stepIndex:${stepIndex}, toolIndex:${toolIndex}`);
 
     // All tools from dropdown are now ToolDTO
-    // Strip @tool: prefix to keep backend consistent
-    const toolName = tool.name;
+    const toolName = `@tool:${tool.name}`;
     console.log(`[CapabilityManager] handleToolSelect - Generated toolName:"${toolName}"`);
 
     // Handle OAuth requirements for tools that require connection

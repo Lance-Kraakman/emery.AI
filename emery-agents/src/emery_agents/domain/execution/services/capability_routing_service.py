@@ -113,8 +113,7 @@ class CapabilityRoutingService:
         all_tools = []
         for step in capability.steps:
             if hasattr(step, 'tools') and step.tools:
-                                # Extract tool names for this step
-                step_tools = [tool.name for tool in step.tools]
+                all_tools.extend([tool.name for tool in step.tools])
 
         # AIDEV-NOTE: Pass full capability configuration to preserve multi-step execution
         # The capability object contains all step configurations with tools and instructions
@@ -135,7 +134,6 @@ class CapabilityRoutingService:
         # Extract tool names from instruction config
         tool_names = []
         if hasattr(instruction_config, 'tools') and instruction_config.tools:
-            # Extract tool names from instruction config tools
             tool_names = [tool.name for tool in instruction_config.tools]
         
         return ExecutionContext(

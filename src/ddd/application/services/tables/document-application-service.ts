@@ -83,24 +83,11 @@ export class DocumentApplicationService {
         return { success: false, error: 'Document not found' };
       }
 
-      // Create a complete DocumentFieldValue with the actual data from the database
-      const documentFieldValue: DocumentFieldValue = {
-        id: documentId,
-        name: documentData.name,
-        size: 0, // Size can be retrieved from S3 if needed
-        mimeType: documentData.mimeType,
-        s3Key: documentData.s3Key,
-        uploadedAt: new Date().toISOString(), // TODO: Get real upload date if needed
-        documentMetadata: {
-          title: documentData.name,
-          version: 1,
-          documentType: documentData.mimeType === 'application/vnd.tiptap+json' ? 'tiptap' : 'file'
-        }
-      };
-
+      // CRITICAL FIX: Return the actual document data from storage
+      // instead of creating a new object with hardcoded defaults (size: 0, etc.)
       return {
         success: true,
-        data: documentFieldValue
+        data: documentData
       };
     } catch (error) {
       console.error('[DOCUMENT-APP-SERVICE] Error getting document field value:', error);
@@ -113,13 +100,14 @@ export class DocumentApplicationService {
 
   /**
    * Private helper to find document data in table rows
+   * Returns the complete DocumentFieldValue with all metadata
    */
   private async findDocumentInTable(
     documentId: string,
     organizationId: OrganizationId,
     tableId: TableId,
     fieldId: FieldId
-  ): Promise<{ s3Key: string; name: string; mimeType: string } | null> {
+  ): Promise<DocumentFieldValue | null> {
     try {
       // Get table and validate field
       const table = await this.dynamicTableService.getTable(tableId);
@@ -146,11 +134,9 @@ export class DocumentApplicationService {
           const matchingFile = files.find((f: any) => f && f.id === documentId);
 
           if (matchingFile && matchingFile.s3Key) {
-            return {
-              s3Key: matchingFile.s3Key,
-              name: matchingFile.name || documentId,
-              mimeType: matchingFile.mimeType || 'application/vnd.tiptap+json'
-            };
+            // CRITICAL FIX: Return the ENTIRE document object with all metadata
+            // instead of cherry-picking properties and losing size, uploadedAt, etc.
+            return matchingFile;
           }
         } catch (error) {
           console.warn('[DOCUMENT-APP-SERVICE] Error parsing document data from row:', error);

@@ -3,31 +3,31 @@
   /* DSG Border Colors - match your border system */
   --dsg-border-color: hsl(var(--border));
   --dsg-selection-border-color: hsl(var(--primary));
-  
+
   /* DSG Selection - match your primary/accent colors */
   --dsg-selection-border-radius: var(--radius-md);
   --dsg-selection-border-width: 2px;
   --dsg-selection-background-color: hsl(var(--primary) / 0.1);
   --dsg-selection-disabled-border-color: hsl(var(--muted-foreground) / 0.3);
   --dsg-selection-disabled-background-color: hsl(var(--muted) / 0.3);
-  
+
   /* DSG Corner Indicator */
   --dsg-corner-indicator-width: 6px;
-  
+
   /* DSG Header Colors - match your text system */
   --dsg-header-text-color: hsl(var(--muted-foreground));
   --dsg-header-active-text-color: hsl(var(--foreground));
-  
+
   /* DSG Cell Backgrounds */
   --dsg-cell-background-color: hsl(var(--background));
   --dsg-cell-disabled-background-color: hsl(var(--muted) / 0.5);
-  
+
   /* DSG Transitions - match your system */
   --dsg-transition-duration: 150ms;
-  
+
   /* DSG Expand Rows Indicator */
   --dsg-expand-rows-indicator-width: 2px;
-  
+
   /* DSG Scroll Shadow */
   --dsg-scroll-shadow-width: 8px;
   --dsg-scroll-shadow-color: hsl(var(--border) / 0.2);
@@ -39,12 +39,27 @@
   --dsg-scroll-shadow-color: hsl(var(--border) / 0.3);
 }
 
-/* Main DSG container */
+/* Grid wrapper - fills parent container */
+.dsg-grid-wrapper {
+  height: 100%;
+  width: 100%;
+}
+
+/* DataSheetGrid fills wrapper and handles "+ Add" button spacing */
+.dsg-grid-wrapper .datasheet-grid {
+  width: 100% !important;
+  background-color: transparent !important;
+}
+
+/* Main DSG container - transparent to show animated background */
 .dsg-container {
   width: 100% !important;
-  overflow: hidden !important;
+  height: 100% !important;
+  overflow: auto !important;
   border: none !important;
+  background-color: transparent !important;
 }
+
 
 /* DSG table layout */
 .dsg-table {
@@ -59,12 +74,12 @@
   width: 100% !important;
 }
 
-/* DSG Cell styling integration */
+/* DSG Cell styling integration - semi-transparent to show animated background */
 .dsg-cell {
   border-right: 1px solid hsl(var(--border));
   border-bottom: 1px solid hsl(var(--border));
   transition: all 150ms ease;
-  background-color: hsl(var(--background));
+  background-color: hsl(var(--background) / 0.5);
   padding: 8px 12px !important;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -77,15 +92,83 @@
   box-shadow: 0 0 0 2px hsl(var(--primary)), 0 0 0 4px hsl(var(--background));
 }
 
-/* DSG Header styling */
+/* DSG Header styling - semi-transparent to show animated background */
 .dsg-cell-header {
   font-weight: 600;
   font-size: 0.75rem;
   color: hsl(var(--muted-foreground));
-  background-color: hsl(var(--muted) / 0.5);
+  background-color: hsl(var(--secondary) / 0.5);
   padding: 8px 12px !important;
   border-right: 1px solid hsl(var(--border));
   border-bottom: 2px solid hsl(var(--border));
+}
+
+/* Fix empty header space on RHS - semi-transparent to show animated background */
+.dsg-corner-indicator,
+.dsg-container .dsg-table thead tr th:last-child,
+.dsg-container .dsg-scrollable-view-top-right,
+.dsg-container .dsg-corner-cell,
+.dsg-container thead th.dsg-corner,
+.datasheet-grid .dsg-scrollable-view-top-right,
+.dsg-container .dsg-scrollable-view-container > div:last-child > div:first-child,
+.dsg-table thead tr th:last-child,
+.dsg-scrollable-view-top-right,
+div[class*="scrollable-view-top-right"] {
+  background-color: hsl(var(--secondary) / 0.5) !important;
+  border-bottom: 2px solid hsl(var(--border)) !important;
+}
+
+/* ============================================
+   CUSTOM SCROLLBAR STYLING
+   Uses Tailwind semantic color tokens
+   ============================================ */
+
+/* Modern browsers (Firefox) - standard properties */
+.dsg-container,
+.dsg-container .dsg-scrollable-view,
+.datasheet-grid {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--accent)) hsl(var(--secondary));
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+.dsg-container::-webkit-scrollbar,
+.dsg-container .dsg-scrollable-view::-webkit-scrollbar,
+.datasheet-grid::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+/* Scrollbar track - using secondary background */
+.dsg-container::-webkit-scrollbar-track,
+.dsg-container .dsg-scrollable-view::-webkit-scrollbar-track,
+.datasheet-grid::-webkit-scrollbar-track {
+  background: hsl(var(--secondary));
+  border-radius: var(--radius-sm);
+}
+
+/* Scrollbar thumb - using accent for interactive element */
+.dsg-container::-webkit-scrollbar-thumb,
+.dsg-container .dsg-scrollable-view::-webkit-scrollbar-thumb,
+.datasheet-grid::-webkit-scrollbar-thumb {
+  background: hsl(var(--accent));
+  border-radius: var(--radius-sm);
+  border: 3px solid hsl(var(--secondary));
+  transition: all 150ms ease;
+}
+
+/* Scrollbar thumb hover - use primary for emphasis */
+.dsg-container::-webkit-scrollbar-thumb:hover,
+.dsg-container .dsg-scrollable-view::-webkit-scrollbar-thumb:hover,
+.datasheet-grid::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary));
+  border: 3px solid hsl(var(--background));
+}
+
+/* Scrollbar corner where horizontal and vertical meet */
+.dsg-container::-webkit-scrollbar-corner,
+.datasheet-grid::-webkit-scrollbar-corner {
+  background: hsl(var(--secondary));
 }
 
 /* DSG Row hover styling */
@@ -109,10 +192,11 @@
   color: hsl(var(--muted-foreground));
 }
 
-/* DSG Add row button */
+/* DSG Add row button - semi-transparent to show animated background */
 .dsg-add-row {
-  background-color: hsl(var(--background));
+  background-color: hsl(var(--secondary) / 0.5) !important;
   border: 1px solid hsl(var(--border));
+  border-top: 2px solid hsl(var(--border));
   padding: 8px;
   text-align: center;
   color: hsl(var(--muted-foreground));
@@ -120,8 +204,13 @@
 }
 
 .dsg-add-row:hover {
-  background-color: hsl(var(--muted) / 0.5);
+  background-color: hsl(var(--secondary) / 0.7) !important;
   color: hsl(var(--foreground));
+}
+
+/* Add column component - semi-transparent */
+.dsg-container .dsg-add-column {
+  background-color: hsl(var(--secondary) / 0.5) !important;
 }
 
 /* DSG Checkbox styling */
@@ -162,9 +251,38 @@
 }
 
 .dark .dsg-add-row {
-  background-color: hsl(var(--background));
+  background-color: hsl(var(--secondary) / 0.5) !important;
 }
 
 .dark .dsg-add-row:hover {
-  background-color: hsl(var(--muted) / 0.3);
+  background-color: hsl(var(--secondary) / 0.7) !important;
+}
+
+.dark .dsg-container .dsg-add-column {
+  background-color: hsl(var(--secondary) / 0.5) !important;
+}
+
+/* Dark mode - scrollbar inherits theme automatically via CSS variables */
+.dark .dsg-container,
+.dark .dsg-container .dsg-scrollable-view,
+.dark .datasheet-grid {
+  /* Uses dark mode values of --accent and --secondary automatically */
+  scrollbar-color: hsl(var(--accent)) hsl(var(--secondary));
+}
+
+/* Dark mode - semi-transparent headers and corner to show animated background */
+.dark .dsg-corner-indicator,
+.dark .dsg-container .dsg-table thead tr th:last-child,
+.dark .dsg-container .dsg-scrollable-view-top-right,
+.dark .dsg-container .dsg-corner-cell,
+.dark .dsg-container thead th.dsg-corner,
+.dark .datasheet-grid .dsg-scrollable-view-top-right,
+.dark .dsg-table thead tr th:last-child,
+.dark .dsg-scrollable-view-top-right,
+.dark div[class*="scrollable-view-top-right"] {
+  background-color: hsl(var(--secondary) / 0.5) !important;
+}
+
+.dark .dsg-cell-header {
+  background-color: hsl(var(--secondary) / 0.5);
 }

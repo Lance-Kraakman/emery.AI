@@ -192,7 +192,12 @@ export class ArrowDataStorageService implements DataStorageService {
       const plainObject = row.toPlainObject();
       for (const field of fields) {
         let value = plainObject[field.name];
-        
+
+        // AIDEV-NOTE: Debug logging for document field values before Arrow conversion
+        if (field.type === 'document' || field.type === 'file') {
+          console.log(`[processRowsForArrow] ${field.type} field "${field.name}" value from toPlainObject:`, JSON.stringify(value, null, 2));
+        }
+
         // Handle null/undefined values
         if (value === undefined || value === null) {
           value = null;
@@ -214,13 +219,20 @@ export class ArrowDataStorageService implements DataStorageService {
             case 'file':
             case 'document':
               // Serialize complex types to JSON for Arrow storage
-              value = typeof value === 'object' ? JSON.stringify(value) : String(value);
+              const jsonValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+
+              // AIDEV-NOTE: Debug logging to see the JSON serialization
+              if (field.type === 'document' || field.type === 'file') {
+                console.log(`[processRowsForArrow] ${field.type} field "${field.name}" JSON serialized:`, jsonValue);
+              }
+
+              value = jsonValue;
               break;
             default:
               value = String(value);
           }
         }
-        
+
         columns[field.name].push(value);
       }
     }
@@ -267,8 +279,20 @@ export class ArrowDataStorageService implements DataStorageService {
               // Deserialize JSON back to structured data for StorageData
               if (value !== null && value !== undefined && typeof value === 'string') {
                 try {
-                  const parsed = JSON.parse(value);
+                  let parsed = JSON.parse(value);
                   console.log(`[ArrowStorage] Parsed ${field.type} value:`, parsed, `(array length: ${Array.isArray(parsed) ? parsed.length : 'N/A'})`);
+
+                  // CRITICAL FIX: Handle legacy data stored with wrapper object {fieldName: array}
+                  // Old datasheet grid code stored as {"docs": [...]} instead of [...]
+                  // Check if parsed is an object with single key matching field name
+                  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    const keys = Object.keys(parsed);
+                    if (keys.length === 1 && keys[0] === field.name) {
+                      console.log(`[ArrowStorage] Unwrapping legacy data structure for field "${field.name}"`);
+                      parsed = parsed[field.name];
+                    }
+                  }
+
                   value = parsed;
                 } catch (e) {
                   console.warn(`[ArrowDataStorageService] Malformed ${field.type} field data:`, value, e);
