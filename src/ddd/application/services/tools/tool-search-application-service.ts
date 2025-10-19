@@ -369,23 +369,36 @@ export class ToolSearchApplicationService {
     limit: number,
     offset: number
   ): Promise<ReferenceTool[]> {
+    console.log(`[searchDocumentTools] Starting search. SearchText: "${searchText}", OrgId: ${organizationId.value}, Limit: ${limit}, Offset: ${offset}`);
+
     const databases = await this.databaseApplicationService.getDatabases({ organizationId });
     const allDocumentTools: ReferenceTool[] = [];
 
+    console.log(`[searchDocumentTools] Found ${databases.length} databases`);
+
     // Search through all tables for document-like content
     const allOrgTables = await this.tableApplicationService.getTablesForOrganization(organizationId);
+    console.log(`[searchDocumentTools] Found ${allOrgTables.length} tables for organization`);
 
     for (const database of databases) {
       const tables = allOrgTables.filter(table => table.databaseId.equals(database.id));
+      console.log(`[searchDocumentTools] Database "${database.name}" has ${tables.length} tables`);
 
       for (const table of tables) {
         try {
+          console.log(`[searchDocumentTools] Processing table "${table.name}" (id: ${table.id.value})`);
+
           // Get table fields to map fieldSlug to fieldId
           const tableFields = await this.tableApplicationService.getFieldsForTable(table.id);
+          console.log(`[searchDocumentTools] Table "${table.name}" has ${tableFields.length} fields:`, tableFields.map(f => ({ name: f.name, type: f.type })));
 
           // Skip tables without document or file fields
           const documentFields = tableFields.filter(field => field.type === 'document' || field.type === 'file');
-          if (documentFields.length === 0) continue;
+          console.log(`[searchDocumentTools] Table "${table.name}" has ${documentFields.length} document/file fields`);
+          if (documentFields.length === 0) {
+            console.log(`[searchDocumentTools] Skipping table "${table.name}" - no document/file fields`);
+            continue;
+          }
 
           // Map field name (slug) to fieldId - the FieldValue.fieldSlug is the field name, not column name
           const fieldSlugToIdMap = new Map(
@@ -400,29 +413,42 @@ export class ToolSearchApplicationService {
             orderDirection: 'DESC'
           };
 
+          console.log(`[searchDocumentTools] Getting rows for table "${table.name}" with options:`, queryOptions);
           const rows = await this.tableApplicationService.getRows(table.id, queryOptions);
+          console.log(`[searchDocumentTools] Table "${table.name}" returned ${rows ? rows.length : 0} rows`);
 
           if (rows && rows.length > 0) {
             // Process each row using RowMapper to get properly typed field values
             for (const row of rows) {
               const rowDTO = RowMapper.toDTO(row);
+              console.log(`[searchDocumentTools] Processing row ${rowDTO.id} with ${rowDTO.fieldValues.length} field values`);
 
               // Look through all field values to find document and file fields
               for (const fieldValue of rowDTO.fieldValues) {
                 const fieldId = fieldSlugToIdMap.get(fieldValue.fieldSlug);
-                if (!fieldId) continue; // Skip if we can't find the fieldId
+                if (!fieldId) {
+                  console.log(`[searchDocumentTools] Could not find fieldId for fieldSlug "${fieldValue.fieldSlug}"`);
+                  continue; // Skip if we can't find the fieldId
+                }
+
+                console.log(`[searchDocumentTools] Checking field "${fieldValue.fieldSlug}" (type: ${fieldValue.fieldType}), value:`, fieldValue.value);
 
                 if (fieldValue.fieldType === 'document' && fieldValue.value && isDocumentArray(fieldValue.value)) {
                   // Handle DocumentArrayFieldValue - iterate through each document
                   const docArray = fieldValue.value as DocumentFieldValue[];
+                  console.log(`[searchDocumentTools] Found ${docArray.length} documents in field "${fieldValue.fieldSlug}"`);
+
                   for (const docField of docArray) {
                     const title = docField.documentMetadata?.title || docField.name || 'Untitled Document';
+                    console.log(`[searchDocumentTools] Document: name="${docField.name}", title="${title}", searchText="${searchText}"`);
 
                     // AIDEV-NOTE: Search both title AND name fields since documents can have different titles than filenames
                     // Filter by search text if provided - check both title and name
                     const matchesSearch = !searchText ||
                       title.toLowerCase().includes(searchText.toLowerCase()) ||
                       (docField.name && docField.name.toLowerCase().includes(searchText.toLowerCase()));
+
+                    console.log(`[searchDocumentTools] Document "${title}" matches search: ${matchesSearch}`);
 
                     if (matchesSearch) {
                       allDocumentTools.push(

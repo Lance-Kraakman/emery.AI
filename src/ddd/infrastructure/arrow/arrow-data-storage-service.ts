@@ -261,14 +261,21 @@ export class ArrowDataStorageService implements DataStorageService {
             case 'relation':
             case 'file':
             case 'document':
+              // AIDEV-NOTE: Debug logging to identify document retrieval issue
+              console.log(`[ArrowStorage] ${field.type} field "${field.name}" raw value from Arrow:`, value, `(type: ${typeof value})`);
+
               // Deserialize JSON back to structured data for StorageData
               if (value !== null && value !== undefined && typeof value === 'string') {
                 try {
-                  value = JSON.parse(value);
-                } catch {
-                  console.warn(`[ArrowDataStorageService] Malformed ${field.type} field data:`, value);
+                  const parsed = JSON.parse(value);
+                  console.log(`[ArrowStorage] Parsed ${field.type} value:`, parsed, `(array length: ${Array.isArray(parsed) ? parsed.length : 'N/A'})`);
+                  value = parsed;
+                } catch (e) {
+                  console.warn(`[ArrowDataStorageService] Malformed ${field.type} field data:`, value, e);
                   value = null;
                 }
+              } else {
+                console.log(`[ArrowStorage] ${field.type} value not a string, using as-is:`, value);
               }
               break;
             // Other types (text, number, boolean) are stored as-is
