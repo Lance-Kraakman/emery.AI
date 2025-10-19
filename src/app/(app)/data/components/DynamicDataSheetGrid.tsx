@@ -52,6 +52,10 @@ import { DocumentField } from '@/components/tables/fields/DocumentField'
 import { FileTypeDetector } from '@/ddd/domain/tables/services/file-type-detector'
 import { createFileArtifact, createDocumentArtifact } from '@/components/chat/types/chat-artifacts'
 import { uiStateActions } from '@/stores/ui-state.store'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
+import { Search, Settings, RefreshCw } from 'lucide-react'
 
 // ============================================================================
 // REDUCER PATTERN - Event-Driven Sync
@@ -104,11 +108,90 @@ function gridReducer(state: GridState, action: GridAction): GridState {
 
 // ============================================================================
 
+interface GridHeaderBarProps {
+  tableName: string;
+  rowCount: number;
+  totalRows: number;
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
+  onManageFields: () => void;
+  onRefresh: () => void;
+}
+
+const GridHeaderBar = ({
+  tableName,
+  rowCount,
+  totalRows,
+  searchTerm,
+  onSearchChange,
+  onManageFields,
+  onRefresh
+}: GridHeaderBarProps) => (
+  <div className="flex items-center justify-between h-[50px] px-4 border border-border border-b-0 bg-background rounded-t-md">
+    {/* Left: Table name and row count */}
+    <div className="flex items-center gap-3 min-w-0">
+      <h2 className="text-base font-semibold truncate">{tableName}</h2>
+      <span className="text-xs text-muted-foreground whitespace-nowrap">
+        {rowCount} row{rowCount !== 1 ? 's' : ''}
+        {searchTerm && ` (filtered from ${totalRows})`}
+      </span>
+    </div>
+
+    {/* Center: Search */}
+    <div className="flex-1 max-w-md mx-4">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Search in table..."
+          value={searchTerm}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="pl-10 h-9 bg-background"
+        />
+      </div>
+    </div>
+
+    {/* Right: Actions */}
+    <div className="flex items-center gap-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onRefresh}
+        className="h-9 w-9 p-0"
+      >
+        <RefreshCw className="h-4 w-4" />
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-9 w-9 p-0">
+            <Settings className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={onManageFields}>
+            <Settings className="h-4 w-4 mr-2" />
+            Manage Fields
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={onRefresh}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh Data
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  </div>
+)
+
 interface DynamicDataSheetGridProps {
   fields: FieldDTO[];
   rows: DSGRow[];
   organizationId: number;
   tableId: number;
+  tableName: string;
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
+  onManageFields: () => void;
+  onRefresh: () => void;
   onUpdateRow: (rowId: string, fieldId: number, value: DomainFieldValue) => void;
   onAddRow: (data?: Record<string, any>) => Promise<void>;
   onDeleteRow: (rowId: string) => void;
@@ -308,13 +391,18 @@ const ErrorState = ({ error, onRetry }: { error: string; onRetry?: () => void })
   </div>
 )
 
-export function DynamicDataSheetGrid({ 
-  fields, 
-  rows, 
+export function DynamicDataSheetGrid({
+  fields,
+  rows,
   organizationId,
   tableId,
-  onUpdateRow, 
-  onAddRow, 
+  tableName,
+  searchTerm,
+  onSearchChange,
+  onManageFields,
+  onRefresh,
+  onUpdateRow,
+  onAddRow,
   onDeleteRow,
   isLoading = false,
   error = null
@@ -325,33 +413,11 @@ export function DynamicDataSheetGrid({
     isSyncing: false
   })
 
-  const [containerHeight, setContainerHeight] = useState(400)
-  const containerRef = useRef<HTMLDivElement>(null)
-  // No more debounceTimer!
-
   // Sync server data to state (TanStack Query manages server state)
   useEffect(() => {
     dispatch({ type: 'SET_DATA', payload: rows })
     dispatch({ type: 'SYNC_COMPLETE' })  // Server update means sync is done
   }, [rows])
-
-  // Update container height
-  useEffect(() => {
-    const updateHeight = () => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect()
-        setContainerHeight(rect.height)
-      }
-    }
-
-    updateHeight()
-    const resizeObserver = new ResizeObserver(updateHeight)
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current)
-    }
-
-    return () => resizeObserver.disconnect()
-  }, [])
 
   const columns = useMemo(() => {
     // AIDEV-NOTE: Using react-datasheet-grid built-in column types for standard fields
@@ -511,44 +577,48 @@ export function DynamicDataSheetGrid({
     return <ErrorState error={error} />
   }
 
-  // Show empty state when no fields exist
-  if (fields.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-muted-foreground border border-border rounded-md">
-        <div className="text-sm mb-2">No fields defined</div>
-        <div className="text-xs">Add fields using the Manage Fields button to start entering data</div>
-      </div>
-    )
-  }
+  // REMOVED: Empty state check - always show grid with header and footer
+  // This allows users to access Manage Fields button even when no fields exist
 
   return (
-    <div className="h-full flex flex-col">
-      {/* DataSheetGrid - fills remaining space */}
-      <div ref={containerRef} className="flex-1 border border-border rounded-md overflow-hidden">
-        <DataSheetGrid
-          value={state.data}
-          onChange={handleChange}
-          columns={columns}
-          createRow={() => createEmptyDSGRow(fields)}  // ✅ CRITICAL: Preserves IDs
-          lockRows={false}
-          rowKey="id"
-          height={containerHeight}
-          rowHeight={45}
-          headerRowHeight={50}
-          autoAddRow={false}
-          gutterColumn={false}  // Disable gutter column to show only data columns
-          className="datasheet-grid h-full"
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Custom Header Bar - integrated with grid */}
+      <div className="flex-shrink-0">
+        <GridHeaderBar
+          tableName={tableName}
+          rowCount={rows.length}
+          totalRows={rows.length}
+          searchTerm={searchTerm}
+          onSearchChange={onSearchChange}
+          onManageFields={onManageFields}
+          onRefresh={onRefresh}
         />
       </div>
 
-      {/* Status indicator */}
-      {state.isSyncing && (
-        <div className="flex justify-start items-center px-4 py-2 border-t border-border flex-shrink-0">
-          <div className="text-xs text-muted-foreground">
-            Saving changes...
+      {/* DataSheetGrid - fills remaining space, includes built-in "+ Add" button */}
+      <div className="flex-1 min-h-0 border border-t-0 border-border rounded-b-md overflow-auto dsg-grid-wrapper">
+        {fields.length === 0 ? (
+          // Empty state with access to header controls
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground bg-background">
+            <div className="text-sm mb-2">No fields defined</div>
+            <div className="text-xs">Use the settings menu above to add fields</div>
           </div>
-        </div>
-      )}
+        ) : (
+          <DataSheetGrid
+            value={state.data}
+            onChange={handleChange}
+            columns={columns}
+            createRow={() => createEmptyDSGRow(fields)}  // ✅ CRITICAL: Preserves IDs
+            lockRows={false}
+            rowKey="id"
+            rowHeight={45}
+            headerRowHeight={50}
+            autoAddRow={false}
+            gutterColumn={false}  // Disable gutter column to show only data columns
+            className="datasheet-grid"
+          />
+        )}
+      </div>
     </div>
   )
 }

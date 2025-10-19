@@ -284,8 +284,7 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
     const { stepIndex, toolIndex } = editingToolInfo;
 
     // All tools from dropdown are now ToolDTO
-    // Strip @tool: prefix to keep backend consistent
-    const toolName = tool.name;
+    const toolName = `@tool:${tool.name}`;
 
     if (toolIndex === -1) {
       // This is for instructions field - insert at cursor position AND add to tools array

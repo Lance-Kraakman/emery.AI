@@ -300,82 +300,31 @@ export function DataViewsClientSimplified() {
   if (dataError) return renderErrorState()
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="py-4 px-6 border-b flex-shrink-0">
-        <h1 className="text-2xl font-bold">Data</h1>
-        <p className="text-muted-foreground">
-          {selectedTable
-            ? `Viewing ${selectedTable.name} in ${(data?.databases || []).find(db => db.id === selectedTable.databaseId)?.name || 'Unknown Database'}`
-            : 'Select a table from the sidebar to view its data'
-          }
-        </p>
-      </div>
-      
-      <div className="flex-1 flex flex-col px-6 min-h-0">
-        {selectedTable && (
-          <div className="flex items-center justify-between py-4 flex-shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search in table..."
-                  value={searchTerm}
-                  onChange={(e) => dataActions.setSearchTerm(e.target.value)}
-                  className="pl-10 bg-transparent"
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="bg-transparent">
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => dataActions.setFieldManagerOpen(true)}>
-                    <Settings className="h-4 w-4 mr-2" />
-                    Manage Fields
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={refreshTableData}>
-                    Refresh Data
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Main content - full width, no padding, no header */}
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {loading ? renderLoadingState() :
+         error ? renderErrorState() :
+         !selectedTable ? renderEmptyState() : (
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <DynamicDataSheetGrid
+              fields={fields}
+              rows={filteredRows}
+              organizationId={selectedTable.organizationId!}
+              tableId={selectedTable.id}
+              tableName={selectedTable.name}
+              searchTerm={searchTerm}
+              onSearchChange={(value) => dataActions.setSearchTerm(value)}
+              onManageFields={() => dataActions.setFieldManagerOpen(true)}
+              onRefresh={refreshTableData}
+              onUpdateRow={handleUpdateRow}
+              onAddRow={handleAddRow}
+              onDeleteRow={handleDeleteRow}
+              isLoading={loading}
+              error={error ? String(error) : null}
+            />
           </div>
         )}
-
-        {/* Main Content - fills remaining space */}
-        <div className="flex-1 flex flex-col min-h-0">
-          {loading ? renderLoadingState() : 
-           error ? renderErrorState() :
-           !selectedTable ? renderEmptyState() : (
-            <>
-              <div className="mb-4 flex-shrink-0">
-                <h2 className="text-xl font-bold">{selectedTable.name}</h2>
-                <p className="text-sm text-muted-foreground">
-                  {filteredRows.length} row{filteredRows.length !== 1 ? "s" : ""}
-                  {searchTerm && ` (filtered from ${rows.length})`}
-                </p>
-              </div>
-              <div className="flex-1 min-h-0">
-                <DynamicDataSheetGrid
-                  fields={fields}
-                  rows={filteredRows}
-                  organizationId={selectedTable.organizationId!}
-                  tableId={selectedTable.id}
-                  onUpdateRow={handleUpdateRow}
-                  onAddRow={handleAddRow}
-                  onDeleteRow={handleDeleteRow}
-                  isLoading={loading}
-                  error={error ? String(error) : null}
-                />
-              </div>
-            </>
-          )}
-        </div>
       </div>
 
       {/* Field Manager Dialog - local to table */}

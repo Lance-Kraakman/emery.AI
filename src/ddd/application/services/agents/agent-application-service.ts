@@ -5,10 +5,12 @@
  * capability management, and organization scoping.
  */
 
-import type { IAgentRepository, CreateAgentData, UpdateAgentData } from '@/ddd/domain/agents/repositories/agent-repository';
+import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
 import {
   Agent,
+  type CreateAgentData,
+  type UpdateAgentData,
   type ServerConfig,
   type CapabilityConfig,
   type AgentType
@@ -94,23 +96,39 @@ export class AgentApplicationService {
       // Create agent data with defaults - ensure required fields are set
       const agentData: CreateAgentData = {
         name: command.name.trim(),
-        type: command.role || 'assistant',
+        role: command.role,
         description: command.description,
-        instructions: {
-          persona: command.persona,
-          tools: command.tools,
-          servers: command.servers
-        },
-        capabilities: command.capabilities?.map(cap => cap.name) || null, // Convert CapabilityConfig[] to string[]
-        organizationId: command.organizationId.value, // Convert OrganizationId to number
-        ownerId: command.ownerId.value, // Convert UserId to string
-        isActive: (command.status ? command.status : 'active') === 'active',
+        persona: command.persona,
+        ownerId: command.ownerId, // Required from command
+        organizationId: command.organizationId, // Required from command
+        agentType: command.agentType,
+        specialization: command.specialization,
+        tools: command.tools,
+        servers: command.servers,
         trigger: command.trigger,
-        apiKey: apiKey.value // Include the generated API key
+        capabilities: command.capabilities,
+        status: command.status ? AgentStatus.fromString(command.status) : undefined
       };
 
+      // Apply defaults and add generated fields
+      const agentWithDefaults = createAgentDefaults(agentData);
+
       // Create agent via repository
-      const createData = agentData;
+      const createData = {
+        name: agentWithDefaults.name,
+        type: agentWithDefaults.role,
+        description: agentWithDefaults.description,
+        instructions: {
+          persona: agentWithDefaults.persona,
+          tools: agentWithDefaults.tools,
+          servers: agentWithDefaults.servers
+        },
+        capabilities: agentWithDefaults.capabilities?.map(c => c.name) || null,
+        organizationId: command.organizationId.value,
+        ownerId: command.ownerId.value,
+        isActive: true,
+        trigger: agentWithDefaults.trigger
+      };
       
       const savedAgent = await this.agentRepository.create(createData);
 
@@ -143,30 +161,19 @@ export class AgentApplicationService {
 
       // Role validation removed - using simplified 3-role system
 
-      // Build update data with only changed fields using repository data structure
-      const updateData: UpdateAgentData = {};
+      // Build update data with only changed fields
+      const updateData: any = {};
 
       if (command.name !== undefined) updateData.name = command.name;
-      if (command.role !== undefined) updateData.type = command.role;
+      if (command.role !== undefined) updateData.role = command.role;
       if (command.description !== undefined) updateData.description = command.description;
-      if (command.persona !== undefined || command.tools !== undefined || command.servers !== undefined) {
-        // Update instructions if any of these fields change
-        const existingAgent = await this.agentRepository.findById(command.agentId);
-        if (existingAgent) {
-          updateData.instructions = {
-            persona: command.persona !== undefined ? command.persona : existingAgent.persona,
-            tools: command.tools !== undefined ? command.tools : existingAgent.tools,
-            servers: command.servers !== undefined ? command.servers : existingAgent.servers
-          };
-        }
-      }
+      if (command.persona !== undefined) updateData.persona = command.persona;
+      if (command.ownerId !== undefined) updateData.ownerId = command.ownerId;
+      if (command.tools !== undefined) updateData.tools = command.tools;
+      if (command.servers !== undefined) updateData.servers = command.servers;
       if (command.trigger !== undefined) updateData.trigger = command.trigger;
-      if (command.status !== undefined) updateData.isActive = command.status === 'active';
-      
-      // Only update capabilities if explicitly provided
-      if (command.capabilities !== undefined) {
-        updateData.capabilities = command.capabilities.map(cap => cap.name);
-      }
+      if (command.capabilities !== undefined) updateData.capabilities = command.capabilities;
+      if (command.status !== undefined) updateData.status = command.status;
 
       // Update agent via repository
       const savedAgent = await this.agentRepository.update(command.agentId, updateData);

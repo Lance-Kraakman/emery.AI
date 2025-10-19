@@ -144,8 +144,12 @@ export class RowMapper {
     for (const field of fields) {
       const value = result[field.name];
 
-      // Apply default if value is missing, empty, or invalid
-      if (value === '' || value === null || value === undefined) {
+      // Only apply defaults for primitive field types with empty strings
+      // Complex fields (file, document, relation) with empty arrays are valid
+      const isPrimitiveField = ['text', 'number', 'boolean', 'date'].includes(field.type);
+      const needsDefault = isPrimitiveField && (value === '' || value === null || value === undefined);
+
+      if (needsDefault) {
         // Convert TableField (domain) to FieldDTO using FieldMapper
         const fieldDTO = FieldMapper.toDTO(field);
 

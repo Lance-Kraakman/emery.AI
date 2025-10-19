@@ -33,7 +33,7 @@ import { resolveReferences } from '@/app/actions/references'
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
 import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
-import { fetchFileArtifactData, getFileDownloadUrl, getDocumentFieldValue } from '@/app/actions/artifacts'
+import { fetchFileArtifactData, getFileDownloadUrl, getDocumentFieldValue, getDocumentDownloadUrl } from '@/app/actions/artifacts'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 
 /**
@@ -258,13 +258,24 @@ function ChatContentWithCanvas({
       )
 
       if (result.success && result.data) {
+        // Get download URL for the document
+        const urlResult = await getDocumentDownloadUrl(
+          tool.config.documentId!,
+          tool.config.organizationId,
+          tool.config.tableId!,
+          tool.config.fieldId!
+        )
+
+        const downloadUrl = urlResult.success ? urlResult.data! : undefined
+
         // Create artifact and open in canvas using tool config data
         const artifact = createDocumentArtifact(
           result.data,
           tool.config.organizationId,
           tool.config.tableId!,
           tool.config.fieldId!,
-          'view'
+          'view',
+          downloadUrl
         )
         openArtifactInCanvas(artifact)
         console.log('Document artifact opened in canvas:', artifact)

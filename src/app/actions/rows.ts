@@ -302,16 +302,13 @@ export async function getRowsDataDSG(tableId: number, limit = 1000): Promise<any
       { limit, offset: 0 }
     );
 
-    // Transform to DSG format with defaults applied (data migration)
+    // Transform to DSG format
+    // ARCHITECTURE NOTE: Defaults are already applied in infrastructure layer
+    // ArrowDataStorageService.retrieveData() calls RowMapper.applyDefaults() before creating Row objects
+    // No need to apply defaults again here - just convert Row objects to DSG format
     const dsgData = rowsData.map(row => {
       const plainData = row.toPlainObject();
-
-      // ARCHITECTURE NOTE: Apply defaults in application layer, not infrastructure
-      // Infrastructure (ArrowDataStorageService) returns raw data (may have empty strings, nulls)
-      // Application layer (RowMapper) fixes legacy data with valid defaults
-      const withDefaults = RowMapper.applyDefaults(plainData, table.fields);
-
-      return { id: row.id.value, ...withDefaults };
+      return { id: row.id.value, ...plainData };
     });
 
     return dsgData;
