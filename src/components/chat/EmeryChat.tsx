@@ -35,6 +35,7 @@ import { createDocumentArtifact, createFileArtifact } from './types/chat-artifac
 import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
 import { fetchFileArtifactData, getFileDownloadUrl, getDocumentFieldValue, getDocumentDownloadUrl } from '@/app/actions/artifacts'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
+import { uiStateActions } from '@/stores/ui-state.store'
 
 /**
  * EmeryChat - Main chat component with LlamaIndex integration
@@ -237,7 +238,7 @@ function ChatContentWithCanvas({
 }: ChatContentWithCanvasProps) {
   const { openArtifactInCanvas } = useChatCanvas()
 
-  // Handle tool click using canvas hook
+  // Handle tool click using global UI state for artifacts
   const handleToolClick = async (tool: ToolDTO) => {
     console.log('Tool clicked:', tool)
 
@@ -268,7 +269,7 @@ function ChatContentWithCanvas({
 
         const downloadUrl = urlResult.success ? urlResult.data! : undefined
 
-        // Create artifact and open in canvas using tool config data
+        // Create artifact and open in canvas using global UI state
         const artifact = createDocumentArtifact(
           result.data,
           tool.config.organizationId,
@@ -277,7 +278,9 @@ function ChatContentWithCanvas({
           'view',
           downloadUrl
         )
-        openArtifactInCanvas(artifact)
+        // CRITICAL FIX: Use global UI state instead of LlamaIndex canvas
+        // This ensures artifact opens in EmeryCanvas (main content area)
+        uiStateActions.openArtifact(artifact)
         console.log('Document artifact opened in canvas:', artifact)
       } else {
         console.error('Failed to fetch document data:', result.error)
@@ -300,9 +303,9 @@ function ChatContentWithCanvas({
 
         const downloadUrl = urlResult.success ? urlResult.data! : ''
 
-        // Create artifact and open in canvas
+        // Create artifact and open in canvas using global UI state
         const artifact = createFileArtifact(fileResult.data, 1, 1, 'generic', downloadUrl)
-        openArtifactInCanvas(artifact)
+        uiStateActions.openArtifact(artifact)
         console.log('File artifact opened in canvas:', artifact)
       } else {
         console.error('Failed to fetch file data:', fileResult.error)
