@@ -4,127 +4,89 @@
  * Infrastructure implementation for executing analytical queries against Apache Arrow files
  * stored in S3 using DuckDB's powerful analytical capabilities with zero-copy performance.
  *
- * AIDEV-NOTE: Infrastructure implementation of TableQueryService using stable duckdb package
- * Uses dynamic import and callback-based API for reliable cross-platform compatibility
+ * AIDEV-NOTE: Infrastructure implementation of TableQueryService using @duckdb/node-api
+ * Uses dynamic import and promise-based API for reliable cross-platform compatibility
  */
 
 import { BUCKET_NAME } from '@/lib/s3/client';
 
 import type { Result } from '@/ddd/domain/shared/result';
-import type { 
-  TableQueryService, 
+import type {
+  TableQueryService,
   QueryResult
 } from '@/ddd/domain/tables/services/table-query-service';
 import { TableId } from '@/ddd/domain/shared/value-objects';
 import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import { DuckDB, eq, gt, gte, lt, lte, like, type QueryFilter } from './duckdb-sql-builder';
+import type { DuckDBConnection } from '@duckdb/node-api';
+import { getDuckDBConnection } from './duckdb-connection-manager';
 
 export class DuckDBTableQueryService implements TableQueryService {
-  private connection: any | null = null;
-  private isInitialized = false;
+  private connection: DuckDBConnection | null = null;
 
   constructor() {
-    // AIDEV-NOTE: Initialize DuckDB lazily at first use (not during construction)
-    // to avoid loading native module during Next.js build
-    // https://duckdb.org/docs/stable/clients/nodejs/overview
+    // AIDEV-NOTE: Will get singleton connection on first use
+    // Connection is already configured with extensions and S3 by DuckDBConnectionManager
   }
 
-  private async initializeDatabase(): Promise<void> {
-    if (this.isInitialized) return;
+  private async ensureConnection(): Promise<void> {
+    if (!this.connection) {
+      console.log('[DuckDB Query Service] Getting pre-configured DuckDB connection...');
+      this.connection = await getDuckDBConnection();
 
-    return new Promise(async (resolve, reject) => {
-      try {
-        // Dynamic import to avoid loading native module during Next.js build
-        const duckdb = await import('duckdb');
-
-        // Create in-memory database with unsigned extensions enabled (for Arrow)
-        this.connection = new duckdb.Database(':memory:', {
-          allow_unsigned_extensions: 'true'
-        });
-
-        // Install extensions using stable callback-based API
-        this.connection.exec("INSTALL arrow; LOAD arrow; INSTALL httpfs; LOAD httpfs;", (err: any) => {
-          if (err) {
-            console.error('[DuckDB] Failed to install extensions:', err);
-            reject(err);
-            return;
-          }
-
-          console.log('[DuckDB] Extensions loaded successfully');
-
-          // Configure S3 credentials if available
-          if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-            const s3Config = [
-              `SET s3_region='${process.env.AWS_REGION || 'ap-southeast-2'}';`,
-              `SET s3_access_key_id='${process.env.AWS_ACCESS_KEY_ID}';`,
-              `SET s3_secret_access_key='${process.env.AWS_SECRET_ACCESS_KEY}';`
-            ];
-
-            if (process.env.S3_ENDPOINT_URL) {
-              s3Config.push(`SET s3_endpoint='${process.env.S3_ENDPOINT_URL}';`);
-              s3Config.push(`SET s3_use_ssl='${!process.env.S3_ENDPOINT_URL.startsWith('http://')}';`);
-            }
-
-            this.connection!.exec(s3Config.join(' '), (s3Err: any) => {
-              if (s3Err) {
-                console.warn('[DuckDB] Failed to configure S3:', s3Err);
-              } else {
-                console.log('[DuckDB] S3 configuration applied');
-              }
-
-              this.isInitialized = true;
-              console.log('[DuckDB] Database initialized successfully');
-              resolve();
-            });
-          } else {
-            this.isInitialized = true;
-            console.log('[DuckDB] Database initialized successfully (no S3 credentials)');
-            resolve();
-          }
-        });
-      } catch (error) {
-        console.error('[DuckDB] Failed to initialize database:', error);
-        reject(error);
+      if (!this.connection) {
+        throw new Error('DuckDB connection unavailable');
       }
-    });
+
+      console.log('[DuckDB Query Service] ✅ Using pre-configured DuckDB connection');
+    }
   }
 
   private async executeQuery(sql: string): Promise<Result<QueryResult>> {
-    // Initialize on first use
-    if (!this.isInitialized) {
-      await this.initializeDatabase();
-    }
+    await this.ensureConnection();
 
     if (!this.connection) {
+      console.error('[DuckDB Query Service] ❌ Cannot execute query - DuckDB not initialized');
       return { success: false, error: 'DuckDB not initialized' };
     }
 
-    return new Promise((resolve) => {
-      const startTime = Date.now();
+    const startTime = Date.now();
 
-      // Use stable callback-based API for queries
-      this.connection!.all(sql, (err: any, rows: any) => {
-        const executionTime = Date.now() - startTime;
+    console.log('[DuckDB Query Service] 🔍 Executing SQL query:', sql);
 
-        if (err) {
-          console.error('[DuckDB] Error executing query:', err);
-          resolve({
-            success: false,
-            error: err.message || 'Failed to execute query'
-          });
-          return;
-        }
+    try {
+      // Use promise-based API for queries
+      const result = await this.connection.run(sql);
+      const rows = await result.getRows();
+      const executionTime = Date.now() - startTime;
 
-        resolve({
-          success: true,
-          data: {
-            rows: rows || [],
-            rowCount: rows?.length || 0,
-            executionTime
-          }
-        });
+      console.log('[DuckDB Query Service] ✅ Query executed successfully:', {
+        rowCount: rows?.length || 0,
+        executionTime: `${executionTime}ms`
       });
-    });
+
+      return {
+        success: true,
+        data: {
+          rows: rows || [],
+          rowCount: rows?.length || 0,
+          executionTime
+        }
+      };
+    } catch (err: any) {
+      const executionTime = Date.now() - startTime;
+
+      console.error('[DuckDB Query Service] ❌ Query execution failed:', {
+        error: err.message,
+        sql,
+        executionTime: `${executionTime}ms`
+      });
+
+      return {
+        success: false,
+        error: err.message || 'Failed to execute query'
+      };
+    }
   }
 
   async queryTable(
@@ -136,14 +98,26 @@ export class DuckDBTableQueryService implements TableQueryService {
     offset?: number
   ): Promise<Result<QueryResult>> {
     try {
+      console.log('[DuckDB Query Service] 📊 Query requested for table:', {
+        tableId: tableId.value,
+        filters,
+        orderBy,
+        orderDirection,
+        limit,
+        offset
+      });
+
       // Get S3 path for table
       const s3Path = await this.getTableS3Path(tableId.value);
       if (!s3Path) {
+        console.error('[DuckDB Query Service] ❌ Table not found:', tableId.value);
         return { success: false, error: 'Table not found' };
       }
 
       // Build SQL query
       const s3Url = `s3://${BUCKET_NAME}/${s3Path.getDataPath()}`;
+      console.log('[DuckDB Query Service] 📂 Resolved S3 path:', s3Url);
+
       // Convert basic filters to QueryFilter format for the SQL builder
       const queryFilters: QueryFilter[] = [];
       if (filters && Object.keys(filters).length > 0) {
@@ -152,6 +126,7 @@ export class DuckDBTableQueryService implements TableQueryService {
             queryFilters.push(eq(key, value));
           }
         }
+        console.log('[DuckDB Query Service] 🔎 Applying filters:', queryFilters);
       }
 
       // Use the type-safe SQL builder
@@ -162,12 +137,11 @@ export class DuckDBTableQueryService implements TableQueryService {
         limit,
         offset
       });
-      
-      console.log(`[DuckDB] Executing query: ${sql}`);
+
       return await this.executeQuery(sql);
-      
+
     } catch (error) {
-      console.error('[DuckDB] Error querying table:', error);
+      console.error('[DuckDB Query Service] ❌ Error querying table:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to query table'
@@ -220,26 +194,33 @@ export class DuckDBTableQueryService implements TableQueryService {
    */
   async countRows(tableId: number, queryFilters?: QueryFilter[]): Promise<Result<number>> {
     try {
+      console.log('[DuckDB Query Service] 🔢 Count requested for table:', {
+        tableId,
+        filters: queryFilters
+      });
+
       const s3Path = await this.getTableS3Path(tableId);
       if (!s3Path) {
+        console.error('[DuckDB Query Service] ❌ Table not found:', tableId);
         return { success: false, error: 'Table not found' };
       }
 
       const s3Url = `s3://${BUCKET_NAME}/${s3Path.getDataPath()}`;
+      console.log('[DuckDB Query Service] 📂 Resolved S3 path:', s3Url);
+
       const sql = DuckDB.count(s3Url, queryFilters);
-      
-      console.log(`[DuckDB] Executing count query: ${sql}`);
       const result = await this.executeQuery(sql);
-      
+
       if (!result.success) {
         return { success: false, error: result.error };
       }
-      
+
       const count = result.data?.rows[0]?.count || 0;
+      console.log('[DuckDB Query Service] ✅ Count result:', count);
       return { success: true, data: count };
-      
+
     } catch (error) {
-      console.error('[DuckDB] Error counting rows:', error);
+      console.error('[DuckDB Query Service] ❌ Error counting rows:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to count rows'
@@ -251,31 +232,42 @@ export class DuckDBTableQueryService implements TableQueryService {
    * Get distinct values for a field
    */
   async getDistinctValues(
-    tableId: number, 
-    field: string, 
+    tableId: number,
+    field: string,
     queryFilters?: QueryFilter[]
   ): Promise<Result<any[]>> {
     try {
+      console.log('[DuckDB Query Service] 🎯 Distinct values requested:', {
+        tableId,
+        field,
+        filters: queryFilters
+      });
+
       const s3Path = await this.getTableS3Path(tableId);
       if (!s3Path) {
+        console.error('[DuckDB Query Service] ❌ Table not found:', tableId);
         return { success: false, error: 'Table not found' };
       }
 
       const s3Url = `s3://${BUCKET_NAME}/${s3Path.getDataPath()}`;
+      console.log('[DuckDB Query Service] 📂 Resolved S3 path:', s3Url);
+
       const sql = DuckDB.distinct(s3Url, field, queryFilters);
-      
-      console.log(`[DuckDB] Executing distinct query: ${sql}`);
       const result = await this.executeQuery(sql);
-      
+
       if (!result.success) {
         return { success: false, error: result.error };
       }
-      
+
       const values = result.data?.rows.map(row => row[field]) || [];
+      console.log('[DuckDB Query Service] ✅ Distinct values found:', {
+        field,
+        count: values.length
+      });
       return { success: true, data: values };
-      
+
     } catch (error) {
-      console.error('[DuckDB] Error getting distinct values:', error);
+      console.error('[DuckDB Query Service] ❌ Error getting distinct values:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get distinct values'

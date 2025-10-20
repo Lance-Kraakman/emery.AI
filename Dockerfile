@@ -16,6 +16,7 @@ RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
 RUN npm i -g pnpm
 
 # AIDEV-NOTE: Install dependencies with frozen lockfile for cache efficiency
+# @duckdb/node-api handles platform binaries automatically via optionalDependencies
 RUN pnpm install --frozen-lockfile
 
 # Copy source code after dependencies are installed

@@ -4,26 +4,22 @@ const nextConfig = {
   // output: 'standalone',
   // AIDEV-NOTE: Removed env config to allow runtime environment variable loading
   // App router is now stable in Next.js 15
-  
+  // instrumentation.ts is enabled by default in Next.js 15
+
   // Modern Next.js approach for native modules - replaces complex webpack externals
   serverExternalPackages: [
-    'duckdb',
-    '@duckdb/node-api', 
-    '@duckdb/node-bindings',
-    '@duckdb/node-bindings-darwin-arm64',
-    '@duckdb/node-bindings-linux-x64',
-    'unpdf', 
-    '@z-skip/protoc', 
+    '@duckdb/node-api',
+    'unpdf',
+    '@z-skip/protoc',
     'canvas'
   ],
   
   webpack: (config, { isServer }) => {
-    // Externalize DuckDB and its dependencies from webpack bundling
+    // Externalize native modules from webpack bundling
     if (isServer) {
       config.externals = config.externals || [];
       config.externals.push(
-        'duckdb',
-        '@mapbox/node-pre-gyp',
+        '@duckdb/node-api',
         'mock-aws-s3'
       );
     }

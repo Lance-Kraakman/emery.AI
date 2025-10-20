@@ -73,13 +73,16 @@ export class DuckDBSqlTemplates {
    * - Domain table id: 123
    * - Creates: table_123
    * - Points to: s3://bucket/org_1/db_5/table_123/data.arrow
+   *
+   * AIDEV-NOTE: Uses read_arrow (nanoarrow) instead of read_arrow_ipc
+   * The community arrow extension (nanoarrow) uses read_arrow for IPC format
    */
   static createVirtualTable(params: TableCreateParams): string {
     const { tableId, s3Path } = params
 
     return `
       CREATE OR REPLACE TABLE table_${tableId} AS
-      SELECT * FROM read_arrow_ipc('${s3Path}')
+      SELECT * FROM read_arrow('${s3Path}')
     `.trim()
   }
 
@@ -93,13 +96,16 @@ export class DuckDBSqlTemplates {
   /**
    * Refresh virtual table with latest S3 data
    * Called after writes to sync DuckDB view with S3
+   *
+   * AIDEV-NOTE: Uses read_arrow (nanoarrow) instead of read_arrow_ipc
+   * The community arrow extension (nanoarrow) uses read_arrow for IPC format
    */
   static refreshVirtualTable(params: { tableId: number; s3Path: string }): string {
     const { tableId, s3Path } = params
 
     return `
       CREATE OR REPLACE TABLE table_${tableId} AS
-      SELECT * FROM read_arrow_ipc('${s3Path}')
+      SELECT * FROM read_arrow('${s3Path}')
     `.trim()
   }
 
@@ -457,14 +463,14 @@ export class DuckDBSqlLogger {
 
   static logQuery(operation: string, sql: string): void {
     if (this.isDevelopment) {
-      console.log(`[DUCKDB ${operation}]`, {
+      console.log(`[DuckDB SQL] 🔍 ${operation}:`, {
         sql: sql.replace(/\s+/g, ' ').trim()
       })
     }
   }
 
   static logError(operation: string, error: Error, sql: string): void {
-    console.error(`[DUCKDB ERROR ${operation}]`, {
+    console.error(`[DuckDB SQL] ❌ ${operation} FAILED:`, {
       error: error.message,
       sql: sql.replace(/\s+/g, ' ').trim()
     })
@@ -475,48 +481,43 @@ export class DuckDBSqlLogger {
 // SQL EXECUTOR
 // ============================================
 
+import type { DuckDBConnection } from '@duckdb/node-api'
+
 /**
- * Executes DuckDB SQL templates with logging using stable API
- * Part of infrastructure layer - handles DuckDB connection with callback-based interface
- * AIDEV-NOTE: Uses any type to avoid importing native module during build
+ * Executes DuckDB SQL templates with logging using @duckdb/node-api
+ * Part of infrastructure layer - handles DuckDB connection with promise-based interface
  */
 export class DuckDBSqlExecutor {
-  constructor(private duckdb: any) {}
+  constructor(private duckdb: DuckDBConnection) {}
 
   /**
-   * Execute query and return rows using stable callback API
+   * Execute query and return rows using promise-based API
    */
   async execute(operation: string, sql: string): Promise<any[]> {
     DuckDBSqlLogger.logQuery(operation, sql)
 
-    return new Promise((resolve, reject) => {
-      this.duckdb.all(sql, (err: any, rows: any) => {
-        if (err) {
-          DuckDBSqlLogger.logError(operation, err as Error, sql)
-          reject(err)
-          return
-        }
-        resolve(rows || [])
-      })
-    })
+    try {
+      const result = await this.duckdb.run(sql)
+      const rows = await result.getRows()
+      return rows || []
+    } catch (err) {
+      DuckDBSqlLogger.logError(operation, err as Error, sql)
+      throw err
+    }
   }
 
   /**
-   * Execute non-query statement (INSERT, UPDATE, DELETE) using stable callback API
+   * Execute non-query statement (INSERT, UPDATE, DELETE, CREATE, etc.)
    */
   async executeNonQuery(operation: string, sql: string): Promise<void> {
     DuckDBSqlLogger.logQuery(operation, sql)
 
-    return new Promise((resolve, reject) => {
-      this.duckdb.exec(sql, (err: any) => {
-        if (err) {
-          DuckDBSqlLogger.logError(operation, err as Error, sql)
-          reject(err)
-          return
-        }
-        resolve()
-      })
-    })
+    try {
+      await this.duckdb.run(sql)
+    } catch (err) {
+      DuckDBSqlLogger.logError(operation, err as Error, sql)
+      throw err
+    }
   }
 
   /**

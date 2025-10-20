@@ -9,7 +9,6 @@ import { DrizzleOrganizationRepository } from '@/ddd/infrastructure/db/repositor
 import { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import { DrizzleUserRepository } from '@/ddd/infrastructure/db/repositories/users/drizzle-user-repository';
 import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
-import { DynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/dynamic-table-repository';
 import { DuckDBDynamicTableRepository } from '@/ddd/infrastructure/data/duckdb-dynamic-table-repository';
 import { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
 import { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
@@ -177,35 +176,64 @@ interface RepositoryRegistry {
   OAuthProxyApplicationService: OAuthProxyApplicationService | null;
 }
 
+// AIDEV-NOTE: Use Node.js global to ensure singleton survives Next.js code splitting
+// Next.js creates multiple module contexts, breaking static class singletons
+declare global {
+  var __diContainer: DIContainer | undefined;
+}
+
 export class DIContainer {
-  private static instance: DIContainer;
   private repositories = new Map<string, any>();
   private isInitialized = false;
   private initializationAttempted = false;
 
   private constructor() {
-    // Auto-initialize immediately when singleton is created
-    if (typeof window === 'undefined' && process.env.NODE_ENV !== 'test') {
+    // AIDEV-NOTE: Auto-initialize immediately when singleton is created
+    // This ensures container is ready in production where instrumentation.ts may not run
+    // Skip during build phase to avoid DuckDB initialization errors
+    const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build' ||
+                        process.env.npm_lifecycle_event === 'build';
+
+    const isServer = typeof window === 'undefined';
+
+    console.log('[DIContainer] Constructor called:', {
+      isServer,
+      isBuildTime,
+      NEXT_RUNTIME: process.env.NEXT_RUNTIME,
+      NEXT_PHASE: process.env.NEXT_PHASE,
+      npm_lifecycle_event: process.env.npm_lifecycle_event
+    });
+
+    // Run in server environment, but not during build
+    if (isServer && !isBuildTime) {
       this.autoInitialize();
     }
   }
 
-  private async autoInitialize(): Promise<void> {
+  /**
+   * Auto-initialize the container on first getInstance() call
+   * Fire-and-forget pattern - will crash server if initialization fails
+   */
+  private autoInitialize(): void {
+    if (this.initializationAttempted) return;
     this.initializationAttempted = true;
-    try {
-      // Use context-aware db client for automatic RLS context
-      await this.initialize(contextAwareDb);
-      console.log('✅ DIContainer auto-initialized with context-aware database');
-    } catch (error) {
-      console.warn('⚠️ DIContainer auto-initialization failed, will require manual initialization:', error);
-    }
+
+    console.log('[DIContainer] 🚀 Auto-initializing container...');
+
+    // Fire-and-forget async initialization
+    this.initialize(contextAwareDb).catch(error => {
+      console.error('[DIContainer] ❌ FATAL: Auto-initialization failed:', error);
+      console.error('[DIContainer] ❌ Terminating server - DuckDB is a hard requirement');
+      process.exit(1);
+    });
   }
 
   static getInstance(): DIContainer {
-    if (!DIContainer.instance) {
-      DIContainer.instance = new DIContainer();
+    // Use Node.js global to survive Next.js module bundling/code splitting
+    if (!global.__diContainer) {
+      global.__diContainer = new DIContainer();
     }
-    return DIContainer.instance;
+    return global.__diContainer;
   }
 
   /**
@@ -270,24 +298,25 @@ export class DIContainer {
     // Create simplified Arrow data storage service
     const arrowDataStorageService = new ArrowDataStorageService();
 
-    // Initialize DuckDB connection for analytical queries using singleton
-    // Automatically skips during build to avoid extension conflicts
+    // Initialize DuckDB connection for S3 Arrow table operations
+    // Automatically skips during build, initializes at runtime
     const duckdbConnection = await getDuckDBConnection();
 
-    // Create table repository - use DuckDB if available, otherwise fallback
-    const tableRepository = duckdbConnection
-      ? new DuckDBDynamicTableRepository(
-          contextAwareDb,
-          duckdbConnection,
-          arrowDataStorageService
-        )
-      : new DynamicTableRepository(
-          contextAwareDb,
-          arrowDataStorageService,
-          tableQueryService
-        );
+    if (!duckdbConnection) {
+      console.error('❌ DuckDB connection unavailable - this will cause S3 table operations to fail');
+      console.error('❌ Check Docker image includes duckdb.node binary, or run locally with native modules');
+      throw new Error('DuckDB connection required for S3 Arrow table operations');
+    }
 
-    console.log(`✅ Using ${duckdbConnection ? 'DuckDB' : 'standard'} repository for table operations`);
+    // Create DuckDB-powered table repository for analytical queries on S3 Arrow files
+    // AIDEV-NOTE: Extensions are already loaded by getDuckDBConnection() above
+    const tableRepository = new DuckDBDynamicTableRepository(
+      contextAwareDb,
+      duckdbConnection,
+      arrowDataStorageService
+    );
+
+    console.log('✅ Using DuckDB repository for S3 Arrow table operations');
 
     // Create DynamicTableService - central domain service for all table operations
     const dynamicTableService = new DynamicTableService(
@@ -474,10 +503,11 @@ export class DIContainer {
 
   /**
    * Get a repository by interface name
+   * Note: Use typed async getters (e.g., getAgentRepository()) instead of calling this directly
    */
   get<K extends keyof RepositoryRegistry>(interfaceName: K): RepositoryRegistry[K] {
     if (!this.isInitialized) {
-      throw new Error('DIContainer must be initialized before use. Call initialize() first.');
+      throw new Error('DIContainer not initialized. Use async typed getters (e.g., await getAgentRepository()) for automatic lazy initialization.');
     }
 
     const repository = this.repositories.get(interfaceName);
@@ -571,11 +601,12 @@ type ServiceMap = {
 };
 
 // Generate getter functions dynamically
+// Note: Container must be initialized via instrumentation.ts before use
 const diContainer = DIContainer.getInstance();
 const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] => {
   // Map simple names to container keys (e.g., 'AgentRepository' -> 'IAgentRepository')
   let containerKey;
-  
+
   // Special mappings for services with interface prefix
   const specialMappings: Record<string, string> = {
     'RagIndexRepository': 'IRagIndexRepository',
@@ -584,7 +615,7 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
     'ConnectionRepository': 'IConnectionRepository',
     'IToolRegistryService': 'IToolRegistryService',
   };
-  
+
   if (specialMappings[key as string]) {
     containerKey = specialMappings[key as string];
   } else if (key.includes('Repository')) {

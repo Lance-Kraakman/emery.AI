@@ -32,73 +32,27 @@ import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata'
 import type { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service'
 
 import { DuckDBSqlTemplates, DuckDBSqlExecutor } from './duckdb-sql-templates'
+import type { DuckDBConnection } from '@duckdb/node-api'
 
 type TableRow = InferSelectModel<typeof tables>
 type FieldRow = InferSelectModel<typeof fields>
 
 /**
  * DuckDB-powered repository for analytical queries on dynamic tables
- * Uses SQL templates for type-safe query building
+ * Uses SQL templates for type-safe query building with @duckdb/node-api
  */
 export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
   private executor: DuckDBSqlExecutor
-  private isInitialized: boolean = false
 
   constructor(
     private readonly db: DbClient,
-    private readonly duckdb: any, // DuckDB Database - using any to avoid import during build
+    private readonly duckdb: DuckDBConnection,
     private readonly dataStorageService: DataStorageService
   ) {
+    // AIDEV-NOTE: Extensions are already loaded in DuckDBConnectionManager
+    // This repository just uses the pre-configured connection
     this.executor = new DuckDBSqlExecutor(duckdb)
-    this.initialize()
-  }
-
-  /**
-   * Initialize DuckDB with S3 configuration using stable API
-   */
-  private async initialize(): Promise<void> {
-    if (this.isInitialized) return
-
-    return new Promise((resolve, reject) => {
-      // Install and load extensions using stable callback-based API
-      this.duckdb.exec("INSTALL arrow; LOAD arrow; INSTALL httpfs; LOAD httpfs;", (err: any) => {
-        if (err) {
-          console.error('[DuckDBDynamicTableRepository] Extension installation failed:', err)
-          reject(err)
-          return
-        }
-
-        // Configure S3 if credentials are available
-        if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-          const s3Config = [
-            `SET s3_region='${process.env.AWS_REGION || 'ap-southeast-2'}';`,
-            `SET s3_access_key_id='${process.env.AWS_ACCESS_KEY_ID}';`,
-            `SET s3_secret_access_key='${process.env.AWS_SECRET_ACCESS_KEY}';`
-          ]
-
-          if (process.env.S3_ENDPOINT_URL) {
-            s3Config.push(`SET s3_endpoint='${process.env.S3_ENDPOINT_URL}';`)
-            s3Config.push(`SET s3_use_ssl='${!process.env.S3_ENDPOINT_URL.startsWith('http://')}';`)
-          }
-
-          this.duckdb.exec(s3Config.join(' '), (s3Err: any) => {
-            if (s3Err) {
-              console.error('[DuckDBDynamicTableRepository] S3 configuration failed:', s3Err)
-              reject(s3Err)
-              return
-            }
-
-            this.isInitialized = true
-            console.log('[DuckDBDynamicTableRepository] Initialized successfully with S3')
-            resolve()
-          })
-        } else {
-          this.isInitialized = true
-          console.log('[DuckDBDynamicTableRepository] Initialized successfully (no S3 credentials)')
-          resolve()
-        }
-      })
-    })
+    console.log('[DuckDB Repository] ✅ Repository created with pre-configured DuckDB connection')
   }
 
   // ==========================================
@@ -131,6 +85,7 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
 
       // 4. Create DuckDB virtual table
       const s3Url = `s3://${BUCKET_NAME}/${realS3Path.getDataPath()}`
+      console.log(`[DuckDB Repository] 📊 Creating virtual table_${tableRecord.id} → ${s3Url}`)
       const createTableSql = DuckDBSqlTemplates.createVirtualTable({
         tableId: tableRecord.id,
         s3Path: s3Url,
