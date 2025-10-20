@@ -20,9 +20,6 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.859.0
         version: 3.859.0
-      '@duckdb/node-api':
-        specifier: 1.3.2-alpha.26
-        version: 1.3.2-alpha.26
       '@grpc/grpc-js':
         specifier: ^1.13.4
         version: 1.13.4
@@ -913,37 +910,6 @@ packages:
 
   '@drizzle-team/brocli@0.10.2':
     resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
-
-  '@duckdb/node-api@1.3.2-alpha.26':
-    resolution: {integrity: sha512-2gLtgJaiguAuPbXuS4NCthbIfEHo72FIF9514FKxg7sYY0gGJP1DgCpvBKdisyhWtBkNJ+jjn2p2PmRqkgZabQ==}
-
-  '@duckdb/node-bindings-darwin-arm64@1.3.2-alpha.26':
-    resolution: {integrity: sha512-SioksFdehT2TWuGx6otWM2bCJ6kjD4Nq9r6xHCA4gvko1MBESIm+XhwvwcnGx2IaXTzKRZ+DPxNTPobPX18lpQ==}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@duckdb/node-bindings-darwin-x64@1.3.2-alpha.26':
-    resolution: {integrity: sha512-RZ1n2Vtzit8YLl9kjfuH17nZd5MOLZoWTlDo0rv2EuIgslC7XLbxK3ZH6jiUQ+VEGRZAjXWvwtPOFNvQQ3+LhQ==}
-    cpu: [x64]
-    os: [darwin]
-
-  '@duckdb/node-bindings-linux-arm64@1.3.2-alpha.26':
-    resolution: {integrity: sha512-vhHmoiQpkeXb0PbhsLEEmulG05BxO1elNhHVMLobdAwVfoGEPE3fZkH4bPgvTGywwZC7ccqMFwMjYTTOIIJvLg==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@duckdb/node-bindings-linux-x64@1.3.2-alpha.26':
-    resolution: {integrity: sha512-tLzo/lGu5DXrDZhogI8N9ohhByU8UzGnBFFE/0blBuZ/g5SonvTL0yq1zE/NCkLSmDSBtqibz3ehZ1rZuBBQTQ==}
-    cpu: [x64]
-    os: [linux]
-
-  '@duckdb/node-bindings-win32-x64@1.3.2-alpha.26':
-    resolution: {integrity: sha512-wNZmvYgnkUS3/pC9RQNO6yJeI8EANxB5LAyERJMHtMKrF6LB1nTEYmFbSlVJQ9n10qtNxKv/fF47AAAovOnG6g==}
-    cpu: [x64]
-    os: [win32]
-
-  '@duckdb/node-bindings@1.3.2-alpha.26':
-    resolution: {integrity: sha512-066o5XrzesZnF/qhNlpmFwDxvIXNYQWr48bjw/ecyLfUcpcvqE0MyL1/zV5oScfcf7hSd/dSntRVzUnQmJCwXg==}
 
   '@electric-sql/pglite@0.3.7':
     resolution: {integrity: sha512-5c3mybVrhxu5s47zFZtIGdG8YHkKCBENOmqxnNBjY53ZoDhADY/c5UqBDl159b7qtkzNPtbbb893wL9zi1kAuw==}
@@ -9391,33 +9357,6 @@ snapshots:
   '@discoveryjs/json-ext@0.6.3': {}
 
   '@drizzle-team/brocli@0.10.2': {}
-
-  '@duckdb/node-api@1.3.2-alpha.26':
-    dependencies:
-      '@duckdb/node-bindings': 1.3.2-alpha.26
-
-  '@duckdb/node-bindings-darwin-arm64@1.3.2-alpha.26':
-    optional: true
-
-  '@duckdb/node-bindings-darwin-x64@1.3.2-alpha.26':
-    optional: true
-
-  '@duckdb/node-bindings-linux-arm64@1.3.2-alpha.26':
-    optional: true
-
-  '@duckdb/node-bindings-linux-x64@1.3.2-alpha.26':
-    optional: true
-
-  '@duckdb/node-bindings-win32-x64@1.3.2-alpha.26':
-    optional: true
-
-  '@duckdb/node-bindings@1.3.2-alpha.26':
-    optionalDependencies:
-      '@duckdb/node-bindings-darwin-arm64': 1.3.2-alpha.26
-      '@duckdb/node-bindings-darwin-x64': 1.3.2-alpha.26
-      '@duckdb/node-bindings-linux-arm64': 1.3.2-alpha.26
-      '@duckdb/node-bindings-linux-x64': 1.3.2-alpha.26
-      '@duckdb/node-bindings-win32-x64': 1.3.2-alpha.26
 
   '@electric-sql/pglite@0.3.7': {}
 

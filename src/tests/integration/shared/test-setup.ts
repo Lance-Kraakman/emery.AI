@@ -320,12 +320,12 @@ export async function createTestTeam(
 
 /**
  * Initialize DI container with proper context-aware database client for integration tests
- * 
+ *
  * AIDEV-NOTE: This ensures tests use the context-aware database client for RLS functionality
  * while providing the raw client for cleanup operations.
  */
-export function initializeTestDI(): void {
+export async function initializeTestDI(): Promise<void> {
   // Use context-aware client for repositories (handles RLS automatically)
-  initializeDI(testClient.db as any);
+  await initializeDI(testClient.db as any);
   console.log('✅ DI container initialized with context-aware database client for tests');
 }

@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
 RUN npm i -g pnpm
-RUN pnpm install @duckdb/node-api
 
 # AIDEV-NOTE: Install dependencies with frozen lockfile for cache efficiency
 RUN pnpm install --frozen-lockfile
@@ -46,7 +45,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && npm i -g pnpm
 
-ENV NODE_ENV=production 
+ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # AIDEV-NOTE: Use regular Next.js build with node_modules (faster build time)

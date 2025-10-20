@@ -65,8 +65,8 @@ export class TestDatabaseClient {
   }
 }
 
-export function initializeTestDI(): void {
-  initializeDI(db);
+export async function initializeTestDI(): Promise<void> {
+  await initializeDI(db);
 }
 
 export const testDb = new TestDatabaseClient();

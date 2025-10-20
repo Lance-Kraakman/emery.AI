@@ -2,6 +2,7 @@ import type { DbClient } from '@/lib/db/client';
 import { contextAwareDb, type ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
 import { rawClient } from '@/lib/db/client';
 import type postgres from 'postgres';
+import { getDuckDBConnection } from '@/ddd/infrastructure/data/duckdb-connection-manager';
 
 import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { DrizzleOrganizationRepository } from '@/ddd/infrastructure/db/repositories/organizations/drizzle-organization-repository';
@@ -9,6 +10,7 @@ import { IUserRepository } from '@/ddd/domain/users/repositories/user-repository
 import { DrizzleUserRepository } from '@/ddd/infrastructure/db/repositories/users/drizzle-user-repository';
 import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import { DynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/dynamic-table-repository';
+import { DuckDBDynamicTableRepository } from '@/ddd/infrastructure/data/duckdb-dynamic-table-repository';
 import { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
 import { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
 import { DuckDBTableQueryService } from '@/ddd/infrastructure/data/duckdb-table-query-service';
@@ -188,11 +190,11 @@ export class DIContainer {
     }
   }
 
-  private autoInitialize(): void {
+  private async autoInitialize(): Promise<void> {
     this.initializationAttempted = true;
     try {
       // Use context-aware db client for automatic RLS context
-      this.initialize(contextAwareDb);
+      await this.initialize(contextAwareDb);
       console.log('✅ DIContainer auto-initialized with context-aware database');
     } catch (error) {
       console.warn('⚠️ DIContainer auto-initialization failed, will require manual initialization:', error);
@@ -210,7 +212,7 @@ export class DIContainer {
    * Initialize the container with database clients
    * This should be called once at application startup
    */
-  initialize(db: DbClient | ContextAwareDbClient): void {
+  async initialize(db: DbClient | ContextAwareDbClient): Promise<void> {
     if (this.isInitialized) {
       console.warn('DIContainer is already initialized');
       return;
@@ -267,13 +269,25 @@ export class DIContainer {
 
     // Create simplified Arrow data storage service
     const arrowDataStorageService = new ArrowDataStorageService();
-        
-    // Create table repository with data storage service using context-aware DB client
-    const tableRepository = new DynamicTableRepository(
-      contextAwareDb,
-      arrowDataStorageService,
-      tableQueryService
-    );
+
+    // Initialize DuckDB connection for analytical queries using singleton
+    // Automatically skips during build to avoid extension conflicts
+    const duckdbConnection = await getDuckDBConnection();
+
+    // Create table repository - use DuckDB if available, otherwise fallback
+    const tableRepository = duckdbConnection
+      ? new DuckDBDynamicTableRepository(
+          contextAwareDb,
+          duckdbConnection,
+          arrowDataStorageService
+        )
+      : new DynamicTableRepository(
+          contextAwareDb,
+          arrowDataStorageService,
+          tableQueryService
+        );
+
+    console.log(`✅ Using ${duckdbConnection ? 'DuckDB' : 'standard'} repository for table operations`);
 
     // Create DynamicTableService - central domain service for all table operations
     const dynamicTableService = new DynamicTableService(
@@ -655,8 +669,8 @@ export const getOAuthProxyApplicationService = (): OAuthProxyApplicationService 
 // RLS context management removed - RLS policies work automatically
 
 // Helper to initialize container from existing clients
-export function initializeDI(db: DbClient | ContextAwareDbClient): void {
-  DIContainer.getInstance().initialize(db);
+export async function initializeDI(db: DbClient | ContextAwareDbClient): Promise<void> {
+  await DIContainer.getInstance().initialize(db);
 }
 
 // Export context manager for API routes and tests
