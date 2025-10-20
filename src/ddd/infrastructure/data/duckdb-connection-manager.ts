@@ -4,15 +4,14 @@
  * Prevents multiple DuckDB connections from being created during build/runtime.
  * Ensures only one DuckDB instance exists to avoid extension registration conflicts.
  *
- * AIDEV-NOTE: Singleton to prevent "Attempted to register an already registered secret type: 's3'" errors
+ * AIDEV-NOTE: Uses dynamic import to avoid loading native module during Next.js build
+ * Singleton to prevent "Attempted to register an already registered secret type: 's3'" errors
  */
-
-import * as duckdb from 'duckdb';
 
 export class DuckDBConnectionManager {
   private static instance: DuckDBConnectionManager | null = null;
-  private connection: duckdb.Database | null = null;
-  private initializationPromise: Promise<duckdb.Database | null> | null = null;
+  private connection: any | null = null;
+  private initializationPromise: Promise<any | null> | null = null;
   private isInitialized = false;
 
   private constructor() {}
@@ -28,8 +27,8 @@ export class DuckDBConnectionManager {
    * Get or create DuckDB connection (singleton)
    * Returns null during build time to avoid initialization conflicts
    */
-  async getConnection(): Promise<duckdb.Database | null> {
-    // Skip DuckDB during build to avoid extension conflicts
+  async getConnection(): Promise<any | null> {
+    // Skip DuckDB during build to avoid native module loading
     const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build' ||
                         process.env.npm_lifecycle_event === 'build';
 
@@ -53,28 +52,29 @@ export class DuckDBConnectionManager {
     return this.initializationPromise;
   }
 
-  private async initialize(): Promise<duckdb.Database | null> {
-    return new Promise((resolve, reject) => {
-      try {
-        console.log('[DuckDB] Creating singleton connection with stable API...');
+  private async initialize(): Promise<any | null> {
+    try {
+      console.log('[DuckDB] Creating singleton connection with stable API...');
 
-        // Create in-memory database with unsigned extensions enabled (for Arrow)
-        this.connection = new duckdb.Database(':memory:', {
-          allow_unsigned_extensions: 'true'
-        });
+      // Dynamic import to avoid loading native module during Next.js build
+      const duckdb = await import('duckdb');
 
-        this.isInitialized = true;
-        this.initializationPromise = null;
-        console.log('[DuckDB] Singleton connection created successfully');
-        resolve(this.connection);
-      } catch (error) {
-        console.warn('[DuckDB] Failed to create connection, using fallback repository:', error);
-        this.connection = null;
-        this.isInitialized = false;
-        this.initializationPromise = null;
-        resolve(null);
-      }
-    });
+      // Create in-memory database with unsigned extensions enabled (for Arrow)
+      this.connection = new duckdb.Database(':memory:', {
+        allow_unsigned_extensions: 'true'
+      });
+
+      this.isInitialized = true;
+      this.initializationPromise = null;
+      console.log('[DuckDB] Singleton connection created successfully');
+      return this.connection;
+    } catch (error) {
+      console.warn('[DuckDB] Failed to create connection, using fallback repository:', error);
+      this.connection = null;
+      this.isInitialized = false;
+      this.initializationPromise = null;
+      return null;
+    }
   }
 
   /**
@@ -90,6 +90,6 @@ export class DuckDBConnectionManager {
 }
 
 // Export singleton instance getter
-export async function getDuckDBConnection(): Promise<duckdb.Database | null> {
+export async function getDuckDBConnection(): Promise<any | null> {
   return DuckDBConnectionManager.getInstance().getConnection();
 }

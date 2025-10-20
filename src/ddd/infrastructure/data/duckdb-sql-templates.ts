@@ -475,14 +475,13 @@ export class DuckDBSqlLogger {
 // SQL EXECUTOR
 // ============================================
 
-import type * as duckdb from 'duckdb';
-
 /**
  * Executes DuckDB SQL templates with logging using stable API
  * Part of infrastructure layer - handles DuckDB connection with callback-based interface
+ * AIDEV-NOTE: Uses any type to avoid importing native module during build
  */
 export class DuckDBSqlExecutor {
-  constructor(private duckdb: duckdb.Database) {}
+  constructor(private duckdb: any) {}
 
   /**
    * Execute query and return rows using stable callback API
@@ -491,7 +490,7 @@ export class DuckDBSqlExecutor {
     DuckDBSqlLogger.logQuery(operation, sql)
 
     return new Promise((resolve, reject) => {
-      this.duckdb.all(sql, (err, rows) => {
+      this.duckdb.all(sql, (err: any, rows: any) => {
         if (err) {
           DuckDBSqlLogger.logError(operation, err as Error, sql)
           reject(err)
@@ -509,7 +508,7 @@ export class DuckDBSqlExecutor {
     DuckDBSqlLogger.logQuery(operation, sql)
 
     return new Promise((resolve, reject) => {
-      this.duckdb.exec(sql, (err) => {
+      this.duckdb.exec(sql, (err: any) => {
         if (err) {
           DuckDBSqlLogger.logError(operation, err as Error, sql)
           reject(err)

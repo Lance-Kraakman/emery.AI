@@ -5,10 +5,8 @@
  * stored in S3 using DuckDB's powerful analytical capabilities with zero-copy performance.
  *
  * AIDEV-NOTE: Infrastructure implementation of TableQueryService using stable duckdb package
- * Uses callback-based API for reliable cross-platform compatibility
+ * Uses dynamic import and callback-based API for reliable cross-platform compatibility
  */
-
-import * as duckdb from 'duckdb';
 
 import { BUCKET_NAME } from '@/lib/s3/client';
 
@@ -22,25 +20,30 @@ import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import { DuckDB, eq, gt, gte, lt, lte, like, type QueryFilter } from './duckdb-sql-builder';
 
 export class DuckDBTableQueryService implements TableQueryService {
-  private connection: duckdb.Database | null = null;
+  private connection: any | null = null;
   private isInitialized = false;
 
   constructor() {
-    // AIDEV-NOTE: Initialize DuckDB at construction time using stable API
+    // AIDEV-NOTE: Initialize DuckDB lazily at first use (not during construction)
+    // to avoid loading native module during Next.js build
     // https://duckdb.org/docs/stable/clients/nodejs/overview
-    this.initializeDatabase();
   }
 
   private async initializeDatabase(): Promise<void> {
-    return new Promise((resolve, reject) => {
+    if (this.isInitialized) return;
+
+    return new Promise(async (resolve, reject) => {
       try {
+        // Dynamic import to avoid loading native module during Next.js build
+        const duckdb = await import('duckdb');
+
         // Create in-memory database with unsigned extensions enabled (for Arrow)
         this.connection = new duckdb.Database(':memory:', {
           allow_unsigned_extensions: 'true'
         });
 
         // Install extensions using stable callback-based API
-        this.connection.exec("INSTALL arrow; LOAD arrow; INSTALL httpfs; LOAD httpfs;", (err) => {
+        this.connection.exec("INSTALL arrow; LOAD arrow; INSTALL httpfs; LOAD httpfs;", (err: any) => {
           if (err) {
             console.error('[DuckDB] Failed to install extensions:', err);
             reject(err);
@@ -62,7 +65,7 @@ export class DuckDBTableQueryService implements TableQueryService {
               s3Config.push(`SET s3_use_ssl='${!process.env.S3_ENDPOINT_URL.startsWith('http://')}';`);
             }
 
-            this.connection!.exec(s3Config.join(' '), (s3Err) => {
+            this.connection!.exec(s3Config.join(' '), (s3Err: any) => {
               if (s3Err) {
                 console.warn('[DuckDB] Failed to configure S3:', s3Err);
               } else {
@@ -87,7 +90,12 @@ export class DuckDBTableQueryService implements TableQueryService {
   }
 
   private async executeQuery(sql: string): Promise<Result<QueryResult>> {
-    if (!this.connection || !this.isInitialized) {
+    // Initialize on first use
+    if (!this.isInitialized) {
+      await this.initializeDatabase();
+    }
+
+    if (!this.connection) {
       return { success: false, error: 'DuckDB not initialized' };
     }
 
@@ -95,7 +103,7 @@ export class DuckDBTableQueryService implements TableQueryService {
       const startTime = Date.now();
 
       // Use stable callback-based API for queries
-      this.connection!.all(sql, (err, rows) => {
+      this.connection!.all(sql, (err: any, rows: any) => {
         const executionTime = Date.now() - startTime;
 
         if (err) {

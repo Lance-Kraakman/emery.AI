@@ -14,7 +14,6 @@
  */
 
 import type { DbClient } from '@/lib/db/client'
-import * as duckdb from 'duckdb'
 import { tables, fields } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import type { InferSelectModel } from 'drizzle-orm'
@@ -47,7 +46,7 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
 
   constructor(
     private readonly db: DbClient,
-    private readonly duckdb: duckdb.Database,
+    private readonly duckdb: any, // DuckDB Database - using any to avoid import during build
     private readonly dataStorageService: DataStorageService
   ) {
     this.executor = new DuckDBSqlExecutor(duckdb)
@@ -62,7 +61,7 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
 
     return new Promise((resolve, reject) => {
       // Install and load extensions using stable callback-based API
-      this.duckdb.exec("INSTALL arrow; LOAD arrow; INSTALL httpfs; LOAD httpfs;", (err) => {
+      this.duckdb.exec("INSTALL arrow; LOAD arrow; INSTALL httpfs; LOAD httpfs;", (err: any) => {
         if (err) {
           console.error('[DuckDBDynamicTableRepository] Extension installation failed:', err)
           reject(err)
@@ -82,7 +81,7 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
             s3Config.push(`SET s3_use_ssl='${!process.env.S3_ENDPOINT_URL.startsWith('http://')}';`)
           }
 
-          this.duckdb.exec(s3Config.join(' '), (s3Err) => {
+          this.duckdb.exec(s3Config.join(' '), (s3Err: any) => {
             if (s3Err) {
               console.error('[DuckDBDynamicTableRepository] S3 configuration failed:', s3Err)
               reject(s3Err)
