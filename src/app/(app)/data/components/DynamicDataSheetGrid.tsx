@@ -596,7 +596,7 @@ export function DynamicDataSheetGrid({
       </div>
 
       {/* DataSheetGrid - fills remaining space, includes built-in "+ Add" button */}
-      <div className="flex-1 min-h-0 border border-t-0 border-border rounded-b-md overflow-auto dsg-grid-wrapper">
+      <div className="flex-1 min-h-0 border border-t-0 border-border rounded-b-md overflow-hidden dsg-grid-wrapper">
         {fields.length === 0 ? (
           // Empty state with access to header controls
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground bg-background">

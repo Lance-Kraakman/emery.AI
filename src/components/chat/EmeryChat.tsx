@@ -29,13 +29,10 @@ import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { ToolPanel } from './ToolPanel'
 import { useChatHandler } from './ChatProvider'
-import { resolveReferences } from '@/app/actions/references'
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
-import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
 import { fetchFileArtifactData, getFileDownloadUrl, getDocumentFieldValue, getDocumentDownloadUrl } from '@/app/actions/artifacts'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
-import { uiStateActions } from '@/stores/ui-state.store'
 
 /**
  * EmeryChat - Main chat component with LlamaIndex integration
