@@ -29,7 +29,7 @@
 
 "use client"
 
-import React, { useMemo, useCallback, useState, useEffect, useRef, useReducer } from 'react'
+import React, { useMemo, useCallback } from 'react'
 import {
   DataSheetGrid,
   keyColumn,
@@ -45,7 +45,7 @@ import './datasheet-grid.css' // Custom overrides
 import type { FieldDTO } from '@/app/mappers/field-mapper'
 import type { FieldValue as DomainFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
 import type { DSGRow } from '@/app/mappers/dsg-mapper'
-import { createEmptyDSGRow, dsgRowToPlainObject, hasRowChanged, getChangedFields } from '@/app/mappers/dsg-mapper'
+import { createEmptyDSGRow, dsgRowToPlainObject } from '@/app/mappers/dsg-mapper'
 import { RelationField } from '@/components/tables/fields/RelationField'
 import { FileField } from '@/components/tables/fields/FileField'
 import { DocumentField } from '@/components/tables/fields/DocumentField'
@@ -56,57 +56,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Search, Settings, RefreshCw } from 'lucide-react'
-
-// ============================================================================
-// REDUCER PATTERN - Event-Driven Sync
-// ============================================================================
-
-/**
- * Grid state - minimal, just tracks display data and sync status
- * TanStack Query manages server state, we just track local UI state
- */
-interface GridState {
-  data: DSGRow[]              // Current displayed data
-  isSyncing: boolean          // Is a save operation in progress?
-}
-
-/**
- * Grid actions - map 1:1 to user events and mutations
- */
-type GridAction =
-  | { type: 'SET_DATA'; payload: DSGRow[] }           // Server data loaded
-  | { type: 'CELL_CHANGED'; payload: { rowId: string; fieldId: number; value: any } }
-  | { type: 'ROW_ADDED'; payload: DSGRow }
-  | { type: 'START_SYNC' }
-  | { type: 'SYNC_COMPLETE' }
-
-/**
- * Reducer - handles state transitions
- * Note: We don't update data here for changes, TanStack Query handles that via optimistic updates
- */
-function gridReducer(state: GridState, action: GridAction): GridState {
-  switch (action.type) {
-    case 'SET_DATA':
-      return { ...state, data: action.payload }
-
-    case 'CELL_CHANGED':
-    case 'ROW_ADDED':
-      // Don't update state here - TanStack Query mutation handles optimistic update
-      // Just track that we're syncing
-      return { ...state, isSyncing: true }
-
-    case 'START_SYNC':
-      return { ...state, isSyncing: true }
-
-    case 'SYNC_COMPLETE':
-      return { ...state, isSyncing: false }
-
-    default:
-      return state
-  }
-}
-
-// ============================================================================
+import { useGridState } from '../hooks/useGridState'
 
 interface GridHeaderBarProps {
   tableName: string;
@@ -407,17 +357,8 @@ export function DynamicDataSheetGrid({
   isLoading = false,
   error = null
 }: DynamicDataSheetGridProps) {
-  // Use reducer for state management
-  const [state, dispatch] = useReducer(gridReducer, {
-    data: rows,
-    isSyncing: false
-  })
-
-  // Sync server data to state (TanStack Query manages server state)
-  useEffect(() => {
-    dispatch({ type: 'SET_DATA', payload: rows })
-    dispatch({ type: 'SYNC_COMPLETE' })  // Server update means sync is done
-  }, [rows])
+  // Use custom hook for grid state management
+  const { state, dispatch } = useGridState(rows)
 
   const columns = useMemo(() => {
     // AIDEV-NOTE: Using react-datasheet-grid built-in column types for standard fields
