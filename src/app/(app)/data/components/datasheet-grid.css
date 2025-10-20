@@ -39,15 +39,17 @@
   --dsg-scroll-shadow-color: hsl(var(--border) / 0.3);
 }
 
-/* Grid wrapper - fills parent container */
+/* Grid wrapper - fills parent container with subtle dark background to tame animation */
 .dsg-grid-wrapper {
   height: 100%;
   width: 100%;
+  background-color: hsl(var(--background) / 0.85);
 }
 
 /* DataSheetGrid fills wrapper and handles "+ Add" button spacing */
 .dsg-grid-wrapper .datasheet-grid {
   width: 100% !important;
+  height: 100% !important;
   background-color: transparent !important;
 }
 
@@ -55,9 +57,16 @@
 .dsg-container {
   width: 100% !important;
   height: 100% !important;
-  overflow: auto !important;
+  overflow: hidden !important;
   border: none !important;
   background-color: transparent !important;
+}
+
+/* Add padding to scrollable view to prevent last row from hiding under sticky "+ Add" button */
+.dsg-container .dsg-scrollable-view {
+  padding-bottom: 100px !important;
+  overflow: auto !important;
+  scroll-behavior: smooth !important;
 }
 
 
@@ -74,12 +83,13 @@
   width: 100% !important;
 }
 
-/* DSG Cell styling integration - semi-transparent to show animated background */
+/* DSG Cell styling integration - frosted glass effect */
 .dsg-cell {
   border-right: 1px solid hsl(var(--border));
   border-bottom: 1px solid hsl(var(--border));
   transition: all 150ms ease;
-  background-color: hsl(var(--background) / 0.5);
+  background-color: hsl(var(--background) / 0.75);
+  backdrop-filter: blur(8px);
   padding: 8px 12px !important;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -92,18 +102,19 @@
   box-shadow: 0 0 0 2px hsl(var(--primary)), 0 0 0 4px hsl(var(--background));
 }
 
-/* DSG Header styling - semi-transparent to show animated background */
+/* DSG Header styling - frosted glass effect with more opacity */
 .dsg-cell-header {
   font-weight: 600;
   font-size: 0.75rem;
   color: hsl(var(--muted-foreground));
-  background-color: hsl(var(--secondary) / 0.5);
+  background-color: hsl(var(--secondary) / 0.85);
+  backdrop-filter: blur(8px);
   padding: 8px 12px !important;
   border-right: 1px solid hsl(var(--border));
   border-bottom: 2px solid hsl(var(--border));
 }
 
-/* Fix empty header space on RHS - semi-transparent to show animated background */
+/* Fix empty header space on RHS - frosted glass effect */
 .dsg-corner-indicator,
 .dsg-container .dsg-table thead tr th:last-child,
 .dsg-container .dsg-scrollable-view-top-right,
@@ -114,7 +125,8 @@
 .dsg-table thead tr th:last-child,
 .dsg-scrollable-view-top-right,
 div[class*="scrollable-view-top-right"] {
-  background-color: hsl(var(--secondary) / 0.5) !important;
+  background-color: hsl(var(--secondary) / 0.85) !important;
+  backdrop-filter: blur(8px) !important;
   border-bottom: 2px solid hsl(var(--border)) !important;
 }
 
@@ -192,9 +204,13 @@ div[class*="scrollable-view-top-right"] {
   color: hsl(var(--muted-foreground));
 }
 
-/* DSG Add row button - semi-transparent to show animated background */
+/* DSG Add row button - sticky within table container with frosted glass effect */
 .dsg-add-row {
-  background-color: hsl(var(--secondary) / 0.5) !important;
+  position: sticky !important;
+  bottom: 0 !important;
+  z-index: 100 !important;
+  background-color: hsl(var(--secondary) / 0.9) !important;
+  backdrop-filter: blur(12px) !important;
   border: 1px solid hsl(var(--border));
   border-top: 2px solid hsl(var(--border));
   padding: 8px;
@@ -204,7 +220,8 @@ div[class*="scrollable-view-top-right"] {
 }
 
 .dsg-add-row:hover {
-  background-color: hsl(var(--secondary) / 0.7) !important;
+  background-color: hsl(var(--secondary)) !important;
+  backdrop-filter: blur(16px) !important;
   color: hsl(var(--foreground));
 }
 
@@ -251,11 +268,13 @@ div[class*="scrollable-view-top-right"] {
 }
 
 .dark .dsg-add-row {
-  background-color: hsl(var(--secondary) / 0.5) !important;
+  background-color: hsl(var(--secondary) / 0.9) !important;
+  backdrop-filter: blur(12px) !important;
 }
 
 .dark .dsg-add-row:hover {
-  background-color: hsl(var(--secondary) / 0.7) !important;
+  background-color: hsl(var(--secondary)) !important;
+  backdrop-filter: blur(16px) !important;
 }
 
 .dark .dsg-container .dsg-add-column {
@@ -270,7 +289,7 @@ div[class*="scrollable-view-top-right"] {
   scrollbar-color: hsl(var(--accent)) hsl(var(--secondary));
 }
 
-/* Dark mode - semi-transparent headers and corner to show animated background */
+/* Dark mode - frosted glass headers and corner */
 .dark .dsg-corner-indicator,
 .dark .dsg-container .dsg-table thead tr th:last-child,
 .dark .dsg-container .dsg-scrollable-view-top-right,
@@ -280,9 +299,11 @@ div[class*="scrollable-view-top-right"] {
 .dark .dsg-table thead tr th:last-child,
 .dark .dsg-scrollable-view-top-right,
 .dark div[class*="scrollable-view-top-right"] {
-  background-color: hsl(var(--secondary) / 0.5) !important;
+  background-color: hsl(var(--secondary) / 0.85) !important;
+  backdrop-filter: blur(8px) !important;
 }
 
 .dark .dsg-cell-header {
-  background-color: hsl(var(--secondary) / 0.5);
+  background-color: hsl(var(--secondary) / 0.85);
+  backdrop-filter: blur(8px);
 }
