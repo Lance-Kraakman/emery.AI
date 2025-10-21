@@ -170,20 +170,157 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
   }
 
   async findByOrganization(organizationId: OrganizationId): Promise<DynamicTable[]> {
-    // Implementation similar to findById but for multiple tables
-    // Omitted for brevity - same pattern as existing repository
-    return []
+    try {
+      const tableRecords = await this.db.query.tables.findMany({
+        where: eq(tables.organizationId, organizationId.value)
+      });
+
+      // Load all tables with their fields for complete functionality
+      const tablesWithFields: DynamicTable[] = [];
+
+      for (const tableRecord of tableRecords) {
+        // Load fields for each table
+        const fieldRecords = await this.db.query.fields.findMany({
+          where: eq(fields.tableId, tableRecord.id),
+          orderBy: [fields.orderIndex]
+        });
+
+        // Convert field persistence records to domain TableField objects
+        const tableFields = fieldRecords.map((fieldRecord: FieldRow) =>
+          TableField.fromPersistence({
+            id: fieldRecord.id,
+            tableId: fieldRecord.tableId,
+            name: fieldRecord.name,
+            type: fieldRecord.type as FieldType,
+            orderIndex: fieldRecord.orderIndex,
+            relatedTableId: fieldRecord.fieldConfig?.relatedTableId || null,
+            required: fieldRecord.required,
+            metadata: fieldRecord.fieldConfig || undefined,
+            createdAt: fieldRecord.createdAt
+          })
+        );
+
+        const dynamicTable = DynamicTable.fromPersistence({
+          id: tableRecord.id,
+          databaseId: tableRecord.databaseId,
+          organizationId: tableRecord.organizationId,
+          name: tableRecord.name,
+          storageLocation: tableRecord.s3Path,
+          description: tableRecord.metadata?.description,
+          metadata: tableRecord.metadata ? TableMetadata.fromDatabase(tableRecord.metadata).data : undefined,
+          createdBy: tableRecord.createdBy,
+          createdAt: tableRecord.createdAt!,
+          updatedAt: tableRecord.updatedAt!,
+          fields: tableFields
+        });
+
+        tablesWithFields.push(dynamicTable);
+      }
+
+      return tablesWithFields;
+
+    } catch (error) {
+      console.error('[DuckDBDynamicTableRepository] Error finding tables by organization:', error);
+      throw error;
+    }
   }
 
   async findByDatabase(databaseId: DatabaseId): Promise<DynamicTable[]> {
-    // Implementation similar to findById
-    return []
+    try {
+      const tableRecords = await this.db.query.tables.findMany({
+        where: eq(tables.databaseId, databaseId.value)
+      })
+
+      if (tableRecords.length === 0) return []
+
+      // Get all fields for all tables
+      const fieldsByTable = new Map<number, FieldRow[]>()
+      for (const tableRecord of tableRecords) {
+        const tableFieldRecords = await this.db.query.fields.findMany({
+          where: eq(fields.tableId, tableRecord.id),
+          orderBy: [fields.orderIndex]
+        })
+        fieldsByTable.set(tableRecord.id, tableFieldRecords)
+      }
+
+      // Convert to domain entities
+      return tableRecords.map((tableRecord: TableRow) => {
+        const fieldRecords = fieldsByTable.get(tableRecord.id) || []
+        const tableFields = fieldRecords.map((fieldRecord: FieldRow) =>
+          TableField.fromPersistence({
+            id: fieldRecord.id,
+            tableId: fieldRecord.tableId,
+            name: fieldRecord.name,
+            type: fieldRecord.type as FieldType,
+            orderIndex: fieldRecord.orderIndex,
+            relatedTableId: fieldRecord.fieldConfig?.relatedTableId || null,
+            required: fieldRecord.required,
+            metadata: fieldRecord.fieldConfig || undefined,
+            createdAt: fieldRecord.createdAt
+          })
+        )
+
+        return DynamicTable.fromPersistence({
+          id: tableRecord.id,
+          databaseId: tableRecord.databaseId,
+          organizationId: tableRecord.organizationId,
+          name: tableRecord.name,
+          storageLocation: tableRecord.s3Path,
+          description: tableRecord.metadata?.description,
+          metadata: tableRecord.metadata ? TableMetadata.fromDatabase(tableRecord.metadata).data : undefined,
+          createdBy: tableRecord.createdBy,
+          createdAt: tableRecord.createdAt!,
+          updatedAt: tableRecord.updatedAt!,
+          fields: tableFields
+        })
+      })
+    } catch (error) {
+      console.error('[DuckDBDynamicTableRepository] Error finding tables by database:', error)
+      throw error
+    }
   }
 
   async update(id: TableId, data: Partial<DynamicTable>): Promise<DynamicTable> {
-    // Update PostgreSQL metadata
-    // Refresh DuckDB virtual table if needed
-    throw new Error('Not implemented yet')
+    try {
+      // 1. Update table metadata in PostgreSQL
+      const [updatedRecord] = await this.db.update(tables)
+        .set({
+          name: data.name,
+          metadata: data.metadata || null,
+          updatedAt: new Date()
+        })
+        .where(eq(tables.id, id.value))
+        .returning();
+
+      if (!updatedRecord) {
+        throw new Error(`Table ${id.value} not found`);
+      }
+
+      // 2. If fields are provided, sync them to PostgreSQL
+      if (data.fields) {
+        await this.syncTableFields(id, data.fields);
+
+        // 3. DUCKDB-SPECIFIC: Refresh virtual table since schema changed
+        // Virtual table needs to be recreated when fields are added/removed
+        const table = await this.findById(id);
+        if (table) {
+          await this.refreshVirtualTable(id, table.storageLocation);
+        }
+      }
+
+      // 4. Reload table with complete fields
+      const reloadedTable = await this.findById(id);
+      if (!reloadedTable) {
+        throw new Error(`Failed to reload table ${id.value} after update`);
+      }
+
+      console.log(`[DuckDBDynamicTableRepository] Updated table ${id.value}`);
+      return reloadedTable;
+
+    } catch (error) {
+      console.error('[DuckDBDynamicTableRepository] Error updating table:', error);
+      throw error;
+    }
   }
 
   async delete(id: TableId): Promise<void> {
@@ -486,6 +623,45 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
       await this.executor.executeNonQuery('REFRESH_VIRTUAL_TABLE', refreshSql)
     } catch (error) {
       console.error('[DuckDBDynamicTableRepository] Error refreshing virtual table:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Sync table fields to PostgreSQL
+   * Handles adding new fields that were created via table.addField()
+   */
+  private async syncTableFields(tableId: TableId, tableFields: readonly TableField[]): Promise<void> {
+    try {
+      // Get existing fields from database
+      const existingFields = await this.db.select()
+        .from(fields)
+        .where(eq(fields.tableId, tableId.value))
+
+      // Find fields that need to be added (exist in memory but not in DB)
+      const existingFieldNames = new Set(existingFields.map((f: FieldRow) => f.name))
+      const fieldsToAdd = Array.from(tableFields).filter(f => !existingFieldNames.has(f.name))
+
+      // Insert new fields
+      for (const field of fieldsToAdd) {
+        await this.db.insert(fields).values({
+          tableId: tableId.value,
+          name: field.name,
+          slug: field.name.toLowerCase().replace(/\s+/g, '_'),
+          type: field.type,
+          orderIndex: field.orderIndex,
+          required: field.required,
+          fieldConfig: field.relatedTableId || field.metadata ? {
+            ...(field.metadata || {}),
+            ...(field.relatedTableId ? { relatedTableId: field.relatedTableId.value } : {})
+          } : null
+        })
+      }
+
+      console.log(`[DuckDBDynamicTableRepository] Synced ${fieldsToAdd.length} new fields for table ${tableId.value}`)
+
+    } catch (error) {
+      console.error('[DuckDBDynamicTableRepository] Error syncing table fields:', error)
       throw error
     }
   }

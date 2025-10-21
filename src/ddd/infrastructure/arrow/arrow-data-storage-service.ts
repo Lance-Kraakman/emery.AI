@@ -15,9 +15,9 @@ import { Row } from '@/ddd/domain/tables/value-objects/row';
 import { RowMapper } from '@/app/mappers/row-mapper';
 
 // Apache Arrow imports for direct conversion
-import { 
-  Table, 
-  tableFromIPC, 
+import {
+  Table,
+  tableFromIPC,
   tableToIPC,
   tableFromArrays,
   Field as ArrowField,
@@ -27,7 +27,8 @@ import {
   Bool,
   Utf8,
   Timestamp,
-  TimeUnit
+  TimeUnit,
+  RecordBatchStreamWriter
 } from 'apache-arrow';
 
 // Type mapping registry for Field types to Arrow types
@@ -62,11 +63,16 @@ export class ArrowDataStorageService implements DataStorageService {
       
       // 3. Create Arrow Table using tableFromArrays
       const arrowTable = tableFromArrays(processedData);
-      
-      // 4. Convert to IPC buffer
-      const buffer = tableToIPC(arrowTable);
-      
-      return { success: true, data: Buffer.from(buffer) };
+
+      // 4. Convert to IPC stream format (not file format)
+      // AIDEV-NOTE: Use RecordBatchStreamWriter for Arrow IPC stream format
+      // DuckDB's nanoarrow extension has better compatibility with stream format (.arrows)
+      // Stream format is simpler (no footer metadata) and matches what DuckDB itself writes
+      const writer = RecordBatchStreamWriter.writeAll(arrowTable);
+      const uint8Array = await writer.toUint8Array();
+      const buffer = Buffer.from(uint8Array);
+
+      return { success: true, data: buffer };
       
     } catch (error) {
       console.error('[ArrowDataStorageService] Error converting to Arrow IPC:', error);
