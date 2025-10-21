@@ -1,15 +1,17 @@
 /**
  * DuckDB Dynamic Table Repository
  *
- * Infrastructure implementation using DuckDB for analytical queries on Arrow files.
- * Designed for big data analytics with complex operations.
+ * Infrastructure implementation using DuckDB for CRUD operations and analytical queries.
+ * Designed for big data analytics with complex operations and random writes.
  *
  * Architecture:
  * - PostgreSQL: Table metadata (id, name, fields, s3Path)
- * - S3: Arrow IPC files (actual row data)
- * - DuckDB: Virtual tables (1:1 mapping with domain tables) for analytics
+ * - S3: DuckDB database files (.duckdb) - one file per domain Database
+ * - DuckDB: Real tables with full CRUD support via DuckDBDatabaseManager
+ * - Distributed locking: PostgreSQL advisory locks for S3 sync coordination
  *
- * AIDEV-NOTE: DuckDB repository for analytical workloads
+ * AIDEV-NOTE: DuckDB repository for analytical workloads with CRUD operations
+ * Uses database-level .duckdb files (not per-table) for cross-table JOINs
  * Follows DDD principles - infrastructure layer, implements domain repository interface
  */
 
@@ -17,8 +19,8 @@ import type { DbClient } from '@/lib/db/client'
 import { tables, fields } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import type { InferSelectModel } from 'drizzle-orm'
-import { s3Client, BUCKET_NAME, ensureBucketExists } from '@/lib/s3/client'
-import { GetObjectCommand, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
+import { s3Client, BUCKET_NAME } from '@/lib/s3/client'
+import { HeadObjectCommand } from '@aws-sdk/client-s3'
 
 import { TableId, DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects'
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository'
@@ -29,30 +31,27 @@ import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persis
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field'
 import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path'
 import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata'
-import type { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service'
 
-import { DuckDBSqlTemplates, DuckDBSqlExecutor } from './duckdb-sql-templates'
+import { DuckDBSqlTemplates } from './duckdb-sql-templates'
 import type { DuckDBConnection } from '@duckdb/node-api'
+import { DuckDBDatabaseManager } from './duckdb-database-manager'
 
 type TableRow = InferSelectModel<typeof tables>
 type FieldRow = InferSelectModel<typeof fields>
 
 /**
- * DuckDB-powered repository for analytical queries on dynamic tables
- * Uses SQL templates for type-safe query building with @duckdb/node-api
+ * DuckDB-powered repository for dynamic tables
+ * Uses .duckdb files stored in S3 (one file per database)
+ * Direct SQL operations via DuckDBDatabaseManager
  */
 export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
-  private executor: DuckDBSqlExecutor
+  private dbManager: DuckDBDatabaseManager
 
   constructor(
-    private readonly db: DbClient,
-    private readonly duckdb: DuckDBConnection,
-    private readonly dataStorageService: DataStorageService
+    private readonly db: DbClient
   ) {
-    // AIDEV-NOTE: Extensions are already loaded in DuckDBConnectionManager
-    // This repository just uses the pre-configured connection
-    this.executor = new DuckDBSqlExecutor(duckdb)
-    console.log('[DuckDB Repository] ✅ Repository created with pre-configured DuckDB connection')
+    this.dbManager = new DuckDBDatabaseManager(db)
+    console.log('[DuckDB Repository] ✅ Repository created with database manager')
   }
 
   // ==========================================
@@ -80,20 +79,25 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
         .set({ s3Path: realS3Path.path })
         .where(eq(tables.id, tableRecord.id))
 
-      // 3. Initialize empty Arrow file in S3
-      await this.initializeEmptyTable(realS3Path, data.organizationId, data.databaseId, TableId.fromNumber(tableRecord.id), data.name, data.createdBy)
+      // 3. Create real table in .duckdb file
+      await this.dbManager.withDatabaseLock(
+        data.organizationId,
+        data.databaseId,
+        async (conn) => {
+          // Create table with system columns only (no user fields yet)
+          const createTableSql = `
+            CREATE TABLE IF NOT EXISTS table_${tableRecord.id} (
+              id VARCHAR PRIMARY KEY,
+              created_at TIMESTAMP,
+              updated_at TIMESTAMP
+            )
+          `
+          await conn.run(createTableSql)
+          console.log(`[DuckDB Repository] Created table_${tableRecord.id} in .duckdb file`)
+        }
+      )
 
-      // 4. Create DuckDB virtual table
-      const s3Url = `s3://${BUCKET_NAME}/${realS3Path.getDataPath()}`
-      console.log(`[DuckDB Repository] 📊 Creating virtual table_${tableRecord.id} → ${s3Url}`)
-      const createTableSql = DuckDBSqlTemplates.createVirtualTable({
-        tableId: tableRecord.id,
-        s3Path: s3Url,
-        fields: []
-      })
-      await this.executor.executeNonQuery('CREATE_VIRTUAL_TABLE', createTableSql)
-
-      // 5. Return domain entity
+      // 4. Return domain entity
       const dynamicTable = DynamicTable.fromPersistence({
         id: tableRecord.id,
         databaseId: tableRecord.databaseId,
@@ -108,7 +112,7 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
         updatedAt: tableRecord.updatedAt!
       })
 
-      console.log(`[DuckDBDynamicTableRepository] Created table: ${dynamicTable.name} with virtual table_${tableRecord.id}`)
+      console.log(`[DuckDBDynamicTableRepository] Created table: ${dynamicTable.name} (table_${tableRecord.id})`)
       return dynamicTable
 
     } catch (error) {
@@ -157,9 +161,6 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
         updatedAt: tableRecord.updatedAt!,
         fields: tableFields
       })
-
-      // Ensure virtual table exists for this table (important for existing tables!)
-      await this.ensureVirtualTableExists(dynamicTable)
 
       return dynamicTable
 
@@ -296,15 +297,26 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
         throw new Error(`Table ${id.value} not found`);
       }
 
-      // 2. If fields are provided, sync them to PostgreSQL
+      // 2. If fields are provided, sync them to PostgreSQL and DuckDB
       if (data.fields) {
-        await this.syncTableFields(id, data.fields);
+        const newFields = await this.syncTableFields(id, data.fields);
 
-        // 3. DUCKDB-SPECIFIC: Refresh virtual table since schema changed
-        // Virtual table needs to be recreated when fields are added/removed
-        const table = await this.findById(id);
-        if (table) {
-          await this.refreshVirtualTable(id, table.storageLocation);
+        // 3. Add columns to DuckDB table for new fields
+        if (newFields.length > 0) {
+          const table = await this.findById(id);
+          if (table) {
+            await this.dbManager.withDatabaseLock(
+              OrganizationId.fromNumber(table.organizationId.value),
+              DatabaseId.fromNumber(table.databaseId.value),
+              async (conn) => {
+                for (const field of newFields) {
+                  const alterSql = `ALTER TABLE table_${id.value} ADD COLUMN ${field.name} ${this.getDuckDBType(field.type)}`
+                  await conn.run(alterSql)
+                  console.log(`[DuckDB Repository] Added column ${field.name} to table_${id.value}`)
+                }
+              }
+            );
+          }
         }
       }
 
@@ -328,15 +340,18 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
       const table = await this.findById(id)
       if (!table) throw new Error('Table not found')
 
-      // 1. Drop DuckDB virtual table
-      const dropSql = DuckDBSqlTemplates.dropVirtualTable(id.value)
-      await this.executor.executeNonQuery('DROP_VIRTUAL_TABLE', dropSql)
+      // 1. Drop DuckDB table from .duckdb file
+      await this.dbManager.withDatabaseLock(
+        OrganizationId.fromNumber(table.organizationId.value),
+        DatabaseId.fromNumber(table.databaseId.value),
+        async (conn) => {
+          const dropSql = `DROP TABLE IF EXISTS table_${id.value}`
+          await conn.run(dropSql)
+          console.log(`[DuckDB Repository] Dropped table_${id.value} from .duckdb file`)
+        }
+      )
 
-      // 2. Delete S3 files
-      const s3Path = S3TablePath.fromPath(table.storageLocation)
-      await this.deleteS3Directory(s3Path.path)
-
-      // 3. Delete PostgreSQL metadata
+      // 2. Delete PostgreSQL metadata
       await this.db.delete(fields).where(eq(fields.tableId, id.value))
       await this.db.delete(tables).where(eq(tables.id, id.value))
 
@@ -371,18 +386,21 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
       const table = await this.findById(tableId)
       if (!table) throw new Error('Table not found')
 
-      // Use SQL template for INSERT
-      const insertSql = DuckDBSqlTemplates.insertRow({
-        tableId: tableId.value,
-        rowData: row.toPlainObject()
-      })
+      return await this.dbManager.withDatabaseLock(
+        OrganizationId.fromNumber(table.organizationId.value),
+        DatabaseId.fromNumber(table.databaseId.value),
+        async (conn) => {
+          // Direct SQL INSERT
+          const insertSql = DuckDBSqlTemplates.insertRow({
+            tableId: tableId.value,
+            rowData: row.toPlainObject()
+          })
 
-      await this.executor.executeNonQuery('INSERT_ROW', insertSql)
-
-      // Refresh virtual table to see new data
-      await this.refreshVirtualTable(tableId, table.storageLocation)
-
-      return row
+          await conn.run(insertSql)
+          console.log(`[DuckDB Repository] Inserted row ${row.id.value} into table_${tableId.value}`)
+          return row
+        }
+      )
     } catch (error) {
       console.error('[DuckDBDynamicTableRepository] Error inserting row:', error)
       throw error
@@ -398,25 +416,32 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
       const table = await this.findById(tableId)
       if (!table) return []
 
-      // Build query using SQL templates
-      const selectSql = DuckDBSqlTemplates.selectRows({
-        tableId: tableId.value,
-        filters: options?.filters?.map(f => ({
-          field: f.field,
-          operator: f.operator || '=',
-          value: f.value
-        })),
-        orderBy: options?.orderBy,
-        orderDirection: options?.orderDirection,
-        limit: options?.limit,
-        offset: options?.offset
-      })
+      return await this.dbManager.withDatabaseLock(
+        OrganizationId.fromNumber(table.organizationId.value),
+        DatabaseId.fromNumber(table.databaseId.value),
+        async (conn) => {
+          // Build query using SQL templates
+          const selectSql = DuckDBSqlTemplates.selectRows({
+            tableId: tableId.value,
+            filters: options?.filters?.map(f => ({
+              field: f.field,
+              operator: f.operator || '=',
+              value: f.value
+            })),
+            orderBy: options?.orderBy,
+            orderDirection: options?.orderDirection,
+            limit: options?.limit,
+            offset: options?.offset
+          })
 
-      const rows = await this.executor.execute('SELECT_ROWS', selectSql)
+          const result = await conn.run(selectSql)
+          const rows = await result.getRows()
 
-      // Convert to Row entities
-      return rows.map(rowData =>
-        Row.fromPlainObject(rowData, tableId.value, table.fields)
+          // Convert to Row entities
+          return rows.map(rowData =>
+            Row.fromPlainObject(rowData, tableId.value, table.fields)
+          )
+        }
       )
 
     } catch (error) {
@@ -430,16 +455,23 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
       const table = await this.findById(tableId)
       if (!table) return null
 
-      const selectSql = DuckDBSqlTemplates.selectRowById({
-        tableId: tableId.value,
-        rowId
-      })
+      return await this.dbManager.withDatabaseLock(
+        OrganizationId.fromNumber(table.organizationId.value),
+        DatabaseId.fromNumber(table.databaseId.value),
+        async (conn) => {
+          const selectSql = DuckDBSqlTemplates.selectRowById({
+            tableId: tableId.value,
+            rowId
+          })
 
-      const rows = await this.executor.execute('SELECT_ROW_BY_ID', selectSql)
+          const result = await conn.run(selectSql)
+          const rows = await result.getRows()
 
-      if (rows.length === 0) return null
+          if (rows.length === 0) return null
 
-      return Row.fromPlainObject(rows[0], tableId.value, table.fields)
+          return Row.fromPlainObject(rows[0], tableId.value, table.fields)
+        }
+      )
 
     } catch (error) {
       console.error('[DuckDBDynamicTableRepository] Error getting row:', error)
@@ -452,18 +484,21 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
       const table = await this.findById(tableId)
       if (!table) throw new Error('Table not found')
 
-      const updateSql = DuckDBSqlTemplates.updateRow({
-        tableId: tableId.value,
-        rowId,
-        rowData: row.toPlainObject()
-      })
+      return await this.dbManager.withDatabaseLock(
+        OrganizationId.fromNumber(table.organizationId.value),
+        DatabaseId.fromNumber(table.databaseId.value),
+        async (conn) => {
+          const updateSql = DuckDBSqlTemplates.updateRow({
+            tableId: tableId.value,
+            rowId,
+            rowData: row.toPlainObject()
+          })
 
-      await this.executor.executeNonQuery('UPDATE_ROW', updateSql)
-
-      // Refresh virtual table
-      await this.refreshVirtualTable(tableId, table.storageLocation)
-
-      return row
+          await conn.run(updateSql)
+          console.log(`[DuckDB Repository] Updated row ${rowId} in table_${tableId.value}`)
+          return row
+        }
+      )
     } catch (error) {
       console.error('[DuckDBDynamicTableRepository] Error updating row:', error)
       throw error
@@ -475,15 +510,19 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
       const table = await this.findById(tableId)
       if (!table) throw new Error('Table not found')
 
-      const deleteSql = DuckDBSqlTemplates.deleteRow({
-        tableId: tableId.value,
-        rowId
-      })
+      await this.dbManager.withDatabaseLock(
+        OrganizationId.fromNumber(table.organizationId.value),
+        DatabaseId.fromNumber(table.databaseId.value),
+        async (conn) => {
+          const deleteSql = DuckDBSqlTemplates.deleteRow({
+            tableId: tableId.value,
+            rowId
+          })
 
-      await this.executor.executeNonQuery('DELETE_ROW', deleteSql)
-
-      // Refresh virtual table
-      await this.refreshVirtualTable(tableId, table.storageLocation)
+          await conn.run(deleteSql)
+          console.log(`[DuckDB Repository] Deleted row ${rowId} from table_${tableId.value}`)
+        }
+      )
 
     } catch (error) {
       console.error('[DuckDBDynamicTableRepository] Error deleting row:', error)
@@ -506,18 +545,25 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
       if (!table) throw new Error('Table not found')
 
       // Use DuckDB for row count (fast)
-      const statsSql = DuckDBSqlTemplates.getTableStats(tableId.value)
-      const statsRows = await this.executor.execute('GET_TABLE_STATS', statsSql)
+      const rowCount = await this.dbManager.withDatabaseLock(
+        OrganizationId.fromNumber(table.organizationId.value),
+        DatabaseId.fromNumber(table.databaseId.value),
+        async (conn) => {
+          const statsSql = `SELECT COUNT(*) as row_count FROM table_${tableId.value}`
+          const result = await conn.run(statsSql)
+          const rows = await result.getRows()
+          const firstRow = rows[0] as any
+          return firstRow?.row_count || 0
+        }
+      )
 
-      const stats = statsRows[0]
-
-      // Get S3 file size
-      const s3Path = S3TablePath.fromPath(table.storageLocation)
+      // Get S3 .duckdb file size
+      const s3Key = `org_${table.organizationId.value}/db_${table.databaseId.value}/data.duckdb`
       let sizeBytes = 0
       try {
         const response = await s3Client.send(new HeadObjectCommand({
           Bucket: BUCKET_NAME,
-          Key: s3Path.getDataPath()
+          Key: s3Key
         }))
         sizeBytes = (response as any).ContentLength || 0
       } catch (error) {
@@ -525,9 +571,9 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
       }
 
       return {
-        rowCount: stats.row_count || 0,
+        rowCount,
         sizeBytes,
-        lastModified: stats.last_updated ? new Date(stats.last_updated) : table.updatedAt || new Date()
+        lastModified: table.updatedAt || new Date()
       }
 
     } catch (error) {
@@ -538,9 +584,20 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
 
   async hasRows(tableId: TableId): Promise<boolean> {
     try {
-      const hasSql = DuckDBSqlTemplates.hasRows(tableId.value)
-      const rows = await this.executor.execute('HAS_ROWS', hasSql)
-      return rows[0]?.has_rows || false
+      const table = await this.findById(tableId)
+      if (!table) return false
+
+      return await this.dbManager.withDatabaseLock(
+        OrganizationId.fromNumber(table.organizationId.value),
+        DatabaseId.fromNumber(table.databaseId.value),
+        async (conn) => {
+          const hasSql = `SELECT COUNT(*) > 0 as has_rows FROM table_${tableId.value}`
+          const result = await conn.run(hasSql)
+          const rows = await result.getRows()
+          const firstRow = rows[0] as any
+          return firstRow?.has_rows || false
+        }
+      )
     } catch (error) {
       console.error('[DuckDBDynamicTableRepository] Error checking has rows:', error)
       return false
@@ -573,65 +630,13 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
   // PRIVATE HELPER METHODS
   // ==========================================
 
-  /**
-   * Ensure virtual table exists for a domain table
-   * Critical for existing tables that were created before DuckDB was enabled
-   */
-  private async ensureVirtualTableExists(table: DynamicTable): Promise<void> {
-    try {
-      // Check if virtual table exists by querying information_schema
-      const checkSql = `
-        SELECT table_name
-        FROM information_schema.tables
-        WHERE table_name = 'table_${table.id.value}'
-      `.trim()
-
-      const existingTables = await this.executor.execute('CHECK_VIRTUAL_TABLE', checkSql)
-
-      // If virtual table doesn't exist, create it
-      if (existingTables.length === 0) {
-        console.log(`[DuckDBDynamicTableRepository] Creating virtual table for existing table_${table.id.value}`)
-        await this.refreshVirtualTable(table.id, table.storageLocation)
-      }
-    } catch (error) {
-      // If check fails, try to create the virtual table anyway
-      // This handles cases where S3 file might not exist yet for new empty tables
-      console.warn(`[DuckDBDynamicTableRepository] Error checking virtual table existence for table_${table.id.value}, attempting to create:`, error)
-      try {
-        await this.refreshVirtualTable(table.id, table.storageLocation)
-      } catch (createError) {
-        // S3 file might not exist yet for brand new empty tables - this is ok
-        console.warn(`[DuckDBDynamicTableRepository] Could not create virtual table for table_${table.id.value} - S3 file may not exist yet`)
-      }
-    }
-  }
-
-  /**
-   * Refresh DuckDB virtual table with latest S3 data
-   * Called after writes to ensure DuckDB sees updated data
-   */
-  private async refreshVirtualTable(tableId: TableId, storageLocation: string): Promise<void> {
-    try {
-      const s3Path = S3TablePath.fromPath(storageLocation)
-      const s3Url = `s3://${BUCKET_NAME}/${s3Path.getDataPath()}`
-
-      const refreshSql = DuckDBSqlTemplates.refreshVirtualTable({
-        tableId: tableId.value,
-        s3Path: s3Url
-      })
-
-      await this.executor.executeNonQuery('REFRESH_VIRTUAL_TABLE', refreshSql)
-    } catch (error) {
-      console.error('[DuckDBDynamicTableRepository] Error refreshing virtual table:', error)
-      throw error
-    }
-  }
 
   /**
    * Sync table fields to PostgreSQL
    * Handles adding new fields that were created via table.addField()
+   * Returns the list of newly added fields
    */
-  private async syncTableFields(tableId: TableId, tableFields: readonly TableField[]): Promise<void> {
+  private async syncTableFields(tableId: TableId, tableFields: readonly TableField[]): Promise<TableField[]> {
     try {
       // Get existing fields from database
       const existingFields = await this.db.select()
@@ -660,53 +665,28 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
 
       console.log(`[DuckDBDynamicTableRepository] Synced ${fieldsToAdd.length} new fields for table ${tableId.value}`)
 
+      return fieldsToAdd
+
     } catch (error) {
       console.error('[DuckDBDynamicTableRepository] Error syncing table fields:', error)
       throw error
     }
   }
 
-  private async initializeEmptyTable(
-    s3Path: S3TablePath,
-    organizationId: OrganizationId,
-    databaseId: DatabaseId,
-    tableId: TableId,
-    tableName: string,
-    createdBy: UserId
-  ): Promise<void> {
-    const emptyRows: Row[] = []
+  /**
+   * Map domain field types to DuckDB types
+   */
+  private getDuckDBType(fieldType: FieldType): string {
+    const typeMap: Record<FieldType, string> = {
+      'text': 'VARCHAR',
+      'number': 'DOUBLE',
+      'boolean': 'BOOLEAN',
+      'date': 'TIMESTAMP',
+      'relation': 'VARCHAR', // Store as JSON string
+      'file': 'VARCHAR',     // Store as JSON string
+      'document': 'VARCHAR'  // Store as JSON string
+    };
 
-    const emptyTable = DynamicTable.fromPersistence({
-      id: tableId.value,
-      databaseId: databaseId.value,
-      organizationId: organizationId.value,
-      name: tableName,
-      storageLocation: s3Path.path,
-      description: undefined,
-      metadata: undefined,
-      fields: [],
-      createdBy: createdBy.value,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    })
-
-    const result = await this.dataStorageService.storeData(emptyRows, emptyTable)
-    if (!result.success) {
-      throw new Error(`Failed to initialize empty table: ${result.error}`)
-    }
-
-    await ensureBucketExists()
-
-    await s3Client.send(new PutObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: s3Path.getDataPath(),
-      Body: result.data,
-      ContentType: 'application/vnd.apache.arrow.file'
-    }))
-  }
-
-  private async deleteS3Directory(prefix: string): Promise<void> {
-    // TODO: Implement S3 directory deletion
-    console.warn('[DuckDBDynamicTableRepository] S3 directory deletion not yet implemented for:', prefix)
+    return typeMap[fieldType] || 'VARCHAR';
   }
 }

@@ -160,6 +160,7 @@ export class DuckDBSqlTemplates {
     const { tableId, rowId, rowData } = params
 
     const setClause = Object.entries(rowData)
+      .filter(([key]) => key !== 'id') // Exclude 'id' from SET clause
       .map(([key, val]) => `${key} = ${this.sqlValue(val)}`)
       .join(', ')
 

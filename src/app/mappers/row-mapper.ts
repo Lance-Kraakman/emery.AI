@@ -123,7 +123,7 @@ export class RowMapper {
    * Apply default values for missing/invalid fields (data migration)
    *
    * ARCHITECTURE NOTE: This belongs in the application layer (mapper), NOT infrastructure.
-   * Infrastructure (ArrowDataStorageService) should only handle storage - it returns raw data.
+   * Infrastructure (DuckDBDynamicTableRepository) returns raw data from storage.
    * Application layer (RowMapper) handles data transformation and migration.
    *
    * Handles legacy data with:

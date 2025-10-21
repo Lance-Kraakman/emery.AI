@@ -99,13 +99,15 @@ export class Row {
       // CRITICAL FIX: Ensure complex objects are properly serialized, not stringified
       const value = fieldValue.value;
 
+      // AIDEV-NOTE: Debug logging for document field values
+      if (fieldValue.fieldType === 'document') {
+        console.log(`[Row.toPlainObject] document field "${fieldValue.fieldSlug}" output value:`, value);
+      }
+
       // For complex field types, ensure they remain as objects/arrays
       if (fieldValue.fieldType === 'file' || fieldValue.fieldType === 'document' || fieldValue.fieldType === 'relation') {
         // These should already be plain objects/arrays from domain value objects
         obj[fieldValue.fieldSlug] = value;
-
-        // AIDEV-NOTE: Debug logging for document field values
-        console.log(`[Row.toPlainObject] ${fieldValue.fieldType} field "${fieldValue.fieldSlug}" output value:`, JSON.stringify(value, null, 2));
       } else if (fieldValue.fieldType === 'date' && value instanceof Date) {
         // Convert Date objects to ISO strings
         obj[fieldValue.fieldSlug] = value.toISOString();

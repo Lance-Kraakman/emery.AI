@@ -304,7 +304,7 @@ export async function getRowsDataDSG(tableId: number, limit = 1000): Promise<any
 
     // Transform to DSG format
     // ARCHITECTURE NOTE: Defaults are already applied in infrastructure layer
-    // ArrowDataStorageService.retrieveData() calls RowMapper.applyDefaults() before creating Row objects
+    // DuckDBDynamicTableRepository.getRows() calls RowMapper.applyDefaults() before creating Row objects
     // No need to apply defaults again here - just convert Row objects to DSG format
     const dsgData = rowsData.map(row => {
       const plainData = row.toPlainObject();

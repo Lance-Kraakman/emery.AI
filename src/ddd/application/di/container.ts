@@ -2,7 +2,6 @@ import type { DbClient } from '@/lib/db/client';
 import { contextAwareDb, type ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
 import { rawClient } from '@/lib/db/client';
 import type postgres from 'postgres';
-import { getDuckDBConnection } from '@/ddd/infrastructure/data/duckdb-connection-manager';
 
 import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { DrizzleOrganizationRepository } from '@/ddd/infrastructure/db/repositories/organizations/drizzle-organization-repository';
@@ -10,7 +9,6 @@ import { IUserRepository } from '@/ddd/domain/users/repositories/user-repository
 import { DrizzleUserRepository } from '@/ddd/infrastructure/db/repositories/users/drizzle-user-repository';
 import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import { DuckDBDynamicTableRepository } from '@/ddd/infrastructure/data/duckdb-dynamic-table-repository';
-import { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
 import { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
 import { DuckDBTableQueryService } from '@/ddd/infrastructure/data/duckdb-table-query-service';
 import { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
@@ -67,9 +65,6 @@ import { ToolSearchApplicationService } from '@/ddd/application/services/tools/t
 // Domain services
 import { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 
-// Field and table services
-import { ArrowDataStorageService } from '@/ddd/infrastructure/arrow/arrow-data-storage-service';
-
 // Chat domain imports
 import { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
 import { DrizzleChatRepository } from '@/ddd/infrastructure/db/repositories/chat/drizzle-chat-repository';
@@ -102,7 +97,6 @@ interface RepositoryRegistry {
   IOrganizationRepository: IOrganizationRepository;
   IUserRepository: IUserRepository;
   IDynamicTableRepository: IDynamicTableRepository;
-  DataStorageService: DataStorageService;
   TableQueryService: TableQueryService;
   IFileStorageRepository: IFileStorageRepository;
   
@@ -294,29 +288,11 @@ export class DIContainer {
       agentRepository
     );
 
+    // Create DuckDB-powered table repository for analytical queries and CRUD operations
+    // AIDEV-NOTE: DuckDBDatabaseManager handles connection lifecycle internally
+    const tableRepository = new DuckDBDynamicTableRepository(contextAwareDb);
 
-    // Create simplified Arrow data storage service
-    const arrowDataStorageService = new ArrowDataStorageService();
-
-    // Initialize DuckDB connection for S3 Arrow table operations
-    // Automatically skips during build, initializes at runtime
-    const duckdbConnection = await getDuckDBConnection();
-
-    if (!duckdbConnection) {
-      console.error('❌ DuckDB connection unavailable - this will cause S3 table operations to fail');
-      console.error('❌ Check Docker image includes duckdb.node binary, or run locally with native modules');
-      throw new Error('DuckDB connection required for S3 Arrow table operations');
-    }
-
-    // Create DuckDB-powered table repository for analytical queries on S3 Arrow files
-    // AIDEV-NOTE: Extensions are already loaded by getDuckDBConnection() above
-    const tableRepository = new DuckDBDynamicTableRepository(
-      contextAwareDb,
-      duckdbConnection,
-      arrowDataStorageService
-    );
-
-    console.log('✅ Using DuckDB repository for S3 Arrow table operations');
+    console.log('✅ Using DuckDB repository for S3 database operations (.duckdb files)');
 
     // Create DynamicTableService - central domain service for all table operations
     const dynamicTableService = new DynamicTableService(
@@ -352,10 +328,7 @@ export class DIContainer {
     this.repositories.set('InvitationApplicationService', invitationApplicationService);
     this.repositories.set('IDynamicTableRepository', tableRepository);
     this.repositories.set('DynamicTableService', dynamicTableService);
-    
-    // Register simplified data storage service
-    this.repositories.set('DataStorageService', arrowDataStorageService);
-    
+
     // Initialize TableApplicationService with proper dependencies
     const tableApplicationService = new TableApplicationService(
       dynamicTableService,
@@ -559,9 +532,8 @@ type ServiceMap = {
   DatabaseRepository: IDatabaseRepository;
   ChatRepository: IChatRepository;
   ChatMessageRepository: IChatMessageRepository;
-  
+
   // New data services
-  DataStorageService: DataStorageService;
   TableQueryService: TableQueryService;
   DynamicTableService: DynamicTableService;
   
@@ -632,7 +604,6 @@ export const getOrganizationRepository = createGetter('OrganizationRepository');
 export const getUserRepository = createGetter('UserRepository');
 export const getDynamicTableRepository = createGetter('DynamicTableRepository');
 export const getDynamicTableService = createGetter('DynamicTableService');
-export const getDataStorageService = createGetter('DataStorageService');
 export const getTableQueryService = createGetter('TableQueryService');
 export const getFileStorageRepository = createGetter('FileStorageRepository');
 export const getAgentRepository = createGetter('AgentRepository');
