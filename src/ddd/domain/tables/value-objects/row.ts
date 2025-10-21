@@ -137,7 +137,16 @@ export class Row {
     const fieldValues: FieldValue[] = [];
 
     for (const field of tableFields) {
-      const value = data[field.name];
+      let value = data[field.name];
+
+      // AIDEV-NOTE: When reading from DuckDB, JSON types may be returned as strings
+      if ((field.type === 'document' || field.type === 'file' || field.type === 'relation') && typeof value === 'string') {
+        try {
+          value = JSON.parse(value);
+        } catch (e) {
+          console.warn(`[Row.fromPlainObject] Failed to parse JSON for field "${field.name}":`, value);
+        }
+      }
 
       // AIDEV-NOTE: Debug logging for document field values
       if (field.type === 'document' || field.type === 'file') {

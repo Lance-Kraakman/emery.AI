@@ -682,9 +682,9 @@ export class DuckDBDynamicTableRepository implements IDynamicTableRepository {
       'number': 'DOUBLE',
       'boolean': 'BOOLEAN',
       'date': 'TIMESTAMP',
-      'relation': 'VARCHAR', // Store as JSON string
-      'file': 'VARCHAR',     // Store as JSON string
-      'document': 'VARCHAR'  // Store as JSON string
+      'relation': 'JSON', // Store as JSON string
+      'file': 'JSON',     // Store as JSON string
+      'document': 'JSON'  // Store as JSON string
     };
 
     return typeMap[fieldType] || 'VARCHAR';
