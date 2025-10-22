@@ -1,0 +1,234 @@
+syntax = "proto3";
+
+package emery.tables;
+
+// Delta Lake Table Service - Handles table and row operations using Delta Lake
+service TableService {
+  rpc CreateTable(CreateTableRequest) returns (TableResponse);
+  rpc GetTable(GetTableRequest) returns (TableResponse);
+  rpc UpdateTable(UpdateTableRequest) returns (TableResponse);
+  rpc DeleteTable(DeleteTableRequest) returns (DeleteTableResponse);
+  rpc ListTables(ListTablesRequest) returns (ListTablesResponse);
+  
+  // Row operations with strong typing (bulk operations)
+  rpc CreateRows(CreateRowsRequest) returns (CreateRowsResponse);
+  rpc GetRows(GetRowsRequest) returns (GetRowsResponse);
+  rpc UpdateRows(UpdateRowsRequest) returns (UpdateRowsResponse);
+  rpc DeleteRows(DeleteRowsRequest) returns (DeleteRowsResponse);
+  rpc QueryRows(QueryRowsRequest) returns (QueryRowsResponse);
+}
+
+// Field types matching the frontend TypeScript definitions
+enum FieldType {
+  FIELD_TYPE_UNSPECIFIED = 0;
+  FIELD_TYPE_TEXT = 1;
+  FIELD_TYPE_NUMBER = 2;
+  FIELD_TYPE_BOOLEAN = 3;
+  FIELD_TYPE_DATE = 4;
+  FIELD_TYPE_FILE = 5;        // Stored as JSON string
+  FIELD_TYPE_RELATION = 6;    // Stored as JSON string  
+  FIELD_TYPE_DOCUMENT = 7;    // Stored as JSON string
+}
+
+// Table field definition with strong typing
+message TableField {
+  string name = 1;
+  FieldType type = 2;
+  bool required = 3;
+  map<string, string> metadata = 4;  // UI hints, validation rules, etc.
+}
+
+// Table schema with structured field definitions
+message TableSchema {
+  string schema_id = 1;
+  string name = 2;
+  string version = 3;
+  repeated TableField fields = 4;
+  map<string, string> metadata = 5;
+}
+
+// Table entity with Delta Lake support
+message Table {
+  string table_id = 1;               // Unique table identifier
+  string name = 2;                   // Table name
+  TableSchema schema = 3;             // Structured table schema
+  string description = 4;            // Table description
+  string created_by = 5;             // Creator user ID
+  string updated_by = 6;             // Last updater user ID
+  int64 created_at_ms = 7;           // Creation timestamp
+  int64 updated_at_ms = 8;           // Last update timestamp
+  string organization_id = 9;        // Organization for multi-tenant routing
+  map<string, string> metadata = 10; // Additional table metadata
+  bool is_deleted = 11;              // Soft delete flag
+  string s3_path = 12;               // S3 path for Delta Lake table data
+}
+
+// Table entity with Delta Lake support
+
+// Row entity with typed data
+message Row {
+  string row_id = 1;                 // Unique row identifier
+  string table_id = 2;               // Parent table ID
+  RowData row_data = 3;              // Typed row data
+  string created_by = 4;             // Creator user ID
+  string updated_by = 5;             // Last updater user ID
+  int64 created_at_ms = 6;           // Creation timestamp
+  int64 updated_at_ms = 7;           // Last update timestamp
+  string organization_id = 8;        // Organization for multi-tenant routing
+  bool is_deleted = 9;               // Soft delete flag
+}
+
+// Table request messages
+message CreateTableRequest {
+  string name = 1;
+  TableSchema schema = 2;            // Structured table schema
+  string description = 3;
+  string user_id = 4;
+  string organization_id = 5;
+  map<string, string> metadata = 6;
+  string s3_path = 7;                // S3 path for Delta Lake table data
+}
+
+message GetTableRequest {
+  string table_id = 1;
+  string user_id = 2;
+  string organization_id = 3;
+}
+
+message UpdateTableRequest {
+  string table_id = 1;
+  string name = 2;                   // Optional
+  TableSchema schema = 3;            // Optional structured schema
+  string description = 4;            // Optional
+  string user_id = 5;
+  string organization_id = 6;
+  map<string, string> metadata = 7;  // Optional
+}
+
+message DeleteTableRequest {
+  string table_id = 1;
+  string user_id = 2;
+  string organization_id = 3;
+  bool soft_delete = 4;
+}
+
+message ListTablesRequest {
+  string user_id = 1;
+  string organization_id = 2;
+  int32 limit = 3;                   // Optional: result limit
+  int32 offset = 4;                  // Optional: result offset
+  string search_term = 5;            // Optional: search tables by name/description
+}
+
+// Row request messages with strong typing (bulk operations)
+message CreateRowsRequest {
+  string table_id = 1;
+  repeated RowData rows_data = 2;    // Multiple typed rows
+  string user_id = 3;
+  string organization_id = 4;
+}
+
+message GetRowsRequest {
+  string table_id = 1;
+  repeated string row_ids = 2;       // Multiple row IDs
+  string user_id = 3;
+  string organization_id = 4;
+}
+
+message UpdateRowsRequest {
+  string table_id = 1;
+  repeated RowData rows_data = 2;    // Multiple typed rows (must include IDs)
+  string user_id = 3;
+  string organization_id = 4;
+}
+
+message DeleteRowsRequest {
+  string table_id = 1;
+  repeated string row_ids = 2;       // Multiple row IDs
+  string user_id = 3;
+  string organization_id = 4;
+}
+
+message QueryRowsRequest {
+  string table_id = 1;
+  string s3_path = 2;
+  map<string, RowDataValue> filters = 3;  // Typed filters
+  string order_by = 4;
+  string order_direction = 5;       // 'ASC' or 'DESC'
+  int32 limit = 6;
+  int32 offset = 7;
+  string user_id = 8;
+  string organization_id = 9;
+}
+
+
+
+// Response messages
+message TableResponse {
+  bool success = 1;
+  Table table = 2;
+  string message = 3;
+}
+
+message DeleteTableResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ListTablesResponse {
+  bool success = 1;
+  repeated Table tables = 2;
+  int32 total_count = 3;
+  string message = 4;
+}
+
+message CreateRowsResponse {
+  bool success = 1;
+  repeated Row rows = 2;
+  int32 rows_created = 3;
+  string message = 4;
+}
+
+message GetRowsResponse {
+  bool success = 1;
+  repeated Row rows = 2;
+  int32 total_count = 3;
+  string message = 4;
+}
+
+message UpdateRowsResponse {
+  bool success = 1;
+  repeated Row rows = 2;
+  int32 rows_updated = 3;
+  string message = 4;
+}
+
+message DeleteRowsResponse {
+  bool success = 1;
+  int32 rows_deleted = 2;
+  string message = 3;
+}
+
+message QueryRowsResponse {
+  bool success = 1;
+  repeated RowData rows = 2;
+  int32 total_count = 3;
+  string message = 4;
+}
+
+// Typed value for row data - maps frontend field types to protobuf
+message RowDataValue {
+  oneof value {
+    string text_value = 1;
+    double number_value = 2;
+    bool boolean_value = 3;
+    int64 date_value = 4;      // Unix timestamp ms
+    string json_value = 5;     // For file/relation/document complex types
+  }
+}
+
+// Represents a single row's data with strong typing
+message RowData {
+  string id = 1;
+  map<string, RowDataValue> data = 2;
+}

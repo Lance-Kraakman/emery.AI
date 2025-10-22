@@ -6,6 +6,7 @@ from typing import AsyncIterator, Dict, Any, List
 import grpc
 from grpc import aio
 from ...grpc.generated import agent_worker_pb2, agent_worker_pb2_grpc
+from ...grpc.generated import table_service_pb2, table_service_pb2_grpc
 from .mappers import ProtoMapper
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -183,6 +184,11 @@ async def serve(port: int, organization_id: str):
     chat_service_impl = ChatProcessingServiceImplementation(organization_id)
     agent_worker_pb2_grpc.add_ChatProcessingServiceServicer_to_server(chat_service_impl, server)
     
+    # Add Table service
+    from .table_proccessing_service import TableService
+    table_service_impl = TableService()
+    table_service_pb2_grpc.add_TableServiceServicer_to_server(table_service_impl, server)
+    
     listen_addr = f'[::]:{port}'
     server.add_insecure_port(listen_addr)
     
@@ -190,6 +196,7 @@ async def serve(port: int, organization_id: str):
     logger.info("Services available:")
     logger.info("  - AgentWorker: Agent execution and task management")
     logger.info("  - ChatProcessingService: AI chat processing (RAG + LLM streaming)")
+    logger.info("  - TableService: Delta Lake table operations (CRUD + bulk insert)")
     
     await server.start()
     logger.info("✅ gRPC server started successfully, waiting for termination")
