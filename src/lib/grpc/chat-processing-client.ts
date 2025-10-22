@@ -97,10 +97,11 @@ export class ChatProcessingClient {
 
     // Build request
     const request: ProcessMessageRequest = {
-      message_content: messageContent,
-      user_id: userId,
-      organization_id: organizationId,
-      conversation_history: conversationHistory,
+      context: undefined, // Will set below if needed
+      messageContent: messageContent,
+      userId: userId,
+      organizationId: organizationId,
+      conversationHistory: conversationHistory,
       tools: (options.tools || []).map(tool => ({
         name: tool.name,
         version: '', // Empty version since ToolConfig no longer has version
@@ -111,14 +112,14 @@ export class ChatProcessingClient {
     // Add context if provided
     if (options.domainType || options.enableRag || options.assembledRagContext) {
       const context: ChatContext = {
-        domain_type: options.domainType || '',
-        domain_id: options.domainId || 0,
-        enable_rag: options.enableRag || false,
-        rag_threshold: options.ragThreshold || 0.3,
-        max_rag_docs: options.maxRagDocs || 5,
-        primary_rag_weight: options.primaryRagWeight || 0.7,
-        assembled_rag_context: options.assembledRagContext || '',
-        rag_sources: options.ragSources || []
+        domainType: options.domainType || '',
+        domainId: options.domainId || 0,
+        enableRag: options.enableRag || false,
+        ragThreshold: options.ragThreshold || 0.3,
+        maxRagDocs: options.maxRagDocs || 5,
+        primaryRagWeight: options.primaryRagWeight || 0.7,
+        assembledRagContext: options.assembledRagContext || '',
+        ragSources: options.ragSources || []
       };
       request.context = context;
     }
@@ -139,17 +140,17 @@ export class ChatProcessingClient {
         // Convert gRPC response to standardized streaming response
         let streamingResponse: StreamingChatResponse;
 
-        if (response.content_chunk) {
+        if (response.contentChunk) {
           streamingResponse = {
             type: 'content',
-            content: response.content_chunk.content,
-            sequence: response.content_chunk.sequence,
+            content: response.contentChunk.content,
+            sequence: response.contentChunk.sequence,
             timestamp: response.timestamp
           };
-        } else if (response.rag_context) {
+        } else if (response.ragContext) {
           streamingResponse = {
             type: 'rag_context',
-            ragContext: response.rag_context,
+            ragContext: response.ragContext,
             timestamp: response.timestamp
           };
         } else if (response.complete) {
@@ -189,9 +190,9 @@ export class ChatProcessingClient {
         onStreamingResponse({
           type: 'error',
           error: {
-            error_code: 'GRPC_ERROR',
-            error_message: error.message,
-            error_details: {
+            errorCode: 'GRPC_ERROR',
+            errorMessage: error.message,
+            errorDetails: {
               'grpc_code': error.code.toString(),
               'grpc_details': error.details || 'No additional details'
             }

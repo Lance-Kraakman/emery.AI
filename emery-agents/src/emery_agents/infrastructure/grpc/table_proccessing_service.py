@@ -113,6 +113,31 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
     def CreateTable(self, request: table_service_pb2.CreateTableRequest, context) -> table_service_pb2.TableResponse:
         """Create a new Delta table with the specified schema."""
         try:
+            # Debug logging - log all request fields
+            logger.info(f"[CreateTable] Request received:")
+            logger.info(f"  - name: '{request.name}'")
+            logger.info(f"  - description: '{request.description}'")
+            logger.info(f"  - user_id: '{request.user_id}'")
+            logger.info(f"  - organization_id: '{request.organization_id}'")
+            logger.info(f"  - s3_path: '{getattr(request, 's3_path', 'MISSING')}'")
+            logger.info(f"  - Request fields: {dir(request)}")
+            logger.info(f"  - Has s3_path field: {hasattr(request, 's3_path')}")
+            
+            # Check if s3_path exists and is not empty
+            if not hasattr(request, 's3_path'):
+                logger.error("[CreateTable] s3_path field is missing from request!")
+                return table_service_pb2.TableResponse(
+                    success=False,
+                    message="s3_path field is missing from request"
+                )
+            
+            if not request.s3_path:
+                logger.error("[CreateTable] s3_path is empty!")
+                return table_service_pb2.TableResponse(
+                    success=False,
+                    message="s3_path is required but empty"
+                )
+            
             logger.info(f"Creating table: {request.name} at {request.s3_path}")
             
             # Build schema from structured table fields
@@ -144,7 +169,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 s3_path=request.s3_path
             )
             
-            logger.info(f"Successfully created table: {request.name}")
+            logger.info(f"Successfully created table: {request.name} at {request.s3_path}")
             return table_service_pb2.TableResponse(
                 success=True,
                 table=table,
@@ -153,6 +178,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             
         except Exception as e:
             logger.error(f"Error creating table {request.name}: {e}")
+            logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return table_service_pb2.TableResponse(
                 success=False,
                 message=f"Failed to create table: {str(e)}"
@@ -161,7 +189,32 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
     def CreateRows(self, request: table_service_pb2.CreateRowsRequest, context) -> table_service_pb2.CreateRowsResponse:
         """Efficiently create multiple rows in a Delta table."""
         try:
-            logger.info(f"Creating {len(request.rows_data)} rows in table: {request.table_id}")
+            # Debug logging - log all request fields
+            logger.info(f"[CreateRows] Request received:")
+            logger.info(f"  - table_id: '{request.table_id}'")
+            logger.info(f"  - user_id: '{request.user_id}'")
+            logger.info(f"  - organization_id: '{request.organization_id}'")
+            logger.info(f"  - s3_path: '{getattr(request, 's3_path', 'MISSING')}'")
+            logger.info(f"  - rows_data count: {len(request.rows_data)}")
+            logger.info(f"  - Request fields: {dir(request)}")
+            logger.info(f"  - Has s3_path field: {hasattr(request, 's3_path')}")
+            
+            # Check if s3_path exists and is not empty
+            if not hasattr(request, 's3_path'):
+                logger.error("[CreateRows] s3_path field is missing from request!")
+                return table_service_pb2.CreateRowsResponse(
+                    success=False,
+                    message="s3_path field is missing from request"
+                )
+            
+            if not request.s3_path:
+                logger.error("[CreateRows] s3_path is empty!")
+                return table_service_pb2.CreateRowsResponse(
+                    success=False,
+                    message="s3_path is required but empty"
+                )
+            
+            logger.info(f"Creating {len(request.rows_data)} rows in table: {request.table_id} at {request.s3_path}")
             
             # Read existing table schema
             delta_table = DeltaTable(request.s3_path)
@@ -204,6 +257,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             
         except Exception as e:
             logger.error(f"Error creating rows in table {request.table_id}: {e}")
+            logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return table_service_pb2.CreateRowsResponse(
                 success=False,
                 message=f"Failed to create rows: {str(e)}"
@@ -262,7 +318,36 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
     def QueryRows(self, request: table_service_pb2.QueryRowsRequest, context) -> table_service_pb2.QueryRowsResponse:
         """Query rows with filters and pagination."""
         try:
-            logger.info(f"Querying table: {request.table_id} with filters: {dict(request.filters)}")
+            # Debug logging - log all request fields
+            logger.info(f"[QueryRows] Request received:")
+            logger.info(f"  - table_id: '{request.table_id}'")
+            logger.info(f"  - user_id: '{request.user_id}'")
+            logger.info(f"  - organization_id: '{request.organization_id}'")
+            logger.info(f"  - s3_path: '{getattr(request, 's3_path', 'MISSING')}'")
+            logger.info(f"  - order_by: '{request.order_by}'")
+            logger.info(f"  - order_direction: '{request.order_direction}'")
+            logger.info(f"  - limit: {request.limit}")
+            logger.info(f"  - offset: {request.offset}")
+            logger.info(f"  - filters count: {len(request.filters)}")
+            logger.info(f"  - Request fields: {dir(request)}")
+            logger.info(f"  - Has s3_path field: {hasattr(request, 's3_path')}")
+            
+            # Check if s3_path exists and is not empty
+            if not hasattr(request, 's3_path'):
+                logger.error("[QueryRows] s3_path field is missing from request!")
+                return table_service_pb2.QueryRowsResponse(
+                    success=False,
+                    message="s3_path field is missing from request"
+                )
+            
+            if not request.s3_path:
+                logger.error("[QueryRows] s3_path is empty!")
+                return table_service_pb2.QueryRowsResponse(
+                    success=False,
+                    message="s3_path is required but empty"
+                )
+            
+            logger.info(f"Querying table: {request.table_id} at {request.s3_path} with filters: {dict(request.filters)}")
             
             # Read Delta table
             delta_table = DeltaTable(request.s3_path)
@@ -315,6 +400,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             
         except Exception as e:
             logger.error(f"Error querying table {request.table_id}: {e}")
+            logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return table_service_pb2.QueryRowsResponse(
                 success=False,
                 message=f"Failed to query table: {str(e)}"

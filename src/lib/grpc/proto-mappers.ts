@@ -166,20 +166,21 @@ export function createTaskRequest(params: {
 
   // Build the base request
   const request: TaskRequest = {
-    task_id: params.taskId,
-    agent_id: params.agentId,
-    agent_config: mapAgentToProto(params.agent),
-    trigger_data: triggerData as any,
-    organization_id: params.organizationId,
-    owner_id: params.ownerId,
-    timeout_seconds: params.timeoutSeconds || 300
+    name: params.capabilityName || 'instruction_based_task',
+    taskId: params.taskId,
+    agentId: params.agentId,
+    agentConfig: mapAgentToProto(params.agent),
+    triggerData: triggerData as any,
+    organizationId: params.organizationId,
+    ownerId: params.ownerId,
+    timeoutSeconds: params.timeoutSeconds || 300
   };
 
   // Set execution mode (oneof field)
   if (params.capabilityName) {
-    request.capability_name = params.capabilityName;
+    request.capabilityName = params.capabilityName;
   } else if (params.instructionConfig) {
-    request.instruction_config = mapInstructionConfigToProto(params.instructionConfig);
+    request.instructionConfig = mapInstructionConfigToProto(params.instructionConfig);
   } else {
     throw new Error('Either capabilityName or instructionConfig must be provided');
   }
@@ -232,19 +233,19 @@ export function mapTaskProgressFromProto(progress: TaskProgressProto): {
   
   // Parse result if available
   let result: any = undefined;
-  if (progress.output_json) {
+  if (progress.outputJson) {
     try {
-      result = JSON.parse(progress.output_json);
+      result = JSON.parse(progress.outputJson);
     } catch (error) {
       console.warn('Failed to parse task output JSON:', error);
-      result = { raw_output: progress.output_json };
+      result = { raw_output: progress.outputJson };
     }
   }
 
   return {
     status,
     result,
-    error: progress.error_message || undefined
+    error: progress.errorMessage || undefined
   };
 }
 

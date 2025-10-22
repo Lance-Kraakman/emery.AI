@@ -106,16 +106,16 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       
       // 6. Execute task via gRPC with streaming progress updates
       await workerClient.executeTask(taskRequest as any, async (progress: TaskProgress) => {
-        console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Step ${progress.step_id} - Status: ${progress.status} (${progress.progress_percent}%)`);
+        console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Step ${progress.stepId} - Status: ${progress.status} (${progress.progressPercent}%)`);
 
         // DEBUG: Log full TaskProgress object
         console.log(`[GRPC-DEBUG] TaskProgress received:`, JSON.stringify(progress, null, 2));
-        console.log(`[GRPC-DEBUG] output_json content:`, progress.output_json);
-        console.log(`[GRPC-DEBUG] step_id:`, progress.step_id);
-        console.log(`[GRPC-DEBUG] step_type:`, progress.step_type);
+        console.log(`[GRPC-DEBUG] outputJson content:`, progress.outputJson);
+        console.log(`[GRPC-DEBUG] stepId:`, progress.stepId);
+        console.log(`[GRPC-DEBUG] stepType:`, progress.stepType);
 
         // Create log message from TaskProgress
-        const logMessage = `Step ${progress.step_id} (${progress.step_type}): ${progress.status} - ${progress.progress_percent}% ${progress.output_json ? `| Output: ${progress.output_json.substring(0, 200)}${progress.output_json.length > 200 ? '...' : ''}` : ''}${progress.error_message ? ` | Error: ${progress.error_message}` : ''}`;
+        const logMessage = `Step ${progress.stepId} (${progress.stepType}): ${progress.status} - ${progress.progressPercent}% ${progress.outputJson ? `| Output: ${progress.outputJson.substring(0, 200)}${progress.outputJson.length > 200 ? '...' : ''}` : ''}${progress.errorMessage ? ` | Error: ${progress.errorMessage}` : ''}`;
 
         console.log(`[GRPC-DEBUG] Formatted log message:`, logMessage);
 
@@ -138,8 +138,8 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         this.activeExecutions.set(executionId, {
           executionId,
           status: (taskUpdate.status?.value as ExecutionStatus['status']) || 'in_progress',
-          progress: progress.progress_percent,
-          currentStep: progress.step_id,
+          progress: progress.progressPercent,
+          currentStep: progress.stepId,
           result: taskUpdate.result,
           error: taskUpdate.error,
           startedAt,

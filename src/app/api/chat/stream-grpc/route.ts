@@ -415,16 +415,16 @@ export async function POST(req: NextRequest) {
               } else if (response.type === 'complete' && response.complete) {
                 // AI processing completed
                 console.log(`[CHAT-GRPC-API] AI processing completed:`, {
-                  model: response.complete.model_used,
-                  tokens: response.complete.total_tokens,
-                  processingTime: response.complete.processing_time_ms
+                  model: response.complete.modelUsed,
+                  tokens: response.complete.totalTokens,
+                  processingTime: response.complete.processingTimeMs
                 });
                 controller.close();
                 
               } else if (response.type === 'error' && response.error) {
                 // AI processing error
                 console.error('[CHAT-GRPC-API] AI processing error:', response.error);
-                const errorMessage = `AI processing error: ${response.error.error_message}`;
+                const errorMessage = `AI processing error: ${response.error.errorMessage}`;
                 const chunk = new TextEncoder().encode(errorMessage);
                 controller.enqueue(chunk);
                 controller.close();

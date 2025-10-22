@@ -66,8 +66,6 @@ import { ToolSearchApplicationService } from '@/ddd/application/services/tools/t
 // Domain services
 import { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 
-// Field and table services
-import { ArrowDataStorageService } from '@/ddd/infrastructure/arrow/arrow-data-storage-service';
 
 // Chat domain imports
 import { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
@@ -94,6 +92,8 @@ import { OAuthProxyApplicationService } from '@/ddd/application/services/connect
 import { pipedreamClient } from '@/lib/pipedream/client';
 import { EmbeddingGeneratorService } from '@/ddd/domain/rag/services/embedding-generator-service';
 import { EmbeddingGeneratorDomainService } from '../services/rag/embedding-generator-service/embedding-generator-service';
+import { GrpcDataStorageService } from '@/ddd/infrastructure/datalake/grpc-data-storage-service';
+import { GrpcTableClient } from '@/ddd/infrastructure/grpc/table-grpc-client';
 
 
 // Registry of all available repository interfaces and services
@@ -265,13 +265,17 @@ export class DIContainer {
     );
 
 
-    // Create simplified Arrow data storage service
-    const arrowDataStorageService = new ArrowDataStorageService();
-        
+    // Create simplified gRPC data storage service
+    const grpcClient = new GrpcTableClient({
+      address: process.env.WORKER_ADDRESS || 'localhost:50051',
+      timeout: 30000
+    });
+    const grpcDataStorageService = new GrpcDataStorageService(grpcClient);
+
     // Create table repository with data storage service using context-aware DB client
     const tableRepository = new DynamicTableRepository(
       contextAwareDb,
-      arrowDataStorageService,
+      grpcDataStorageService,
       tableQueryService
     );
 
@@ -311,7 +315,7 @@ export class DIContainer {
     this.repositories.set('DynamicTableService', dynamicTableService);
     
     // Register simplified data storage service
-    this.repositories.set('DataStorageService', arrowDataStorageService);
+    this.repositories.set('DataStorageService', grpcDataStorageService);
     
     // Initialize TableApplicationService with proper dependencies
     const tableApplicationService = new TableApplicationService(
