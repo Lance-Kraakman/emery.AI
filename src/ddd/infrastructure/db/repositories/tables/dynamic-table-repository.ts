@@ -30,8 +30,8 @@ import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/ta
 import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
-import type { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
-import type { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
+import type { ITableDataStorageService } from '@/ddd/domain/tables/services/table-data-storage-service.interface';
+import type { ITableQueryService } from '@/ddd/domain/tables/services/table-query-service.interface';
 
 type TableRow = InferSelectModel<typeof tables>;
 type FieldRow = InferSelectModel<typeof fields>;
@@ -39,8 +39,8 @@ type FieldRow = InferSelectModel<typeof fields>;
 export class DynamicTableRepository implements IDynamicTableRepository {
   constructor(
     private readonly db: DbClient,
-    private readonly dataStorageService: DataStorageService,
-    private readonly queryService: TableQueryService
+    private readonly dataStorageService: ITableDataStorageService,
+    private readonly queryService: ITableQueryService
   ) {}
 
   async create(data: CreateDynamicTableData): Promise<DynamicTable> {
@@ -66,8 +66,26 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         .set({ s3Path: realS3Path.path })
         .where(eq(tables.id, tableRecord.id));
 
-      // 3. Initialize empty table in S3 (no fields created here - handled separately)
-      await this.initializeEmptyTable(realS3Path, data.organizationId, data.databaseId, TableId.fromNumber(tableRecord.id), data.name, data.createdBy);
+      // 3. Initialize Delta Lake table via gRPC service instead of S3 file
+      const emptyTable = DynamicTable.fromPersistence({
+        id: tableRecord.id,
+        databaseId: tableRecord.databaseId,
+        organizationId: tableRecord.organizationId,
+        name: tableRecord.name,
+        storageLocation: realS3Path.path,
+        description: tableRecord.metadata?.description,
+        metadata: tableRecord.metadata ? TableMetadata.fromDatabase(tableRecord.metadata).data : undefined,
+        fields: [], // No fields created yet - handled separately
+        createdBy: tableRecord.createdBy,
+        createdAt: tableRecord.createdAt!,
+        updatedAt: tableRecord.updatedAt!
+      });
+
+      // Create Delta Lake table via gRPC service
+      const result = await this.dataStorageService.createTable(emptyTable);
+      if (!result.success) {
+        throw new Error(`Failed to initialize Delta Lake table: ${result.error}`);
+      }
 
       // 4. Return domain entity with empty fields (no fields created yet)
       const dynamicTable = DynamicTable.fromPersistence({
@@ -670,8 +688,8 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       updatedAt: new Date()
     });
 
-    // Empty rows array - no rows for empty table
-    const result = await this.dataStorageService.storeData(emptyRows, emptyTable);
+    // Create the table via gRPC service instead of storing empty data
+    const result = await this.dataStorageService.createTable(emptyTable);
     if (!result.success) {
       throw new Error(`Failed to initialize empty table: ${result.error}`);
     }
@@ -713,7 +731,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       }
       
       // Fields are available from table object (loaded in findById)
-      const result = await this.dataStorageService.retrieveData(buffer, table);
+      const result = await this.dataStorageService.retrieveRows(table);
       if (!result.success) {
         throw new Error(`Failed to retrieve data: ${result.error}`);
       }
@@ -730,35 +748,20 @@ export class DynamicTableRepository implements IDynamicTableRepository {
   }
 
   private async saveTableData(s3Path: S3TablePath, rows: Row[], table: DynamicTable): Promise<void> {
-    const s3Key = s3Path.getDataPath();
+    // Store rows via gRPC service
+    const storageResult = await this.dataStorageService.storeRows(rows, table);
     
-    // Rows are already in Row format - Arrow storage service handles conversion
-    const storageBuffer = await this.dataStorageService.storeData(rows, table);
-    
-    if (!storageBuffer.success) {
-      throw new Error(`Failed to store data: ${storageBuffer.error}`);
+    if (!storageResult.success) {
+      throw new Error(`Failed to store data: ${storageResult.error}`);
     }
     
-    try {
-      await s3Client.send(new PutObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: s3Key,
-        Body: storageBuffer.data,
-        ContentType: 'application/vnd.apache.arrow.file'
-      }));
-
-      // Update table updatedAt timestamp to trigger RAG reindexing
-      // Important: This triggers PostgreSQL triggers for automatic RAG reindexing
-      await this.db.update(tables)
-        .set({ 
-          updatedAt: new Date() 
-        })
-        .where(eq(tables.id, table.id.value));
-
-    } catch (error) {
-      console.error(`[DynamicTableRepository] Error saving to S3:`, error);
-      throw error;
-    }
+    // Update table updatedAt timestamp to trigger RAG reindexing
+    // Important: This triggers PostgreSQL triggers for automatic RAG reindexing
+    await this.db.update(tables)
+      .set({ 
+        updatedAt: new Date() 
+      })
+      .where(eq(tables.id, table.id.value));
   }
 
   // Helper method to extract table ID from S3 path
@@ -777,5 +780,4 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     // Need to list all objects with prefix and delete them
     console.warn('S3 directory deletion not yet implemented for:', prefix);
   }
-
 }

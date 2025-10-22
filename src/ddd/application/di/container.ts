@@ -9,9 +9,8 @@ import { IUserRepository } from '@/ddd/domain/users/repositories/user-repository
 import { DrizzleUserRepository } from '@/ddd/infrastructure/db/repositories/users/drizzle-user-repository';
 import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import { DynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/dynamic-table-repository';
-import { DataStorageService } from '@/ddd/domain/tables/services/data-storage-service';
-import { TableQueryService } from '@/ddd/domain/tables/services/table-query-service';
-import { DuckDBTableQueryService } from '@/ddd/infrastructure/data/duckdb-table-query-service';
+import type { ITableQueryService } from '@/ddd/domain/tables/services/table-query-service.interface';
+import type { ITableDataStorageService } from '@/ddd/domain/tables/services/table-data-storage-service.interface';
 import { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
 import { S3FileStorageRepository } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
 
@@ -92,8 +91,8 @@ import { OAuthProxyApplicationService } from '@/ddd/application/services/connect
 import { pipedreamClient } from '@/lib/pipedream/client';
 import { EmbeddingGeneratorService } from '@/ddd/domain/rag/services/embedding-generator-service';
 import { EmbeddingGeneratorDomainService } from '../services/rag/embedding-generator-service/embedding-generator-service';
-import { GrpcDataStorageService } from '@/ddd/infrastructure/datalake/grpc-data-storage-service';
 import { GrpcTableClient } from '@/ddd/infrastructure/grpc/table-grpc-client';
+import { GrpcDataStorageService } from '@/ddd/infrastructure/datalake/grpc-data-storage-service';
 
 
 // Registry of all available repository interfaces and services
@@ -101,8 +100,7 @@ interface RepositoryRegistry {
   IOrganizationRepository: IOrganizationRepository;
   IUserRepository: IUserRepository;
   IDynamicTableRepository: IDynamicTableRepository;
-  DataStorageService: DataStorageService;
-  TableQueryService: TableQueryService;
+  ITableQueryService: ITableQueryService;
   IFileStorageRepository: IFileStorageRepository;
   
   // Field and table services
@@ -222,9 +220,18 @@ export class DIContainer {
     const fileStorageRepository = new S3FileStorageRepository();
     this.repositories.set('IFileStorageRepository', fileStorageRepository);
 
-    // Register S3 + Arrow + DuckDB services
-    const tableQueryService = new DuckDBTableQueryService();
-    this.repositories.set('TableQueryService', tableQueryService);
+    // Register mock table query services (to be replaced with actual implementation)
+    const tableQueryService: ITableQueryService = {
+      findTableById: async () => ({ success: false, error: 'Mock implementation not available' }),
+      findTablesByOrganization: async () => ({ success: false, error: 'Mock implementation not available' }),
+      findTablesByDatabase: async () => ({ success: false, error: 'Mock implementation not available' }),
+      searchTables: async () => ({ success: false, error: 'Mock implementation not available' }),
+      tableExists: async () => ({ success: false, error: 'Mock implementation not available' }),
+      isTableNameAvailable: async () => ({ success: false, error: 'Mock implementation not available' }),
+      getTableCount: async () => ({ success: false, error: 'Mock implementation not available' }),
+      getTableCountForDatabase: async () => ({ success: false, error: 'Mock implementation not available' })
+    };
+    this.repositories.set('ITableQueryService', tableQueryService);
 
     // Register other repository implementations
     this.repositories.set('IOrganizationRepository', 
@@ -520,9 +527,7 @@ type ServiceMap = {
   ChatRepository: IChatRepository;
   ChatMessageRepository: IChatMessageRepository;
   
-  // New data services
-  DataStorageService: DataStorageService;
-  TableQueryService: TableQueryService;
+  ITableQueryService: ITableQueryService;
   DynamicTableService: DynamicTableService;
   
   // Services
@@ -591,8 +596,7 @@ export const getOrganizationRepository = createGetter('OrganizationRepository');
 export const getUserRepository = createGetter('UserRepository');
 export const getDynamicTableRepository = createGetter('DynamicTableRepository');
 export const getDynamicTableService = createGetter('DynamicTableService');
-export const getDataStorageService = createGetter('DataStorageService');
-export const getTableQueryService = createGetter('TableQueryService');
+export const getTableQueryService = createGetter('ITableQueryService');
 export const getFileStorageRepository = createGetter('FileStorageRepository');
 export const getAgentRepository = createGetter('AgentRepository');
 export const getTaskRepository = createGetter('TaskRepository');
