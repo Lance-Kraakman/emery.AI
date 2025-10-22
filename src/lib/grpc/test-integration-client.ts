@@ -103,16 +103,17 @@ export class AgentWorkerTestClient {
     return new Promise((resolve, reject) => {
       // Build the gRPC request object
       const grpcRequest: TaskRequest = {
-        task_id: request.taskId,
-        agent_id: request.agentId,
-        organization_id: this.config.organizationId,
-        owner_id: request.ownerId,
-        timeout_seconds: request.timeoutSeconds || 300,
-        agent_config: {
+        name: request.name,
+        taskId: request.taskId,
+        agentId: request.agentId,
+        organizationId: this.config.organizationId,
+        ownerId: request.ownerId,
+        timeoutSeconds: request.timeoutSeconds || 300,
+        agentConfig: {
           name: request.name,
           // Add other agent config fields as needed
         } as AgentConfig,
-        trigger_data: {
+        triggerData: {
           // Add trigger data fields as needed
         } as TriggerData,
         

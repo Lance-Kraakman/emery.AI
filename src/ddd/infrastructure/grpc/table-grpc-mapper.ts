@@ -1,0 +1,329 @@
+/**
+ * Table gRPC Mapper
+ * 
+ * Converts between domain entities and protobuf messages for the gRPC table service.
+ * Handles field type mapping and data serialization/deserialization.
+ */
+
+import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
+import { TableField } from '@/ddd/domain/tables/value-objects/table-field';
+import { Row } from '@/ddd/domain/tables/value-objects/row';
+import { TableId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { 
+  FieldType,
+  Table as ITable,
+  TableSchema as ITableSchema,
+  TableField as ITableField,
+  Row as IRow,
+  RowData as IRowData,
+  RowDataValue as IRowDataValue,
+  CreateTableRequest as ICreateTableRequest,
+  CreateRowsRequest as ICreateRowsRequest,
+  QueryRowsRequest as IQueryRowsRequest,
+} from '@/lib/grpc/generated/table_service';
+
+/**
+ * Maps field types between domain and protobuf
+ */
+export class TableGrpcMapper {
+  /**
+   * Convert DynamicTable domain entity to protobuf Table interface
+   */
+  static toProtoTable(table: DynamicTable): ITable {
+    const protoTable: ITable = {
+      tableId: table.id.value.toString(),
+      name: table.name,
+      description: table.description || '',
+      s3Path: table.storageLocation || '',
+      createdBy: table.createdBy.value,
+      updatedBy: table.createdBy.value, // Use createdBy as updatedBy since DynamicTable doesn't have updatedBy
+      organizationId: table.organizationId.value.toString(),
+      createdAtMs: table.createdAt?.getTime() || 0,
+      updatedAtMs: table.updatedAt?.getTime() || 0,
+      metadata: {},
+      isDeleted: false,
+      schema: this.toProtoTableSchema(table.fields),
+    };
+
+    return protoTable;
+  }
+
+  /**
+   * Convert TableField array to protobuf TableSchema interface
+   */
+  static toProtoTableSchema(fields: readonly TableField[]): ITableSchema {
+    const protoSchema: ITableSchema = {
+      schemaId: `schema_${Date.now()}`,
+      name: 'default',
+      version: '1.0',
+      fields: fields.map(field => this.toProtoTableField(field)),
+      metadata: {},
+    };
+
+    return protoSchema;
+  }
+
+  /**
+   * Convert TableField domain entity to protobuf TableField interface
+   */
+  static toProtoTableField(field: TableField): ITableField {
+    const protoField: ITableField = {
+      name: field.name,
+      type: this.mapFieldTypeToProto(field.type),
+      required: field.required || false,
+      metadata: field.metadata || {},
+    };
+
+    return protoField;
+  }
+
+  /**
+   * Convert CreateRows parameters to protobuf CreateRowsRequest interface
+   */
+  static toCreateRowsRequest(
+    tableId: TableId, 
+    rows: Row[], 
+    organizationId: OrganizationId,
+    s3Path?: string
+  ): ICreateRowsRequest {
+    // Debug logging
+    console.log('[TableGrpcMapper] toCreateRowsRequest called with:');
+    console.log(`  - tableId: ${tableId.value}`);
+    console.log(`  - organizationId: ${organizationId.value}`);
+    console.log(`  - s3Path: ${s3Path}`);
+    console.log(`  - rows count: ${rows.length}`);
+    
+    const request: ICreateRowsRequest = {
+      tableId: tableId.value.toString(),
+      userId: '', // Will be set by the service layer
+      organizationId: organizationId.value.toString(),
+      s3Path: s3Path || '', // S3 path for Delta Lake table data
+      rowsData: rows.map(row => this.toProtoRowData(row)),
+    };
+
+    console.log('[TableGrpcMapper] Created request:');
+    console.log(`  - tableId: '${request.tableId}'`);
+    console.log(`  - organizationId: '${request.organizationId}'`);
+    console.log(`  - s3Path: '${request.s3Path}'`);
+    console.log(`  - userId: '${request.userId}'`);
+    console.log(`  - rowsData count: ${request.rowsData.length}`);
+
+    return request;
+  }
+
+  /**
+   * Convert QueryRows parameters to protobuf QueryRowsRequest interface
+   */
+  static toQueryRowsRequest(
+    tableId: TableId, 
+    s3Path: string, 
+    queryParams: any = {}, 
+    organizationId: OrganizationId
+  ): IQueryRowsRequest {
+    const request: IQueryRowsRequest = {
+      tableId: tableId.value.toString(),
+      s3Path: s3Path,
+      userId: '', // Will be set by the service layer
+      organizationId: organizationId.value.toString(),
+      orderBy: queryParams.orderBy || '',
+      orderDirection: queryParams.orderDirection || 'ASC',
+      limit: queryParams.limit || 0,
+      offset: queryParams.offset || 0,
+      filters: queryParams.filters || {},
+    };
+
+    return request;
+  }
+
+  /**
+   * Convert Row domain entity to protobuf RowData interface
+   */
+  static toProtoRowData(row: Row): IRowData {
+    const plainData = row.toPlainObject();
+    
+    const protoRowData: IRowData = {
+      id: row.id.value,
+      data: Object.entries(plainData).reduce((acc, [key, value]) => {
+        acc[key] = this.toProtoRowDataValue(value);
+        return acc;
+      }, {} as Record<string, IRowDataValue>),
+    };
+
+    return protoRowData;
+  }
+
+  /**
+   * Convert JavaScript value to protobuf RowDataValue interface
+   */
+  static toProtoRowDataValue(value: any): IRowDataValue {
+    if (value === null || value === undefined) {
+      // Handle null/undefined - use empty string as default
+      return { textValue: '' };
+    } else if (typeof value === 'string') {
+      return { textValue: value };
+    } else if (typeof value === 'number') {
+      return { numberValue: value };
+    } else if (typeof value === 'boolean') {
+      return { booleanValue: value };
+    } else if (value instanceof Date) {
+      return { dateValue: value.getTime() };
+    } else if (typeof value === 'object') {
+      // For complex objects, JSON stringify them
+      return { jsonValue: JSON.stringify(value) };
+    } else {
+      // Fallback to string
+      return { textValue: String(value) };
+    }
+  }
+
+  /**
+   * Convert protobuf Table message to DynamicTable domain entity
+   */
+  static fromProtoTable(protoTable: any): DynamicTable {
+    const tableId = parseInt(protoTable.getTableId());
+    const databaseId = 1; // Will be set by repository
+    const organizationId = parseInt(protoTable.getOrganizationId());
+    
+    // Convert fields from protobuf
+    const protoSchema = protoTable.getSchema();
+    const protoFields = protoSchema ? this.fromProtoTableSchema(protoSchema) : [];
+    
+    // Convert fields to domain entities
+    const fields = protoFields.map(f => TableField.create({
+      name: f.name,
+      type: f.type as any, // TODO: Fix type mapping
+      required: f.required,
+      metadata: f.metadata || {}
+    }));
+    
+    // Convert timestamps
+    const createdAt = protoTable.getCreatedAtMs() ? new Date(protoTable.getCreatedAtMs()) : null;
+    const updatedAt = protoTable.getUpdatedAtMs() ? new Date(protoTable.getUpdatedAtMs()) : null;
+
+    return DynamicTable.fromPersistence({
+      id: tableId,
+      databaseId: databaseId,
+      organizationId: organizationId,
+      name: protoTable.getName(),
+      storageLocation: protoTable.getS3Path(),
+      description: protoTable.getDescription() || undefined,
+      metadata: undefined,
+      fields: fields,
+      createdBy: protoTable.getCreatedBy(),
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    });
+  }
+
+  /**
+   * Convert protobuf TableSchema message to TableField array
+   */
+  static fromProtoTableSchema(protoSchema: any): any[] {
+    const protoFields = protoSchema.getFieldsList() || [];
+    
+    return protoFields.map((protoField: any) => ({
+      name: protoField.getName(),
+      type: this.mapFieldTypeFromProto(protoField.getType()),
+      required: protoField.getRequired(),
+      metadata: this.protoMapToObject(protoField.getMetadataMap()),
+    }));
+  }
+
+  /**
+   * Convert protobuf RowData message to Row domain entity
+   */
+  static fromProtoRowData(protoRowData: any, fields: readonly TableField[]): Row {
+    const rowId = new TableId(protoRowData.getId());
+    
+    // Convert protobuf data map to plain object
+    const dataMap = protoRowData.getDataMap();
+    const plainObject: Record<string, any> = {};
+    
+    dataMap.forEach((protoValue: any, key: string) => {
+      plainObject[key] = this.fromProtoRowDataValue(protoValue);
+    });
+
+    return Row.fromPlainObject(plainObject, rowId.value, fields as TableField[]);
+  }
+
+  /**
+   * Convert protobuf RowDataValue message to JavaScript value
+   */
+  static fromProtoRowDataValue(protoValue: IRowDataValue): any {
+    // Check which property is set (oneof pattern)
+    if (protoValue.textValue !== undefined) {
+      return protoValue.textValue;
+    } else if (protoValue.numberValue !== undefined) {
+      return protoValue.numberValue;
+    } else if (protoValue.booleanValue !== undefined) {
+      return protoValue.booleanValue;
+    } else if (protoValue.dateValue !== undefined) {
+      return new Date(protoValue.dateValue);
+    } else if (protoValue.jsonValue !== undefined) {
+      return JSON.parse(protoValue.jsonValue);
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * Map domain field type to protobuf FieldType enum
+   */
+  static mapFieldTypeToProto(fieldType: string): number {
+    switch (fieldType.toLowerCase()) {
+      case 'text':
+        return FieldType.FIELD_TYPE_TEXT;
+      case 'number':
+        return FieldType.FIELD_TYPE_NUMBER;
+      case 'boolean':
+        return FieldType.FIELD_TYPE_BOOLEAN;
+      case 'date':
+        return FieldType.FIELD_TYPE_DATE;
+      case 'file':
+        return FieldType.FIELD_TYPE_FILE;
+      case 'relation':
+        return FieldType.FIELD_TYPE_RELATION;
+      case 'document':
+        return FieldType.FIELD_TYPE_DOCUMENT;
+      default:
+        return FieldType.FIELD_TYPE_UNSPECIFIED;
+    }
+  }
+
+  /**
+   * Map protobuf FieldType enum to domain field type
+   */
+  static mapFieldTypeFromProto(protoFieldType: number): string {
+    switch (protoFieldType) {
+      case FieldType.FIELD_TYPE_TEXT:
+        return 'text';
+      case FieldType.FIELD_TYPE_NUMBER:
+        return 'number';
+      case FieldType.FIELD_TYPE_BOOLEAN:
+        return 'boolean';
+      case FieldType.FIELD_TYPE_DATE:
+        return 'date';
+      case FieldType.FIELD_TYPE_FILE:
+        return 'file';
+      case FieldType.FIELD_TYPE_RELATION:
+        return 'relation';
+      case FieldType.FIELD_TYPE_DOCUMENT:
+        return 'document';
+      default:
+        return 'text';
+    }
+  }
+
+  /**
+   * Convert protobuf Map to JavaScript object
+   */
+  static protoMapToObject(protoMap: any): Record<string, string> {
+    const obj: Record<string, string> = {};
+    if (protoMap && typeof protoMap.forEach === 'function') {
+      protoMap.forEach((value: string, key: string) => {
+        obj[key] = value;
+      });
+    }
+    return obj;
+  }
+}

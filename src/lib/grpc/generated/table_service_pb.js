@@ -3303,7 +3303,8 @@ proto.emery.tables.CreateRowsRequest.toObject = function(includeInstance, msg) {
     rowsDataList: jspb.Message.toObjectList(msg.getRowsDataList(),
     proto.emery.tables.RowData.toObject, includeInstance),
     userId: jspb.Message.getFieldWithDefault(msg, 3, ""),
-    organizationId: jspb.Message.getFieldWithDefault(msg, 4, "")
+    organizationId: jspb.Message.getFieldWithDefault(msg, 4, ""),
+    s3Path: jspb.Message.getFieldWithDefault(msg, 5, "")
   };
 
   if (includeInstance) {
@@ -3356,6 +3357,10 @@ proto.emery.tables.CreateRowsRequest.deserializeBinaryFromReader = function(msg,
     case 4:
       var value = /** @type {string} */ (reader.readString());
       msg.setOrganizationId(value);
+      break;
+    case 5:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setS3Path(value);
       break;
     default:
       reader.skipField();
@@ -3412,6 +3417,13 @@ proto.emery.tables.CreateRowsRequest.serializeBinaryToWriter = function(message,
   if (f.length > 0) {
     writer.writeString(
       4,
+      f
+    );
+  }
+  f = message.getS3Path();
+  if (f.length > 0) {
+    writer.writeString(
+      5,
       f
     );
   }
@@ -3507,6 +3519,24 @@ proto.emery.tables.CreateRowsRequest.prototype.getOrganizationId = function() {
  */
 proto.emery.tables.CreateRowsRequest.prototype.setOrganizationId = function(value) {
   return jspb.Message.setProto3StringField(this, 4, value);
+};
+
+
+/**
+ * optional string s3_path = 5;
+ * @return {string}
+ */
+proto.emery.tables.CreateRowsRequest.prototype.getS3Path = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 5, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.emery.tables.CreateRowsRequest} returns this
+ */
+proto.emery.tables.CreateRowsRequest.prototype.setS3Path = function(value) {
+  return jspb.Message.setProto3StringField(this, 5, value);
 };
 
 
