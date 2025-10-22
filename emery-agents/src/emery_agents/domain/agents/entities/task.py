@@ -12,9 +12,7 @@ from typing import Any, Dict, List, Optional, Union
 from ...shared.value_objects.ids import AgentId, OrganizationId, TaskId, OwnerId
 from ...execution.value_objects.execution_value_objects import CapabilityName
 
-
 TaskStatus = Union[str, Any]  # 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout'
-
 
 @dataclass
 class TaskInstructions:
