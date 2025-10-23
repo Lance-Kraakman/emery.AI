@@ -11,7 +11,7 @@ import { getTeamApplicationService } from "@/ddd/application/di/container";
 import { AgentId } from "@/ddd/domain/shared/value-objects";
 import { createTeamSchema, updateTeamSchema, parseFormDataToTeam } from "@/lib/schemas";
 import type { Result, CreateTeamData, CreateTeamClientData, TeamMembershipData } from "./types";
-import type { CreateTeamCommand, UpdateTeamCommand, TeamFilters } from "@/ddd/application/services/teams/team-application-service";
+import type { CreateTeamDTO, UpdateTeamDTO, TeamFiltersDTO } from "@/app/dtos/team.dto";
 import { TeamId, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
 import { TeamMapper, type TeamDTO } from "@/app/mappers/team-mapper";
 
@@ -39,7 +39,7 @@ export async function createTeam(data: CreateTeamData): Promise<Result> {
 
     const teamApplicationService = getTeamApplicationService();
     
-    const command: CreateTeamCommand = {
+    const dto: CreateTeamDTO = {
       name,
       purpose,
       description,
@@ -49,7 +49,7 @@ export async function createTeam(data: CreateTeamData): Promise<Result> {
       organizationId: currentOrg.id
     };
 
-    const result = await teamApplicationService.createTeam(command);
+    const result = await teamApplicationService.createTeam(dto);
 
     if (!result.success || !result.data) {
       return {
@@ -65,7 +65,7 @@ export async function createTeam(data: CreateTeamData): Promise<Result> {
     revalidatePath('/teams');
     
     // Map domain entity to DTO for client serialization
-    const teamDTO = TeamMapper.toDTO(result.data);
+    const teamDTO = result.data;
     
     return {
       success: true,
@@ -166,8 +166,8 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
 
       const teamApplicationService = getTeamApplicationService();
       
-      const command: UpdateTeamCommand = {
-        teamId,
+      const dto: UpdateTeamDTO = {
+        id: teamId,
         name: data.name,
         purpose: data.purpose,
         description: data.description,
@@ -176,7 +176,7 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
         agentIds: data.agentIds
       };
 
-      const result = await teamApplicationService.updateTeam(command);
+      const result = await teamApplicationService.updateTeam(dto);
 
       if (!result.success || !result.data) {
         return {
@@ -190,7 +190,7 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
       revalidatePath('/teams');
       
       // Map domain entity to DTO for client serialization
-      const teamDTO = TeamMapper.toDTO(result.data);
+      const teamDTO = result.data;
       
       return {
         success: true,
@@ -275,7 +275,7 @@ export async function addAgentToTeam(teamId: number, agentId: string): Promise<R
       revalidatePath('/teams');
       
       // Map domain entity to DTO for client serialization
-      const teamDTO = TeamMapper.toDTO(result.data);
+      const teamDTO = result.data;
       
       return {
         success: true,
@@ -453,7 +453,7 @@ export async function bulkAssignAgents(teamId: number, agentIds: string[]): Prom
       revalidatePath('/teams');
       
       // Map domain entity to DTO for client serialization
-      const teamDTO = TeamMapper.toDTO(result.data);
+      const teamDTO = result.data;
       
       return {
         success: true,
