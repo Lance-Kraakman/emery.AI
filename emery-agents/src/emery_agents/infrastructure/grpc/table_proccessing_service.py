@@ -289,15 +289,22 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             except Exception as e:
                 logger.warning(f"[CreateRows] Could not read existing table (might be first write): {e}")
 
-            # Append to Delta table with S3 storage
-            logger.info(f"[CreateRows] Calling write_deltalake with mode='append'...")
+            # Write to Delta table with S3 storage
+            # AIDEV-NOTE: schema_mode="merge" allows schema evolution (new columns added automatically)
+            # This enables adding new fields to tables without schema mismatch errors
+            # Get write mode from request (default to "append" for backward compatibility)
+            write_mode = request.mode if request.mode else "append"
+            logger.info(f"[CreateRows] Write mode from request: '{write_mode}'")
+
+            logger.info(f"[CreateRows] Calling write_deltalake with mode='{write_mode}' and schema_mode='merge'...")
             write_deltalake(
                 s3_uri,
                 df,
-                mode="append",
+                mode=write_mode,  # Use mode from request ("append" or "overwrite")
+                schema_mode="merge",  # Allow adding new columns (schema evolution)
                 storage_options=storage_options
             )
-            logger.info(f"[CreateRows] write_deltalake completed without exception")
+            logger.info(f"[CreateRows] write_deltalake completed without exception (mode: {write_mode})")
 
             # VERIFICATION: Check Delta table state after write
             try:

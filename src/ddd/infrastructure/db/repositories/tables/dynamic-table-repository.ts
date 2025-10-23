@@ -393,11 +393,10 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         throw new Error('Table not found');
       }
 
-      // 2. Save only the new row (Delta Lake append mode will add it to existing data)
-      // AIDEV-NOTE: Do NOT load existing rows - this caused exponential duplication
-      // because saveTableData appends to Delta Lake, so sending all rows duplicates them
+      // 2. Append the new row to existing table data
+      // AIDEV-NOTE: Use mode="append" to add new row without affecting existing rows
       const s3Path = S3TablePath.fromPath(table.storageLocation);
-      await this.saveTableData(s3Path, [row], table);
+      await this.saveTableData(s3Path, [row], table, 'append');
 
       // 3. Return Row entity directly
       return row;
@@ -464,7 +463,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
 
   async updateRow(tableId: TableId, rowId: string, row: Row): Promise<Row> {
-    // AIDEV-NOTE: Work with Row objects directly 
+    // AIDEV-NOTE: Read-modify-write pattern with overwrite mode
     try {
       // 1. Get table metadata
       const table = await this.findById(tableId);
@@ -477,7 +476,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       const allRows = await this.loadTableData(s3Path);
 
       // 3. Find the row to update
-      const rowIndex = allRows.findIndex(row => row.id.value === rowId);
+      const rowIndex = allRows.findIndex(r => r.id.value === rowId);
       if (rowIndex === -1) {
         throw new Error('Row not found');
       }
@@ -485,10 +484,11 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       // 4. Replace the existing row with the updated Row entity
       allRows[rowIndex] = row;
 
-      // 5. Save back to S3
-      await this.saveTableData(s3Path, allRows, table);
+      // 5. Overwrite entire table with updated rows
+      // AIDEV-NOTE: Use mode="overwrite" to replace all rows (prevents duplication)
+      await this.saveTableData(s3Path, allRows, table, 'overwrite');
 
-      console.log(`[TableService] Updated row ${rowId} in table ${table.name} using Row objects`);
+      console.log(`[TableService] Updated row ${rowId} in table ${table.name}`);
 
       // 6. Return the updated Row entity directly
       return row;
@@ -500,7 +500,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
   }
 
   async deleteRow(tableId: TableId, rowId: string): Promise<void> {
-    // AIDEV-NOTE: Simple atomic approach - load all rows, remove row, save all rows
+    // AIDEV-NOTE: Read-modify-write pattern with overwrite mode
     try {
       // 1. Get table metadata
       const table = await this.findById(tableId);
@@ -514,15 +514,16 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
       // 3. Filter out the row to delete
       const filteredRows = allRows.filter(row => row.id.value !== rowId);
-      
+
       if (filteredRows.length === allRows.length) {
         throw new Error(`Row ${rowId} not found`);
       }
 
-      // 4. Save filtered rows back to S3
-      await this.saveTableData(s3Path, filteredRows, table);
+      // 4. Overwrite entire table with filtered rows
+      // AIDEV-NOTE: Use mode="overwrite" to replace all rows (removes deleted row)
+      await this.saveTableData(s3Path, filteredRows, table, 'overwrite');
 
-      console.log(`[TableService] Deleted row ${rowId} in table ${table.name} using atomic approach`);
+      console.log(`[TableService] Deleted row ${rowId} in table ${table.name}`);
 
     } catch (error) {
       console.error('[TableService] Error deleting row:', error);
@@ -770,9 +771,14 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
-  private async saveTableData(s3Path: S3TablePath, rows: Row[], table: DynamicTable): Promise<void> {
-    // Store rows via gRPC service
-    const storageResult = await this.dataStorageService.storeRows(rows, table);
+  private async saveTableData(
+    s3Path: S3TablePath,
+    rows: Row[],
+    table: DynamicTable,
+    mode: 'append' | 'overwrite'
+  ): Promise<void> {
+    // Store rows via gRPC service with explicit write mode
+    const storageResult = await this.dataStorageService.storeRows(rows, table, mode);
     
     if (!storageResult.success) {
       throw new Error(`Failed to store data: ${storageResult.error}`);

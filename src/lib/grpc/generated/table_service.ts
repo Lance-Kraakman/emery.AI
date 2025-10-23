@@ -253,6 +253,8 @@ export interface CreateRowsRequest {
   organizationId: string;
   /** S3 path for Delta Lake table data */
   s3Path: string;
+  /** Write mode: "append" (add rows) or "overwrite" (replace all) */
+  mode: string;
 }
 
 export interface GetRowsRequest {
@@ -2185,7 +2187,7 @@ export const ListTablesRequest: MessageFns<ListTablesRequest> = {
 };
 
 function createBaseCreateRowsRequest(): CreateRowsRequest {
-  return { tableId: "", rowsData: [], userId: "", organizationId: "", s3Path: "" };
+  return { tableId: "", rowsData: [], userId: "", organizationId: "", s3Path: "", mode: "" };
 }
 
 export const CreateRowsRequest: MessageFns<CreateRowsRequest> = {
@@ -2204,6 +2206,9 @@ export const CreateRowsRequest: MessageFns<CreateRowsRequest> = {
     }
     if (message.s3Path !== "") {
       writer.uint32(42).string(message.s3Path);
+    }
+    if (message.mode !== "") {
+      writer.uint32(50).string(message.mode);
     }
     return writer;
   },
@@ -2255,6 +2260,14 @@ export const CreateRowsRequest: MessageFns<CreateRowsRequest> = {
           message.s3Path = reader.string();
           continue;
         }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.mode = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2271,6 +2284,7 @@ export const CreateRowsRequest: MessageFns<CreateRowsRequest> = {
       userId: isSet(object.userId) ? globalThis.String(object.userId) : "",
       organizationId: isSet(object.organizationId) ? globalThis.String(object.organizationId) : "",
       s3Path: isSet(object.s3Path) ? globalThis.String(object.s3Path) : "",
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
     };
   },
 
@@ -2291,6 +2305,9 @@ export const CreateRowsRequest: MessageFns<CreateRowsRequest> = {
     if (message.s3Path !== "") {
       obj.s3Path = message.s3Path;
     }
+    if (message.mode !== "") {
+      obj.mode = message.mode;
+    }
     return obj;
   },
 
@@ -2304,6 +2321,7 @@ export const CreateRowsRequest: MessageFns<CreateRowsRequest> = {
     message.userId = object.userId ?? "";
     message.organizationId = object.organizationId ?? "";
     message.s3Path = object.s3Path ?? "";
+    message.mode = object.mode ?? "";
     return message;
   },
 };

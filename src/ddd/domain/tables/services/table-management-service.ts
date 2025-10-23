@@ -180,8 +180,8 @@ export class TableManagementService {
       // For now, assuming rows are already Row entities
       const rowEntities = rows; // This would need proper conversion
 
-      // Store rows
-      const storeResult = await this.dataStorageService.storeRows(rowEntities, table);
+      // Append rows to existing table
+      const storeResult = await this.dataStorageService.storeRows(rowEntities, table, 'append');
 
       if (!storeResult.success) {
         return ResultHelpers.failure(`Failed to store rows: ${storeResult.error}`);
