@@ -118,6 +118,65 @@ export async function getFields(tableId: number): Promise<FieldDTO[]> {
   }
 }
 
+export async function updateField(data: {
+  tableId: number
+  fieldName: string
+  updates: {
+    name?: string
+    type?: FieldType
+    required?: boolean
+    relatedTableId?: number
+  }
+}, revalidateUrl?: string): Promise<Result> {
+  try {
+    const session = await requirePermission("data:manage");
+    const { tableId, fieldName, updates } = data;
+
+    if (!tableId || !fieldName) {
+      return {
+        success: false,
+        error: "tableId and fieldName are required",
+      };
+    }
+
+    const tableApplicationService = getTableApplicationService();
+
+    const result = await tableApplicationService.updateField({
+      tableId: TableId.fromNumber(tableId),
+      fieldName,
+      name: updates.name,
+      type: updates.type,
+      required: updates.required,
+      metadata: updates.relatedTableId ? { relatedTableId: updates.relatedTableId } : undefined
+    });
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to update field"
+      };
+    }
+
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/data'); // Default path for field operations
+    }
+
+    return {
+      success: true,
+      data: result.data ? FieldMapper.toDTO(result.data) : null,
+    };
+  } catch (error) {
+    console.error("Error updating field:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update field",
+    };
+  }
+}
+
 export async function deleteField(tableId: number, fieldName: string, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("data:manage");

@@ -29,7 +29,7 @@
 
 "use client"
 
-import React, { useMemo, useCallback } from 'react'
+import React, { useMemo, useCallback, useState } from 'react'
 import {
   DataSheetGrid,
   keyColumn,
@@ -57,6 +57,11 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Search, Settings, RefreshCw } from 'lucide-react'
 import { useGridState } from '../hooks/useGridState'
+import { ColumnHeader } from './ColumnHeader'
+import { EditFieldPanel } from './EditFieldPanel'
+import { AddColumnButton } from './AddColumnButton'
+import { createField, updateField, deleteField } from '@/app/actions/fields'
+import { useEmery } from '@/contexts/EmeryStoreProvider'
 
 interface GridHeaderBarProps {
   tableName: string;
@@ -360,10 +365,81 @@ export function DynamicDataSheetGrid({
   // Use custom hook for grid state management
   const { state, dispatch } = useGridState(rows)
 
+  // State for field editing
+  const [editingField, setEditingField] = useState<FieldDTO | null>(null)
+  const [isEditFieldOpen, setIsEditFieldOpen] = useState(false)
+
+  // Get available tables for relation fields
+  const { data: emeryData } = useEmery()
+  const availableTables = emeryData?.databases?.flatMap(db => db.tables) || []
+
+  // Handlers for field management
+  const handleEditField = useCallback((field: FieldDTO) => {
+    setEditingField(field)
+    setIsEditFieldOpen(true)
+  }, [])
+
+  const handleSaveField = useCallback(async (field: FieldDTO, updates: Partial<FieldDTO>) => {
+    const result = await updateField({
+      tableId,
+      fieldName: field.name,
+      updates: {
+        name: updates.name,
+        type: updates.type,
+        required: updates.required ?? undefined,
+        relatedTableId: updates.relatedTableId ?? undefined
+      }
+    })
+
+    if (result.success) {
+      onRefresh()
+    } else {
+      alert(result.error || "Failed to update field")
+    }
+  }, [tableId, onRefresh])
+
+  const handleDeleteField = useCallback(async (fieldName: string) => {
+    const result = await deleteField(tableId, fieldName)
+    if (result.success) {
+      onRefresh()
+    } else {
+      alert(result.error || "Failed to delete field")
+    }
+  }, [tableId, onRefresh])
+
+  const handleAddColumn = useCallback(async (data: { name: string; type: any; required: boolean; relatedTableId?: number }) => {
+    const result = await createField({
+      tableId,
+      name: data.name,
+      type: data.type,
+      required: data.required,
+      relatedTableId: data.relatedTableId
+    })
+
+    if (result.success) {
+      onRefresh()
+    } else {
+      throw new Error(result.error || "Failed to create field")
+    }
+  }, [tableId, onRefresh])
+
   const columns = useMemo(() => {
     // AIDEV-NOTE: Using react-datasheet-grid built-in column types for standard fields
     // Built-in columns handle rendering, editing, formatting, and keyboard navigation automatically
-    return fields.map(field => {
+
+    // ID column - always first, non-editable
+    const idColumn = {
+      ...keyColumn('id', textColumn),
+      title: <span className="font-semibold text-muted-foreground">ID</span>,
+      disabled: true,  // Non-editable
+      basis: 100,
+      grow: 0,
+      shrink: 0,
+      minWidth: 80,
+      headerClassName: 'id-column-header'
+    }
+
+    const fieldColumns = fields.map(field => {
       let columnConfig
       let basis = 150
       let minWidth = 120
@@ -431,7 +507,7 @@ export function DynamicDataSheetGrid({
 
       return {
         ...keyColumn(field.name, columnConfig),
-        title: field.name,
+        title: <ColumnHeader field={field} onEdit={handleEditField} onDelete={handleDeleteField} />,
         disabled: false,
         basis,
         grow: 0,
@@ -439,7 +515,21 @@ export function DynamicDataSheetGrid({
         minWidth
       }
     })
-  }, [fields, organizationId, tableId, onUpdateRow])
+
+    // Add column button column - right-most column
+    const addColumnCol = {
+      ...keyColumn('__add_column', textColumn),
+      title: <AddColumnButton onAddColumn={handleAddColumn} availableTables={availableTables} />,
+      disabled: true,
+      basis: 50,
+      grow: 0,
+      shrink: 0,
+      minWidth: 50
+    }
+
+    // Return ID column first, then field columns, then add column button
+    return [idColumn, ...fieldColumns, addColumnCol]
+  }, [fields, organizationId, tableId, onUpdateRow, handleEditField, handleDeleteField, handleAddColumn, availableTables])
 
   /**
    * Event-driven onChange - uses operations parameter for precise change detection
@@ -577,14 +667,23 @@ export function DynamicDataSheetGrid({
             duplicateRow={({ rowData }) => ({ ...rowData, id: crypto.randomUUID() })}  // Enable context menu with row duplication
             lockRows={false}
             rowKey="id"
-            rowHeight={45}
-            headerRowHeight={50}
+            rowHeight={22}  // Reduced from 45 (50% reduction for Baserow-style compact view)
+            headerRowHeight={32}  // Reduced from 50 (proportionally smaller)
             autoAddRow={false}
             gutterColumn={false}  // Disable gutter column to show only data columns
             className="datasheet-grid"
           />
         )}
       </div>
+
+      {/* Edit Field Dialog */}
+      <EditFieldPanel
+        field={editingField}
+        isOpen={isEditFieldOpen}
+        onClose={() => setIsEditFieldOpen(false)}
+        onSave={handleSaveField}
+        availableTables={availableTables}
+      />
     </div>
   )
 }
