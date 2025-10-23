@@ -99,21 +99,29 @@ export async function POST(
       metadata
     };
     
-    // Create and execute task
+    // Create and execute task - service accepts primitives
     const taskResult = await agentTaskService.createAndExecuteTask({
-      agentId: AgentId.fromNumber(agentId),
+      agentId: agentId,
       name: `Agent execution: ${instructions.substring(0, 50)}...`,
       instructions: taskInstructions,
-      organizationId: OrganizationId.fromNumber(agent.organizationId),
-      createdBy: UserId.fromString(userId),
+      organizationId: agent.organizationId,
+      createdBy: userId,
       timeoutSeconds: Math.floor(timeout / 1000)
     });
-    
+
+    if (!taskResult.success) {
+      console.error(`[AGENT-EXECUTE-API] Task execution failed: ${taskResult.error}`);
+      return NextResponse.json({
+        success: false,
+        error: taskResult.error || 'Task execution failed'
+      }, { status: 500 });
+    }
+
     const result = {
-      success: taskResult.executionResult.success,
-      output_data: taskResult.executionResult.outputData,
-      error: taskResult.executionResult.error,
-      execution_id: taskResult.executionResult.executionId
+      success: taskResult.data!.executionResult.success,
+      output_data: taskResult.data!.executionResult.outputData,
+      error: taskResult.data!.executionResult.error,
+      execution_id: taskResult.data!.executionResult.executionId
     };
 
     // If webhook URL provided, send result asynchronously

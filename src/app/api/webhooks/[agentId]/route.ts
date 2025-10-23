@@ -165,9 +165,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     
     await withSystemContext(agent.organizationId, async () => {
       try {
-        const task = await agentTaskService.createTask({
-          agentId: agent.id,
-          organizationId: agent.organizationId,
+        // Service accepts primitives and returns Result<TaskDTO>
+        const createResult = await agentTaskService.createTask({
+          agentId: agent.id.value,
+          organizationId: agent.organizationId.value,
           name: 'Webhook Trigger',
           capabilityName: undefined,
           instructions: {
@@ -175,10 +176,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             metadata: payload.data
           }
         });
-        
+
+        if (!createResult.success) {
+          throw new Error(createResult.error || 'Failed to create task');
+        }
+
         // Execute the task immediately
-        await agentTaskService.executeTask({ taskId: task.id.value });
-        
+        const executeResult = await agentTaskService.executeTask({ taskId: createResult.data!.id });
+
+        if (!executeResult.success) {
+          throw new Error(executeResult.error || 'Failed to execute task');
+        }
+
         console.log(`✅ Webhook triggered task for agent ${agent.name} (${agent.id.value})`);
       } catch (error) {
         console.error(`❌ Failed to create/execute webhook task for agent ${agent.id.value}:`, error);
