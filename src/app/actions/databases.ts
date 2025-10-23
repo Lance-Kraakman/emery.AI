@@ -12,12 +12,13 @@ import { getDatabaseApplicationService } from "@/ddd/application/di/container"
 import type { Result } from "./types"
 
 import type {
-  CreateDatabaseCommand,
-  UpdateDatabaseCommand,
-  DatabaseFilters
-} from "@/ddd/application/services/database/database-application-service"
+  CreateDatabaseDTO,
+  UpdateDatabaseDTO,
+  DatabaseFiltersDTO,
+  DatabaseDTO
+} from "@/app/dtos/database.dto"
 import { UserId, DatabaseId, OrganizationId } from "@/ddd/domain/shared/value-objects"
-import { DatabaseMapper, type DatabaseDTO } from "@/app/mappers/database-mapper"
+import { DatabaseMapper } from "@/app/mappers/database-mapper"
 
 const createDatabaseSchema = z.object({
   name: z.string().min(1, "Database name is required"),
@@ -36,17 +37,17 @@ export async function getDatabases(searchQuery?: string, hasTables?: boolean): P
   try {
     const session = await requirePermission("data:view");
     const currentOrg = await requireCurrentOrganization();
-    
+
     const databaseApplicationService = getDatabaseApplicationService();
-    
-    const filters: DatabaseFilters = {
-      organizationId: OrganizationId.fromNumber(currentOrg.id),
+
+    const filters: DatabaseFiltersDTO = {
+      organizationId: currentOrg.id,
       searchQuery,
       hasTables
     };
-    
+
     const databases = await databaseApplicationService.getDatabases(filters);
-    return databases.map(DatabaseMapper.toDTO);
+    return databases; // Service now returns DatabaseDTO[]
   } catch (error) {
     console.error('Error fetching databases:', error)
     throw new Error('Failed to fetch databases')
@@ -79,20 +80,20 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
   try {
     const session = await requirePermission("data:create");
     const currentOrg = await requireCurrentOrganization();
-    
+
     const validatedData = createDatabaseSchema.parse(data);
-    
+
     const databaseApplicationService = getDatabaseApplicationService();
-    
-    const command: CreateDatabaseCommand = {
+
+    const dto: CreateDatabaseDTO = {
       name: validatedData.name,
       description: validatedData.description,
       metadata: validatedData.metadata,
-      organizationId: OrganizationId.fromNumber(currentOrg.id),
-      createdBy: UserId.fromString(session.user.id)
+      organizationId: currentOrg.id,
+      createdBy: session.user.id
     };
 
-    const result = await databaseApplicationService.createDatabase(command);
+    const result = await databaseApplicationService.createDatabase(dto);
 
     if (!result.success) {
       return {
@@ -112,16 +113,7 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
 
     return {
       success: true,
-      data: result.data ? {
-        id: result.data.id.value,
-        name: result.data.name,
-        slug: result.data.slug,
-        metadata: result.data.metadata,
-        organizationId: result.data.organizationId.value,
-        createdBy: result.data.createdBy.value,
-        createdAt: result.data.createdAt,
-        updatedAt: result.data.updatedAt
-      } : null,
+      data: result.data,
       warnings: result.warnings
     };
   } catch (error) {
@@ -141,23 +133,23 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
 export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("data:manage");
-    
+
     const validatedData = updateDatabaseSchema.parse(data);
-    
+
     if (!validatedData.id) {
       return { success: false, error: "Database ID is required" };
     }
-    
+
     const databaseApplicationService = getDatabaseApplicationService();
-    
-    const command: UpdateDatabaseCommand = {
-      databaseId: DatabaseId.fromNumber(validatedData.id),
+
+    const dto: UpdateDatabaseDTO = {
+      databaseId: validatedData.id,
       name: validatedData.name,
       description: validatedData.description,
       metadata: validatedData.metadata
     };
 
-    const result = await databaseApplicationService.updateDatabase(command);
+    const result = await databaseApplicationService.updateDatabase(dto);
 
     if (!result.success) {
       return {
@@ -177,16 +169,7 @@ export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>,
 
     return {
       success: true,
-      data: result.data ? {
-        id: result.data.id.value,
-        name: result.data.name,
-        slug: result.data.slug,
-        metadata: result.data.metadata,
-        organizationId: result.data.organizationId.value,
-        createdBy: result.data.createdBy.value,
-        createdAt: result.data.createdAt,
-        updatedAt: result.data.updatedAt
-      } : null,
+      data: result.data,
       warnings: result.warnings
     };
   } catch (error) {
