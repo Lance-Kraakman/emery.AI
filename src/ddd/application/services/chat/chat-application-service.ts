@@ -1,10 +1,10 @@
 /**
  * Chat Application Service
- * 
+ *
  * Orchestrates chat operations with business logic and table connections.
  * Handles chat session management, message processing, and RAG integration.
  * Connects chats to dynamic tables for table-specific AI assistance.
- * 
+ *
  * AIDEV-NOTE: Application service for chat management - coordinates between
  * chat repositories, RAG services, and dynamic table context for table-connected chats
  */
@@ -18,43 +18,16 @@ import type { DomainType } from '@/ddd/domain/rag/value-objects';
 import type { ChatMessage, CreateChatMessageData, ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 import type { Result } from '@/ddd/domain/shared/result';
 import { ChatMessageEntity } from '@/ddd/domain/chat/entities/chat-message';
-
-export interface CreateChatCommand {
-  organizationId: OrganizationId;
-  createdBy: UserId;
-  title?: string; // Auto-generated if not provided
-  description?: string;
-  
-  // Domain connections
-  domainType?: DomainType;
-  domainId?: number; // Keep as number since it's generic across domains
-}
-
-export interface SendMessageCommand {
-  chatId: ChatId;
-  userId: UserId;
-  organizationId: OrganizationId;
-  content: string;
-  role: 'user' | 'assistant' | 'system';
-  metadata?: ChatMessageMetadata;
-}
-
-export interface GetChatHistoryQuery {
-  chatId: ChatId;
-  userId: UserId;
-  organizationId: OrganizationId;
-  limit?: number;
-  offset?: number;
-}
-
-export interface GetChatsQuery {
-  userId?: UserId;
-  organizationId: OrganizationId;
-  tableId?: TableId;
-  status?: 'active' | 'archived';
-  limit?: number;
-  offset?: number;
-}
+import type {
+  CreateChatDTO,
+  SendMessageDTO,
+  GetChatHistoryDTO,
+  GetChatsDTO,
+  ChatSessionDTO,
+  ChatMessageDTO,
+  ChatWithMessagesDTO
+} from '@/app/dtos/chat.dto';
+import { ChatMapper } from '@/app/mappers/chat-mapper';
 
 export class ChatApplicationService {
   constructor(
@@ -67,21 +40,25 @@ export class ChatApplicationService {
   /**
    * Create a new chat session, optionally connected to any domain type
    */
-  async createChat(command: CreateChatCommand): Promise<Result<Chat>> {
+  async createChat(dto: CreateChatDTO): Promise<Result<ChatSessionDTO>> {
     try {
+      // Convert DTO to Value Objects
+      const organizationId = OrganizationId.fromNumber(dto.organizationId);
+      const createdBy = UserId.fromString(dto.createdBy);
+
       // 1. Validate domain connection and get domain info
       let contextMetadata: ChatContextMetadata;
-      
-      if (command.domainType && command.domainId) {
-        const validation = await this.validateDomainConnection(command.domainType, command.domainId, command.organizationId.value);
+
+      if (dto.domainType && dto.domainId) {
+        const validation = await this.validateDomainConnection(dto.domainType, dto.domainId, dto.organizationId);
         if (!validation.valid) {
           return { success: false, error: validation.error };
         }
-        
+
         // Create domain-specific context metadata
         contextMetadata = ChatUtils.createDomainContextMetadata(
-          command.domainType,
-          command.domainId,
+          dto.domainType,
+          dto.domainId,
           validation.domainName!,
           validation.domainSchema
         );
@@ -91,14 +68,14 @@ export class ChatApplicationService {
       }
 
       // 2. Generate title if not provided
-      const title = command.title || ChatUtils.generateContextTitle(contextMetadata);
+      const title = dto.title || ChatUtils.generateContextTitle(contextMetadata);
 
       // 3. Validate chat data
       const chatData: CreateChatData = {
-        organizationId: command.organizationId,
-        createdBy: command.createdBy,
+        organizationId,
+        createdBy,
         title,
-        description: command.description,
+        description: dto.description,
         contextMetadata
       };
 
@@ -125,7 +102,7 @@ export class ChatApplicationService {
 
       return {
         success: true,
-        data: chat
+        data: ChatMapper.toSessionDTO(chat)
       };
 
     } catch (error) {
