@@ -19,8 +19,7 @@ import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Set default timeout to 3 minutes for agent execution tests (accounts for AI model delays)
 const TEST_TIMEOUT = 180000;
-import { AgentId, OrganizationId, UserId, TaskStatus } from '@/ddd/domain/shared/value-objects';
-import type { CreateTaskRequest, TaskExecutionResult } from '@/ddd/application/services/agents/agent-task-application-service';
+import type { CreateTaskDTO, TaskExecutionResultDTO } from '@/app/dtos/task.dto';
 import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';
@@ -31,7 +30,7 @@ import { initializeTestDI } from '../shared/test-setup';
 // Tests actual gRPC communication and task lifecycle management
 
 interface CreateAndExecuteTaskTestInput {
-  agentId: AgentId;
+  agentId: number;
   name: string;
   instructions: string;
   tools: ToolConfig[];
@@ -196,9 +195,9 @@ describe('Agent Task Execution Integration Tests', () => {
     test('should create task without execution', async () => {
       const agentTaskService = getAgentTaskApplicationService();
       
-      const createRequest: CreateTaskRequest = {
-        agentId: testAgentId,
-        organizationId: testContext.organizationId,
+      const createDTO: CreateTaskDTO = {
+        agentId: testAgentId.value,
+        organizationId: testContext.organizationId.value,
         name: 'Creation Test Task',
         instructions: {
           instructions: 'Test task creation without execution',
@@ -208,16 +207,17 @@ describe('Agent Task Execution Integration Tests', () => {
       };
 
       console.log(`🧪 Creating task for agent ${testAgentId.value}`);
-      
-      const task = await agentTaskService.createTask(createRequest);
-      
-      expect(task).toBeDefined();
-      expect(task.name).toBe(createRequest.name);
-      expect(task.agentId.value).toBe(testAgentId.value);
-      expect(task.organizationId.value).toBe(testContext.organizationId.value);
-      expect(task.isPending).toBe(true);
-      
-      console.log(`✅ Task created successfully: ${task.id.value}`);
+
+      const result = await agentTaskService.createTask(createDTO);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      expect(result.data!.name).toBe(createDTO.name);
+      expect(result.data!.agentId).toBe(testAgentId.value);
+      expect(result.data!.organizationId).toBe(testContext.organizationId.value);
+      expect(result.data!.status).toBe('pending');
+
+      console.log(`✅ Task created successfully: ${result.data!.id}`);
     });
   });
 
