@@ -44,11 +44,9 @@ export class RowSerializer {
     for (const field of fields) {
       const value = plain[field.name];
 
-      // All fields (complex or not) are sent as-is
-      // Python Delta Lake + Arrow handle arrays/objects natively
-      result[field.name] = value;
-
-      // Debug logging for complex fields
+      // AIDEV-NOTE: Complex field types need to be wrapped with field name for Delta Lake storage
+      // This creates: {fieldName: [...]} which allows proper deserialization
+      // The wrapper helps identify the field when parsing JSON from Delta Lake
       if (['relation', 'document', 'file'].includes(field.type)) {
         console.log(`[RowSerializer.serializeForStorage] Field "${field.name}":`, {
           type: field.type,
@@ -56,6 +54,17 @@ export class RowSerializer {
           isArray: Array.isArray(value),
           value: Array.isArray(value) ? `array[${value.length}]` : value
         });
+
+        // Wrap arrays/objects with field name: [...] → {fieldName: [...]}
+        if (value && (Array.isArray(value) || typeof value === 'object')) {
+          result[field.name] = { [field.name]: value };
+        } else {
+          // null, undefined, or primitive → keep as-is
+          result[field.name] = value;
+        }
+      } else {
+        // Non-complex fields: copy as-is
+        result[field.name] = value;
       }
     }
 
@@ -87,7 +96,17 @@ export class RowSerializer {
       if (['relation', 'document', 'file'].includes(field.type)) {
         if (typeof value === 'string' && value.length > 0) {
           try {
-            result[field.name] = JSON.parse(value);
+            const parsed = JSON.parse(value);
+
+            // AIDEV-NOTE: Unwrap the field-named wrapper object
+            // Storage format: '{"docs": [...]}' → Return: [...]
+            // This ensures the domain layer receives plain arrays, not wrapped objects
+            if (parsed && typeof parsed === 'object' && field.name in parsed) {
+              result[field.name] = parsed[field.name];
+            } else {
+              // Fallback: use parsed value directly (for legacy data)
+              result[field.name] = parsed;
+            }
           } catch (e) {
             console.warn(`[RowSerializer.deserializeFromStorage] Failed to parse JSON for field "${field.name}":`, e);
             result[field.name] = value; // Keep as-is if parse fails
