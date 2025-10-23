@@ -44,14 +44,10 @@ import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/
 
 // Tools domain imports
 import { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
-import { IToolProxyService } from '@/ddd/domain/tools/services/tool-proxy';
 import { IToolConfigurationService } from '@/ddd/domain/tools/services/tool-configuration-service';
 import { ToolConfigurationDomainService } from '@/ddd/domain/tools/services/tool-configuration-domain-service';
 import { ToolConfigurationApplicationService } from '@/ddd/application/services/tools/tool-configuration-application-service';
 import { DatabaseToolRegistry } from '@/ddd/infrastructure/tools/database-tool-registry';
-
-// Chat domain imports
-import { IReferenceResolverService } from '@/ddd/domain/chat/services/reference-resolver';
 
 // New application services for tables, fields, rows, files, and chat
 import { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
@@ -135,12 +131,10 @@ interface RepositoryRegistry {
 
   // Tools domain services
   IToolRegistryService: IToolRegistryService;
-  IToolProxyService: IToolProxyService;
   IToolConfigurationService: IToolConfigurationService;
   ToolConfigurationApplicationService: ToolConfigurationApplicationService;
 
   // Chat domain services
-  IReferenceResolverService: IReferenceResolverService;
   IChatRepository: IChatRepository;
   IChatMessageRepository: IChatMessageRepository;
   ChatApplicationService: ChatApplicationService;
