@@ -499,7 +499,7 @@ if (goog.DEBUG && !COMPILED) {
  * @constructor
  */
 proto.emery.tables.QueryRowsResponse = function(opt_data) {
-  jspb.Message.initialize(this, opt_data, 0, -1, proto.emery.tables.QueryRowsResponse.repeatedFields_, null);
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
 };
 goog.inherits(proto.emery.tables.QueryRowsResponse, jspb.Message);
 if (goog.DEBUG && !COMPILED) {
@@ -6217,13 +6217,6 @@ proto.emery.tables.DeleteRowsResponse.prototype.setMessage = function(value) {
 
 
 
-/**
- * List of repeated fields within this message type.
- * @private {!Array<number>}
- * @const
- */
-proto.emery.tables.QueryRowsResponse.repeatedFields_ = [2];
-
 
 
 if (jspb.Message.GENERATE_TO_OBJECT) {
@@ -6256,8 +6249,7 @@ proto.emery.tables.QueryRowsResponse.prototype.toObject = function(opt_includeIn
 proto.emery.tables.QueryRowsResponse.toObject = function(includeInstance, msg) {
   var f, obj = {
     success: jspb.Message.getBooleanFieldWithDefault(msg, 1, false),
-    rowsList: jspb.Message.toObjectList(msg.getRowsList(),
-    proto.emery.tables.RowData.toObject, includeInstance),
+    arrowIpcStream: msg.getArrowIpcStream_asB64(),
     totalCount: jspb.Message.getFieldWithDefault(msg, 3, 0),
     message: jspb.Message.getFieldWithDefault(msg, 4, "")
   };
@@ -6301,9 +6293,8 @@ proto.emery.tables.QueryRowsResponse.deserializeBinaryFromReader = function(msg,
       msg.setSuccess(value);
       break;
     case 2:
-      var value = new proto.emery.tables.RowData;
-      reader.readMessage(value,proto.emery.tables.RowData.deserializeBinaryFromReader);
-      msg.addRows(value);
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.setArrowIpcStream(value);
       break;
     case 3:
       var value = /** @type {number} */ (reader.readInt32());
@@ -6349,12 +6340,11 @@ proto.emery.tables.QueryRowsResponse.serializeBinaryToWriter = function(message,
       f
     );
   }
-  f = message.getRowsList();
+  f = message.getArrowIpcStream_asU8();
   if (f.length > 0) {
-    writer.writeRepeatedMessage(
+    writer.writeBytes(
       2,
-      f,
-      proto.emery.tables.RowData.serializeBinaryToWriter
+      f
     );
   }
   f = message.getTotalCount();
@@ -6393,40 +6383,44 @@ proto.emery.tables.QueryRowsResponse.prototype.setSuccess = function(value) {
 
 
 /**
- * repeated RowData rows = 2;
- * @return {!Array<!proto.emery.tables.RowData>}
+ * optional bytes arrow_ipc_stream = 2;
+ * @return {!(string|Uint8Array)}
  */
-proto.emery.tables.QueryRowsResponse.prototype.getRowsList = function() {
-  return /** @type{!Array<!proto.emery.tables.RowData>} */ (
-    jspb.Message.getRepeatedWrapperField(this, proto.emery.tables.RowData, 2));
+proto.emery.tables.QueryRowsResponse.prototype.getArrowIpcStream = function() {
+  return /** @type {!(string|Uint8Array)} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
 };
 
 
 /**
- * @param {!Array<!proto.emery.tables.RowData>} value
+ * optional bytes arrow_ipc_stream = 2;
+ * This is a type-conversion wrapper around `getArrowIpcStream()`
+ * @return {string}
+ */
+proto.emery.tables.QueryRowsResponse.prototype.getArrowIpcStream_asB64 = function() {
+  return /** @type {string} */ (jspb.Message.bytesAsB64(
+      this.getArrowIpcStream()));
+};
+
+
+/**
+ * optional bytes arrow_ipc_stream = 2;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getArrowIpcStream()`
+ * @return {!Uint8Array}
+ */
+proto.emery.tables.QueryRowsResponse.prototype.getArrowIpcStream_asU8 = function() {
+  return /** @type {!Uint8Array} */ (jspb.Message.bytesAsU8(
+      this.getArrowIpcStream()));
+};
+
+
+/**
+ * @param {!(string|Uint8Array)} value
  * @return {!proto.emery.tables.QueryRowsResponse} returns this
-*/
-proto.emery.tables.QueryRowsResponse.prototype.setRowsList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 2, value);
-};
-
-
-/**
- * @param {!proto.emery.tables.RowData=} opt_value
- * @param {number=} opt_index
- * @return {!proto.emery.tables.RowData}
  */
-proto.emery.tables.QueryRowsResponse.prototype.addRows = function(opt_value, opt_index) {
-  return jspb.Message.addToRepeatedWrapperField(this, 2, opt_value, proto.emery.tables.RowData, opt_index);
-};
-
-
-/**
- * Clears the list making it empty but non-null.
- * @return {!proto.emery.tables.QueryRowsResponse} returns this
- */
-proto.emery.tables.QueryRowsResponse.prototype.clearRowsList = function() {
-  return this.setRowsList([]);
+proto.emery.tables.QueryRowsResponse.prototype.setArrowIpcStream = function(value) {
+  return jspb.Message.setProto3BytesField(this, 2, value);
 };
 
 

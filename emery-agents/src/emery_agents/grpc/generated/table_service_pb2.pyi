@@ -365,16 +365,16 @@ class DeleteRowsResponse(_message.Message):
     def __init__(self, success: bool = ..., rows_deleted: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
 
 class QueryRowsResponse(_message.Message):
-    __slots__ = ("success", "rows", "total_count", "message")
+    __slots__ = ("success", "arrow_ipc_stream", "total_count", "message")
     SUCCESS_FIELD_NUMBER: _ClassVar[int]
-    ROWS_FIELD_NUMBER: _ClassVar[int]
+    ARROW_IPC_STREAM_FIELD_NUMBER: _ClassVar[int]
     TOTAL_COUNT_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
     success: bool
-    rows: _containers.RepeatedCompositeFieldContainer[RowData]
+    arrow_ipc_stream: bytes
     total_count: int
     message: str
-    def __init__(self, success: bool = ..., rows: _Optional[_Iterable[_Union[RowData, _Mapping]]] = ..., total_count: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
+    def __init__(self, success: bool = ..., arrow_ipc_stream: _Optional[bytes] = ..., total_count: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
 
 class RowDataValue(_message.Message):
     __slots__ = ("text_value", "number_value", "boolean_value", "date_value", "json_value")

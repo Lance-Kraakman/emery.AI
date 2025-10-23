@@ -305,7 +305,8 @@ createRows: {
     responseSerialize: serialize_emery_tables_DeleteRowsResponse,
     responseDeserialize: deserialize_emery_tables_DeleteRowsResponse,
   },
-  queryRows: {
+  // Zero-copy Arrow IPC query (updated to use Arrow IPC for performance)
+queryRows: {
     path: '/emery.tables.TableService/QueryRows',
     requestStream: false,
     responseStream: false,

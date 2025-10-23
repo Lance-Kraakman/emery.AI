@@ -346,7 +346,8 @@ export interface DeleteRowsResponse {
 
 export interface QueryRowsResponse {
   success: boolean;
-  rows: RowData[];
+  /** Arrow IPC serialized data (zero-copy) */
+  arrowIpcStream: Uint8Array;
   totalCount: number;
   message: string;
 }
@@ -3624,7 +3625,7 @@ export const DeleteRowsResponse: MessageFns<DeleteRowsResponse> = {
 };
 
 function createBaseQueryRowsResponse(): QueryRowsResponse {
-  return { success: false, rows: [], totalCount: 0, message: "" };
+  return { success: false, arrowIpcStream: new Uint8Array(0), totalCount: 0, message: "" };
 }
 
 export const QueryRowsResponse: MessageFns<QueryRowsResponse> = {
@@ -3632,8 +3633,8 @@ export const QueryRowsResponse: MessageFns<QueryRowsResponse> = {
     if (message.success !== false) {
       writer.uint32(8).bool(message.success);
     }
-    for (const v of message.rows) {
-      RowData.encode(v!, writer.uint32(18).fork()).join();
+    if (message.arrowIpcStream.length !== 0) {
+      writer.uint32(18).bytes(message.arrowIpcStream);
     }
     if (message.totalCount !== 0) {
       writer.uint32(24).int32(message.totalCount);
@@ -3664,7 +3665,7 @@ export const QueryRowsResponse: MessageFns<QueryRowsResponse> = {
             break;
           }
 
-          message.rows.push(RowData.decode(reader, reader.uint32()));
+          message.arrowIpcStream = reader.bytes();
           continue;
         }
         case 3: {
@@ -3695,7 +3696,7 @@ export const QueryRowsResponse: MessageFns<QueryRowsResponse> = {
   fromJSON(object: any): QueryRowsResponse {
     return {
       success: isSet(object.success) ? globalThis.Boolean(object.success) : false,
-      rows: globalThis.Array.isArray(object?.rows) ? object.rows.map((e: any) => RowData.fromJSON(e)) : [],
+      arrowIpcStream: isSet(object.arrowIpcStream) ? bytesFromBase64(object.arrowIpcStream) : new Uint8Array(0),
       totalCount: isSet(object.totalCount) ? globalThis.Number(object.totalCount) : 0,
       message: isSet(object.message) ? globalThis.String(object.message) : "",
     };
@@ -3706,8 +3707,8 @@ export const QueryRowsResponse: MessageFns<QueryRowsResponse> = {
     if (message.success !== false) {
       obj.success = message.success;
     }
-    if (message.rows?.length) {
-      obj.rows = message.rows.map((e) => RowData.toJSON(e));
+    if (message.arrowIpcStream.length !== 0) {
+      obj.arrowIpcStream = base64FromBytes(message.arrowIpcStream);
     }
     if (message.totalCount !== 0) {
       obj.totalCount = Math.round(message.totalCount);
@@ -3724,7 +3725,7 @@ export const QueryRowsResponse: MessageFns<QueryRowsResponse> = {
   fromPartial<I extends Exact<DeepPartial<QueryRowsResponse>, I>>(object: I): QueryRowsResponse {
     const message = createBaseQueryRowsResponse();
     message.success = object.success ?? false;
-    message.rows = object.rows?.map((e) => RowData.fromPartial(e)) || [];
+    message.arrowIpcStream = object.arrowIpcStream ?? new Uint8Array(0);
     message.totalCount = object.totalCount ?? 0;
     message.message = object.message ?? "";
     return message;
@@ -4119,6 +4120,7 @@ export const TableServiceService = {
     responseSerialize: (value: DeleteRowsResponse): Buffer => Buffer.from(DeleteRowsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): DeleteRowsResponse => DeleteRowsResponse.decode(value),
   },
+  /** Zero-copy Arrow IPC query (updated to use Arrow IPC for performance) */
   queryRows: {
     path: "/emery.tables.TableService/QueryRows",
     requestStream: false,
@@ -4141,6 +4143,7 @@ export interface TableServiceServer extends UntypedServiceImplementation {
   getRows: handleUnaryCall<GetRowsRequest, GetRowsResponse>;
   updateRows: handleUnaryCall<UpdateRowsRequest, UpdateRowsResponse>;
   deleteRows: handleUnaryCall<DeleteRowsRequest, DeleteRowsResponse>;
+  /** Zero-copy Arrow IPC query (updated to use Arrow IPC for performance) */
   queryRows: handleUnaryCall<QueryRowsRequest, QueryRowsResponse>;
 }
 
@@ -4281,6 +4284,7 @@ export interface TableServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: DeleteRowsResponse) => void,
   ): ClientUnaryCall;
+  /** Zero-copy Arrow IPC query (updated to use Arrow IPC for performance) */
   queryRows(
     request: QueryRowsRequest,
     callback: (error: ServiceError | null, response: QueryRowsResponse) => void,
@@ -4306,6 +4310,31 @@ export const TableServiceClient = makeGenericClientConstructor(
   service: typeof TableServiceService;
   serviceName: string;
 };
+
+function bytesFromBase64(b64: string): Uint8Array {
+  if ((globalThis as any).Buffer) {
+    return Uint8Array.from(globalThis.Buffer.from(b64, "base64"));
+  } else {
+    const bin = globalThis.atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; ++i) {
+      arr[i] = bin.charCodeAt(i);
+    }
+    return arr;
+  }
+}
+
+function base64FromBytes(arr: Uint8Array): string {
+  if ((globalThis as any).Buffer) {
+    return globalThis.Buffer.from(arr).toString("base64");
+  } else {
+    const bin: string[] = [];
+    arr.forEach((byte) => {
+      bin.push(globalThis.String.fromCharCode(byte));
+    });
+    return globalThis.btoa(bin.join(""));
+  }
+}
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 

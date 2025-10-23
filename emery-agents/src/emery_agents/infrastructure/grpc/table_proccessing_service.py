@@ -7,6 +7,7 @@ It provides high-performance, ACID-compliant operations on data stored in S3.
 
 import json
 import logging
+import os
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 
@@ -22,11 +23,39 @@ logger = logging.getLogger(__name__)
 class TableService(table_service_pb2_grpc.TableServiceServicer):
     """
     Delta Lake Table Service implementation.
-    
-    This service manages tables and rows using Delta Lake format stored in S3.
+
+    This service manages tables and rows using Delta Lake format stored in S3/MinIO.
     It provides efficient append-only writes and ACID transaction support.
     """
-    
+
+    def _get_storage_options(self) -> Dict[str, str]:
+        """Get S3/MinIO storage options for Delta Lake.
+
+        Returns storage configuration for connecting to MinIO/S3.
+        """
+        return {
+            "AWS_ACCESS_KEY_ID": os.getenv("AWS_ACCESS_KEY_ID", "minioadmin"),
+            "AWS_SECRET_ACCESS_KEY": os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+            "AWS_ENDPOINT_URL": os.getenv("AWS_ENDPOINT_URL", "http://minio:9000"),
+            "AWS_REGION": os.getenv("AWS_REGION", "us-east-1"),
+            "AWS_S3_ALLOW_UNSAFE_RENAME": "true",
+            "AWS_ALLOW_HTTP": "true"  # Allow HTTP for MinIO
+        }
+
+    def _to_s3_uri(self, path: str) -> str:
+        """Convert relative path to full S3 URI.
+
+        Args:
+            path: Relative path like 'org_1/db_1/table_1/'
+
+        Returns:
+            Full S3 URI like 's3://emery-files/org_1/db_1/table_1/'
+        """
+        bucket = os.getenv("S3_BUCKET_NAME", "emery-files")
+        # Remove leading/trailing slashes for consistency
+        clean_path = path.strip('/')
+        return f"s3://{bucket}/{clean_path}"
+
     def _build_schema_from_table_fields(self, table_fields: List[table_service_pb2.TableField]) -> pa.Schema:
         """Convert protobuf TableField messages to PyArrow schema for Delta Lake."""
         try:
@@ -45,19 +74,22 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             for field in table_fields:
                 dtype = type_mapping.get(field.type, pa.string())
                 arrow_fields.append(pa.field(field.name, dtype, nullable=not field.required))
-            
-            return pa.Schema(arrow_fields)
+
+            return pa.schema(arrow_fields)
         except Exception as e:
             logger.error(f"Error building schema from table fields: {e}")
             raise ValueError(f"Invalid table fields: {e}")
 
-    def _row_data_to_dataframe(self, rows_data: List[table_service_pb2.RowData], schema: pa.Schema) -> pl.DataFrame:
-        """Convert protobuf RowData messages to Polars DataFrame."""
+    def _row_data_to_dataframe(self, rows_data: List[table_service_pb2.RowData]) -> pl.DataFrame:
+        """Convert protobuf RowData messages to Polars DataFrame.
+
+        Polars will infer types from the data, and Delta Lake will handle schema matching during write.
+        """
         try:
             data = []
             for row_data in rows_data:
                 record = {'id': row_data.id}
-                
+
                 # Convert protobuf RowDataValue to Python types
                 for key, value in row_data.data.items():
                     if value.HasField('text_value'):
@@ -72,10 +104,12 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                         record[key] = value.json_value
                     else:
                         record[key] = None  # Default for unset values
-                
+
                 data.append(record)
-            
-            return pl.DataFrame(data, schema=schema)
+
+            # Create Polars DataFrame - Polars will infer types
+            # Schema matching happens during write_deltalake()
+            return pl.DataFrame(data)
         except Exception as e:
             logger.error(f"Error converting row data to DataFrame: {e}")
             raise ValueError(f"Invalid row data: {e}")
@@ -139,19 +173,32 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 )
             
             logger.info(f"Creating table: {request.name} at {request.s3_path}")
-            
+
+            # Convert relative path to full S3 URI
+            s3_uri = self._to_s3_uri(request.s3_path)
+            storage_options = self._get_storage_options()
+
+            logger.info(f"Writing to S3 URI: {s3_uri}")
+
             # Build schema from structured table fields
             schema = self._build_schema_from_table_fields(request.schema.fields)
-            
+
             # Create empty DataFrame with the schema
-            empty_df = pl.DataFrame(schema=schema)
-            
-            # Write to S3 as Delta Lake table
+            # Convert PyArrow schema to Polars-compatible format
+            if len(schema) == 0:
+                # Empty schema - create completely empty DataFrame
+                empty_df = pl.DataFrame()
+            else:
+                # Create empty DataFrame from PyArrow schema
+                empty_table = pa.table({field.name: pa.array([], type=field.type) for field in schema})
+                empty_df = pl.from_arrow(empty_table)
+
+            # Write to S3/MinIO as Delta Lake table
             write_deltalake(
-                request.s3_path,
+                s3_uri,
                 empty_df,
                 mode="overwrite",
-                engine='rust'
+                storage_options=storage_options
             )
             
             # Create table response
@@ -215,21 +262,73 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 )
             
             logger.info(f"Creating {len(request.rows_data)} rows in table: {request.table_id} at {request.s3_path}")
-            
-            # Read existing table schema
-            delta_table = DeltaTable(request.s3_path)
-            schema = delta_table.schema().to_pyarrow()
-            
-            # Convert to DataFrame
-            df = self._row_data_to_dataframe(request.rows_data, schema)
-            
-            # Append to Delta table
+
+            # Convert to DataFrame (Polars infers types, Delta Lake handles schema matching)
+            df = self._row_data_to_dataframe(request.rows_data)
+
+            # DIAGNOSTIC: Log DataFrame details before write
+            logger.info(f"[CreateRows] DataFrame details:")
+            logger.info(f"  - Shape: {len(df)} rows x {len(df.columns)} columns")
+            logger.info(f"  - Columns: {df.columns}")
+            logger.info(f"  - Schema: {df.schema}")
+            logger.info(f"  - Sample data (first row): {df.head(1)}")
+
+            # Convert relative path to full S3 URI
+            s3_uri = self._to_s3_uri(request.s3_path)
+            storage_options = self._get_storage_options()
+
+            logger.info(f"Appending {len(df)} rows to S3 URI: {s3_uri}")
+
+            # Check existing Delta table state before write
+            try:
+                existing_table = DeltaTable(s3_uri, storage_options=storage_options)
+                logger.info(f"[CreateRows] Delta table BEFORE write:")
+                logger.info(f"  - Version: {existing_table.version()}")
+                logger.info(f"  - Files: {len(existing_table.files())}")
+                logger.info(f"  - Schema: {existing_table.schema()}")
+            except Exception as e:
+                logger.warning(f"[CreateRows] Could not read existing table (might be first write): {e}")
+
+            # Append to Delta table with S3 storage
+            logger.info(f"[CreateRows] Calling write_deltalake with mode='append'...")
             write_deltalake(
-                request.s3_path,
+                s3_uri,
                 df,
                 mode="append",
-                engine='rust'
+                storage_options=storage_options
             )
+            logger.info(f"[CreateRows] write_deltalake completed without exception")
+
+            # VERIFICATION: Check Delta table state after write
+            try:
+                updated_table = DeltaTable(s3_uri, storage_options=storage_options)
+                logger.info(f"[CreateRows] Delta table AFTER write:")
+                logger.info(f"  - Version: {updated_table.version()}")
+                logger.info(f"  - Files: {len(updated_table.files())}")
+                logger.info(f"  - File list: {updated_table.files()}")
+
+                # Read back to verify data was actually written using PyArrow
+                arrow_table = updated_table.to_pyarrow_table()
+                logger.info(f"[CreateRows] Verification read (PyArrow):")
+                logger.info(f"  - Total rows in table: {arrow_table.num_rows}")
+                logger.info(f"  - Total columns: {arrow_table.num_columns}")
+                logger.info(f"  - Schema: {arrow_table.schema}")
+
+                if arrow_table.num_rows == 0:
+                    logger.error(f"[CreateRows] VERIFICATION FAILED: Table is empty after write!")
+                    return table_service_pb2.CreateRowsResponse(
+                        success=False,
+                        message="Verification failed: Table is empty after write"
+                    )
+
+                logger.info(f"[CreateRows] ✅ VERIFICATION PASSED: {arrow_table.num_rows} rows in table")
+            except Exception as e:
+                logger.error(f"[CreateRows] VERIFICATION ERROR: Could not verify write: {e}")
+                logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                # Don't fail the request on verification errors - the write succeeded
+                logger.warning(f"[CreateRows] Skipping verification due to error, but write completed successfully")
             
             # Create row entities for response
             rows = []
@@ -316,7 +415,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         )
 
     def QueryRows(self, request: table_service_pb2.QueryRowsRequest, context) -> table_service_pb2.QueryRowsResponse:
-        """Query rows with filters and pagination."""
+        """Query rows with filters and pagination - returns Arrow IPC for zero-copy transfer."""
         try:
             # Debug logging - log all request fields
             logger.info(f"[QueryRows] Request received:")
@@ -329,9 +428,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             logger.info(f"  - limit: {request.limit}")
             logger.info(f"  - offset: {request.offset}")
             logger.info(f"  - filters count: {len(request.filters)}")
-            logger.info(f"  - Request fields: {dir(request)}")
-            logger.info(f"  - Has s3_path field: {hasattr(request, 's3_path')}")
-            
+
             # Check if s3_path exists and is not empty
             if not hasattr(request, 's3_path'):
                 logger.error("[QueryRows] s3_path field is missing from request!")
@@ -339,20 +436,30 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     success=False,
                     message="s3_path field is missing from request"
                 )
-            
+
             if not request.s3_path:
                 logger.error("[QueryRows] s3_path is empty!")
                 return table_service_pb2.QueryRowsResponse(
                     success=False,
                     message="s3_path is required but empty"
                 )
-            
+
             logger.info(f"Querying table: {request.table_id} at {request.s3_path} with filters: {dict(request.filters)}")
-            
-            # Read Delta table
-            delta_table = DeltaTable(request.s3_path)
-            df = delta_table.to_polars()
-            
+
+            # Convert relative path to full S3 URI
+            s3_uri = self._to_s3_uri(request.s3_path)
+            storage_options = self._get_storage_options()
+
+            logger.info(f"Reading from S3 URI: {s3_uri}")
+
+            # Read Delta table from S3/MinIO
+            delta_table = DeltaTable(s3_uri, storage_options=storage_options)
+
+            # Convert PyArrow table to Polars DataFrame
+            # AIDEV-NOTE: DeltaTable.to_pyarrow_table() is the correct method (not to_polars())
+            arrow_table = delta_table.to_pyarrow_table()
+            df = pl.from_arrow(arrow_table)
+
             # Apply filters
             for key, value in request.filters.items():
                 if value.HasField('text_value'):
@@ -361,43 +468,42 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     df = df.filter(pl.col(key) == value.number_value)
                 elif value.HasField('boolean_value'):
                     df = df.filter(pl.col(key) == value.boolean_value)
-            
+
             # Apply ordering
             if request.order_by:
                 if request.order_direction.upper() == 'DESC':
                     df = df.sort(request.order_by, descending=True)
                 else:
                     df = df.sort(request.order_by, descending=False)
-            
+
             # Get total count before pagination
             total_count = len(df)
-            
+
             # Apply pagination
             if request.offset > 0:
                 df = df.slice(request.offset)
             if request.limit > 0:
                 df = df.slice(0, request.limit)
-            
-            # Convert to protobuf RowData format
-            rows_data = []
-            for row in df.to_dicts():
-                row_data = table_service_pb2.RowData()
-                row_data.id = str(row.get('id', ''))
-                
-                for key, value in row.items():
-                    if key != 'id':
-                        row_data.data[key].CopyFrom(self._protobuf_value_from_python(value))
-                
-                rows_data.append(row_data)
-            
-            logger.info(f"Successfully queried table: {request.table_id}, returned {len(rows_data)} rows")
+
+            # Convert Polars DataFrame to PyArrow Table (zero-copy)
+            arrow_table = df.to_arrow()
+
+            # Serialize to Arrow IPC format (zero-copy stream)
+            import io
+            sink = io.BytesIO()
+            with pa.ipc.new_stream(sink, arrow_table.schema) as writer:
+                writer.write_table(arrow_table)
+
+            arrow_ipc_bytes = sink.getvalue()
+
+            logger.info(f"Successfully queried table: {request.table_id}, returned {len(df)} rows as Arrow IPC ({len(arrow_ipc_bytes)} bytes)")
             return table_service_pb2.QueryRowsResponse(
                 success=True,
-                rows=rows_data,
+                arrow_ipc_stream=arrow_ipc_bytes,
                 total_count=total_count,
-                message=f"Successfully queried {len(rows_data)} rows"
+                message=f"Successfully queried {len(df)} rows"
             )
-            
+
         except Exception as e:
             logger.error(f"Error querying table {request.table_id}: {e}")
             logger.error(f"Exception details: {type(e).__name__}: {str(e)}")

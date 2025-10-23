@@ -79,7 +79,8 @@ export class GrpcDataStorageService implements ITableDataStorageService {
 
   /**
    * Retrieve rows from a table using gRPC service
-   * Queries the Python service and converts protobuf back to domain entities
+   * Receives Arrow IPC bytes from Python service for zero-copy transfer
+   * Deserializes to Arrow Table and converts to domain entities
    */
   async retrieveRows(
     table: DynamicTable,
@@ -92,10 +93,14 @@ export class GrpcDataStorageService implements ITableDataStorageService {
     } = {}
   ): Promise<Result<Row[]>> {
     try {
-      console.log(`[GrpcDataStorageService] Retrieving data for table ${table.id}`);
+      console.log(`[GrpcDataStorageService.retrieveRows] === ENTRY ===`);
+      console.log(`[GrpcDataStorageService.retrieveRows] Table ID: ${table.id.value}`);
+      console.log(`[GrpcDataStorageService.retrieveRows] Table name: ${table.name}`);
+      console.log(`[GrpcDataStorageService.retrieveRows] Storage location: ${table.storageLocation}`);
+      console.log(`[GrpcDataStorageService.retrieveRows] Options:`, JSON.stringify(options, null, 2));
 
       const { limit = 1000, offset = 0, filters = {}, orderBy = '', orderDirection = 'ASC' } = options;
-      
+
       // 1. Create query request
       const queryOptions = {
         orderBy,
@@ -104,38 +109,91 @@ export class GrpcDataStorageService implements ITableDataStorageService {
         offset,
         filters
       };
-      
+
       const queryRequest = TableGrpcMapper.toQueryRowsRequest(
         table.id,
         table.storageLocation || `s3://emery-tables/${table.id.value}`,
         queryOptions,
         table.organizationId
       );
-      
+
+      console.log(`[GrpcDataStorageService.retrieveRows] Query request created:`, {
+        tableId: table.id.value,
+        s3Path: table.storageLocation || `s3://emery-tables/${table.id.value}`,
+        limit,
+        offset,
+        orderBy,
+        orderDirection,
+        filterCount: Object.keys(filters).length
+      });
+
       // 2. Send to gRPC service
+      console.log(`[GrpcDataStorageService.retrieveRows] Calling grpcClient.queryRows...`);
       const response = await this.grpcClient.queryRows(queryRequest);
-      
-      // 3. Handle response using TypeScript property access
+      console.log(`[GrpcDataStorageService.retrieveRows] gRPC response received:`, {
+        success: response?.success,
+        hasArrowData: !!(response?.arrowIpcStream),
+        arrowDataLength: response?.arrowIpcStream?.length || 0,
+        message: response?.message
+      });
+
+      // 3. Handle Arrow IPC response (zero-copy deserialization)
       if (response && response.success) {
-        const protoRowsData = response.rows || [];
-        // Convert protobuf rows to domain entities
-        const rows = protoRowsData.map((protoRowData: any) => 
-          TableGrpcMapper.fromProtoRowData(protoRowData, table.fields)
-        );
-        
-        console.log(`[GrpcDataStorageService] Successfully retrieved ${rows.length} rows`);
+        const arrowIpcBytes = response.arrowIpcStream;
+
+        if (!arrowIpcBytes || arrowIpcBytes.length === 0) {
+          console.log(`[GrpcDataStorageService.retrieveRows] No Arrow data returned - table is empty`);
+          console.log(`[GrpcDataStorageService.retrieveRows] === EXIT === (empty result)`);
+          return { success: true, data: [] };
+        }
+
+        console.log(`[GrpcDataStorageService.retrieveRows] Deserializing Arrow IPC bytes (${arrowIpcBytes.length} bytes)...`);
+
+        // Deserialize Arrow IPC bytes to Arrow Table (zero-copy)
+        const { tableFromIPC } = await import('apache-arrow');
+        const arrowTable = tableFromIPC(arrowIpcBytes);
+
+        console.log(`[GrpcDataStorageService.retrieveRows] Arrow table deserialized:`, {
+          numRows: arrowTable.numRows,
+          numCols: arrowTable.numCols,
+          schema: arrowTable.schema.fields.map(f => ({ name: f.name, type: f.type.toString() }))
+        });
+
+        // Convert Arrow Table to domain Row entities
+        const rows: Row[] = [];
+        for (let i = 0; i < arrowTable.numRows; i++) {
+          const rowData: Record<string, any> = {};
+
+          // Extract data from each column
+          for (const field of arrowTable.schema.fields) {
+            const column = arrowTable.getChild(field.name);
+            rowData[field.name] = column?.get(i);
+          }
+
+          // Convert to domain Row entity
+          const row = Row.fromPlainObject(rowData, table.id.value, table.fields as any);
+          rows.push(row);
+        }
+
+        console.log(`[GrpcDataStorageService.retrieveRows] Converted ${rows.length} Arrow rows to domain Row entities`);
+        console.log(`[GrpcDataStorageService.retrieveRows] Sample row:`, rows[0]?.toPlainObject());
+        console.log(`[GrpcDataStorageService.retrieveRows] === EXIT === (success: ${rows.length} rows)`);
         return { success: true, data: rows };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[GrpcDataStorageService] Failed to retrieve rows: ${message}`);
+        console.error(`[GrpcDataStorageService.retrieveRows] gRPC query failed: ${message}`);
+        console.error(`[GrpcDataStorageService.retrieveRows] === EXIT === (error)`);
         return {
           success: false,
           error: message || 'Failed to retrieve data via gRPC'
         };
       }
-      
+
     } catch (error) {
-      console.error('[GrpcDataStorageService] Error retrieving data:', error);
+      console.error('[GrpcDataStorageService.retrieveRows] === EXCEPTION ===');
+      console.error('[GrpcDataStorageService.retrieveRows] Error retrieving data:', error);
+      console.error('[GrpcDataStorageService.retrieveRows] Error type:', error instanceof Error ? error.constructor.name : typeof error);
+      console.error('[GrpcDataStorageService.retrieveRows] Error stack:', error instanceof Error ? error.stack : 'N/A');
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to retrieve data via gRPC'
@@ -148,28 +206,45 @@ export class GrpcDataStorageService implements ITableDataStorageService {
    */
   async createTable(table: DynamicTable): Promise<Result<string>> {
     try {
-      console.log(`[GrpcDataStorageService] Creating table ${table.name}`);
+      console.log(`[GrpcDataStorageService] Creating table ${table.name} with ${table.fields.length} fields`);
 
-      // 1. Convert domain table to protobuf
-      const protoTable = TableGrpcMapper.toProtoTable(table);
+      // Convert domain fields to protobuf format
+      // AIDEV-NOTE: table.fields includes system 'id' field (added by repository)
+      // This ensures PostgreSQL and Delta Lake schemas match exactly
+      const protoFields = table.fields.map(field => ({
+        name: field.name,
+        type: TableGrpcMapper.mapFieldTypeToProto(field.type),
+        required: field.required || false,
+        metadata: field.metadata || {}
+      }));
+
+      // Create request with complete field schema from domain entity
+      const createRequest = CreateTableRequest.create({
+        name: table.name,
+        schema: {
+          schemaId: `schema_${Date.now()}`,
+          name: 'default',
+          version: '1.0',
+          fields: protoFields,
+          metadata: {},
+        },
+        description: table.description || '',
+        organizationId: table.organizationId.value.toString(),
+        s3Path: table.storageLocation || `s3://emery-tables/${table.id.value}`
+      });
+
+      console.log(`[GrpcDataStorageService] Creating table with schema:`, {
+        name: table.name,
+        fieldCount: protoFields.length,
+        fields: protoFields.map(f => f.name)
+      });
       
-      // 2. Create request
-      const createRequest = CreateTableRequest.create(
-        {
-          name: protoTable.name,
-          schema: protoTable.schema,
-          description: protoTable.description,
-          organizationId: protoTable.organizationId,
-          s3Path: protoTable.s3Path
-        }
-      );
-      
-      // 3. Send to gRPC service
+      // 5. Send to gRPC service
       const response = await this.grpcClient.createTable(createRequest);
       
-      // 4. Handle response using TypeScript property access
+      // 6. Handle response
       if (response && response.success) {
-        const s3Path = protoTable.s3Path || `s3://emery-tables/${table.id.value}`;
+        const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
         console.log(`[GrpcDataStorageService] Successfully created table ${table.name} at ${s3Path}`);
         return { success: true, data: s3Path };
       } else {

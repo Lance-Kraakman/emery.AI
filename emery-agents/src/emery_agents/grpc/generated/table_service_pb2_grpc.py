@@ -147,7 +147,8 @@ class TableServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def QueryRows(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Zero-copy Arrow IPC query (updated to use Arrow IPC for performance)
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
