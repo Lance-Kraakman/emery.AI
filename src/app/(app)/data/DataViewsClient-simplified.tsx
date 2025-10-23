@@ -92,7 +92,7 @@ export function DataViewsClientSimplified() {
   const loading = fieldsQuery.isLoading || infiniteRowsQuery.isLoading
   const error = fieldsQuery.error || infiniteRowsQuery.error
 
-  // Scroll handler for infinite scroll
+  // Scroll handler for infinite scroll - throttled for performance
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const target = e.target as HTMLDivElement
     const { scrollHeight, scrollTop, clientHeight } = target
@@ -106,6 +106,27 @@ export function DataViewsClientSimplified() {
       infiniteRowsQuery.fetchNextPage()
     }
   }, [infiniteRowsQuery])
+
+  // Throttle scroll handler to max 100ms (10 times per second)
+  const handleScrollThrottled = useMemo(() => {
+    let timeoutId: NodeJS.Timeout | null = null
+    let lastRan = 0
+
+    return (e: React.UIEvent<HTMLDivElement>) => {
+      const now = Date.now()
+
+      if (now - lastRan >= 100) {
+        handleScroll(e)
+        lastRan = now
+      } else {
+        if (timeoutId) clearTimeout(timeoutId)
+        timeoutId = setTimeout(() => {
+          handleScroll(e)
+          lastRan = Date.now()
+        }, 100 - (now - lastRan))
+      }
+    }
+  }, [handleScroll])
 
   // TanStack Mutations for optimistic updates
   const updateRowMutation = useMutation({
@@ -241,18 +262,20 @@ export function DataViewsClientSimplified() {
     }
   }
 
-  // Filter rows based on search - DSG format
-  const filteredRows: DSGRow[] = rows.filter((row) => {
-    if (!searchTerm) return true
-    // DSG format: flat object with field values directly
-    const searchableValues = Object.keys(row)
-      .filter(key => key !== 'id')
-      .map(key => String(row[key] || ''))
-    searchableValues.push(row.id) // Include row ID in search
-    return searchableValues.some(value =>
-      value.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  })
+  // Filter rows based on search - DSG format (memoized for performance)
+  const filteredRows: DSGRow[] = useMemo(() => {
+    return rows.filter((row) => {
+      if (!searchTerm) return true
+      // DSG format: flat object with field values directly
+      const searchableValues = Object.keys(row)
+        .filter(key => key !== 'id')
+        .map(key => String(row[key] || ''))
+      searchableValues.push(row.id) // Include row ID in search
+      return searchableValues.some(value =>
+        value.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    })
+  }, [rows, searchTerm])
 
   const renderEmptyState = () => (
     <div className="flex-1 flex items-center justify-center">
@@ -326,7 +349,7 @@ export function DataViewsClientSimplified() {
               onUpdateRow={handleUpdateRow}
               onAddRows={handleAddRows}
               onDeleteRow={handleDeleteRow}
-              onScroll={handleScroll}
+              onScroll={handleScrollThrottled}
               isLoading={loading}
               error={error ? String(error) : null}
             />
