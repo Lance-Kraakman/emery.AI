@@ -201,10 +201,15 @@ export class ChatApplicationService {
   /**
    * Send a message to a chat
    */
-  async sendMessage(command: SendMessageCommand): Promise<Result<ChatMessage>> {
+  async sendMessage(dto: SendMessageDTO): Promise<Result<ChatMessageDTO>> {
     try {
+      // Convert DTO to Value Objects
+      const chatId = ChatId.fromString(dto.chatId);
+      const userId = UserId.fromString(dto.userId);
+      const organizationId = OrganizationId.fromNumber(dto.organizationId);
+
       // 1. Verify chat exists and user has access
-      const chat = await this.chatRepository.findById(command.chatId, command.organizationId);
+      const chat = await this.chatRepository.findById(chatId, organizationId);
       if (!chat) {
         return {
           success: false,
@@ -212,7 +217,7 @@ export class ChatApplicationService {
         };
       }
 
-      if (!chat.canUserMessage(command.userId, command.organizationId)) {
+      if (!chat.canUserMessage(userId, organizationId)) {
         return {
           success: false,
           error: 'Access denied: cannot send messages to this chat'
@@ -220,14 +225,14 @@ export class ChatApplicationService {
       }
 
       // 2. Get next message index
-      const messageIndex = await this.messageRepository.getNextMessageIndex(command.chatId);
+      const messageIndex = await this.messageRepository.getNextMessageIndex(chatId);
 
       // 3. Validate message data
       const messageData: CreateChatMessageData = {
-        chatId: command.chatId,
-        role: command.role,
-        content: command.content,
-        metadata: command.metadata,
+        chatId,
+        role: dto.role,
+        content: dto.content,
+        metadata: dto.metadata,
         messageIndex
       };
 
@@ -243,14 +248,14 @@ export class ChatApplicationService {
       const message = await this.messageRepository.create(messageData);
 
       // 5. Update chat statistics
-      const newMessageCount = await this.messageRepository.getMessageCount(command.chatId);
-      await this.chatRepository.updateMessageStats(command.chatId, newMessageCount, new Date());
+      const newMessageCount = await this.messageRepository.getMessageCount(chatId);
+      await this.chatRepository.updateMessageStats(chatId, newMessageCount, new Date());
 
-      console.log(`[CHAT-APP-SERVICE] Added ${command.role} message to chat ${chat.title}`);
+      console.log(`[CHAT-APP-SERVICE] Added ${dto.role} message to chat ${chat.title}`);
 
       return {
         success: true,
-        data: message
+        data: ChatMapper.toMessageDTO(message)
       };
 
     } catch (error) {
@@ -265,14 +270,15 @@ export class ChatApplicationService {
   /**
    * Get chat history with messages
    */
-  async getChatHistory(query: GetChatHistoryQuery): Promise<Result<{
-    chat: Chat;
-    messages: ChatMessage[];
-    totalMessages: number;
-  }>> {
+  async getChatHistory(dto: GetChatHistoryDTO): Promise<Result<ChatWithMessagesDTO>> {
     try {
+      // Convert DTO to Value Objects
+      const chatId = ChatId.fromString(dto.chatId);
+      const userId = UserId.fromString(dto.userId);
+      const organizationId = OrganizationId.fromNumber(dto.organizationId);
+
       // 1. Verify chat exists and user has access
-      const chat = await this.chatRepository.findById(query.chatId, query.organizationId);
+      const chat = await this.chatRepository.findById(chatId, organizationId);
       if (!chat) {
         return {
           success: false,
@@ -280,7 +286,7 @@ export class ChatApplicationService {
         };
       }
 
-      if (!chat.canUserAccess(query.userId, query.organizationId)) {
+      if (!chat.canUserAccess(userId, organizationId)) {
         return {
           success: false,
           error: 'Access denied: cannot view this chat'
@@ -289,21 +295,17 @@ export class ChatApplicationService {
 
       // 2. Get messages
       const messages = await this.messageRepository.findByChatId(
-        query.chatId,
-        query.limit || 50,
-        query.offset || 0
+        chatId,
+        dto.limit || 50,
+        dto.offset || 0
       );
 
       // 3. Get total message count
-      const totalMessages = await this.messageRepository.getMessageCount(query.chatId);
+      const totalMessages = await this.messageRepository.getMessageCount(chatId);
 
       return {
         success: true,
-        data: {
-          chat,
-          messages,
-          totalMessages
-        }
+        data: ChatMapper.toChatWithMessagesDTO(chat, messages, totalMessages)
       };
 
     } catch (error) {
@@ -318,46 +320,51 @@ export class ChatApplicationService {
   /**
    * Get chats for a user or organization, with optional table filtering
    */
-  async getChats(query: GetChatsQuery): Promise<Result<Chat[]>> {
+  async getChats(dto: GetChatsDTO): Promise<Result<ChatSessionDTO[]>> {
     try {
+      // Convert DTO to Value Objects
+      const organizationId = OrganizationId.fromNumber(dto.organizationId);
+
       let chats: Chat[];
 
-      if (query.tableId) {
+      if (dto.tableId) {
         // Get chats for specific table
+        const tableId = TableId.fromNumber(dto.tableId);
         chats = await this.chatRepository.findByTable(
-          query.tableId,
-          query.organizationId,
-          query.limit || 20,
-          query.offset || 0
+          tableId,
+          organizationId,
+          dto.limit || 20,
+          dto.offset || 0
         );
-      } else if (query.userId) {
+      } else if (dto.userId) {
         // Get chats for specific user
+        const userId = UserId.fromString(dto.userId);
         chats = await this.chatRepository.findByUser(
-          query.userId,
-          query.organizationId,
-          query.limit || 20,
-          query.offset || 0
+          userId,
+          organizationId,
+          dto.limit || 20,
+          dto.offset || 0
         );
       } else {
         // Get all chats for organization
-        if (query.status === 'active') {
+        if (dto.status === 'active') {
           chats = await this.chatRepository.findActiveByOrganization(
-            query.organizationId,
-            query.limit || 20,
-            query.offset || 0
+            organizationId,
+            dto.limit || 20,
+            dto.offset || 0
           );
         } else {
           chats = await this.chatRepository.findByOrganization(
-            query.organizationId,
-            query.limit || 20,
-            query.offset || 0
+            organizationId,
+            dto.limit || 20,
+            dto.offset || 0
           );
         }
       }
 
       return {
         success: true,
-        data: chats
+        data: chats.map(ChatMapper.toSessionDTO)
       };
 
     } catch (error) {

@@ -24,7 +24,7 @@ import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
 import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository } from '@/ddd/application/di/container';
-import type { CreateChatCommand, SendMessageCommand } from '@/ddd/application/services/chat/chat-application-service';
+import type { CreateChatDTO, SendMessageDTO } from '@/app/dtos/chat.dto';
 import type { EnrichToolsWithUserApiKeyCommand } from '@/ddd/application/services/tools/tool-configuration-application-service';
 
 // Import user API key utilities
@@ -129,25 +129,25 @@ export async function POST(req: NextRequest) {
     // Create or retrieve chat session
     if (!currentChatId && latestMessage) {
       console.log('[CHAT-GRPC-API] Creating new chat session');
-      const createChatCommand: CreateChatCommand = {
-        organizationId: OrganizationId.fromNumber(organizationId),
-        createdBy: UserId.fromString(userId),
+      const createChatDTO: CreateChatDTO = {
+        organizationId: organizationId,
+        createdBy: userId,
         domainType: domainType as any,
         domainId: domainId ? parseInt(domainId) : undefined
       };
 
-      const chatResult = await chatApplicationService.createChat(createChatCommand);
+      const chatResult = await chatApplicationService.createChat(createChatDTO);
       if (!chatResult.success) {
         return new Response(
           JSON.stringify({ error: chatResult.error || 'Failed to create chat' }),
           { status: 500, headers: { 'Content-Type': 'application/json' } }
         );
       }
-      
+
       currentChatId = chatResult.data!.id;
       currentChat = chatResult.data;
       console.log(`[CHAT-GRPC-API] Created new chat session: ${currentChatId}`);
-      
+
     } else if (currentChatId) {
       console.log('[CHAT-GRPC-API] Retrieving existing chat session');
       const chatHistory = await chatApplicationService.getChatHistory({
@@ -156,24 +156,24 @@ export async function POST(req: NextRequest) {
         organizationId,
         limit: 1
       });
-      
+
       if (chatHistory.success) {
-        currentChat = chatHistory.data?.chat;
+        currentChat = chatHistory.data;
       }
     }
 
     // Save user message
     if (currentChatId && latestMessage) {
       console.log('[CHAT-GRPC-API] Saving user message to database');
-      const userMessageCommand: SendMessageCommand = {
+      const userMessageDTO: SendMessageDTO = {
         chatId: currentChatId,
-        userId: UserId.fromString(userId),
-        organizationId: OrganizationId.fromNumber(organizationId),
+        userId: userId,
+        organizationId: organizationId,
         content: latestMessage,
         role: 'user'
       };
 
-      const messageResult = await chatApplicationService.sendMessage(userMessageCommand);
+      const messageResult = await chatApplicationService.sendMessage(userMessageDTO);
       if (!messageResult.success) {
         console.warn('[CHAT-GRPC-API] Failed to save user message:', messageResult.error);
       }
@@ -185,8 +185,8 @@ export async function POST(req: NextRequest) {
       console.log('[CHAT-GRPC-API] Retrieving conversation history from database');
       const historyResult = await chatApplicationService.getChatHistory({
         chatId: currentChatId,
-        userId: UserId.fromString(userId),
-        organizationId: OrganizationId.fromNumber(organizationId),
+        userId: userId,
+        organizationId: organizationId,
         limit: 10 // Last 10 messages for context
       });
       
@@ -309,10 +309,10 @@ export async function POST(req: NextRequest) {
         if (currentChatId && fullAssistantResponse.trim()) {
           const saveAssistantMessage = async () => {
             try {
-              const assistantMessageCommand: SendMessageCommand = {
+              const assistantMessageDTO: SendMessageDTO = {
                 chatId: currentChatId,
-                userId: UserId.fromString(userId),
-                organizationId: OrganizationId.fromNumber(organizationId),
+                userId: userId,
+                organizationId: organizationId,
                 content: fullAssistantResponse.trim(),
                 role: 'assistant',
                 metadata: {
@@ -321,8 +321,8 @@ export async function POST(req: NextRequest) {
                   modelUsed: 'qwen-coder' // This will come from gRPC response
                 }
               };
-              
-              await chatApplicationService.sendMessage(assistantMessageCommand);
+
+              await chatApplicationService.sendMessage(assistantMessageDTO);
               console.log(`[CHAT-GRPC-API] Saved assistant response to chat ${currentChatId}`);
             } catch (error) {
               console.error('[CHAT-GRPC-API] Failed to save assistant response:', error);
