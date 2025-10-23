@@ -16,6 +16,7 @@
 import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { getAgentTaskApplicationService, getAgentApplicationService } from '@/ddd/application/di/container';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import { AgentId } from '@/ddd/domain/shared/value-objects';
 
 // Set default timeout to 3 minutes for agent execution tests (accounts for AI model delays)
 const TEST_TIMEOUT = 180000;
@@ -46,7 +47,7 @@ interface CreateAndExecuteTaskTestOutput {
 }
 
 // Factory function to generate test cases with proper context
-function createTaskExecutionTestCases(testAgentId: AgentId): TestCase<CreateAndExecuteTaskTestInput, CreateAndExecuteTaskTestOutput>[] {
+function createTaskExecutionTestCases(testAgentId: number): TestCase<CreateAndExecuteTaskTestInput, CreateAndExecuteTaskTestOutput>[] {
   return [
     {
       name: 'should execute simple python calculation',
@@ -89,7 +90,7 @@ function createTaskExecutionTestCases(testAgentId: AgentId): TestCase<CreateAndE
 
 // Test context that will be created in beforeEach
 let testContext: TestContext;
-let testAgentId: AgentId;
+let testAgentId: number;
 
 describe('Agent Task Execution Integration Tests', () => {
   
@@ -169,8 +170,8 @@ describe('Agent Task Execution Integration Tests', () => {
       expect(agentResult.success).toBe(true);
       expect(agentResult.data).toBeDefined();
 
-      testAgentId = AgentId.fromNumber(agentResult.data!.id);
-      console.log(`✅ Test agent created with ID: ${testAgentId.value}`);
+      testAgentId = agentResult.data!.id;
+      console.log(`✅ Test agent created with ID: ${testAgentId}`);
       
     } catch (error) {
       console.error('❌ Error creating test context in beforeEach:', error);
@@ -196,7 +197,7 @@ describe('Agent Task Execution Integration Tests', () => {
       const agentTaskService = getAgentTaskApplicationService();
       
       const createDTO: CreateTaskDTO = {
-        agentId: testAgentId.value,
+        agentId: testAgentId,
         organizationId: testContext.organizationId.value,
         name: 'Creation Test Task',
         instructions: {
@@ -206,14 +207,14 @@ describe('Agent Task Execution Integration Tests', () => {
         }
       };
 
-      console.log(`🧪 Creating task for agent ${testAgentId.value}`);
+      console.log(`🧪 Creating task for agent ${testAgentId}`);
 
       const result = await agentTaskService.createTask(createDTO);
 
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
       expect(result.data!.name).toBe(createDTO.name);
-      expect(result.data!.agentId).toBe(testAgentId.value);
+      expect(result.data!.agentId).toBe(testAgentId);
       expect(result.data!.organizationId).toBe(testContext.organizationId.value);
       expect(result.data!.status).toBe('pending');
 
@@ -225,11 +226,11 @@ describe('Agent Task Execution Integration Tests', () => {
     
     test('should execute individual task by ID', async () => {
       const agentTaskService = getAgentTaskApplicationService();
-      
+
       // First create a task
-      const createRequest: CreateTaskRequest = {
+      const createDTO: CreateTaskDTO = {
         agentId: testAgentId,
-        organizationId: testContext.organizationId,
+        organizationId: testContext.organizationId.value,
         name: 'Individual Execution Test',
         instructions: {
           instructions: 'Calculate 3 + 5 using python',
@@ -238,24 +239,27 @@ describe('Agent Task Execution Integration Tests', () => {
         }
       };
 
-      const task = await agentTaskService.createTask(createRequest);
-      console.log(`📝 Created task: ${task.id.value}`);
-      
+      const createResult = await agentTaskService.createTask(createDTO);
+      expect(createResult.success).toBe(true);
+      expect(createResult.data).toBeDefined();
+      console.log(`📝 Created task: ${createResult.data!.id}`);
+
       // Then execute it
       const executionResult = await agentTaskService.executeTask({
-        taskId: task.id.value,
+        taskId: createResult.data!.id,
         timeoutSeconds: 30
       });
 
       // Verify execution results
-      expect(executionResult).toBeDefined();
-      expect(executionResult.task).toBeDefined();
-      expect(executionResult.executionResult).toBeDefined();
-      
-      const { task: executedTask, executionResult: execResult } = executionResult;
-      
+      expect(executionResult.success).toBe(true);
+      expect(executionResult.data).toBeDefined();
+      expect(executionResult.data!.task).toBeDefined();
+      expect(executionResult.data!.executionResult).toBeDefined();
+
+      const { task: executedTask, executionResult: execResult } = executionResult.data!;
+
       console.log(`🔍 Task execution completed:`, {
-        taskId: executedTask.id.value,
+        taskId: executedTask.id,
         status: executedTask.status,
         executionSuccess: execResult.success,
         executionStatus: execResult.status
@@ -263,13 +267,11 @@ describe('Agent Task Execution Integration Tests', () => {
 
       // Task should complete successfully with gRPC worker
       expect(execResult.success).toBe(true);
-      expect(executedTask.status.value).toBe('completed');
-      expect(executedTask.isPending).toBe(false);
-      expect(executedTask.isTerminal).toBe(true);
+      expect(executedTask.status).toBe('completed');
       expect(execResult.outputData).toBeDefined();
-      
+
       console.log(`✅ Task completed successfully with output:`, execResult.outputData);
-      
+
       // If task fails, the test should fail too
       if (!execResult.success) {
         throw new Error(`Task execution failed: ${execResult.error}`);
@@ -279,58 +281,55 @@ describe('Agent Task Execution Integration Tests', () => {
     test('should run comprehensive task execution test cases', async () => {
       const agentTaskService = getAgentTaskApplicationService();
       const testCases = createTaskExecutionTestCases(testAgentId);
-      
+
       for (const testCase of testCases) {
         console.log(`🧪 Running test: ${testCase.name}`);
-        
-        const createRequest: CreateTaskRequest = {
+
+        const createDTO: CreateTaskDTO & { timeoutSeconds?: number } = {
           agentId: testCase.input.agentId,
-          organizationId: testContext.organizationId,
+          organizationId: testContext.organizationId.value,
           name: testCase.input.name,
           instructions: {
             instructions: testCase.input.instructions,
             tools: testCase.input.tools,
             servers: testCase.input.servers
           },
-          createdBy: testContext.ownerUserId
+          createdBy: testContext.ownerUserId.value,
+          timeoutSeconds: testCase.input.timeoutSeconds
         };
 
         try {
-          const result = await agentTaskService.createAndExecuteTask({
-            ...createRequest,
-            timeoutSeconds: testCase.input.timeoutSeconds
-          });
-          
+          const result = await agentTaskService.createAndExecuteTask(createDTO);
+
+          expect(result.success).toBe(true);
+          expect(result.data).toBeDefined();
+
           console.log(`🔍 Task execution result:`, {
             taskName: testCase.input.name,
-            taskId: result.task.id.value,
-            taskStatus: result.task.status,
-            executionSuccess: result.executionResult.success,
-            executionStatus: result.executionResult.status
+            taskId: result.data!.task.id,
+            taskStatus: result.data!.task.status,
+            executionSuccess: result.data!.executionResult.success,
+            executionStatus: result.data!.executionResult.status
           });
-          
+
           // Verify task was created successfully
-          expect(result.task).toBeDefined();
-          expect(result.task.name).toBe(testCase.input.name);
-          expect(result.task.agentId.value).toBe(testCase.input.agentId);
+          expect(result.data!.task).toBeDefined();
+          expect(result.data!.task.name).toBe(testCase.input.name);
+          expect(result.data!.task.agentId).toBe(testCase.input.agentId);
           expect(testCase.expected.success).toBe(true);
-          
-          // Verify task reached terminal state
-          expect(result.task.isTerminal).toBe(true);
-          expect(testCase.expected.taskCompleted).toBe(true);
-          
+
           // Check execution result (may succeed or fail based on gRPC availability)
-          if (result.executionResult.success) {
-            expect(result.task.status.value).toBe('completed');
-            expect(result.executionResult.outputData).toBeDefined();
+          if (result.data!.executionResult.success) {
+            expect(result.data!.task.status).toBe('completed');
+            expect(result.data!.executionResult.outputData).toBeDefined();
             console.log(`✅ Task executed successfully: ${testCase.name}`);
           } else {
-            expect(result.task.status.value).toBe('failed');
-            expect(result.executionResult.error).toBeDefined();
+            expect(result.data!.task.status).toBe('failed');
+            expect(result.data!.executionResult.error).toBeDefined();
             console.log(`⚠️ Task failed (likely no gRPC worker available): ${testCase.name}`);
-            console.log(`   Error: ${result.executionResult.error}`);
+            console.log(`   Error: ${result.data!.executionResult.error}`);
           }
-          
+
         } catch (error) {
           console.error(`❌ Error in test case "${testCase.name}":`, error);
           throw error;
@@ -343,15 +342,15 @@ describe('Agent Task Execution Integration Tests', () => {
     
     test('should retrieve tasks by agent and organization', async () => {
       const agentTaskService = getAgentTaskApplicationService();
-      
+
       // Create multiple tasks
       const taskNames = ['Retrieval Test 1', 'Retrieval Test 2', 'Retrieval Test 3'];
       const createdTasks = [];
-      
+
       for (const name of taskNames) {
-        const task = await agentTaskService.createTask({
+        const result = await agentTaskService.createTask({
           agentId: testAgentId,
-          organizationId: testContext.organizationId,
+          organizationId: testContext.organizationId.value,
           name,
           instructions: {
             instructions: `Task instructions for ${name}`,
@@ -359,40 +358,41 @@ describe('Agent Task Execution Integration Tests', () => {
             servers: []
           }
         });
-        createdTasks.push(task);
+        expect(result.success).toBe(true);
+        createdTasks.push(result.data!);
       }
-      
+
       console.log(`📝 Created ${createdTasks.length} tasks for retrieval testing`);
-      
+
       // Test retrieval by agent
-      const agentTasks = await agentTaskService.getTasksForAgent(testAgentId.value);
+      const agentTasks = await agentTaskService.getTasksForAgent(testAgentId);
       expect(agentTasks.length).toBeGreaterThanOrEqual(taskNames.length);
-      
+
       // Test retrieval by organization
       const orgTasks = await agentTaskService.getTasksForOrganization(testContext.organizationId.value);
       expect(orgTasks.length).toBeGreaterThanOrEqual(taskNames.length);
-      
+
       // Verify task data
       for (const taskName of taskNames) {
         const foundAgentTask = agentTasks.find(t => t.name === taskName);
         const foundOrgTask = orgTasks.find(t => t.name === taskName);
-        
+
         expect(foundAgentTask).toBeDefined();
         expect(foundOrgTask).toBeDefined();
-        expect(foundAgentTask?.agentId.value).toBe(testAgentId.value);
-        expect(foundOrgTask?.organizationId.value).toBe(testContext.organizationId.value);
+        expect(foundAgentTask?.agentId).toBe(testAgentId);
+        expect(foundOrgTask?.organizationId).toBe(testContext.organizationId.value);
       }
-      
+
       console.log(`✅ Successfully retrieved tasks by agent (${agentTasks.length}) and organization (${orgTasks.length})`);
     });
 
     test('should cancel pending task', async () => {
       const agentTaskService = getAgentTaskApplicationService();
-      
+
       // Create a task
-      const task = await agentTaskService.createTask({
+      const result = await agentTaskService.createTask({
         agentId: testAgentId,
-        organizationId: testContext.organizationId,
+        organizationId: testContext.organizationId.value,
         name: 'Cancellation Test Task',
         instructions: {
           instructions: 'This task will be cancelled',
@@ -400,20 +400,21 @@ describe('Agent Task Execution Integration Tests', () => {
           servers: []
         }
       });
-      
-      expect(task.isPending).toBe(true);
-      console.log(`📝 Created task for cancellation: ${task.id.value}`);
-      
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      expect(result.data!.status).toBe('pending');
+      console.log(`📝 Created task for cancellation: ${result.data!.id}`);
+
       // Cancel the task
       const cancelReason = 'Test cancellation';
-      await agentTaskService.cancelTask(task.id.value, cancelReason);
-      
+      await agentTaskService.cancelTask(result.data!.id, cancelReason);
+
       // Retrieve task to verify cancellation
-      const cancelledTask = await agentTaskService.getTask(task.id.value);
+      const cancelledTask = await agentTaskService.getTask(result.data!.id);
       expect(cancelledTask).toBeDefined();
-      expect(cancelledTask!.status.value).toBe('cancelled');
-      expect(cancelledTask!.isPending).toBe(false);
-      
+      expect(cancelledTask!.status).toBe('cancelled');
+
       console.log(`✅ Task successfully cancelled with reason: ${cancelReason}`);
     });
   });
@@ -496,9 +497,9 @@ describe('Agent Task Execution Integration Tests', () => {
       const agent2Id = agent2Result.data!.id;
       
       // Create tasks in both organizations
-      const task1 = await agentTaskService.createTask({
+      const task1Result = await agentTaskService.createTask({
         agentId: testAgentId,
-        organizationId: testContext.organizationId,
+        organizationId: testContext.organizationId.value,
         name: 'Org 1 Task',
         instructions: {
           instructions: 'Task in organization 1',
@@ -506,10 +507,11 @@ describe('Agent Task Execution Integration Tests', () => {
           servers: []
         }
       });
-      
-      const task2 = await agentTaskService.createTask({
-        agentId: AgentId.fromNumber(agent2Id),
-        organizationId: org2Context.organizationId,
+      expect(task1Result.success).toBe(true);
+
+      const task2Result = await agentTaskService.createTask({
+        agentId: agent2Id,
+        organizationId: org2Context.organizationId.value,
         name: 'Org 2 Task',
         instructions: {
           instructions: 'Task in organization 2',
@@ -517,6 +519,7 @@ describe('Agent Task Execution Integration Tests', () => {
           servers: []
         }
       });
+      expect(task2Result.success).toBe(true);
       
       // Verify organization isolation
       const org1Tasks = await agentTaskService.getTasksForOrganization(testContext.organizationId.value);
