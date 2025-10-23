@@ -150,8 +150,18 @@ interface DynamicDataSheetGridProps {
   onUpdateRow: (rowId: string, fieldId: number, value: DomainFieldValue) => void;
   onAddRows: (rows: Record<string, any>[]) => Promise<void>;
   onDeleteRow: (rowId: string) => void;
+  onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;  // For infinite scroll
   isLoading?: boolean;
   error?: string | null;
+}
+
+// Row number component for gutter column
+const RowNumberCell = ({ rowIndex }: { rowIndex: number }) => {
+  return (
+    <div className="flex items-center justify-center text-xs text-muted-foreground font-mono">
+      {rowIndex + 1}
+    </div>
+  )
 }
 
 // Direct field components for DataSheetGrid
@@ -359,6 +369,7 @@ export function DynamicDataSheetGrid({
   onUpdateRow,
   onAddRows,
   onDeleteRow,
+  onScroll,
   isLoading = false,
   error = null
 }: DynamicDataSheetGridProps) {
@@ -439,7 +450,8 @@ export function DynamicDataSheetGrid({
       headerClassName: 'id-column-header'
     }
 
-    const fieldColumns = fields.map(field => {
+    // AIDEV-NOTE: Filter out 'id' field to prevent duplicate with built-in ID column
+    const fieldColumns = fields.filter(field => field.name !== 'id').map(field => {
       let columnConfig
       let basis = 150
       let minWidth = 120
@@ -453,6 +465,8 @@ export function DynamicDataSheetGrid({
         case 'number':
           // Use built-in floatColumn - handles number parsing/formatting
           columnConfig = floatColumn
+          basis = 180  // Increased from 150 to show larger numbers
+          minWidth = 150  // Increased from 120
           break
 
         case 'boolean':
@@ -667,10 +681,15 @@ export function DynamicDataSheetGrid({
             duplicateRow={({ rowData }) => ({ ...rowData, id: crypto.randomUUID() })}  // Enable context menu with row duplication
             lockRows={false}
             rowKey="id"
-            rowHeight={22}  // Reduced from 45 (50% reduction for Baserow-style compact view)
+            rowHeight={25}  // Increased by 10% from 23px (25.3px rounded down)
             headerRowHeight={32}  // Reduced from 50 (proportionally smaller)
             autoAddRow={false}
-            gutterColumn={false}  // Disable gutter column to show only data columns
+            gutterColumn={{   // Enable gutter for row numbers
+              basis: 60,
+              component: RowNumberCell
+            }}
+            onScroll={onScroll}  // Enable infinite scroll
+            style={{ height: '100%' }}  // CRITICAL: Create scrollable container for mouse wheel events
             className="datasheet-grid"
           />
         )}
