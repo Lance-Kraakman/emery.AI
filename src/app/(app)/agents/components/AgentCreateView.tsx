@@ -64,8 +64,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
           tools: value.tools || [],
           servers: value.servers || [],
           trigger: value.trigger,
-          organizationId: value.organizationId,
-          roleId: value.roleId
+          organizationId: value.organizationId
         });
         
         if (!result.success) {
@@ -244,7 +243,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
             </form.Field>
             <form.Field name="status">
               {(field) => (
-                <Select value={field.state.value} onValueChange={field.handleChange}>
+                <Select value={field.state.value} onValueChange={(value: string) => field.handleChange(value as any)}>
                   <SelectTrigger className="w-32 h-auto p-2 border-none shadow-none bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/20 rounded">
                     <SelectValue />
                   </SelectTrigger>

@@ -463,8 +463,8 @@ describe('Agent Task Execution Integration Tests', () => {
       const agent2Result = await agentApplicationService.createAgent({
         name: 'Isolation Test Agent 2',
         description: 'Agent for testing organization isolation',
-        ownerId: org2Context.ownerUserId,
-        organizationId: org2Context.organizationId,
+        ownerId: org2Context.ownerUserId.value,
+        organizationId: org2Context.organizationId.value,
         role: 'assistant',
         agentType: 'data-collector',
         tools: [
@@ -508,7 +508,7 @@ describe('Agent Task Execution Integration Tests', () => {
       });
       
       const task2 = await agentTaskService.createTask({
-        agentId: agent2Id,
+        agentId: AgentId.fromNumber(agent2Id),
         organizationId: org2Context.organizationId,
         name: 'Org 2 Task',
         instructions: {

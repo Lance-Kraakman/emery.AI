@@ -28,8 +28,8 @@ export async function GET(
     const agentService = getAgentApplicationService();
     
     // Get data-collector agents for this organization
-    const dataCollectors = await agentService.getAgents({ 
-      organizationId: OrganizationId.fromNumber(organizationId),
+    const dataCollectors = await agentService.getAgents({
+      organizationId: organizationId,
       agentTypes: ['data-collector']
     });
 

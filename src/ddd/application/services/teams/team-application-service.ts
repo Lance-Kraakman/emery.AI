@@ -76,24 +76,9 @@ export class TeamApplicationService {
       };
       const savedTeam = await this.teamRepository.create(createData);
 
-      // Convert domain entity to DTO
-      const teamDTO: TeamDTO = {
-        id: savedTeam.id.value,
-        name: savedTeam.name,
-        purpose: savedTeam.purpose,
-        description: savedTeam.description,
-        responsibilities: savedTeam.responsibilities,
-        goals: savedTeam.goals,
-        agentIds: savedTeam.agentIds?.map(id => id.value),
-        databaseId: savedTeam.databaseId,
-        organizationId: savedTeam.organizationId.value,
-        createdAt: savedTeam.createdAt,
-        updatedAt: savedTeam.updatedAt
-      };
-
       return {
         success: true,
-        data: teamDTO,
+        data: this.toDTO(savedTeam),
         warnings: warnings.length > 0 ? warnings : undefined
       };
     } catch (error) {
@@ -159,7 +144,7 @@ export class TeamApplicationService {
 
       return {
         success: true,
-        data: savedTeam,
+        data: this.toDTO(savedTeam),
         warnings: warnings.length > 0 ? warnings : undefined
       };
     } catch (error) {
@@ -247,9 +232,28 @@ export class TeamApplicationService {
   }
 
   /**
+   * Convert Team domain entity to TeamDTO
+   */
+  private toDTO(team: Team): TeamDTO {
+    return {
+      id: team.id.value,
+      name: team.name,
+      purpose: team.purpose || undefined,
+      description: team.description || undefined,
+      responsibilities: team.responsibilities || undefined,
+      goals: team.goals || undefined,
+      agentIds: team.agentIds?.map(id => id.value.toString()) || undefined,
+      databaseId: team.databaseId || undefined,
+      organizationId: team.organizationId.value,
+      createdAt: team.createdAt || undefined,
+      updatedAt: undefined // Team entity doesn't track updatedAt
+    };
+  }
+
+  /**
    * Add agent to team
    */
-  async addAgentToTeam(teamId: number, agentId: string): Promise<Result<Team>> {
+  async addAgentToTeam(teamId: number, agentId: string): Promise<Result<TeamDTO>> {
     try {
       const existingTeam = await this.teamRepository.findById(TeamId.fromNumber(teamId));
       if (!existingTeam) {
@@ -297,7 +301,7 @@ export class TeamApplicationService {
 
       return {
         success: true,
-        data: savedTeam
+        data: this.toDTO(savedTeam)
       };
     } catch (error) {
       console.error("Error adding agent to team:", error);
@@ -311,7 +315,7 @@ export class TeamApplicationService {
   /**
    * Remove agent from team
    */
-  async removeAgentFromTeam(teamId: number, agentId: string): Promise<Result<Team>> {
+  async removeAgentFromTeam(teamId: number, agentId: string): Promise<Result<TeamDTO>> {
     try {
       const existingTeam = await this.teamRepository.findById(TeamId.fromNumber(teamId));
       if (!existingTeam) {
@@ -348,7 +352,7 @@ export class TeamApplicationService {
 
       return {
         success: true,
-        data: savedTeam
+        data: this.toDTO(savedTeam)
       };
     } catch (error) {
       console.error("Error removing agent from team:", error);
@@ -376,7 +380,7 @@ export class TeamApplicationService {
   /**
    * Bulk assign agents to team
    */
-  async bulkAssignAgents(teamId: TeamId, agentIds: AgentId[]): Promise<Result<Team>> {
+  async bulkAssignAgents(teamId: TeamId, agentIds: AgentId[]): Promise<Result<TeamDTO>> {
     try {
       const existingTeam = await this.teamRepository.findById(teamId);
       if (!existingTeam) {
@@ -415,7 +419,7 @@ export class TeamApplicationService {
 
       return {
         success: true,
-        data: savedTeam
+        data: this.toDTO(savedTeam)
       };
     } catch (error) {
       console.error("Error bulk assigning agents:", error);

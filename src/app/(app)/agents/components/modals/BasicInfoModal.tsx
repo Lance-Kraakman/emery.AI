@@ -130,7 +130,7 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
         name: formData.name.trim(),
         role: formData.role.trim(),
         description: formData.description.trim(),
-        status: formData.status,
+        status: formData.status as 'active' | 'inactive' | 'archived',
         ...(canManageAgents && formData.ownerId && { ownerId: formData.ownerId })
       });
 
