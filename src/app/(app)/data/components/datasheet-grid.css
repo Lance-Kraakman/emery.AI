@@ -86,13 +86,12 @@
   width: 100% !important;
 }
 
-/* DSG Cell styling integration - frosted glass effect */
+/* DSG Cell styling - optimized for performance */
 .dsg-cell {
   border-right: 1px solid hsl(var(--border));
   border-bottom: 1px solid hsl(var(--border));
-  transition: all 150ms ease;
-  background-color: hsl(var(--background) / 0.75);
-  backdrop-filter: blur(8px);
+  transition: background-color 150ms ease;  /* Optimized: only transition what changes */
+  background-color: hsl(var(--background));  /* Solid background for performance */
   padding: 4px 8px !important;  /* Reduced from 8px 12px for compact rows */
   font-size: 0.875rem;  /* 14px - slightly smaller text */
   line-height: 1.25;  /* Tighter line height */
