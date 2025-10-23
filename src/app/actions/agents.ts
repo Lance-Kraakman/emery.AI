@@ -5,11 +5,12 @@ import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
-import { type Result, type CreateAgentData } from "./types";
+import { type Result, type CreateAgentData, type CreateAgentClientData } from "./types";
 import { getAgentApplicationService } from "@/ddd/application/di/container";
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from "@/app/dtos/agent.dto";
 import type { CapabilityConfig } from "@/ddd/domain/agents/entities/agent";
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
+import { AgentMapper } from "@/app/mappers/agent-mapper";
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
@@ -280,21 +281,20 @@ export async function getAgents(filters: { teamId?: number | string, searchQuery
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("agents:view");
-    const currentOrg = await requireCurrentOrganization();
-    const agentApplicationService = getAgentApplicationService();
-    
-    const agentFilters: AgentFilters = {
-      organizationId: OrganizationId.fromNumber(currentOrg.id),
-      teamId: filters.teamId,
-      searchQuery: filters.searchQuery,
-      status: filters.status
-    };
+      const currentOrg = await requireCurrentOrganization();
+      const agentApplicationService = getAgentApplicationService();
 
-    const domainAgents = await agentApplicationService.getAgents(agentFilters);
-    
-    // Map domain entities to DTOs for client serialization
-    return domainAgents.map(AgentMapper.toDTO);
-  } catch (error) {
+      // Build DTO filter - Application Service handles Value Object conversion
+      const agentFilters: AgentFiltersDTO = {
+        organizationId: currentOrg.id,
+        teamId: filters.teamId,
+        searchQuery: filters.searchQuery,
+        status: filters.status
+      };
+
+      // Application service now returns DTOs directly
+      return await agentApplicationService.getAgents(agentFilters);
+    } catch (error) {
       console.error("Error fetching agents:", error);
       throw new Error("Failed to fetch agents");
     }
@@ -336,65 +336,69 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
         };
       }
 
-      // Check resource-specific permission for updating this specific agent  
+      // Check resource-specific permission for updating this specific agent
       const session = await requireResourcePermission("agents:manage", "agent", agentId);
-    const agentApplicationService = getAgentApplicationService();
-    
-    const command: UpdateAgentCommand = {
-      agentId: AgentId.fromNumber(agentId),
-      name: data.name,
-      role: data.role,
-      description: data.description,
-      persona: data.persona,
-      ownerId: data.ownerId, // Already a UserId from domain data conversion
-      tools: data.tools,
-      servers: data.servers,
-      trigger: data.trigger,
-      capabilities: data.capabilities,
-      status: (() => {
-        const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
-        return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
-          ? statusValue as 'active' | 'inactive' | 'archived'
-          : undefined;
-      })()
-    };
+      const agentApplicationService = getAgentApplicationService();
 
-    console.log('[updateAgent] UpdateAgentCommand capabilities:', JSON.stringify({
-      capabilitiesCount: command.capabilities?.length || 0,
-      capabilities: command.capabilities?.map(c => ({
-        name: c.name,
-        stepsCount: c.steps.length,
-        steps: c.steps.map(s => ({
-          type: s.type,
-          toolsCount: s.tools?.length || 0,
-          tools: s.tools?.map(t => ({ name: t.name, config: t.config }))
-        }))
-      }))
-    }, null, 2));
+      // Convert tools to ToolConfigDTOs
+      const toolDTOs = data.tools?.map(tool =>
+        tool instanceof ToolConfig ? tool.toPlain() : tool
+      );
 
-    const result = await agentApplicationService.updateAgent(command);
-
-    if (!result.success || !result.data) {
-      return {
-        success: false,
-        error: result.error || "Failed to update agent"
+      // Build DTO - Application Service handles Value Object conversion
+      const dto: UpdateAgentDTO = {
+        id: agentId,
+        name: data.name,
+        role: data.role,
+        description: data.description,
+        persona: data.persona,
+        ownerId: data.ownerId instanceof UserId ? data.ownerId.value : data.ownerId,
+        tools: toolDTOs,
+        servers: data.servers,
+        trigger: data.trigger,
+        capabilities: data.capabilities,
+        status: (() => {
+          const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
+          return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
+            ? statusValue as 'active' | 'inactive' | 'archived'
+            : undefined;
+        })()
       };
-    }
 
-    // Revalidate the appropriate path
-    if (revalidateUrl) {
-      revalidatePath(revalidateUrl);
-    } else {
-      revalidatePath('/manage'); // Default path for agent operations
-    }
-    
-    // Map domain entity to DTO for client serialization
-    const agentDTO = AgentMapper.toDTO(result.data);
+      console.log('[updateAgent] UpdateAgentDTO capabilities:', JSON.stringify({
+        capabilitiesCount: dto.capabilities?.length || 0,
+        capabilities: dto.capabilities?.map(c => ({
+          name: c.name,
+          stepsCount: c.steps.length,
+          steps: c.steps.map(s => ({
+            type: s.type,
+            toolsCount: s.tools?.length || 0,
+            tools: s.tools?.map(t => ({ name: t.name, config: t.config }))
+          }))
+        }))
+      }, null, 2));
 
-    return {
-      success: true,
-      data: agentDTO,
-    };
+      const result = await agentApplicationService.updateAgent(dto);
+
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          error: result.error || "Failed to update agent"
+        };
+      }
+
+      // Revalidate the appropriate path
+      if (revalidateUrl) {
+        revalidatePath(revalidateUrl);
+      } else {
+        revalidatePath('/manage'); // Default path for agent operations
+      }
+
+      // Application service now returns DTO directly
+      return {
+        success: true,
+        data: result.data,
+      };
   } catch (error) {
     console.error("Error updating agent:", error);
       return {

@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAgentApplicationService } from '@/ddd/application/di/container';
-import type { CreateAgentCommand } from '@/ddd/application/services/agents/agent-application-service';
+import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 /**
@@ -47,20 +47,21 @@ export async function POST(request: NextRequest): Promise<Response> {
     // Use AgentApplicationService for agent creation
     const agentApplicationService = getAgentApplicationService();
 
-    const command: CreateAgentCommand = {
+    // Build DTO - Application Service handles Value Object conversion
+    const dto: CreateAgentDTO = {
       name,
       role,
       description,
       persona,
-      ownerId: UserId.fromString(userId),
-      organizationId: OrganizationId.fromNumber(parseInt(organizationId)),
+      ownerId: userId,
+      organizationId: parseInt(organizationId),
       trigger: trigger || { type: 'MANUAL', enabled: true },
       capabilities: capabilities || [],
       tools: tools || [],
       servers: servers || []
     };
 
-    const result = await agentApplicationService.createAgent(command);
+    const result = await agentApplicationService.createAgent(dto);
 
     if (!result.success) {
       return Response.json({ 
