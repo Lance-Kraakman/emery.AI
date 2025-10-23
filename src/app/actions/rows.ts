@@ -398,6 +398,57 @@ export async function getRowsDataDSG(tableId: number, limit = 1000): Promise<any
   }
 }
 
+/**
+ * Paginated version for infinite scroll
+ * Returns rows with pagination metadata
+ */
+export async function getRowsDataDSGPaginated(
+  tableId: number,
+  limit = 100,
+  offset = 0
+): Promise<{ rows: any[], hasMore: boolean, total: number }> {
+  try {
+    await requirePermission("data:manage");
+
+    if (!tableId) {
+      throw new Error("tableId is required");
+    }
+
+    const tableAppService = getTableApplicationService();
+
+    // Get table to access field definitions
+    const table = await tableAppService.getTable(TableId.fromNumber(tableId));
+    if (!table) {
+      throw new Error("Table not found");
+    }
+
+    // Get paginated rows
+    const rowsData = await tableAppService.getRows(
+      TableId.fromNumber(tableId),
+      { limit, offset }
+    );
+
+    // Transform to DSG format
+    const dsgData = rowsData.map(row => {
+      const plainData = row.toPlainObject();
+      return { id: row.id.value, ...plainData };
+    });
+
+    // Check if there are more rows
+    // If we got fewer rows than the limit, we're at the end
+    const hasMore = dsgData.length === limit;
+
+    return {
+      rows: dsgData,
+      hasMore,
+      total: dsgData.length
+    };
+  } catch (error) {
+    console.error("Error fetching paginated rows:", error);
+    throw new Error(error instanceof Error ? error.message : "Failed to fetch rows");
+  }
+}
+
 export async function deleteRowAction(formData: FormData) {
   const tableId = parseInt(formData.get('tableId') as string);
   const rowId = formData.get('rowId') as string;

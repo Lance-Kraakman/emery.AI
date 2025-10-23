@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useEffect } from "react"
+import React, { useEffect, useMemo, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { useStore } from '@tanstack/react-store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,7 +16,7 @@ import { dataStore, dataSelectors } from '@/stores/data-management.store'
 import { storeActions, dataActions } from '@/stores/actions'
 import type { TableDTO } from "@/app/mappers/table-mapper"
 import { getFields } from "@/app/actions/fields"
-import { getRowsDataDSG, createRow, createRows, updateRowData, deleteRowData } from "@/app/actions/rows"
+import { getRowsDataDSG, getRowsDataDSGPaginated, createRow, createRows, updateRowData, deleteRowData } from "@/app/actions/rows"
 import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { DSGRow } from "@/app/mappers/dsg-mapper"
@@ -66,19 +66,46 @@ export function DataViewsClientSimplified() {
     staleTime: 1000 * 60 * 5, // 5 minutes
   })
 
-  // TanStack Query for rows
-  const rowsQuery = useQuery<DSGRow[]>({
-    queryKey: ['rows', selectedTableId],
-    queryFn: () => selectedTableId ? getRowsDataDSG(selectedTableId, 1000) : Promise.resolve([]),
+  // TanStack Infinite Query for rows (supports pagination)
+  const infiniteRowsQuery = useInfiniteQuery({
+    queryKey: ['rows-infinite', selectedTableId],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }: { pageParam: number }) =>
+      selectedTableId
+        ? getRowsDataDSGPaginated(selectedTableId, 100, pageParam)
+        : Promise.resolve({ rows: [], hasMore: false, total: 0 }),
+    getNextPageParam: (lastPage: { rows: DSGRow[], hasMore: boolean, total: number }, allPages: any[]) => {
+      if (!lastPage.hasMore) return undefined
+      return allPages.length * 100 // Offset for next page
+    },
     enabled: !!selectedTableId,
     staleTime: 1000 * 60 * 2, // 2 minutes
   })
 
   const fields: FieldDTO[] = fieldsQuery.data || []
-  const rows: DSGRow[] = rowsQuery.data || []
 
-  const loading = fieldsQuery.isLoading || rowsQuery.isLoading
-  const error = fieldsQuery.error || rowsQuery.error
+  // Flatten all pages into single array
+  const rows: DSGRow[] = useMemo(() => {
+    return infiniteRowsQuery.data?.pages.flatMap((page: { rows: DSGRow[], hasMore: boolean, total: number }) => page.rows) ?? []
+  }, [infiniteRowsQuery.data])
+
+  const loading = fieldsQuery.isLoading || infiniteRowsQuery.isLoading
+  const error = fieldsQuery.error || infiniteRowsQuery.error
+
+  // Scroll handler for infinite scroll
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLDivElement
+    const { scrollHeight, scrollTop, clientHeight } = target
+
+    // Trigger load when within 300px of bottom
+    if (
+      scrollHeight - scrollTop - clientHeight < 300 &&
+      !infiniteRowsQuery.isFetching &&
+      infiniteRowsQuery.hasNextPage
+    ) {
+      infiniteRowsQuery.fetchNextPage()
+    }
+  }, [infiniteRowsQuery])
 
   // TanStack Mutations for optimistic updates
   const updateRowMutation = useMutation({
@@ -97,44 +124,42 @@ export function DataViewsClientSimplified() {
       })
     },
     onMutate: async ({ rowId, fieldId, value }) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['rows', selectedTableId] })
+      // Cancel outgoing refetches to prevent race conditions
+      await queryClient.cancelQueries({ queryKey: ['rows-infinite', selectedTableId] })
 
-      // Snapshot the previous value
-      const previousRows = queryClient.getQueryData(['rows', selectedTableId])
+      // Snapshot the previous data for rollback
+      const previousData = queryClient.getQueryData(['rows-infinite', selectedTableId])
 
-      // Find the field to get its info
+      // Find the field to get its name
       const field = fields.find(f => f.id === fieldId)
-      if (!field) return { previousRows }
+      if (!field) return { previousData }
 
-      // Optimistically update the cache with the value from built-in column
-      queryClient.setQueryData(['rows', selectedTableId], (oldRows: any[] | undefined) => {
-        if (!oldRows) return []
-        return oldRows.map(row => {
-          if (row.id === rowId) {
-            return {
-              ...row,
-              [field.name]: value
-            }
-          }
-          return row
-        })
+      // Optimistically update all pages in the infinite query
+      queryClient.setQueryData(['rows-infinite', selectedTableId], (old: any) => {
+        if (!old?.pages) return old
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            rows: page.rows.map((row: DSGRow) =>
+              row.id === rowId ? { ...row, [field.name]: value } : row
+            )
+          }))
+        }
       })
 
-      return { previousRows }
+      return { previousData }
     },
     onError: (err, variables, context) => {
-      // Rollback on error
-      if (context?.previousRows) {
-        queryClient.setQueryData(['rows', selectedTableId], context.previousRows)
+      // Rollback to previous state on error
+      if (context?.previousData) {
+        queryClient.setQueryData(['rows-infinite', selectedTableId], context.previousData)
       }
       console.error("Failed to update row:", err)
     },
     onSettled: () => {
-      // Don't automatically refetch - let the optimistic update persist
-      // This prevents race conditions where the server data overwrites the correct UI state
-      // Users can manually refresh if needed
-      // queryClient.invalidateQueries({ queryKey: ['rows', selectedTableId] })
+      // Don't invalidate - let optimistic update persist
+      // Only refetch on errors (handled by onError rollback)
     },
   })
 
@@ -172,21 +197,9 @@ export function DataViewsClientSimplified() {
 
       return createRows({ tableId: selectedTableId, rows: processedRows })
     },
-    onSuccess: (result) => {
-      if (result.success && result.data) {
-        // Convert all returned RowDTOs to DSG format for the cache
-        const dsgRows = result.data.map((row: any) => ({
-          id: row.id,
-          ...row.fieldValues.reduce((acc: Record<string, any>, fv: any) => {
-            acc[fv.fieldSlug] = fv.value
-            return acc
-          }, {} as Record<string, any>)
-        }))
-
-        queryClient.setQueryData(['rows', selectedTableId], (oldRows: any[] | undefined) => {
-          return oldRows ? [...oldRows, ...dsgRows] : dsgRows
-        })
-      }
+    onSettled: () => {
+      // Invalidate infinite query to refetch with new rows
+      queryClient.invalidateQueries({ queryKey: ['rows-infinite', selectedTableId] })
     },
     onError: (err) => {
       console.error("Failed to add rows:", err)
@@ -198,24 +211,12 @@ export function DataViewsClientSimplified() {
       if (!selectedTableId) throw new Error('No table selected')
       return deleteRowData(selectedTableId, rowId)
     },
-    onMutate: async (rowId) => {
-      await queryClient.cancelQueries({ queryKey: ['rows', selectedTableId] })
-      const previousRows = queryClient.getQueryData(['rows', selectedTableId])
-      
-      queryClient.setQueryData(['rows', selectedTableId], (oldRows: any[] | undefined) => {
-        return oldRows ? oldRows.filter(row => row.id !== rowId) : []
-      })
-
-      return { previousRows }
-    },
-    onError: (err, variables, context) => {
-      if (context?.previousRows) {
-        queryClient.setQueryData(['rows', selectedTableId], context.previousRows)
-      }
-      console.error("Failed to delete row:", err)
-    },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['rows', selectedTableId] })
+      // Invalidate infinite query to refetch without deleted row
+      queryClient.invalidateQueries({ queryKey: ['rows-infinite', selectedTableId] })
+    },
+    onError: (err) => {
+      console.error("Failed to delete row:", err)
     },
   })
 
@@ -236,7 +237,7 @@ export function DataViewsClientSimplified() {
   const refreshTableData = () => {
     if (selectedTableId) {
       queryClient.invalidateQueries({ queryKey: ['fields', selectedTableId] })
-      queryClient.invalidateQueries({ queryKey: ['rows', selectedTableId] })
+      queryClient.invalidateQueries({ queryKey: ['rows-infinite', selectedTableId] })
     }
   }
 
@@ -325,6 +326,7 @@ export function DataViewsClientSimplified() {
               onUpdateRow={handleUpdateRow}
               onAddRows={handleAddRows}
               onDeleteRow={handleDeleteRow}
+              onScroll={handleScroll}
               isLoading={loading}
               error={error ? String(error) : null}
             />
