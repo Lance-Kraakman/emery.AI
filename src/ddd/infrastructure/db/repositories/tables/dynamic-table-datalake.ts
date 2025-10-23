@@ -1,23 +1,22 @@
 /**
- * gRPC Data Storage Service
- * 
- * Infrastructure implementation for gRPC data conversion.
+ * Dynamic Table Data Lake
+ *
+ * Infrastructure implementation for Delta Lake data storage via gRPC.
  * Handles JSON ↔ gRPC conversion for table data storage using domain entities.
- * Follows the same pattern as ArrowDataStorageService but uses gRPC + Delta Lake backend.
- * 
- * AIDEV-NOTE: Replaces Arrow/IPC with gRPC calls to Python table service
+ *
+ * AIDEV-NOTE: Concrete implementation for gRPC + Delta Lake backend.
+ * No interface needed - single implementation for data lake operations.
  */
 
-import type { ITableDataStorageService } from '@/ddd/domain/tables/services/table-data-storage-service.interface';
 import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import type { Result } from '@/ddd/domain/shared/result';
 import { Row } from '@/ddd/domain/tables/value-objects/row';
 import { GrpcTableClient } from '@/ddd/infrastructure/grpc/table-grpc-client';
-import { TableGrpcMapper } from '../grpc/table-grpc-mapper';
+import { TableGrpcMapper } from '@/ddd/infrastructure/grpc/table-grpc-mapper';
 import { RowSerializer } from './row-serializer';
 import { CreateTableRequest, DeleteTableRequest, UpdateTableRequest } from '@/lib/grpc/generated/table_service';
 
-export class GrpcDataStorageService implements ITableDataStorageService {
+export class DynamicTableDataLake {
   constructor(
     private readonly grpcClient: GrpcTableClient,
   ) {}
@@ -34,17 +33,17 @@ export class GrpcDataStorageService implements ITableDataStorageService {
     mode: 'append' | 'overwrite'
   ): Promise<Result<void>> {
     try {
-      console.log(`[GrpcDataStorageService] Storing ${rows.length} rows (mode: ${mode}) for table ${table.id}`);
+      console.log(`[DynamicTableDataLake] Storing ${rows.length} rows (mode: ${mode}) for table ${table.id}`);
 
       // Debug logging for table object
-      console.log('[GrpcDataStorageService] Table object debug:');
+      console.log('[DynamicTableDataLake] Table object debug:');
       console.log(`  - table.id: ${table.id?.value}`);
       console.log(`  - table.organizationId: ${table.organizationId?.value}`);
       console.log(`  - table.storageLocation: ${table.storageLocation}`);
       console.log(`  - write mode: ${mode}`);
 
       const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
-      console.log(`[GrpcDataStorageService] Using s3Path: ${s3Path}`);
+      console.log(`[DynamicTableDataLake] Using s3Path: ${s3Path}`);
 
       // 1. Serialize rows for Delta Lake storage (arrays → JSON strings)
       // AIDEV-NOTE: RowSerializer handles complex field type serialization
@@ -68,14 +67,14 @@ export class GrpcDataStorageService implements ITableDataStorageService {
 
       // 4. Handle response using TypeScript property access
       if (response && response.success) {
-        console.log(`[GrpcDataStorageService] Successfully stored ${rows.length} rows (mode: ${mode})`);
+        console.log(`[DynamicTableDataLake] Successfully stored ${rows.length} rows (mode: ${mode})`);
         return {
           success: true,
           data: undefined
         };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[GrpcDataStorageService] Failed to store rows: ${message}`);
+        console.error(`[DynamicTableDataLake] Failed to store rows: ${message}`);
         return {
           success: false,
           error: message || 'Failed to store data via gRPC'
@@ -83,7 +82,7 @@ export class GrpcDataStorageService implements ITableDataStorageService {
       }
 
     } catch (error) {
-      console.error('[GrpcDataStorageService] Error storing data:', error);
+      console.error('[DynamicTableDataLake] Error storing data:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to store data via gRPC'
@@ -107,11 +106,11 @@ export class GrpcDataStorageService implements ITableDataStorageService {
     } = {}
   ): Promise<Result<Row[]>> {
     try {
-      console.log(`[GrpcDataStorageService.retrieveRows] === ENTRY ===`);
-      console.log(`[GrpcDataStorageService.retrieveRows] Table ID: ${table.id.value}`);
-      console.log(`[GrpcDataStorageService.retrieveRows] Table name: ${table.name}`);
-      console.log(`[GrpcDataStorageService.retrieveRows] Storage location: ${table.storageLocation}`);
-      console.log(`[GrpcDataStorageService.retrieveRows] Options:`, JSON.stringify(options, null, 2));
+      console.log(`[DynamicTableDataLake.retrieveRows] === ENTRY ===`);
+      console.log(`[DynamicTableDataLake.retrieveRows] Table ID: ${table.id.value}`);
+      console.log(`[DynamicTableDataLake.retrieveRows] Table name: ${table.name}`);
+      console.log(`[DynamicTableDataLake.retrieveRows] Storage location: ${table.storageLocation}`);
+      console.log(`[DynamicTableDataLake.retrieveRows] Options:`, JSON.stringify(options, null, 2));
 
       const { limit = 1000, offset = 0, filters = {}, orderBy = '', orderDirection = 'ASC' } = options;
 
@@ -131,7 +130,7 @@ export class GrpcDataStorageService implements ITableDataStorageService {
         table.organizationId
       );
 
-      console.log(`[GrpcDataStorageService.retrieveRows] Query request created:`, {
+      console.log(`[DynamicTableDataLake.retrieveRows] Query request created:`, {
         tableId: table.id.value,
         s3Path: table.storageLocation || `s3://emery-tables/${table.id.value}`,
         limit,
@@ -142,9 +141,9 @@ export class GrpcDataStorageService implements ITableDataStorageService {
       });
 
       // 2. Send to gRPC service
-      console.log(`[GrpcDataStorageService.retrieveRows] Calling grpcClient.queryRows...`);
+      console.log(`[DynamicTableDataLake.retrieveRows] Calling grpcClient.queryRows...`);
       const response = await this.grpcClient.queryRows(queryRequest);
-      console.log(`[GrpcDataStorageService.retrieveRows] gRPC response received:`, {
+      console.log(`[DynamicTableDataLake.retrieveRows] gRPC response received:`, {
         success: response?.success,
         hasArrowData: !!(response?.arrowIpcStream),
         arrowDataLength: response?.arrowIpcStream?.length || 0,
@@ -156,18 +155,18 @@ export class GrpcDataStorageService implements ITableDataStorageService {
         const arrowIpcBytes = response.arrowIpcStream;
 
         if (!arrowIpcBytes || arrowIpcBytes.length === 0) {
-          console.log(`[GrpcDataStorageService.retrieveRows] No Arrow data returned - table is empty`);
-          console.log(`[GrpcDataStorageService.retrieveRows] === EXIT === (empty result)`);
+          console.log(`[DynamicTableDataLake.retrieveRows] No Arrow data returned - table is empty`);
+          console.log(`[DynamicTableDataLake.retrieveRows] === EXIT === (empty result)`);
           return { success: true, data: [] };
         }
 
-        console.log(`[GrpcDataStorageService.retrieveRows] Deserializing Arrow IPC bytes (${arrowIpcBytes.length} bytes)...`);
+        console.log(`[DynamicTableDataLake.retrieveRows] Deserializing Arrow IPC bytes (${arrowIpcBytes.length} bytes)...`);
 
         // Deserialize Arrow IPC bytes to Arrow Table (zero-copy)
         const { tableFromIPC } = await import('apache-arrow');
         const arrowTable = tableFromIPC(arrowIpcBytes);
 
-        console.log(`[GrpcDataStorageService.retrieveRows] Arrow table deserialized:`, {
+        console.log(`[DynamicTableDataLake.retrieveRows] Arrow table deserialized:`, {
           numRows: arrowTable.numRows,
           numCols: arrowTable.numCols,
           schema: arrowTable.schema.fields.map(f => ({ name: f.name, type: f.type.toString() }))
@@ -193,14 +192,14 @@ export class GrpcDataStorageService implements ITableDataStorageService {
           rows.push(row);
         }
 
-        console.log(`[GrpcDataStorageService.retrieveRows] Converted ${rows.length} Arrow rows to domain Row entities`);
-        console.log(`[GrpcDataStorageService.retrieveRows] Sample row:`, rows[0]?.toPlainObject());
-        console.log(`[GrpcDataStorageService.retrieveRows] === EXIT === (success: ${rows.length} rows)`);
+        console.log(`[DynamicTableDataLake.retrieveRows] Converted ${rows.length} Arrow rows to domain Row entities`);
+        console.log(`[DynamicTableDataLake.retrieveRows] Sample row:`, rows[0]?.toPlainObject());
+        console.log(`[DynamicTableDataLake.retrieveRows] === EXIT === (success: ${rows.length} rows)`);
         return { success: true, data: rows };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[GrpcDataStorageService.retrieveRows] gRPC query failed: ${message}`);
-        console.error(`[GrpcDataStorageService.retrieveRows] === EXIT === (error)`);
+        console.error(`[DynamicTableDataLake.retrieveRows] gRPC query failed: ${message}`);
+        console.error(`[DynamicTableDataLake.retrieveRows] === EXIT === (error)`);
         return {
           success: false,
           error: message || 'Failed to retrieve data via gRPC'
@@ -208,10 +207,10 @@ export class GrpcDataStorageService implements ITableDataStorageService {
       }
 
     } catch (error) {
-      console.error('[GrpcDataStorageService.retrieveRows] === EXCEPTION ===');
-      console.error('[GrpcDataStorageService.retrieveRows] Error retrieving data:', error);
-      console.error('[GrpcDataStorageService.retrieveRows] Error type:', error instanceof Error ? error.constructor.name : typeof error);
-      console.error('[GrpcDataStorageService.retrieveRows] Error stack:', error instanceof Error ? error.stack : 'N/A');
+      console.error('[DynamicTableDataLake.retrieveRows] === EXCEPTION ===');
+      console.error('[DynamicTableDataLake.retrieveRows] Error retrieving data:', error);
+      console.error('[DynamicTableDataLake.retrieveRows] Error type:', error instanceof Error ? error.constructor.name : typeof error);
+      console.error('[DynamicTableDataLake.retrieveRows] Error stack:', error instanceof Error ? error.stack : 'N/A');
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to retrieve data via gRPC'
@@ -224,7 +223,7 @@ export class GrpcDataStorageService implements ITableDataStorageService {
    */
   async createTable(table: DynamicTable): Promise<Result<string>> {
     try {
-      console.log(`[GrpcDataStorageService] Creating table ${table.name} with ${table.fields.length} fields`);
+      console.log(`[DynamicTableDataLake] Creating table ${table.name} with ${table.fields.length} fields`);
 
       // Convert domain fields to protobuf format
       // AIDEV-NOTE: table.fields includes system 'id' field (added by repository)
@@ -251,31 +250,31 @@ export class GrpcDataStorageService implements ITableDataStorageService {
         s3Path: table.storageLocation || `s3://emery-tables/${table.id.value}`
       });
 
-      console.log(`[GrpcDataStorageService] Creating table with schema:`, {
+      console.log(`[DynamicTableDataLake] Creating table with schema:`, {
         name: table.name,
         fieldCount: protoFields.length,
         fields: protoFields.map(f => f.name)
       });
-      
+
       // 5. Send to gRPC service
       const response = await this.grpcClient.createTable(createRequest);
-      
+
       // 6. Handle response
       if (response && response.success) {
         const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
-        console.log(`[GrpcDataStorageService] Successfully created table ${table.name} at ${s3Path}`);
+        console.log(`[DynamicTableDataLake] Successfully created table ${table.name} at ${s3Path}`);
         return { success: true, data: s3Path };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[GrpcDataStorageService] Failed to create table: ${message}`);
+        console.error(`[DynamicTableDataLake] Failed to create table: ${message}`);
         return {
           success: false,
           error: message || 'Failed to create table via gRPC'
         };
       }
-      
+
     } catch (error) {
-      console.error('[GrpcDataStorageService] Error creating table:', error);
+      console.error('[DynamicTableDataLake] Error creating table:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create table via gRPC'
@@ -288,11 +287,11 @@ export class GrpcDataStorageService implements ITableDataStorageService {
    */
   async updateTable(table: DynamicTable): Promise<Result<void>> {
     try {
-      console.log(`[GrpcDataStorageService] Updating table ${table.id}`);
+      console.log(`[DynamicTableDataLake] Updating table ${table.id}`);
 
       // 1. Convert domain table to protobuf
       const protoTable = TableGrpcMapper.toProtoTable(table);
-      
+
       // 2. Create update request
       const updateRequest = UpdateTableRequest.create(
         {
@@ -306,22 +305,22 @@ export class GrpcDataStorageService implements ITableDataStorageService {
 
       // 3. Send to gRPC service
       const response = await this.grpcClient.updateTable(updateRequest);
-      
+
       // 4. Handle response using TypeScript property access
       if (response && response.success) {
-        console.log(`[GrpcDataStorageService] Successfully updated table ${table.id}`);
+        console.log(`[DynamicTableDataLake] Successfully updated table ${table.id}`);
         return { success: true, data: undefined };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[GrpcDataStorageService] Failed to update table: ${message}`);
+        console.error(`[DynamicTableDataLake] Failed to update table: ${message}`);
         return {
           success: false,
           error: message || 'Failed to update table via gRPC'
         };
       }
-      
+
     } catch (error) {
-      console.error('[GrpcDataStorageService] Error updating table:', error);
+      console.error('[DynamicTableDataLake] Error updating table:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update table via gRPC'
@@ -346,7 +345,7 @@ export class GrpcDataStorageService implements ITableDataStorageService {
     lastModified: Date;
   }>> {
     // For now, return mock data
-    console.warn(`[GrpcDataStorageService] getTableStats not implemented for table ${table.id}, returning mock data`);
+    console.warn(`[DynamicTableDataLake] getTableStats not implemented for table ${table.id}, returning mock data`);
     return {
       success: true,
       data: {
@@ -388,7 +387,7 @@ export class GrpcDataStorageService implements ITableDataStorageService {
    */
   async deleteTable(table: DynamicTable): Promise<Result<void>> {
     try {
-      console.log(`[GrpcDataStorageService] Deleting table storage for ${table.id}`);
+      console.log(`[DynamicTableDataLake] Deleting table storage for ${table.id}`);
 
       const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
 
@@ -402,18 +401,18 @@ export class GrpcDataStorageService implements ITableDataStorageService {
       const response = await this.grpcClient.deleteTable(deleteRequest);
 
       if (response && response.success) {
-        console.log(`[GrpcDataStorageService] Successfully deleted table storage for ${table.id}`);
+        console.log(`[DynamicTableDataLake] Successfully deleted table storage for ${table.id}`);
         return { success: true, data: undefined };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[GrpcDataStorageService] Failed to delete table storage: ${message}`);
+        console.error(`[DynamicTableDataLake] Failed to delete table storage: ${message}`);
         return {
           success: false,
           error: message || 'Failed to delete table storage via gRPC'
         };
       }
     } catch (error) {
-      console.error('[GrpcDataStorageService] Error deleting table storage:', error);
+      console.error('[DynamicTableDataLake] Error deleting table storage:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to delete table storage via gRPC'

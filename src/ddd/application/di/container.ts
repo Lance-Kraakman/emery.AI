@@ -9,8 +9,6 @@ import { IUserRepository } from '@/ddd/domain/users/repositories/user-repository
 import { DrizzleUserRepository } from '@/ddd/infrastructure/db/repositories/users/drizzle-user-repository';
 import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import { DynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/dynamic-table-repository';
-import type { ITableQueryService } from '@/ddd/domain/tables/services/table-query-service.interface';
-import type { ITableDataStorageService } from '@/ddd/domain/tables/services/table-data-storage-service.interface';
 import { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
 import { S3FileStorageRepository } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
 
@@ -92,7 +90,7 @@ import { pipedreamClient } from '@/lib/pipedream/client';
 import { EmbeddingGeneratorService } from '@/ddd/domain/rag/services/embedding-generator-service';
 import { EmbeddingGeneratorDomainService } from '../services/rag/embedding-generator-service/embedding-generator-service';
 import { GrpcTableClient } from '@/ddd/infrastructure/grpc/table-grpc-client';
-import { GrpcDataStorageService } from '@/ddd/infrastructure/datalake/grpc-data-storage-service';
+import { DynamicTableDataLake } from '@/ddd/infrastructure/db/repositories/tables/dynamic-table-datalake';
 
 
 // Registry of all available repository interfaces and services
@@ -100,7 +98,6 @@ interface RepositoryRegistry {
   IOrganizationRepository: IOrganizationRepository;
   IUserRepository: IUserRepository;
   IDynamicTableRepository: IDynamicTableRepository;
-  ITableQueryService: ITableQueryService;
   IFileStorageRepository: IFileStorageRepository;
   
   // Field and table services
@@ -220,18 +217,6 @@ export class DIContainer {
     const fileStorageRepository = new S3FileStorageRepository();
     this.repositories.set('IFileStorageRepository', fileStorageRepository);
 
-    // Register mock table query services (to be replaced with actual implementation)
-    const tableQueryService: ITableQueryService = {
-      findTableById: async () => ({ success: false, error: 'Mock implementation not available' }),
-      findTablesByOrganization: async () => ({ success: false, error: 'Mock implementation not available' }),
-      findTablesByDatabase: async () => ({ success: false, error: 'Mock implementation not available' }),
-      searchTables: async () => ({ success: false, error: 'Mock implementation not available' }),
-      tableExists: async () => ({ success: false, error: 'Mock implementation not available' }),
-      isTableNameAvailable: async () => ({ success: false, error: 'Mock implementation not available' }),
-      getTableCount: async () => ({ success: false, error: 'Mock implementation not available' }),
-      getTableCountForDatabase: async () => ({ success: false, error: 'Mock implementation not available' })
-    };
-    this.repositories.set('ITableQueryService', tableQueryService);
 
     // Register other repository implementations
     this.repositories.set('IOrganizationRepository', 
@@ -272,18 +257,17 @@ export class DIContainer {
     );
 
 
-    // Create simplified gRPC data storage service
+    // Create gRPC client and data lake service
     const grpcClient = new GrpcTableClient({
       address: process.env.WORKER_ADDRESS || 'localhost:50051',
       timeout: 30000
     });
-    const grpcDataStorageService = new GrpcDataStorageService(grpcClient);
+    const datalake = new DynamicTableDataLake(grpcClient);
 
-    // Create table repository with data storage service using context-aware DB client
+    // Create table repository with data lake using context-aware DB client
     const tableRepository = new DynamicTableRepository(
       contextAwareDb,
-      grpcDataStorageService,
-      tableQueryService
+      datalake
     );
 
     // Create DynamicTableService - central domain service for all table operations
@@ -320,9 +304,6 @@ export class DIContainer {
     this.repositories.set('InvitationApplicationService', invitationApplicationService);
     this.repositories.set('IDynamicTableRepository', tableRepository);
     this.repositories.set('DynamicTableService', dynamicTableService);
-    
-    // Register simplified data storage service
-    this.repositories.set('DataStorageService', grpcDataStorageService);
     
     // Initialize TableApplicationService with proper dependencies
     const tableApplicationService = new TableApplicationService(
@@ -526,8 +507,7 @@ type ServiceMap = {
   DatabaseRepository: IDatabaseRepository;
   ChatRepository: IChatRepository;
   ChatMessageRepository: IChatMessageRepository;
-  
-  ITableQueryService: ITableQueryService;
+
   DynamicTableService: DynamicTableService;
   
   // Services
@@ -596,7 +576,6 @@ export const getOrganizationRepository = createGetter('OrganizationRepository');
 export const getUserRepository = createGetter('UserRepository');
 export const getDynamicTableRepository = createGetter('DynamicTableRepository');
 export const getDynamicTableService = createGetter('DynamicTableService');
-export const getTableQueryService = createGetter('ITableQueryService');
 export const getFileStorageRepository = createGetter('FileStorageRepository');
 export const getAgentRepository = createGetter('AgentRepository');
 export const getTaskRepository = createGetter('TaskRepository');

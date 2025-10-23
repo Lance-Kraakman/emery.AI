@@ -30,8 +30,7 @@ import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/ta
 import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
-import type { ITableDataStorageService } from '@/ddd/domain/tables/services/table-data-storage-service.interface';
-import type { ITableQueryService } from '@/ddd/domain/tables/services/table-query-service.interface';
+import { DynamicTableDataLake } from './dynamic-table-datalake';
 
 type TableRow = InferSelectModel<typeof tables>;
 type FieldRow = InferSelectModel<typeof fields>;
@@ -39,8 +38,7 @@ type FieldRow = InferSelectModel<typeof fields>;
 export class DynamicTableRepository implements IDynamicTableRepository {
   constructor(
     private readonly db: DbClient,
-    private readonly dataStorageService: ITableDataStorageService,
-    private readonly queryService: ITableQueryService
+    private readonly datalake: DynamicTableDataLake
   ) {}
 
   async create(data: CreateDynamicTableData): Promise<DynamicTable> {
@@ -111,7 +109,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       });
 
       // Create Delta Lake table via gRPC service (id field will be included in schema)
-      const result = await this.dataStorageService.createTable(tableEntity);
+      const result = await this.datalake.createTable(tableEntity);
       if (!result.success) {
         throw new Error(`Failed to initialize Delta Lake table: ${result.error}`);
       }
@@ -705,7 +703,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     });
 
     // Create the table via gRPC service instead of storing empty data
-    const result = await this.dataStorageService.createTable(emptyTable);
+    const result = await this.datalake.createTable(emptyTable);
     if (!result.success) {
       throw new Error(`Failed to initialize empty table: ${result.error}`);
     }
@@ -744,8 +742,8 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
       // Query rows from Delta Lake via gRPC service (NEW implementation)
       // AIDEV-NOTE: Removed old S3 Arrow file read logic - now using Delta Lake
-      console.log(`[DynamicTableRepository.loadTableData] Calling dataStorageService.retrieveRows...`);
-      const result = await this.dataStorageService.retrieveRows(table);
+      console.log(`[DynamicTableRepository.loadTableData] Calling datalake.retrieveRows...`);
+      const result = await this.datalake.retrieveRows(table);
 
       if (!result.success) {
         console.error(`[DynamicTableRepository.loadTableData] retrieveRows failed: ${result.error}`);
@@ -778,7 +776,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     mode: 'append' | 'overwrite'
   ): Promise<void> {
     // Store rows via gRPC service with explicit write mode
-    const storageResult = await this.dataStorageService.storeRows(rows, table, mode);
+    const storageResult = await this.datalake.storeRows(rows, table, mode);
     
     if (!storageResult.success) {
       throw new Error(`Failed to store data: ${storageResult.error}`);
