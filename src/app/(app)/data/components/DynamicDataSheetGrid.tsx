@@ -681,7 +681,7 @@ export function DynamicDataSheetGrid({
             duplicateRow={({ rowData }) => ({ ...rowData, id: crypto.randomUUID() })}  // Enable context menu with row duplication
             lockRows={false}
             rowKey="id"
-            rowHeight={25}  // Increased by 10% from 23px (25.3px rounded down)
+            rowHeight={30}  // Increased to 30 for better readability
             headerRowHeight={32}  // Reduced from 50 (proportionally smaller)
             autoAddRow={false}
             gutterColumn={{   // Enable gutter for row numbers
