@@ -11,8 +11,8 @@
 import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import type { Result } from '@/ddd/domain/shared/result';
 import { Row } from '@/ddd/domain/tables/value-objects/row';
-import { GrpcTableClient } from '@/ddd/infrastructure/grpc/table-grpc-client';
-import { TableGrpcMapper } from '@/ddd/infrastructure/grpc/table-grpc-mapper';
+import { GrpcTableClient } from '@/ddd/infrastructure/db/repositories/tables/table-grpc-client';
+import { TableGrpcMapper } from '@/ddd/infrastructure/db/repositories/tables/table-grpc-mapper';
 import { RowSerializer } from './row-serializer';
 import { CreateTableRequest, DeleteTableRequest, UpdateTableRequest } from '@/lib/grpc/generated/table_service';
 
