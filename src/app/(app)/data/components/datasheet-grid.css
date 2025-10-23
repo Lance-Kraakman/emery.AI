@@ -90,7 +90,9 @@
   transition: all 150ms ease;
   background-color: hsl(var(--background) / 0.75);
   backdrop-filter: blur(8px);
-  padding: 8px 12px !important;
+  padding: 4px 8px !important;  /* Reduced from 8px 12px for compact rows */
+  font-size: 0.875rem;  /* 14px - slightly smaller text */
+  line-height: 1.25;  /* Tighter line height */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -105,13 +107,26 @@
 /* DSG Header styling - frosted glass effect with more opacity */
 .dsg-cell-header {
   font-weight: 600;
-  font-size: 0.75rem;
+  font-size: 0.75rem;  /* Keep header text small */
   color: hsl(var(--muted-foreground));
   background-color: hsl(var(--secondary) / 0.85);
   backdrop-filter: blur(8px);
-  padding: 8px 12px !important;
+  padding: 6px 8px !important;  /* Reduced from 8px 12px for compact headers */
   border-right: 1px solid hsl(var(--border));
   border-bottom: 2px solid hsl(var(--border));
+}
+
+/* ID column styling - grayed out and non-interactive */
+.id-column-header {
+  background-color: hsl(var(--muted) / 0.3) !important;
+}
+
+.dsg-cell-disabled,
+.dsg-cell[data-column-id="id"] {
+  background-color: hsl(var(--muted) / 0.2) !important;
+  color: hsl(var(--muted-foreground));
+  cursor: not-allowed !important;
+  user-select: none;
 }
 
 /* Fix empty header space on RHS - frosted glass effect */
