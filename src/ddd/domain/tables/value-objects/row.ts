@@ -91,26 +91,20 @@ export class Row {
 
 
   toPlainObject(): Record<string, any> {
+    // AIDEV-NOTE: Domain value object returns plain values as-is
+    // Serialization for storage is handled by RowSerializer (infrastructure layer)
     const obj: Record<string, any> = {
       id: this.id.value  // Include row ID in the returned data
     };
 
     for (const fieldValue of this.fieldValues) {
-      // CRITICAL FIX: Ensure complex objects are properly serialized, not stringified
       const value = fieldValue.value;
 
-      // For complex field types, ensure they remain as objects/arrays
-      if (fieldValue.fieldType === 'file' || fieldValue.fieldType === 'document' || fieldValue.fieldType === 'relation') {
-        // These should already be plain objects/arrays from domain value objects
-        obj[fieldValue.fieldSlug] = value;
-
-        // AIDEV-NOTE: Debug logging for document field values
-        console.log(`[Row.toPlainObject] ${fieldValue.fieldType} field "${fieldValue.fieldSlug}" output value:`, JSON.stringify(value, null, 2));
-      } else if (fieldValue.fieldType === 'date' && value instanceof Date) {
-        // Convert Date objects to ISO strings
+      // Convert Date objects to ISO strings for JSON serialization
+      if (fieldValue.fieldType === 'date' && value instanceof Date) {
         obj[fieldValue.fieldSlug] = value.toISOString();
       } else {
-        // For primitive types, use as-is
+        // All other types: return value as-is (arrays, objects, strings, primitives)
         obj[fieldValue.fieldSlug] = value;
       }
     }

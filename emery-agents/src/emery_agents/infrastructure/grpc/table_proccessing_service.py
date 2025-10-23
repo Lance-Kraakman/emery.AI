@@ -92,6 +92,16 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
                 # Convert protobuf RowDataValue to Python types
                 for key, value in row_data.data.items():
+                    # AIDEV-NOTE: Debug logging for relation/document fields
+                    if key in ['relation', 'docs', 'document']:
+                        logger.info(f"[_row_data_to_dataframe] Processing field '{key}':")
+                        logger.info(f"  - HasField('text_value'): {value.HasField('text_value')}")
+                        logger.info(f"  - HasField('json_value'): {value.HasField('json_value')}")
+                        if value.HasField('text_value'):
+                            logger.info(f"  - text_value: {value.text_value[:100] if value.text_value else 'EMPTY'}")
+                        if value.HasField('json_value'):
+                            logger.info(f"  - json_value: {value.json_value[:100] if value.json_value else 'EMPTY'}")
+
                     if value.HasField('text_value'):
                         record[key] = value.text_value
                     elif value.HasField('number_value'):
@@ -101,9 +111,15 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     elif value.HasField('date_value'):
                         record[key] = value.date_value
                     elif value.HasField('json_value'):
+                        # AIDEV-NOTE: Store JSON as string in Delta Lake (schema expects pa.string())
+                        # TypeScript will parse the JSON string when deserializing from storage
                         record[key] = value.json_value
                     else:
                         record[key] = None  # Default for unset values
+
+                # Log the complete record for first row
+                if len(data) == 0:
+                    logger.info(f"[_row_data_to_dataframe] First record: {record}")
 
                 data.append(record)
 

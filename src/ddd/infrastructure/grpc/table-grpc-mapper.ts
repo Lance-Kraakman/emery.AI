@@ -100,6 +100,29 @@ export class TableGrpcMapper {
   }
 
   /**
+   * Convert serialized row data to protobuf CreateRowsRequest interface
+   * Used when data has already been serialized by RowSerializer
+   */
+  static toCreateRowsRequestFromData(
+    tableId: TableId,
+    serializedRows: Array<{ id: string; data: Record<string, any> }>,
+    organizationId: OrganizationId,
+    s3Path?: string,
+    mode?: 'append' | 'overwrite'
+  ): ICreateRowsRequest {
+    const request: ICreateRowsRequest = {
+      tableId: tableId.value.toString(),
+      userId: '', // Will be set by the service layer
+      organizationId: organizationId.value.toString(),
+      s3Path: s3Path || '', // S3 path for Delta Lake table data
+      rowsData: serializedRows.map(({ id, data }) => this.toProtoRowDataFromPlain(id, data)),
+      mode: mode || 'append', // Default to append for backward compatibility
+    };
+
+    return request;
+  }
+
+  /**
    * Convert QueryRows parameters to protobuf QueryRowsRequest interface
    */
   static toQueryRowsRequest(
@@ -128,13 +151,22 @@ export class TableGrpcMapper {
    */
   static toProtoRowData(row: Row): IRowData {
     const plainData = row.toPlainObject();
+    return this.toProtoRowDataFromPlain(row.id.value, plainData);
+  }
 
+  /**
+   * Convert plain data object to protobuf RowData interface
+   * Used for already-serialized data from RowSerializer
+   */
+  static toProtoRowDataFromPlain(id: string, data: Record<string, any>): IRowData {
     const protoRowData: IRowData = {
-      id: row.id.value,
-      data: Object.entries(plainData).reduce((acc, [key, value]) => {
-        acc[key] = this.toProtoRowDataValue(value);
-        return acc;
-      }, {} as Record<string, IRowDataValue>),
+      id: id,
+      data: Object.entries(data)
+        .filter(([key]) => key !== 'id') // Exclude 'id' from data map (it's in the RowData.id field)
+        .reduce((acc, [key, value]) => {
+          acc[key] = this.toProtoRowDataValue(value);
+          return acc;
+        }, {} as Record<string, IRowDataValue>),
     };
 
     return protoRowData;
@@ -142,12 +174,18 @@ export class TableGrpcMapper {
 
   /**
    * Convert JavaScript value to protobuf RowDataValue interface
+   * AIDEV-NOTE: Simplified - no type detection. RowSerializer handles complex field serialization.
    */
   static toProtoRowDataValue(value: any): IRowDataValue {
     if (value === null || value === undefined) {
       // Handle null/undefined - use empty string as default
       return { textValue: '' };
     } else if (typeof value === 'string') {
+      // All strings go to textValue (JSON strings from RowSerializer included)
+      // Check if it looks like a JSON string and use jsonValue for better storage
+      if (value.startsWith('{') || value.startsWith('[')) {
+        return { jsonValue: value };
+      }
       return { textValue: value };
     } else if (typeof value === 'number') {
       return { numberValue: value };
@@ -156,7 +194,8 @@ export class TableGrpcMapper {
     } else if (value instanceof Date) {
       return { dateValue: value.getTime() };
     } else if (typeof value === 'object') {
-      // For complex objects, JSON stringify them
+      // Objects/arrays that weren't serialized by RowSerializer (shouldn't happen normally)
+      // Stringify them for storage
       return { jsonValue: JSON.stringify(value) };
     } else {
       // Fallback to string
