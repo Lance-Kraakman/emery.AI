@@ -21,7 +21,7 @@ import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 const TEST_TIMEOUT = 180000;
 import { AgentId, OrganizationId, UserId, TaskStatus } from '@/ddd/domain/shared/value-objects';
 import type { CreateTaskRequest, TaskExecutionResult } from '@/ddd/application/services/agents/agent-task-application-service';
-import type { CreateAgentCommand } from '@/ddd/application/services/agents/agent-application-service';
+import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';
 import type { TestContext } from '../shared/test-setup';
@@ -116,18 +116,20 @@ describe('Agent Task Execution Integration Tests', () => {
 
       // Create a test agent for task execution
       const agentApplicationService = getAgentApplicationService();
-      const agentCommand: CreateAgentCommand = {
+
+      // Build DTO - Application Service handles Value Object conversion
+      const agentDTO: CreateAgentDTO = {
         name: 'Task Execution Test Agent',
         description: 'Agent specifically for testing task execution workflow',
-        ownerId: testContext.ownerUserId,
-        organizationId: testContext.organizationId,
+        ownerId: testContext.ownerUserId.value,
+        organizationId: testContext.organizationId.value,
         role: 'assistant',
         agentType: 'data-collector',
         tools: [
-          ToolConfig.basic('python_repl'),
-          ToolConfig.basic('file_reader'),
-          ToolConfig.basic('web_search'),
-          ToolConfig.basic('calculator')
+          ToolConfig.basic('python_repl').toPlain(),
+          ToolConfig.basic('file_reader').toPlain(),
+          ToolConfig.basic('web_search').toPlain(),
+          ToolConfig.basic('calculator').toPlain()
         ],
         capabilities: [
           {
@@ -138,9 +140,9 @@ describe('Agent Task Execution Integration Tests', () => {
                 type: 'TOOL_STEP',
                 instructions: 'Use available tools to collect and analyze data as requested',
                 tools: [
-                  ToolConfig.basic('python_repl'),
-                  ToolConfig.basic('web_search'),
-                  ToolConfig.basic('calculator')
+                  ToolConfig.basic('python_repl').toPlain(),
+                  ToolConfig.basic('web_search').toPlain(),
+                  ToolConfig.basic('calculator').toPlain()
                 ],
                 servers: []
               }
@@ -154,8 +156,8 @@ describe('Agent Task Execution Integration Tests', () => {
                 type: 'TOOL_STEP',
                 instructions: 'Read, process, or manipulate files as requested',
                 tools: [
-                  ToolConfig.basic('file_reader'),
-                  ToolConfig.basic('python_repl')
+                  ToolConfig.basic('file_reader').toPlain(),
+                  ToolConfig.basic('python_repl').toPlain()
                 ],
                 servers: []
               }
@@ -164,11 +166,11 @@ describe('Agent Task Execution Integration Tests', () => {
         ]
       };
 
-      const agentResult = await agentApplicationService.createAgent(agentCommand);
+      const agentResult = await agentApplicationService.createAgent(agentDTO);
       expect(agentResult.success).toBe(true);
       expect(agentResult.data).toBeDefined();
-      
-      testAgentId = agentResult.data!.id;
+
+      testAgentId = AgentId.fromNumber(agentResult.data!.id);
       console.log(`✅ Test agent created with ID: ${testAgentId.value}`);
       
     } catch (error) {
