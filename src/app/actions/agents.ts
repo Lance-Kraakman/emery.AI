@@ -5,68 +5,72 @@ import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
-import { type Result, type CreateAgentData, type CreateAgentClientData } from "./types";
+import { type Result, type CreateAgentData } from "./types";
 import { getAgentApplicationService } from "@/ddd/application/di/container";
-import type { CreateAgentCommand, UpdateAgentCommand, AgentFilters } from "@/ddd/application/services/agents/agent-application-service";
+import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from "@/app/dtos/agent.dto";
 import type { CapabilityConfig } from "@/ddd/domain/agents/entities/agent";
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
-import { AgentMapper, type AgentDTO } from "@/app/mappers/agent-mapper";
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
+// AIDEV-NOTE: Now using DTOs directly instead of Commands for simplified architecture
 
 export async function createAgent(data: CreateAgentData, revalidateUrl?: string): Promise<Result> {
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("agents:manage");
       const agentApplicationService = getAgentApplicationService();
-    
-    const command: CreateAgentCommand = {
-      name: data.name,
-      role: data.role,
-      description: data.description,
-      persona: data.persona,
-      ownerId: UserId.fromString(session.user.id),
-      organizationId: OrganizationId.fromNumber(session.user.currentOrganizationId),
-      tools: data.tools,
-      servers: data.servers,
-      trigger: data.trigger,
-      capabilities: data.capabilities,
-      status: (() => {
-        const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
-        return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived') 
-          ? statusValue as 'active' | 'inactive' | 'archived'
-          : 'active';
-      })()
-    };
 
-    const result = await agentApplicationService.createAgent(command);
+      // Convert tools to ToolConfigDTOs for the DTO
+      const toolDTOs = data.tools?.map(tool =>
+        tool instanceof ToolConfig ? tool.toPlain() : tool
+      );
 
-    if (!result.success || !result.data) {
-      return {
-        success: false,
-        error: result.error || "Failed to create agent"
+      // Build DTO - Application Service handles Value Object conversion
+      const dto: CreateAgentDTO = {
+        name: data.name,
+        role: data.role,
+        description: data.description,
+        persona: data.persona,
+        ownerId: session.user.id,
+        organizationId: session.user.currentOrganizationId,
+        tools: toolDTOs,
+        servers: data.servers,
+        trigger: data.trigger,
+        capabilities: data.capabilities,
+        status: (() => {
+          const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
+          return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
+            ? statusValue as 'active' | 'inactive' | 'archived'
+            : 'active';
+        })()
       };
-    }
 
-    // Note: RAG reindexing is now handled automatically by database triggers
+      const result = await agentApplicationService.createAgent(dto);
 
-    // Revalidate the appropriate path
-    if (revalidateUrl) {
-      revalidatePath(revalidateUrl);
-    } else {
-      revalidatePath('/manage'); // Default path for agent operations
-    }
-    
-    // Map domain entity to DTO for client serialization
-    const agentDTO = AgentMapper.toDTO(result.data);
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          error: result.error || "Failed to create agent"
+        };
+      }
 
-    return {
-      success: true,
-      data: agentDTO,
-    };
-  } catch (error) {
-    console.error("Error creating agent:", error);
+      // Note: RAG reindexing is now handled automatically by database triggers
+
+      // Revalidate the appropriate path
+      if (revalidateUrl) {
+        revalidatePath(revalidateUrl);
+      } else {
+        revalidatePath('/manage'); // Default path for agent operations
+      }
+
+      // Application service now returns DTO directly
+      return {
+        success: true,
+        data: result.data,
+      };
+    } catch (error) {
+      console.error("Error creating agent:", error);
       return {
         success: false,
         error: "Failed to create agent",

@@ -1,8 +1,10 @@
 /**
  * Agent Application Service
- * 
+ *
  * Handles agent business operations including CRUD, API key management,
  * capability management, and organization scoping.
+ *
+ * AIDEV-NOTE: Now accepts DTOs directly instead of Commands for simplified architecture
  */
 
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
@@ -20,54 +22,11 @@ import type { Result } from '@/ddd/domain/shared/result';
 import { createAgentDefaults } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, OrganizationId, UserId, TeamId, AgentStatus, ApiKey, AGENT_STATUS } from '@/ddd/domain/shared/value-objects';
 import { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from '@/app/dtos/agent.dto';
+import { AgentMapper } from '@/app/mappers/agent-mapper';
 
-export interface CreateAgentCommand {
-  name: string;
-  role?: string;
-  description?: string;
-  persona?: string;
-  ownerId: UserId;
-  organizationId: OrganizationId;
-  agentType?: AgentType;
-  specialization?: any;
-  tools?: ToolConfig[];
-  servers?: ServerConfig[];
-  trigger?: TriggerConfig;
-  capabilities?: CapabilityConfig[];
-  status?: 'active' | 'inactive' | 'archived';
-}
-
-export interface UpdateAgentCommand {
-  agentId: AgentId;
-  name?: string;
-  role?: string;
-  description?: string;
-  persona?: string;
-  ownerId?: UserId;
-  tools?: ToolConfig[];
-  servers?: ServerConfig[];
-  trigger?: TriggerConfig;
-  capabilities?: CapabilityConfig[];
-  status?: 'active' | 'inactive' | 'archived';
-}
-
-export interface AgentFilters {
-  teamId?: TeamId | number | string;
-  searchQuery?: string;
-  organizationId: OrganizationId;
-  status?: 'active' | 'inactive' | 'archived';
-  agentTypes?: AgentType[];
-}
-
-export interface AgentCapability {
-  name: string;
-  description: string;
-  tools: string[];
-  servers: any[];
-}
-
-// Use unified Result interface from domain shared types
-export type AgentApplicationResult<T = any> = Result<T>;
+// Re-export DTOs for backward compatibility during migration
+export type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO };
 
 export class AgentApplicationService {
   constructor(
@@ -77,37 +36,52 @@ export class AgentApplicationService {
 
   /**
    * Create a new agent with business validation
+   * AIDEV-NOTE: Now accepts DTO and returns DTO for consistent serialization
    */
-  async createAgent(command: CreateAgentCommand): Promise<AgentApplicationResult<Agent>> {
+  async createAgent(dto: CreateAgentDTO): Promise<Result<AgentDTO>> {
     try {
       // Business validation
-      if (!command.name?.trim()) {
+      if (!dto.name?.trim()) {
         return {
           success: false,
           error: "Agent name is required"
         };
       }
 
-      // Role validation removed - using simplified 3-role system
+      // Convert DTO primitives to Value Objects
+      const ownerId = dto.ownerId ? UserId.fromString(dto.ownerId) : undefined;
+      const organizationId = dto.organizationId ? OrganizationId.fromNumber(dto.organizationId) : undefined;
+
+      if (!ownerId || !organizationId) {
+        return {
+          success: false,
+          error: "Owner ID and Organization ID are required"
+        };
+      }
+
+      // Convert tool DTOs to ToolConfig instances
+      const tools = dto.tools?.map(toolDto =>
+        new ToolConfig(toolDto.name, toolDto.config)
+      );
 
       // Generate API key for agent authentication
       const apiKey = ApiKey.generate();
 
       // Create agent data with defaults - ensure required fields are set
       const agentData: CreateAgentData = {
-        name: command.name.trim(),
-        role: command.role,
-        description: command.description,
-        persona: command.persona,
-        ownerId: command.ownerId, // Required from command
-        organizationId: command.organizationId, // Required from command
-        agentType: command.agentType,
-        specialization: command.specialization,
-        tools: command.tools,
-        servers: command.servers,
-        trigger: command.trigger,
-        capabilities: command.capabilities,
-        status: command.status ? AgentStatus.fromString(command.status) : undefined
+        name: dto.name.trim(),
+        role: dto.role,
+        description: dto.description,
+        persona: dto.persona,
+        ownerId,
+        organizationId,
+        agentType: dto.agentType,
+        specialization: dto.specialization,
+        tools,
+        servers: dto.servers,
+        trigger: dto.trigger,
+        capabilities: dto.capabilities,
+        status: dto.status ? AgentStatus.fromString(dto.status) : undefined
       };
 
       // Apply defaults and add generated fields
@@ -124,17 +98,20 @@ export class AgentApplicationService {
           servers: agentWithDefaults.servers
         },
         capabilities: agentWithDefaults.capabilities?.map(c => c.name) || null,
-        organizationId: command.organizationId.value,
-        ownerId: command.ownerId.value,
+        organizationId: organizationId.value,
+        ownerId: ownerId.value,
         isActive: true,
         trigger: agentWithDefaults.trigger
       };
-      
+
       const savedAgent = await this.agentRepository.create(createData);
+
+      // Convert domain entity to DTO for serialization
+      const agentDTO = AgentMapper.toDTO(savedAgent);
 
       return {
         success: true,
-        data: savedAgent
+        data: agentDTO
       };
     } catch (error) {
       console.error("Error creating agent:", error);
@@ -147,40 +124,49 @@ export class AgentApplicationService {
 
   /**
    * Update an existing agent
+   * AIDEV-NOTE: Now accepts DTO and returns DTO for consistent serialization
    */
-  async updateAgent(command: UpdateAgentCommand): Promise<AgentApplicationResult<Agent>> {
+  async updateAgent(dto: UpdateAgentDTO): Promise<Result<AgentDTO>> {
     try {
+      // Convert ID to Value Object
+      const agentId = AgentId.fromNumber(dto.id);
+
       // Load existing agent
-      const existingAgent = await this.agentRepository.findById(command.agentId);
+      const existingAgent = await this.agentRepository.findById(agentId);
       if (!existingAgent) {
         return {
           success: false,
-          error: `Agent with ID ${command.agentId} not found`
+          error: `Agent with ID ${dto.id} not found`
         };
       }
-
-      // Role validation removed - using simplified 3-role system
 
       // Build update data with only changed fields
       const updateData: any = {};
 
-      if (command.name !== undefined) updateData.name = command.name;
-      if (command.role !== undefined) updateData.role = command.role;
-      if (command.description !== undefined) updateData.description = command.description;
-      if (command.persona !== undefined) updateData.persona = command.persona;
-      if (command.ownerId !== undefined) updateData.ownerId = command.ownerId;
-      if (command.tools !== undefined) updateData.tools = command.tools;
-      if (command.servers !== undefined) updateData.servers = command.servers;
-      if (command.trigger !== undefined) updateData.trigger = command.trigger;
-      if (command.capabilities !== undefined) updateData.capabilities = command.capabilities;
-      if (command.status !== undefined) updateData.status = command.status;
+      if (dto.name !== undefined) updateData.name = dto.name;
+      if (dto.role !== undefined) updateData.role = dto.role;
+      if (dto.description !== undefined) updateData.description = dto.description;
+      if (dto.persona !== undefined) updateData.persona = dto.persona;
+      if (dto.ownerId !== undefined) updateData.ownerId = UserId.fromString(dto.ownerId);
+      if (dto.tools !== undefined) {
+        updateData.tools = dto.tools.map(toolDto =>
+          new ToolConfig(toolDto.name, toolDto.config)
+        );
+      }
+      if (dto.servers !== undefined) updateData.servers = dto.servers;
+      if (dto.trigger !== undefined) updateData.trigger = dto.trigger;
+      if (dto.capabilities !== undefined) updateData.capabilities = dto.capabilities;
+      if (dto.status !== undefined) updateData.status = dto.status;
 
       // Update agent via repository
-      const savedAgent = await this.agentRepository.update(command.agentId, updateData);
+      const savedAgent = await this.agentRepository.update(agentId, updateData);
+
+      // Convert domain entity to DTO for serialization
+      const agentDTO = AgentMapper.toDTO(savedAgent);
 
       return {
         success: true,
-        data: savedAgent
+        data: agentDTO
       };
     } catch (error) {
       console.error("Error updating agent:", error);
@@ -228,13 +214,17 @@ export class AgentApplicationService {
 
   /**
    * Get agents with filtering and organization scoping
+   * AIDEV-NOTE: Now accepts and returns DTOs for consistent serialization
    */
-  async getAgents(filters: AgentFilters): Promise<Agent[]> {
+  async getAgents(filters: AgentFiltersDTO): Promise<AgentDTO[]> {
     try {
       let agents: Agent[];
 
+      // Convert filter DTO to Value Object
+      const organizationId = OrganizationId.fromNumber(filters.organizationId);
+
       // Get all agents for organization first
-      agents = await this.agentRepository.findByOrganization(filters.organizationId);
+      agents = await this.agentRepository.findByOrganization(organizationId);
 
       // If filtering by team, filter the results
       if (filters.teamId && filters.teamId !== 'all') {
@@ -281,7 +271,8 @@ export class AgentApplicationService {
         return bTime - aTime;
       });
 
-      return agents;
+      // Convert domain entities to DTOs for serialization
+      return agents.map(agent => AgentMapper.toDTO(agent));
     } catch (error) {
       console.error("Error fetching agents:", error);
       throw new Error("Failed to fetch agents");
@@ -290,8 +281,9 @@ export class AgentApplicationService {
 
   /**
    * Add capability to agent
+   * AIDEV-NOTE: Now returns DTO for consistent serialization
    */
-  async addCapabilityToAgent(agentId: AgentId, capability: CapabilityConfig): Promise<AgentApplicationResult<Agent>> {
+  async addCapabilityToAgent(agentId: AgentId, capability: CapabilityConfig): Promise<Result<AgentDTO>> {
     try {
       const existingAgent = await this.agentRepository.findById(agentId);
       if (!existingAgent) {
@@ -310,9 +302,12 @@ export class AgentApplicationService {
         capabilities: updatedCapabilities.map(c => c.name)
       });
 
+      // Convert domain entity to DTO for serialization
+      const agentDTO = AgentMapper.toDTO(savedAgent);
+
       return {
         success: true,
-        data: savedAgent
+        data: agentDTO
       };
     } catch (error) {
       console.error("Error adding capability to agent:", error);
@@ -359,15 +354,18 @@ export class AgentApplicationService {
 
   /**
    * Get agents by owner
+   * AIDEV-NOTE: Now returns DTOs for consistent serialization
    */
-  async getAgentsByOwner(ownerId: string): Promise<Agent[]> {
-    return await this.agentRepository.findByOwner(UserId.fromString(ownerId));
+  async getAgentsByOwner(ownerId: string): Promise<AgentDTO[]> {
+    const agents = await this.agentRepository.findByOwner(UserId.fromString(ownerId));
+    return agents.map(agent => AgentMapper.toDTO(agent));
   }
 
   /**
    * Activate/deactivate agent
+   * AIDEV-NOTE: Now returns DTO for consistent serialization
    */
-  async toggleAgentStatus(agentId: number): Promise<AgentApplicationResult<Agent>> {
+  async toggleAgentStatus(agentId: number): Promise<Result<AgentDTO>> {
     try {
       const existingAgent = await this.agentRepository.findById(AgentId.fromNumber(agentId));
       if (!existingAgent) {
@@ -378,15 +376,18 @@ export class AgentApplicationService {
       }
 
       const newStatus = existingAgent.status.value === 'active' ? 'inactive' : 'active';
-      
+
       // Update agent with new status
       const savedAgent = await this.agentRepository.update(AgentId.fromNumber(agentId), {
         status: newStatus
       });
 
+      // Convert domain entity to DTO for serialization
+      const agentDTO = AgentMapper.toDTO(savedAgent);
+
       return {
         success: true,
-        data: savedAgent
+        data: agentDTO
       };
     } catch (error) {
       console.error("Error toggling agent status:", error);
