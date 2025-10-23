@@ -267,7 +267,7 @@ export class ToolSearchApplicationService {
     offset: number
   ): Promise<ReferenceTool[]> {
     const agents = await this.agentApplicationService.getAgents({
-      organizationId,
+      organizationId: organizationId.value,
       searchQuery: searchText,
       status: 'active'
     });
@@ -277,9 +277,9 @@ export class ToolSearchApplicationService {
 
     return paginatedAgents.map(agent => {
       return ReferenceTool.fromAgent(
-        agent.id.value,
+        agent.id,
         organizationId.value,
-        agent.ownerId.value,
+        agent.ownerId || '',
         agent.name,
         `${agent.role || 'Agent'} - ${agent.description || 'No description'}`
       );

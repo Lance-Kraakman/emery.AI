@@ -312,9 +312,9 @@ export async function createTestTeam(
   }
   
   return {
-    id: result.data!.id,
+    id: TeamId.fromNumber(result.data!.id),
     name: result.data!.name,
-    organizationId: result.data!.organizationId
+    organizationId: OrganizationId.fromNumber(result.data!.organizationId)
   };
 }
 

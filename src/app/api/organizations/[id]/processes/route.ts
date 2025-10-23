@@ -28,8 +28,8 @@ export async function GET(
     const agentService = getAgentApplicationService();
     
     // Get process-analyst agents for this organization
-    const processAnalysts = await agentService.getAgents({ 
-      organizationId: OrganizationId.fromNumber(organizationId),
+    const processAnalysts = await agentService.getAgents({
+      organizationId: organizationId,
       agentTypes: ['process-analyst']
     });
 

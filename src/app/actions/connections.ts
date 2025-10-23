@@ -555,7 +555,7 @@ export async function getAgentsNeedingConnections(): Promise<Result<AgentConnect
 
     // Get agents in this organization
     const agents = await agentService.getAgents({
-      organizationId: OrganizationId.fromNumber(session.user.currentOrganizationId!)
+      organizationId: session.user.currentOrganizationId!
     });
 
     const agentSummaries: AgentConnectionSummary[] = [];
@@ -593,7 +593,7 @@ export async function getAgentsNeedingConnections(): Promise<Result<AgentConnect
       // Only include agents that need connections
       if (disconnectedTools > 0) {
         agentSummaries.push({
-          agentId: agent.id.value,
+          agentId: agent.id,
           agentName: agent.name,
           totalTools: toolStatuses.length,
           connectedTools,

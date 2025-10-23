@@ -231,8 +231,8 @@ describe('Agent Application Service Integration Tests', () => {
       const org2DTO: CreateAgentDTO = {
         name: 'Org 2 Agent',
         description: 'Agent in organization 2',
-        ownerId: user2Id,
-        organizationId: testOrg2Id,
+        ownerId: user2Id.value,
+        organizationId: testOrg2Id.value,
         role: 'data-analyst',
         agentType: 'kpi-calculator'
       };

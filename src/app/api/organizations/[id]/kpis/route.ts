@@ -28,8 +28,8 @@ export async function GET(
     const agentService = getAgentApplicationService();
     
     // Get kpi-calculator agents for this organization
-    const kpiCalculators = await agentService.getAgents({ 
-      organizationId: OrganizationId.fromNumber(organizationId),
+    const kpiCalculators = await agentService.getAgents({
+      organizationId: organizationId,
       agentTypes: ['kpi-calculator']
     });
 

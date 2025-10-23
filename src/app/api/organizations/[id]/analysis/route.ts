@@ -10,6 +10,7 @@ import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigge
 import { TriggerConfigs } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,14 +60,13 @@ export async function POST(
       const config = getAgentTypeConfig(agentType);
       
       try {
-        const command = {
+        const command: CreateAgentDTO = {
           name: `${config.description} - ${organizationId}`,
           role: 'assistant',
           description: `${config.description} for organizational analysis`,
           persona: createPersonaForAgentType(agentType),
-          ownerId: UserId.fromString(session.user.id),
-          organizationId: OrganizationId.fromNumber(organizationId),
-          roleId: 1, // Default role ID - will be set by application layer
+          ownerId: session.user.id,
+          organizationId: organizationId,
           agentType,
           tools: getDefaultToolsForType(agentType).map(toolName =>
             ToolConfig.create(
@@ -87,7 +87,7 @@ export async function POST(
             agentId: result.data.id,
             agentType,
             name: result.data.name,
-            tools: command.tools.map(t => t.name)
+            tools: command.tools!.map(t => t.name)
           });
         }
       } catch (error) {
@@ -141,8 +141,8 @@ export async function GET(
     const agentService = getAgentApplicationService();
     
     // Get analysis agents for this organization
-    const analysisAgents = await agentService.getAgents({ 
-      organizationId: OrganizationId.fromNumber(organizationId),
+    const analysisAgents = await agentService.getAgents({
+      organizationId: organizationId,
       agentTypes: ['data-collector', 'kpi-calculator', 'process-analyst', 'reporter', 'coordinator', 'monitor']
     });
 
@@ -214,8 +214,8 @@ export async function PATCH(
     const agentService = getAgentApplicationService();
     
     // Find the agent of the specified type
-    const agents = await agentService.getAgents({ 
-      organizationId: OrganizationId.fromNumber(organizationId),
+    const agents = await agentService.getAgents({
+      organizationId: organizationId,
       agentTypes: [agentType]
     });
 
@@ -224,10 +224,10 @@ export async function PATCH(
     }
 
     const agent = agents[0];
-    
+
     // Update the agent's trigger config
     const updateResult = await agentService.updateAgent({
-      agentId: agent.id,
+      id: agent.id,
       trigger: triggerConfig
     });
 

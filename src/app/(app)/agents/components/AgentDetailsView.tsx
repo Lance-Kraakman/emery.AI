@@ -139,7 +139,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
         role: editFormData.role.trim(),
         description: editFormData.description.trim(),
         persona: editFormData.persona.trim(),
-        status: editFormData.status,
+        status: editFormData.status as 'active' | 'inactive' | 'archived',
         trigger: editFormData.trigger,
         tools: editFormData.tools,
         servers: editFormData.servers,

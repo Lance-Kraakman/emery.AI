@@ -113,8 +113,8 @@ export async function getTeams(organizationId?: number): Promise<TeamDTO[]> {
       const currentOrg = await requireCurrentOrganization();
       
       const teamApplicationService = getTeamApplicationService();
-      
-      const filters: TeamFilters = {
+
+      const filters: TeamFiltersDTO = {
         organizationId: organizationId || currentOrg.id
       };
       

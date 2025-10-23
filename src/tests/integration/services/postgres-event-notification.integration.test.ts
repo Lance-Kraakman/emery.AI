@@ -45,14 +45,14 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
       const agentResult = await agentService.createAgent({
         name: 'Event Test Agent',
         description: 'Agent for testing event notifications',
-        ownerId: testContext.ownerUserId,
-        organizationId: testContext.organizationId,
+        ownerId: testContext.ownerUserId.value,
+        organizationId: testContext.organizationId.value,
         role: 'assistant',
         agentType: 'data-collector'
       });
-      
+
       if (agentResult.success && agentResult.data) {
-        testAgentId = agentResult.data.id;
+        testAgentId = AgentId.fromNumber(agentResult.data.id);
         console.log(`✅ Test agent created: id=${testAgentId.value}`);
       } else {
         throw new Error('Failed to create test agent');
