@@ -98,21 +98,9 @@ export interface CreateAgentFormData {
 // These DTOs use plain serializable types that can pass through Next.js Server Actions
 import type { ToolConfigDTO, CapabilityConfigDTO } from '@/app/mappers/agent-mapper';
 
-// Client-side agent data interface for server actions (using serializable DTOs)
-export interface CreateAgentClientData {
-  name: string;
-  role?: string;
-  description?: string;
-  persona?: string;
-  ownerId?: string; // User ID string - converted to UserId in action
-  tools?: ToolConfigDTO[];
-  servers?: ServerConfig[];
-  trigger?: TriggerConfig;
-  capabilities?: CapabilityConfigDTO[]; // Optional for agent creation, required for agent updates
-  status?: string; // Plain string - converted to AgentStatus in action
-  organizationId?: number;
-  roleId?: number;
-}
+// AIDEV-NOTE: Re-export CreateAgentDTO from consolidated DTOs
+// CreateAgentClientData is now an alias for CreateAgentDTO
+export type { CreateAgentDTO as CreateAgentClientData } from '@/app/dtos/agent.dto';
 
 // Import agent types from domain layer
 export type {

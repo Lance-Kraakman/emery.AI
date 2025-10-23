@@ -80,7 +80,8 @@ export class AgentApplicationService {
         tools,
         servers: dto.servers,
         trigger: dto.trigger,
-        capabilities: dto.capabilities,
+        // CapabilityConfigDTO and CapabilityConfig are structurally identical
+        capabilities: dto.capabilities as any as CapabilityConfig[],
         status: dto.status ? AgentStatus.fromString(dto.status) : undefined
       };
 
@@ -180,7 +181,7 @@ export class AgentApplicationService {
   /**
    * Delete an agent
    */
-  async deleteAgent(agentId: AgentId): Promise<AgentApplicationResult<void>> {
+  async deleteAgent(agentId: AgentId): Promise<Result<void>> {
     try {
       const agent = await this.agentRepository.findById(agentId);
       if (!agent) {
@@ -321,7 +322,7 @@ export class AgentApplicationService {
   /**
    * Regenerate API key for agent
    */
-  async regenerateApiKey(agentId: number): Promise<AgentApplicationResult<{ apiKey: string }>> {
+  async regenerateApiKey(agentId: number): Promise<Result<{ apiKey: string }>> {
     try {
       const existingAgent = await this.agentRepository.findById(AgentId.fromNumber(agentId));
       if (!existingAgent) {
