@@ -393,11 +393,11 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         throw new Error('Table not found');
       }
 
-      // 2. Use Row entity directly for storage
+      // 2. Save only the new row (Delta Lake append mode will add it to existing data)
+      // AIDEV-NOTE: Do NOT load existing rows - this caused exponential duplication
+      // because saveTableData appends to Delta Lake, so sending all rows duplicates them
       const s3Path = S3TablePath.fromPath(table.storageLocation);
-      const existingRows = await this.loadTableData(s3Path);
-      existingRows.push(row);
-      await this.saveTableData(s3Path, existingRows, table);
+      await this.saveTableData(s3Path, [row], table);
 
       // 3. Return Row entity directly
       return row;
