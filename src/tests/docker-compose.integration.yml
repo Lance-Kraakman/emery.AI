@@ -91,8 +91,18 @@ services:
       ORGANIZATION_ID: default
       USE_PIPEDREAM_TOOLS: true
       NEXTJS_BASE_URL: http://app-integration:3000
+      # MinIO S3 configuration for Delta Lake storage (internal container network)
+      AWS_ENDPOINT_URL: http://minio-integration:9000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      S3_BUCKET_NAME: emery-files
+      AWS_ALLOW_HTTP: "true"
+      AWS_S3_ALLOW_UNSAFE_RENAME: "true"
     depends_on:
       postgres-integration:
+        condition: service_healthy
+      minio-integration:
         condition: service_healthy
     command: ["python", "-m", "emery_agents.infrastructure.grpc.main"]
     healthcheck:

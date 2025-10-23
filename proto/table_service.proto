@@ -9,12 +9,14 @@ service TableService {
   rpc UpdateTable(UpdateTableRequest) returns (TableResponse);
   rpc DeleteTable(DeleteTableRequest) returns (DeleteTableResponse);
   rpc ListTables(ListTablesRequest) returns (ListTablesResponse);
-  
+
   // Row operations with strong typing (bulk operations)
   rpc CreateRows(CreateRowsRequest) returns (CreateRowsResponse);
   rpc GetRows(GetRowsRequest) returns (GetRowsResponse);
   rpc UpdateRows(UpdateRowsRequest) returns (UpdateRowsResponse);
   rpc DeleteRows(DeleteRowsRequest) returns (DeleteRowsResponse);
+
+  // Zero-copy Arrow IPC query (updated to use Arrow IPC for performance)
   rpc QueryRows(QueryRowsRequest) returns (QueryRowsResponse);
 }
 
@@ -212,7 +214,7 @@ message DeleteRowsResponse {
 
 message QueryRowsResponse {
   bool success = 1;
-  repeated RowData rows = 2;
+  bytes arrow_ipc_stream = 2;      // Arrow IPC serialized data (zero-copy)
   int32 total_count = 3;
   string message = 4;
 }

@@ -81,18 +81,11 @@ export class TableGrpcMapper {
    * Convert CreateRows parameters to protobuf CreateRowsRequest interface
    */
   static toCreateRowsRequest(
-    tableId: TableId, 
-    rows: Row[], 
+    tableId: TableId,
+    rows: Row[],
     organizationId: OrganizationId,
     s3Path?: string
   ): ICreateRowsRequest {
-    // Debug logging
-    console.log('[TableGrpcMapper] toCreateRowsRequest called with:');
-    console.log(`  - tableId: ${tableId.value}`);
-    console.log(`  - organizationId: ${organizationId.value}`);
-    console.log(`  - s3Path: ${s3Path}`);
-    console.log(`  - rows count: ${rows.length}`);
-    
     const request: ICreateRowsRequest = {
       tableId: tableId.value.toString(),
       userId: '', // Will be set by the service layer
@@ -100,13 +93,6 @@ export class TableGrpcMapper {
       s3Path: s3Path || '', // S3 path for Delta Lake table data
       rowsData: rows.map(row => this.toProtoRowData(row)),
     };
-
-    console.log('[TableGrpcMapper] Created request:');
-    console.log(`  - tableId: '${request.tableId}'`);
-    console.log(`  - organizationId: '${request.organizationId}'`);
-    console.log(`  - s3Path: '${request.s3Path}'`);
-    console.log(`  - userId: '${request.userId}'`);
-    console.log(`  - rowsData count: ${request.rowsData.length}`);
 
     return request;
   }
@@ -140,7 +126,7 @@ export class TableGrpcMapper {
    */
   static toProtoRowData(row: Row): IRowData {
     const plainData = row.toPlainObject();
-    
+
     const protoRowData: IRowData = {
       id: row.id.value,
       data: Object.entries(plainData).reduce((acc, [key, value]) => {

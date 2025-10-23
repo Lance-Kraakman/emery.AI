@@ -127,6 +127,11 @@ export class Row {
     // AIDEV-NOTE: Allow empty strings for legacy data - RowMapper.applyDefaults() will fix them
     // Only fail on undefined (field completely missing)
     for (const field of tableFields) {
+      // Skip 'id' field - it's auto-generated if not provided (see line 159)
+      if (field.name === 'id') {
+        continue;
+      }
+
       if (field.required && data[field.name] === undefined) {
         throw new Error(`${field.name} is required`);
       }
@@ -135,6 +140,12 @@ export class Row {
     const fieldValues: FieldValue[] = [];
 
     for (const field of tableFields) {
+      // Skip 'id' field - Row.id is the authoritative source, not fieldValues
+      // The 'id' is auto-generated in Row constructor (line 159) and used by toPlainObject()
+      if (field.name === 'id') {
+        continue;
+      }
+
       const value = data[field.name];
 
       // AIDEV-NOTE: Debug logging for document field values

@@ -66,8 +66,37 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         .set({ s3Path: realS3Path.path })
         .where(eq(tables.id, tableRecord.id));
 
-      // 3. Initialize Delta Lake table via gRPC service instead of S3 file
-      const emptyTable = DynamicTable.fromPersistence({
+      // 3. Create 'id' field - required by Delta Lake (at least one column must exist)
+      // AIDEV-NOTE: This is an infrastructure requirement, not a domain concept.
+      // The 'id' field stores Row.id (UUID) values for row identification.
+      const [idFieldRecord] = await this.db.insert(fields).values({
+        tableId: tableRecord.id,
+        name: 'id',
+        slug: 'id',
+        type: 'text',
+        orderIndex: 0,
+        required: true,
+        fieldConfig: {
+          isSystemField: true,
+          description: 'Row identifier (UUID)'
+        }
+      }).returning();
+
+      // Create TableField domain object for the id field
+      const idField = TableField.fromPersistence({
+        id: idFieldRecord.id,
+        tableId: idFieldRecord.tableId,
+        name: idFieldRecord.name,
+        type: idFieldRecord.type as FieldType,
+        orderIndex: idFieldRecord.orderIndex,
+        relatedTableId: null,
+        required: idFieldRecord.required,
+        metadata: idFieldRecord.fieldConfig || undefined,
+        createdAt: idFieldRecord.createdAt
+      });
+
+      // 4. Create table entity with id field
+      const tableEntity = DynamicTable.fromPersistence({
         id: tableRecord.id,
         databaseId: tableRecord.databaseId,
         organizationId: tableRecord.organizationId,
@@ -75,36 +104,22 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         storageLocation: realS3Path.path,
         description: tableRecord.metadata?.description,
         metadata: tableRecord.metadata ? TableMetadata.fromDatabase(tableRecord.metadata).data : undefined,
-        fields: [], // No fields created yet - handled separately
+        fields: [idField],  // Include system id field
         createdBy: tableRecord.createdBy,
         createdAt: tableRecord.createdAt!,
         updatedAt: tableRecord.updatedAt!
       });
 
-      // Create Delta Lake table via gRPC service
-      const result = await this.dataStorageService.createTable(emptyTable);
+      // Create Delta Lake table via gRPC service (id field will be included in schema)
+      const result = await this.dataStorageService.createTable(tableEntity);
       if (!result.success) {
         throw new Error(`Failed to initialize Delta Lake table: ${result.error}`);
       }
 
-      // 4. Return domain entity with empty fields (no fields created yet)
-      const dynamicTable = DynamicTable.fromPersistence({
-        id: tableRecord.id,
-        databaseId: tableRecord.databaseId,
-        organizationId: tableRecord.organizationId,
-        name: tableRecord.name,
-        storageLocation: realS3Path.path,
-        description: tableRecord.metadata?.description,
-        metadata: tableRecord.metadata ? TableMetadata.fromDatabase(tableRecord.metadata).data : undefined,
-        fields: [], // No fields created yet - handled separately
-        createdBy: tableRecord.createdBy,
-        createdAt: tableRecord.createdAt!,
-        updatedAt: tableRecord.updatedAt!
-      });
+      // 4. Return the created table entity
+      console.log(`[TableService] Created table: ${tableEntity.name} (ID: ${tableEntity.id})`);
 
-      console.log(`[TableService] Created table: ${dynamicTable.name} (ID: ${dynamicTable.id})`);
-
-      return dynamicTable;
+      return tableEntity;
 
     } catch (error) {
       console.error('[TableService] Error creating table:', error);
@@ -710,39 +725,47 @@ export class DynamicTableRepository implements IDynamicTableRepository {
   // Empty table initialization is handled by initializeEmptyTable instead
   private async loadTableData(s3Path: S3TablePath): Promise<Row[]> {
     try {
-      const s3Key = s3Path.getDataPath();
-      
-      const response = await s3Client.send(new GetObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: s3Key
-      }));
+      console.log('[DynamicTableRepository.loadTableData] === ENTRY ===');
+      console.log(`[DynamicTableRepository.loadTableData] S3 path: ${s3Path.path}`);
 
-      if (!response.Body) {
-        return [];
-      }
-
-      const buffer = Buffer.from(await response.Body.transformToByteArray());
-      
       // Get table entity and fields for data storage service
       const tableId = this.extractTableIdFromPath(s3Path);
+      console.log(`[DynamicTableRepository.loadTableData] Extracted table ID: ${tableId}`);
+
       const table = await this.findById(TableId.fromNumber(tableId));
       if (!table) {
         throw new Error(`Table not found: ${tableId}`);
       }
-      
-      // Fields are available from table object (loaded in findById)
+
+      console.log(`[DynamicTableRepository.loadTableData] Found table: ${table.name} (ID: ${table.id.value})`);
+      console.log(`[DynamicTableRepository.loadTableData] Storage location: ${table.storageLocation}`);
+      console.log(`[DynamicTableRepository.loadTableData] Field count: ${table.fields.length}`);
+
+      // Query rows from Delta Lake via gRPC service (NEW implementation)
+      // AIDEV-NOTE: Removed old S3 Arrow file read logic - now using Delta Lake
+      console.log(`[DynamicTableRepository.loadTableData] Calling dataStorageService.retrieveRows...`);
       const result = await this.dataStorageService.retrieveRows(table);
+
       if (!result.success) {
+        console.error(`[DynamicTableRepository.loadTableData] retrieveRows failed: ${result.error}`);
         throw new Error(`Failed to retrieve data: ${result.error}`);
       }
-      
+
+      console.log(`[DynamicTableRepository.loadTableData] Successfully retrieved ${result.data?.length || 0} rows`);
+      console.log(`[DynamicTableRepository.loadTableData] === EXIT ===`);
+
       return result.data || [];
 
     } catch (error) {
-      if ((error as any).name === 'NoSuchKey') {
+      console.error(`[DynamicTableRepository.loadTableData] === ERROR ===`);
+      console.error(`[DynamicTableRepository.loadTableData] Error loading table data:`, error);
+      console.error(`[DynamicTableRepository.loadTableData] Error type:`, error instanceof Error ? error.constructor.name : typeof error);
+
+      // Return empty array for missing table data (not an error - table might be new)
+      if (error instanceof Error && error.message.includes('Table not found')) {
         return [];
       }
-      console.error(`[DynamicTableRepository] Error loading table data from S3:`, error);
+
       throw error;
     }
   }
