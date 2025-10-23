@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Force dynamic rendering to prevent build-time database connections
 export const dynamic = 'force-dynamic';
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { db } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
