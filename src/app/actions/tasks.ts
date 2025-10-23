@@ -5,53 +5,55 @@ import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result, CreateTaskData } from "./types";
-import { getAgentTaskApplicationService, getAgentApplicationService } from "@/ddd/application/di/container";
-import type { CreateTaskRequest } from "@/ddd/application/services/agents/agent-task-application-service";
-import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
-import { taskToDTO, tasksToDTO } from '@/app/mappers/task-mapper';
+import { getAgentTaskApplicationService } from "@/ddd/application/di/container";
+import type { CreateTaskDTO } from "@/app/dtos/task.dto";
 
 export async function createTask(data: CreateTaskData): Promise<Result> {
   return withAuthContext(async () => {
     try {
       const { agentId, name, capabilityName, instructions, createdBy } = data;
 
-    if (!name || !instructions?.instructions) {
+      if (!name || !instructions?.instructions) {
+        return {
+          success: false,
+          error: "Task name and instructions are required",
+        };
+      }
+
+      // Check resource-specific permission for task creation to this specific agent
+      const session = await requireResourcePermission("tasks:create", "agent", agentId);
+      const currentOrg = await requireCurrentOrganization();
+
+      // Create task using application service - service accepts primitives
+      const taskApplicationService = getAgentTaskApplicationService();
+      const createDTO: CreateTaskDTO = {
+        agentId,
+        name,
+        instructions,
+        capabilityName,
+        createdBy: createdBy || session.user.id,
+        organizationId: currentOrg.id
+      };
+
+      const result = await taskApplicationService.createTask(createDTO);
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || "Failed to create task"
+        };
+      }
+
+      revalidatePath('/dashboard');
+
+      return {
+        success: true,
+        data: result.data,
+      };
+    } catch (error) {
+      console.error("Error creating task:", error);
       return {
         success: false,
-        error: "Task name and instructions are required",
-      };
-    }
-
-    // Check resource-specific permission for task creation to this specific agent
-    const session = await requireResourcePermission("tasks:create", "agent", agentId);
-    const currentOrg = await requireCurrentOrganization();
-
-    // Create task using application service
-    const taskApplicationService = getAgentTaskApplicationService();
-    const createRequest: CreateTaskRequest = {
-      agentId: AgentId.fromNumber(agentId),
-      name,
-      instructions,
-      capabilityName,
-      createdBy: UserId.fromString(createdBy || session.user.id),
-      organizationId: OrganizationId.fromNumber(currentOrg.id)
-    };
-
-    const task = await taskApplicationService.createTask(createRequest);
-
-    // Convert domain entity to frontend DTO
-    const convertedTask = taskToDTO(task);
-
-    revalidatePath('/dashboard');
-    
-    return {
-      success: true,
-      data: convertedTask,
-    };
-  } catch (error) {
-    console.error("Error creating task:", error);
-    return {
-      success: false,
         error: error instanceof Error ? error.message : "Failed to create task",
       };
     }
@@ -62,28 +64,26 @@ export async function getTasks(agentId?: number, limit = 50): Promise<Result> {
   return withAuthContext(async () => {
     try {
       await requirePermission("tasks:manage");
-    const currentOrg = await requireCurrentOrganization();
+      const currentOrg = await requireCurrentOrganization();
 
-    const taskApplicationService = getAgentTaskApplicationService();
-    let domainTasks;
+      const taskApplicationService = getAgentTaskApplicationService();
+      let tasks;
 
-    if (agentId) {
-      domainTasks = await taskApplicationService.getTasksForAgent(agentId);
-    } else {
-      domainTasks = await taskApplicationService.getRecentTasksForOrganization(currentOrg.id, limit);
-    }
+      if (agentId) {
+        tasks = await taskApplicationService.getTasksForAgent(agentId);
+      } else {
+        tasks = await taskApplicationService.getRecentTasksForOrganization(currentOrg.id, limit);
+      }
 
-    // Convert domain entities to frontend DTOs
-    const convertedTasks = tasksToDTO(domainTasks);
-
-    return {
-      success: true,
-      data: convertedTasks,
-    };
-  } catch (error) {
-    console.error("Error fetching tasks:", error);
-    return {
-      success: false,
+      // Service already returns DTOs, no conversion needed
+      return {
+        success: true,
+        data: tasks,
+      };
+    } catch (error) {
+      console.error("Error fetching tasks:", error);
+      return {
+        success: false,
         error: "Failed to fetch tasks",
       };
     }
@@ -95,27 +95,25 @@ export async function getTask(taskId: string): Promise<Result> {
     try {
       await requirePermission("tasks:manage");
 
-    const taskApplicationService = getAgentTaskApplicationService();
-    const domainTask = await taskApplicationService.getTask(taskId);
+      const taskApplicationService = getAgentTaskApplicationService();
+      const task = await taskApplicationService.getTask(taskId);
 
-    if (!domainTask) {
+      if (!task) {
+        return {
+          success: false,
+          error: "Task not found",
+        };
+      }
+
+      // Service already returns DTO, no conversion needed
+      return {
+        success: true,
+        data: task,
+      };
+    } catch (error) {
+      console.error("Error fetching task:", error);
       return {
         success: false,
-        error: "Task not found",
-      };
-    }
-
-    // Convert domain entity to frontend DTO
-    const convertedTask = taskToDTO(domainTask);
-
-    return {
-      success: true,
-      data: convertedTask,
-    };
-  } catch (error) {
-    console.error("Error fetching task:", error);
-    return {
-      success: false,
         error: "Failed to fetch task",
       };
     }
@@ -138,11 +136,12 @@ export async function updateTaskStatus(
     if (status === 'cancelled') {
       await taskApplicationService.cancelTask(taskId, error || 'Cancelled by user');
     } else {
-      // For other status changes, we need to get the task and use domain methods
-      // Note: This is a simplified approach - in a real scenario, you might want 
-      // to add status update methods to the application service
-      const domainTask = await taskApplicationService.getTask(taskId);
-      
+      // For other status changes, we need to get the domain task entity and use domain methods
+      // Note: Accessing repository directly is not ideal - better to add status update methods to application service
+      const { TaskId } = await import('@/ddd/domain/shared/value-objects');
+      const taskRepository = (taskApplicationService as any).taskRepository;
+      const domainTask = await taskRepository.findById(TaskId.fromString(taskId));
+
       if (!domainTask) {
         return {
           success: false,
@@ -173,9 +172,7 @@ export async function updateTaskStatus(
         }
 
         // Save the updated task through the repository
-        // Note: Accessing repository directly from application service would be cleaner
-        // but this approach works for now
-        await (taskApplicationService as any).taskRepository.save(domainTask);
+        await taskRepository.save(domainTask);
       } catch (domainError) {
         return {
           success: false,
@@ -185,23 +182,21 @@ export async function updateTaskStatus(
     }
 
     // Get the updated task
-    const updatedDomainTask = await taskApplicationService.getTask(taskId);
-    
-    if (!updatedDomainTask) {
+    const updatedTask = await taskApplicationService.getTask(taskId);
+
+    if (!updatedTask) {
       return {
         success: false,
         error: "Failed to retrieve updated task",
       };
     }
 
-    // Convert domain entity to frontend DTO
-    const convertedTask = taskToDTO(updatedDomainTask);
-
+    // Service already returns DTO, no conversion needed
     revalidatePath('/dashboard');
-    
+
     return {
       success: true,
-      data: convertedTask,
+      data: updatedTask,
     };
   } catch (error) {
     console.error("Error updating task status:", error);
@@ -260,35 +255,36 @@ export async function getTaskStats(agentId?: number): Promise<Result> {
   return withAuthContext(async () => {
     try {
       await requirePermission("tasks:manage");
-    const currentOrg = await requireCurrentOrganization();
+      const currentOrg = await requireCurrentOrganization();
 
-    const taskApplicationService = getAgentTaskApplicationService();
-    let domainTasks;
+      const taskApplicationService = getAgentTaskApplicationService();
+      let tasks;
 
-    if (agentId) {
-      domainTasks = await taskApplicationService.getTasksForAgent(agentId);
-    } else {
-      domainTasks = await taskApplicationService.getTasksForOrganization(currentOrg.id);
-    }
-    
-    const stats = {
-      total: domainTasks.length,
-      pending: domainTasks.filter(t => t.status.value === 'pending').length,
-      in_progress: domainTasks.filter(t => t.status.value === 'in_progress').length,
-      completed: domainTasks.filter(t => t.status.value === 'completed').length,
-      failed: domainTasks.filter(t => t.status.value === 'failed').length,
-      cancelled: domainTasks.filter(t => t.status.value === 'cancelled').length,
-      timeout: domainTasks.filter(t => t.status.value === 'timeout').length,
-    };
+      if (agentId) {
+        tasks = await taskApplicationService.getTasksForAgent(agentId);
+      } else {
+        tasks = await taskApplicationService.getTasksForOrganization(currentOrg.id);
+      }
 
-    return {
-      success: true,
-      data: stats,
-    };
-  } catch (error) {
-    console.error("Error fetching task stats:", error);
-    return {
-      success: false,
+      // Service returns DTOs where status is a string, not a Value Object
+      const stats = {
+        total: tasks.length,
+        pending: tasks.filter(t => t.status === 'pending').length,
+        in_progress: tasks.filter(t => t.status === 'in_progress').length,
+        completed: tasks.filter(t => t.status === 'completed').length,
+        failed: tasks.filter(t => t.status === 'failed').length,
+        cancelled: tasks.filter(t => t.status === 'cancelled').length,
+        timeout: tasks.filter(t => t.status === 'timeout').length,
+      };
+
+      return {
+        success: true,
+        data: stats,
+      };
+    } catch (error) {
+      console.error("Error fetching task stats:", error);
+      return {
+        success: false,
         error: "Failed to fetch task stats",
       };
     }
