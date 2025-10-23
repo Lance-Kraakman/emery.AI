@@ -10,36 +10,10 @@ import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-re
 import type { Result } from '@/ddd/domain/shared/result';
 import { Team } from '@/ddd/domain/teams/entities/team';
 import { TeamId, OrganizationId, AgentId } from '@/ddd/domain/shared/value-objects';
+import type { CreateTeamDTO, UpdateTeamDTO, TeamFiltersDTO, TeamDTO } from '@/app/dtos/team.dto';
 
-export interface CreateTeamCommand {
-  name: string;
-  purpose?: string;
-  description?: string;
-  responsibilities?: string[];
-  goals?: string[];
-  agentIds?: string[];
-  databaseId?: string;
-  organizationId: number;
-}
-
-export interface UpdateTeamCommand {
-  teamId: number;
-  name?: string;
-  purpose?: string;
-  description?: string;
-  responsibilities?: string[];
-  goals?: string[];
-  agentIds?: string[];
-}
-
-export interface TeamFilters {
-  organizationId: number;
-  searchQuery?: string;
-  hasAgents?: boolean;
-}
-
-// Use unified Result interface from domain shared types
-export type TeamApplicationResult<T = any> = Result<T>;
+// Re-export DTOs for backward compatibility during migration
+export type { CreateTeamDTO, UpdateTeamDTO, TeamFiltersDTO, TeamDTO };
 
 export class TeamApplicationService {
 
@@ -51,7 +25,7 @@ export class TeamApplicationService {
   /**
    * Create a new team with business validation
    */
-  async createTeam(command: CreateTeamCommand): Promise<TeamApplicationResult<Team>> {
+  async createTeam(dto: CreateTeamDTO): Promise<Result<TeamDTO>> {
     try {
       // Business validation
       if (!command.name?.trim()) {
