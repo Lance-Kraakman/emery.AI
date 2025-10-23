@@ -9,15 +9,13 @@
 
 import { auth } from '@/lib/auth'
 import { getChatApplicationService } from '@/ddd/application/di/container'
-import { OrganizationId, UserId, ChatId } from '@/ddd/domain/shared/value-objects'
-import { 
-  ChatMapper,
-  type ChatContextDTO, 
-  type ChatSessionDTO, 
-  type ChatMessageDTO,
-  type ChatWithMessagesDTO,
-  type ChatActionResult,
-  type CreateChatSessionDTO
+import type {
+  ChatContextDTO,
+  ChatSessionDTO,
+  ChatMessageDTO,
+  ChatWithMessagesDTO,
+  ChatActionResult,
+  CreateChatSessionDTO
 } from '@/app/mappers/chat-mapper'
 import { ChatUtils } from '@/ddd/domain/chat/entities/chat'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
@@ -40,13 +38,11 @@ export async function getChatSessions(context: ChatContextDTO): Promise<ChatActi
     }
 
     const chatApplicationService = getChatApplicationService()
-    const userId = UserId.fromString(session.user.id)
-    const organizationId = OrganizationId.fromNumber(context.organizationId)
 
-    // Get chats based on context
+    // Get chats based on context - service accepts primitives and returns DTOs
     const result = await chatApplicationService.getChats({
-      userId,
-      organizationId,
+      userId: session.user.id,
+      organizationId: context.organizationId,
       limit: context.limit || 20,
       offset: context.offset || 0
     })
@@ -57,7 +53,7 @@ export async function getChatSessions(context: ChatContextDTO): Promise<ChatActi
 
     // Filter by domain context if specified
     let chats = result.data || []
-    
+
     if (context.domainType && context.domainId) {
       // Filter for specific domain entity
       chats = chats.filter(chat => {
@@ -73,10 +69,8 @@ export async function getChatSessions(context: ChatContextDTO): Promise<ChatActi
       })
     }
 
-    // Convert to DTOs using ChatMapper
-    const chatDTOs = chats.map(chat => ChatMapper.toSessionDTO(chat));
-
-    return { success: true, data: chatDTOs }
+    // Service already returns DTOs, no mapping needed
+    return { success: true, data: chats }
 
   } catch (error) {
     console.error('[CHAT-ACTIONS] Error getting chat sessions:', error)
@@ -99,15 +93,12 @@ export async function loadChatWithFullHistory(chatId: string): Promise<ChatActio
     }
 
     const chatApplicationService = getChatApplicationService()
-    const userId = UserId.fromString(session.user.id)
-    const organizationId = OrganizationId.fromNumber(session.user.currentOrganizationId!)
-    const chatIdVO = ChatId.fromString(chatId)
 
-    // Get chat history (with higher limit for full history)
+    // Get chat history - service accepts primitives and returns DTOs
     const result = await chatApplicationService.getChatHistory({
-      chatId: chatIdVO,
-      userId,
-      organizationId,
+      chatId: chatId,
+      userId: session.user.id,
+      organizationId: session.user.currentOrganizationId!,
       limit: 100 // Load up to 100 messages for full history
     })
 
@@ -115,21 +106,10 @@ export async function loadChatWithFullHistory(chatId: string): Promise<ChatActio
       return { success: false, error: result.error || 'Failed to load chat history' }
     }
 
-    const chatData = result.data
-    if (!chatData?.chat) {
-      return { success: false, error: 'Chat not found' }
-    }
-
-    // Convert to DTOs using ChatMapper
-    const chatWithMessages = ChatMapper.toChatWithMessagesDTO(
-      chatData.chat, 
-      chatData.messages || [], 
-      chatData.chat.messageCount
-    );
-
+    // Service already returns DTO, no mapping needed
     return {
       success: true,
-      data: chatWithMessages
+      data: result.data!
     }
 
   } catch (error) {
@@ -173,9 +153,11 @@ export async function createNewChatSession(request: CreateChatSessionDTO): Promi
     const title = request.title || ChatUtils.generateContextTitle(contextMetadata)
 
     const chatApplicationService = getChatApplicationService()
+
+    // Service accepts primitives and returns DTOs
     const result = await chatApplicationService.createChat({
-      organizationId: OrganizationId.fromNumber(request.organizationId),
-      createdBy: UserId.fromString(session.user.id),
+      organizationId: request.organizationId,
+      createdBy: session.user.id,
       title,
       domainType: request.domainType as DomainType,
       domainId: request.domainId
@@ -185,10 +167,8 @@ export async function createNewChatSession(request: CreateChatSessionDTO): Promi
       return { success: false, error: result.error || 'Failed to create chat session' }
     }
 
-    // Convert to DTO using ChatMapper
-    const chatDTO = ChatMapper.toSessionDTO(result.data!);
-
-    return { success: true, data: chatDTO }
+    // Service already returns DTO, no mapping needed
+    return { success: true, data: result.data! }
 
   } catch (error) {
     console.error('[CHAT-ACTIONS] Error creating chat session:', error)
@@ -218,13 +198,11 @@ export async function getCurrentChatSession(context: ChatContextDTO): Promise<Ch
     }
 
     const chatApplicationService = getChatApplicationService()
-    const userId = UserId.fromString(session.user.id)
-    const organizationId = OrganizationId.fromNumber(context.organizationId)
 
-    // Get the most recent chat for this context (limit 1)
+    // Get the most recent chat for this context - service accepts primitives and returns DTOs
     const result = await chatApplicationService.getChats({
-      userId,
-      organizationId,
+      userId: session.user.id,
+      organizationId: context.organizationId,
       limit: 1,
       offset: 0
     })
@@ -235,7 +213,7 @@ export async function getCurrentChatSession(context: ChatContextDTO): Promise<Ch
 
     // Filter by domain context if specified
     let chats = result.data || []
-    
+
     if (context.domainType && context.domainId) {
       // Filter for specific domain entity
       chats = chats.filter(chat => {
@@ -251,25 +229,9 @@ export async function getCurrentChatSession(context: ChatContextDTO): Promise<Ch
       })
     }
 
-    // Return the most recent chat or null if none found
+    // Return the most recent chat or null if none found - already a DTO
     const mostRecentChat = chats[0] || null
-    
-    if (mostRecentChat) {
-      const chatDTO: ChatSessionDTO = {
-        id: mostRecentChat.id.value,
-        title: mostRecentChat.title,
-        description: mostRecentChat.description,
-        status: mostRecentChat.status,
-        messageCount: mostRecentChat.messageCount,
-        lastMessageAt: mostRecentChat.lastMessageAt,
-        createdAt: mostRecentChat.createdAt,
-        updatedAt: mostRecentChat.updatedAt,
-        contextMetadata: mostRecentChat.contextMetadata
-      }
-      return { success: true, data: chatDTO }
-    }
-
-    return { success: true, data: null }
+    return { success: true, data: mostRecentChat }
 
   } catch (error) {
     console.error('[CHAT-ACTIONS] Error getting current chat session:', error)
@@ -292,25 +254,27 @@ export async function archiveChatSession(chatId: string): Promise<ChatActionResu
     }
 
     const chatApplicationService = getChatApplicationService()
-    const userId = UserId.fromString(session.user.id)
-    const organizationId = OrganizationId.fromNumber(session.user.currentOrganizationId!)
-    const chatIdVO = ChatId.fromString(chatId)
 
-    // First verify user has access to this chat
+    // First verify user has access to this chat - service accepts primitives
     const chatResult = await chatApplicationService.getChatHistory({
-      chatId: chatIdVO,
-      userId,
-      organizationId,
+      chatId: chatId,
+      userId: session.user.id,
+      organizationId: session.user.currentOrganizationId!,
       limit: 1
     })
 
-    if (!chatResult.success || !chatResult.data?.chat) {
+    if (!chatResult.success || !chatResult.data) {
       return { success: false, error: 'Chat not found or access denied' }
     }
 
-    // Archive the chat (using repository directly)
-    const chatRepository = (chatApplicationService as any).chatRepository // Access private field
-    const archived = await chatRepository.archive(chatIdVO, organizationId)
+    // TODO: Add archiveChat method to ChatApplicationService instead of accessing repository directly
+    // For now, using repository directly as a workaround
+    const chatRepository = (chatApplicationService as any).chatRepository
+    const { ChatId, OrganizationId } = await import('@/ddd/domain/shared/value-objects')
+    const archived = await chatRepository.archive(
+      ChatId.fromString(chatId),
+      OrganizationId.fromNumber(session.user.currentOrganizationId!)
+    )
 
     return { success: true, data: archived }
 

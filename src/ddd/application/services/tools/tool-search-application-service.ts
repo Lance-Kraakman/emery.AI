@@ -296,14 +296,14 @@ export class ToolSearchApplicationService {
     limit: number,
     offset: number
   ): Promise<ReferenceTool[]> {
-    const databases = await this.databaseApplicationService.getDatabases({ organizationId });
+    const databases = await this.databaseApplicationService.getDatabases({ organizationId: organizationId.value });
     const allTableTools: ReferenceTool[] = [];
 
     // Search through all tables in all databases
     const allOrgTables = await this.tableApplicationService.getTablesForOrganization(organizationId);
 
     for (const database of databases) {
-      const tables = allOrgTables.filter(table => table.databaseId.equals(database.id));
+      const tables = allOrgTables.filter(table => table.databaseId.value === database.id);
 
       const matchingTables = tables
         .filter(table =>
@@ -338,7 +338,7 @@ export class ToolSearchApplicationService {
     limit: number,
     offset: number
   ): Promise<ReferenceTool[]> {
-    const databases = await this.databaseApplicationService.getDatabases({ organizationId });
+    const databases = await this.databaseApplicationService.getDatabases({ organizationId: organizationId.value });
 
     const matchingDatabases = databases
       .filter(database =>
@@ -349,7 +349,7 @@ export class ToolSearchApplicationService {
       .slice(offset, offset + limit)
       .map(database => {
         return ReferenceTool.fromDatabase(
-          database.id.value.toString(),
+          database.id.toString(),
           organizationId.value,
           database.name,
           `Database - ${database.description || 'No description'}`
@@ -371,7 +371,7 @@ export class ToolSearchApplicationService {
   ): Promise<ReferenceTool[]> {
     console.log(`[searchDocumentTools] Starting search. SearchText: "${searchText}", OrgId: ${organizationId.value}, Limit: ${limit}, Offset: ${offset}`);
 
-    const databases = await this.databaseApplicationService.getDatabases({ organizationId });
+    const databases = await this.databaseApplicationService.getDatabases({ organizationId: organizationId.value });
     const allDocumentTools: ReferenceTool[] = [];
 
     console.log(`[searchDocumentTools] Found ${databases.length} databases`);
@@ -381,7 +381,7 @@ export class ToolSearchApplicationService {
     console.log(`[searchDocumentTools] Found ${allOrgTables.length} tables for organization`);
 
     for (const database of databases) {
-      const tables = allOrgTables.filter(table => table.databaseId.equals(database.id));
+      const tables = allOrgTables.filter(table => table.databaseId.value === database.id);
       console.log(`[searchDocumentTools] Database "${database.name}" has ${tables.length} tables`);
 
       for (const table of tables) {
