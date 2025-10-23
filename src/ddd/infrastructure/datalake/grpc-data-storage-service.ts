@@ -14,6 +14,7 @@ import type { Result } from '@/ddd/domain/shared/result';
 import { Row } from '@/ddd/domain/tables/value-objects/row';
 import { GrpcTableClient } from '@/ddd/infrastructure/grpc/table-grpc-client';
 import { TableGrpcMapper } from '../grpc/table-grpc-mapper';
+import { RowSerializer } from './row-serializer';
 import { CreateTableRequest, DeleteTableRequest, UpdateTableRequest } from '@/lib/grpc/generated/table_service';
 
 export class GrpcDataStorageService implements ITableDataStorageService {
@@ -45,10 +46,18 @@ export class GrpcDataStorageService implements ITableDataStorageService {
       const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
       console.log(`[GrpcDataStorageService] Using s3Path: ${s3Path}`);
 
-      // 1. Convert domain rows to protobuf request with mode
-      const createRequest = TableGrpcMapper.toCreateRowsRequest(
+      // 1. Serialize rows for Delta Lake storage (arrays → JSON strings)
+      // AIDEV-NOTE: RowSerializer handles complex field type serialization
+      // Create serialized plain objects for each row
+      const serializedData = rows.map(row => ({
+        id: row.id.value,
+        data: RowSerializer.serializeForStorage(row, table.fields)
+      }));
+
+      // 2. Convert serialized data to protobuf request with mode
+      const createRequest = TableGrpcMapper.toCreateRowsRequestFromData(
         table.id,
-        rows,
+        serializedData,
         table.organizationId,
         s3Path,
         mode
@@ -175,8 +184,12 @@ export class GrpcDataStorageService implements ITableDataStorageService {
             rowData[field.name] = column?.get(i);
           }
 
-          // Convert to domain Row entity
-          const row = Row.fromPlainObject(rowData, table.id.value, table.fields as any);
+          // Deserialize from Delta Lake storage (JSON strings → arrays/objects)
+          // AIDEV-NOTE: RowSerializer handles complex field type deserialization
+          const deserializedData = RowSerializer.deserializeFromStorage(rowData, table.fields);
+
+          // Convert to domain Row entity with clean deserialized data
+          const row = Row.fromPlainObject(deserializedData, table.id.value, table.fields as any);
           rows.push(row);
         }
 

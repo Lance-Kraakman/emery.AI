@@ -152,7 +152,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           name: fieldRecord.name,
           type: fieldRecord.type as FieldType,
           orderIndex: fieldRecord.orderIndex,
-          relatedTableId: fieldRecord.fieldConfig?.relatedTableId || null,
+          relatedTableId: fieldRecord.fieldConfig?.targetTableId || null,
           required: fieldRecord.required,
           metadata: fieldRecord.fieldConfig || undefined,
           createdAt: fieldRecord.createdAt
@@ -206,7 +206,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
             name: fieldRecord.name,
             type: fieldRecord.type as FieldType,
             orderIndex: fieldRecord.orderIndex,
-            relatedTableId: fieldRecord.fieldConfig?.relatedTableId || null,
+            relatedTableId: fieldRecord.fieldConfig?.targetTableId || null,
             required: fieldRecord.required,
             metadata: fieldRecord.fieldConfig || undefined,
             createdAt: fieldRecord.createdAt
@@ -326,7 +326,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           required: field.required,
           fieldConfig: field.relatedTableId || field.metadata ? {
             ...(field.metadata || {}),
-            ...(field.relatedTableId ? { relatedTableId: field.relatedTableId.value } : {})
+            ...(field.relatedTableId ? { targetTableId: field.relatedTableId.value } : {})
           } : null
         });
       }
