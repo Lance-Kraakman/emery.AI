@@ -107,13 +107,12 @@ type ServiceMap = {
   IToolRegistryService: IToolRegistryService;
 };
 
-// Get singleton instance
-const diContainer = DIContainer.getInstance();
-
 /**
  * Generic getter factory that creates type-safe getter functions
+ * NOTE: Container is accessed lazily to avoid initialization issues during module loading
  */
 const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] => {
+  const diContainer = DIContainer.getInstance(); // Lazy access
   // Map simple names to container keys (e.g., 'AgentRepository' -> 'IAgentRepository')
   let containerKey;
 
@@ -197,6 +196,7 @@ export const getIndexingQueueService = createGetter('IndexingQueueService');
 
 // Connection service getters - handle null gracefully when Pipedream not configured
 export const getConnectionRepository = (): IConnectionRepository => {
+  const diContainer = DIContainer.getInstance(); // Lazy access
   const service = diContainer.get('IConnectionRepository');
   if (!service) {
     throw new Error('Connection services not available. Pipedream client not configured. This is expected during build time.');
@@ -205,6 +205,7 @@ export const getConnectionRepository = (): IConnectionRepository => {
 };
 
 export const getConnectionApplicationService = (): ConnectionApplicationService => {
+  const diContainer = DIContainer.getInstance(); // Lazy access
   const service = diContainer.get('ConnectionApplicationService');
   if (!service) {
     throw new Error('Connection services not available. Pipedream client not configured. This is expected during build time.');
@@ -213,6 +214,7 @@ export const getConnectionApplicationService = (): ConnectionApplicationService 
 };
 
 export const getOAuthProxyApplicationService = (): OAuthProxyApplicationService => {
+  const diContainer = DIContainer.getInstance(); // Lazy access
   const service = diContainer.get('OAuthProxyApplicationService');
   if (!service) {
     throw new Error('OAuth proxy service not available. Pipedream client not configured. This is expected during build time.');
