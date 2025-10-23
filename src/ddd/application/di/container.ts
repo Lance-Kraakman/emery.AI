@@ -89,7 +89,7 @@ import { OAuthProxyApplicationService } from '@/ddd/application/services/connect
 import { pipedreamClient } from '@/lib/pipedream/client';
 import { EmbeddingGeneratorService } from '@/ddd/domain/rag/services/embedding-generator-service';
 import { EmbeddingGeneratorDomainService } from '../services/rag/embedding-generator-service/embedding-generator-service';
-import { GrpcTableClient } from '@/ddd/infrastructure/grpc/table-grpc-client';
+import { GrpcTableClient } from '@/ddd/infrastructure/db/repositories/tables/table-grpc-client';
 import { DynamicTableDataLake } from '@/ddd/infrastructure/db/repositories/tables/dynamic-table-datalake';
 
 
