@@ -19,9 +19,21 @@ export interface ITableDataStorageService {
   createTable(table: DynamicTable): Promise<Result<string>>; // Returns S3 path
 
   /**
-   * Store rows in a table
+   * Store rows in a table with explicit write mode
+   *
+   * @param rows - Row entities to store
+   * @param table - Table entity containing schema and storage location
+   * @param mode - Write mode: "append" adds new rows, "overwrite" replaces entire table
+   *
+   * AIDEV-NOTE: This is the core storage method. Repository layer uses:
+   * - mode="append" for insertRow() operations
+   * - mode="overwrite" for updateRow() and deleteRow() operations (read-modify-write pattern)
    */
-  storeRows(rows: Row[], table: DynamicTable): Promise<Result<void>>;
+  storeRows(
+    rows: Row[],
+    table: DynamicTable,
+    mode: 'append' | 'overwrite'
+  ): Promise<Result<void>>;
 
   /**
    * Retrieve rows from a table
@@ -33,16 +45,6 @@ export interface ITableDataStorageService {
     orderBy?: string;
     orderDirection?: 'ASC' | 'DESC';
   }): Promise<Result<Row[]>>;
-
-  /**
-   * Update existing rows in a table
-   */
-  updateRows(rows: Row[], table: DynamicTable): Promise<Result<void>>;
-
-  /**
-   * Delete rows from a table
-   */
-  deleteRows(rowIds: string[], table: DynamicTable): Promise<Result<void>>;
 
   /**
    * Get table statistics

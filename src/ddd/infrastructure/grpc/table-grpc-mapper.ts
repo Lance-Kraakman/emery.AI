@@ -84,7 +84,8 @@ export class TableGrpcMapper {
     tableId: TableId,
     rows: Row[],
     organizationId: OrganizationId,
-    s3Path?: string
+    s3Path?: string,
+    mode?: 'append' | 'overwrite'
   ): ICreateRowsRequest {
     const request: ICreateRowsRequest = {
       tableId: tableId.value.toString(),
@@ -92,6 +93,7 @@ export class TableGrpcMapper {
       organizationId: organizationId.value.toString(),
       s3Path: s3Path || '', // S3 path for Delta Lake table data
       rowsData: rows.map(row => this.toProtoRowData(row)),
+      mode: mode || 'append', // Default to append for backward compatibility
     };
 
     return request;

@@ -24,39 +24,44 @@ export class GrpcDataStorageService implements ITableDataStorageService {
   /**
    * Store rows in a table using gRPC service
    * Converts domain entities to protobuf and sends to Python service
+   *
+   * @param mode - "append" adds new rows, "overwrite" replaces entire table
    */
   async storeRows(
     rows: Row[],
-    table: DynamicTable
+    table: DynamicTable,
+    mode: 'append' | 'overwrite'
   ): Promise<Result<void>> {
     try {
-      console.log(`[GrpcDataStorageService] Storing ${rows.length} rows for table ${table.id}`);
-      
+      console.log(`[GrpcDataStorageService] Storing ${rows.length} rows (mode: ${mode}) for table ${table.id}`);
+
       // Debug logging for table object
       console.log('[GrpcDataStorageService] Table object debug:');
       console.log(`  - table.id: ${table.id?.value}`);
       console.log(`  - table.organizationId: ${table.organizationId?.value}`);
       console.log(`  - table.storageLocation: ${table.storageLocation}`);
+      console.log(`  - write mode: ${mode}`);
 
       const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
       console.log(`[GrpcDataStorageService] Using s3Path: ${s3Path}`);
 
-      // 1. Convert domain rows to protobuf request
+      // 1. Convert domain rows to protobuf request with mode
       const createRequest = TableGrpcMapper.toCreateRowsRequest(
-        table.id, 
-        rows, 
+        table.id,
+        rows,
         table.organizationId,
-        s3Path
+        s3Path,
+        mode
       );
-      
+
       // 3. Send to gRPC service
       const response = await this.grpcClient.createRows(createRequest);
-      
+
       // 4. Handle response using TypeScript property access
       if (response && response.success) {
-        console.log(`[GrpcDataStorageService] Successfully stored ${rows.length} rows`);
-        return { 
-          success: true, 
+        console.log(`[GrpcDataStorageService] Successfully stored ${rows.length} rows (mode: ${mode})`);
+        return {
+          success: true,
           data: undefined
         };
       } else {
@@ -67,7 +72,7 @@ export class GrpcDataStorageService implements ITableDataStorageService {
           error: message || 'Failed to store data via gRPC'
         };
       }
-      
+
     } catch (error) {
       console.error('[GrpcDataStorageService] Error storing data:', error);
       return {
@@ -311,32 +316,12 @@ export class GrpcDataStorageService implements ITableDataStorageService {
     }
   }
 
-  /**
-   * Update existing rows in a table using gRPC service
-   * Note: This is a mock implementation since the gRPC client doesn't support updateRows yet
-   */
-  async updateRows(rows: Row[], table: DynamicTable): Promise<Result<void>> {
-    // For now, this is not implemented in the gRPC service
-    // We would need to implement this by deleting and re-inserting rows
-    console.warn(`[GrpcDataStorageService] updateRows not implemented for table ${table.id}`);
-    return {
-      success: false,
-      error: 'updateRows is not yet implemented in the gRPC service'
-    };
-  }
-
-  /**
-   * Delete rows from a table using gRPC service
-   * Note: This is a mock implementation since the gRPC client doesn't support deleteRows yet
-   */
-  async deleteRows(rowIds: string[], table: DynamicTable): Promise<Result<void>> {
-    // For now, this is not implemented in the gRPC service
-    console.warn(`[GrpcDataStorageService] deleteRows not implemented for table ${table.id}`);
-    return {
-      success: false,
-      error: 'deleteRows is not yet implemented in the gRPC service'
-    };
-  }
+  // AIDEV-NOTE: updateRows() and deleteRows() removed from interface.
+  // Repository layer handles updates/deletes via read-modify-write pattern:
+  // - Load all rows via retrieveRows()
+  // - Modify rows in memory
+  // - Write back via storeRows(mode="overwrite")
+  // This pattern works well with Delta Lake's append-only architecture.
 
   /**
    * Get table statistics from gRPC service

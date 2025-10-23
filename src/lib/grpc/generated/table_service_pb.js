@@ -3304,7 +3304,8 @@ proto.emery.tables.CreateRowsRequest.toObject = function(includeInstance, msg) {
     proto.emery.tables.RowData.toObject, includeInstance),
     userId: jspb.Message.getFieldWithDefault(msg, 3, ""),
     organizationId: jspb.Message.getFieldWithDefault(msg, 4, ""),
-    s3Path: jspb.Message.getFieldWithDefault(msg, 5, "")
+    s3Path: jspb.Message.getFieldWithDefault(msg, 5, ""),
+    mode: jspb.Message.getFieldWithDefault(msg, 6, "")
   };
 
   if (includeInstance) {
@@ -3361,6 +3362,10 @@ proto.emery.tables.CreateRowsRequest.deserializeBinaryFromReader = function(msg,
     case 5:
       var value = /** @type {string} */ (reader.readString());
       msg.setS3Path(value);
+      break;
+    case 6:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setMode(value);
       break;
     default:
       reader.skipField();
@@ -3424,6 +3429,13 @@ proto.emery.tables.CreateRowsRequest.serializeBinaryToWriter = function(message,
   if (f.length > 0) {
     writer.writeString(
       5,
+      f
+    );
+  }
+  f = message.getMode();
+  if (f.length > 0) {
+    writer.writeString(
+      6,
       f
     );
   }
@@ -3537,6 +3549,24 @@ proto.emery.tables.CreateRowsRequest.prototype.getS3Path = function() {
  */
 proto.emery.tables.CreateRowsRequest.prototype.setS3Path = function(value) {
   return jspb.Message.setProto3StringField(this, 5, value);
+};
+
+
+/**
+ * optional string mode = 6;
+ * @return {string}
+ */
+proto.emery.tables.CreateRowsRequest.prototype.getMode = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 6, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.emery.tables.CreateRowsRequest} returns this
+ */
+proto.emery.tables.CreateRowsRequest.prototype.setMode = function(value) {
+  return jspb.Message.setProto3StringField(this, 6, value);
 };
 
 

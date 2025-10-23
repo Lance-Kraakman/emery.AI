@@ -129,6 +129,7 @@ message CreateRowsRequest {
   string user_id = 3;
   string organization_id = 4;
   string s3_path = 5;                // S3 path for Delta Lake table data
+  string mode = 6;                   // Write mode: "append" (add rows) or "overwrite" (replace all)
 }
 
 message GetRowsRequest {
