@@ -256,5 +256,68 @@ export function initializeDI(db: DbClient | ContextAwareDbClient): void {
 // Export container instance for direct access if needed
 export const container = DIContainer.getInstance();
 
-// Re-export all typed getters from the getters module
-export * from './getters';
+// Re-export getters - explicit exports to avoid circular dependency issues with export *
+export {
+  // Core domain repositories
+  getOrganizationRepository,
+  getUserRepository,
+  getTeamRepository,
+  getInvitationRepository,
+  getRBACRepository,
+
+  // Agent domain repositories
+  getAgentRepository,
+  getTaskRepository,
+  getAgentExecutionRepository,
+
+  // Database domain repositories
+  getDatabaseRepository,
+  getDynamicTableRepository,
+  getFileStorageRepository,
+
+  // Chat domain repositories
+  getChatRepository,
+  getChatMessageRepository,
+
+  // Domain services
+  getDynamicTableService,
+
+  // Core application services
+  getTeamApplicationService,
+  getUserRoleApplicationService,
+  getInvitationApplicationService,
+
+  // Agent application services
+  getAgentTaskApplicationService,
+  getAgentApplicationService,
+
+  // Database application services
+  getDatabaseApplicationService,
+  getTableApplicationService,
+  getFileApplicationService,
+  getDocumentApplicationService,
+
+  // Chat application services
+  getChatApplicationService,
+
+  // Tools application services
+  getToolSearchApplicationService,
+  getToolConfigurationApplicationService,
+  getToolRegistryService,
+
+  // RAG services
+  getRagIndexRepository,
+  getRagDocumentRepository,
+  getRagQueryLogRepository,
+  getEmbeddingService,
+  getSearchAnalyticsService,
+  getIndexingDomainService,
+  getSearchDomainService,
+  getRagSearchApplicationService,
+  getIndexingQueueService,
+
+  // Connection services
+  getConnectionRepository,
+  getConnectionApplicationService,
+  getOAuthProxyApplicationService
+} from './getters';
