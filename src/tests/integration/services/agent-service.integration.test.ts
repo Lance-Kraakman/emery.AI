@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { getAgentApplicationService, getAgentRepository } from '@/ddd/application/di/container';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
-import type { CreateAgentCommand } from '@/ddd/application/services/agents/agent-application-service';
+import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';
 import type { TestContext } from '../shared/test-setup';
@@ -123,25 +123,26 @@ describe('Agent Application Service Integration Tests', () => {
       
       for (const testCase of testCases) {
         console.log(`🧪 Running test: ${testCase.name}`);
-        
-        const command: CreateAgentCommand = {
+
+        // Build DTO - Application Service handles Value Object conversion
+        const dto: CreateAgentDTO = {
           name: testCase.input.name,
           description: 'Test agent description',
-          ownerId: testCase.input.ownerId,
-          organizationId: testCase.input.organizationId,
+          ownerId: testCase.input.ownerId.value,
+          organizationId: testCase.input.organizationId.value,
           role: testCase.input.role,
           agentType: 'data-collector'
         };
 
-        console.log(`🔍 Creating agent with command:`, {
-          name: command.name,
-          ownerId: command.ownerId.value,
-          organizationId: command.organizationId.value,
-          role: command.role
+        console.log(`🔍 Creating agent with DTO:`, {
+          name: dto.name,
+          ownerId: dto.ownerId,
+          organizationId: dto.organizationId,
+          role: dto.role
         });
 
         try {
-          const result = await agentApplicationService.createAgent(command);
+          const result = await agentApplicationService.createAgent(dto);
           
           console.log(`🔍 Agent creation result:`, {
             success: result.success,
@@ -180,16 +181,16 @@ describe('Agent Application Service Integration Tests', () => {
       const agentApplicationService = getAgentApplicationService();
       
       // First create an agent
-      const command: CreateAgentCommand = {
+      const dto: CreateAgentDTO = {
         name: 'Retrieval Test Agent',
         description: 'Agent for testing retrieval',
-        ownerId: testContext.ownerUserId,
-        organizationId: testContext.organizationId,
+        ownerId: testContext.ownerUserId.value,
+        organizationId: testContext.organizationId.value,
         role: 'assistant',
         agentType: 'process-analyst'
       };
 
-      const createResult = await agentApplicationService.createAgent(command);
+      const createResult = await agentApplicationService.createAgent(dto);
       expect(createResult.success).toBe(true);
 
       // Then retrieve agents for organization using repository directly
@@ -218,16 +219,16 @@ describe('Agent Application Service Integration Tests', () => {
       const user2Id = org2Context.ownerUserId;
       
       // Create agents in different organizations
-      const org1Command: CreateAgentCommand = {
+      const org1DTO: CreateAgentDTO = {
         name: 'Org 1 Agent',
         description: 'Agent in organization 1',
-        ownerId: testContext.ownerUserId,
-        organizationId: testContext.organizationId,
+        ownerId: testContext.ownerUserId.value,
+        organizationId: testContext.organizationId.value,
         role: 'assistant',
         agentType: 'data-collector'
       };
 
-      const org2Command: CreateAgentCommand = {
+      const org2DTO: CreateAgentDTO = {
         name: 'Org 2 Agent',
         description: 'Agent in organization 2',
         ownerId: user2Id,
@@ -237,11 +238,11 @@ describe('Agent Application Service Integration Tests', () => {
       };
 
       // Create agent in org 1
-      const org1Result = await agentApplicationService.createAgent(org1Command);
+      const org1Result = await agentApplicationService.createAgent(org1DTO);
       expect(org1Result.success).toBe(true);
       
       // Create agent in org 2  
-      const org2Result = await agentApplicationService.createAgent(org2Command);
+      const org2Result = await agentApplicationService.createAgent(org2DTO);
       expect(org2Result.success).toBe(true);
 
       // Verify isolation using repository directly

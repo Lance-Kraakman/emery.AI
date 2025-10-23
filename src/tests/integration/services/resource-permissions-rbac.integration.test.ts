@@ -16,7 +16,7 @@ import { describe, test, expect, beforeEach, afterEach, beforeAll } from 'vitest
 import { getAgentTaskApplicationService, getAgentApplicationService, getTeamApplicationService, initializeDI } from '@/ddd/application/di/container';
 import { AgentId, OrganizationId, UserId, TeamId } from '@/ddd/domain/shared/value-objects';
 import type { CreateTaskRequest } from '@/ddd/application/services/agents/agent-task-application-service';
-import type { CreateAgentCommand } from '@/ddd/application/services/agents/agent-application-service';
+import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
 import { testClient } from '../shared/integration-helpers';
 import { createTestOrganization, createTestAgent, createTestTeam, createTestUser, initializeTestDI } from '../shared/test-setup';
 import type { TestContext } from '../shared/test-setup';
