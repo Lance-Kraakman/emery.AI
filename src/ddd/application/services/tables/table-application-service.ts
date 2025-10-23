@@ -93,6 +93,12 @@ export interface CreateRowCommand {
   createdBy?: UserId;
 }
 
+export interface CreateRowsCommand {
+  tableId: TableId;
+  rows: Row[];
+  createdBy?: UserId;
+}
+
 export interface UpdateRowCommand {
   tableId: TableId;
   rowId: RowId;
@@ -713,14 +719,50 @@ export class TableApplicationService {
         return ResultHelpers.failure(relationValidation.error || 'Relation validation failed');
       }
 
-      // Insert row using repository
-      const row = await this.dynamicTableRepository.insertRow(tableId, data);
+      // Insert single row using batch method
+      const rows = await this.dynamicTableRepository.insertRows(tableId, [data]);
 
-      return ResultHelpers.success(row);
+      return ResultHelpers.success(rows[0]);
 
     } catch (error) {
       console.error('[TABLE-APP-SERVICE] Error creating row:', error);
       return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to create row');
+    }
+  }
+
+  /**
+   * Create multiple rows in a table (batch operation)
+   */
+  async createRows(command: CreateRowsCommand): Promise<TableApplicationServiceResult<Row[]>> {
+    try {
+      const { tableId, rows } = command;
+
+      if (rows.length === 0) {
+        return ResultHelpers.success([]);
+      }
+
+      // Verify table exists
+      const table = await this.dynamicTableService.getTable(tableId);
+      if (!table) {
+        return ResultHelpers.failure(`Table ${tableId.value} not found`);
+      }
+
+      // Validate relation fields for all rows
+      for (const row of rows) {
+        const relationValidation = await this.validateRelationFields(table, row);
+        if (!relationValidation.valid) {
+          return ResultHelpers.failure(relationValidation.error || 'Relation validation failed');
+        }
+      }
+
+      // Batch insert all rows in single gRPC call
+      const createdRows = await this.dynamicTableRepository.insertRows(tableId, rows);
+
+      return ResultHelpers.success(createdRows);
+
+    } catch (error) {
+      console.error('[TABLE-APP-SERVICE] Error creating rows:', error);
+      return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to create rows');
     }
   }
 
@@ -743,10 +785,13 @@ export class TableApplicationService {
         return ResultHelpers.failure(relationValidation.error || 'Relation validation failed');
       }
 
-      // Update row using repository
-      const updatedRow = await this.dynamicTableRepository.updateRow(tableId, rowId.value, data);
+      // Update single row using batch method
+      const updatedRows = await this.dynamicTableRepository.updateRows(tableId, [{
+        rowId: rowId.value,
+        row: data
+      }]);
 
-      return ResultHelpers.success(updatedRow);
+      return ResultHelpers.success(updatedRows[0]);
 
     } catch (error) {
       console.error('[TABLE-APP-SERVICE] Error updating row:', error);
@@ -813,12 +858,8 @@ export class TableApplicationService {
         return ResultHelpers.failure(`Table ${tableId.value} not found`);
       }
 
-      // Insert all rows using repository
-      const createdRows = [];
-      for (const row of rows) {
-        const newRow = await this.dynamicTableRepository.insertRow(tableId, row);
-        createdRows.push(newRow);
-      }
+      // Batch insert all rows in single call
+      const createdRows = await this.dynamicTableRepository.insertRows(tableId, rows);
 
       return ResultHelpers.success(createdRows);
 

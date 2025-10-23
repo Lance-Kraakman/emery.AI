@@ -143,7 +143,7 @@ interface DynamicDataSheetGridProps {
   onManageFields: () => void;
   onRefresh: () => void;
   onUpdateRow: (rowId: string, fieldId: number, value: DomainFieldValue) => void;
-  onAddRow: (data?: Record<string, any>) => Promise<void>;
+  onAddRows: (rows: Record<string, any>[]) => Promise<void>;
   onDeleteRow: (rowId: string) => void;
   isLoading?: boolean;
   error?: string | null;
@@ -352,7 +352,7 @@ export function DynamicDataSheetGrid({
   onManageFields,
   onRefresh,
   onUpdateRow,
-  onAddRow,
+  onAddRows,
   onDeleteRow,
   isLoading = false,
   error = null
@@ -442,64 +442,88 @@ export function DynamicDataSheetGrid({
   }, [fields, organizationId, tableId, onUpdateRow])
 
   /**
-   * Event-driven onChange - immediately dispatch actions for changes
+   * Event-driven onChange - uses operations parameter for precise change detection
    * No debouncing - mutations fire immediately, TanStack Query handles optimistic updates
    */
-  const handleChange = useCallback((newData: Record<string, any>[]) => {
+  const handleChange = useCallback((
+    newData: Record<string, any>[],
+    operations: Array<{type: 'UPDATE' | 'DELETE' | 'CREATE', fromRowIndex: number, toRowIndex: number}>
+  ) => {
     const dsgRows = newData as DSGRow[]
     const oldData = state.data
 
-    // AIDEV-NOTE: Diff algorithm to find what changed
-    // react-datasheet-grid gives us the full array on every change, so we diff to find deltas
+    // AIDEV-NOTE: Use operations parameter instead of manual diffing
+    // react-datasheet-grid provides operation details: CREATE, UPDATE, DELETE
 
-    // 1. Find new rows (in newData but not in oldData)
-    const oldIds = new Set(oldData.map(r => r.id))
-    const newRows = dsgRows.filter(row => {
-      if (!row.id) {
-        console.warn('[DynamicDataSheetGrid] Row missing ID, generating:', row)
-        row.id = crypto.randomUUID()  // Defensive: ensure ID exists
-      }
-      return !oldIds.has(row.id)
-    })
+    operations.forEach(operation => {
+      switch (operation.type) {
+        case 'CREATE': {
+          // New rows added
+          const newRows = dsgRows.slice(operation.fromRowIndex, operation.toRowIndex)
 
-    // 2. Find changed cells (compare rows by ID)
-    const changes: Array<{ rowId: string; fieldId: number; value: any }> = []
-
-    dsgRows.forEach(newRow => {
-      if (!newRow.id) return  // Skip rows without IDs
-
-      const oldRow = oldData.find(r => r.id === newRow.id)
-      if (!oldRow) return  // New row, handled above
-
-      // Compare each field
-      fields.forEach(field => {
-        if (newRow[field.name] !== oldRow[field.name]) {
-          changes.push({
-            rowId: newRow.id,
-            fieldId: field.id,
-            value: newRow[field.name]
+          // Ensure all new rows have IDs
+          newRows.forEach(row => {
+            if (!row.id) {
+              console.warn('[DynamicDataSheetGrid] Row missing ID, generating:', row)
+              row.id = crypto.randomUUID()
+            }
           })
+
+          // Dispatch all row additions to local state
+          newRows.forEach(row => dispatch({ type: 'ROW_ADDED', payload: row }))
+
+          // Single batch call for all new rows
+          onAddRows(newRows.map(row => dsgRowToPlainObject(row))).catch(err => {
+            console.error('Failed to add rows:', err)
+            // TanStack Query will rollback optimistic update on error
+          })
+          break
         }
-      })
+
+        case 'DELETE': {
+          // Rows deleted - indices refer to OLD data
+          const deletedRows = oldData.slice(operation.fromRowIndex, operation.toRowIndex)
+
+          deletedRows.forEach(row => {
+            dispatch({ type: 'ROW_DELETED', payload: row.id })
+            onDeleteRow(row.id)
+          })
+          break
+        }
+
+        case 'UPDATE': {
+          // Cells updated - compare old and new data for changed cells
+          const changes: Array<{ rowId: string; fieldId: number; value: any }> = []
+
+          for (let i = operation.fromRowIndex; i < operation.toRowIndex; i++) {
+            const newRow = dsgRows[i]
+            const oldRow = oldData[i]
+
+            if (!newRow?.id || !oldRow?.id) continue
+
+            // Compare each field
+            fields.forEach(field => {
+              if (newRow[field.name] !== oldRow[field.name]) {
+                changes.push({
+                  rowId: newRow.id,
+                  fieldId: field.id,
+                  value: newRow[field.name]
+                })
+              }
+            })
+          }
+
+          changes.forEach(change => {
+            dispatch({ type: 'CELL_CHANGED', payload: change })
+            // Call mutation - TanStack Query handles optimistic update
+            onUpdateRow(change.rowId, change.fieldId, change.value)
+          })
+          break
+        }
+      }
     })
 
-    // 3. Dispatch actions immediately (no setTimeout!)
-    newRows.forEach(row => {
-      dispatch({ type: 'ROW_ADDED', payload: row })
-      // Call mutation - TanStack Query handles optimistic update
-      onAddRow(dsgRowToPlainObject(row)).catch(err => {
-        console.error('Failed to add row:', err)
-        // TanStack Query will rollback optimistic update on error
-      })
-    })
-
-    changes.forEach(change => {
-      dispatch({ type: 'CELL_CHANGED', payload: change })
-      // Call mutation - TanStack Query handles optimistic update
-      onUpdateRow(change.rowId, change.fieldId, change.value)
-    })
-
-  }, [state.data, fields, onAddRow, onUpdateRow])
+  }, [state.data, fields, onAddRows, onUpdateRow, onDeleteRow, dispatch])
 
   const handleDeleteRow = useCallback((rowId: string) => {
     if (!state.isSyncing) {
@@ -550,6 +574,7 @@ export function DynamicDataSheetGrid({
             onChange={handleChange}
             columns={columns}
             createRow={() => createEmptyDSGRow(fields)}  // ✅ CRITICAL: Preserves IDs
+            duplicateRow={({ rowData }) => ({ ...rowData, id: crypto.randomUUID() })}  // Enable context menu with row duplication
             lockRows={false}
             rowKey="id"
             rowHeight={45}

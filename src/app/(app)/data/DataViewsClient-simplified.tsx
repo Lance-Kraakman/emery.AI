@@ -16,7 +16,7 @@ import { dataStore, dataSelectors } from '@/stores/data-management.store'
 import { storeActions, dataActions } from '@/stores/actions'
 import type { TableDTO } from "@/app/mappers/table-mapper"
 import { getFields } from "@/app/actions/fields"
-import { getRowsDataDSG, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
+import { getRowsDataDSG, createRow, createRows, updateRowData, deleteRowData } from "@/app/actions/rows"
 import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { DSGRow } from "@/app/mappers/dsg-mapper"
@@ -138,53 +138,58 @@ export function DataViewsClientSimplified() {
     },
   })
 
-  const addRowMutation = useMutation({
-    mutationFn: async (initialData?: Record<string, any>) => {
+  const addRowsMutation = useMutation({
+    mutationFn: async (rowsData: Record<string, any>[]) => {
       if (!selectedTableId) throw new Error('No table selected')
 
-      const rowData: Record<string, any> = initialData || {}
+      // Apply field defaults to each row
+      const processedRows = rowsData.map(initialData => {
+        const rowData: Record<string, any> = initialData || {}
 
-      // Only add defaults for optional (non-required) fields
-      // Required fields are left undefined so domain validation can enforce them
-      fields.forEach(field => {
-        if (rowData[field.name] === undefined && !field.required) {
-          switch (field.type) {
-            case 'number':
-              rowData[field.name] = null
-              break
-            case 'boolean':
-              rowData[field.name] = false
-              break
-            case 'date':
-              rowData[field.name] = null
-              break
-            case 'text':
-              rowData[field.name] = ""
-              break
+        // Only add defaults for optional (non-required) fields
+        // Required fields are left undefined so domain validation can enforce them
+        fields.forEach(field => {
+          if (rowData[field.name] === undefined && !field.required) {
+            switch (field.type) {
+              case 'number':
+                rowData[field.name] = null
+                break
+              case 'boolean':
+                rowData[field.name] = false
+                break
+              case 'date':
+                rowData[field.name] = null
+                break
+              case 'text':
+                rowData[field.name] = ""
+                break
+            }
           }
-        }
+        })
+
+        return rowData
       })
 
-      return createRow({ tableId: selectedTableId, data: rowData })
+      return createRows({ tableId: selectedTableId, rows: processedRows })
     },
     onSuccess: (result) => {
       if (result.success && result.data) {
-        // Convert the returned RowDTO to DSG format for the cache
-        const dsgRow = {
-          id: result.data.id,
-          ...result.data.fieldValues.reduce((acc: Record<string, any>, fv: any) => {
+        // Convert all returned RowDTOs to DSG format for the cache
+        const dsgRows = result.data.map((row: any) => ({
+          id: row.id,
+          ...row.fieldValues.reduce((acc: Record<string, any>, fv: any) => {
             acc[fv.fieldSlug] = fv.value
             return acc
           }, {} as Record<string, any>)
-        }
-        
+        }))
+
         queryClient.setQueryData(['rows', selectedTableId], (oldRows: any[] | undefined) => {
-          return oldRows ? [...oldRows, dsgRow] : [dsgRow]
+          return oldRows ? [...oldRows, ...dsgRows] : dsgRows
         })
       }
     },
     onError: (err) => {
-      console.error("Failed to add row:", err)
+      console.error("Failed to add rows:", err)
     },
   })
 
@@ -219,8 +224,8 @@ export function DataViewsClientSimplified() {
     return updateRowMutation.mutateAsync({ rowId, fieldId, value })
   }
 
-  const handleAddRow = async (initialData?: Record<string, any>): Promise<void> => {
-    await addRowMutation.mutateAsync(initialData)
+  const handleAddRows = async (rowsData: Record<string, any>[]): Promise<void> => {
+    await addRowsMutation.mutateAsync(rowsData)
   }
 
   const handleDeleteRow = (rowId: string) => {
@@ -318,7 +323,7 @@ export function DataViewsClientSimplified() {
               onManageFields={() => dataActions.setFieldManagerOpen(true)}
               onRefresh={refreshTableData}
               onUpdateRow={handleUpdateRow}
-              onAddRow={handleAddRow}
+              onAddRows={handleAddRows}
               onDeleteRow={handleDeleteRow}
               isLoading={loading}
               error={error ? String(error) : null}

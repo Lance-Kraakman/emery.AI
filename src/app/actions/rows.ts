@@ -84,10 +84,90 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
   }
 }
 
+/**
+ * Create multiple rows in a table (batch operation)
+ */
+export async function createRows(data: { tableId: number; rows: Record<string, any>[] }, revalidateUrl?: string): Promise<Result> {
+  try {
+    const session = await requirePermission("data:manage");
+    const { tableId, rows: rowsData } = data;
+
+    if (!tableId) {
+      return {
+        success: false,
+        error: "tableId is required",
+      };
+    }
+
+    if (!rowsData || rowsData.length === 0) {
+      return {
+        success: true,
+        data: []
+      };
+    }
+
+    // Use table application service for row creation
+    const tableAppService = getTableApplicationService();
+
+    // Get table to retrieve field information
+    const table = await tableAppService.getTable(TableId.fromNumber(tableId));
+
+    if (!table) {
+      return {
+        success: false,
+        error: "Table not found"
+      };
+    }
+
+    // Convert all plain data to Row entities
+    const rows = rowsData.map(rowData => Row.fromPlainObject(rowData, tableId, table.fields));
+
+    // AIDEV-NOTE: Ensure we have a valid user ID
+    if (!session.user?.id || typeof session.user.id !== 'string') {
+      return {
+        success: false,
+        error: "Invalid user session - user ID not found"
+      };
+    }
+
+    const result = await tableAppService.createRows({
+      tableId: TableId.fromNumber(tableId),
+      rows: rows,
+      createdBy: UserId.fromString(session.user.id)
+    });
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to create rows"
+      };
+    }
+
+    // Optional revalidation with custom URL
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    }
+
+    // Convert Domain objects to DTOs for serialization
+    const rowDTOs = result.data ? result.data.map(row => RowMapper.toDTO(row)) : [];
+
+    return {
+      success: true,
+      data: rowDTOs,
+    };
+  } catch (error) {
+    console.error("Error creating rows:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to create rows",
+    };
+  }
+}
+
 export async function createRowAction(formData: FormData) {
   const tableId = parseInt(formData.get('tableId') as string);
   const rowDataStr = formData.get('data') as string;
-  
+
   let rowData: Record<string, any>;
   try {
     rowData = JSON.parse(rowDataStr);
@@ -96,7 +176,7 @@ export async function createRowAction(formData: FormData) {
   }
 
   const result = await createRow({ tableId, data: rowData });
-  
+
   if (!result.success) {
     throw new Error(result.error);
   }

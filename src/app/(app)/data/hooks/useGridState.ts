@@ -17,6 +17,7 @@ export type GridAction =
   | { type: 'SET_DATA'; payload: DSGRow[] }           // Server data loaded
   | { type: 'CELL_CHANGED'; payload: { rowId: string; fieldId: number; value: any } }
   | { type: 'ROW_ADDED'; payload: DSGRow }
+  | { type: 'ROW_DELETED'; payload: string }          // Row ID deleted
   | { type: 'START_SYNC' }
   | { type: 'SYNC_COMPLETE' }
 
@@ -31,6 +32,7 @@ function gridReducer(state: GridState, action: GridAction): GridState {
 
     case 'CELL_CHANGED':
     case 'ROW_ADDED':
+    case 'ROW_DELETED':
       // Don't update state here - TanStack Query mutation handles optimistic update
       // Just track that we're syncing
       return { ...state, isSyncing: true }
