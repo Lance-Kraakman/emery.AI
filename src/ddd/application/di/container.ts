@@ -1,168 +1,25 @@
+/**
+ * DI Container - Dependency Injection Container
+ *
+ * Central container for managing application dependencies using the singleton pattern.
+ * This container orchestrates registration of all domains through modular registration functions.
+ *
+ * AIDEV-NOTE: Refactored from monolithic (647 lines) to modular architecture.
+ * Each domain has its own registration module in ./modules/ directory.
+ */
+
 import type { DbClient } from '@/lib/db/client';
 import { contextAwareDb, type ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
-import { rawClient } from '@/lib/db/client';
-import type postgres from 'postgres';
+import type { RepositoryRegistry } from './registry';
 
-import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
-import { DrizzleOrganizationRepository } from '@/ddd/infrastructure/db/repositories/organizations/drizzle-organization-repository';
-import { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
-import { DrizzleUserRepository } from '@/ddd/infrastructure/db/repositories/users/drizzle-user-repository';
-import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
-import { DynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/dynamic-table-repository';
-import { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
-import { S3FileStorageRepository } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
-
-// Agent domain imports
-import { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
-import { DrizzleAgentRepository } from '@/ddd/infrastructure/db/repositories/agents/drizzle-agent-repository';
-import { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
-import { DrizzleTaskRepository } from '@/ddd/infrastructure/db/repositories/tasks/drizzle-task-repository';
-import { IAgentExecutionRepository } from '@/ddd/domain/agents/repositories/agent-execution-repository';
-import { GrpcAgentExecutionRepository } from '@/ddd/infrastructure/execution/grpc-agent-execution-repository';
-import { AgentTaskApplicationService } from '@/ddd/application/services/agents/agent-task-application-service';
-import { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
-import { TeamApplicationService } from '@/ddd/application/services/teams/team-application-service';
-import { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
-import { UserRoleApplicationService } from '@/ddd/application/services/user-organizations/user-role-application-service';
-import { InvitationApplicationService } from '@/ddd/application/services/invitations/invitation-application-service';
-
-// Team domain imports
-import { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
-import { DrizzleTeamRepository } from '@/ddd/infrastructure/db/repositories/teams/drizzle-team-repository';
-
-// Invitation domain imports
-import { IInvitationRepository } from '@/ddd/domain/invitations/repositories/invitation-repository';
-import { DrizzleInvitationRepository } from '@/ddd/infrastructure/db/repositories/invitations/drizzle-invitation-repository';
-
-// RBAC domain imports
-import { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
-import { DrizzleRBACRepository } from '@/ddd/infrastructure/db/repositories/rbac/drizzle-rbac-repository';
-
-// Database domain imports
-import { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
-import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/databases/drizzle-database-repository';
-
-// Tools domain imports
-import { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
-import { IToolConfigurationService } from '@/ddd/domain/tools/services/tool-configuration-service';
-import { ToolConfigurationDomainService } from '@/ddd/domain/tools/services/tool-configuration-domain-service';
-import { ToolConfigurationApplicationService } from '@/ddd/application/services/tools/tool-configuration-application-service';
-import { DatabaseToolRegistry } from '@/ddd/infrastructure/tools/database-tool-registry';
-
-// New application services for tables, fields, rows, files, and chat
-import { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
-import { FileUseCases } from '@/ddd/application/services/tables/file-application-service';
-import { DocumentApplicationService } from '@/ddd/application/services/tables/document-application-service';
-import { ChatApplicationService } from '@/ddd/application/services/chat/chat-application-service';
-import { ToolSearchApplicationService } from '@/ddd/application/services/tools/tool-search-application-service';
-
-// Domain services
-import { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
-
-
-// Chat domain imports
-import { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
-import { DrizzleChatRepository } from '@/ddd/infrastructure/db/repositories/chat/drizzle-chat-repository';
-import { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
-import { DrizzleChatMessageRepository } from '@/ddd/infrastructure/db/repositories/chat/drizzle-chat-message-repository';
-
-// RAG domain imports
-import { DrizzleRagIndexRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-index-repository';
-import { DrizzleRagDocumentRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-document-repository';
-import { DrizzleRagQueryLogRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-query-log-repository';
-import { EmbeddingService } from '@/ddd/application/services/embedding-service';
-import { SearchAnalyticsService } from '@/ddd/application/services/search-analytics-service';
-import type { IIndexingDomainService, ISearchDomainService } from '@/ddd/domain/rag/services';
-import { IndexingDomainService, SearchDomainService } from '@/ddd/domain/rag/services';
-import { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
-import { IndexingQueueService, indexingQueueService } from '@/ddd/application/services/rag/indexing-queue-service';
-
-// Connection domain imports
-import { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
-import { PipedreamConnectionRepository } from '@/ddd/infrastructure/external/pipedream/pipedream-connection-repository';
-import { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service';
-import { OAuthProxyApplicationService } from '@/ddd/application/services/connections/oauth-proxy-application-service';
-import { pipedreamClient } from '@/lib/pipedream/client';
-import { EmbeddingGeneratorService } from '@/ddd/domain/rag/services/embedding-generator-service';
-import { EmbeddingGeneratorDomainService } from '../services/rag/embedding-generator-service/embedding-generator-service';
-import { GrpcTableClient } from '@/ddd/infrastructure/db/repositories/tables/table-grpc-client';
-import { DynamicTableDataLake } from '@/ddd/infrastructure/db/repositories/tables/dynamic-table-datalake';
-
-
-// Registry of all available repository interfaces and services
-interface RepositoryRegistry {
-  IOrganizationRepository: IOrganizationRepository;
-  IUserRepository: IUserRepository;
-  IDynamicTableRepository: IDynamicTableRepository;
-  IFileStorageRepository: IFileStorageRepository;
-  
-  // Field and table services
-  
-  // Team domain
-  ITeamRepository: ITeamRepository;
-  
-  // Invitation domain
-  IInvitationRepository: IInvitationRepository;
-  
-  // RBAC domain
-  IRBACRepository: IRBACRepository;
-  
-  // Database domain
-  IDatabaseRepository: IDatabaseRepository;
-  
-  // Agent domain services
-  IAgentRepository: IAgentRepository;
-  ITaskRepository: ITaskRepository;
-  IAgentExecutionRepository: IAgentExecutionRepository;
-  AgentTaskApplicationService: AgentTaskApplicationService;
-  AgentApplicationService: AgentApplicationService;
-  TeamApplicationService: TeamApplicationService;
-  DatabaseApplicationService: DatabaseApplicationService;
-  UserRoleApplicationService: UserRoleApplicationService;
-  InvitationApplicationService: InvitationApplicationService;
-  
-  // New application services for data management
-  TableApplicationService: TableApplicationService;
-  FileApplicationService: FileUseCases;
-  DocumentApplicationService: DocumentApplicationService;
-  
-  // Domain services
-  DynamicTableService: DynamicTableService;
-
-  // Tools domain services
-  IToolRegistryService: IToolRegistryService;
-  IToolConfigurationService: IToolConfigurationService;
-  ToolConfigurationApplicationService: ToolConfigurationApplicationService;
-
-  // Chat domain services
-  IChatRepository: IChatRepository;
-  IChatMessageRepository: IChatMessageRepository;
-  ChatApplicationService: ChatApplicationService;
-  ToolSearchApplicationService: ToolSearchApplicationService;
-
-  // RAG domain repositories
-  IRagIndexRepository: DrizzleRagIndexRepository;
-  IRagDocumentRepository: DrizzleRagDocumentRepository;
-  IRagQueryLogRepository: DrizzleRagQueryLogRepository;
-
-  // RAG application services
-  EmbeddingService: EmbeddingService;
-  SearchAnalyticsService: SearchAnalyticsService;
-  EmbeddingGeneratorService: EmbeddingGeneratorService;
-
-  // RAG domain services
-  IndexingDomainService: IIndexingDomainService;
-  SearchDomainService: ISearchDomainService;
-
-  // RAG use case services
-  RagSearchApplicationService: RagSearchApplicationService;
-  IndexingQueueService: IndexingQueueService;
-  
-  // Connection domain services (nullable during build when Pipedream not configured)
-  IConnectionRepository: IConnectionRepository | null;
-  ConnectionApplicationService: ConnectionApplicationService | null;
-  OAuthProxyApplicationService: OAuthProxyApplicationService | null;
-}
+// Import registration modules
+import { registerCoreServices, type CoreServices } from './modules/core-registration';
+import { registerAgentServices, type AgentServices } from './modules/agent-registration';
+import { registerDatabaseServices, type DatabaseServices } from './modules/database-registration';
+import { registerChatServices, type ChatServices } from './modules/chat-registration';
+import { registerToolsServices, type ToolsServices } from './modules/tools-registration';
+import { registerRagServices, type RagServices } from './modules/rag-registration';
+import { registerConnectionServices, type ConnectionServices } from './modules/connection-registration';
 
 export class DIContainer {
   private static instance: DIContainer;
@@ -198,6 +55,8 @@ export class DIContainer {
   /**
    * Initialize the container with database clients
    * This should be called once at application startup
+   *
+   * Orchestrates registration of all domains through modular registration functions.
    */
   initialize(db: DbClient | ContextAwareDbClient): void {
     if (this.isInitialized) {
@@ -205,243 +64,145 @@ export class DIContainer {
       return;
     }
 
-    // Use raw Drizzle database client - RLS policies handle isolation automatically
+    // Phase 1: Register core services (organizations, users, teams, RBAC)
+    // These have minimal dependencies
+    const coreServices = registerCoreServices({ db });
+    this.registerServices('core', coreServices);
 
-    // Register storage repository
-    const fileStorageRepository = new S3FileStorageRepository();
-    this.repositories.set('IFileStorageRepository', fileStorageRepository);
-
-
-    // Register other repository implementations
-    this.repositories.set('IOrganizationRepository', 
-      new DrizzleOrganizationRepository(contextAwareDb));
-    this.repositories.set('IUserRepository', 
-      new DrizzleUserRepository(contextAwareDb));
-
-    // Register team and invitation repositories
-    const teamRepository = new DrizzleTeamRepository(contextAwareDb);
-    const invitationRepository = new DrizzleInvitationRepository(contextAwareDb);
-    this.repositories.set('ITeamRepository', teamRepository);
-    this.repositories.set('IInvitationRepository', invitationRepository);
-    
-    // Register RBAC repository - use contextAwareDb for RLS support
-    const rbacRepository = new DrizzleRBACRepository(contextAwareDb);
-    this.repositories.set('IRBACRepository', rbacRepository);
-    
-    // Register database repository
-    const databaseRepository = new DrizzleDatabaseRepository(contextAwareDb);
-    this.repositories.set('IDatabaseRepository', databaseRepository);
-
-    // Register agent domain repositories and services  
-    const agentRepository = new DrizzleAgentRepository(contextAwareDb);
-    const taskRepository = new DrizzleTaskRepository(contextAwareDb);
-    const agentExecutionRepository = new GrpcAgentExecutionRepository(agentRepository);
-    const agentTaskApplicationService = new AgentTaskApplicationService(
-      agentRepository,
-      taskRepository,
-      agentExecutionRepository
-    );
-    const agentApplicationService = new AgentApplicationService(
-      agentRepository,
-      teamRepository
-    );
-    const teamApplicationService = new TeamApplicationService(
-      teamRepository,
-      agentRepository
-    );
-
-
-    // Create gRPC client and data lake service
-    const grpcClient = new GrpcTableClient({
-      address: process.env.WORKER_ADDRESS || 'localhost:50051',
-      timeout: 30000
+    // Phase 2: Register agent services
+    // Depends on: team repository
+    const agentServices = registerAgentServices({
+      db,
+      teamRepository: coreServices.teamRepository
     });
-    const datalake = new DynamicTableDataLake(grpcClient);
+    this.registerServices('agent', agentServices);
 
-    // Create table repository with data lake using context-aware DB client
-    const tableRepository = new DynamicTableRepository(
-      contextAwareDb,
-      datalake
-    );
+    // Update TeamApplicationService with agentRepository now that it exists
+    const teamApplicationServiceWithAgent = coreServices.teamApplicationService;
+    (teamApplicationServiceWithAgent as any).agentRepository = agentServices.agentRepository;
 
-    // Create DynamicTableService - central domain service for all table operations
-    const dynamicTableService = new DynamicTableService(
-      tableRepository
-    );
+    // Phase 3: Register database services (tables, files, documents)
+    // Depends on: organization repository
+    const databaseServices = registerDatabaseServices({
+      db,
+      organizationRepository: coreServices.organizationRepository
+    });
+    this.registerServices('database', databaseServices);
 
-    // Initialize DatabaseApplicationService with proper dependencies
-    const databaseApplicationService = new DatabaseApplicationService(
-      tableRepository,
-      databaseRepository
-    );
-        
-    const userRoleApplicationService = new UserRoleApplicationService(
-      this.repositories.get('IUserRepository'),
-      this.repositories.get('IOrganizationRepository'),
-      this.repositories.get('IRBACRepository')
-    );
-    const invitationApplicationService = new InvitationApplicationService(
-      this.repositories.get('IInvitationRepository'),
-      this.repositories.get('IUserRepository'),
-      this.repositories.get('IOrganizationRepository'),
-      this.repositories.get('IRBACRepository')
-    );
+    // Phase 4: Register chat services
+    // Depends on: dynamic table service, agent repository
+    const chatServices = registerChatServices({
+      db,
+      dynamicTableService: databaseServices.dynamicTableService,
+      agentRepository: agentServices.agentRepository
+    });
+    this.registerServices('chat', chatServices);
 
-    this.repositories.set('IAgentRepository', agentRepository);
-    this.repositories.set('ITaskRepository', taskRepository);
-    this.repositories.set('IAgentExecutionRepository', agentExecutionRepository);
-    this.repositories.set('AgentTaskApplicationService', agentTaskApplicationService);
-    this.repositories.set('AgentApplicationService', agentApplicationService);
-    this.repositories.set('TeamApplicationService', teamApplicationService);
-    this.repositories.set('DatabaseApplicationService', databaseApplicationService);
-    this.repositories.set('UserRoleApplicationService', userRoleApplicationService);
-    this.repositories.set('InvitationApplicationService', invitationApplicationService);
-    this.repositories.set('IDynamicTableRepository', tableRepository);
-    this.repositories.set('DynamicTableService', dynamicTableService);
-    
-    // Initialize TableApplicationService with proper dependencies
-    const tableApplicationService = new TableApplicationService(
-      dynamicTableService,
-      databaseRepository,
-      this.repositories.get('IOrganizationRepository'),
-      tableRepository,
-    );
-    
-    
-    
-    // Initialize FileApplicationService with proper dependencies  
-    const fileApplicationService = new FileUseCases(
-      fileStorageRepository,
-      dynamicTableService
-    );
-    
-    // Initialize DocumentApplicationService (extends file system)
-    const documentApplicationService = new DocumentApplicationService(
-      fileApplicationService,
-      fileStorageRepository,
-      dynamicTableService,
-      tableRepository
-    );
-    
-    // Register chat repositories
-    const chatRepository = new DrizzleChatRepository(contextAwareDb);
-    const chatMessageRepository = new DrizzleChatMessageRepository(contextAwareDb);
-    this.repositories.set('IChatRepository', chatRepository);
-    this.repositories.set('IChatMessageRepository', chatMessageRepository);
-    
-    // Initialize ChatApplicationService with proper dependencies
-    const chatApplicationService = new ChatApplicationService(
-      chatRepository,
-      chatMessageRepository,
-      dynamicTableService,
-      agentRepository
-    );
+    // Phase 5: Register tools services
+    // Depends on: agent repository, table/agent/database application services
+    const toolsServices = registerToolsServices({
+      agentRepository: agentServices.agentRepository,
+      tableApplicationService: databaseServices.tableApplicationService,
+      agentApplicationService: agentServices.agentApplicationService,
+      databaseApplicationService: databaseServices.databaseApplicationService
+    });
+    this.registerServices('tools', toolsServices);
 
-    // Initialize tool registry service with database-only approach
-    if (!process.env.DATABASE_URL) {
-      throw new Error('DATABASE_URL environment variable is required for tool registry');
-    }
-    const toolRegistryService = new DatabaseToolRegistry();
-    this.repositories.set('IToolRegistryService', toolRegistryService);
+    // Phase 6: Register RAG services
+    // Depends on: many repositories from previous phases
+    const ragServices = registerRagServices({
+      db,
+      organizationRepository: coreServices.organizationRepository,
+      agentRepository: agentServices.agentRepository,
+      databaseRepository: databaseServices.databaseRepository,
+      teamRepository: coreServices.teamRepository,
+      taskRepository: agentServices.taskRepository,
+      fileStorageRepository: databaseServices.fileStorageRepository,
+      dynamicTableRepository: databaseServices.dynamicTableRepository
+    });
+    this.registerServices('rag', ragServices);
 
-    // Initialize Tool Configuration Services
-    const toolConfigurationService = new ToolConfigurationDomainService();
-    const toolConfigurationApplicationService = new ToolConfigurationApplicationService(
-      agentRepository,
-      toolConfigurationService,
-      toolRegistryService
-    );
-    this.repositories.set('IToolConfigurationService', toolConfigurationService);
-    this.repositories.set('ToolConfigurationApplicationService', toolConfigurationApplicationService);
-
-    // Initialize ToolSearchApplicationService with proper dependencies (replaces ReferenceApplicationService)
-    const toolSearchApplicationService = new ToolSearchApplicationService(
-      tableApplicationService,
-      agentApplicationService,
-      databaseApplicationService,
-      toolRegistryService
-    );
-    
-    this.repositories.set('TableApplicationService', tableApplicationService);
-    this.repositories.set('FileApplicationService', fileApplicationService);
-    this.repositories.set('DocumentApplicationService', documentApplicationService);
-    this.repositories.set('ChatApplicationService', chatApplicationService);
-    this.repositories.set('ToolSearchApplicationService', toolSearchApplicationService);
-
-    // Initialize RAG domain repositories
-    const ragIndexRepository = new DrizzleRagIndexRepository(contextAwareDb);
-    const ragDocumentRepository = new DrizzleRagDocumentRepository(contextAwareDb);
-    const ragQueryLogRepository = new DrizzleRagQueryLogRepository(contextAwareDb);
-    this.repositories.set('IRagIndexRepository', ragIndexRepository);
-    this.repositories.set('IRagDocumentRepository', ragDocumentRepository);
-    this.repositories.set('IRagQueryLogRepository', ragQueryLogRepository);
-
-    // Initialize RAG application services
-    const embeddingService = new EmbeddingService();
-    const searchAnalyticsService = new SearchAnalyticsService(ragQueryLogRepository);
-    const embeddingGenerator = new EmbeddingGeneratorDomainService(embeddingService);
-    
-    this.repositories.set('EmbeddingService', embeddingService);
-    this.repositories.set('EmbeddingGeneratorService', embeddingGenerator);
-
-    // Initialize RAG domain services
-    const indexingDomainService = new IndexingDomainService(
-      embeddingGenerator,
-      this.repositories.get('IOrganizationRepository'),
-      agentRepository,
-      databaseRepository,
-      teamRepository,
-      taskRepository,
-      fileStorageRepository,
-      tableRepository,
-      ragIndexRepository,
-      ragDocumentRepository
-    );
-    const searchDomainService = new SearchDomainService(embeddingService, searchAnalyticsService);
-    
-    this.repositories.set('IndexingDomainService', indexingDomainService);
-    this.repositories.set('SearchDomainService', searchDomainService);
-    
-    // Register singleton IndexingQueueService
-    this.repositories.set('IndexingQueueService', indexingQueueService);
-
-    // Initialize RAG use case services
-    const ragSearchApplicationService = new RagSearchApplicationService(
-      ragIndexRepository,
-      ragDocumentRepository,
-      searchDomainService,
-      embeddingService,
-      searchAnalyticsService
-    );
-    
-    this.repositories.set('RagSearchApplicationService', ragSearchApplicationService);
-
-    // Register connection services - skip if Pipedream client not available during build
-    if (!pipedreamClient) {
-      console.warn('⚠️ Pipedream client not configured, skipping connection services registration. Set PIPEDREAM_PROJECT_ID, PIPEDREAM_CLIENT_ID, and PIPEDREAM_CLIENT_SECRET for full functionality.');
-
-      // Register null services for graceful degradation
-      this.repositories.set('IConnectionRepository', null);
-      this.repositories.set('ConnectionApplicationService', null);
-      this.repositories.set('OAuthProxyApplicationService', null);
-    } else {
-      const connectionRepository = new PipedreamConnectionRepository();
-      const connectionApplicationService = new ConnectionApplicationService(connectionRepository);
-      const oauthProxyApplicationService = new OAuthProxyApplicationService(
-        agentRepository, // Inject repository dependency
-        pipedreamClient
-      );
-
-      this.repositories.set('IConnectionRepository', connectionRepository);
-      this.repositories.set('ConnectionApplicationService', connectionApplicationService);
-      this.repositories.set('OAuthProxyApplicationService', oauthProxyApplicationService);
-
-      console.log('✅ Connection services registered with Pipedream client');
-    }
-
+    // Phase 7: Register connection services (optional - Pipedream)
+    // Depends on: agent repository
+    const connectionServices = registerConnectionServices({
+      agentRepository: agentServices.agentRepository
+    });
+    this.registerServices('connection', connectionServices);
 
     this.isInitialized = true;
-    console.log('✅ DIContainer initialized with repositories, file storage, agent services, RAG services, and connection services');
+    console.log('✅ DIContainer initialized with all domain services');
+  }
+
+  /**
+   * Helper method to register services from a registration module
+   */
+  private registerServices(
+    domain: string,
+    services: CoreServices | AgentServices | DatabaseServices | ChatServices | ToolsServices | RagServices | ConnectionServices
+  ): void {
+    // Map service names to container keys
+    const serviceKeyMappings: Record<string, string> = {
+      // Core domain
+      'organizationRepository': 'IOrganizationRepository',
+      'userRepository': 'IUserRepository',
+      'teamRepository': 'ITeamRepository',
+      'invitationRepository': 'IInvitationRepository',
+      'rbacRepository': 'IRBACRepository',
+      'teamApplicationService': 'TeamApplicationService',
+      'userRoleApplicationService': 'UserRoleApplicationService',
+      'invitationApplicationService': 'InvitationApplicationService',
+
+      // Agent domain
+      'agentRepository': 'IAgentRepository',
+      'taskRepository': 'ITaskRepository',
+      'agentExecutionRepository': 'IAgentExecutionRepository',
+      'agentTaskApplicationService': 'AgentTaskApplicationService',
+      'agentApplicationService': 'AgentApplicationService',
+
+      // Database domain
+      'databaseRepository': 'IDatabaseRepository',
+      'dynamicTableRepository': 'IDynamicTableRepository',
+      'fileStorageRepository': 'IFileStorageRepository',
+      'dynamicTableService': 'DynamicTableService',
+      'databaseApplicationService': 'DatabaseApplicationService',
+      'tableApplicationService': 'TableApplicationService',
+      'fileApplicationService': 'FileApplicationService',
+      'documentApplicationService': 'DocumentApplicationService',
+
+      // Chat domain
+      'chatRepository': 'IChatRepository',
+      'chatMessageRepository': 'IChatMessageRepository',
+      'chatApplicationService': 'ChatApplicationService',
+
+      // Tools domain
+      'toolRegistryService': 'IToolRegistryService',
+      'toolConfigurationService': 'IToolConfigurationService',
+      'toolConfigurationApplicationService': 'ToolConfigurationApplicationService',
+      'toolSearchApplicationService': 'ToolSearchApplicationService',
+
+      // RAG domain
+      'ragIndexRepository': 'IRagIndexRepository',
+      'ragDocumentRepository': 'IRagDocumentRepository',
+      'ragQueryLogRepository': 'IRagQueryLogRepository',
+      'embeddingService': 'EmbeddingService',
+      'searchAnalyticsService': 'SearchAnalyticsService',
+      'embeddingGeneratorService': 'EmbeddingGeneratorService',
+      'indexingDomainService': 'IndexingDomainService',
+      'searchDomainService': 'SearchDomainService',
+      'ragSearchApplicationService': 'RagSearchApplicationService',
+      'indexingQueueService': 'IndexingQueueService',
+
+      // Connection domain
+      'connectionRepository': 'IConnectionRepository',
+      'connectionApplicationService': 'ConnectionApplicationService',
+      'oauthProxyApplicationService': 'OAuthProxyApplicationService'
+    };
+
+    // Register all services from the module
+    Object.entries(services).forEach(([key, service]) => {
+      const containerKey = serviceKeyMappings[key] || key;
+      this.repositories.set(containerKey, service);
+    });
   }
 
   /**
@@ -453,7 +214,8 @@ export class DIContainer {
     }
 
     const repository = this.repositories.get(interfaceName);
-    if (!repository) {
+    if (!repository && !interfaceName.toString().includes('Connection')) {
+      // Allow connection services to be null during build
       throw new Error(`Repository ${interfaceName} not found in container`);
     }
 
@@ -483,165 +245,16 @@ export class DIContainer {
   }
 }
 
-// Simplified convenience getters using dynamic function generation
-// AIDEV-NOTE: This reduces 125+ lines of repetitive getter functions to ~25 lines
-
-type ServiceMap = {
-  // Repositories
-  OrganizationRepository: IOrganizationRepository;
-  UserRepository: IUserRepository;
-  DynamicTableRepository: IDynamicTableRepository;
-  FileStorageRepository: IFileStorageRepository;
-  AgentRepository: IAgentRepository;
-  TaskRepository: ITaskRepository;
-  AgentExecutionRepository: IAgentExecutionRepository;
-  TeamRepository: ITeamRepository;
-  InvitationRepository: IInvitationRepository;
-  RBACRepository: IRBACRepository;
-  DatabaseRepository: IDatabaseRepository;
-  ChatRepository: IChatRepository;
-  ChatMessageRepository: IChatMessageRepository;
-
-  DynamicTableService: DynamicTableService;
-  
-  // Services
-  AgentTaskApplicationService: AgentTaskApplicationService;
-  AgentApplicationService: AgentApplicationService;
-  TeamApplicationService: TeamApplicationService;
-  DatabaseApplicationService: DatabaseApplicationService;
-  UserRoleApplicationService: UserRoleApplicationService;
-  InvitationApplicationService: InvitationApplicationService;
-  TableApplicationService: TableApplicationService;
-  FileApplicationService: FileUseCases;
-  DocumentApplicationService: DocumentApplicationService;
-  ChatApplicationService: ChatApplicationService;
-  ToolSearchApplicationService: ToolSearchApplicationService;
-  
-
-  // RAG Services
-  RagIndexRepository: DrizzleRagIndexRepository;
-  RagDocumentRepository: DrizzleRagDocumentRepository;
-  RagQueryLogRepository: DrizzleRagQueryLogRepository;
-  EmbeddingService: EmbeddingService;
-  SearchAnalyticsService: SearchAnalyticsService;
-  EmbeddingGeneratorDomainService: EmbeddingGeneratorService;
-  IndexingDomainService: IIndexingDomainService;
-  SearchDomainService: ISearchDomainService;
-  RagSearchApplicationService: RagSearchApplicationService;
-  IndexingQueueService: IndexingQueueService;
-  
-  // Connection Services
-  ConnectionRepository: IConnectionRepository;
-  ConnectionApplicationService: ConnectionApplicationService;
-
-  // Tool Services
-  IToolRegistryService: IToolRegistryService;
-  ToolConfigurationApplicationService: ToolConfigurationApplicationService;
-};
-
-// Generate getter functions dynamically
-const diContainer = DIContainer.getInstance();
-const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] => {
-  // Map simple names to container keys (e.g., 'AgentRepository' -> 'IAgentRepository')
-  let containerKey;
-  
-  // Special mappings for services with interface prefix
-  const specialMappings: Record<string, string> = {
-    'RagIndexRepository': 'IRagIndexRepository',
-    'RagDocumentRepository': 'IRagDocumentRepository',
-    'RagQueryLogRepository': 'IRagQueryLogRepository',
-    'ConnectionRepository': 'IConnectionRepository',
-    'IToolRegistryService': 'IToolRegistryService',
-  };
-  
-  if (specialMappings[key as string]) {
-    containerKey = specialMappings[key as string];
-  } else if (key.includes('Repository')) {
-    containerKey = `I${key}`;
-  } else {
-    // All other services are registered as-is (domain services, application services)
-    containerKey = key;
-  }
-  return diContainer.get(containerKey as any) as ServiceMap[K];
-};
-
-// Export typed getter functions
-export const getOrganizationRepository = createGetter('OrganizationRepository');
-export const getUserRepository = createGetter('UserRepository');
-export const getDynamicTableRepository = createGetter('DynamicTableRepository');
-export const getDynamicTableService = createGetter('DynamicTableService');
-export const getFileStorageRepository = createGetter('FileStorageRepository');
-export const getAgentRepository = createGetter('AgentRepository');
-export const getTaskRepository = createGetter('TaskRepository');
-export const getAgentExecutionRepository = createGetter('AgentExecutionRepository');
-export const getTeamRepository = createGetter('TeamRepository');
-export const getInvitationRepository = createGetter('InvitationRepository');
-export const getRBACRepository = createGetter('RBACRepository');
-export const getDatabaseRepository = createGetter('DatabaseRepository');
-export const getChatRepository = createGetter('ChatRepository');
-export const getChatMessageRepository = createGetter('ChatMessageRepository');
-export const getAgentTaskApplicationService = createGetter('AgentTaskApplicationService');
-export const getAgentApplicationService = createGetter('AgentApplicationService');
-export const getTeamApplicationService = createGetter('TeamApplicationService');
-export const getDatabaseApplicationService = createGetter('DatabaseApplicationService');
-export const getUserRoleApplicationService = createGetter('UserRoleApplicationService');
-export const getInvitationApplicationService = createGetter('InvitationApplicationService');
-export const getTableApplicationService = createGetter('TableApplicationService');
-export const getFileApplicationService = createGetter('FileApplicationService');
-export const getDocumentApplicationService = createGetter('DocumentApplicationService');
-export const getChatApplicationService = createGetter('ChatApplicationService');
-export const getToolSearchApplicationService = createGetter('ToolSearchApplicationService');
-export const getToolConfigurationApplicationService = createGetter('ToolConfigurationApplicationService');
-// Note: getReferenceApplicationService replaced by getToolSearchApplicationService
-
-// RAG service getters
-export const getRagIndexRepository = createGetter('RagIndexRepository');
-export const getRagDocumentRepository = createGetter('RagDocumentRepository');
-export const getRagQueryLogRepository = createGetter('RagQueryLogRepository');
-export const getEmbeddingService = createGetter('EmbeddingService');
-export const getSearchAnalyticsService = createGetter('SearchAnalyticsService');
-export const getIndexingDomainService = createGetter('IndexingDomainService');
-export const getSearchDomainService = createGetter('SearchDomainService');
-export const getRagSearchApplicationService = createGetter('RagSearchApplicationService');
-export const getIndexingQueueService = createGetter('IndexingQueueService');
-
-// Tool service getters
-export const getToolRegistryService = createGetter('IToolRegistryService');
-
-// Connection service getters - handle null gracefully when Pipedream not configured
-export const getConnectionRepository = (): IConnectionRepository => {
-  const service = diContainer.get('IConnectionRepository');
-  if (!service) {
-    throw new Error('Connection services not available. Pipedream client not configured. This is expected during build time.');
-  }
-  return service;
-};
-
-export const getConnectionApplicationService = (): ConnectionApplicationService => {
-  const service = diContainer.get('ConnectionApplicationService');
-  if (!service) {
-    throw new Error('Connection services not available. Pipedream client not configured. This is expected during build time.');
-  }
-  return service;
-};
-
-export const getOAuthProxyApplicationService = (): OAuthProxyApplicationService => {
-  const service = diContainer.get('OAuthProxyApplicationService');
-  if (!service) {
-    throw new Error('OAuth proxy service not available. Pipedream client not configured. This is expected during build time.');
-  }
-  return service;
-};
-
-// RLS context management removed - RLS policies work automatically
+// Export context manager for API routes and tests
+export { contextManager } from '@/lib/db/context-manager';
 
 // Helper to initialize container from existing clients
 export function initializeDI(db: DbClient | ContextAwareDbClient): void {
   DIContainer.getInstance().initialize(db);
 }
 
-// Export context manager for API routes and tests
-export { contextManager } from '@/lib/db/context-manager';
-
 // Export container instance for direct access if needed
 export const container = DIContainer.getInstance();
+
+// Re-export all typed getters from the getters module
+export * from './getters';
