@@ -194,7 +194,7 @@ class GetTableRequest(_message.Message):
     def __init__(self, table_id: _Optional[str] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ...) -> None: ...
 
 class UpdateTableRequest(_message.Message):
-    __slots__ = ("table_id", "name", "schema", "description", "user_id", "organization_id", "metadata")
+    __slots__ = ("table_id", "name", "schema", "description", "user_id", "organization_id", "metadata", "s3_path")
     class MetadataEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -209,6 +209,7 @@ class UpdateTableRequest(_message.Message):
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
+    S3_PATH_FIELD_NUMBER: _ClassVar[int]
     table_id: str
     name: str
     schema: TableSchema
@@ -216,7 +217,8 @@ class UpdateTableRequest(_message.Message):
     user_id: str
     organization_id: str
     metadata: _containers.ScalarMap[str, str]
-    def __init__(self, table_id: _Optional[str] = ..., name: _Optional[str] = ..., schema: _Optional[_Union[TableSchema, _Mapping]] = ..., description: _Optional[str] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., metadata: _Optional[_Mapping[str, str]] = ...) -> None: ...
+    s3_path: str
+    def __init__(self, table_id: _Optional[str] = ..., name: _Optional[str] = ..., schema: _Optional[_Union[TableSchema, _Mapping]] = ..., description: _Optional[str] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., metadata: _Optional[_Mapping[str, str]] = ..., s3_path: _Optional[str] = ...) -> None: ...
 
 class DeleteTableRequest(_message.Message):
     __slots__ = ("table_id", "user_id", "organization_id", "soft_delete")

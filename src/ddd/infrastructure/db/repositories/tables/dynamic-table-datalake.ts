@@ -396,6 +396,7 @@ export class DynamicTableDataLake {
           schema: protoTable.schema,
           description: protoTable.description,
           organizationId: protoTable.organizationId,
+          s3Path: protoTable.s3Path,  // Include S3 path for Delta Lake schema updates
         }
       );
 

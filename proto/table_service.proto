@@ -128,6 +128,7 @@ message UpdateTableRequest {
   string user_id = 5;
   string organization_id = 6;
   map<string, string> metadata = 7;  // Optional
+  string s3_path = 8;                // S3 path for Delta Lake table data
 }
 
 message DeleteTableRequest {

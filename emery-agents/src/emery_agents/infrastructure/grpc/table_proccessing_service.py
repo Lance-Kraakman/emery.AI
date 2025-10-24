@@ -396,11 +396,136 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         )
 
     def UpdateTable(self, request: table_service_pb2.UpdateTableRequest, context) -> table_service_pb2.TableResponse:
-        """Update table metadata."""
-        return table_service_pb2.TableResponse(
-            success=False,
-            message="UpdateTable not yet implemented"
-        )
+        """Update table metadata and evolve schema with new fields."""
+        try:
+            # AIDEV-NOTE: UpdateTable implementation for Delta Lake schema evolution
+            # When new fields are added in PostgreSQL, we need to sync them to Delta Lake
+            # This allows sorting and filtering on newly added fields
+
+            logger.info(f"[UpdateTable] Request received:")
+            logger.info(f"  - table_id: '{request.table_id}'")
+            logger.info(f"  - name: '{request.name}'")
+            logger.info(f"  - s3_path: '{getattr(request, 's3_path', 'MISSING')}'")
+            logger.info(f"  - schema fields count: {len(request.schema.fields) if request.schema else 0}")
+
+            # Check if s3_path exists and is not empty
+            if not hasattr(request, 's3_path'):
+                logger.error("[UpdateTable] s3_path field is missing from request!")
+                return table_service_pb2.TableResponse(
+                    success=False,
+                    message="s3_path field is missing from request"
+                )
+
+            if not request.s3_path:
+                logger.error("[UpdateTable] s3_path is empty!")
+                return table_service_pb2.TableResponse(
+                    success=False,
+                    message="s3_path is required but empty"
+                )
+
+            # Convert relative path to full S3 URI
+            s3_uri = self._to_s3_uri(request.s3_path)
+            storage_options = self._get_storage_options()
+
+            logger.info(f"Updating table schema at: {s3_uri}")
+
+            # Read existing Delta table to check current schema
+            try:
+                delta_table = DeltaTable(s3_uri, storage_options=storage_options)
+                current_schema = delta_table.schema()
+                current_columns = [field.name for field in current_schema]
+                logger.info(f"[UpdateTable] Current Delta Lake columns: {current_columns}")
+            except Exception as e:
+                logger.warning(f"[UpdateTable] Could not read existing table (might not exist yet): {e}")
+                # Table might not exist yet - that's ok, it will be created on first row insert
+                return table_service_pb2.TableResponse(
+                    success=True,
+                    message=f"Table schema update queued (table will be created on first data insert)"
+                )
+
+            # Build new schema from request
+            new_schema = self._build_schema_from_table_fields(request.schema.fields)
+            new_columns = [field.name for field in new_schema]
+            logger.info(f"[UpdateTable] New schema columns: {new_columns}")
+
+            # Find columns that need to be added
+            columns_to_add = [col for col in new_columns if col not in current_columns]
+            logger.info(f"[UpdateTable] Columns to add: {columns_to_add}")
+
+            if not columns_to_add:
+                logger.info("[UpdateTable] No new columns to add, schema is already up to date")
+                return table_service_pb2.TableResponse(
+                    success=True,
+                    message="Schema is already up to date"
+                )
+
+            # AIDEV-NOTE: Schema evolution via empty DataFrame write
+            # Delta Lake's schema_mode="merge" will add new columns automatically
+            # We write an empty DataFrame with the new schema to trigger evolution
+            # This is the safest approach - no data modification, just schema update
+
+            # Create empty Polars DataFrame with new schema only (columns to add)
+            schema_dict = {}
+            for field in new_schema:
+                if field.name in columns_to_add:
+                    # Map PyArrow types to Polars types for empty DataFrame
+                    if field.type == pa.float64():
+                        schema_dict[field.name] = pl.Float64
+                    elif field.type == pa.bool_():
+                        schema_dict[field.name] = pl.Boolean
+                    elif field.type == pa.timestamp('us'):
+                        schema_dict[field.name] = pl.Datetime('us')
+                    else:  # Default to String for text, JSON, etc.
+                        schema_dict[field.name] = pl.Utf8
+
+            # Create empty DataFrame with new columns only
+            df_schema = pl.DataFrame(schema=schema_dict)
+            logger.info(f"[UpdateTable] Created empty DataFrame with schema: {df_schema.columns}")
+
+            # Write empty DataFrame to trigger schema evolution
+            # mode="append" won't add any rows (DataFrame is empty)
+            # schema_mode="merge" will add the new columns to the schema
+            from deltalake import write_deltalake
+            write_deltalake(
+                s3_uri,
+                df_schema,
+                mode="append",
+                schema_mode="merge",  # Critical: enables adding new columns
+                storage_options=storage_options
+            )
+
+            # Verify schema was updated
+            updated_table = DeltaTable(s3_uri, storage_options=storage_options)
+            updated_schema = updated_table.schema()
+            updated_columns = [field.name for field in updated_schema]
+            logger.info(f"[UpdateTable] Delta table AFTER schema evolution:")
+            logger.info(f"  - Columns: {updated_columns}")
+            logger.info(f"  - Version: {updated_table.version()}")
+
+            # Verify all new columns were added
+            missing_columns = [col for col in columns_to_add if col not in updated_columns]
+            if missing_columns:
+                logger.error(f"[UpdateTable] Failed to add columns: {missing_columns}")
+                return table_service_pb2.TableResponse(
+                    success=False,
+                    message=f"Failed to add columns: {missing_columns}"
+                )
+
+            logger.info(f"[UpdateTable] Successfully added {len(columns_to_add)} columns: {columns_to_add}")
+            return table_service_pb2.TableResponse(
+                success=True,
+                message=f"Schema updated: added {len(columns_to_add)} columns"
+            )
+
+        except Exception as e:
+            logger.error(f"Error updating table {request.table_id}: {e}")
+            logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return table_service_pb2.TableResponse(
+                success=False,
+                message=f"Failed to update table: {str(e)}"
+            )
 
     def DeleteTable(self, request: table_service_pb2.DeleteTableRequest, context) -> table_service_pb2.DeleteTableResponse:
         """Delete a table."""
@@ -995,10 +1120,48 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
             # Apply ordering
             if request.order_by:
-                if request.order_direction.upper() == 'DESC':
-                    df = df.sort(request.order_by, descending=True)
-                else:
-                    df = df.sort(request.order_by, descending=False)
+                # AIDEV-NOTE: Debug logging for sort issues (especially boolean fields)
+                logger.info(f"[QueryRows] Attempting to sort:")
+                logger.info(f"  - order_by field: '{request.order_by}'")
+                logger.info(f"  - order_direction: '{request.order_direction}'")
+                logger.info(f"  - DataFrame shape: {df.shape}")
+                logger.info(f"  - DataFrame columns: {df.columns}")
+                logger.info(f"  - Delta Lake schema column names: {[field.name for field in schema]}")
+
+                # Check if sort column exists in DataFrame
+                if request.order_by not in df.columns:
+                    logger.error(f"[QueryRows] Sort column '{request.order_by}' does not exist in DataFrame!")
+                    logger.error(f"  - Available columns: {df.columns}")
+                    return table_service_pb2.QueryRowsResponse(
+                        success=False,
+                        message=f"Sort column '{request.order_by}' not found in table"
+                    )
+
+                # Log column type and sample values
+                try:
+                    col_dtype = df[request.order_by].dtype
+                    null_count = df[request.order_by].null_count()
+                    logger.info(f"  - Column '{request.order_by}' type: {col_dtype}")
+                    logger.info(f"  - Null count: {null_count}")
+                    logger.info(f"  - Sample values: {df[request.order_by].head(5).to_list()}")
+                except Exception as inspect_error:
+                    logger.warning(f"  - Could not inspect column: {inspect_error}")
+
+                # Attempt sort with error handling
+                try:
+                    if request.order_direction.upper() == 'DESC':
+                        df = df.sort(request.order_by, descending=True)
+                    else:
+                        df = df.sort(request.order_by, descending=False)
+                    logger.info(f"[QueryRows] Sort successful, result shape: {df.shape}")
+                except Exception as sort_error:
+                    logger.error(f"[QueryRows] Sort failed with error: {type(sort_error).__name__}: {str(sort_error)}")
+                    import traceback
+                    logger.error(f"[QueryRows] Sort traceback: {traceback.format_exc()}")
+                    return table_service_pb2.QueryRowsResponse(
+                        success=False,
+                        message=f"Failed to sort by '{request.order_by}': {str(sort_error)}"
+                    )
 
             # Get total count before pagination
             total_count = len(df)
