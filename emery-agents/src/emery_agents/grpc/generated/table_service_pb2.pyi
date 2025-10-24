@@ -17,6 +17,25 @@ class FieldType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     FIELD_TYPE_FILE: _ClassVar[FieldType]
     FIELD_TYPE_RELATION: _ClassVar[FieldType]
     FIELD_TYPE_DOCUMENT: _ClassVar[FieldType]
+
+class FilterOperator(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    FILTER_OP_UNSPECIFIED: _ClassVar[FilterOperator]
+    FILTER_OP_EQ: _ClassVar[FilterOperator]
+    FILTER_OP_NE: _ClassVar[FilterOperator]
+    FILTER_OP_GT: _ClassVar[FilterOperator]
+    FILTER_OP_GTE: _ClassVar[FilterOperator]
+    FILTER_OP_LT: _ClassVar[FilterOperator]
+    FILTER_OP_LTE: _ClassVar[FilterOperator]
+    FILTER_OP_LIKE: _ClassVar[FilterOperator]
+    FILTER_OP_ILIKE: _ClassVar[FilterOperator]
+    FILTER_OP_IN: _ClassVar[FilterOperator]
+    FILTER_OP_NOT_IN: _ClassVar[FilterOperator]
+    FILTER_OP_IS_NULL: _ClassVar[FilterOperator]
+    FILTER_OP_IS_NOT_NULL: _ClassVar[FilterOperator]
+    FILTER_OP_CONTAINS: _ClassVar[FilterOperator]
+    FILTER_OP_CONTAINED_BY: _ClassVar[FilterOperator]
+    FILTER_OP_HAS_KEY: _ClassVar[FilterOperator]
 FIELD_TYPE_UNSPECIFIED: FieldType
 FIELD_TYPE_TEXT: FieldType
 FIELD_TYPE_NUMBER: FieldType
@@ -25,6 +44,22 @@ FIELD_TYPE_DATE: FieldType
 FIELD_TYPE_FILE: FieldType
 FIELD_TYPE_RELATION: FieldType
 FIELD_TYPE_DOCUMENT: FieldType
+FILTER_OP_UNSPECIFIED: FilterOperator
+FILTER_OP_EQ: FilterOperator
+FILTER_OP_NE: FilterOperator
+FILTER_OP_GT: FilterOperator
+FILTER_OP_GTE: FilterOperator
+FILTER_OP_LT: FilterOperator
+FILTER_OP_LTE: FilterOperator
+FILTER_OP_LIKE: FilterOperator
+FILTER_OP_ILIKE: FilterOperator
+FILTER_OP_IN: FilterOperator
+FILTER_OP_NOT_IN: FilterOperator
+FILTER_OP_IS_NULL: FilterOperator
+FILTER_OP_IS_NOT_NULL: FilterOperator
+FILTER_OP_CONTAINS: FilterOperator
+FILTER_OP_CONTAINED_BY: FilterOperator
+FILTER_OP_HAS_KEY: FilterOperator
 
 class TableField(_message.Message):
     __slots__ = ("name", "type", "required", "metadata")
@@ -265,15 +300,20 @@ class DeleteRowsRequest(_message.Message):
     s3_path: str
     def __init__(self, table_id: _Optional[str] = ..., row_ids: _Optional[_Iterable[str]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ...) -> None: ...
 
+class RowFilter(_message.Message):
+    __slots__ = ("field", "operator", "value", "values")
+    FIELD_FIELD_NUMBER: _ClassVar[int]
+    OPERATOR_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    VALUES_FIELD_NUMBER: _ClassVar[int]
+    field: str
+    operator: FilterOperator
+    value: RowDataValue
+    values: _containers.RepeatedCompositeFieldContainer[RowDataValue]
+    def __init__(self, field: _Optional[str] = ..., operator: _Optional[_Union[FilterOperator, str]] = ..., value: _Optional[_Union[RowDataValue, _Mapping]] = ..., values: _Optional[_Iterable[_Union[RowDataValue, _Mapping]]] = ...) -> None: ...
+
 class QueryRowsRequest(_message.Message):
     __slots__ = ("table_id", "s3_path", "filters", "order_by", "order_direction", "limit", "offset", "user_id", "organization_id")
-    class FiltersEntry(_message.Message):
-        __slots__ = ("key", "value")
-        KEY_FIELD_NUMBER: _ClassVar[int]
-        VALUE_FIELD_NUMBER: _ClassVar[int]
-        key: str
-        value: RowDataValue
-        def __init__(self, key: _Optional[str] = ..., value: _Optional[_Union[RowDataValue, _Mapping]] = ...) -> None: ...
     TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     S3_PATH_FIELD_NUMBER: _ClassVar[int]
     FILTERS_FIELD_NUMBER: _ClassVar[int]
@@ -285,14 +325,14 @@ class QueryRowsRequest(_message.Message):
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
     table_id: str
     s3_path: str
-    filters: _containers.MessageMap[str, RowDataValue]
+    filters: _containers.RepeatedCompositeFieldContainer[RowFilter]
     order_by: str
     order_direction: str
     limit: int
     offset: int
     user_id: str
     organization_id: str
-    def __init__(self, table_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., filters: _Optional[_Mapping[str, RowDataValue]] = ..., order_by: _Optional[str] = ..., order_direction: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., filters: _Optional[_Iterable[_Union[RowFilter, _Mapping]]] = ..., order_by: _Optional[str] = ..., order_direction: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ...) -> None: ...
 
 class TableResponse(_message.Message):
     __slots__ = ("success", "table", "message")
@@ -410,3 +450,25 @@ class RowData(_message.Message):
     id: str
     data: _containers.MessageMap[str, RowDataValue]
     def __init__(self, id: _Optional[str] = ..., data: _Optional[_Mapping[str, RowDataValue]] = ...) -> None: ...
+
+class GetTableStatsRequest(_message.Message):
+    __slots__ = ("table_id", "s3_path", "organization_id")
+    TABLE_ID_FIELD_NUMBER: _ClassVar[int]
+    S3_PATH_FIELD_NUMBER: _ClassVar[int]
+    ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
+    table_id: str
+    s3_path: str
+    organization_id: str
+    def __init__(self, table_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., organization_id: _Optional[str] = ...) -> None: ...
+
+class GetTableStatsResponse(_message.Message):
+    __slots__ = ("success", "row_count", "size_bytes", "message")
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    ROW_COUNT_FIELD_NUMBER: _ClassVar[int]
+    SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    row_count: int
+    size_bytes: int
+    message: str
+    def __init__(self, success: bool = ..., row_count: _Optional[int] = ..., size_bytes: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...

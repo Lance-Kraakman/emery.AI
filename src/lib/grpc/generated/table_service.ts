@@ -94,6 +94,139 @@ export function fieldTypeToJSON(object: FieldType): string {
   }
 }
 
+/** Filter operators matching the TypeScript FilterOperator type */
+export enum FilterOperator {
+  FILTER_OP_UNSPECIFIED = 0,
+  /** FILTER_OP_EQ - equals */
+  FILTER_OP_EQ = 1,
+  /** FILTER_OP_NE - not equals */
+  FILTER_OP_NE = 2,
+  /** FILTER_OP_GT - greater than */
+  FILTER_OP_GT = 3,
+  /** FILTER_OP_GTE - greater than or equal */
+  FILTER_OP_GTE = 4,
+  /** FILTER_OP_LT - less than */
+  FILTER_OP_LT = 5,
+  /** FILTER_OP_LTE - less than or equal */
+  FILTER_OP_LTE = 6,
+  /** FILTER_OP_LIKE - SQL LIKE pattern */
+  FILTER_OP_LIKE = 7,
+  /** FILTER_OP_ILIKE - case-insensitive LIKE */
+  FILTER_OP_ILIKE = 8,
+  /** FILTER_OP_IN - value in array */
+  FILTER_OP_IN = 9,
+  /** FILTER_OP_NOT_IN - value not in array */
+  FILTER_OP_NOT_IN = 10,
+  /** FILTER_OP_IS_NULL - IS NULL */
+  FILTER_OP_IS_NULL = 11,
+  /** FILTER_OP_IS_NOT_NULL - IS NOT NULL */
+  FILTER_OP_IS_NOT_NULL = 12,
+  /** FILTER_OP_CONTAINS - Contains operator (for relation fields) */
+  FILTER_OP_CONTAINS = 13,
+  /** FILTER_OP_CONTAINED_BY - Contained by operator */
+  FILTER_OP_CONTAINED_BY = 14,
+  /** FILTER_OP_HAS_KEY - Has key operator */
+  FILTER_OP_HAS_KEY = 15,
+  UNRECOGNIZED = -1,
+}
+
+export function filterOperatorFromJSON(object: any): FilterOperator {
+  switch (object) {
+    case 0:
+    case "FILTER_OP_UNSPECIFIED":
+      return FilterOperator.FILTER_OP_UNSPECIFIED;
+    case 1:
+    case "FILTER_OP_EQ":
+      return FilterOperator.FILTER_OP_EQ;
+    case 2:
+    case "FILTER_OP_NE":
+      return FilterOperator.FILTER_OP_NE;
+    case 3:
+    case "FILTER_OP_GT":
+      return FilterOperator.FILTER_OP_GT;
+    case 4:
+    case "FILTER_OP_GTE":
+      return FilterOperator.FILTER_OP_GTE;
+    case 5:
+    case "FILTER_OP_LT":
+      return FilterOperator.FILTER_OP_LT;
+    case 6:
+    case "FILTER_OP_LTE":
+      return FilterOperator.FILTER_OP_LTE;
+    case 7:
+    case "FILTER_OP_LIKE":
+      return FilterOperator.FILTER_OP_LIKE;
+    case 8:
+    case "FILTER_OP_ILIKE":
+      return FilterOperator.FILTER_OP_ILIKE;
+    case 9:
+    case "FILTER_OP_IN":
+      return FilterOperator.FILTER_OP_IN;
+    case 10:
+    case "FILTER_OP_NOT_IN":
+      return FilterOperator.FILTER_OP_NOT_IN;
+    case 11:
+    case "FILTER_OP_IS_NULL":
+      return FilterOperator.FILTER_OP_IS_NULL;
+    case 12:
+    case "FILTER_OP_IS_NOT_NULL":
+      return FilterOperator.FILTER_OP_IS_NOT_NULL;
+    case 13:
+    case "FILTER_OP_CONTAINS":
+      return FilterOperator.FILTER_OP_CONTAINS;
+    case 14:
+    case "FILTER_OP_CONTAINED_BY":
+      return FilterOperator.FILTER_OP_CONTAINED_BY;
+    case 15:
+    case "FILTER_OP_HAS_KEY":
+      return FilterOperator.FILTER_OP_HAS_KEY;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return FilterOperator.UNRECOGNIZED;
+  }
+}
+
+export function filterOperatorToJSON(object: FilterOperator): string {
+  switch (object) {
+    case FilterOperator.FILTER_OP_UNSPECIFIED:
+      return "FILTER_OP_UNSPECIFIED";
+    case FilterOperator.FILTER_OP_EQ:
+      return "FILTER_OP_EQ";
+    case FilterOperator.FILTER_OP_NE:
+      return "FILTER_OP_NE";
+    case FilterOperator.FILTER_OP_GT:
+      return "FILTER_OP_GT";
+    case FilterOperator.FILTER_OP_GTE:
+      return "FILTER_OP_GTE";
+    case FilterOperator.FILTER_OP_LT:
+      return "FILTER_OP_LT";
+    case FilterOperator.FILTER_OP_LTE:
+      return "FILTER_OP_LTE";
+    case FilterOperator.FILTER_OP_LIKE:
+      return "FILTER_OP_LIKE";
+    case FilterOperator.FILTER_OP_ILIKE:
+      return "FILTER_OP_ILIKE";
+    case FilterOperator.FILTER_OP_IN:
+      return "FILTER_OP_IN";
+    case FilterOperator.FILTER_OP_NOT_IN:
+      return "FILTER_OP_NOT_IN";
+    case FilterOperator.FILTER_OP_IS_NULL:
+      return "FILTER_OP_IS_NULL";
+    case FilterOperator.FILTER_OP_IS_NOT_NULL:
+      return "FILTER_OP_IS_NOT_NULL";
+    case FilterOperator.FILTER_OP_CONTAINS:
+      return "FILTER_OP_CONTAINS";
+    case FilterOperator.FILTER_OP_CONTAINED_BY:
+      return "FILTER_OP_CONTAINED_BY";
+    case FilterOperator.FILTER_OP_HAS_KEY:
+      return "FILTER_OP_HAS_KEY";
+    case FilterOperator.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
 /** Table field definition with strong typing */
 export interface TableField {
   name: string;
@@ -285,11 +418,25 @@ export interface DeleteRowsRequest {
   s3Path: string;
 }
 
+/** Row filter with operator support for advanced querying */
+export interface RowFilter {
+  /** field_{id} format or field name */
+  field: string;
+  /** Filter operator (eq, gt, like, etc.) */
+  operator: FilterOperator;
+  /** Filter value (typed) */
+  value:
+    | RowDataValue
+    | undefined;
+  /** Multiple values for IN/NOT_IN operators */
+  values: RowDataValue[];
+}
+
 export interface QueryRowsRequest {
   tableId: string;
   s3Path: string;
-  /** Typed filters */
-  filters: { [key: string]: RowDataValue };
+  /** Typed filters with operators */
+  filters: RowFilter[];
   orderBy: string;
   /** 'ASC' or 'DESC' */
   orderDirection: string;
@@ -297,11 +444,6 @@ export interface QueryRowsRequest {
   offset: number;
   userId: string;
   organizationId: string;
-}
-
-export interface QueryRowsRequest_FiltersEntry {
-  key: string;
-  value: RowDataValue | undefined;
 }
 
 /** Response messages */
@@ -2701,11 +2843,121 @@ export const DeleteRowsRequest: MessageFns<DeleteRowsRequest> = {
   },
 };
 
+function createBaseRowFilter(): RowFilter {
+  return { field: "", operator: 0, value: undefined, values: [] };
+}
+
+export const RowFilter: MessageFns<RowFilter> = {
+  encode(message: RowFilter, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.field !== "") {
+      writer.uint32(10).string(message.field);
+    }
+    if (message.operator !== 0) {
+      writer.uint32(16).int32(message.operator);
+    }
+    if (message.value !== undefined) {
+      RowDataValue.encode(message.value, writer.uint32(26).fork()).join();
+    }
+    for (const v of message.values) {
+      RowDataValue.encode(v!, writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RowFilter {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRowFilter();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.field = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.operator = reader.int32() as any;
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.value = RowDataValue.decode(reader, reader.uint32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.values.push(RowDataValue.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RowFilter {
+    return {
+      field: isSet(object.field) ? globalThis.String(object.field) : "",
+      operator: isSet(object.operator) ? filterOperatorFromJSON(object.operator) : 0,
+      value: isSet(object.value) ? RowDataValue.fromJSON(object.value) : undefined,
+      values: globalThis.Array.isArray(object?.values) ? object.values.map((e: any) => RowDataValue.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: RowFilter): unknown {
+    const obj: any = {};
+    if (message.field !== "") {
+      obj.field = message.field;
+    }
+    if (message.operator !== 0) {
+      obj.operator = filterOperatorToJSON(message.operator);
+    }
+    if (message.value !== undefined) {
+      obj.value = RowDataValue.toJSON(message.value);
+    }
+    if (message.values?.length) {
+      obj.values = message.values.map((e) => RowDataValue.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RowFilter>, I>>(base?: I): RowFilter {
+    return RowFilter.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RowFilter>, I>>(object: I): RowFilter {
+    const message = createBaseRowFilter();
+    message.field = object.field ?? "";
+    message.operator = object.operator ?? 0;
+    message.value = (object.value !== undefined && object.value !== null)
+      ? RowDataValue.fromPartial(object.value)
+      : undefined;
+    message.values = object.values?.map((e) => RowDataValue.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 function createBaseQueryRowsRequest(): QueryRowsRequest {
   return {
     tableId: "",
     s3Path: "",
-    filters: {},
+    filters: [],
     orderBy: "",
     orderDirection: "",
     limit: 0,
@@ -2723,9 +2975,9 @@ export const QueryRowsRequest: MessageFns<QueryRowsRequest> = {
     if (message.s3Path !== "") {
       writer.uint32(18).string(message.s3Path);
     }
-    Object.entries(message.filters).forEach(([key, value]) => {
-      QueryRowsRequest_FiltersEntry.encode({ key: key as any, value }, writer.uint32(26).fork()).join();
-    });
+    for (const v of message.filters) {
+      RowFilter.encode(v!, writer.uint32(26).fork()).join();
+    }
     if (message.orderBy !== "") {
       writer.uint32(34).string(message.orderBy);
     }
@@ -2775,10 +3027,7 @@ export const QueryRowsRequest: MessageFns<QueryRowsRequest> = {
             break;
           }
 
-          const entry3 = QueryRowsRequest_FiltersEntry.decode(reader, reader.uint32());
-          if (entry3.value !== undefined) {
-            message.filters[entry3.key] = entry3.value;
-          }
+          message.filters.push(RowFilter.decode(reader, reader.uint32()));
           continue;
         }
         case 4: {
@@ -2842,12 +3091,7 @@ export const QueryRowsRequest: MessageFns<QueryRowsRequest> = {
     return {
       tableId: isSet(object.tableId) ? globalThis.String(object.tableId) : "",
       s3Path: isSet(object.s3Path) ? globalThis.String(object.s3Path) : "",
-      filters: isObject(object.filters)
-        ? Object.entries(object.filters).reduce<{ [key: string]: RowDataValue }>((acc, [key, value]) => {
-          acc[key] = RowDataValue.fromJSON(value);
-          return acc;
-        }, {})
-        : {},
+      filters: globalThis.Array.isArray(object?.filters) ? object.filters.map((e: any) => RowFilter.fromJSON(e)) : [],
       orderBy: isSet(object.orderBy) ? globalThis.String(object.orderBy) : "",
       orderDirection: isSet(object.orderDirection) ? globalThis.String(object.orderDirection) : "",
       limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
@@ -2865,14 +3109,8 @@ export const QueryRowsRequest: MessageFns<QueryRowsRequest> = {
     if (message.s3Path !== "") {
       obj.s3Path = message.s3Path;
     }
-    if (message.filters) {
-      const entries = Object.entries(message.filters);
-      if (entries.length > 0) {
-        obj.filters = {};
-        entries.forEach(([k, v]) => {
-          obj.filters[k] = RowDataValue.toJSON(v);
-        });
-      }
+    if (message.filters?.length) {
+      obj.filters = message.filters.map((e) => RowFilter.toJSON(e));
     }
     if (message.orderBy !== "") {
       obj.orderBy = message.orderBy;
@@ -2902,101 +3140,13 @@ export const QueryRowsRequest: MessageFns<QueryRowsRequest> = {
     const message = createBaseQueryRowsRequest();
     message.tableId = object.tableId ?? "";
     message.s3Path = object.s3Path ?? "";
-    message.filters = Object.entries(object.filters ?? {}).reduce<{ [key: string]: RowDataValue }>(
-      (acc, [key, value]) => {
-        if (value !== undefined) {
-          acc[key] = RowDataValue.fromPartial(value);
-        }
-        return acc;
-      },
-      {},
-    );
+    message.filters = object.filters?.map((e) => RowFilter.fromPartial(e)) || [];
     message.orderBy = object.orderBy ?? "";
     message.orderDirection = object.orderDirection ?? "";
     message.limit = object.limit ?? 0;
     message.offset = object.offset ?? 0;
     message.userId = object.userId ?? "";
     message.organizationId = object.organizationId ?? "";
-    return message;
-  },
-};
-
-function createBaseQueryRowsRequest_FiltersEntry(): QueryRowsRequest_FiltersEntry {
-  return { key: "", value: undefined };
-}
-
-export const QueryRowsRequest_FiltersEntry: MessageFns<QueryRowsRequest_FiltersEntry> = {
-  encode(message: QueryRowsRequest_FiltersEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.key !== "") {
-      writer.uint32(10).string(message.key);
-    }
-    if (message.value !== undefined) {
-      RowDataValue.encode(message.value, writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): QueryRowsRequest_FiltersEntry {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseQueryRowsRequest_FiltersEntry();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.key = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.value = RowDataValue.decode(reader, reader.uint32());
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): QueryRowsRequest_FiltersEntry {
-    return {
-      key: isSet(object.key) ? globalThis.String(object.key) : "",
-      value: isSet(object.value) ? RowDataValue.fromJSON(object.value) : undefined,
-    };
-  },
-
-  toJSON(message: QueryRowsRequest_FiltersEntry): unknown {
-    const obj: any = {};
-    if (message.key !== "") {
-      obj.key = message.key;
-    }
-    if (message.value !== undefined) {
-      obj.value = RowDataValue.toJSON(message.value);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<QueryRowsRequest_FiltersEntry>, I>>(base?: I): QueryRowsRequest_FiltersEntry {
-    return QueryRowsRequest_FiltersEntry.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<QueryRowsRequest_FiltersEntry>, I>>(
-    object: I,
-  ): QueryRowsRequest_FiltersEntry {
-    const message = createBaseQueryRowsRequest_FiltersEntry();
-    message.key = object.key ?? "";
-    message.value = (object.value !== undefined && object.value !== null)
-      ? RowDataValue.fromPartial(object.value)
-      : undefined;
     return message;
   },
 };

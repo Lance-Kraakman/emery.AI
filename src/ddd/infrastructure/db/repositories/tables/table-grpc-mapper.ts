@@ -9,14 +9,17 @@ import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import { Row } from '@/ddd/domain/tables/value-objects/row';
 import { TableId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import type { RowFilter, FilterOperator } from '@/ddd/infrastructure/db/types/table-persistence';
 import {
   FieldType,
+  FilterOperator as ProtoFilterOperator,
   Table as ITable,
   TableSchema as ITableSchema,
   TableField as ITableField,
   Row as IRow,
   RowData as IRowData,
   RowDataValue as IRowDataValue,
+  RowFilter as IRowFilter,
   CreateTableRequest as ICreateTableRequest,
   CreateRowsRequest as ICreateRowsRequest,
   UpdateRowsRequest as IUpdateRowsRequest,
@@ -29,6 +32,51 @@ import {
  * Maps field types between domain and protobuf
  */
 export class TableGrpcMapper {
+  /**
+   * Convert FilterOperator string to protobuf FilterOperator enum
+   */
+  private static filterOperatorToProto(operator: FilterOperator): ProtoFilterOperator {
+    const mapping: Record<FilterOperator, ProtoFilterOperator> = {
+      'eq': ProtoFilterOperator.FILTER_OP_EQ,
+      'ne': ProtoFilterOperator.FILTER_OP_NE,
+      'gt': ProtoFilterOperator.FILTER_OP_GT,
+      'gte': ProtoFilterOperator.FILTER_OP_GTE,
+      'lt': ProtoFilterOperator.FILTER_OP_LT,
+      'lte': ProtoFilterOperator.FILTER_OP_LTE,
+      'like': ProtoFilterOperator.FILTER_OP_LIKE,
+      'ilike': ProtoFilterOperator.FILTER_OP_ILIKE,
+      'in': ProtoFilterOperator.FILTER_OP_IN,
+      'not_in': ProtoFilterOperator.FILTER_OP_NOT_IN,
+      'is_null': ProtoFilterOperator.FILTER_OP_IS_NULL,
+      'is_not_null': ProtoFilterOperator.FILTER_OP_IS_NOT_NULL,
+      'contains': ProtoFilterOperator.FILTER_OP_CONTAINS,
+      'contained_by': ProtoFilterOperator.FILTER_OP_CONTAINED_BY,
+      'has_key': ProtoFilterOperator.FILTER_OP_HAS_KEY,
+    };
+
+    return mapping[operator] || ProtoFilterOperator.FILTER_OP_EQ;
+  }
+
+  /**
+   * Convert RowFilter to protobuf RowFilter
+   */
+  private static toProtoRowFilter(filter: RowFilter): IRowFilter {
+    const protoFilter: IRowFilter = {
+      field: filter.field,
+      operator: this.filterOperatorToProto(filter.operator),
+      value: this.toProtoRowDataValue(filter.value),
+      values: [], // For IN/NOT_IN operators - would need to be populated if value is an array
+    };
+
+    // Handle IN/NOT_IN operators with array values
+    if ((filter.operator === 'in' || filter.operator === 'not_in') && Array.isArray(filter.value)) {
+      protoFilter.values = filter.value.map(v => this.toProtoRowDataValue(v));
+      protoFilter.value = this.toProtoRowDataValue(null); // Empty value for array operators
+    }
+
+    return protoFilter;
+  }
+
   /**
    * Convert DynamicTable domain entity to protobuf Table interface
    */
@@ -177,6 +225,25 @@ export class TableGrpcMapper {
     queryParams: any = {},
     organizationId: OrganizationId
   ): IQueryRowsRequest {
+    // Convert RowFilter[] to protobuf RowFilter[] if present
+    let protoFilters: IRowFilter[] = [];
+    if (queryParams.filters) {
+      if (Array.isArray(queryParams.filters)) {
+        // New format: RowFilter[] with operators
+        protoFilters = queryParams.filters.map((filter: RowFilter) =>
+          this.toProtoRowFilter(filter)
+        );
+      } else if (typeof queryParams.filters === 'object') {
+        // Legacy format: Record<string, any> - convert to filters with EQ operator
+        protoFilters = Object.entries(queryParams.filters).map(([field, value]) => ({
+          field,
+          operator: ProtoFilterOperator.FILTER_OP_EQ,
+          value: this.toProtoRowDataValue(value),
+          values: [],
+        }));
+      }
+    }
+
     const request: IQueryRowsRequest = {
       tableId: tableId.value.toString(),
       s3Path: s3Path,
@@ -186,7 +253,7 @@ export class TableGrpcMapper {
       orderDirection: queryParams.orderDirection || 'ASC',
       limit: queryParams.limit || 0,
       offset: queryParams.offset || 0,
-      filters: queryParams.filters || {},
+      filters: protoFilters,
     };
 
     return request;

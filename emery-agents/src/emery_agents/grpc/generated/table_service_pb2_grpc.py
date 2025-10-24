@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import table_service_pb2 as table__service__pb2
+import table_service_pb2 as table__service__pb2
 
 GRPC_GENERATED_VERSION = '1.74.0'
 GRPC_VERSION = grpc.__version__
@@ -85,6 +85,11 @@ class TableServiceStub(object):
                 request_serializer=table__service__pb2.QueryRowsRequest.SerializeToString,
                 response_deserializer=table__service__pb2.QueryRowsResponse.FromString,
                 _registered_method=True)
+        self.GetTableStats = channel.unary_unary(
+                '/emery.tables.TableService/GetTableStats',
+                request_serializer=table__service__pb2.GetTableStatsRequest.SerializeToString,
+                response_deserializer=table__service__pb2.GetTableStatsResponse.FromString,
+                _registered_method=True)
 
 
 class TableServiceServicer(object):
@@ -153,6 +158,13 @@ class TableServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetTableStats(self, request, context):
+        """Get table statistics from Delta Lake metadata (no data loading)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_TableServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -205,6 +217,11 @@ def add_TableServiceServicer_to_server(servicer, server):
                     servicer.QueryRows,
                     request_deserializer=table__service__pb2.QueryRowsRequest.FromString,
                     response_serializer=table__service__pb2.QueryRowsResponse.SerializeToString,
+            ),
+            'GetTableStats': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetTableStats,
+                    request_deserializer=table__service__pb2.GetTableStatsRequest.FromString,
+                    response_serializer=table__service__pb2.GetTableStatsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -478,6 +495,33 @@ class TableService(object):
             '/emery.tables.TableService/QueryRows',
             table__service__pb2.QueryRowsRequest.SerializeToString,
             table__service__pb2.QueryRowsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetTableStats(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/emery.tables.TableService/GetTableStats',
+            table__service__pb2.GetTableStatsRequest.SerializeToString,
+            table__service__pb2.GetTableStatsResponse.FromString,
             options,
             channel_credentials,
             insecure,
