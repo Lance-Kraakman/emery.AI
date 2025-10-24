@@ -36,7 +36,7 @@ export interface DataState {
   }
   sortBy: {
     field?: string
-    order: 'asc' | 'desc'
+    order?: 'asc' | 'desc'
   }
   
   // Pagination
@@ -134,7 +134,7 @@ const initialState: DataState = {
   fieldFilter: '',
   activeFilters: [],
   rowFilter: {},
-  sortBy: { order: 'asc' },
+  sortBy: {},
   
   // Pagination
   currentPage: 1,
@@ -280,7 +280,7 @@ export const dataActions = {
   clearSorting: () => {
     dataStore.setState((state) => ({
       ...state,
-      sortBy: { order: 'asc' }
+      sortBy: {}
     }))
   },
 
@@ -316,7 +316,7 @@ export const dataActions = {
       fieldFilter: '',
       activeFilters: [],
       rowFilter: {},
-      sortBy: { order: 'asc' },
+      sortBy: {},
       currentPage: 1
     }))
   },
@@ -718,7 +718,7 @@ export const dataSelectors = {
           compareResult = String(aValue).localeCompare(String(bValue))
         }
 
-        return state.sortBy.order === 'asc' ? compareResult : -compareResult
+        return (state.sortBy.order || 'asc') === 'asc' ? compareResult : -compareResult
       })
     }
 
