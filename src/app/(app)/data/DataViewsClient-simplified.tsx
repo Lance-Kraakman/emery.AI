@@ -20,6 +20,7 @@ import { getFields } from "@/app/actions/fields"
 import { getRowsDSG, searchRowsDSG, createRow, createRows, updateRowData, deleteRowData } from "@/app/actions/rows"
 import { GRID_CONFIG } from "@/lib/constants/grid"
 import { rowQueryKeys, fieldQueryKeys } from "@/lib/query-keys/rows"
+import type { FilterConfig } from "@/lib/types/filters"
 import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { DSGRow } from "@/app/mappers/dsg-mapper"
@@ -51,7 +52,7 @@ export function DataViewsClientSimplified() {
   const [isMounted, setIsMounted] = React.useState(false)
 
   // Local state for filters (not in global store - table-specific)
-  const [activeFilters, setActiveFilters] = React.useState<Array<{ field: string, operator: string, value: any }> | null>(null)
+  const [activeFilters, setActiveFilters] = React.useState<FilterConfig[] | null>(null)
 
   // Set mounted state after client hydration
   useEffect(() => {
@@ -342,7 +343,7 @@ export function DataViewsClientSimplified() {
   }
 
   // Filter handlers
-  const handleAddFilter = (filter: { field: string, operator: string, value: any }) => {
+  const handleAddFilter = (filter: FilterConfig) => {
     setActiveFilters(prev => [...(prev ?? []), filter])
   }
 
