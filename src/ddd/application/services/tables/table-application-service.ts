@@ -882,6 +882,25 @@ export class TableApplicationService {
   }
 
   /**
+   * Get table statistics efficiently using Delta Lake metadata
+   *
+   * Reads only transaction log to get row count and size without loading data.
+   * Much faster than loading all rows for large tables (10-1000x speedup).
+   */
+  async getTableStats(tableId: TableId): Promise<{
+    rowCount: number;
+    sizeBytes: number;
+    lastModified: Date;
+  }> {
+    try {
+      return await this.dynamicTableRepository.getTableStats(tableId);
+    } catch (error) {
+      console.error('[TABLE-APP-SERVICE] Error getting table stats:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Search for rows in a table based on a query string
    * Uses the existing getRows method with text search filters
    */
