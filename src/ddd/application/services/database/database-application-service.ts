@@ -6,7 +6,10 @@
  * Databases serve as logical namespaces/workspaces for grouping related tables.
  */
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+
+const logger = createDebugLogger('DatabaseService');
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import { Database } from '@/ddd/domain/databases/entities/database';
 import type { Result } from '@/ddd/domain/shared/result';
@@ -80,7 +83,7 @@ export class DatabaseApplicationService {
         data: DatabaseMapper.toDTO(savedDatabase)
       };
     } catch (error) {
-      console.error("Error creating database:", error);
+      logger.error('Error creating database', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to create database"
@@ -147,7 +150,7 @@ export class DatabaseApplicationService {
         data: DatabaseMapper.toDTO(savedDatabase)
       };
     } catch (error) {
-      console.error("Error updating database:", error);
+      logger.error('Error updating database', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to update database"
@@ -194,7 +197,7 @@ export class DatabaseApplicationService {
         data: undefined
       };
     } catch (error) {
-      console.error("Error deleting database:", error);
+      logger.error('Error deleting database', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to delete database"
@@ -255,7 +258,7 @@ export class DatabaseApplicationService {
       // Convert to DTOs
       return databases.map(DatabaseMapper.toDTO);
     } catch (error) {
-      console.error("Error fetching databases:", error);
+      logger.error('Error fetching databases', error);
       throw new Error("Failed to fetch databases");
     }
   }
