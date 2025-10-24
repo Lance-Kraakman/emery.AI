@@ -7,7 +7,7 @@
  * @see https://tkdodo.eu/blog/effective-react-query-keys#use-query-key-factories
  */
 
-import type { FilterConfig } from "@/app/(app)/data/components/FilterPopover"
+import type { FilterConfig } from "@/lib/types/filters"
 
 /**
  * Sort state for query keys

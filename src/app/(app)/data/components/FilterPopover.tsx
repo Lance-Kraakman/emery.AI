@@ -17,9 +17,6 @@ import {
   getOperatorLabel
 } from "@/lib/types/filters"
 
-// Re-export FilterConfig for backward compatibility
-export type { FilterConfig }
-
 interface FilterPopoverProps {
   trigger: React.ReactNode
   fields: FieldDTO[]

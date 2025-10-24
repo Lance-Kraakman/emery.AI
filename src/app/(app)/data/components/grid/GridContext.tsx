@@ -18,7 +18,7 @@ import { createContext, useContext } from 'react'
 import type { FieldDTO } from '@/app/mappers/field-mapper'
 import type { DSGRow } from '@/app/mappers/dsg-mapper'
 import type { FieldValue as DomainFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
-import type { FilterConfig } from '../FilterPopover'
+import type { FilterConfig } from '@/lib/types/filters'
 
 /**
  * Grid context value containing all grid state and actions
