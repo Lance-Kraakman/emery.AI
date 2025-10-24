@@ -342,9 +342,8 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
  * Get rows in DataSheetGrid format with pagination
  * Returns rows with pagination metadata for infinite scroll
  *
- * Uses limit+1 pattern: Request one extra row to detect if more pages exist,
- * then return only the requested limit. This prevents false positives when
- * total rows is exactly a multiple of the page size (e.g., 1000 rows with 100/page).
+ * Uses efficient Delta Lake metadata to get accurate total count without
+ * loading all rows. This enables proper pagination UI with total row display.
  */
 export async function getRowsDSG(
   tableId: number,
@@ -365,6 +364,11 @@ export async function getRowsDSG(
     if (!table) {
       throw new Error("Table not found");
     }
+
+    // Get actual total count from table metadata (efficient - reads only transaction log)
+    const tableRepository = await getTableRepository();
+    const stats = await tableRepository.getTableStats(TableId.fromNumber(tableId));
+    const totalRows = stats.rowCount;
 
     // Request limit + 1 rows to detect if more pages exist
     // Standard pagination pattern to avoid false positives at multiples of page size
@@ -388,7 +392,7 @@ export async function getRowsDSG(
     return {
       rows: dsgData,
       hasMore,
-      total: dsgData.length
+      total: totalRows // Now returns actual total from metadata, not just loaded rows
     };
   } catch (error) {
     console.error("Error fetching paginated rows:", error);
