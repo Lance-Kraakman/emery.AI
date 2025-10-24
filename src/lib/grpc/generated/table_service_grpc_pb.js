@@ -114,6 +114,28 @@ function deserialize_emery_tables_GetTableRequest(buffer_arg) {
   return table_service_pb.GetTableRequest.deserializeBinary(new Uint8Array(buffer_arg));
 }
 
+function serialize_emery_tables_GetTableStatsRequest(arg) {
+  if (!(arg instanceof table_service_pb.GetTableStatsRequest)) {
+    throw new Error('Expected argument of type emery.tables.GetTableStatsRequest');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_emery_tables_GetTableStatsRequest(buffer_arg) {
+  return table_service_pb.GetTableStatsRequest.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
+function serialize_emery_tables_GetTableStatsResponse(arg) {
+  if (!(arg instanceof table_service_pb.GetTableStatsResponse)) {
+    throw new Error('Expected argument of type emery.tables.GetTableStatsResponse');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_emery_tables_GetTableStatsResponse(buffer_arg) {
+  return table_service_pb.GetTableStatsResponse.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
 function serialize_emery_tables_ListTablesRequest(arg) {
   if (!(arg instanceof table_service_pb.ListTablesRequest)) {
     throw new Error('Expected argument of type emery.tables.ListTablesRequest');
@@ -316,6 +338,18 @@ queryRows: {
     requestDeserialize: deserialize_emery_tables_QueryRowsRequest,
     responseSerialize: serialize_emery_tables_QueryRowsResponse,
     responseDeserialize: deserialize_emery_tables_QueryRowsResponse,
+  },
+  // Get table statistics from Delta Lake metadata (no data loading)
+getTableStats: {
+    path: '/emery.tables.TableService/GetTableStats',
+    requestStream: false,
+    responseStream: false,
+    requestType: table_service_pb.GetTableStatsRequest,
+    responseType: table_service_pb.GetTableStatsResponse,
+    requestSerialize: serialize_emery_tables_GetTableStatsRequest,
+    requestDeserialize: deserialize_emery_tables_GetTableStatsRequest,
+    responseSerialize: serialize_emery_tables_GetTableStatsResponse,
+    responseDeserialize: deserialize_emery_tables_GetTableStatsResponse,
   },
 };
 

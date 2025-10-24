@@ -702,3 +702,63 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 success=False,
                 message=f"Failed to query table: {str(e)}"
             )
+
+    def GetTableStats(self, request: table_service_pb2.GetTableStatsRequest, context) -> table_service_pb2.GetTableStatsResponse:
+        """Get table statistics from Delta Lake metadata without loading data files.
+
+        This method uses Delta Lake's transaction log (add actions) to get row count
+        and file sizes without reading the actual data files. Much faster than loading all rows.
+        """
+        try:
+            import pyarrow.compute as pc
+
+            logger.info(f"[GetTableStats] Request received:")
+            logger.info(f"  - table_id: '{request.table_id}'")
+            logger.info(f"  - s3_path: '{request.s3_path}'")
+            logger.info(f"  - organization_id: '{request.organization_id}'")
+
+            if not request.s3_path:
+                logger.error("[GetTableStats] s3_path is required")
+                return table_service_pb2.GetTableStatsResponse(
+                    success=False,
+                    message="s3_path is required"
+                )
+
+            # Convert to S3 URI
+            s3_uri = self._to_s3_uri(request.s3_path)
+            storage_options = self._get_storage_options()
+
+            logger.info(f"[GetTableStats] Reading Delta table metadata from: {s3_uri}")
+
+            # Load Delta table (metadata only - no data files read!)
+            delta_table = DeltaTable(s3_uri, storage_options=storage_options)
+
+            # Get add actions from transaction log
+            # AIDEV-NOTE: add_actions contains metadata about files including num_records and size_bytes
+            # This reads only the transaction log (_delta_log/*.json), not the actual data files
+            add_actions = delta_table.get_add_actions(flatten=True)
+
+            # Sum num_records across all files to get total row count
+            row_count = pc.sum(add_actions['num_records']).as_py()
+
+            # Sum size_bytes across all files to get total size
+            size_bytes = pc.sum(add_actions['size_bytes']).as_py()
+
+            logger.info(f"[GetTableStats] Retrieved stats from metadata: {row_count} rows, {size_bytes} bytes")
+
+            return table_service_pb2.GetTableStatsResponse(
+                success=True,
+                row_count=row_count,
+                size_bytes=size_bytes,
+                message=f"Statistics retrieved from Delta Lake metadata"
+            )
+
+        except Exception as e:
+            logger.error(f"[GetTableStats] Error getting table stats for {request.table_id}: {e}")
+            logger.error(f"[GetTableStats] Exception details: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"[GetTableStats] Traceback: {traceback.format_exc()}")
+            return table_service_pb2.GetTableStatsResponse(
+                success=False,
+                message=f"Failed to get table stats: {str(e)}"
+            )

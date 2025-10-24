@@ -210,6 +210,7 @@ export class DynamicTableDataLake {
    * Retrieve rows from a table using gRPC service
    * Receives Arrow IPC bytes from Python service for zero-copy transfer
    * Deserializes to Arrow Table and converts to domain entities
+   * Returns rows and totalCount from gRPC response
    */
   async retrieveRows(
     table: DynamicTable,
@@ -220,7 +221,7 @@ export class DynamicTableDataLake {
       orderBy?: string;
       orderDirection?: 'ASC' | 'DESC';
     } = {}
-  ): Promise<Result<Row[]>> {
+  ): Promise<Result<{ rows: Row[]; totalCount: number }>> {
     try {
       console.log(`[DynamicTableDataLake.retrieveRows] === ENTRY ===`);
       console.log(`[DynamicTableDataLake.retrieveRows] Table ID: ${table.id.value}`);
@@ -269,11 +270,12 @@ export class DynamicTableDataLake {
       // 3. Handle Arrow IPC response (zero-copy deserialization)
       if (response && response.success) {
         const arrowIpcBytes = response.arrowIpcStream;
+        const totalCount = response.totalCount || 0;
 
         if (!arrowIpcBytes || arrowIpcBytes.length === 0) {
           console.log(`[DynamicTableDataLake.retrieveRows] No Arrow data returned - table is empty`);
           console.log(`[DynamicTableDataLake.retrieveRows] === EXIT === (empty result)`);
-          return { success: true, data: [] };
+          return { success: true, data: { rows: [], totalCount } };
         }
 
         console.log(`[DynamicTableDataLake.retrieveRows] Deserializing Arrow IPC bytes (${arrowIpcBytes.length} bytes)...`);
@@ -309,9 +311,10 @@ export class DynamicTableDataLake {
         }
 
         console.log(`[DynamicTableDataLake.retrieveRows] Converted ${rows.length} Arrow rows to domain Row entities`);
+        console.log(`[DynamicTableDataLake.retrieveRows] Total count from gRPC: ${totalCount}`);
         console.log(`[DynamicTableDataLake.retrieveRows] Sample row:`, rows[0]?.toPlainObject());
-        console.log(`[DynamicTableDataLake.retrieveRows] === EXIT === (success: ${rows.length} rows)`);
-        return { success: true, data: rows };
+        console.log(`[DynamicTableDataLake.retrieveRows] === EXIT === (success: ${rows.length} rows, total: ${totalCount})`);
+        return { success: true, data: { rows, totalCount } };
       } else {
         const message = response?.message || 'Unknown response error';
         console.error(`[DynamicTableDataLake.retrieveRows] gRPC query failed: ${message}`);
@@ -452,36 +455,69 @@ export class DynamicTableDataLake {
   // This pattern works well with Delta Lake's append-only architecture.
 
   /**
-   * Get table statistics from gRPC service
-   * Note: This is a mock implementation since the gRPC client doesn't support getTableStats yet
+   * Get table statistics from Delta Lake metadata via gRPC
+   *
+   * This reads only the transaction log (_delta_log/*.json) to get
+   * row count and file sizes without loading actual data files.
+   * Much faster than loading all rows, especially for large tables.
    */
   async getTableStats(table: DynamicTable): Promise<Result<{
     rowCount: number;
     sizeBytes: number;
     lastModified: Date;
   }>> {
-    // For now, return mock data
-    console.warn(`[DynamicTableDataLake] getTableStats not implemented for table ${table.id}, returning mock data`);
-    return {
-      success: true,
-      data: {
-        rowCount: 0,
-        sizeBytes: 0,
-        lastModified: new Date()
+    try {
+      console.log(`[DynamicTableDataLake] Getting table stats for ${table.id} using Delta Lake metadata`);
+
+      const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
+
+      // Create getTableStats request
+      const statsRequest = TableGrpcMapper.toGetTableStatsRequest(
+        table.id,
+        s3Path,
+        table.organizationId
+      );
+
+      // Call gRPC service
+      const response = await this.grpcClient.getTableStats(statsRequest);
+
+      if (response && response.success) {
+        console.log(`[DynamicTableDataLake] Table stats retrieved: ${response.rowCount} rows, ${response.sizeBytes} bytes`);
+        return {
+          success: true,
+          data: {
+            rowCount: Number(response.rowCount),
+            sizeBytes: Number(response.sizeBytes),
+            lastModified: table.updatedAt || new Date()
+          }
+        };
+      } else {
+        const message = response?.message || 'Unknown response error';
+        console.error(`[DynamicTableDataLake] Failed to get table stats: ${message}`);
+        return {
+          success: false,
+          error: message || 'Failed to get table stats via gRPC'
+        };
       }
-    };
+    } catch (error) {
+      console.error('[DynamicTableDataLake] Error getting table stats:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get table stats via gRPC'
+      };
+    }
   }
 
   /**
    * Check if table has any rows using gRPC service
-   * Note: This uses queryRows with limit 1 to check if table has rows
+   * Uses totalCount from queryRows response
    */
   async hasRows(table: DynamicTable): Promise<Result<boolean>> {
-    // For now, use queryRows with limit 1 to check if table has rows
     try {
       const result = await this.retrieveRows(table, { limit: 1 });
       if (result.success && result.data) {
-        return { success: true, data: result.data.length > 0 };
+        // Use totalCount instead of loaded rows length
+        return { success: true, data: result.data.totalCount > 0 };
       } else if (!result.success) {
         return {
           success: false,

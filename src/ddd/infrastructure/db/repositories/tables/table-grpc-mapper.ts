@@ -22,6 +22,7 @@ import {
   UpdateRowsRequest as IUpdateRowsRequest,
   DeleteRowsRequest as IDeleteRowsRequest,
   QueryRowsRequest as IQueryRowsRequest,
+  GetTableStatsRequest as IGetTableStatsRequest,
 } from '@/lib/grpc/generated/table_service';
 
 /**
@@ -171,9 +172,9 @@ export class TableGrpcMapper {
    * Convert QueryRows parameters to protobuf QueryRowsRequest interface
    */
   static toQueryRowsRequest(
-    tableId: TableId, 
-    s3Path: string, 
-    queryParams: any = {}, 
+    tableId: TableId,
+    s3Path: string,
+    queryParams: any = {},
     organizationId: OrganizationId
   ): IQueryRowsRequest {
     const request: IQueryRowsRequest = {
@@ -186,6 +187,26 @@ export class TableGrpcMapper {
       limit: queryParams.limit || 0,
       offset: queryParams.offset || 0,
       filters: queryParams.filters || {},
+    };
+
+    return request;
+  }
+
+  /**
+   * Convert GetTableStats parameters to protobuf GetTableStatsRequest interface
+   *
+   * This request will read only Delta Lake transaction log metadata (not data files)
+   * to get row count and file sizes efficiently.
+   */
+  static toGetTableStatsRequest(
+    tableId: TableId,
+    s3Path: string,
+    organizationId: OrganizationId
+  ): IGetTableStatsRequest {
+    const request: IGetTableStatsRequest = {
+      tableId: tableId.value.toString(),
+      s3Path: s3Path,
+      organizationId: organizationId.value.toString(),
     };
 
     return request;

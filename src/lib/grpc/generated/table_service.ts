@@ -384,6 +384,21 @@ export interface RowData_DataEntry {
   value: RowDataValue | undefined;
 }
 
+/** Get table statistics request */
+export interface GetTableStatsRequest {
+  tableId: string;
+  s3Path: string;
+  organizationId: string;
+}
+
+/** Get table statistics response */
+export interface GetTableStatsResponse {
+  success: boolean;
+  rowCount: number;
+  sizeBytes: number;
+  message: string;
+}
+
 function createBaseTableField(): TableField {
   return { name: "", type: 0, required: false, metadata: {} };
 }
@@ -4089,6 +4104,206 @@ export const RowData_DataEntry: MessageFns<RowData_DataEntry> = {
   },
 };
 
+function createBaseGetTableStatsRequest(): GetTableStatsRequest {
+  return { tableId: "", s3Path: "", organizationId: "" };
+}
+
+export const GetTableStatsRequest: MessageFns<GetTableStatsRequest> = {
+  encode(message: GetTableStatsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.tableId !== "") {
+      writer.uint32(10).string(message.tableId);
+    }
+    if (message.s3Path !== "") {
+      writer.uint32(18).string(message.s3Path);
+    }
+    if (message.organizationId !== "") {
+      writer.uint32(26).string(message.organizationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetTableStatsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetTableStatsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.tableId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.s3Path = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.organizationId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetTableStatsRequest {
+    return {
+      tableId: isSet(object.tableId) ? globalThis.String(object.tableId) : "",
+      s3Path: isSet(object.s3Path) ? globalThis.String(object.s3Path) : "",
+      organizationId: isSet(object.organizationId) ? globalThis.String(object.organizationId) : "",
+    };
+  },
+
+  toJSON(message: GetTableStatsRequest): unknown {
+    const obj: any = {};
+    if (message.tableId !== "") {
+      obj.tableId = message.tableId;
+    }
+    if (message.s3Path !== "") {
+      obj.s3Path = message.s3Path;
+    }
+    if (message.organizationId !== "") {
+      obj.organizationId = message.organizationId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetTableStatsRequest>, I>>(base?: I): GetTableStatsRequest {
+    return GetTableStatsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetTableStatsRequest>, I>>(object: I): GetTableStatsRequest {
+    const message = createBaseGetTableStatsRequest();
+    message.tableId = object.tableId ?? "";
+    message.s3Path = object.s3Path ?? "";
+    message.organizationId = object.organizationId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetTableStatsResponse(): GetTableStatsResponse {
+  return { success: false, rowCount: 0, sizeBytes: 0, message: "" };
+}
+
+export const GetTableStatsResponse: MessageFns<GetTableStatsResponse> = {
+  encode(message: GetTableStatsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.success !== false) {
+      writer.uint32(8).bool(message.success);
+    }
+    if (message.rowCount !== 0) {
+      writer.uint32(16).int64(message.rowCount);
+    }
+    if (message.sizeBytes !== 0) {
+      writer.uint32(24).int64(message.sizeBytes);
+    }
+    if (message.message !== "") {
+      writer.uint32(34).string(message.message);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetTableStatsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetTableStatsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.success = reader.bool();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.rowCount = longToNumber(reader.int64());
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.sizeBytes = longToNumber(reader.int64());
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.message = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetTableStatsResponse {
+    return {
+      success: isSet(object.success) ? globalThis.Boolean(object.success) : false,
+      rowCount: isSet(object.rowCount) ? globalThis.Number(object.rowCount) : 0,
+      sizeBytes: isSet(object.sizeBytes) ? globalThis.Number(object.sizeBytes) : 0,
+      message: isSet(object.message) ? globalThis.String(object.message) : "",
+    };
+  },
+
+  toJSON(message: GetTableStatsResponse): unknown {
+    const obj: any = {};
+    if (message.success !== false) {
+      obj.success = message.success;
+    }
+    if (message.rowCount !== 0) {
+      obj.rowCount = Math.round(message.rowCount);
+    }
+    if (message.sizeBytes !== 0) {
+      obj.sizeBytes = Math.round(message.sizeBytes);
+    }
+    if (message.message !== "") {
+      obj.message = message.message;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetTableStatsResponse>, I>>(base?: I): GetTableStatsResponse {
+    return GetTableStatsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetTableStatsResponse>, I>>(object: I): GetTableStatsResponse {
+    const message = createBaseGetTableStatsResponse();
+    message.success = object.success ?? false;
+    message.rowCount = object.rowCount ?? 0;
+    message.sizeBytes = object.sizeBytes ?? 0;
+    message.message = object.message ?? "";
+    return message;
+  },
+};
+
 /** Delta Lake Table Service - Handles table and row operations using Delta Lake */
 export type TableServiceService = typeof TableServiceService;
 export const TableServiceService = {
@@ -4184,6 +4399,17 @@ export const TableServiceService = {
     responseSerialize: (value: QueryRowsResponse): Buffer => Buffer.from(QueryRowsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): QueryRowsResponse => QueryRowsResponse.decode(value),
   },
+  /** Get table statistics from Delta Lake metadata (no data loading) */
+  getTableStats: {
+    path: "/emery.tables.TableService/GetTableStats",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: GetTableStatsRequest): Buffer => Buffer.from(GetTableStatsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetTableStatsRequest => GetTableStatsRequest.decode(value),
+    responseSerialize: (value: GetTableStatsResponse): Buffer =>
+      Buffer.from(GetTableStatsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetTableStatsResponse => GetTableStatsResponse.decode(value),
+  },
 } as const;
 
 export interface TableServiceServer extends UntypedServiceImplementation {
@@ -4199,6 +4425,8 @@ export interface TableServiceServer extends UntypedServiceImplementation {
   deleteRows: handleUnaryCall<DeleteRowsRequest, DeleteRowsResponse>;
   /** Zero-copy Arrow IPC query (updated to use Arrow IPC for performance) */
   queryRows: handleUnaryCall<QueryRowsRequest, QueryRowsResponse>;
+  /** Get table statistics from Delta Lake metadata (no data loading) */
+  getTableStats: handleUnaryCall<GetTableStatsRequest, GetTableStatsResponse>;
 }
 
 export interface TableServiceClient extends Client {
@@ -4353,6 +4581,22 @@ export interface TableServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: QueryRowsResponse) => void,
+  ): ClientUnaryCall;
+  /** Get table statistics from Delta Lake metadata (no data loading) */
+  getTableStats(
+    request: GetTableStatsRequest,
+    callback: (error: ServiceError | null, response: GetTableStatsResponse) => void,
+  ): ClientUnaryCall;
+  getTableStats(
+    request: GetTableStatsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetTableStatsResponse) => void,
+  ): ClientUnaryCall;
+  getTableStats(
+    request: GetTableStatsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetTableStatsResponse) => void,
   ): ClientUnaryCall;
 }
 

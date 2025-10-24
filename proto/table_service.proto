@@ -18,6 +18,9 @@ service TableService {
 
   // Zero-copy Arrow IPC query (updated to use Arrow IPC for performance)
   rpc QueryRows(QueryRowsRequest) returns (QueryRowsResponse);
+
+  // Get table statistics from Delta Lake metadata (no data loading)
+  rpc GetTableStats(GetTableStatsRequest) returns (GetTableStatsResponse);
 }
 
 // Field types matching the frontend TypeScript definitions
@@ -237,4 +240,19 @@ message RowDataValue {
 message RowData {
   string id = 1;
   map<string, RowDataValue> data = 2;
+}
+
+// Get table statistics request
+message GetTableStatsRequest {
+  string table_id = 1;
+  string s3_path = 2;
+  string organization_id = 3;
+}
+
+// Get table statistics response
+message GetTableStatsResponse {
+  bool success = 1;
+  int64 row_count = 2;
+  int64 size_bytes = 3;
+  string message = 4;
 }
