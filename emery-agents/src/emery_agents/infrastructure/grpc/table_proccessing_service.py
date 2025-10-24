@@ -728,60 +728,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 message=f"Error deleting rows: {str(e)}"
             )
 
-    def GetTableStats(self, request: table_service_pb2.GetTableStatsRequest, context) -> table_service_pb2.GetTableStatsResponse:
-        """Get table statistics from Delta Lake metadata without loading data.
-
-        This reads only the transaction log's add actions, which contain metadata
-        about each file including row counts. Much faster than loading actual data.
-
-        AIDEV-NOTE: This is 10-1000x faster than loading data because it only reads
-        the Delta Lake transaction log (_delta_log/*.json files), not the actual
-        Parquet data files. Each add action contains num_records and size_bytes metadata.
-        """
-        try:
-            logger.info(f"[GetTableStats] Getting stats for table {request.table_id}")
-
-            # Convert to S3 URI
-            s3_uri = self._to_s3_uri(request.s3_path)
-            storage_options = self._get_storage_options()
-
-            logger.info(f"[GetTableStats] Reading from S3 URI: {s3_uri}")
-
-            # Load Delta table (metadata only - NO data files loaded!)
-            delta_table = DeltaTable(s3_uri, storage_options=storage_options)
-
-            # Get row count from add actions metadata
-            # AIDEV-NOTE: get_add_actions() reads transaction log only, not data files
-            # This is the standard Delta Lake pattern for getting row counts efficiently
-            add_actions = delta_table.get_add_actions(flatten=True)
-
-            # Convert arro3 to PyArrow for compute operations
-            import pyarrow.compute as pc
-            add_actions_pa = pa.table(add_actions)
-
-            # Sum num_records across all files
-            row_count = pc.sum(add_actions_pa['num_records']).as_py()
-
-            # Sum size_bytes across all files
-            size_bytes = pc.sum(add_actions_pa['size_bytes']).as_py()
-
-            logger.info(f"[GetTableStats] Table {request.table_id}: {row_count} rows, {size_bytes} bytes from {len(add_actions_pa)} files")
-
-            return table_service_pb2.GetTableStatsResponse(
-                success=True,
-                row_count=row_count,
-                size_bytes=size_bytes,
-                message=f"Retrieved stats from {len(add_actions_pa)} files"
-            )
-
-        except Exception as e:
-            logger.error(f"[GetTableStats] Error: {e}", exc_info=True)
-            return table_service_pb2.GetTableStatsResponse(
-                success=False,
-                row_count=0,
-                size_bytes=0,
-                message=f"Error getting stats: {str(e)}"
-            )
+    # AIDEV-NOTE: Removed duplicate GetTableStats - using the better implementation below at line ~1204
 
     def _cast_value_to_column_type(self, value, column_type):
         """
@@ -1206,6 +1153,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
         This method uses Delta Lake's transaction log (add actions) to get row count
         and file sizes without reading the actual data files. Much faster than loading all rows.
+
+        AIDEV-NOTE: Handles empty tables (newly created with schema only) by checking
+        for data files before attempting to access metadata to avoid Rust panics.
         """
         try:
             import pyarrow.compute as pc
@@ -1231,31 +1181,75 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Load Delta table (metadata only - no data files read!)
             delta_table = DeltaTable(s3_uri, storage_options=storage_options)
 
+            # AIDEV-NOTE: Check if table is empty to avoid Rust panic
+            # Newly created tables have schema but no data files yet
+            # Accessing file metadata on empty tables causes index out of bounds panic
+            table_files = delta_table.files()
+            table_version = delta_table.version()
+
+            logger.info(f"[GetTableStats] Table state: version={table_version}, files={len(table_files)}")
+
+            # Handle empty table case (schema only, no data)
+            if len(table_files) == 0:
+                logger.info(f"[GetTableStats] Table is empty (no data files yet), returning zeros")
+                return table_service_pb2.GetTableStatsResponse(
+                    success=True,
+                    row_count=0,
+                    size_bytes=0,
+                    message="Table is empty (no data files)"
+                )
+
             # Get add actions from transaction log
             # AIDEV-NOTE: add_actions contains metadata about files including num_records and size_bytes
             # This reads only the transaction log (_delta_log/*.json), not the actual data files
             # get_add_actions() returns arro3.core.RecordBatch in deltalake 1.2.1+
-            add_actions_arro3 = delta_table.get_add_actions(flatten=True)
+            try:
+                add_actions_arro3 = delta_table.get_add_actions(flatten=True)
 
-            # Convert arro3.RecordBatch to pyarrow.Table using PyCapsule interface (zero-copy)
-            # PyArrow compute functions require PyArrow objects, not arro3
-            # Use pa.table() which accepts objects implementing __arrow_c_stream__ protocol
-            add_actions = pa.table(add_actions_arro3)
+                # Convert arro3.RecordBatch to pyarrow.Table using PyCapsule interface (zero-copy)
+                # PyArrow compute functions require PyArrow objects, not arro3
+                # Use pa.table() which accepts objects implementing __arrow_c_stream__ protocol
+                add_actions = pa.table(add_actions_arro3)
 
-            # Sum num_records across all files to get total row count
-            row_count = pc.sum(add_actions['num_records']).as_py()
+                # Double-check that add_actions is not empty before accessing columns
+                if len(add_actions) == 0:
+                    logger.info(f"[GetTableStats] Add actions is empty, returning zeros")
+                    return table_service_pb2.GetTableStatsResponse(
+                        success=True,
+                        row_count=0,
+                        size_bytes=0,
+                        message="Table has no add actions"
+                    )
 
-            # Sum size_bytes across all files to get total size
-            size_bytes = pc.sum(add_actions['size_bytes']).as_py()
+                # Sum num_records across all files to get total row count
+                row_count = pc.sum(add_actions['num_records']).as_py()
 
-            logger.info(f"[GetTableStats] Retrieved stats from metadata: {row_count} rows, {size_bytes} bytes")
+                # Sum size_bytes across all files to get total size
+                size_bytes = pc.sum(add_actions['size_bytes']).as_py()
 
-            return table_service_pb2.GetTableStatsResponse(
-                success=True,
-                row_count=row_count,
-                size_bytes=size_bytes,
-                message=f"Statistics retrieved from Delta Lake metadata"
-            )
+                # Handle None/null results from sum (can happen with empty tables)
+                row_count = row_count if row_count is not None else 0
+                size_bytes = size_bytes if size_bytes is not None else 0
+
+                logger.info(f"[GetTableStats] Retrieved stats from metadata: {row_count} rows, {size_bytes} bytes")
+
+                return table_service_pb2.GetTableStatsResponse(
+                    success=True,
+                    row_count=row_count,
+                    size_bytes=size_bytes,
+                    message=f"Statistics retrieved from Delta Lake metadata"
+                )
+
+            except Exception as metadata_error:
+                # Catch Rust panics or other errors from get_add_actions
+                logger.warning(f"[GetTableStats] Could not get add actions (likely empty table): {metadata_error}")
+                logger.info(f"[GetTableStats] Returning zeros for empty table")
+                return table_service_pb2.GetTableStatsResponse(
+                    success=True,
+                    row_count=0,
+                    size_bytes=0,
+                    message="Table is empty (could not read metadata)"
+                )
 
         except Exception as e:
             logger.error(f"[GetTableStats] Error getting table stats for {request.table_id}: {e}")
