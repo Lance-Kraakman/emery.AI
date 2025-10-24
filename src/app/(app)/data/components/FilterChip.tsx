@@ -5,9 +5,6 @@ import { X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { type FilterConfig, type FilterOperator, getOperatorLabel, operatorNeedsValue } from "@/lib/types/filters"
 
-// Re-export for backward compatibility
-export type { FilterConfig }
-
 interface FilterChipProps {
   filter: FilterConfig
   onRemove: () => void
