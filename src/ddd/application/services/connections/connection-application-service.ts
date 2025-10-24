@@ -6,6 +6,9 @@ import { Connection, ConnectionStatus } from '@/ddd/domain/connections/entities/
 import { ConnectionId, AppName } from '@/ddd/domain/connections/value-objects';
 import { UserId } from '@/ddd/domain/shared/value-objects';
 import type { Result } from '@/ddd/domain/shared/result';
+import { createDebugLogger } from '@/lib/utils/debug-logger';
+
+const logger = createDebugLogger('ConnectionService');
 
 export class ConnectionApplicationService {
   constructor(
@@ -21,7 +24,8 @@ export class ConnectionApplicationService {
     options: { showAllDuplicates?: boolean } = {}
   ): Promise<Result<Connection[]>> {
     try {
-      console.log(`[ConnectionService] Getting connections for user ${userId.value}`);
+      logger.debug('Getting user connections', { userId: userId.value, showAllDuplicates: options.showAllDuplicates });
+
       const connections = await this.connectionRepository.findByUserId(userId);
 
       // Sort by most recent first
@@ -34,12 +38,18 @@ export class ConnectionApplicationService {
         ? sortedConnections
         : this.deduplicateConnections(sortedConnections);
 
-      console.log(`[ConnectionService] Found ${connections.length} total connections, returning ${finalConnections.length} (duplicates ${options.showAllDuplicates ? 'included' : 'filtered'})`);
+      logger.summary('Retrieved connections', {
+        userId: userId.value,
+        total: connections.length,
+        returned: finalConnections.length,
+        duplicatesFiltered: !options.showAllDuplicates
+      });
+
       return { success: true, data: finalConnections };
 
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[ConnectionService] Error fetching connections for user ${userId.value}:`, error);
+      logger.error(`Error fetching connections for user ${userId.value}`, error);
       return {
         success: false,
         error: `Failed to fetch connections: ${errorMessage}`
@@ -73,7 +83,11 @@ export class ConnectionApplicationService {
     const duplicatesRemoved = originalCount - deduplicatedCount;
 
     if (duplicatesRemoved > 0) {
-      console.log(`[ConnectionService] Deduplication: ${originalCount} → ${deduplicatedCount} connections (removed ${duplicatesRemoved} duplicates)`);
+      logger.summary('Deduplicated connections', {
+        original: originalCount,
+        deduplicated: deduplicatedCount,
+        removed: duplicatesRemoved
+      });
 
       // Log details of duplicates for debugging
       const duplicateGroups = new Map<string, number>();
@@ -84,7 +98,7 @@ export class ConnectionApplicationService {
 
       for (const [key, count] of duplicateGroups) {
         if (count > 1) {
-          console.log(`[ConnectionService] Duplicate group: ${key} had ${count} connections`);
+          logger.debug('Duplicate group found', { key, count });
         }
       }
     }
@@ -148,7 +162,7 @@ export class ConnectionApplicationService {
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[ConnectionService] Error fetching all connections:`, error);
+      logger.error('Error fetching all connections', error);
       return {
         success: false,
         error: `Failed to fetch all connections: ${errorMessage}`
@@ -172,14 +186,22 @@ export class ConnectionApplicationService {
     warningMessage?: string;
   }>> {
     try {
-      console.log(`[ConnectionService] Initiating ${appName.value} connection for user ${userId.value}`, options);
+      logger.debug('Initiating connection', {
+        userId: userId.value,
+        appName: appName.value,
+        forceNew: options.forceNew,
+        reconnectExisting: options.reconnectExisting
+      });
 
       // Business rule: Check if already connected and provide smart recommendations
       const existing = await this.connectionRepository.findByUserAndApp(userId, appName);
       const hasActiveConnection = existing?.status === ConnectionStatus.CONNECTED || existing?.status === ConnectionStatus.ACTIVE;
 
       if (hasActiveConnection && !options.forceNew) {
-        console.log(`[ConnectionService] User ${userId.value} already has active ${appName.value} connection`);
+        logger.debug('Active connection exists', {
+          userId: userId.value,
+          appName: appName.value
+        });
 
         // Check for duplicates to provide better messaging
         const allConnectionsResult = await this.getUserConnections(userId, { showAllDuplicates: true });
@@ -187,7 +209,10 @@ export class ConnectionApplicationService {
         const sameAppConnections = allConnections.filter(conn => conn.appName.value === appName.value);
 
         if (sameAppConnections.length > 1) {
-          console.log(`[ConnectionService] Found ${sameAppConnections.length} existing ${appName.value} connections - creating new one may add to duplicates`);
+          logger.debug('Multiple existing connections found', {
+            appName: appName.value,
+            count: sameAppConnections.length
+          });
         }
 
         if (!options.reconnectExisting) {
@@ -214,7 +239,10 @@ export class ConnectionApplicationService {
 
       const isReconnection = hasActiveConnection && (options.reconnectExisting || options.forceNew);
 
-      console.log(`[ConnectionService] Generated connection URL for ${appName.value} (${isReconnection ? 'reconnection' : 'new connection'})`);
+      logger.summary('Generated connection URL', {
+        appName: appName.value,
+        type: isReconnection ? 'reconnection' : 'new'
+      });
 
       return {
         success: true,
@@ -227,7 +255,7 @@ export class ConnectionApplicationService {
 
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[ConnectionService] Error initiating ${appName.value} connection:`, error);
+      logger.error(`Error initiating ${appName.value} connection`, error);
       return {
         success: false,
         error: `Failed to generate connection URL: ${errorMessage}`
@@ -240,17 +268,20 @@ export class ConnectionApplicationService {
    */
   async disconnectConnection(connectionId: ConnectionId): Promise<Result<void>> {
     try {
-      console.log(`[ConnectionService] Disconnecting connection ${connectionId.value}`);
+      logger.debug('Disconnecting connection', { connectionId: connectionId.value });
+
       await this.connectionRepository.disconnect(connectionId);
-      console.log(`[ConnectionService] Successfully disconnected ${connectionId.value}`);
+
+      logger.summary('Disconnected connection', { connectionId: connectionId.value });
+
       return { success: true, data: undefined };
-      
+
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[ConnectionService] Error disconnecting ${connectionId.value}:`, error);
-      return { 
-        success: false, 
-        error: `Failed to disconnect: ${errorMessage}` 
+      logger.error(`Error disconnecting ${connectionId.value}`, error);
+      return {
+        success: false,
+        error: `Failed to disconnect: ${errorMessage}`
       };
     }
   }
@@ -266,15 +297,18 @@ export class ConnectionApplicationService {
         .filter(conn => conn.status === ConnectionStatus.ACTIVE || conn.status === ConnectionStatus.CONNECTED)
         .map(conn => conn.appName.value);
 
-      console.log(`[ConnectionService] Checking if user ${userId.value} can use ${appName.value}`);
-      console.log(`[ConnectionService] User's active connections: [${activeConnections.join(', ')}]`);
-
       const hasConnection = await this.connectionRepository.hasActiveConnection(userId, appName);
-      console.log(`[ConnectionService] User ${userId.value} can use ${appName.value}: ${hasConnection}`);
+
+      logger.debug('Checked app availability', {
+        userId: userId.value,
+        appName: appName.value,
+        hasConnection,
+        activeApps: activeConnections
+      });
 
       return hasConnection;
     } catch (error) {
-      console.error(`[ConnectionService] Error checking app availability for ${appName.value}:`, error);
+      logger.error(`Error checking app availability for ${appName.value}`, error);
       return false;
     }
   }
@@ -285,13 +319,16 @@ export class ConnectionApplicationService {
    */
   async getMissingConnections(userId: UserId, requiredApps: string[]): Promise<AppName[]> {
     try {
-      console.log(`[ConnectionService] Checking missing connections for user ${userId.value}:`, requiredApps);
-      
+      logger.debug('Checking missing connections', {
+        userId: userId.value,
+        requiredApps
+      });
+
       const connections = await this.connectionRepository.findByUserId(userId);
       const connectedApps = connections
         .filter(conn => conn.status === ConnectionStatus.ACTIVE || conn.status === ConnectionStatus.CONNECTED)
         .map(conn => conn.appName.value);
-      
+
       const missingApps = requiredApps
         .filter(app => {
           // Check if the required app is connected either directly or through normalization
@@ -300,18 +337,15 @@ export class ConnectionApplicationService {
             const isConnected = connectedApps.some(connectedApp => {
               try {
                 const normalizedConnected = AppName.fromString(connectedApp);
-                const matches = normalizedRequired.equals(normalizedConnected);
-                console.log(`[ConnectionService] Comparing required '${app}' (normalized: '${normalizedRequired.value}') with connected '${connectedApp}' (normalized: '${normalizedConnected.value}') = ${matches}`);
-                return matches;
+                return normalizedRequired.equals(normalizedConnected);
               } catch (normError) {
-                console.warn(`[ConnectionService] Failed to normalize connected app '${connectedApp}':`, normError);
+                logger.debug('Failed to normalize connected app', { connectedApp, error: normError });
                 return false;
               }
             });
-            console.log(`[ConnectionService] Required app '${app}' is connected: ${isConnected}`);
             return !isConnected; // Return true if missing (not connected)
           } catch (error) {
-            console.warn(`[ConnectionService] Failed to normalize required app '${app}':`, error);
+            logger.debug('Failed to normalize required app', { app, error });
             return true; // If normalization fails, consider it missing
           }
         })
@@ -320,17 +354,23 @@ export class ConnectionApplicationService {
           try {
             return AppName.fromString(app);
           } catch (error) {
-            console.warn(`[ConnectionService] Failed to create AppName for '${app}':`, error);
+            logger.debug('Failed to create AppName', { app, error });
             return null;
           }
         })
         .filter((app): app is AppName => app !== null);
-      
-      console.log(`[ConnectionService] Missing connections: ${missingApps.map(app => app.value).join(', ')}`);
+
+      logger.summary('Missing connections check complete', {
+        userId: userId.value,
+        required: requiredApps.length,
+        missing: missingApps.length,
+        missingApps: missingApps.map(app => app.value)
+      });
+
       return missingApps;
-      
+
     } catch (error) {
-      console.error('[ConnectionService] Error checking missing connections:', error);
+      logger.error('Error checking missing connections', error);
       return [];
     }
   }
@@ -344,10 +384,10 @@ export class ConnectionApplicationService {
       return { success: true, data: connection };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[ConnectionService] Error getting connection status for ${appName.value}:`, error);
-      return { 
-        success: false, 
-        error: `Failed to get connection status: ${errorMessage}` 
+      logger.error(`Error getting connection status for ${appName.value}`, error);
+      return {
+        success: false,
+        error: `Failed to get connection status: ${errorMessage}`
       };
     }
   }
@@ -380,10 +420,10 @@ export class ConnectionApplicationService {
       return { success: true, data: summary };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[ConnectionService] Error getting connection summary:`, error);
-      return { 
-        success: false, 
-        error: `Failed to get connection summary: ${errorMessage}` 
+      logger.error('Error getting connection summary', error);
+      return {
+        success: false,
+        error: `Failed to get connection summary: ${errorMessage}`
       };
     }
   }
