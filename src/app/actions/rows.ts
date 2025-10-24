@@ -366,8 +366,7 @@ export async function getRowsDSG(
     }
 
     // Get actual total count from table metadata (efficient - reads only transaction log)
-    const tableRepository = await getTableRepository();
-    const stats = await tableRepository.getTableStats(TableId.fromNumber(tableId));
+    const stats = await tableAppService.getTableStats(TableId.fromNumber(tableId));
     const totalRows = stats.rowCount;
 
     // Request limit + 1 rows to detect if more pages exist
@@ -425,19 +424,20 @@ export async function searchRowsDSG(
       return { rows: [], total: 0 };
     }
 
-    const session = await withAuthContext();
-    if (!session.user?.organizationId) {
-      throw new Error("Organization ID not found in session");
-    }
-
     const tableAppService = getTableApplicationService();
+
+    // Get table to access organizationId
+    const table = await tableAppService.getTable(TableId.fromNumber(tableId));
+    if (!table) {
+      throw new Error("Table not found");
+    }
 
     // Use searchTableRows method which searches all text fields
     const result = await tableAppService.searchTableRows({
       tableId: TableId.fromNumber(tableId),
       query: query.trim(),
       limit,
-      organizationId: session.user.organizationId
+      organizationId: table.organizationId
     });
 
     if (!result.success || !result.data) {
