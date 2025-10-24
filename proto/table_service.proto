@@ -144,6 +144,7 @@ message UpdateRowsRequest {
   repeated RowData rows_data = 2;    // Multiple typed rows (must include IDs)
   string user_id = 3;
   string organization_id = 4;
+  string s3_path = 5;                // S3 path for Delta Lake table data
 }
 
 message DeleteRowsRequest {
@@ -151,6 +152,7 @@ message DeleteRowsRequest {
   repeated string row_ids = 2;       // Multiple row IDs
   string user_id = 3;
   string organization_id = 4;
+  string s3_path = 5;                // S3 path for Delta Lake table data
 }
 
 message QueryRowsRequest {

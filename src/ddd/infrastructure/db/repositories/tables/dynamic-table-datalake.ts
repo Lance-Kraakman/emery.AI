@@ -22,25 +22,21 @@ export class DynamicTableDataLake {
   ) {}
 
   /**
-   * Store rows in a table using gRPC service
-   * Converts domain entities to protobuf and sends to Python service
-   *
-   * @param mode - "append" adds new rows, "overwrite" replaces entire table
+   * Create new rows in a table using gRPC service
+   * Converts domain entities to protobuf and appends to Delta Lake table
    */
-  async storeRows(
+  async createRows(
     rows: Row[],
-    table: DynamicTable,
-    mode: 'append' | 'overwrite'
+    table: DynamicTable
   ): Promise<Result<void>> {
     try {
-      console.log(`[DynamicTableDataLake] Storing ${rows.length} rows (mode: ${mode}) for table ${table.id}`);
+      console.log(`[DynamicTableDataLake] Creating ${rows.length} rows for table ${table.id}`);
 
       // Debug logging for table object
       console.log('[DynamicTableDataLake] Table object debug:');
       console.log(`  - table.id: ${table.id?.value}`);
       console.log(`  - table.organizationId: ${table.organizationId?.value}`);
       console.log(`  - table.storageLocation: ${table.storageLocation}`);
-      console.log(`  - write mode: ${mode}`);
 
       const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
       console.log(`[DynamicTableDataLake] Using s3Path: ${s3Path}`);
@@ -53,13 +49,13 @@ export class DynamicTableDataLake {
         data: RowSerializer.serializeForStorage(row, table.fields)
       }));
 
-      // 2. Convert serialized data to protobuf request with mode
+      // 2. Convert serialized data to protobuf request (always append mode)
       const createRequest = TableGrpcMapper.toCreateRowsRequestFromData(
         table.id,
         serializedData,
         table.organizationId,
         s3Path,
-        mode
+        'append'
       );
 
       // 3. Send to gRPC service
@@ -67,25 +63,145 @@ export class DynamicTableDataLake {
 
       // 4. Handle response using TypeScript property access
       if (response && response.success) {
-        console.log(`[DynamicTableDataLake] Successfully stored ${rows.length} rows (mode: ${mode})`);
+        console.log(`[DynamicTableDataLake] Successfully created ${rows.length} rows`);
         return {
           success: true,
           data: undefined
         };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[DynamicTableDataLake] Failed to store rows: ${message}`);
+        console.error(`[DynamicTableDataLake] Failed to create rows: ${message}`);
         return {
           success: false,
-          error: message || 'Failed to store data via gRPC'
+          error: message || 'Failed to create rows via gRPC'
         };
       }
 
     } catch (error) {
-      console.error('[DynamicTableDataLake] Error storing data:', error);
+      console.error('[DynamicTableDataLake] Error creating rows:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to store data via gRPC'
+        error: error instanceof Error ? error.message : 'Failed to create rows via gRPC'
+      };
+    }
+  }
+
+  /**
+   * Update rows in a table using Delta Lake merge operation
+   * Converts domain entities to protobuf and sends to Python service for efficient upsert
+   * Only writes the updated rows, not the entire table
+   */
+  async updateRows(
+    rows: Row[],
+    table: DynamicTable
+  ): Promise<Result<void>> {
+    try {
+      console.log(`[DynamicTableDataLake] Updating ${rows.length} rows using merge for table ${table.id}`);
+
+      // Debug logging for table object
+      console.log('[DynamicTableDataLake] Table object debug:');
+      console.log(`  - table.id: ${table.id?.value}`);
+      console.log(`  - table.organizationId: ${table.organizationId?.value}`);
+      console.log(`  - table.storageLocation: ${table.storageLocation}`);
+
+      const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
+      console.log(`[DynamicTableDataLake] Using s3Path: ${s3Path}`);
+
+      // 1. Serialize rows for Delta Lake storage (arrays → JSON strings)
+      // AIDEV-NOTE: RowSerializer handles complex field type serialization
+      const serializedData = rows.map(row => ({
+        id: row.id.value,
+        data: RowSerializer.serializeForStorage(row, table.fields)
+      }));
+
+      // 2. Convert serialized data to protobuf UpdateRowsRequest
+      const updateRequest = TableGrpcMapper.toUpdateRowsRequestFromData(
+        table.id,
+        serializedData,
+        table.organizationId,
+        s3Path
+      );
+
+      // 3. Send to gRPC service (will use Delta Lake merge)
+      const response = await this.grpcClient.updateRows(updateRequest);
+
+      // 4. Handle response
+      if (response && response.success) {
+        console.log(`[DynamicTableDataLake] Successfully updated ${rows.length} rows using Delta Lake merge`);
+        return {
+          success: true,
+          data: undefined
+        };
+      } else {
+        const message = response?.message || 'Unknown response error';
+        console.error(`[DynamicTableDataLake] Failed to update rows: ${message}`);
+        return {
+          success: false,
+          error: message || 'Failed to update rows via gRPC'
+        };
+      }
+
+    } catch (error) {
+      console.error('[DynamicTableDataLake] Error updating rows:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update rows via gRPC'
+      };
+    }
+  }
+
+  /**
+   * Delete rows from a table using Delta Lake delete operation
+   * Performs efficient row-level deletes without rewriting entire table
+   */
+  async deleteRows(
+    rowIds: string[],
+    table: DynamicTable
+  ): Promise<Result<void>> {
+    try {
+      console.log(`[DynamicTableDataLake] Deleting ${rowIds.length} rows using Delta Lake delete for table ${table.id}`);
+
+      // Debug logging for table object
+      console.log('[DynamicTableDataLake] Table object debug:');
+      console.log(`  - table.id: ${table.id?.value}`);
+      console.log(`  - table.organizationId: ${table.organizationId?.value}`);
+      console.log(`  - table.storageLocation: ${table.storageLocation}`);
+
+      const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
+      console.log(`[DynamicTableDataLake] Using s3Path: ${s3Path}`);
+
+      // 1. Convert to protobuf DeleteRowsRequest
+      const deleteRequest = TableGrpcMapper.toDeleteRowsRequest(
+        table.id,
+        rowIds,
+        table.organizationId,
+        s3Path
+      );
+
+      // 2. Send to gRPC service (will use Delta Lake delete)
+      const response = await this.grpcClient.deleteRows(deleteRequest);
+
+      // 3. Handle response
+      if (response && response.success) {
+        console.log(`[DynamicTableDataLake] Successfully deleted ${rowIds.length} rows using Delta Lake delete`);
+        return {
+          success: true,
+          data: undefined
+        };
+      } else {
+        const message = response?.message || 'Unknown response error';
+        console.error(`[DynamicTableDataLake] Failed to delete rows: ${message}`);
+        return {
+          success: false,
+          error: message || 'Failed to delete rows via gRPC'
+        };
+      }
+
+    } catch (error) {
+      console.error('[DynamicTableDataLake] Error deleting rows:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete rows via gRPC'
       };
     }
   }

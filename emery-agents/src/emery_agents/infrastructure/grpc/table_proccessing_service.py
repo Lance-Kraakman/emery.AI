@@ -424,18 +424,184 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         )
 
     def UpdateRows(self, request: table_service_pb2.UpdateRowsRequest, context) -> table_service_pb2.UpdateRowsResponse:
-        """Update multiple rows."""
-        return table_service_pb2.UpdateRowsResponse(
-            success=False,
-            message="UpdateRows not yet implemented"
-        )
+        """Update multiple rows using Delta Lake merge operation."""
+        try:
+            # Debug logging - log all request fields
+            logger.info(f"[UpdateRows] Request received:")
+            logger.info(f"  - table_id: '{request.table_id}'")
+            logger.info(f"  - user_id: '{request.user_id}'")
+            logger.info(f"  - organization_id: '{request.organization_id}'")
+            logger.info(f"  - s3_path: '{getattr(request, 's3_path', 'MISSING')}'")
+            logger.info(f"  - rows_data count: {len(request.rows_data)}")
+
+            # Check if s3_path exists and is not empty
+            if not hasattr(request, 's3_path'):
+                logger.error("[UpdateRows] s3_path field is missing from request!")
+                return table_service_pb2.UpdateRowsResponse(
+                    success=False,
+                    message="s3_path field is missing from request"
+                )
+
+            if not request.s3_path:
+                logger.error("[UpdateRows] s3_path is empty!")
+                return table_service_pb2.UpdateRowsResponse(
+                    success=False,
+                    message="s3_path is required but empty"
+                )
+
+            logger.info(f"Updating {len(request.rows_data)} rows in table: {request.table_id} at {request.s3_path}")
+
+            # Convert to DataFrame (Polars infers types, Delta Lake handles schema matching)
+            df = self._row_data_to_dataframe(request.rows_data)
+
+            # DIAGNOSTIC: Log DataFrame details before merge
+            logger.info(f"[UpdateRows] DataFrame details:")
+            logger.info(f"  - Shape: {len(df)} rows x {len(df.columns)} columns")
+            logger.info(f"  - Columns: {df.columns}")
+            logger.info(f"  - Schema: {df.schema}")
+            logger.info(f"  - Sample data (first row): {df.head(1)}")
+
+            # Convert relative path to full S3 URI
+            s3_uri = self._to_s3_uri(request.s3_path)
+            storage_options = self._get_storage_options()
+
+            logger.info(f"Merging {len(df)} rows to S3 URI: {s3_uri}")
+
+            # Load existing Delta table
+            try:
+                dt = DeltaTable(s3_uri, storage_options=storage_options)
+                logger.info(f"[UpdateRows] Delta table BEFORE merge:")
+                logger.info(f"  - Version: {dt.version()}")
+                logger.info(f"  - Files: {len(dt.files())}")
+            except Exception as e:
+                logger.error(f"[UpdateRows] Could not read Delta table: {e}")
+                return table_service_pb2.UpdateRowsResponse(
+                    success=False,
+                    message=f"Delta table not found: {e}"
+                )
+
+            # Perform merge operation using Delta Lake native merge
+            # AIDEV-NOTE: This performs efficient row-level updates without rewriting entire table
+            # Matches rows by 'id' field and updates all columns when matched
+            logger.info(f"[UpdateRows] Executing Delta Lake merge operation...")
+            dt.merge(
+                source=df.to_arrow(),  # Convert Polars DataFrame to PyArrow Table
+                predicate='target.id = source.id',
+                source_alias='source',
+                target_alias='target'
+            ).when_matched_update_all().execute()
+
+            logger.info(f"[UpdateRows] Merge operation completed successfully")
+
+            # VERIFICATION: Check Delta table state after merge
+            try:
+                updated_table = DeltaTable(s3_uri, storage_options=storage_options)
+                logger.info(f"[UpdateRows] Delta table AFTER merge:")
+                logger.info(f"  - Version: {updated_table.version()}")
+                logger.info(f"  - Files: {len(updated_table.files())}")
+            except Exception as e:
+                logger.warning(f"[UpdateRows] Could not verify merge result: {e}")
+
+            return table_service_pb2.UpdateRowsResponse(
+                success=True,
+                rows_updated=len(df)
+            )
+
+        except Exception as e:
+            logger.error(f"[UpdateRows] Error updating rows: {e}", exc_info=True)
+            return table_service_pb2.UpdateRowsResponse(
+                success=False,
+                message=f"Error updating rows: {str(e)}"
+            )
 
     def DeleteRows(self, request: table_service_pb2.DeleteRowsRequest, context) -> table_service_pb2.DeleteRowsResponse:
-        """Delete multiple rows."""
-        return table_service_pb2.DeleteRowsResponse(
-            success=False,
-            message="DeleteRows not yet implemented"
-        )
+        """Delete multiple rows using Delta Lake delete operation."""
+        try:
+            # Debug logging - log all request fields
+            logger.info(f"[DeleteRows] Request received:")
+            logger.info(f"  - table_id: '{request.table_id}'")
+            logger.info(f"  - user_id: '{request.user_id}'")
+            logger.info(f"  - organization_id: '{request.organization_id}'")
+            logger.info(f"  - s3_path: '{getattr(request, 's3_path', 'MISSING')}'")
+            logger.info(f"  - row_ids count: {len(request.row_ids)}")
+
+            # Check if s3_path exists and is not empty
+            if not hasattr(request, 's3_path'):
+                logger.error("[DeleteRows] s3_path field is missing from request!")
+                return table_service_pb2.DeleteRowsResponse(
+                    success=False,
+                    message="s3_path field is missing from request"
+                )
+
+            if not request.s3_path:
+                logger.error("[DeleteRows] s3_path is empty!")
+                return table_service_pb2.DeleteRowsResponse(
+                    success=False,
+                    message="s3_path is required but empty"
+                )
+
+            if len(request.row_ids) == 0:
+                logger.warning("[DeleteRows] No row IDs provided")
+                return table_service_pb2.DeleteRowsResponse(
+                    success=True,
+                    rows_deleted=0
+                )
+
+            logger.info(f"Deleting {len(request.row_ids)} rows from table: {request.table_id} at {request.s3_path}")
+
+            # Convert relative path to full S3 URI
+            s3_uri = self._to_s3_uri(request.s3_path)
+            storage_options = self._get_storage_options()
+
+            logger.info(f"Deleting from S3 URI: {s3_uri}")
+
+            # Load existing Delta table
+            try:
+                dt = DeltaTable(s3_uri, storage_options=storage_options)
+                logger.info(f"[DeleteRows] Delta table BEFORE delete:")
+                logger.info(f"  - Version: {dt.version()}")
+                logger.info(f"  - Files: {len(dt.files())}")
+            except Exception as e:
+                logger.error(f"[DeleteRows] Could not read Delta table: {e}")
+                return table_service_pb2.DeleteRowsResponse(
+                    success=False,
+                    message=f"Delta table not found: {e}"
+                )
+
+            # Build delete predicate (id IN ('row1', 'row2', ...))
+            # AIDEV-NOTE: Escape single quotes in row IDs to prevent SQL injection
+            escaped_ids = [row_id.replace("'", "''") for row_id in request.row_ids]
+            row_ids_str = "', '".join(escaped_ids)
+            predicate = f"id IN ('{row_ids_str}')"
+
+            logger.info(f"[DeleteRows] Executing Delta Lake delete with predicate: {predicate}")
+
+            # Perform efficient row-level delete using Delta Lake native delete
+            # AIDEV-NOTE: This performs efficient row-level deletes without rewriting entire table
+            dt.delete(predicate)
+
+            logger.info(f"[DeleteRows] Delete operation completed successfully")
+
+            # VERIFICATION: Check Delta table state after delete
+            try:
+                updated_table = DeltaTable(s3_uri, storage_options=storage_options)
+                logger.info(f"[DeleteRows] Delta table AFTER delete:")
+                logger.info(f"  - Version: {updated_table.version()}")
+                logger.info(f"  - Files: {len(updated_table.files())}")
+            except Exception as e:
+                logger.warning(f"[DeleteRows] Could not verify delete result: {e}")
+
+            return table_service_pb2.DeleteRowsResponse(
+                success=True,
+                rows_deleted=len(request.row_ids)
+            )
+
+        except Exception as e:
+            logger.error(f"[DeleteRows] Error deleting rows: {e}", exc_info=True)
+            return table_service_pb2.DeleteRowsResponse(
+                success=False,
+                message=f"Error deleting rows: {str(e)}"
+            )
 
     def QueryRows(self, request: table_service_pb2.QueryRowsRequest, context) -> table_service_pb2.QueryRowsResponse:
         """Query rows with filters and pagination - returns Arrow IPC for zero-copy transfer."""

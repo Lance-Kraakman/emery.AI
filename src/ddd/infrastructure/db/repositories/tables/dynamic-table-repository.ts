@@ -393,11 +393,12 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         throw new Error('Table not found');
       }
 
-      // 2. Append all rows in single gRPC call
-      // AIDEV-NOTE: Use mode="append" to add new rows without affecting existing rows
-      // This is 4x faster than individual insertRow calls
-      const s3Path = S3TablePath.fromPath(table.storageLocation);
-      await this.saveTableData(s3Path, rows, table, 'append');
+      // 2. Create all rows in single gRPC call using Delta Lake append
+      // AIDEV-NOTE: This is 4x faster than individual insertRow calls
+      const result = await this.datalake.createRows(rows, table);
+      if (!result.success) {
+        throw new Error(`Failed to create rows: ${result.error}`);
+      }
 
       // 3. Return all Row entities
       return rows;
@@ -467,7 +468,8 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     tableId: TableId,
     updates: Array<{rowId: string, row: Row}>
   ): Promise<Row[]> {
-    // AIDEV-NOTE: Batch read-modify-write pattern with overwrite mode
+    // AIDEV-NOTE: Efficient update using Delta Lake merge operation
+    // Only writes the updated rows, not the entire table
     try {
       if (updates.length === 0) return [];
 
@@ -477,29 +479,21 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         throw new Error('Table not found');
       }
 
-      // 2. Load all existing rows
-      const s3Path = S3TablePath.fromPath(table.storageLocation);
-      const allRows = await this.loadTableData(s3Path);
+      // 2. Extract just the updated rows (no need to load all rows)
+      const updatedRows = updates.map(u => u.row);
 
-      // 3. Create map for fast lookup and updates
-      const rowMap = new Map(allRows.map(r => [r.id.value, r]));
+      // 3. Use Delta Lake merge to update only the changed rows
+      // AIDEV-NOTE: This performs efficient row-level updates without rewriting entire table
+      const result = await this.datalake.updateRows(updatedRows, table);
 
-      // 4. Apply all updates
-      for (const {rowId, row} of updates) {
-        if (!rowMap.has(rowId)) {
-          throw new Error(`Row ${rowId} not found`);
-        }
-        rowMap.set(rowId, row);
+      if (!result.success) {
+        throw new Error(`Failed to update rows: ${result.error}`);
       }
 
-      // 5. Single overwrite with all rows (including updates)
-      // AIDEV-NOTE: Use mode="overwrite" to replace all rows (prevents duplication)
-      await this.saveTableData(s3Path, Array.from(rowMap.values()), table, 'overwrite');
+      console.log(`[DynamicTableRepository] Updated ${updates.length} rows in table ${table.name} using Delta Lake merge`);
 
-      console.log(`[DynamicTableRepository] Updated ${updates.length} rows in table ${table.name}`);
-
-      // 6. Return the updated Row entities
-      return updates.map(u => u.row);
+      // 4. Return the updated Row entities
+      return updatedRows;
 
     } catch (error) {
       console.error('[DynamicTableRepository] Error updating rows:', error);
@@ -507,34 +501,28 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
-  async deleteRow(tableId: TableId, rowId: string): Promise<void> {
-    // AIDEV-NOTE: Read-modify-write pattern with overwrite mode
+  async deleteRows(tableId: TableId, rowIds: string[]): Promise<void> {
+    // AIDEV-NOTE: Efficient delete using Delta Lake delete operation
+    // Only deletes specified rows, not rewriting entire table
     try {
+      if (rowIds.length === 0) return;
+
       // 1. Get table metadata
       const table = await this.findById(tableId);
       if (!table) {
         throw new Error('Table not found');
       }
 
-      // 2. Load all existing rows
-      const s3Path = S3TablePath.fromPath(table.storageLocation);
-      const allRows = await this.loadTableData(s3Path);
-
-      // 3. Filter out the row to delete
-      const filteredRows = allRows.filter(row => row.id.value !== rowId);
-
-      if (filteredRows.length === allRows.length) {
-        throw new Error(`Row ${rowId} not found`);
+      // 2. Delete rows using Delta Lake delete operation
+      const result = await this.datalake.deleteRows(rowIds, table);
+      if (!result.success) {
+        throw new Error(`Failed to delete rows: ${result.error}`);
       }
 
-      // 4. Overwrite entire table with filtered rows
-      // AIDEV-NOTE: Use mode="overwrite" to replace all rows (removes deleted row)
-      await this.saveTableData(s3Path, filteredRows, table, 'overwrite');
-
-      console.log(`[TableService] Deleted row ${rowId} in table ${table.name}`);
+      console.log(`[DynamicTableRepository] Deleted ${rowIds.length} rows using Delta Lake delete`);
 
     } catch (error) {
-      console.error('[TableService] Error deleting row:', error);
+      console.error('[DynamicTableRepository] Error deleting rows:', error);
       throw error;
     }
   }
@@ -777,28 +765,6 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
       throw error;
     }
-  }
-
-  private async saveTableData(
-    s3Path: S3TablePath,
-    rows: Row[],
-    table: DynamicTable,
-    mode: 'append' | 'overwrite'
-  ): Promise<void> {
-    // Store rows via gRPC service with explicit write mode
-    const storageResult = await this.datalake.storeRows(rows, table, mode);
-    
-    if (!storageResult.success) {
-      throw new Error(`Failed to store data: ${storageResult.error}`);
-    }
-    
-    // Update table updatedAt timestamp to trigger RAG reindexing
-    // Important: This triggers PostgreSQL triggers for automatic RAG reindexing
-    await this.db.update(tables)
-      .set({ 
-        updatedAt: new Date() 
-      })
-      .where(eq(tables.id, table.id.value));
   }
 
   // Helper method to extract table ID from S3 path

@@ -60,11 +60,11 @@
   overflow: auto !important;  /* CRITICAL: Changed from hidden to auto - container needs to scroll for onScroll events */
   border: none !important;
   background-color: transparent !important;
+  padding-bottom: 100px !important;  /* Create scrollable space for sticky "+ Add" button - prevents it from covering bottom rows */
 }
 
-/* Add padding to scrollable view to prevent last row from hiding under sticky "+ Add" button */
+/* Scrollable view - no padding needed here, it's on parent container */
 .dsg-container .dsg-scrollable-view {
-  padding-bottom: 100px !important;
   overflow: auto !important;
   scroll-behavior: smooth !important;
   overscroll-behavior: contain;  /* Prevent scroll chaining to parent */
