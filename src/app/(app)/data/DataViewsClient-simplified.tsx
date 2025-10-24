@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { useStore } from '@tanstack/react-store'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,6 +18,8 @@ import { storeActions, dataActions } from '@/stores/actions'
 import type { TableDTO } from "@/app/mappers/table-mapper"
 import { getFields } from "@/app/actions/fields"
 import { getRowsDSG, searchRowsDSG, createRow, createRows, updateRowData, deleteRowData } from "@/app/actions/rows"
+import { GRID_CONFIG } from "@/lib/constants/grid"
+import { rowQueryKeys, fieldQueryKeys } from "@/lib/query-keys/rows"
 import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { DSGRow } from "@/app/mappers/dsg-mapper"
@@ -82,21 +85,23 @@ export function DataViewsClientSimplified() {
 
   // TanStack Query for fields
   const fieldsQuery = useQuery({
-    queryKey: ['fields', selectedTableId],
+    queryKey: selectedTableId ? fieldQueryKeys.all(selectedTableId) : ['fields', null],
     queryFn: () => selectedTableId ? getFields(selectedTableId) : Promise.resolve([]),
     enabled: !!selectedTableId,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: GRID_CONFIG.FIELD_STALE_TIME,
   })
 
   // TanStack Infinite Query for rows (supports pagination)
   const infiniteRowsQuery = useInfiniteQuery({
-    queryKey: ['rows-infinite', selectedTableId, sortBy, activeFilters ?? []],
+    queryKey: selectedTableId
+      ? rowQueryKeys.infinite(selectedTableId, sortBy, activeFilters ?? [])
+      : ['rows', null, 'infinite'],
     initialPageParam: 0,
     queryFn: ({ pageParam }: { pageParam: number }) =>
       selectedTableId
         ? getRowsDSG(
             selectedTableId,
-            100,
+            GRID_CONFIG.PAGE_SIZE,
             pageParam,
             sortBy.field,
             sortBy.order === 'asc' ? 'ASC' : 'DESC',
@@ -105,21 +110,23 @@ export function DataViewsClientSimplified() {
         : Promise.resolve({ rows: [], hasMore: false, total: 0 }),
     getNextPageParam: (lastPage: { rows: DSGRow[], hasMore: boolean, total: number }, allPages: any[]) => {
       if (!lastPage.hasMore) return undefined
-      return allPages.length * 100 // Offset for next page
+      return allPages.length * GRID_CONFIG.PAGE_SIZE // Offset for next page
     },
     enabled: !!selectedTableId && !searchTerm, // Disable when searching
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    staleTime: GRID_CONFIG.ROW_STALE_TIME,
   })
 
   // TanStack Query for server-side search
   const searchQuery = useQuery({
-    queryKey: ['rows-search', selectedTableId, searchTerm],
+    queryKey: selectedTableId && searchTerm
+      ? rowQueryKeys.search(selectedTableId, searchTerm)
+      : ['rows', null, 'search'],
     queryFn: () =>
       selectedTableId && searchTerm
         ? searchRowsDSG(selectedTableId, searchTerm, 1000) // Higher limit for search results
         : Promise.resolve({ rows: [], total: 0 }),
     enabled: !!selectedTableId && !!searchTerm && searchTerm.trim().length > 0,
-    staleTime: 1000 * 30, // 30 seconds
+    staleTime: GRID_CONFIG.SEARCH_STALE_TIME,
   })
 
   const fields: FieldDTO[] = fieldsQuery.data || []
@@ -152,9 +159,9 @@ export function DataViewsClientSimplified() {
     const target = e.target as HTMLDivElement
     const { scrollHeight, scrollTop, clientHeight } = target
 
-    // Trigger load when within 300px of bottom
+    // Trigger load when within threshold of bottom
     if (
-      scrollHeight - scrollTop - clientHeight < 300 &&
+      scrollHeight - scrollTop - clientHeight < GRID_CONFIG.SCROLL_THRESHOLD &&
       !infiniteRowsQuery.isFetching &&
       infiniteRowsQuery.hasNextPage
     ) {
@@ -201,7 +208,9 @@ export function DataViewsClientSimplified() {
     },
     onMutate: async ({ rowId, fieldId, value }) => {
       // Use EXACT query key with sortBy and activeFilters to match the infinite query
-      const queryKey = ['rows-infinite', selectedTableId, sortBy, activeFilters ?? []]
+      const queryKey = selectedTableId
+        ? rowQueryKeys.infinite(selectedTableId, sortBy, activeFilters ?? [])
+        : ['rows', null, 'infinite']
 
       // Cancel outgoing refetches to prevent race conditions
       await queryClient.cancelQueries({ queryKey })
@@ -235,6 +244,9 @@ export function DataViewsClientSimplified() {
         queryClient.setQueryData(context.queryKey, context.previousData)
       }
       console.error("Failed to update row:", err)
+      toast.error("Failed to update cell", {
+        description: err instanceof Error ? err.message : "An error occurred while updating the cell"
+      })
     },
     onSettled: () => {
       // Don't invalidate - let optimistic update persist
@@ -276,12 +288,21 @@ export function DataViewsClientSimplified() {
 
       return createRows({ tableId: selectedTableId, rows: processedRows })
     },
+    onSuccess: (data, variables) => {
+      const rowCount = variables.length
+      toast.success(`Added ${rowCount} ${rowCount === 1 ? 'row' : 'rows'}`)
+    },
     onSettled: () => {
-      // Invalidate infinite query to refetch with new rows
-      queryClient.invalidateQueries({ queryKey: ['rows-infinite', selectedTableId] })
+      // Invalidate all row queries to refetch with new rows
+      if (selectedTableId) {
+        queryClient.invalidateQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
+      }
     },
     onError: (err) => {
       console.error("Failed to add rows:", err)
+      toast.error("Failed to add row", {
+        description: err instanceof Error ? err.message : "An error occurred while adding the row"
+      })
     },
   })
 
@@ -290,12 +311,20 @@ export function DataViewsClientSimplified() {
       if (!selectedTableId) throw new Error('No table selected')
       return deleteRowData(selectedTableId, rowId)
     },
+    onSuccess: () => {
+      toast.success("Row deleted")
+    },
     onSettled: () => {
-      // Invalidate infinite query to refetch without deleted row
-      queryClient.invalidateQueries({ queryKey: ['rows-infinite', selectedTableId] })
+      // Invalidate all row queries to refetch without deleted row
+      if (selectedTableId) {
+        queryClient.invalidateQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
+      }
     },
     onError: (err) => {
       console.error("Failed to delete row:", err)
+      toast.error("Failed to delete row", {
+        description: err instanceof Error ? err.message : "An error occurred while deleting the row"
+      })
     },
   })
 
@@ -337,8 +366,8 @@ export function DataViewsClientSimplified() {
   // Refresh data using TanStack Query invalidation
   const refreshTableData = () => {
     if (selectedTableId) {
-      queryClient.invalidateQueries({ queryKey: ['fields', selectedTableId] })
-      queryClient.invalidateQueries({ queryKey: ['rows-infinite', selectedTableId] })
+      queryClient.invalidateQueries({ queryKey: fieldQueryKeys.all(selectedTableId) })
+      queryClient.invalidateQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
     }
   }
 
