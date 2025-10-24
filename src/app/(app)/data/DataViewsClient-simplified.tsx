@@ -16,7 +16,7 @@ import { dataStore, dataSelectors } from '@/stores/data-management.store'
 import { storeActions, dataActions } from '@/stores/actions'
 import type { TableDTO } from "@/app/mappers/table-mapper"
 import { getFields } from "@/app/actions/fields"
-import { getRowsDSG, createRow, createRows, updateRowData, deleteRowData } from "@/app/actions/rows"
+import { getRowsDSG, searchRowsDSG, createRow, createRows, updateRowData, deleteRowData } from "@/app/actions/rows"
 import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { DSGRow } from "@/app/mappers/dsg-mapper"
@@ -78,19 +78,42 @@ export function DataViewsClientSimplified() {
       if (!lastPage.hasMore) return undefined
       return allPages.length * 100 // Offset for next page
     },
-    enabled: !!selectedTableId,
+    enabled: !!selectedTableId && !searchTerm, // Disable when searching
     staleTime: 1000 * 60 * 2, // 2 minutes
+  })
+
+  // TanStack Query for server-side search
+  const searchQuery = useQuery({
+    queryKey: ['rows-search', selectedTableId, searchTerm],
+    queryFn: () =>
+      selectedTableId && searchTerm
+        ? searchRowsDSG(selectedTableId, searchTerm, 1000) // Higher limit for search results
+        : Promise.resolve({ rows: [], total: 0 }),
+    enabled: !!selectedTableId && !!searchTerm && searchTerm.trim().length > 0,
+    staleTime: 1000 * 30, // 30 seconds
   })
 
   const fields: FieldDTO[] = fieldsQuery.data || []
 
-  // Flatten all pages into single array
+  // Use search results when searching, otherwise use paginated rows
   const rows: DSGRow[] = useMemo(() => {
+    if (searchTerm && searchQuery.data?.rows) {
+      return searchQuery.data.rows
+    }
     return infiniteRowsQuery.data?.pages.flatMap((page: { rows: DSGRow[], hasMore: boolean, total: number }) => page.rows) ?? []
-  }, [infiniteRowsQuery.data])
+  }, [searchTerm, searchQuery.data, infiniteRowsQuery.data])
 
-  const loading = fieldsQuery.isLoading || infiniteRowsQuery.isLoading
-  const error = fieldsQuery.error || infiniteRowsQuery.error
+  // Get total count - from search results or from first page of infinite query
+  const totalCount = useMemo(() => {
+    if (searchTerm && searchQuery.data) {
+      return searchQuery.data.total
+    }
+    // Get total from first page of infinite query
+    return infiniteRowsQuery.data?.pages?.[0]?.total ?? 0
+  }, [searchTerm, searchQuery.data, infiniteRowsQuery.data])
+
+  const loading = fieldsQuery.isLoading || infiniteRowsQuery.isLoading || searchQuery.isLoading
+  const error = fieldsQuery.error || infiniteRowsQuery.error || searchQuery.error
 
   // Scroll handler for infinite scroll - throttled for performance
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -262,21 +285,6 @@ export function DataViewsClientSimplified() {
     }
   }
 
-  // Filter rows based on search - DSG format (memoized for performance)
-  const filteredRows: DSGRow[] = useMemo(() => {
-    return rows.filter((row) => {
-      if (!searchTerm) return true
-      // DSG format: flat object with field values directly
-      const searchableValues = Object.keys(row)
-        .filter(key => key !== 'id')
-        .map(key => String(row[key] || ''))
-      searchableValues.push(row.id) // Include row ID in search
-      return searchableValues.some(value =>
-        value.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    })
-  }, [rows, searchTerm])
-
   const renderEmptyState = () => (
     <div className="flex-1 flex items-center justify-center">
       <Card className="w-full max-w-md text-center">
@@ -338,7 +346,8 @@ export function DataViewsClientSimplified() {
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <DynamicDataSheetGrid
               fields={fields}
-              rows={filteredRows}
+              rows={rows}
+              totalCount={totalCount}
               organizationId={selectedTable.organizationId!}
               tableId={selectedTable.id}
               tableName={selectedTable.name}

@@ -140,6 +140,7 @@ const GridHeaderBar = ({
 interface DynamicDataSheetGridProps {
   fields: FieldDTO[];
   rows: DSGRow[];
+  totalCount?: number;
   organizationId: number;
   tableId: number;
   tableName: string;
@@ -359,6 +360,7 @@ const ErrorState = ({ error, onRetry }: { error: string; onRetry?: () => void })
 export function DynamicDataSheetGrid({
   fields,
   rows,
+  totalCount,
   organizationId,
   tableId,
   tableName,
@@ -656,7 +658,7 @@ export function DynamicDataSheetGrid({
         <GridHeaderBar
           tableName={tableName}
           rowCount={rows.length}
-          totalRows={rows.length}
+          totalRows={totalCount ?? rows.length}
           searchTerm={searchTerm}
           onSearchChange={onSearchChange}
           onManageFields={onManageFields}
