@@ -2561,7 +2561,8 @@ proto.emery.tables.UpdateTableRequest.toObject = function(includeInstance, msg) 
     description: jspb.Message.getFieldWithDefault(msg, 4, ""),
     userId: jspb.Message.getFieldWithDefault(msg, 5, ""),
     organizationId: jspb.Message.getFieldWithDefault(msg, 6, ""),
-    metadataMap: (f = msg.getMetadataMap()) ? f.toObject(includeInstance, undefined) : []
+    metadataMap: (f = msg.getMetadataMap()) ? f.toObject(includeInstance, undefined) : [],
+    s3Path: jspb.Message.getFieldWithDefault(msg, 8, "")
   };
 
   if (includeInstance) {
@@ -2628,6 +2629,10 @@ proto.emery.tables.UpdateTableRequest.deserializeBinaryFromReader = function(msg
       reader.readMessage(value, function(message, reader) {
         jspb.Map.deserializeBinary(message, reader, jspb.BinaryReader.prototype.readString, jspb.BinaryReader.prototype.readString, null, "", "");
          });
+      break;
+    case 8:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setS3Path(value);
       break;
     default:
       reader.skipField();
@@ -2704,6 +2709,13 @@ proto.emery.tables.UpdateTableRequest.serializeBinaryToWriter = function(message
   f = message.getMetadataMap(true);
   if (f && f.getLength() > 0) {
     f.serializeBinary(7, writer, jspb.BinaryWriter.prototype.writeString, jspb.BinaryWriter.prototype.writeString);
+  }
+  f = message.getS3Path();
+  if (f.length > 0) {
+    writer.writeString(
+      8,
+      f
+    );
   }
 };
 
@@ -2855,6 +2867,24 @@ proto.emery.tables.UpdateTableRequest.prototype.getMetadataMap = function(opt_no
 proto.emery.tables.UpdateTableRequest.prototype.clearMetadataMap = function() {
   this.getMetadataMap().clear();
   return this;};
+
+
+/**
+ * optional string s3_path = 8;
+ * @return {string}
+ */
+proto.emery.tables.UpdateTableRequest.prototype.getS3Path = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 8, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.emery.tables.UpdateTableRequest} returns this
+ */
+proto.emery.tables.UpdateTableRequest.prototype.setS3Path = function(value) {
+  return jspb.Message.setProto3StringField(this, 8, value);
+};
 
 
 

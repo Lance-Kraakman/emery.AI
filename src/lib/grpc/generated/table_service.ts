@@ -352,6 +352,8 @@ export interface UpdateTableRequest {
   organizationId: string;
   /** Optional */
   metadata: { [key: string]: string };
+  /** S3 path for Delta Lake table data */
+  s3Path: string;
 }
 
 export interface UpdateTableRequest_MetadataEntry {
@@ -1859,7 +1861,16 @@ export const GetTableRequest: MessageFns<GetTableRequest> = {
 };
 
 function createBaseUpdateTableRequest(): UpdateTableRequest {
-  return { tableId: "", name: "", schema: undefined, description: "", userId: "", organizationId: "", metadata: {} };
+  return {
+    tableId: "",
+    name: "",
+    schema: undefined,
+    description: "",
+    userId: "",
+    organizationId: "",
+    metadata: {},
+    s3Path: "",
+  };
 }
 
 export const UpdateTableRequest: MessageFns<UpdateTableRequest> = {
@@ -1885,6 +1896,9 @@ export const UpdateTableRequest: MessageFns<UpdateTableRequest> = {
     Object.entries(message.metadata).forEach(([key, value]) => {
       UpdateTableRequest_MetadataEntry.encode({ key: key as any, value }, writer.uint32(58).fork()).join();
     });
+    if (message.s3Path !== "") {
+      writer.uint32(66).string(message.s3Path);
+    }
     return writer;
   },
 
@@ -1954,6 +1968,14 @@ export const UpdateTableRequest: MessageFns<UpdateTableRequest> = {
           }
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.s3Path = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1977,6 +1999,7 @@ export const UpdateTableRequest: MessageFns<UpdateTableRequest> = {
           return acc;
         }, {})
         : {},
+      s3Path: isSet(object.s3Path) ? globalThis.String(object.s3Path) : "",
     };
   },
 
@@ -2009,6 +2032,9 @@ export const UpdateTableRequest: MessageFns<UpdateTableRequest> = {
         });
       }
     }
+    if (message.s3Path !== "") {
+      obj.s3Path = message.s3Path;
+    }
     return obj;
   },
 
@@ -2031,6 +2057,7 @@ export const UpdateTableRequest: MessageFns<UpdateTableRequest> = {
       }
       return acc;
     }, {});
+    message.s3Path = object.s3Path ?? "";
     return message;
   },
 };
