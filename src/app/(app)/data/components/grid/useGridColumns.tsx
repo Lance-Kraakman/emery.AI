@@ -164,7 +164,7 @@ export function useGridColumns({
             field={field}
             onEdit={onEditField}
             onDelete={onDeleteField}
-            sortState={sortState?.field === field.name ? sortState.order : null}
+            sortState={sortState?.field === field.name ? (sortState.order ?? null) : null}
             onSort={onSort}
             onClearSort={onClearSort}
           />
