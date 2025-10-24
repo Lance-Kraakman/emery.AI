@@ -92,7 +92,7 @@ export function DataViewsClientSimplified() {
             GRID_CONFIG.PAGE_SIZE,
             pageParam,
             sortBy.field,
-            sortBy.order === 'asc' ? 'ASC' : 'DESC',
+            (sortBy.order || 'asc') === 'asc' ? 'ASC' : 'DESC',
             activeFilters ?? []
           )
         : Promise.resolve({ rows: [], hasMore: false, total: 0 }),
