@@ -31,11 +31,19 @@ export function createDebugLogger(namespace: string): DebugLogger {
     /**
      * Debug logging - only enabled when DEBUG_TABLES=true or NODE_ENV=development
      * For verbose logging of internal state
+     * Objects are JSON.stringify'd to keep output on a single line
      */
     debug: (message: string, data?: any) => {
-      if (DEBUG_ENABLED && data !== undefined) {
-        console.log(`${prefix} ${message}`, data);
-      } else if (DEBUG_ENABLED) {
+      if (!DEBUG_ENABLED) return;
+
+      if (data !== undefined) {
+        // Stringify objects/arrays to keep them on one line
+        if (typeof data === 'object' && data !== null) {
+          console.log(`${prefix} ${message}`, JSON.stringify(data));
+        } else {
+          console.log(`${prefix} ${message}`, data);
+        }
+      } else {
         console.log(`${prefix} ${message}`);
       }
     },
