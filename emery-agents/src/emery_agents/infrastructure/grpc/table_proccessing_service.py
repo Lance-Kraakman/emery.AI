@@ -625,7 +625,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             PyArrow compute expression or None if no filters
         """
         import pyarrow.compute as pc
-        from . import table_service_pb2  # Import for FilterOperator enum
 
         if not filters or len(filters) == 0:
             return None
@@ -650,6 +649,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 value = filter_obj.value.json_value
 
             # Build predicate based on operator
+            # Use the table_service_pb2 module that's already imported at the top of the file
             if operator == table_service_pb2.FILTER_OP_EQ:
                 predicates.append(pc.equal(field_ref, value))
 
