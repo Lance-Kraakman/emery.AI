@@ -1,0 +1,21 @@
+# AIDEV-NOTE: Development override for docker-compose.integration.yml
+# Use with: docker-compose -f docker-compose.integration.yml -f docker-compose.integration.dev.yml up
+#
+# This enables fast iteration with pnpm dev instead of production build:
+# - Skips build step (60-120s faster)
+# - Live code reloading via volume mounts
+# - Same infrastructure (postgres, minio, agent)
+
+services:
+  app-integration:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.dev
+    command: ["dev"]
+    volumes:
+      # Mount source code for live reloading
+      - ../..:/app
+      # Prevent overwriting container's node_modules
+      - /app/node_modules
+      # Prevent overwriting .next directory
+      - /app/.next
