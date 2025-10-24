@@ -24,6 +24,7 @@ interface UseGridColumnsParams {
   onDeleteField: (fieldName: string) => void
   onAddColumn: (data: { name: string; type: FieldType; required: boolean; relatedTableId?: number }) => Promise<void>
   onSort?: (field: string, direction: 'asc' | 'desc') => void
+  onClearSort?: () => void
   sortState?: { field?: string; order: 'asc' | 'desc' }
   // Custom cell components for complex field types
   RelationCell?: CellComponent<any, any>
@@ -50,6 +51,7 @@ export function useGridColumns({
   onDeleteField,
   onAddColumn,
   onSort,
+  onClearSort,
   sortState,
   RelationCell,
   FileCell,
@@ -164,6 +166,7 @@ export function useGridColumns({
             onDelete={onDeleteField}
             sortState={sortState?.field === field.name ? sortState.order : null}
             onSort={onSort}
+            onClearSort={onClearSort}
           />
         ),
         disabled: false,
@@ -187,5 +190,5 @@ export function useGridColumns({
 
     // Return ID column first, then field columns, then add column button
     return [idColumn, ...fieldColumns, addColumnCol]
-  }, [fields, organizationId, tableId, onUpdateRow, onEditField, onDeleteField, onAddColumn, availableTables, sortState, onSort, RelationCell, FileCell, DocumentCell])
+  }, [fields, organizationId, tableId, onUpdateRow, onEditField, onDeleteField, onAddColumn, availableTables, sortState, onSort, onClearSort, RelationCell, FileCell, DocumentCell])
 }

@@ -277,6 +277,13 @@ export const dataActions = {
     }))
   },
 
+  clearSorting: () => {
+    dataStore.setState((state) => ({
+      ...state,
+      sortBy: { order: 'asc' }
+    }))
+  },
+
   // Active filter actions
   addFilter: (filter: FilterConfig) => {
     dataStore.setState((state) => ({

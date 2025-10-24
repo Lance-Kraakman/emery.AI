@@ -380,6 +380,7 @@ export function DynamicDataSheetGrid({
     onDeleteField: handleDeleteField,
     onAddColumn: handleAddColumn,
     onSort,
+    onClearSort,
     sortState,
     RelationCell,
     FileCell,
