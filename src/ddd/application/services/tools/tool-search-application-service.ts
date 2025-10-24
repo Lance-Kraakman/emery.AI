@@ -9,7 +9,10 @@
  * Now searches both reference data AND hardcoded tools for @ mentions.
  */
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+
+const logger = createDebugLogger('ToolSearch');
 import { Reference } from '@/ddd/domain/chat/value-objects/reference';
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool';
@@ -71,7 +74,14 @@ export class ToolSearchApplicationService {
   async searchAllTools(options: SearchReferencesOptions): Promise<SearchToolsResult> {
     const { query, categories, toolCategories, appId, connectedOnly, requiresConnection, limit = 20, offset = 0, organizationId, userId } = options;
 
-    console.log(`[ToolSearchService] Searching for query: "${query}", categories:`, categories, 'toolCategories:', toolCategories, 'appId:', appId, 'connectedOnly:', connectedOnly, 'requiresConnection:', requiresConnection);
+    logger.debug('Searching tools', {
+      query,
+      categories: categories?.join(', '),
+      toolCategories: toolCategories?.join(', '),
+      appId,
+      connectedOnly,
+      requiresConnection
+    });
 
     // Search both reference tools and system tools in parallel
     // Get ALL results first, then apply unified pagination
@@ -80,7 +90,7 @@ export class ToolSearchApplicationService {
       this.searchSystemTools(query, toolCategories, appId, connectedOnly, requiresConnection, 1000, organizationId, userId)
     ]);
 
-    console.log(`[ToolSearchService] Found ${referenceToolsResult.referenceTools.length} reference tools, ${systemTools.length} system tools`);
+    logger.debug(`Found ${referenceToolsResult.referenceTools.length} reference tools, ${systemTools.length} system tools`);
 
     // Sort by relevance
     const sortedReferenceTools = this.sortReferenceToolsByRelevance(referenceToolsResult.referenceTools, query);
@@ -162,13 +172,13 @@ export class ToolSearchApplicationService {
     organizationId?: OrganizationId,
     userId?: UserId
   ): Promise<Tool[]> {
-    console.log(`[ToolSearchService] === STARTING SYSTEM TOOLS SEARCH ===`);
-    console.log(`[ToolSearchService] Query: "${query}"`);
-    console.log(`[ToolSearchService] ToolCategories:`, toolCategories);
-    console.log(`[ToolSearchService] AppId:`, appId);
-    console.log(`[ToolSearchService] ConnectedOnly:`, connectedOnly);
-    console.log(`[ToolSearchService] RequiresConnection:`, requiresConnection);
-    console.log(`[ToolSearchService] Tool registry service:`, !!this.toolRegistryService);
+    logger.debug(`=== STARTING SYSTEM TOOLS SEARCH ===`);
+    logger.debug(`Query: "${query}"`);
+    logger.debug(`ToolCategories:`, toolCategories);
+    logger.debug(`AppId:`, appId);
+    logger.debug(`ConnectedOnly:`, connectedOnly);
+    logger.debug(`RequiresConnection:`, requiresConnection);
+    logger.debug(`Tool registry service:`, !!this.toolRegistryService);
 
     try {
       // Use the tool registry service with enhanced filtering options
@@ -183,23 +193,23 @@ export class ToolSearchApplicationService {
         limit
       };
 
-      console.log(`[ToolSearchService] Calling toolRegistryService.discoverTools with options:`, toolDiscoveryOptions);
+      logger.debug(`Calling toolRegistryService.discoverTools with options:`, toolDiscoveryOptions);
       const discoveryResult = await this.toolRegistryService.discoverTools(toolDiscoveryOptions);
-      console.log(`[ToolSearchService] Found ${discoveryResult.tools.length} tool metadata entries`);
+      logger.debug(`Found ${discoveryResult.tools.length} tool metadata entries`);
 
       // Convert ToolMetadata to Tool instances
       const tools = discoveryResult.tools.map((metadata, index) => {
-        console.log(`[ToolSearchService] Creating tool ${index + 1}:`, metadata.name);
+        logger.debug(`Creating tool ${index + 1}:`, metadata.name);
         return this.toolRegistryService.createTool(metadata);
       });
 
-      console.log(`[ToolSearchService] Created ${tools.length} system tools`);
-      console.log(`[ToolSearchService] === SYSTEM TOOLS SEARCH COMPLETE ===`);
+      logger.debug(`Created ${tools.length} system tools`);
+      logger.debug(`=== SYSTEM TOOLS SEARCH COMPLETE ===`);
 
       return tools;
     } catch (error) {
-      console.error(`[ToolSearchService] === SYSTEM TOOLS SEARCH FAILED ===`);
-      console.error(`[ToolSearchService] Error searching system tools:`, error);
+      logger.error(`=== SYSTEM TOOLS SEARCH FAILED ===`);
+      logger.error(`Error searching system tools:`, error);
       return [];
     }
   }
@@ -251,7 +261,7 @@ export class ToolSearchApplicationService {
           return [];
       }
     } catch (error) {
-      console.error(`Error searching ${category} tools (handler: ${toolResolverService.getCategorySearchHandler(category)}):`, error);
+      logger.error(`Error searching ${category} tools (handler: ${toolResolverService.getCategorySearchHandler(category)}):`, error);
       return [];
     }
   }
@@ -369,34 +379,34 @@ export class ToolSearchApplicationService {
     limit: number,
     offset: number
   ): Promise<ReferenceTool[]> {
-    console.log(`[searchDocumentTools] Starting search. SearchText: "${searchText}", OrgId: ${organizationId.value}, Limit: ${limit}, Offset: ${offset}`);
+    logger.debug(`Starting search. SearchText: "${searchText}", OrgId: ${organizationId.value}, Limit: ${limit}, Offset: ${offset}`);
 
     const databases = await this.databaseApplicationService.getDatabases({ organizationId: organizationId.value });
     const allDocumentTools: ReferenceTool[] = [];
 
-    console.log(`[searchDocumentTools] Found ${databases.length} databases`);
+    logger.debug(`Found ${databases.length} databases`);
 
     // Search through all tables for document-like content
     const allOrgTables = await this.tableApplicationService.getTablesForOrganization(organizationId);
-    console.log(`[searchDocumentTools] Found ${allOrgTables.length} tables for organization`);
+    logger.debug(`Found ${allOrgTables.length} tables for organization`);
 
     for (const database of databases) {
       const tables = allOrgTables.filter(table => table.databaseId.value === database.id);
-      console.log(`[searchDocumentTools] Database "${database.name}" has ${tables.length} tables`);
+      logger.debug(`Database "${database.name}" has ${tables.length} tables`);
 
       for (const table of tables) {
         try {
-          console.log(`[searchDocumentTools] Processing table "${table.name}" (id: ${table.id.value})`);
+          logger.debug(`Processing table "${table.name}" (id: ${table.id.value})`);
 
           // Get table fields to map fieldSlug to fieldId
           const tableFields = await this.tableApplicationService.getFieldsForTable(table.id);
-          console.log(`[searchDocumentTools] Table "${table.name}" has ${tableFields.length} fields:`, tableFields.map(f => ({ name: f.name, type: f.type })));
+          logger.debug(`Table "${table.name}" has ${tableFields.length} fields:`, tableFields.map(f => ({ name: f.name, type: f.type })));
 
           // Skip tables without document or file fields
           const documentFields = tableFields.filter(field => field.type === 'document' || field.type === 'file');
-          console.log(`[searchDocumentTools] Table "${table.name}" has ${documentFields.length} document/file fields`);
+          logger.debug(`Table "${table.name}" has ${documentFields.length} document/file fields`);
           if (documentFields.length === 0) {
-            console.log(`[searchDocumentTools] Skipping table "${table.name}" - no document/file fields`);
+            logger.debug(`Skipping table "${table.name}" - no document/file fields`);
             continue;
           }
 
@@ -413,34 +423,34 @@ export class ToolSearchApplicationService {
             orderDirection: 'DESC'
           };
 
-          console.log(`[searchDocumentTools] Getting rows for table "${table.name}" with options:`, queryOptions);
+          logger.debug(`Getting rows for table "${table.name}" with options:`, queryOptions);
           const rows = await this.tableApplicationService.getRows(table.id, queryOptions);
-          console.log(`[searchDocumentTools] Table "${table.name}" returned ${rows ? rows.length : 0} rows`);
+          logger.debug(`Table "${table.name}" returned ${rows ? rows.length : 0} rows`);
 
           if (rows && rows.length > 0) {
             // Process each row using RowMapper to get properly typed field values
             for (const row of rows) {
               const rowDTO = RowMapper.toDTO(row);
-              console.log(`[searchDocumentTools] Processing row ${rowDTO.id} with ${rowDTO.fieldValues.length} field values`);
+              logger.debug(`Processing row ${rowDTO.id} with ${rowDTO.fieldValues.length} field values`);
 
               // Look through all field values to find document and file fields
               for (const fieldValue of rowDTO.fieldValues) {
                 const fieldId = fieldSlugToIdMap.get(fieldValue.fieldSlug);
                 if (!fieldId) {
-                  console.log(`[searchDocumentTools] Could not find fieldId for fieldSlug "${fieldValue.fieldSlug}"`);
+                  logger.debug(`Could not find fieldId for fieldSlug "${fieldValue.fieldSlug}"`);
                   continue; // Skip if we can't find the fieldId
                 }
 
-                console.log(`[searchDocumentTools] Checking field "${fieldValue.fieldSlug}" (type: ${fieldValue.fieldType}), value:`, fieldValue.value);
+                logger.debug(`Checking field "${fieldValue.fieldSlug}" (type: ${fieldValue.fieldType}), value:`, fieldValue.value);
 
                 if (fieldValue.fieldType === 'document' && fieldValue.value && isDocumentArray(fieldValue.value)) {
                   // Handle DocumentArrayFieldValue - iterate through each document
                   const docArray = fieldValue.value as DocumentFieldValue[];
-                  console.log(`[searchDocumentTools] Found ${docArray.length} documents in field "${fieldValue.fieldSlug}"`);
+                  logger.debug(`Found ${docArray.length} documents in field "${fieldValue.fieldSlug}"`);
 
                   for (const docField of docArray) {
                     const title = docField.documentMetadata?.title || docField.name || 'Untitled Document';
-                    console.log(`[searchDocumentTools] Document: name="${docField.name}", title="${title}", searchText="${searchText}"`);
+                    logger.debug(`Document: name="${docField.name}", title="${title}", searchText="${searchText}"`);
 
                     // AIDEV-NOTE: Search both title AND name fields since documents can have different titles than filenames
                     // Filter by search text if provided - check both title and name
@@ -448,7 +458,7 @@ export class ToolSearchApplicationService {
                       title.toLowerCase().includes(searchText.toLowerCase()) ||
                       (docField.name && docField.name.toLowerCase().includes(searchText.toLowerCase()));
 
-                    console.log(`[searchDocumentTools] Document "${title}" matches search: ${matchesSearch}`);
+                    logger.debug(`Document "${title}" matches search: ${matchesSearch}`);
 
                     if (matchesSearch) {
                       allDocumentTools.push(
@@ -494,13 +504,13 @@ export class ToolSearchApplicationService {
             }
           }
         } catch (error) {
-          console.error(`Error searching documents in table ${table.name}:`, error);
+          logger.error(`Error searching documents in table ${table.name}:`, error);
           continue;
         }
       }
     }
 
-    console.log(`[searchDocumentTools] Search completed. Found ${allDocumentTools.length} total documents`);
+    logger.debug(`Search completed. Found ${allDocumentTools.length} total documents`);
     return allDocumentTools.slice(0, limit);
   }
 
