@@ -185,30 +185,6 @@ export async function createRowAction(formData: FormData) {
   return result;
 }
 
-export async function getRowsData(tableId: number, limit = 100, offset = 0): Promise<RowDTO[]> {
-  try {
-    // Add authentication check (using data:manage as it covers view access)
-    await requirePermission("data:manage");
-    
-    if (!tableId) {
-      throw new Error("tableId is required");
-    }
-
-    // Use table application service for row fetching
-    const tableAppService = getTableApplicationService();
-    
-    const rowsData = await tableAppService.getRows(
-      TableId.fromNumber(tableId), 
-      { limit, offset }
-    );
-    
-    // Convert Domain objects to DTOs for serialization
-    return rowsData.map(RowMapper.toDTO);
-  } catch (error) {
-    console.error("Error fetching rows:", error);
-    throw new Error(error instanceof Error ? error.message : "Failed to fetch rows");
-  }
-}
 
 export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: string): Promise<Result> {
   try {
@@ -361,48 +337,16 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
   }
 }
 
-export async function getRowsDataDSG(tableId: number, limit = 1000): Promise<any[]> {
-  try {
-    await requirePermission("data:manage");
-
-    if (!tableId) {
-      throw new Error("tableId is required");
-    }
-
-    const tableAppService = getTableApplicationService();
-
-    // Get table to access field definitions
-    const table = await tableAppService.getTable(TableId.fromNumber(tableId));
-    if (!table) {
-      throw new Error("Table not found");
-    }
-
-    const rowsData = await tableAppService.getRows(
-      TableId.fromNumber(tableId),
-      { limit, offset: 0 }
-    );
-
-    // Transform to DSG format
-    // ARCHITECTURE NOTE: Defaults are already applied in infrastructure layer
-    // ArrowDataStorageService.retrieveData() calls RowMapper.applyDefaults() before creating Row objects
-    // No need to apply defaults again here - just convert Row objects to DSG format
-    const dsgData = rowsData.map(row => {
-      const plainData = row.toPlainObject();
-      return { id: row.id.value, ...plainData };
-    });
-
-    return dsgData;
-  } catch (error) {
-    console.error("Error fetching rows in DSG format:", error);
-    throw new Error(error instanceof Error ? error.message : "Failed to fetch rows");
-  }
-}
 
 /**
- * Paginated version for infinite scroll
- * Returns rows with pagination metadata
+ * Get rows in DataSheetGrid format with pagination
+ * Returns rows with pagination metadata for infinite scroll
+ *
+ * Uses limit+1 pattern: Request one extra row to detect if more pages exist,
+ * then return only the requested limit. This prevents false positives when
+ * total rows is exactly a multiple of the page size (e.g., 1000 rows with 100/page).
  */
-export async function getRowsDataDSGPaginated(
+export async function getRowsDSG(
   tableId: number,
   limit = 100,
   offset = 0
@@ -422,21 +366,24 @@ export async function getRowsDataDSGPaginated(
       throw new Error("Table not found");
     }
 
-    // Get paginated rows
+    // Request limit + 1 rows to detect if more pages exist
+    // Standard pagination pattern to avoid false positives at multiples of page size
     const rowsData = await tableAppService.getRows(
       TableId.fromNumber(tableId),
-      { limit, offset }
+      { limit: limit + 1, offset }
     );
 
-    // Transform to DSG format
-    const dsgData = rowsData.map(row => {
+    // Transform all rows to DSG format (including the potential extra row)
+    const allDsgData = rowsData.map(row => {
       const plainData = row.toPlainObject();
       return { id: row.id.value, ...plainData };
     });
 
-    // Check if there are more rows
-    // If we got fewer rows than the limit, we're at the end
-    const hasMore = dsgData.length === limit;
+    // If we got more than requested, there are more pages
+    const hasMore = allDsgData.length > limit;
+
+    // Return only the requested number of rows (slice off the extra if it exists)
+    const dsgData = hasMore ? allDsgData.slice(0, limit) : allDsgData;
 
     return {
       rows: dsgData,

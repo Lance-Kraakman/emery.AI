@@ -23,7 +23,7 @@ import { getTables } from '@/app/actions/tables'
 import { getAgents } from '@/app/actions/agents'
 import { getTeams } from '@/app/actions/teams'
 import { getFields } from '@/app/actions/fields'
-import { getRowsData } from '@/app/actions/rows'
+import { getRowsDSG } from '@/app/actions/rows'
 
 /**
  * Cross-store action creators for complex operations
@@ -130,15 +130,15 @@ export const storeActions = {
     try {
       dataActions.setLoading(true)
       
-      const [fields, rows] = await Promise.all([
+      const [fields, rowsResponse] = await Promise.all([
         getFields(tableId),
-        getRowsData(tableId)
+        getRowsDSG(tableId, 1000, 0)
       ])
-      
+
       dataActions.setFields(fields)
-      dataActions.setRows(Array.from(rows) as any, rows.length)
-      
-      return { success: true, data: { fields, rows } }
+      dataActions.setRows(Array.from(rowsResponse.rows) as any, rowsResponse.rows.length)
+
+      return { success: true, data: { fields, rows: rowsResponse.rows } }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to refresh table data'
       dataActions.setError(errorMessage)

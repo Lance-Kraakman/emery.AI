@@ -16,7 +16,7 @@ import { dataStore, dataSelectors } from '@/stores/data-management.store'
 import { storeActions, dataActions } from '@/stores/actions'
 import type { TableDTO } from "@/app/mappers/table-mapper"
 import { getFields } from "@/app/actions/fields"
-import { getRowsDataDSG, getRowsDataDSGPaginated, createRow, createRows, updateRowData, deleteRowData } from "@/app/actions/rows"
+import { getRowsDSG, createRow, createRows, updateRowData, deleteRowData } from "@/app/actions/rows"
 import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { DSGRow } from "@/app/mappers/dsg-mapper"
@@ -72,7 +72,7 @@ export function DataViewsClientSimplified() {
     initialPageParam: 0,
     queryFn: ({ pageParam }: { pageParam: number }) =>
       selectedTableId
-        ? getRowsDataDSGPaginated(selectedTableId, 100, pageParam)
+        ? getRowsDSG(selectedTableId, 100, pageParam)
         : Promise.resolve({ rows: [], hasMore: false, total: 0 }),
     getNextPageParam: (lastPage: { rows: DSGRow[], hasMore: boolean, total: number }, allPages: any[]) => {
       if (!lastPage.hasMore) return undefined

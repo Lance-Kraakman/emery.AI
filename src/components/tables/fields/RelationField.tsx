@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Search, Loader2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getRowsDataDSG } from '@/app/actions/rows';
+import { getRowsDSG } from '@/app/actions/rows';
 import { getFields } from '@/app/actions/fields';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 
@@ -85,12 +85,12 @@ export function RelationField({
 
     setTableDataLoading(true);
     try {
-      const [fields, rows] = await Promise.all([
+      const [fields, rowsResponse] = await Promise.all([
         getFields(relatedTableId),
-        getRowsDataDSG(relatedTableId, 100)
+        getRowsDSG(relatedTableId, 100, 0)
       ]);
 
-      setTableData({ fields, rows });
+      setTableData({ fields, rows: rowsResponse.rows });
     } catch (error) {
       console.error('[RelationField] Error loading table data:', error);
       setTableData({ fields: [], rows: [] });
