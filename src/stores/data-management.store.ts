@@ -13,6 +13,7 @@ import { Store } from '@tanstack/react-store'
 import type { TableDTO } from '@/app/mappers/table-mapper'
 import type { FieldDTO } from '@/app/mappers/field-mapper'
 import type { RowDTO, FieldValueDTO } from '@/app/mappers/row-mapper'
+import type { FilterConfig } from '@/lib/types/filters'
 
 export interface DataState {
   // Current selection
@@ -27,6 +28,7 @@ export interface DataState {
   // Search and filtering
   searchTerm: string
   fieldFilter: string
+  activeFilters: FilterConfig[]
   rowFilter: {
     field?: string
     operator?: 'equals' | 'contains' | 'startsWith' | 'endsWith' | 'greaterThan' | 'lessThan'
@@ -130,6 +132,7 @@ const initialState: DataState = {
   // Search and filtering
   searchTerm: '',
   fieldFilter: '',
+  activeFilters: [],
   rowFilter: {},
   sortBy: { order: 'asc' },
   
@@ -268,9 +271,34 @@ export const dataActions = {
   },
 
   setSorting: (field: string, order: 'asc' | 'desc') => {
-    dataStore.setState((state) => ({ 
-      ...state, 
-      sortBy: { field, order } 
+    dataStore.setState((state) => ({
+      ...state,
+      sortBy: { field, order }
+    }))
+  },
+
+  // Active filter actions
+  addFilter: (filter: FilterConfig) => {
+    dataStore.setState((state) => ({
+      ...state,
+      activeFilters: [...state.activeFilters, filter],
+      currentPage: 1 // Reset to first page when filter changes
+    }))
+  },
+
+  removeFilter: (index: number) => {
+    dataStore.setState((state) => ({
+      ...state,
+      activeFilters: state.activeFilters.filter((_, i) => i !== index),
+      currentPage: 1
+    }))
+  },
+
+  clearActiveFilters: () => {
+    dataStore.setState((state) => ({
+      ...state,
+      activeFilters: [],
+      currentPage: 1
     }))
   },
 
@@ -279,6 +307,7 @@ export const dataActions = {
       ...state,
       searchTerm: '',
       fieldFilter: '',
+      activeFilters: [],
       rowFilter: {},
       sortBy: { order: 'asc' },
       currentPage: 1
@@ -699,6 +728,7 @@ export const dataSelectors = {
   // Search and filter selectors
   searchTerm: (state: DataState) => state.searchTerm,
   fieldFilter: (state: DataState) => state.fieldFilter,
+  activeFilters: (state: DataState) => state.activeFilters,
   rowFilter: (state: DataState) => state.rowFilter,
   sortBy: (state: DataState) => state.sortBy,
 
