@@ -920,9 +920,11 @@ export class TableApplicationService {
       }
 
       // Build text search filters using existing RowQueryOptions
+      // AIDEV-NOTE: Use field.name (not getColumnName) to match Delta Lake schema
+      // Delta Lake columns are created using human-readable names, not field_{id} format
       const textFields = table.fields
         .filter(field => field.type === 'text')
-        .map(field => field.getColumnName());
+        .map(field => field.name);
 
       // Create filters for text search across all text fields
       const searchFilters = textFields.map(fieldName => ({

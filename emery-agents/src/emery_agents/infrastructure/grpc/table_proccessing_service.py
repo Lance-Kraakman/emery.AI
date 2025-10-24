@@ -610,13 +610,18 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         This enables predicate pushdown to Delta Lake - filters are applied BEFORE
         loading data into memory, which is 10-100x faster for large tables.
 
-        Supports all FilterOperator types from protobuf:
+        AIDEV-NOTE: LIKE/ILIKE operators are NOT supported in dataset filter predicates.
+        These filters are skipped here and must be applied in-memory after loading.
+
+        Supports these FilterOperator types for predicate pushdown:
         - FILTER_OP_EQ / FILTER_OP_NE: Exact match / not equal
         - FILTER_OP_GT / FILTER_OP_GTE / FILTER_OP_LT / FILTER_OP_LTE: Numeric comparisons
-        - FILTER_OP_LIKE / FILTER_OP_ILIKE: Pattern matching (SQL LIKE)
         - FILTER_OP_IN / FILTER_OP_NOT_IN: Value in list
         - FILTER_OP_IS_NULL / FILTER_OP_IS_NOT_NULL: Null checks
-        - FILTER_OP_CONTAINS / FILTER_OP_CONTAINED_BY / FILTER_OP_HAS_KEY: JSON/array operators
+
+        NOT supported (apply in-memory instead):
+        - FILTER_OP_LIKE / FILTER_OP_ILIKE: Pattern matching (use Polars after load)
+        - FILTER_OP_CONTAINS / FILTER_OP_CONTAINED_BY / FILTER_OP_HAS_KEY: JSON operators
 
         Args:
             filters: List of RowFilter objects from protobuf QueryRowsRequest
@@ -632,6 +637,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         predicates = []
 
         for filter_obj in filters:
+            # Skip LIKE/ILIKE operators - they don't work in dataset filter predicates
+            if filter_obj.operator in (table_service_pb2.FILTER_OP_LIKE, table_service_pb2.FILTER_OP_ILIKE):
+                continue
             field_ref = pc.field(filter_obj.field)
             operator = filter_obj.operator
 
@@ -667,20 +675,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
             elif operator == table_service_pb2.FILTER_OP_LTE:
                 predicates.append(pc.less_equal(field_ref, value))
-
-            elif operator == table_service_pb2.FILTER_OP_LIKE:
-                # Case-sensitive pattern matching - remove % wildcards
-                search_term = value.replace('%', '')
-                predicates.append(
-                    pc.match_substring(field_ref, search_term, ignore_case=False)
-                )
-
-            elif operator == table_service_pb2.FILTER_OP_ILIKE:
-                # Case-insensitive pattern matching - remove % wildcards
-                search_term = value.replace('%', '')
-                predicates.append(
-                    pc.match_substring(field_ref, search_term, ignore_case=True)
-                )
 
             elif operator == table_service_pb2.FILTER_OP_IN:
                 # Value in array - extract values from repeated values field
@@ -718,33 +712,17 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # These are more complex and may require custom handling
             # For now, we skip them - they could be added in a future iteration
 
-        # Combine all predicates with OR logic for search, AND for filters
-        # AIDEV-NOTE: For text search across multiple fields (e.g., name ILIKE '%test%' OR description ILIKE '%test%'),
-        # we need OR logic to match rows where ANY field contains the search term.
-        # We detect this by checking if all filters use ILIKE/LIKE with the same value.
+        # Combine all predicates with AND logic
+        # AIDEV-NOTE: Use & operator (not pc.and_) for filter expressions
         if len(predicates) == 0:
             return None
         elif len(predicates) == 1:
             return predicates[0]
         else:
-            # Check if this looks like a text search (all ILIKE operators with same value)
-            is_text_search = all(
-                filter_obj.operator in (table_service_pb2.FILTER_OP_ILIKE, table_service_pb2.FILTER_OP_LIKE)
-                for filter_obj in filters
-            )
-
-            if is_text_search:
-                # Use OR logic for text search - match ANY field
-                result = predicates[0]
-                for pred in predicates[1:]:
-                    result = pc.or_(result, pred)
-                return result
-            else:
-                # Use AND logic for regular filters - match ALL conditions
-                result = predicates[0]
-                for pred in predicates[1:]:
-                    result = pc.and_(result, pred)
-                return result
+            result = predicates[0]
+            for pred in predicates[1:]:
+                result = result & pred
+            return result
 
     def QueryRows(self, request: table_service_pb2.QueryRowsRequest, context) -> table_service_pb2.QueryRowsResponse:
         """Query rows with filters and pagination - returns Arrow IPC for zero-copy transfer."""
@@ -797,11 +775,54 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Convert PyArrow table to Polars DataFrame with predicate pushdown
             # AIDEV-NOTE: DeltaTable.to_pyarrow_table(filters=predicate) is the correct method
             # Parameter is 'filters' (plural), not 'filter'
-            # filters_to_expression() accepts Expression objects and returns them unchanged
+            # Predicate only includes filters that support pushdown (not LIKE/ILIKE)
             arrow_table = delta_table.to_pyarrow_table(filters=predicate)
             df = pl.from_arrow(arrow_table)
 
-            # Filters are now applied via predicate pushdown - no in-memory filtering needed
+            # Apply LIKE/ILIKE filters in-memory using Polars
+            # AIDEV-NOTE: LIKE/ILIKE don't work in PyArrow dataset filter predicates,
+            # so we filter them in-memory after loading the data
+
+            # First, detect if this is a text search (multiple ILIKE with same term)
+            ilike_filters = [f for f in request.filters if f.operator == table_service_pb2.FILTER_OP_ILIKE]
+            like_filters = [f for f in request.filters if f.operator == table_service_pb2.FILTER_OP_LIKE]
+
+            # Check if we have a text search pattern (multiple ILIKE filters with same search term)
+            is_text_search = False
+            if len(ilike_filters) > 1:
+                search_terms = set()
+                for f in ilike_filters:
+                    value = f.value.text_value if f.value.HasField('text_value') else ''
+                    search_terms.add(value.replace('%', ''))
+
+                if len(search_terms) == 1:
+                    is_text_search = True
+                    search_term = search_terms.pop()
+
+                    # Build OR condition: field1.contains(term) OR field2.contains(term) OR ...
+                    or_condition = None
+                    for f in ilike_filters:
+                        field_condition = pl.col(f.field).str.contains(f'(?i){search_term}')
+                        if or_condition is None:
+                            or_condition = field_condition
+                        else:
+                            or_condition = or_condition | field_condition
+
+                    # Apply OR filter for text search
+                    df = df.filter(or_condition)
+
+            # If not a text search, apply LIKE/ILIKE filters with AND logic
+            if not is_text_search:
+                for filter_obj in request.filters:
+                    if filter_obj.operator == table_service_pb2.FILTER_OP_ILIKE:
+                        value = filter_obj.value.text_value if filter_obj.value.HasField('text_value') else ''
+                        search_term = value.replace('%', '')
+                        df = df.filter(pl.col(filter_obj.field).str.contains(f'(?i){search_term}'))
+
+                    elif filter_obj.operator == table_service_pb2.FILTER_OP_LIKE:
+                        value = filter_obj.value.text_value if filter_obj.value.HasField('text_value') else ''
+                        search_term = value.replace('%', '')
+                        df = df.filter(pl.col(filter_obj.field).str.contains(search_term))
 
             # Apply ordering
             if request.order_by:
