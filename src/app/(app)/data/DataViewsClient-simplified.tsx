@@ -25,7 +25,7 @@ export function DataViewsClientSimplified() {
   const searchParams = useSearchParams()
   const queryClient = useQueryClient()
   const { data, isLoading: dataLoading, error: dataError } = useEmery()
-  
+
   const tableIdParam = searchParams?.get("tableId")
   const initialTableId = tableIdParam ? parseInt(tableIdParam) : undefined
 
@@ -42,7 +42,29 @@ export function DataViewsClientSimplified() {
   const selectedTableId = useStore(dataStore, dataSelectors.selectedTableId)
   const isFieldManagerOpen = useStore(dataStore, dataSelectors.isFieldManagerOpen)
   const searchTerm = useStore(dataStore, dataSelectors.searchTerm)
-  
+  const sortBy = useStore(dataStore, dataSelectors.sortBy)
+
+  // Hydration-safe mounting check
+  const [isMounted, setIsMounted] = React.useState(false)
+
+  // Local state for filters (not in global store - table-specific)
+  const [activeFilters, setActiveFilters] = React.useState<Array<{ field: string, operator: string, value: any }> | null>(null)
+
+  // Set mounted state after client hydration
+  useEffect(() => {
+    setIsMounted(true)
+    if (activeFilters === null) {
+      setActiveFilters([])
+    }
+  }, [])
+
+  // Clear filters when table changes
+  useEffect(() => {
+    if (isMounted) {
+      setActiveFilters([])
+    }
+  }, [selectedTableId, isMounted])
+
   // Initialize with URL parameter
   useEffect(() => {
     if (initialTableId && !selectedTableId) {
@@ -68,11 +90,18 @@ export function DataViewsClientSimplified() {
 
   // TanStack Infinite Query for rows (supports pagination)
   const infiniteRowsQuery = useInfiniteQuery({
-    queryKey: ['rows-infinite', selectedTableId],
+    queryKey: ['rows-infinite', selectedTableId, sortBy, activeFilters ?? []],
     initialPageParam: 0,
     queryFn: ({ pageParam }: { pageParam: number }) =>
       selectedTableId
-        ? getRowsDSG(selectedTableId, 100, pageParam)
+        ? getRowsDSG(
+            selectedTableId,
+            100,
+            pageParam,
+            sortBy.field,
+            sortBy.order === 'asc' ? 'ASC' : 'DESC',
+            activeFilters ?? []
+          )
         : Promise.resolve({ rows: [], hasMore: false, total: 0 }),
     getNextPageParam: (lastPage: { rows: DSGRow[], hasMore: boolean, total: number }, allPages: any[]) => {
       if (!lastPage.hasMore) return undefined
@@ -171,18 +200,21 @@ export function DataViewsClientSimplified() {
       })
     },
     onMutate: async ({ rowId, fieldId, value }) => {
-      // Cancel outgoing refetches to prevent race conditions
-      await queryClient.cancelQueries({ queryKey: ['rows-infinite', selectedTableId] })
+      // Use EXACT query key with sortBy and activeFilters to match the infinite query
+      const queryKey = ['rows-infinite', selectedTableId, sortBy, activeFilters ?? []]
 
-      // Snapshot the previous data for rollback
-      const previousData = queryClient.getQueryData(['rows-infinite', selectedTableId])
+      // Cancel outgoing refetches to prevent race conditions
+      await queryClient.cancelQueries({ queryKey })
+
+      // Snapshot the previous data for rollback (using exact key)
+      const previousData = queryClient.getQueryData(queryKey)
 
       // Find the field to get its name
       const field = fields.find(f => f.id === fieldId)
-      if (!field) return { previousData }
+      if (!field) return { previousData, queryKey }
 
-      // Optimistically update all pages in the infinite query
-      queryClient.setQueryData(['rows-infinite', selectedTableId], (old: any) => {
+      // Optimistically update all pages in the infinite query (using exact key)
+      queryClient.setQueryData(queryKey, (old: any) => {
         if (!old?.pages) return old
         return {
           ...old,
@@ -195,12 +227,12 @@ export function DataViewsClientSimplified() {
         }
       })
 
-      return { previousData }
+      return { previousData, queryKey }
     },
     onError: (err, variables, context) => {
-      // Rollback to previous state on error
-      if (context?.previousData) {
-        queryClient.setQueryData(['rows-infinite', selectedTableId], context.previousData)
+      // Rollback to previous state on error (using exact key from context)
+      if (context?.previousData && context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, context.previousData)
       }
       console.error("Failed to update row:", err)
     },
@@ -278,6 +310,28 @@ export function DataViewsClientSimplified() {
 
   const handleDeleteRow = (rowId: string) => {
     deleteRowMutation.mutate(rowId)
+  }
+
+  // Filter handlers
+  const handleAddFilter = (filter: { field: string, operator: string, value: any }) => {
+    setActiveFilters(prev => [...(prev ?? []), filter])
+  }
+
+  const handleRemoveFilter = (index: number) => {
+    setActiveFilters(prev => (prev ?? []).filter((_, i) => i !== index))
+  }
+
+  const handleClearFilters = () => {
+    setActiveFilters([])
+  }
+
+  // Sort handlers
+  const handleSort = (field: string, direction: 'asc' | 'desc') => {
+    dataActions.setSorting(field, direction)
+  }
+
+  const handleClearSort = () => {
+    dataActions.setSorting('', 'asc')
   }
 
   // Refresh data using TanStack Query invalidation
@@ -364,6 +418,13 @@ export function DataViewsClientSimplified() {
               onScroll={handleScrollThrottled}
               isLoading={isSearching}
               error={error ? String(error) : null}
+              activeFilters={activeFilters ?? []}
+              onAddFilter={handleAddFilter}
+              onRemoveFilter={handleRemoveFilter}
+              onClearFilters={handleClearFilters}
+              sortState={sortBy}
+              onSort={handleSort}
+              onClearSort={handleClearSort}
             />
           </div>
         )}
