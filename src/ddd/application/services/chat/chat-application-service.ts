@@ -28,6 +28,9 @@ import type {
   ChatWithMessagesDTO
 } from '@/app/dtos/chat.dto';
 import { ChatMapper } from '@/app/mappers/chat-mapper';
+import { createDebugLogger } from '@/lib/utils/debug-logger';
+
+const logger = createDebugLogger('ChatService');
 
 export class ChatApplicationService {
   constructor(
@@ -98,7 +101,7 @@ export class ChatApplicationService {
       await this.chatRepository.updateMessageStats(chat.id, 1, new Date());
 
       const chatTypeDesc = contextMetadata.contextType === 'organizations' ? 'organization' : `${contextMetadata.contextType}-connected`;
-      console.log(`[CHAT-APP-SERVICE] Created ${chatTypeDesc} chat: ${chat.title}`);
+      logger.summary(`Created ${chatTypeDesc} chat: ${chat.title}`);
 
       return {
         success: true,
@@ -106,7 +109,7 @@ export class ChatApplicationService {
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error creating chat:', error);
+      logger.error('Error creating chat:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create chat'
@@ -251,7 +254,7 @@ export class ChatApplicationService {
       const newMessageCount = await this.messageRepository.getMessageCount(chatId);
       await this.chatRepository.updateMessageStats(chatId, newMessageCount, new Date());
 
-      console.log(`[CHAT-APP-SERVICE] Added ${dto.role} message to chat ${chat.title}`);
+      logger.summary(`Added ${dto.role} message to chat ${chat.title}`);
 
       return {
         success: true,
@@ -259,7 +262,7 @@ export class ChatApplicationService {
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error sending message:', error);
+      logger.error('Error sending message:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to send message'
@@ -309,7 +312,7 @@ export class ChatApplicationService {
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error getting chat history:', error);
+      logger.error('Error getting chat history:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get chat history'
@@ -368,7 +371,7 @@ export class ChatApplicationService {
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error getting chats:', error);
+      logger.error('Error getting chats:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get chats'
@@ -398,7 +401,7 @@ export class ChatApplicationService {
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error getting conversation context:', error);
+      logger.error('Error getting conversation context:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get conversation context'
@@ -435,14 +438,14 @@ export class ChatApplicationService {
         };
       }
 
-      console.log(`[CHAT-APP-SERVICE] Archived chat: ${chat.title}`);
+      logger.summary(`Archived chat: ${chat.title}`);
 
       return {
         success: true
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error archiving chat:', error);
+      logger.error('Error archiving chat:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to archive chat'
@@ -481,14 +484,14 @@ export class ChatApplicationService {
         };
       }
 
-      console.log(`[CHAT-APP-SERVICE] Deleted chat: ${chat.title}`);
+      logger.summary(`Deleted chat: ${chat.title}`);
 
       return {
         success: true
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error deleting chat:', error);
+      logger.error('Error deleting chat:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to delete chat'
@@ -514,7 +517,7 @@ export class ChatApplicationService {
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error getting chat stats:', error);
+      logger.error('Error getting chat stats:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get chat statistics'

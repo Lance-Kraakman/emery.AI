@@ -2,10 +2,13 @@
 // Eliminates race conditions by ensuring sequential processing per index
 // Handles retries and failure states gracefully
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { DomainType, RagIndexId } from '@/ddd/domain/rag/value-objects';
 import { getIndexingDomainService } from '../../di/container';
 import { withSystemContext } from '@/lib/db/system-context';
 import { getRagIndexRepository } from '../../di/container';
+
+const logger = createDebugLogger('IndexingQueue');
 
 
 export interface QueueEntry {
@@ -76,9 +79,12 @@ export class IndexingQueueService {
     const queue = this.queues.get(request.indexId) || [];
     queue.push(entry);
     this.queues.set(request.indexId, queue);
-    
-    console.log(`[INDEXING-QUEUE] Enqueued ${request.operation} operation for index ${request.indexId.substring(0, 8)} (${entry.id.substring(0, 8)})`);
-    
+
+    logger.debug(`Enqueued ${request.operation} operation`, {
+      indexId: request.indexId.substring(0, 8),
+      operationId: entry.id.substring(0, 8)
+    });
+
     return entry.id;
   }
 
@@ -131,7 +137,7 @@ export class IndexingQueueService {
     while (Date.now() - startTime < timeoutMs) {
       const stats = this.getStats();
       if (stats.totalQueued === 0 && stats.totalProcessing === 0) {
-        console.log(`[INDEXING-QUEUE] All operations completed`);
+        logger.debug('All operations completed');
         return;
       }
       
@@ -164,7 +170,7 @@ export class IndexingQueueService {
    * Clear all queues (useful for tests)
    */
   async clearAll(): Promise<void> {
-    console.log(`[INDEXING-QUEUE] Clearing all queues`);
+    logger.debug('Clearing all queues');
     this.queues.clear();
     this.processing.clear();
   }
@@ -186,8 +192,8 @@ export class IndexingQueueService {
         } else {
           this.queues.set(indexId, filteredQueue);
         }
-        
-        console.log(`[INDEXING-QUEUE] Cleaned up ${toRemove.length} old operations for index ${indexId.substring(0, 8)}`);
+
+        logger.debug(`Cleaned up ${toRemove.length} old operations`, { indexId: indexId.substring(0, 8) });
       }
     }
   }
@@ -196,25 +202,25 @@ export class IndexingQueueService {
    * Graceful shutdown - stop processing and wait for current operations
    */
   async shutdown(timeoutMs: number = 10000): Promise<void> {
-    console.log(`[INDEXING-QUEUE] Shutting down queue service...`);
+    logger.summary('Shutting down queue service');
     this.isShuttingDown = true;
-    
+
     if (this.processInterval) {
       clearInterval(this.processInterval);
       this.processInterval = null;
     }
-    
+
     // Wait for current processing to complete
     const startTime = Date.now();
     while (this.processing.size > 0 && Date.now() - startTime < timeoutMs) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
-    
+
     if (this.processing.size > 0) {
-      console.warn(`[INDEXING-QUEUE] Shutdown timeout - ${this.processing.size} operations still processing`);
+      logger.debug(`Shutdown timeout - ${this.processing.size} operations still processing`);
     }
-    
-    console.log(`[INDEXING-QUEUE] Queue service shutdown complete`);
+
+    logger.summary('Queue service shutdown complete');
   }
 
   /**
@@ -222,18 +228,18 @@ export class IndexingQueueService {
    */
   private startProcessing(): void {
     if (this.processInterval) return; // Already started
-    
-    console.log(`[INDEXING-QUEUE] Starting queue processing (1 second interval)`);
-    
+
+    logger.summary('Starting queue processing (1 second interval)');
+
     this.processInterval = setInterval(async () => {
       if (this.isShuttingDown) return;
-      
+
       try {
         await this.processQueues();
       } catch (error) {
-        console.error(`[INDEXING-QUEUE] Error in queue processing:`, error);
+        logger.error('Error in queue processing', error);
       }
-      
+
       // Periodic cleanup every 10 processing cycles
       if (Math.random() < 0.1) {
         this.cleanup();
@@ -257,14 +263,17 @@ export class IndexingQueueService {
       this.processing.add(indexId);
       nextEntry.status = 'processing';
       nextEntry.processingStartedAt = new Date();
-      
-      console.log(`[INDEXING-QUEUE] Processing ${nextEntry.operation} for index ${indexId.substring(0, 8)} (${nextEntry.id.substring(0, 8)})`);
-      
+
+      logger.debug(`Processing ${nextEntry.operation}`, {
+        indexId: indexId.substring(0, 8),
+        operationId: nextEntry.id.substring(0, 8)
+      });
+
       try {
         await this.executeOperation(nextEntry);
         nextEntry.status = 'completed';
         nextEntry.completedAt = new Date();
-        console.log(`[INDEXING-QUEUE] Completed ${nextEntry.operation} for index ${indexId.substring(0, 8)}`);
+        logger.debug(`Completed ${nextEntry.operation}`, { indexId: indexId.substring(0, 8) });
       } catch (error) {
         await this.handleOperationFailure(nextEntry, error as Error);
       } finally {
@@ -324,9 +333,9 @@ export class IndexingQueueService {
     if (entry.retryCount < entry.maxRetries) {
       // Retry with exponential backoff
       const delayMs = Math.min(1000 * Math.pow(2, entry.retryCount - 1), 10000);
-      
-      console.warn(`[INDEXING-QUEUE] Operation ${entry.id.substring(0, 8)} failed (attempt ${entry.retryCount}/${entry.maxRetries}), retrying in ${delayMs}ms:`, error.message);
-      
+
+      logger.debug(`Operation ${entry.id.substring(0, 8)} failed (attempt ${entry.retryCount}/${entry.maxRetries}), retrying in ${delayMs}ms: ${error.message}`);
+
       // Reset to queued status after delay
       setTimeout(() => {
         entry.status = 'queued';
@@ -336,8 +345,8 @@ export class IndexingQueueService {
       // Max retries exceeded
       entry.status = 'failed';
       entry.completedAt = new Date();
-      
-      console.error(`[INDEXING-QUEUE] Operation ${entry.id.substring(0, 8)} permanently failed after ${entry.maxRetries} attempts:`, error.message);
+
+      logger.error(`Operation ${entry.id.substring(0, 8)} permanently failed after ${entry.maxRetries} attempts`, error);
     }
   }
 

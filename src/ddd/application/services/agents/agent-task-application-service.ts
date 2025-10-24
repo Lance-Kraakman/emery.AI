@@ -17,6 +17,9 @@ import { AgentId, OrganizationId, TaskId, UserId, TaskStatus, TeamId } from '@/d
 import type { CreateTaskDTO, ExecuteTaskDTO, TaskExecutionResultDTO, TaskDTO } from '@/app/dtos/task.dto';
 import { taskToDTO } from '@/app/mappers/task-mapper';
 import type { Result } from '@/ddd/domain/shared/result';
+import { createDebugLogger } from '@/lib/utils/debug-logger';
+
+const logger = createDebugLogger('AgentTaskService');
 
 export class AgentTaskApplicationService {
   constructor(
@@ -30,7 +33,7 @@ export class AgentTaskApplicationService {
    */
   async createTask(dto: CreateTaskDTO): Promise<Result<TaskDTO>> {
     try {
-      console.log(`[AGENT-TASK-SERVICE] Creating task: ${dto.name}`);
+      logger.summary(`Creating task: ${dto.name}`);
 
       // Convert DTO to Value Objects
       const organizationId = OrganizationId.fromNumber(dto.organizationId);
@@ -106,7 +109,7 @@ export class AgentTaskApplicationService {
       // Update the task object with the saved version
       Object.assign(task, savedTask);
 
-      console.log(`[AGENT-TASK-SERVICE] Created task ${task.id.value.toString().substring(0, 8)} for agent ${dto.agentId}`);
+      logger.summary(`Created task ${task.id.value.toString().substring(0, 8)} for agent ${dto.agentId}`);
 
       return {
         success: true,
@@ -114,7 +117,7 @@ export class AgentTaskApplicationService {
       };
 
     } catch (error) {
-      console.error('[AGENT-TASK-SERVICE] Error creating task:', error);
+      logger.error('Error creating task:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create task'
@@ -129,7 +132,7 @@ export class AgentTaskApplicationService {
     try {
       const { taskId, timeoutSeconds } = dto;
 
-      console.log(`[AGENT-TASK-SERVICE] Executing task ${taskId.substring(0, 8)}`);
+      logger.summary(`Executing task ${taskId.substring(0, 8)}`);
 
       // 1. Load and validate task
       const task = await this.taskRepository.findById(TaskId.fromString(taskId));
@@ -139,7 +142,7 @@ export class AgentTaskApplicationService {
           error: `Task ${taskId} not found`
         };
       }
-      console.log(`[AGENT-TASK-SERVICE] Loaded task ${JSON.stringify(task, null, 4)}`);
+      logger.summary(`Loaded task ${JSON.stringify(task, null, 4)}`);
 
       if (!task.isPending) {
         return {
@@ -192,7 +195,7 @@ export class AgentTaskApplicationService {
       // 5. Update task based on execution result (domain logic)
       if (executionResult.success) {
         task.complete(executionResult.outputData);
-        console.log(`[AGENT-TASK-SERVICE] Task ${taskId.substring(0, 8)} completed successfully`);
+        logger.summary(`Task ${taskId.substring(0, 8)} completed successfully`);
       } else {
         task.fail(executionResult.error || 'Execution failed');
       }
@@ -206,7 +209,7 @@ export class AgentTaskApplicationService {
         logs: task.logs
       });
 
-      console.log(`[AGENT-TASK-SERVICE] Completed task ${taskId.substring(0, 8)}: ${executionResult.success ? 'SUCCESS' : 'FAILED'}`);
+      logger.summary(`Completed task ${taskId.substring(0, 8)}: ${executionResult.success ? 'SUCCESS' : 'FAILED'}`);
 
       return {
         success: true,
@@ -217,7 +220,7 @@ export class AgentTaskApplicationService {
       };
 
     } catch (error) {
-      console.error(`[AGENT-TASK-SERVICE] Error executing task:`, error);
+      logger.error('Error executing task', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to execute task'
@@ -249,7 +252,7 @@ export class AgentTaskApplicationService {
    * Cancel a running task
    */
   async cancelTask(taskId: string, reason?: string): Promise<void> {
-    console.log(`[AGENT-TASK-SERVICE] Cancelling task ${taskId.substring(0, 8)}: ${reason || 'No reason provided'}`);
+    logger.summary(`Cancelling task ${taskId.substring(0, 8)}: ${reason || 'No reason provided'}`);
     
     // 1. Load task
     const task = await this.taskRepository.findById(TaskId.fromString(taskId));
@@ -270,7 +273,7 @@ export class AgentTaskApplicationService {
       completedAt: task.completedAt
     });
 
-    console.log(`[AGENT-TASK-SERVICE] Cancelled task ${taskId.substring(0, 8)}`);
+    logger.summary(`Cancelled task ${taskId.substring(0, 8)}`);
   }
 
   /**
