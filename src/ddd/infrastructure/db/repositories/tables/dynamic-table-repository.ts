@@ -313,7 +313,12 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       const existingFieldNames = new Set(existingFields.map((f: FieldRow) => f.name));
       const fieldsToAdd = tableFields.filter(f => !existingFieldNames.has(f.name));
 
-      // Insert new fields
+      // If no new fields, skip
+      if (fieldsToAdd.length === 0) {
+        return;
+      }
+
+      // Insert new fields into PostgreSQL
       for (const field of fieldsToAdd) {
         await this.db.insert(fields).values({
           tableId: tableId.value,
@@ -327,6 +332,24 @@ export class DynamicTableRepository implements IDynamicTableRepository {
             ...(field.relatedTableId ? { targetTableId: field.relatedTableId.value } : {})
           } : null
         });
+      }
+
+      console.log(`[TableService] Synced ${fieldsToAdd.length} new fields to PostgreSQL for table ${tableId.value}`);
+
+      // CRITICAL FIX: Sync schema changes to Delta Lake storage
+      // This ensures fields are immediately available for sorting/filtering
+      console.log(`[TableService] Now syncing ${fieldsToAdd.length} fields to Delta Lake...`);
+
+      const fullTable = await this.findById(tableId);
+      if (fullTable && this.datalake) {
+        const deltaLakeResult = await this.datalake.updateTable(fullTable);
+        if (!deltaLakeResult.success) {
+          console.warn(`[TableService] Warning: Failed to sync fields to Delta Lake: ${deltaLakeResult.error}`);
+        } else {
+          console.log(`[TableService] Successfully synced ${fieldsToAdd.length} fields to Delta Lake`);
+        }
+      } else {
+        console.warn(`[TableService] Could not sync to Delta Lake - table or datalake repository unavailable`);
       }
 
       // Note: We're not handling field updates or deletions here
