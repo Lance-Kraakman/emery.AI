@@ -47,27 +47,14 @@ export function DataViewsClientSimplified() {
   const isFieldManagerOpen = useStore(dataStore, dataSelectors.isFieldManagerOpen)
   const searchTerm = useStore(dataStore, dataSelectors.searchTerm)
   const sortBy = useStore(dataStore, dataSelectors.sortBy)
-
-  // Hydration-safe mounting check
-  const [isMounted, setIsMounted] = React.useState(false)
-
-  // Local state for filters (not in global store - table-specific)
-  const [activeFilters, setActiveFilters] = React.useState<FilterConfig[] | null>(null)
-
-  // Set mounted state after client hydration
-  useEffect(() => {
-    setIsMounted(true)
-    if (activeFilters === null) {
-      setActiveFilters([])
-    }
-  }, [])
+  const activeFilters = useStore(dataStore, dataSelectors.activeFilters)
 
   // Clear filters when table changes
   useEffect(() => {
-    if (isMounted) {
-      setActiveFilters([])
+    if (selectedTableId) {
+      dataActions.clearActiveFilters()
     }
-  }, [selectedTableId, isMounted])
+  }, [selectedTableId])
 
   // Initialize with URL parameter
   useEffect(() => {
@@ -342,17 +329,17 @@ export function DataViewsClientSimplified() {
     deleteRowMutation.mutate(rowId)
   }
 
-  // Filter handlers
+  // Filter handlers - use store actions
   const handleAddFilter = (filter: FilterConfig) => {
-    setActiveFilters(prev => [...(prev ?? []), filter])
+    dataActions.addFilter(filter)
   }
 
   const handleRemoveFilter = (index: number) => {
-    setActiveFilters(prev => (prev ?? []).filter((_, i) => i !== index))
+    dataActions.removeFilter(index)
   }
 
   const handleClearFilters = () => {
-    setActiveFilters([])
+    dataActions.clearActiveFilters()
   }
 
   // Sort handlers
