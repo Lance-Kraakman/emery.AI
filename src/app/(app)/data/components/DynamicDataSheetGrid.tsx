@@ -71,6 +71,7 @@ interface GridHeaderBarProps {
   onSearchChange: (value: string) => void;
   onManageFields: () => void;
   onRefresh: () => void;
+  isLoading?: boolean;
 }
 
 const GridHeaderBar = ({
@@ -80,30 +81,61 @@ const GridHeaderBar = ({
   searchTerm,
   onSearchChange,
   onManageFields,
-  onRefresh
-}: GridHeaderBarProps) => (
-  <div className="flex items-center justify-between h-[50px] px-4 border border-border border-b-0 bg-background rounded-t-md">
-    {/* Left: Table name and row count */}
-    <div className="flex items-center gap-3 min-w-0">
-      <h2 className="text-base font-semibold truncate">{tableName}</h2>
-      <span className="text-xs text-muted-foreground whitespace-nowrap">
-        {rowCount} row{rowCount !== 1 ? 's' : ''}
-        {searchTerm && ` (filtered from ${totalRows})`}
-      </span>
-    </div>
+  onRefresh,
+  isLoading = false
+}: GridHeaderBarProps) => {
+  // Local state for input value to prevent cursor jumping
+  const [inputValue, setInputValue] = React.useState(searchTerm)
 
-    {/* Center: Search */}
-    <div className="flex-1 max-w-md mx-4">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search in table..."
-          value={searchTerm}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="pl-10 h-9 bg-background"
-        />
+  // Sync input value when searchTerm changes from outside (e.g., clearing search)
+  React.useEffect(() => {
+    setInputValue(searchTerm)
+  }, [searchTerm])
+
+  // Trigger search on Enter key
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      onSearchChange(inputValue)
+    } else if (e.key === 'Escape') {
+      // Clear search on Escape
+      setInputValue('')
+      onSearchChange('')
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between h-[50px] px-4 border border-border border-b-0 bg-background rounded-t-md">
+      {/* Left: Table name and row count */}
+      <div className="flex items-center gap-3 min-w-0">
+        <h2 className="text-base font-semibold truncate">{tableName}</h2>
+        <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-2">
+          {isLoading && (
+            <RefreshCw className="h-3 w-3 animate-spin" />
+          )}
+          {rowCount} row{rowCount !== 1 ? 's' : ''}
+          {searchTerm && ` (filtered from ${totalRows})`}
+        </span>
       </div>
-    </div>
+
+      {/* Center: Search */}
+      <div className="flex-1 max-w-md mx-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search in table... (press Enter)"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="pl-10 h-9 bg-background"
+            disabled={isLoading}
+          />
+          {inputValue && inputValue !== searchTerm && (
+            <kbd className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 text-xs bg-muted rounded border border-border">
+              Enter
+            </kbd>
+          )}
+        </div>
+      </div>
 
     {/* Right: Actions */}
     <div className="flex items-center gap-2">
@@ -135,7 +167,8 @@ const GridHeaderBar = ({
       </DropdownMenu>
     </div>
   </div>
-)
+  )
+}
 
 interface DynamicDataSheetGridProps {
   fields: FieldDTO[];
@@ -638,12 +671,7 @@ export function DynamicDataSheetGrid({
     }
   }, [onDeleteRow, state.isSyncing])
 
-  // Show loading state
-  if (isLoading) {
-    return <LoadingState />
-  }
-
-  // Show error state
+  // Show error state (but keep table visible during loading/search)
   if (error) {
     return <ErrorState error={error} />
   }
@@ -663,6 +691,7 @@ export function DynamicDataSheetGrid({
           onSearchChange={onSearchChange}
           onManageFields={onManageFields}
           onRefresh={onRefresh}
+          isLoading={isLoading}
         />
       </div>
 
@@ -676,7 +705,7 @@ export function DynamicDataSheetGrid({
           </div>
         ) : (
           <DataSheetGrid
-            key={`grid-${tableId}`}  // CRITICAL: Stable key prevents remount on data updates, preserves scroll position
+            key={`grid-${tableId}`}  // CRITICAL: Stable key prevents remount on data updates, preserves scroll position and selection
             value={state.data}
             onChange={handleChange}
             columns={columns}
