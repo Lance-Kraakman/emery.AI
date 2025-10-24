@@ -20,6 +20,9 @@ import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/ta
 import { type FileFieldValue, isFileArray } from '@/ddd/domain/tables/value-objects/field-values';
 import { Row, RowId } from '@/ddd/domain/tables/value-objects/row';
 import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
+import { createDebugLogger } from '@/lib/utils/debug-logger';
+
+const logger = createDebugLogger('TableService');
 
 // Application-layer context type for files with table information
 interface FileWithTableContext {
@@ -198,7 +201,7 @@ export class TableApplicationService {
       
       const newTable = createResult.data;
 
-      console.log(`[TABLE-APP-SERVICE] Created table: ${newTable.name} (S3: ${newTable.storageLocation})`);
+      logger.summary(`Created table: ${newTable.name} (S3: ${newTable.storageLocation})`);
 
       return {
         success: true,
@@ -206,7 +209,7 @@ export class TableApplicationService {
       };
 
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error creating table:', error);
+      logger.error('Error creating table:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create table'
@@ -274,7 +277,7 @@ export class TableApplicationService {
           };
         }
         
-        console.log(`[TABLE-APP-SERVICE] Updated table: ${updateResult.data.name}`);
+        logger.summary(`Updated table: ${updateResult.data.name}`);
         
         return {
           success: true,
@@ -288,7 +291,7 @@ export class TableApplicationService {
       };
 
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error updating table:', error);
+      logger.error('Error updating table:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update table'
@@ -313,7 +316,7 @@ export class TableApplicationService {
       // 2. Check if table has any rows (optional - could be expensive)
       const hasData = await this.dynamicTableService.hasRows(tableId);
       if (hasData) {
-        console.warn(`[TABLE-APP-SERVICE] Deleting table ${table.name} with existing data`);
+        logger.debug(`Deleting table ${table.name} with existing data`);
       }
 
       const deleteResult = await this.dynamicTableService.deleteTable(tableId);
@@ -321,14 +324,14 @@ export class TableApplicationService {
         return deleteResult;
       }
 
-      console.log(`[TABLE-APP-SERVICE] Deleted table: ${table.name} (S3: ${table.storageLocation})`);
+      logger.summary(`Deleted table: ${table.name} (S3: ${table.storageLocation})`);
 
       return {
         success: true
       };
 
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error deleting table:', error);
+      logger.error('Error deleting table:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to delete table'
@@ -407,12 +410,12 @@ export class TableApplicationService {
         return ResultHelpers.failure('Field was added but could not be retrieved');
       }
 
-      console.log(`[TABLE-APP-SERVICE] Created field: ${newField.name} (${newField.type}) for table ${table.name}`);
+      logger.summary(`Created field: ${newField.name} (${newField.type}) for table ${table.name}`);
 
       return ResultHelpers.success(newField);
 
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error creating field:', error);
+      logger.error('Error creating field:', error);
       return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to create field');
     }
   }
@@ -473,11 +476,11 @@ export class TableApplicationService {
         return ResultHelpers.failure('Field was updated but could not be retrieved');
       }
 
-      console.log(`[TABLE-APP-SERVICE] Updated field: ${finalField.name}`);
+      logger.summary(`Updated field: ${finalField.name}`);
       return ResultHelpers.success(finalField);
 
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error updating field:', error);
+      logger.error('Error updating field:', error);
       return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to update field');
     }
   }
@@ -502,7 +505,7 @@ export class TableApplicationService {
       // 3. Check if table has rows - deletion might require data migration
       const hasRows = await this.dynamicTableService.hasRows(table.id);
       if (hasRows) {
-        console.warn(`[TABLE-APP-SERVICE] Deleting field '${fieldName}' from table with existing data`);
+        logger.debug(`Deleting field '${fieldName}' from table with existing data`);
       }
 
       // 4. Remove field from table using internal method
@@ -514,11 +517,11 @@ export class TableApplicationService {
         return ResultHelpers.failure(saveResult.error || 'Failed to save table after field removal');
       }
 
-      console.log(`[TABLE-APP-SERVICE] Deleted field: ${fieldName} from table ${table.name}`);
+      logger.summary(`Deleted field: ${fieldName} from table ${table.name}`);
       return ResultHelpers.success(undefined);
 
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error deleting field:', error);
+      logger.error('Error deleting field:', error);
       return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to delete field');
     }
   }
@@ -528,39 +531,28 @@ export class TableApplicationService {
    */
   async getFieldsForTable(tableId: TableId): Promise<TableField[]> {
     try {
-      console.log('[TABLE-APP-SERVICE-DEBUG] getFieldsForTable called for tableId:', tableId.value);
-      
+      logger.debug('getFieldsForTable called', { tableId: tableId.value });
+
       const table = await this.dynamicTableService.getTable(tableId);
       if (!table) {
-        console.log('[TABLE-APP-SERVICE-DEBUG] Table not found for id:', tableId.value);
+        logger.debug('Table not found', { tableId: tableId.value });
         return [];
       }
 
-      console.log('[TABLE-APP-SERVICE-DEBUG] Table found:', {
+      logger.debug('Table found', {
         id: table.id.value,
         name: table.name,
-        fieldsCount: table.fields.length,
-        fields: table.fields.map(f => ({
-          id: f.id?.value,
-          name: f.name,
-          type: f.type,
-          orderIndex: f.orderIndex
-        }))
+        fieldsCount: table.fields.length
       });
 
       // Return fields sorted by order index (handle nullable orderIndex)
       const sortedFields = [...table.fields].sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
-      
-      console.log('[TABLE-APP-SERVICE-DEBUG] Sorted fields:', sortedFields.map(f => ({
-        id: f.id?.value,
-        name: f.name,
-        type: f.type,
-        orderIndex: f.orderIndex
-      })));
+
+      logger.debug('Fields sorted', { count: sortedFields.length });
       
       return sortedFields;
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE-DEBUG] Error getting fields for table:', error);
+      logger.error('Error getting fields for table:', error);
       return [];
     }
   }
@@ -575,11 +567,11 @@ export class TableApplicationService {
       const tables = await this.dynamicTableRepository.findByOrganization(organizationId);
       
       if (tables.length === 0) {
-        console.log(`[TABLE-APP-SERVICE] No tables found for organization ${organizationId.value}`);
+        logger.summary(`No tables found for organization ${organizationId.value}`);
         return [];
       }
 
-      console.log(`[TABLE-APP-SERVICE] Found ${tables.length} tables for organization ${organizationId.value}`);
+      logger.summary(`Found ${tables.length} tables for organization ${organizationId.value}`);
 
       const allFiles: FileWithTableContext[] = [];
 
@@ -593,7 +585,7 @@ export class TableApplicationService {
             continue;
           }
 
-          console.log(`[TABLE-APP-SERVICE] Found ${fileFields.length} file fields in table ${table.name}`);
+          logger.summary(`Found ${fileFields.length} file fields in table ${table.name}`);
 
           // Get all rows from the table (using high limit for file cleanup operation)
           const rows = await this.dynamicTableRepository.getRows(table.id, { limit: 10000, offset: 0 });
@@ -621,16 +613,16 @@ export class TableApplicationService {
             }
           }
         } catch (error) {
-          console.error(`[TABLE-APP-SERVICE] Error processing table ${table.name}:`, error);
+          logger.error(`Error processing table ${table.name}`, error);
           // Continue with other tables
         }
       }
 
-      console.log(`[TABLE-APP-SERVICE] Found ${allFiles.length} files across ${tables.length} tables`);
+      logger.summary(`Found ${allFiles.length} files across ${tables.length} tables`);
       return allFiles;
 
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error getting files for organization:', error);
+      logger.error('Error getting files for organization:', error);
       return [];
     }
   }
@@ -644,11 +636,11 @@ export class TableApplicationService {
       // Get all tables for organization - tables already contain their fields
       const tables = await this.dynamicTableRepository.findByOrganization(organizationId);
       
-      console.log(`[TABLE-APP-SERVICE] Found ${tables.length} tables with fields for organization ${organizationId.value}`);
+      logger.summary(`Found ${tables.length} tables with fields for organization ${organizationId.value}`);
       
       return tables;
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error getting tables with fields for organization:', error);
+      logger.error('Error getting tables with fields for organization:', error);
       return [];
     }
   }
@@ -725,7 +717,7 @@ export class TableApplicationService {
       return ResultHelpers.success(rows[0]);
 
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error creating row:', error);
+      logger.error('Error creating row:', error);
       return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to create row');
     }
   }
@@ -761,7 +753,7 @@ export class TableApplicationService {
       return ResultHelpers.success(createdRows);
 
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error creating rows:', error);
+      logger.error('Error creating rows:', error);
       return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to create rows');
     }
   }
@@ -794,7 +786,7 @@ export class TableApplicationService {
       return ResultHelpers.success(updatedRows[0]);
 
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error updating row:', error);
+      logger.error('Error updating row:', error);
       return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to update row');
     }
   }
@@ -816,7 +808,7 @@ export class TableApplicationService {
       return ResultHelpers.success(undefined);
 
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error deleting row:', error);
+      logger.error('Error deleting row:', error);
       return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to delete row');
     }
   }
@@ -828,7 +820,7 @@ export class TableApplicationService {
     try {
       return await this.dynamicTableRepository.getRow(tableId, rowId.value);
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error getting row:', error);
+      logger.error('Error getting row:', error);
       return null;
     }
   }
@@ -840,7 +832,7 @@ export class TableApplicationService {
     try {
       return await this.dynamicTableRepository.getRows(tableId, options);
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error getting rows:', error);
+      logger.error('Error getting rows:', error);
       return [];
     }
   }
@@ -864,7 +856,7 @@ export class TableApplicationService {
       return ResultHelpers.success(createdRows);
 
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error bulk creating rows:', error);
+      logger.error('Error bulk creating rows:', error);
       return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to bulk create rows');
     }
   }
@@ -876,7 +868,7 @@ export class TableApplicationService {
     try {
       return await this.dynamicTableRepository.hasRows(tableId);
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error checking if table has rows:', error);
+      logger.error('Error checking if table has rows:', error);
       return false;
     }
   }
@@ -895,7 +887,7 @@ export class TableApplicationService {
     try {
       return await this.dynamicTableRepository.getTableStats(tableId);
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error getting table stats:', error);
+      logger.error('Error getting table stats:', error);
       throw error;
     }
   }
@@ -943,7 +935,7 @@ export class TableApplicationService {
       return ResultHelpers.success(rows);
 
     } catch (error) {
-      console.error('[TABLE-APP-SERVICE] Error searching table rows:', error);
+      logger.error('Error searching table rows:', error);
       return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to search table rows');
     }
   }

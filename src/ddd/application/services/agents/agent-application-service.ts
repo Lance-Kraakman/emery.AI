@@ -24,6 +24,9 @@ import { AgentId, OrganizationId, UserId, TeamId, AgentStatus, ApiKey, AGENT_STA
 import { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from '@/app/dtos/agent.dto';
 import { AgentMapper } from '@/app/mappers/agent-mapper';
+import { createDebugLogger } from '@/lib/utils/debug-logger';
+
+const logger = createDebugLogger('AgentService');
 
 // Re-export DTOs for backward compatibility during migration
 export type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO };
@@ -115,7 +118,7 @@ export class AgentApplicationService {
         data: agentDTO
       };
     } catch (error) {
-      console.error("Error creating agent:", error);
+      logger.error("Error creating agent", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to create agent"
@@ -170,7 +173,7 @@ export class AgentApplicationService {
         data: agentDTO
       };
     } catch (error) {
-      console.error("Error updating agent:", error);
+      logger.error("Error updating agent", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to update agent"
@@ -198,7 +201,7 @@ export class AgentApplicationService {
         data: undefined
       };
     } catch (error) {
-      console.error("Error deleting agent:", error);
+      logger.error("Error deleting agent", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to delete agent"
@@ -231,7 +234,7 @@ export class AgentApplicationService {
       if (filters.teamId && filters.teamId !== 'all') {
         const teamIdNumber = Number(filters.teamId);
         if (isNaN(teamIdNumber)) {
-          console.warn(`Invalid teamId provided: ${filters.teamId}`);
+          logger.debug('Invalid teamId provided', { teamId: filters.teamId });
           return [];
         }
 
@@ -275,7 +278,7 @@ export class AgentApplicationService {
       // Convert domain entities to DTOs for serialization
       return agents.map(agent => AgentMapper.toDTO(agent));
     } catch (error) {
-      console.error("Error fetching agents:", error);
+      logger.error("Error fetching agents", error);
       throw new Error("Failed to fetch agents");
     }
   }
@@ -311,7 +314,7 @@ export class AgentApplicationService {
         data: agentDTO
       };
     } catch (error) {
-      console.error("Error adding capability to agent:", error);
+      logger.error("Error adding capability to agent", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to add capability"
@@ -345,7 +348,7 @@ export class AgentApplicationService {
         data: { apiKey: newApiKey.value }
       };
     } catch (error) {
-      console.error("Error regenerating API key:", error);
+      logger.error("Error regenerating API key", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to regenerate API key"
@@ -391,7 +394,7 @@ export class AgentApplicationService {
         data: agentDTO
       };
     } catch (error) {
-      console.error("Error toggling agent status:", error);
+      logger.error("Error toggling agent status", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to toggle agent status"
