@@ -4,17 +4,33 @@ import React from "react"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { ChevronDown, Edit, Trash2, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
+import { createDebugLogger } from "@/lib/utils/debug-logger"
+import { useGrid } from './grid/GridContext'
+
+const logger = createDebugLogger('ColumnHeader')
 
 interface ColumnHeaderProps {
   field: FieldDTO
   onEdit: (field: FieldDTO) => void
   onDelete: (fieldName: string) => void
-  sortState?: 'asc' | 'desc' | null
   onSort?: (field: string, direction: 'asc' | 'desc') => void
   onClearSort?: () => void
 }
 
-export function ColumnHeader({ field, onEdit, onDelete, sortState, onSort, onClearSort }: ColumnHeaderProps) {
+export function ColumnHeader({ field, onEdit, onDelete, onSort, onClearSort }: ColumnHeaderProps) {
+  // AIDEV-NOTE: Read sortState directly from grid context to avoid stale props
+  const { sortState: globalSortState } = useGrid()
+
+  // Calculate this field's sort state
+  const sortState = globalSortState?.field === field.name && globalSortState?.field != null
+    ? globalSortState.order
+    : null
+
+  // AIDEV-NOTE: Debug logging for sortState changes
+  React.useEffect(() => {
+    logger.debug(`${field.name} sortState changed`, sortState)
+  }, [sortState, field.name])
+
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (confirm(`Delete field "${field.name}"? This will permanently delete all data in this column.`)) {
@@ -31,15 +47,19 @@ export function ColumnHeader({ field, onEdit, onDelete, sortState, onSort, onCle
     e.stopPropagation()
     if (!onSort) return
 
-    // Cycle through: null -> asc -> desc -> (back to asc, parent will clear if needed)
+    logger.debug(`${field.name} sort button clicked, current sortState:`, sortState)
+
+    // Simple cycle based on CURRENT sortState prop
     if (!sortState) {
       onSort(field.name, 'asc')
     } else if (sortState === 'asc') {
       onSort(field.name, 'desc')
     } else {
-      // Third click: cycle back to asc
-      // Parent will detect this pattern and clear the sort instead
-      onSort(field.name, 'asc')
+      // desc -> clear (call onClearSort instead)
+      if (onClearSort) {
+        logger.debug(`${field.name} clearing sort`)
+        onClearSort()
+      }
     }
   }
 

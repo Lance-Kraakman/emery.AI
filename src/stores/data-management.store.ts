@@ -14,6 +14,9 @@ import type { TableDTO } from '@/app/mappers/table-mapper'
 import type { FieldDTO } from '@/app/mappers/field-mapper'
 import type { RowDTO, FieldValueDTO } from '@/app/mappers/row-mapper'
 import type { FilterConfig } from '@/lib/types/filters'
+import { createDebugLogger } from '@/lib/utils/debug-logger'
+
+const logger = createDebugLogger('DataStore')
 
 export interface DataState {
   // Current selection
@@ -271,17 +274,32 @@ export const dataActions = {
   },
 
   setSorting: (field: string, order: 'asc' | 'desc') => {
-    dataStore.setState((state) => ({
-      ...state,
-      sortBy: { field, order }
-    }))
+    logger.debug('setSorting called', { field, order })
+    dataStore.setState((state) => {
+      logger.debug('setSorting old state', { sortBy: state.sortBy })
+      const newState = {
+        ...state,
+        sortBy: { field, order }
+      }
+      logger.debug('setSorting new state', { sortBy: newState.sortBy })
+      return newState
+    })
+    logger.debug('setSorting store state after', { sortBy: dataStore.state.sortBy })
   },
 
   clearSorting: () => {
-    dataStore.setState((state) => ({
-      ...state,
-      sortBy: {}
-    }))
+    logger.debug('clearSorting CALLED')
+    logger.debug('clearSorting state BEFORE', { sortBy: dataStore.state.sortBy })
+    dataStore.setState((state) => {
+      logger.debug('clearSorting inside setState old', { sortBy: state.sortBy })
+      const newState = {
+        ...state,
+        sortBy: {}
+      }
+      logger.debug('clearSorting inside setState new', { sortBy: newState.sortBy })
+      return newState
+    })
+    logger.debug('clearSorting state AFTER', { sortBy: dataStore.state.sortBy })
   },
 
   // Active filter actions

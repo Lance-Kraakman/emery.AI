@@ -24,6 +24,9 @@ import type { FilterConfig } from "@/lib/types/filters"
 import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { DSGRow } from "@/app/mappers/dsg-mapper"
+import { createDebugLogger } from '@/lib/utils/debug-logger'
+
+const logger = createDebugLogger('DataViewsClient')
 
 export function DataViewsClientSimplified() {
   const searchParams = useSearchParams()
@@ -48,6 +51,11 @@ export function DataViewsClientSimplified() {
   const searchTerm = useStore(dataStore, dataSelectors.searchTerm)
   const sortBy = useStore(dataStore, dataSelectors.sortBy)
   const activeFilters = useStore(dataStore, dataSelectors.activeFilters)
+
+  // AIDEV-NOTE: Debug logging for sortBy changes
+  React.useEffect(() => {
+    logger.debug('sortBy changed in component', { field: sortBy.field, order: sortBy.order })
+  }, [sortBy])
 
   // Clear filters when table changes
   useEffect(() => {
@@ -231,7 +239,7 @@ export function DataViewsClientSimplified() {
       if (context?.previousData && context?.queryKey) {
         queryClient.setQueryData(context.queryKey, context.previousData)
       }
-      console.error("Failed to update row:", err)
+      logger.error("Failed to update row:", err)
       toast.error("Failed to update cell", {
         description: err instanceof Error ? err.message : "An error occurred while updating the cell"
       })
@@ -287,7 +295,7 @@ export function DataViewsClientSimplified() {
       }
     },
     onError: (err) => {
-      console.error("Failed to add rows:", err)
+      logger.error("Failed to add rows:", err)
       toast.error("Failed to add row", {
         description: err instanceof Error ? err.message : "An error occurred while adding the row"
       })
@@ -309,7 +317,7 @@ export function DataViewsClientSimplified() {
       }
     },
     onError: (err) => {
-      console.error("Failed to delete row:", err)
+      logger.error("Failed to delete row:", err)
       toast.error("Failed to delete row", {
         description: err instanceof Error ? err.message : "An error occurred while deleting the row"
       })
@@ -342,15 +350,11 @@ export function DataViewsClientSimplified() {
     dataActions.clearActiveFilters()
   }
 
-  // Sort handlers
-  const handleSort = (field: string, direction: 'asc' | 'desc') => {
-    // Smart clearing: if clicking the same field that's currently sorted desc, clear it
-    if (sortBy.field === field && sortBy.order === 'desc' && direction === 'asc') {
-      dataActions.clearSorting()
-    } else {
-      dataActions.setSorting(field, direction)
-    }
-  }
+  // Sort handlers - simplified, just set what's requested
+  const handleSort = useCallback((field: string, direction: 'asc' | 'desc') => {
+    logger.debug('handleSort setting sort', { field, direction })
+    dataActions.setSorting(field, direction)
+  }, [])
 
   const handleClearSort = () => {
     dataActions.clearSorting()
