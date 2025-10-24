@@ -344,7 +344,12 @@ export function DataViewsClientSimplified() {
 
   // Sort handlers
   const handleSort = (field: string, direction: 'asc' | 'desc') => {
-    dataActions.setSorting(field, direction)
+    // Smart clearing: if clicking the same field that's currently sorted desc, clear it
+    if (sortBy.field === field && sortBy.order === 'desc' && direction === 'asc') {
+      dataActions.clearSorting()
+    } else {
+      dataActions.setSorting(field, direction)
+    }
   }
 
   const handleClearSort = () => {

@@ -31,14 +31,15 @@ export function ColumnHeader({ field, onEdit, onDelete, sortState, onSort, onCle
     e.stopPropagation()
     if (!onSort) return
 
-    // Toggle through: null -> asc -> desc -> null (clear)
+    // Cycle through: null -> asc -> desc -> (back to asc, parent will clear if needed)
     if (!sortState) {
       onSort(field.name, 'asc')
     } else if (sortState === 'asc') {
       onSort(field.name, 'desc')
     } else {
-      // Clear sort using dedicated clear function
-      onClearSort?.()
+      // Third click: cycle back to asc
+      // Parent will detect this pattern and clear the sort instead
+      onSort(field.name, 'asc')
     }
   }
 
