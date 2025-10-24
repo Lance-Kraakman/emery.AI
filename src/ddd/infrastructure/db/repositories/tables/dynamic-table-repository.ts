@@ -424,7 +424,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         throw new Error(result.error || 'Failed to retrieve rows');
       }
 
-      return result.data || [];
+      return result.data?.rows || [];
 
     } catch (error) {
       console.error('[DynamicTableRepository] Error getting rows:', error);
@@ -533,6 +533,12 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
+  /**
+   * Get table statistics using efficient Delta Lake metadata
+   *
+   * This method uses gRPC to read only the Delta Lake transaction log
+   * instead of loading all rows. Much faster for large tables.
+   */
   async getTableStats(tableId: TableId): Promise<{
     rowCount: number;
     sizeBytes: number;
@@ -545,33 +551,19 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         throw new Error('Table not found');
       }
 
-      const s3Path = S3TablePath.fromPath(table.storageLocation);
-      try {
-        // Get S3 object metadata
-        const response = await s3Client.send(new HeadObjectCommand({
-          Bucket: BUCKET_NAME,
-          Key: s3Path.getDataPath()
-        }));
+      // Use DataLake's efficient getTableStats that reads only transaction log metadata
+      const result = await this.datalake.getTableStats(table);
 
-        // Load rows to count them (expensive - TODO: optimize with manifest)
-        const rows = await this.loadTableData(s3Path);
-
+      if (result.success && result.data) {
+        return result.data;
+      } else {
+        // If gRPC stats fail, return empty stats (table might be empty or not yet created)
+        console.warn(`[TableRepository] getTableStats failed for table ${tableId.value}, returning empty stats`);
         return {
-          rowCount: rows.length,
-          sizeBytes: (response as any).ContentLength || 0,
-          lastModified: (response as any).LastModified || table.updatedAt || new Date()
+          rowCount: 0,
+          sizeBytes: 0,
+          lastModified: table.createdAt || new Date()
         };
-
-      } catch (error) {
-        if ((error as any).name === 'NoSuchKey') {
-          // Table exists but no data file yet
-          return {
-            rowCount: 0,
-            sizeBytes: 0,
-            lastModified: table.createdAt || new Date()
-          };
-        }
-        throw error;
       }
 
     } catch (error) {
@@ -743,10 +735,10 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         throw new Error(`Failed to retrieve data: ${result.error}`);
       }
 
-      console.log(`[DynamicTableRepository.loadTableData] Successfully retrieved ${result.data?.length || 0} rows`);
+      console.log(`[DynamicTableRepository.loadTableData] Successfully retrieved ${result.data?.rows.length || 0} rows (total: ${result.data?.totalCount || 0})`);
       console.log(`[DynamicTableRepository.loadTableData] === EXIT ===`);
 
-      return result.data || [];
+      return result.data?.rows || [];
 
     } catch (error) {
       console.error(`[DynamicTableRepository.loadTableData] === ERROR ===`);

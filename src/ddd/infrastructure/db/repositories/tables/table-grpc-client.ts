@@ -7,7 +7,7 @@
  */
 
 import * as grpc from '@grpc/grpc-js';
-import { 
+import {
   TableServiceClient,
   CreateTableRequest,
   GetTableRequest,
@@ -19,6 +19,7 @@ import {
   UpdateRowsRequest,
   DeleteRowsRequest,
   QueryRowsRequest,
+  GetTableStatsRequest,
   TableResponse,
   DeleteTableResponse,
   ListTablesResponse,
@@ -27,6 +28,7 @@ import {
   UpdateRowsResponse,
   DeleteRowsResponse,
   QueryRowsResponse,
+  GetTableStatsResponse,
 } from '@/lib/grpc/generated/table_service';
 
 export interface GrpcClientConfig {
@@ -195,6 +197,25 @@ export class GrpcTableClient {
   async queryRows(request: QueryRowsRequest): Promise<QueryRowsResponse> {
     return new Promise((resolve, reject) => {
       this.client.queryRows(request, (error, response) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(response!);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get table statistics from Delta Lake metadata
+   *
+   * This method reads only the transaction log (_delta_log/*.json) to get
+   * row count and file sizes without loading actual data files.
+   * Much faster than loading all rows, especially for large tables.
+   */
+  async getTableStats(request: GetTableStatsRequest): Promise<GetTableStatsResponse> {
+    return new Promise((resolve, reject) => {
+      this.client.getTableStats(request, (error, response) => {
         if (error) {
           reject(error);
         } else {
