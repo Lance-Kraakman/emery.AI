@@ -32,11 +32,6 @@
 import React, { useMemo, useCallback, useState } from 'react'
 import {
   DataSheetGrid,
-  keyColumn,
-  textColumn,
-  checkboxColumn,
-  floatColumn,
-  dateColumn
 } from 'react-datasheet-grid'
 import type { CellProps } from 'react-datasheet-grid'
 import 'react-datasheet-grid/dist/style.css' // Base DSG styles
@@ -52,16 +47,10 @@ import { DocumentField } from '@/components/tables/fields/DocumentField'
 import { FileTypeDetector } from '@/ddd/domain/tables/services/file-type-detector'
 import { createFileArtifact, createDocumentArtifact } from '@/components/chat/types/chat-artifacts'
 import { uiStateActions } from '@/stores/ui-state.store'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
-import { Search, Settings, RefreshCw, Filter, X } from 'lucide-react'
 import { useGridState } from '../hooks/useGridState'
-import { ColumnHeader } from './ColumnHeader'
+import { useGridColumns } from './grid/useGridColumns'
 import { EditFieldPanel } from './EditFieldPanel'
-import { AddColumnButton } from './AddColumnButton'
-import { FilterPopover, type FilterConfig } from './FilterPopover'
-import { FilterChip } from './FilterChip'
+import { type FilterConfig } from './FilterPopover'
 import { createField, updateField, deleteField } from '@/app/actions/fields'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { GridContext, GridHeaderBar, type GridContextValue } from './grid'
@@ -380,124 +369,22 @@ export function DynamicDataSheetGrid({
     }
   }, [tableId, onRefresh])
 
-  const columns = useMemo(() => {
-    // AIDEV-NOTE: Using react-datasheet-grid built-in column types for standard fields
-    // Built-in columns handle rendering, editing, formatting, and keyboard navigation automatically
-
-    // ID column - always first, non-editable, sized for full UUIDs (36 chars)
-    const idColumn = {
-      ...keyColumn('id', textColumn),
-      title: <span className="font-semibold text-muted-foreground">ID</span>,
-      disabled: true,  // Non-editable
-      basis: 300,      // Increased from 100 to fit full UUID (36 chars)
-      grow: 0,
-      shrink: 0,
-      minWidth: 300,   // Increased from 80 to fit full UUID
-      headerClassName: 'id-column-header'
-    }
-
-    // AIDEV-NOTE: Filter out 'id' field to prevent duplicate with built-in ID column
-    const fieldColumns = fields.filter(field => field.name !== 'id').map(field => {
-      let columnConfig
-      let basis = 150
-      let minWidth = 120
-
-      switch (field.type) {
-        case 'text':
-          // Use built-in textColumn - handles all text editing automatically
-          columnConfig = textColumn
-          break
-
-        case 'number':
-          // Use built-in floatColumn - handles number parsing/formatting
-          columnConfig = floatColumn
-          basis = 180  // Increased from 150 to show larger numbers
-          minWidth = 150  // Increased from 120
-          break
-
-        case 'boolean':
-          // Use built-in checkboxColumn - handles boolean rendering
-          columnConfig = checkboxColumn
-          basis = 100
-          minWidth = 80
-          break
-
-        case 'date':
-          // Use built-in dateColumn - handles date formatting
-          columnConfig = dateColumn
-          break
-
-        case 'relation':
-          // Custom component for complex relation selection
-          columnConfig = {
-            component: RelationCell,
-            disableKeys: true,
-            columnData: { field, onUpdateRow }
-          }
-          basis = 250
-          minWidth = 150
-          break
-
-        case 'file':
-          // Custom component for file upload/preview
-          columnConfig = {
-            component: FileCell,
-            disableKeys: true,
-            columnData: { field, organizationId, tableId, onUpdateRow }
-          }
-          basis = 250
-          minWidth = 150
-          break
-
-        case 'document':
-          // Custom component for document management
-          columnConfig = {
-            component: DocumentCell,
-            disableKeys: true,
-            columnData: { field, organizationId, tableId, onUpdateRow }
-          }
-          basis = 250
-          minWidth = 150
-          break
-
-        default:
-          // Fallback to textColumn for unknown types
-          columnConfig = textColumn
-      }
-
-      return {
-        ...keyColumn(field.name, columnConfig),
-        title: (
-          <ColumnHeader
-            field={field}
-            onEdit={handleEditField}
-            onDelete={handleDeleteField}
-            sortState={sortState?.field === field.name ? sortState.order : null}
-            onSort={onSort}
-          />
-        ),
-        disabled: false,
-        basis,
-        grow: 0,
-        shrink: 1,
-        minWidth
-      }
-    })
-
-    // Add column button column - right-most column
-    const addColumnCol = {
-      ...keyColumn('__add_column', textColumn),
-      title: <AddColumnButton onAddColumn={handleAddColumn} availableTables={availableTables} />,
-      disabled: true,
-      basis: 50,
-      grow: 0,
-      shrink: 0,
-      minWidth: 50
-    }
-
-    // Return ID column first, then field columns, then add column button
-    return [idColumn, ...fieldColumns, addColumnCol]
-  }, [fields, organizationId, tableId, onUpdateRow, handleEditField, handleDeleteField, handleAddColumn, availableTables])
+  // Use custom hook for column building
+  const columns = useGridColumns({
+    fields,
+    organizationId,
+    tableId,
+    availableTables,
+    onUpdateRow,
+    onEditField: handleEditField,
+    onDeleteField: handleDeleteField,
+    onAddColumn: handleAddColumn,
+    onSort,
+    sortState,
+    RelationCell,
+    FileCell,
+    DocumentCell,
+  })
 
   /**
    * Event-driven onChange - uses operations parameter for precise change detection
