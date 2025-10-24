@@ -513,6 +513,40 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     message=f"Failed to add columns: {missing_columns}"
                 )
 
+            # AIDEV-NOTE: Backfill boolean columns with false (not null)
+            # When adding new boolean columns, existing rows have null values
+            # This causes filtering issues (null != false), so we set them to false
+            # This matches user expectations: unchecked checkbox = false, not null
+            boolean_columns_added = []
+            for field in new_schema:
+                if field.name in columns_to_add and field.type == pa.bool_():
+                    boolean_columns_added.append(field.name)
+
+            if boolean_columns_added:
+                logger.info(f"[UpdateTable] Backfilling boolean columns with false: {boolean_columns_added}")
+                try:
+                    # Use Delta Lake UPDATE to set null values to false
+                    # This ensures immediate filterability of the new boolean column
+                    for col_name in boolean_columns_added:
+                        # Build predicate for null values in this column
+                        predicate = f"`{col_name}` IS NULL"
+
+                        # Update null values to false
+                        updated_table.update(
+                            predicate=predicate,
+                            updates={col_name: "false"}
+                        )
+
+                        logger.info(f"[UpdateTable] Backfilled column '{col_name}' with false")
+
+                    logger.info(f"[UpdateTable] Successfully backfilled {len(boolean_columns_added)} boolean columns")
+
+                except Exception as backfill_error:
+                    # Log error but don't fail the entire operation
+                    # Schema evolution succeeded, backfill is optimization
+                    logger.warning(f"[UpdateTable] Failed to backfill boolean columns: {backfill_error}")
+                    logger.warning(f"[UpdateTable] Schema evolution succeeded, but existing rows will have null values")
+
             logger.info(f"[UpdateTable] Successfully added {len(columns_to_add)} columns: {columns_to_add}")
             return table_service_pb2.TableResponse(
                 success=True,
