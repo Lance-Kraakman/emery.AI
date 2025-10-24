@@ -55,11 +55,13 @@ import { uiStateActions } from '@/stores/ui-state.store'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
-import { Search, Settings, RefreshCw } from 'lucide-react'
+import { Search, Settings, RefreshCw, Filter, X } from 'lucide-react'
 import { useGridState } from '../hooks/useGridState'
 import { ColumnHeader } from './ColumnHeader'
 import { EditFieldPanel } from './EditFieldPanel'
 import { AddColumnButton } from './AddColumnButton'
+import { FilterPopover, type FilterConfig } from './FilterPopover'
+import { FilterChip } from './FilterChip'
 import { createField, updateField, deleteField } from '@/app/actions/fields'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 
@@ -72,6 +74,13 @@ interface GridHeaderBarProps {
   onManageFields: () => void;
   onRefresh: () => void;
   isLoading?: boolean;
+  fields?: FieldDTO[];
+  activeFilters?: Array<{ field: string, operator: string, value: any }>;
+  onAddFilter?: (filter: { field: string, operator: string, value: any }) => void;
+  onRemoveFilter?: (index: number) => void;
+  onClearFilters?: () => void;
+  sortState?: { field?: string, order: 'asc' | 'desc' };
+  onClearSort?: () => void;
 }
 
 const GridHeaderBar = ({
@@ -82,7 +91,14 @@ const GridHeaderBar = ({
   onSearchChange,
   onManageFields,
   onRefresh,
-  isLoading = false
+  isLoading = false,
+  fields = [],
+  activeFilters = [],
+  onAddFilter,
+  onRemoveFilter,
+  onClearFilters,
+  sortState,
+  onClearSort
 }: GridHeaderBarProps) => {
   // Local state for input value to prevent cursor jumping
   const [inputValue, setInputValue] = React.useState(searchTerm)
@@ -104,6 +120,7 @@ const GridHeaderBar = ({
   }
 
   return (
+    <>
     <div className="flex items-center justify-between h-[50px] px-4 border border-border border-b-0 bg-background rounded-t-md">
       {/* Left: Table name and row count */}
       <div className="flex items-center gap-3 min-w-0">
@@ -138,7 +155,59 @@ const GridHeaderBar = ({
       </div>
 
     {/* Right: Actions */}
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 flex-wrap">
+      {/* Filter Popover + Active Filter Chips */}
+      {onAddFilter && (
+        <FilterPopover
+          trigger={
+            <Button
+              variant={activeFilters.length > 0 ? "default" : "ghost"}
+              size="sm"
+              className="h-9 gap-1"
+            >
+              <Filter className="h-4 w-4" />
+              <span className="text-xs">
+                Filter{activeFilters.length > 0 && ` (${activeFilters.length})`}
+              </span>
+            </Button>
+          }
+          fields={fields}
+          activeFilters={activeFilters}
+          onAddFilter={onAddFilter}
+          onRemoveFilter={onRemoveFilter!}
+        />
+      )}
+
+      {/* Active Filter Chips */}
+      {activeFilters.map((filter, index) => (
+        <FilterChip
+          key={index}
+          filter={filter}
+          onRemove={() => onRemoveFilter?.(index)}
+        />
+      ))}
+
+      {/* Clear All Button - shown when filters or sort are active */}
+      {(activeFilters.length > 0 || sortState?.field) && (onClearFilters || onClearSort) && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            // clearFilters already clears sort, so just call that
+            if (onClearFilters) {
+              onClearFilters()
+            } else if (onClearSort) {
+              onClearSort()
+            }
+          }}
+          className="h-9 gap-1 text-muted-foreground hover:text-foreground"
+          title="Clear all filters and sorting"
+        >
+          <X className="h-4 w-4" />
+          <span className="text-xs">Clear All</span>
+        </Button>
+      )}
+
       <Button
         variant="ghost"
         size="sm"
@@ -167,6 +236,7 @@ const GridHeaderBar = ({
       </DropdownMenu>
     </div>
   </div>
+  </>
   )
 }
 
@@ -187,6 +257,14 @@ interface DynamicDataSheetGridProps {
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;  // For infinite scroll
   isLoading?: boolean;
   error?: string | null;
+  // Filter & Sort props
+  activeFilters?: Array<{ field: string, operator: string, value: any }>;
+  onAddFilter?: (filter: { field: string, operator: string, value: any }) => void;
+  onRemoveFilter?: (index: number) => void;
+  onClearFilters?: () => void;
+  sortState?: { field?: string, order: 'asc' | 'desc' };
+  onSort?: (field: string, direction: 'asc' | 'desc') => void;
+  onClearSort?: () => void;
 }
 
 // Row number component for gutter column
@@ -406,7 +484,14 @@ export function DynamicDataSheetGrid({
   onDeleteRow,
   onScroll,
   isLoading = false,
-  error = null
+  error = null,
+  activeFilters,
+  onAddFilter,
+  onRemoveFilter,
+  onClearFilters,
+  sortState,
+  onSort,
+  onClearSort
 }: DynamicDataSheetGridProps) {
   // Use custom hook for grid state management
   const { state, dispatch } = useGridState(rows)
@@ -556,7 +641,15 @@ export function DynamicDataSheetGrid({
 
       return {
         ...keyColumn(field.name, columnConfig),
-        title: <ColumnHeader field={field} onEdit={handleEditField} onDelete={handleDeleteField} />,
+        title: (
+          <ColumnHeader
+            field={field}
+            onEdit={handleEditField}
+            onDelete={handleDeleteField}
+            sortState={sortState?.field === field.name ? sortState.order : null}
+            onSort={onSort}
+          />
+        ),
         disabled: false,
         basis,
         grow: 0,
@@ -692,6 +785,13 @@ export function DynamicDataSheetGrid({
           onManageFields={onManageFields}
           onRefresh={onRefresh}
           isLoading={isLoading}
+          fields={fields}
+          activeFilters={activeFilters}
+          onAddFilter={onAddFilter}
+          onRemoveFilter={onRemoveFilter}
+          onClearFilters={onClearFilters}
+          sortState={sortState}
+          onClearSort={onClearSort}
         />
       </div>
 

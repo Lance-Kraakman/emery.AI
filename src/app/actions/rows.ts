@@ -348,7 +348,10 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
 export async function getRowsDSG(
   tableId: number,
   limit = 100,
-  offset = 0
+  offset = 0,
+  orderBy?: string,
+  orderDirection?: 'ASC' | 'DESC',
+  filters?: Array<{ field: string, operator: string, value: any }>
 ): Promise<{ rows: any[], hasMore: boolean, total: number }> {
   try {
     await requirePermission("data:manage");
@@ -373,7 +376,13 @@ export async function getRowsDSG(
     // Standard pagination pattern to avoid false positives at multiples of page size
     const rowsData = await tableAppService.getRows(
       TableId.fromNumber(tableId),
-      { limit: limit + 1, offset }
+      {
+        limit: limit + 1,
+        offset,
+        orderBy,
+        orderDirection,
+        filters: filters as any // RowFilter type from persistence layer
+      }
     );
 
     // Transform all rows to DSG format (including the potential extra row)
