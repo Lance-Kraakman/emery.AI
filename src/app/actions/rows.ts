@@ -400,6 +400,66 @@ export async function getRowsDSG(
   }
 }
 
+/**
+ * Server action to search rows in DSG format
+ *
+ * Performs server-side search across all text fields in the table,
+ * searching all data (not just loaded rows in memory).
+ *
+ * Returns matching rows with pagination metadata.
+ */
+export async function searchRowsDSG(
+  tableId: number,
+  query: string,
+  limit = 100
+): Promise<{ rows: any[], total: number }> {
+  try {
+    await requirePermission("data:manage");
+
+    if (!tableId) {
+      throw new Error("tableId is required");
+    }
+
+    if (!query || query.trim() === '') {
+      // Return empty results for empty query
+      return { rows: [], total: 0 };
+    }
+
+    const session = await withAuthContext();
+    if (!session.user?.organizationId) {
+      throw new Error("Organization ID not found in session");
+    }
+
+    const tableAppService = getTableApplicationService();
+
+    // Use searchTableRows method which searches all text fields
+    const result = await tableAppService.searchTableRows({
+      tableId: TableId.fromNumber(tableId),
+      query: query.trim(),
+      limit,
+      organizationId: session.user.organizationId
+    });
+
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "Failed to search rows");
+    }
+
+    // Transform rows to DSG format
+    const dsgData = result.data.map(row => {
+      const plainData = row.toPlainObject();
+      return { id: row.id.value, ...plainData };
+    });
+
+    return {
+      rows: dsgData,
+      total: dsgData.length // For search results, total is the number of matches
+    };
+  } catch (error) {
+    console.error("Error searching rows:", error);
+    throw new Error(error instanceof Error ? error.message : "Failed to search rows");
+  }
+}
+
 export async function deleteRowAction(formData: FormData) {
   const tableId = parseInt(formData.get('tableId') as string);
   const rowId = formData.get('rowId') as string;
