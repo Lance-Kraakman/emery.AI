@@ -397,6 +397,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
     def UpdateTable(self, request: table_service_pb2.UpdateTableRequest, context) -> table_service_pb2.TableResponse:
         """Update table metadata and evolve schema with new fields."""
+        logger.info(f"=== [UpdateTable] METHOD CALLED ===")
         try:
             # AIDEV-NOTE: UpdateTable implementation for Delta Lake schema evolution
             # When new fields are added in PostgreSQL, we need to sync them to Delta Lake
@@ -407,6 +408,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             logger.info(f"  - name: '{request.name}'")
             logger.info(f"  - s3_path: '{getattr(request, 's3_path', 'MISSING')}'")
             logger.info(f"  - schema fields count: {len(request.schema.fields) if request.schema else 0}")
+            logger.info(f"  - schema fields: {[f.name for f in request.schema.fields] if request.schema else []}")
 
             # Check if s3_path exists and is not empty
             if not hasattr(request, 's3_path'):
