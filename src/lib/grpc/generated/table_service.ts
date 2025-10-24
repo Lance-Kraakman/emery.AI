@@ -271,6 +271,8 @@ export interface UpdateRowsRequest {
   rowsData: RowData[];
   userId: string;
   organizationId: string;
+  /** S3 path for Delta Lake table data */
+  s3Path: string;
 }
 
 export interface DeleteRowsRequest {
@@ -279,6 +281,8 @@ export interface DeleteRowsRequest {
   rowIds: string[];
   userId: string;
   organizationId: string;
+  /** S3 path for Delta Lake table data */
+  s3Path: string;
 }
 
 export interface QueryRowsRequest {
@@ -2435,7 +2439,7 @@ export const GetRowsRequest: MessageFns<GetRowsRequest> = {
 };
 
 function createBaseUpdateRowsRequest(): UpdateRowsRequest {
-  return { tableId: "", rowsData: [], userId: "", organizationId: "" };
+  return { tableId: "", rowsData: [], userId: "", organizationId: "", s3Path: "" };
 }
 
 export const UpdateRowsRequest: MessageFns<UpdateRowsRequest> = {
@@ -2451,6 +2455,9 @@ export const UpdateRowsRequest: MessageFns<UpdateRowsRequest> = {
     }
     if (message.organizationId !== "") {
       writer.uint32(34).string(message.organizationId);
+    }
+    if (message.s3Path !== "") {
+      writer.uint32(42).string(message.s3Path);
     }
     return writer;
   },
@@ -2494,6 +2501,14 @@ export const UpdateRowsRequest: MessageFns<UpdateRowsRequest> = {
           message.organizationId = reader.string();
           continue;
         }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.s3Path = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2509,6 +2524,7 @@ export const UpdateRowsRequest: MessageFns<UpdateRowsRequest> = {
       rowsData: globalThis.Array.isArray(object?.rowsData) ? object.rowsData.map((e: any) => RowData.fromJSON(e)) : [],
       userId: isSet(object.userId) ? globalThis.String(object.userId) : "",
       organizationId: isSet(object.organizationId) ? globalThis.String(object.organizationId) : "",
+      s3Path: isSet(object.s3Path) ? globalThis.String(object.s3Path) : "",
     };
   },
 
@@ -2526,6 +2542,9 @@ export const UpdateRowsRequest: MessageFns<UpdateRowsRequest> = {
     if (message.organizationId !== "") {
       obj.organizationId = message.organizationId;
     }
+    if (message.s3Path !== "") {
+      obj.s3Path = message.s3Path;
+    }
     return obj;
   },
 
@@ -2538,12 +2557,13 @@ export const UpdateRowsRequest: MessageFns<UpdateRowsRequest> = {
     message.rowsData = object.rowsData?.map((e) => RowData.fromPartial(e)) || [];
     message.userId = object.userId ?? "";
     message.organizationId = object.organizationId ?? "";
+    message.s3Path = object.s3Path ?? "";
     return message;
   },
 };
 
 function createBaseDeleteRowsRequest(): DeleteRowsRequest {
-  return { tableId: "", rowIds: [], userId: "", organizationId: "" };
+  return { tableId: "", rowIds: [], userId: "", organizationId: "", s3Path: "" };
 }
 
 export const DeleteRowsRequest: MessageFns<DeleteRowsRequest> = {
@@ -2559,6 +2579,9 @@ export const DeleteRowsRequest: MessageFns<DeleteRowsRequest> = {
     }
     if (message.organizationId !== "") {
       writer.uint32(34).string(message.organizationId);
+    }
+    if (message.s3Path !== "") {
+      writer.uint32(42).string(message.s3Path);
     }
     return writer;
   },
@@ -2602,6 +2625,14 @@ export const DeleteRowsRequest: MessageFns<DeleteRowsRequest> = {
           message.organizationId = reader.string();
           continue;
         }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.s3Path = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2617,6 +2648,7 @@ export const DeleteRowsRequest: MessageFns<DeleteRowsRequest> = {
       rowIds: globalThis.Array.isArray(object?.rowIds) ? object.rowIds.map((e: any) => globalThis.String(e)) : [],
       userId: isSet(object.userId) ? globalThis.String(object.userId) : "",
       organizationId: isSet(object.organizationId) ? globalThis.String(object.organizationId) : "",
+      s3Path: isSet(object.s3Path) ? globalThis.String(object.s3Path) : "",
     };
   },
 
@@ -2634,6 +2666,9 @@ export const DeleteRowsRequest: MessageFns<DeleteRowsRequest> = {
     if (message.organizationId !== "") {
       obj.organizationId = message.organizationId;
     }
+    if (message.s3Path !== "") {
+      obj.s3Path = message.s3Path;
+    }
     return obj;
   },
 
@@ -2646,6 +2681,7 @@ export const DeleteRowsRequest: MessageFns<DeleteRowsRequest> = {
     message.rowIds = object.rowIds?.map((e) => e) || [];
     message.userId = object.userId ?? "";
     message.organizationId = object.organizationId ?? "";
+    message.s3Path = object.s3Path ?? "";
     return message;
   },
 };

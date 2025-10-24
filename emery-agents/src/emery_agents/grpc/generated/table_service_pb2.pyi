@@ -238,28 +238,32 @@ class GetRowsRequest(_message.Message):
     def __init__(self, table_id: _Optional[str] = ..., row_ids: _Optional[_Iterable[str]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ...) -> None: ...
 
 class UpdateRowsRequest(_message.Message):
-    __slots__ = ("table_id", "rows_data", "user_id", "organization_id")
+    __slots__ = ("table_id", "rows_data", "user_id", "organization_id", "s3_path")
     TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     ROWS_DATA_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
+    S3_PATH_FIELD_NUMBER: _ClassVar[int]
     table_id: str
     rows_data: _containers.RepeatedCompositeFieldContainer[RowData]
     user_id: str
     organization_id: str
-    def __init__(self, table_id: _Optional[str] = ..., rows_data: _Optional[_Iterable[_Union[RowData, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ...) -> None: ...
+    s3_path: str
+    def __init__(self, table_id: _Optional[str] = ..., rows_data: _Optional[_Iterable[_Union[RowData, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ...) -> None: ...
 
 class DeleteRowsRequest(_message.Message):
-    __slots__ = ("table_id", "row_ids", "user_id", "organization_id")
+    __slots__ = ("table_id", "row_ids", "user_id", "organization_id", "s3_path")
     TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     ROW_IDS_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
+    S3_PATH_FIELD_NUMBER: _ClassVar[int]
     table_id: str
     row_ids: _containers.RepeatedScalarFieldContainer[str]
     user_id: str
     organization_id: str
-    def __init__(self, table_id: _Optional[str] = ..., row_ids: _Optional[_Iterable[str]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ...) -> None: ...
+    s3_path: str
+    def __init__(self, table_id: _Optional[str] = ..., row_ids: _Optional[_Iterable[str]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ...) -> None: ...
 
 class QueryRowsRequest(_message.Message):
     __slots__ = ("table_id", "s3_path", "filters", "order_by", "order_direction", "limit", "offset", "user_id", "organization_id")

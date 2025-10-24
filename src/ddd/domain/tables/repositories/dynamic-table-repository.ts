@@ -26,7 +26,7 @@ export interface IDynamicTableRepository {
   findRows(tableId: TableId, options?: RowQueryOptions): Promise<Row[]>;
   getRow(tableId: TableId, rowId: string): Promise<Row | null>;
   updateRows(tableId: TableId, updates: Array<{rowId: string, row: Row}>): Promise<Row[]>;
-  deleteRow(tableId: TableId, rowId: string): Promise<void>;
+  deleteRows(tableId: TableId, rowIds: string[]): Promise<void>;
   
   // Generic table operations for any storage backend
   tableExists(tableId: TableId): Promise<boolean>;

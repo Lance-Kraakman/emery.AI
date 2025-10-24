@@ -9,7 +9,7 @@ import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import { Row } from '@/ddd/domain/tables/value-objects/row';
 import { TableId, OrganizationId } from '@/ddd/domain/shared/value-objects';
-import { 
+import {
   FieldType,
   Table as ITable,
   TableSchema as ITableSchema,
@@ -19,6 +19,8 @@ import {
   RowDataValue as IRowDataValue,
   CreateTableRequest as ICreateTableRequest,
   CreateRowsRequest as ICreateRowsRequest,
+  UpdateRowsRequest as IUpdateRowsRequest,
+  DeleteRowsRequest as IDeleteRowsRequest,
   QueryRowsRequest as IQueryRowsRequest,
 } from '@/lib/grpc/generated/table_service';
 
@@ -117,6 +119,49 @@ export class TableGrpcMapper {
       s3Path: s3Path || '', // S3 path for Delta Lake table data
       rowsData: serializedRows.map(({ id, data }) => this.toProtoRowDataFromPlain(id, data)),
       mode: mode || 'append', // Default to append for backward compatibility
+    };
+
+    return request;
+  }
+
+  /**
+   * Convert serialized row data to protobuf UpdateRowsRequest interface
+   * Used when updating rows with data that has already been serialized by RowSerializer
+   * Uses Delta Lake merge operation for efficient row-level updates
+   */
+  static toUpdateRowsRequestFromData(
+    tableId: TableId,
+    serializedRows: Array<{ id: string; data: Record<string, any> }>,
+    organizationId: OrganizationId,
+    s3Path?: string
+  ): IUpdateRowsRequest {
+    const request: IUpdateRowsRequest = {
+      tableId: tableId.value.toString(),
+      userId: '', // Will be set by the service layer
+      organizationId: organizationId.value.toString(),
+      s3Path: s3Path || '', // S3 path for Delta Lake table data
+      rowsData: serializedRows.map(({ id, data }) => this.toProtoRowDataFromPlain(id, data)),
+    };
+
+    return request;
+  }
+
+  /**
+   * Convert delete parameters to protobuf DeleteRowsRequest interface
+   * Used for efficient row-level deletes via Delta Lake DELETE operation
+   */
+  static toDeleteRowsRequest(
+    tableId: TableId,
+    rowIds: string[],
+    organizationId: OrganizationId,
+    s3Path: string
+  ): IDeleteRowsRequest {
+    const request: IDeleteRowsRequest = {
+      tableId: tableId.value.toString(),
+      rowIds: rowIds,
+      userId: '', // Will be set by the service layer
+      organizationId: organizationId.value.toString(),
+      s3Path: s3Path,
     };
 
     return request;

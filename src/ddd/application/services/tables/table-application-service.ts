@@ -810,8 +810,8 @@ export class TableApplicationService {
         return ResultHelpers.failure(`Table ${tableId.value} not found`);
       }
 
-      // Delete row using repository
-      await this.dynamicTableRepository.deleteRow(tableId, rowId.value);
+      // Delete row using repository (pass as single-element array)
+      await this.dynamicTableRepository.deleteRows(tableId, [rowId.value]);
 
       return ResultHelpers.success(undefined);
 
