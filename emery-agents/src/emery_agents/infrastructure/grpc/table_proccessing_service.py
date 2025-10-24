@@ -777,9 +777,10 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             predicate = self._build_pyarrow_predicate(request.filters)
 
             # Convert PyArrow table to Polars DataFrame with predicate pushdown
-            # AIDEV-NOTE: DeltaTable.to_pyarrow_table(filter=predicate) is the correct method
-            # Passing filter applies predicate at storage layer, loading only matching rows
-            arrow_table = delta_table.to_pyarrow_table(filter=predicate)
+            # AIDEV-NOTE: DeltaTable.to_pyarrow_table(filters=predicate) is the correct method
+            # Parameter is 'filters' (plural), not 'filter'
+            # filters_to_expression() accepts Expression objects and returns them unchanged
+            arrow_table = delta_table.to_pyarrow_table(filters=predicate)
             df = pl.from_arrow(arrow_table)
 
             # Filters are now applied via predicate pushdown - no in-memory filtering needed
@@ -862,7 +863,12 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Get add actions from transaction log
             # AIDEV-NOTE: add_actions contains metadata about files including num_records and size_bytes
             # This reads only the transaction log (_delta_log/*.json), not the actual data files
-            add_actions = delta_table.get_add_actions(flatten=True)
+            # get_add_actions() returns arro3.core.RecordBatch in deltalake 1.2.1+
+            add_actions_arro3 = delta_table.get_add_actions(flatten=True)
+
+            # Convert arro3.RecordBatch to pyarrow.RecordBatch using PyCapsule interface (zero-copy)
+            # PyArrow compute functions require PyArrow objects, not arro3
+            add_actions = pa.RecordBatch.from_arrow(add_actions_arro3)
 
             # Sum num_records across all files to get total row count
             row_count = pc.sum(add_actions['num_records']).as_py()
