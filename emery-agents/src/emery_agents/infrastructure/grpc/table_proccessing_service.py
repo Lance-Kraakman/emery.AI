@@ -1073,8 +1073,13 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 logger.info(f"  - order_direction: '{request.order_direction}'")
                 logger.info(f"  - DataFrame shape: {df.shape}")
                 logger.info(f"  - DataFrame columns: {df.columns}")
-                # Schema is deltalake._internal.Schema, access field names via schema.names
-                logger.info(f"  - Delta Lake schema column names: {schema.names}")
+                # Get schema field names - convert PyArrow schema to list of names
+                try:
+                    # PyArrow schema can be converted to list to get field names
+                    schema_field_names = [field.name for field in schema]
+                    logger.info(f"  - Delta Lake schema column names: {schema_field_names}")
+                except Exception as schema_error:
+                    logger.warning(f"  - Could not extract schema field names: {schema_error}")
 
                 # Check if sort column exists in DataFrame
                 if request.order_by not in df.columns:
