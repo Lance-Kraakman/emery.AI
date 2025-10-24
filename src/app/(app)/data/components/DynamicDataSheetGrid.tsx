@@ -502,7 +502,7 @@ export function DynamicDataSheetGrid({
     onAddFilter: onAddFilter ?? (() => {}),
     onRemoveFilter: onRemoveFilter ?? (() => {}),
     onClearFilters: onClearFilters ?? (() => {}),
-    sortState: sortState ?? { order: 'asc' },
+    sortState: sortState ?? {},
     onSort: onSort ?? (() => {}),
     onClearSort: onClearSort ?? (() => {}),
     onManageFields,

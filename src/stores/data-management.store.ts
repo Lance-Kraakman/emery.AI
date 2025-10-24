@@ -316,7 +316,7 @@ export const dataActions = {
       fieldFilter: '',
       activeFilters: [],
       rowFilter: {},
-      sortBy: {},
+      // Keep sortBy - clearing filters should not clear sort
       currentPage: 1
     }))
   },
