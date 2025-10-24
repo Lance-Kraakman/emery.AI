@@ -718,17 +718,33 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # These are more complex and may require custom handling
             # For now, we skip them - they could be added in a future iteration
 
-        # Combine all predicates with AND logic
+        # Combine all predicates with OR logic for search, AND for filters
+        # AIDEV-NOTE: For text search across multiple fields (e.g., name ILIKE '%test%' OR description ILIKE '%test%'),
+        # we need OR logic to match rows where ANY field contains the search term.
+        # We detect this by checking if all filters use ILIKE/LIKE with the same value.
         if len(predicates) == 0:
             return None
         elif len(predicates) == 1:
             return predicates[0]
         else:
-            # Chain multiple predicates with AND
-            result = predicates[0]
-            for pred in predicates[1:]:
-                result = pc.and_(result, pred)
-            return result
+            # Check if this looks like a text search (all ILIKE operators with same value)
+            is_text_search = all(
+                filter_obj.operator in (table_service_pb2.FILTER_OP_ILIKE, table_service_pb2.FILTER_OP_LIKE)
+                for filter_obj in filters
+            )
+
+            if is_text_search:
+                # Use OR logic for text search - match ANY field
+                result = predicates[0]
+                for pred in predicates[1:]:
+                    result = pc.or_(result, pred)
+                return result
+            else:
+                # Use AND logic for regular filters - match ALL conditions
+                result = predicates[0]
+                for pred in predicates[1:]:
+                    result = pc.and_(result, pred)
+                return result
 
     def QueryRows(self, request: table_service_pb2.QueryRowsRequest, context) -> table_service_pb2.QueryRowsResponse:
         """Query rows with filters and pagination - returns Arrow IPC for zero-copy transfer."""
@@ -760,7 +776,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     message="s3_path is required but empty"
                 )
 
-            logger.info(f"Querying table: {request.table_id} at {request.s3_path} with filters: {dict(request.filters)}")
+            # Log filter information - request.filters is now a list of RowFilter objects, not a map
+            filter_summary = [f"{f.field}:{f.operator}={f.value}" for f in request.filters] if request.filters else []
+            logger.info(f"Querying table: {request.table_id} at {request.s3_path} with filters: {filter_summary}")
 
             # Convert relative path to full S3 URI
             s3_uri = self._to_s3_uri(request.s3_path)
@@ -866,9 +884,10 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # get_add_actions() returns arro3.core.RecordBatch in deltalake 1.2.1+
             add_actions_arro3 = delta_table.get_add_actions(flatten=True)
 
-            # Convert arro3.RecordBatch to pyarrow.RecordBatch using PyCapsule interface (zero-copy)
+            # Convert arro3.RecordBatch to pyarrow.Table using PyCapsule interface (zero-copy)
             # PyArrow compute functions require PyArrow objects, not arro3
-            add_actions = pa.RecordBatch.from_arrow(add_actions_arro3)
+            # Use pa.table() which accepts objects implementing __arrow_c_stream__ protocol
+            add_actions = pa.table(add_actions_arro3)
 
             # Sum num_records across all files to get total row count
             row_count = pc.sum(add_actions['num_records']).as_py()
