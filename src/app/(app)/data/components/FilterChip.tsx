@@ -3,43 +3,24 @@
 import React from "react"
 import { X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { type FilterConfig, type FilterOperator, getOperatorLabel, operatorNeedsValue } from "@/lib/types/filters"
 
-export interface FilterConfig {
-  field: string
-  operator: string
-  value: any
-}
+// Re-export for backward compatibility
+export type { FilterConfig }
 
 interface FilterChipProps {
   filter: FilterConfig
   onRemove: () => void
 }
 
-const operatorLabels: Record<string, string> = {
-  eq: "=",
-  ne: "≠",
-  gt: ">",
-  gte: "≥",
-  lt: "<",
-  lte: "≤",
-  like: "contains",
-  ilike: "contains",
-  in: "in",
-  not_in: "not in",
-  is_null: "is empty",
-  is_not_null: "is not empty",
-  contains: "contains",
-  contained_by: "contained by",
-  has_key: "has key"
-}
-
 export function FilterChip({ filter, onRemove }: FilterChipProps) {
-  const operatorLabel = operatorLabels[filter.operator] || filter.operator
+  const operatorLabel = getOperatorLabel(filter.operator as FilterOperator)
 
   // Format the value for display
   const formatValue = (value: any): string => {
     if (value === null || value === undefined) return ""
-    if (filter.operator === 'is_null' || filter.operator === 'is_not_null') return ""
+    // Don't show value for operators that don't need it
+    if (!operatorNeedsValue(filter.operator as FilterOperator)) return ""
     if (Array.isArray(value)) return value.join(", ")
     if (typeof value === 'boolean') return value ? "true" : "false"
 

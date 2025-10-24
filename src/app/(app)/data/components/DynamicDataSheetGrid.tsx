@@ -64,8 +64,7 @@ import { FilterPopover, type FilterConfig } from './FilterPopover'
 import { FilterChip } from './FilterChip'
 import { createField, updateField, deleteField } from '@/app/actions/fields'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
-import { GridContext, type GridContextValue } from './grid/GridContext'
-import { GridHeaderBar } from './grid/GridHeaderBar'
+import { GridContext, GridHeaderBar, type GridContextValue } from './grid'
 
 interface DynamicDataSheetGridProps {
   fields: FieldDTO[];
@@ -85,8 +84,8 @@ interface DynamicDataSheetGridProps {
   isLoading?: boolean;
   error?: string | null;
   // Filter & Sort props
-  activeFilters?: Array<{ field: string, operator: string, value: any }>;
-  onAddFilter?: (filter: { field: string, operator: string, value: any }) => void;
+  activeFilters?: FilterConfig[];
+  onAddFilter?: (filter: FilterConfig) => void;
   onRemoveFilter?: (index: number) => void;
   onClearFilters?: () => void;
   sortState?: { field?: string, order: 'asc' | 'desc' };

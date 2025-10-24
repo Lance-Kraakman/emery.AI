@@ -8,12 +8,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
+import {
+  type FilterConfig,
+  type FilterOperator,
+  type FieldType,
+  OPERATORS_BY_FIELD_TYPE,
+  operatorNeedsValue,
+  getOperatorLabel
+} from "@/lib/types/filters"
 
-export interface FilterConfig {
-  field: string
-  operator: string
-  value: any
-}
+// Re-export FilterConfig for backward compatibility
+export type { FilterConfig }
 
 interface FilterPopoverProps {
   trigger: React.ReactNode
@@ -23,57 +28,11 @@ interface FilterPopoverProps {
   onRemoveFilter: (index: number) => void
 }
 
-const operatorsByType: Record<string, Array<{ value: string, label: string }>> = {
-  text: [
-    { value: 'eq', label: 'Equals' },
-    { value: 'ne', label: 'Not equals' },
-    { value: 'ilike', label: 'Contains' },
-    { value: 'is_null', label: 'Is empty' },
-    { value: 'is_not_null', label: 'Is not empty' },
-  ],
-  number: [
-    { value: 'eq', label: 'Equals' },
-    { value: 'ne', label: 'Not equals' },
-    { value: 'gt', label: 'Greater than' },
-    { value: 'gte', label: 'Greater or equal' },
-    { value: 'lt', label: 'Less than' },
-    { value: 'lte', label: 'Less or equal' },
-    { value: 'is_null', label: 'Is empty' },
-    { value: 'is_not_null', label: 'Is not empty' },
-  ],
-  boolean: [
-    { value: 'eq', label: 'Equals' },
-    { value: 'ne', label: 'Not equals' },
-  ],
-  date: [
-    { value: 'eq', label: 'Equals' },
-    { value: 'ne', label: 'Not equals' },
-    { value: 'gt', label: 'After' },
-    { value: 'gte', label: 'On or after' },
-    { value: 'lt', label: 'Before' },
-    { value: 'lte', label: 'On or before' },
-    { value: 'is_null', label: 'Is empty' },
-    { value: 'is_not_null', label: 'Is not empty' },
-  ],
-}
-
-const operatorLabels: Record<string, string> = {
-  eq: "=",
-  ne: "≠",
-  gt: ">",
-  gte: "≥",
-  lt: "<",
-  lte: "≤",
-  ilike: "contains",
-  is_null: "is empty",
-  is_not_null: "is not empty",
-}
-
 export function FilterPopover({ trigger, fields, activeFilters, onAddFilter, onRemoveFilter }: FilterPopoverProps) {
   // Hydration-safe mounting check
   const [isMounted, setIsMounted] = useState(false)
   const [newField, setNewField] = useState<string>("")
-  const [newOperator, setNewOperator] = useState<string>("eq")
+  const [newOperator, setNewOperator] = useState<FilterOperator>("eq")
   const [newValue, setNewValue] = useState<string>("")
 
   // Set mounted state after client hydration
@@ -82,8 +41,8 @@ export function FilterPopover({ trigger, fields, activeFilters, onAddFilter, onR
   }, [])
 
   const selectedFieldObj = fields.find(f => f.name === newField)
-  const fieldType = selectedFieldObj?.type || 'text'
-  const availableOperators = operatorsByType[fieldType] || operatorsByType.text
+  const fieldType = (selectedFieldObj?.type as FieldType) || 'text'
+  const availableOperators = OPERATORS_BY_FIELD_TYPE[fieldType]
 
   // Reset operator when field changes
   useEffect(() => {
@@ -95,7 +54,7 @@ export function FilterPopover({ trigger, fields, activeFilters, onAddFilter, onR
   // Prevent hydration mismatch by not rendering during SSR
   if (!isMounted) return null
 
-  const needsValue = newOperator !== 'is_null' && newOperator !== 'is_not_null'
+  const needsValue = operatorNeedsValue(newOperator)
 
   const handleAddFilter = () => {
     if (!newField) return
@@ -142,10 +101,6 @@ export function FilterPopover({ trigger, fields, activeFilters, onAddFilter, onR
     return String(value)
   }
 
-  const getOperatorLabel = (op: string): string => {
-    return operatorLabels[op] || op
-  }
-
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -185,7 +140,7 @@ export function FilterPopover({ trigger, fields, activeFilters, onAddFilter, onR
             {/* Operator & Value Row */}
             {newField && (
               <div className="flex gap-2">
-                <Select value={newOperator} onValueChange={setNewOperator}>
+                <Select value={newOperator} onValueChange={(value) => setNewOperator(value as FilterOperator)}>
                   <SelectTrigger className="h-9 w-[140px]">
                     <SelectValue />
                   </SelectTrigger>
