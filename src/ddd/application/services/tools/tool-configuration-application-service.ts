@@ -8,7 +8,10 @@
  * Coordinates between domain services and repositories to fulfill use cases.
  */
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+
+const logger = createDebugLogger('ToolConfig');
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { IToolConfigurationService } from '@/ddd/domain/tools/services/tool-configuration-service';
 import { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
@@ -83,9 +86,14 @@ export class ToolConfigurationApplicationService {
         command.organizationId
       );
 
-      console.log(`[ToolConfigurationApplicationService] Found ${userAgents.length} agents for user ${command.userId.value}`);
+      logger.debug(`Found ${userAgents.length} agents`, { userId: command.userId.value });
       userAgents.forEach((agent, index) => {
-        console.log(`  Agent ${index}: id=${agent.id.value}, name=${agent.name}, status=${agent.status.value}, hasApiKey=${!!agent.apiKey}`);
+        logger.debug(`Agent ${index}`, {
+          id: agent.id.value,
+          name: agent.name,
+          status: agent.status.value,
+          hasApiKey: !!agent.apiKey
+        });
       });
 
       // 3. Find the first active agent with an API key
@@ -93,7 +101,7 @@ export class ToolConfigurationApplicationService {
         agent.status.isActive() && agent.apiKey
       );
 
-      console.log(`[ToolConfigurationApplicationService] Active agent with API key: ${activeAgent ? `found (${activeAgent.name})` : 'none found'}`);
+      logger.debug(`Active agent with API key: ${activeAgent ? `found (${activeAgent.name})` : 'none found'}`);
 
       // 4. Use domain service to enrich tools with authentication
       const enrichedTools = this.toolConfigurationService.enrichWithAuthentication(
@@ -111,7 +119,7 @@ export class ToolConfigurationApplicationService {
       };
 
     } catch (error) {
-      console.error('[ToolConfigurationApplicationService] Failed to enrich tools:', error);
+      logger.error('Failed to enrich tools:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to enrich tools with authentication'
@@ -161,7 +169,7 @@ export class ToolConfigurationApplicationService {
       };
 
     } catch (error) {
-      console.error('[ToolConfigurationApplicationService] Failed to validate tools:', error);
+      logger.error('Failed to validate tools:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to validate tool authentication'
@@ -200,7 +208,7 @@ export class ToolConfigurationApplicationService {
       };
 
     } catch (error) {
-      console.error('[ToolConfigurationApplicationService] Failed to get auth requirements:', error);
+      logger.error('Failed to get auth requirements:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get authentication requirements'
@@ -231,7 +239,7 @@ export class ToolConfigurationApplicationService {
       }
 
       if (!command.userApiKey) {
-        console.log('[ToolConfigurationApplicationService] No user API key provided');
+        logger.debug('No user API key provided');
         return {
           success: true,
           data: {
@@ -241,7 +249,7 @@ export class ToolConfigurationApplicationService {
         };
       }
 
-      console.log(`[ToolConfigurationApplicationService] Enriching ${command.tools.length} tools with user API key`);
+      logger.debug(`Enriching ${command.tools.length} tools with user API key`);
 
       // 2. Use domain service to enrich tools with user API key
       const enrichedTools = this.toolConfigurationService.enrichWithAuthentication(
@@ -249,7 +257,7 @@ export class ToolConfigurationApplicationService {
         command.userApiKey
       );
 
-      console.log(`[ToolConfigurationApplicationService] Successfully enriched tools with user API key`);
+      logger.debug(`Successfully enriched tools with user API key`);
 
       return {
         success: true,
@@ -260,7 +268,7 @@ export class ToolConfigurationApplicationService {
       };
 
     } catch (error) {
-      console.error('[ToolConfigurationApplicationService] Failed to enrich tools with user API key:', error);
+      logger.error('Failed to enrich tools with user API key:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to enrich tools with user API key'
@@ -292,7 +300,7 @@ export class ToolConfigurationApplicationService {
       }
 
       if (!command.agentApiKey) {
-        console.log('[ToolConfigurationApplicationService] No agent API key provided');
+        logger.debug('No agent API key provided');
         return {
           success: true,
           data: {
@@ -302,7 +310,7 @@ export class ToolConfigurationApplicationService {
         };
       }
 
-      console.log(`[ToolConfigurationApplicationService] Enriching ${command.tools.length} tools with agent API key (mode: agent)`);
+      logger.debug(`Enriching ${command.tools.length} tools with agent API key (mode: agent)`);
 
       // 2. Enrich tools with agent API key and agent mode
       const enrichedTools = command.tools.map(tool => {
@@ -320,7 +328,7 @@ export class ToolConfigurationApplicationService {
         });
       });
 
-      console.log(`[ToolConfigurationApplicationService] Successfully enriched ${enrichedTools.length} tools with agent API key`);
+      logger.debug(`Successfully enriched ${enrichedTools.length} tools with agent API key`);
 
       return {
         success: true,
@@ -331,7 +339,7 @@ export class ToolConfigurationApplicationService {
       };
 
     } catch (error) {
-      console.error('[ToolConfigurationApplicationService] Failed to enrich tools with agent API key:', error);
+      logger.error('Failed to enrich tools with agent API key:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to enrich tools with agent API key'
