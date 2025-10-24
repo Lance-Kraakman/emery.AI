@@ -595,8 +595,8 @@ export class TableApplicationService {
 
           console.log(`[TABLE-APP-SERVICE] Found ${fileFields.length} file fields in table ${table.name}`);
 
-          // Get all rows from the table
-          const rows = await this.dynamicTableRepository.findRows(table.id);
+          // Get all rows from the table (using high limit for file cleanup operation)
+          const rows = await this.dynamicTableRepository.getRows(table.id, { limit: 10000, offset: 0 });
           
           // Extract file values from each row
           for (const row of rows) {
@@ -834,11 +834,11 @@ export class TableApplicationService {
   }
 
   /**
-   * Get rows from a table with optional filters
+   * Get rows from a table with pagination
    */
-  async getRows(tableId: TableId, options?: RowQueryOptions): Promise<Row[]> {
+  async getRows(tableId: TableId, options: RowQueryOptions): Promise<Row[]> {
     try {
-      return await this.dynamicTableRepository.findRows(tableId, options);
+      return await this.dynamicTableRepository.getRows(tableId, options);
     } catch (error) {
       console.error('[TABLE-APP-SERVICE] Error getting rows:', error);
       return [];
@@ -912,8 +912,8 @@ export class TableApplicationService {
         value: `%${query}%`
       }));
 
-      // Use existing findRows method with search filters
-      const rows = await this.dynamicTableRepository.findRows(tableId, {
+      // Use existing getRows method with search filters
+      const rows = await this.dynamicTableRepository.getRows(tableId, {
         limit,
         offset: 0,
         filters: searchFilters

@@ -23,7 +23,7 @@ export interface IDynamicTableRepository {
   
   // Row CRUD - works with Row entities directly (batch operations)
   insertRows(tableId: TableId, rows: Row[]): Promise<Row[]>;
-  findRows(tableId: TableId, options?: RowQueryOptions): Promise<Row[]>;
+  getRows(tableId: TableId, options: RowQueryOptions): Promise<Row[]>;
   getRow(tableId: TableId, rowId: string): Promise<Row | null>;
   updateRows(tableId: TableId, updates: Array<{rowId: string, row: Row}>): Promise<Row[]>;
   deleteRows(tableId: TableId, rowIds: string[]): Promise<void>;

@@ -1,4 +1,4 @@
-import { useReducer, useEffect } from 'react'
+import { useReducer, useEffect, useRef } from 'react'
 import type { DSGRow } from '@/app/mappers/dsg-mapper'
 
 /**
@@ -14,7 +14,8 @@ export interface GridState {
  * Grid actions - map 1:1 to user events and mutations
  */
 export type GridAction =
-  | { type: 'SET_DATA'; payload: DSGRow[] }           // Server data loaded
+  | { type: 'SET_DATA'; payload: DSGRow[] }           // Server data loaded (initial/replace)
+  | { type: 'APPEND_DATA'; payload: DSGRow[] }        // Append more rows (infinite scroll)
   | { type: 'CELL_CHANGED'; payload: { rowId: string; fieldId: number; value: any } }
   | { type: 'ROW_ADDED'; payload: DSGRow }
   | { type: 'ROW_DELETED'; payload: string }          // Row ID deleted
@@ -29,6 +30,10 @@ function gridReducer(state: GridState, action: GridAction): GridState {
   switch (action.type) {
     case 'SET_DATA':
       return { ...state, data: action.payload }
+
+    case 'APPEND_DATA':
+      // Append new rows without replacing existing data (preserves scroll position)
+      return { ...state, data: [...state.data, ...action.payload] }
 
     case 'CELL_CHANGED':
     case 'ROW_ADDED':
@@ -58,11 +63,31 @@ export function useGridState(rows: DSGRow[]) {
     isSyncing: false
   })
 
+  const prevLengthRef = useRef(rows.length)
+
   // Sync server data to state (TanStack Query manages server state)
   useEffect(() => {
-    dispatch({ type: 'SET_DATA', payload: rows })
+    const prevLength = prevLengthRef.current
+    const currentLength = rows.length
+
+    // Detect if this is an append (infinite scroll loaded more data)
+    // vs a replace (table changed, filter applied, or initial load)
+    const isAppending = currentLength > prevLength &&
+                       state.data.length > 0 &&
+                       currentLength > state.data.length
+
+    if (isAppending) {
+      // Extract only the new rows that were added
+      const newRows = rows.slice(prevLength)
+      dispatch({ type: 'APPEND_DATA', payload: newRows })
+    } else {
+      // Full replace for table changes, filters, or initial load
+      dispatch({ type: 'SET_DATA', payload: rows })
+    }
+
     dispatch({ type: 'SYNC_COMPLETE' })  // Server update means sync is done
-  }, [rows])
+    prevLengthRef.current = currentLength
+  }, [rows, state.data.length])
 
   return { state, dispatch }
 }

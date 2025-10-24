@@ -120,8 +120,8 @@ export class DocumentApplicationService {
         return null;
       }
 
-      // Get all rows using proper repository pattern
-      const rows = await this.tableRepository.findRows(tableId);
+      // Get all rows using proper repository pattern (using high limit for document search)
+      const rows = await this.tableRepository.getRows(tableId, { limit: 10000, offset: 0 });
 
       // Find the document in the rows
       for (const row of rows) {

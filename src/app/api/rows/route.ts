@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from '@/lib/auth/test-auth';
-import { createRow, updateRowData, deleteRowData, getRowsData } from '@/app/actions/rows';
+import { createRow, updateRowData, deleteRowData, getRowsDSG } from '@/app/actions/rows';
 
 export async function POST(request: NextRequest) {
   try {
@@ -65,9 +65,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Use server action function
-    const rows = await getRowsData(parseInt(tableId), limit);
-    return NextResponse.json(rows);
+    // Use server action function with pagination
+    const result = await getRowsDSG(parseInt(tableId), limit, offset);
+    return NextResponse.json(result.rows);
   } catch (error) {
     console.error("Error fetching rows:", error);
     return NextResponse.json(

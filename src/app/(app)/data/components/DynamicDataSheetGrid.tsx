@@ -438,15 +438,15 @@ export function DynamicDataSheetGrid({
     // AIDEV-NOTE: Using react-datasheet-grid built-in column types for standard fields
     // Built-in columns handle rendering, editing, formatting, and keyboard navigation automatically
 
-    // ID column - always first, non-editable
+    // ID column - always first, non-editable, sized for full UUIDs (36 chars)
     const idColumn = {
       ...keyColumn('id', textColumn),
       title: <span className="font-semibold text-muted-foreground">ID</span>,
       disabled: true,  // Non-editable
-      basis: 100,
+      basis: 300,      // Increased from 100 to fit full UUID (36 chars)
       grow: 0,
       shrink: 0,
-      minWidth: 80,
+      minWidth: 300,   // Increased from 80 to fit full UUID
       headerClassName: 'id-column-header'
     }
 
@@ -674,6 +674,7 @@ export function DynamicDataSheetGrid({
           </div>
         ) : (
           <DataSheetGrid
+            key={`grid-${tableId}`}  // CRITICAL: Stable key prevents remount on data updates, preserves scroll position
             value={state.data}
             onChange={handleChange}
             columns={columns}

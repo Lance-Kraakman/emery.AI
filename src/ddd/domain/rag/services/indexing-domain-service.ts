@@ -173,7 +173,7 @@ export class IndexingDomainService {
       
       if (fileFields.length > 0) {
         // Get rows that might contain file values
-        const rows = await this.tableRepository.findRows(table.id, { limit: 10000 });
+        const rows = await this.tableRepository.getRows(table.id, { limit: 10000, offset: 0 });
         
         for (const row of rows) {
           for (const fileField of fileFields) {
@@ -660,9 +660,10 @@ export class IndexingDomainService {
   private async fetchSampleRows(table: DynamicTable, limit: number = 15): Promise<any[]> {
     try {
       // Use the repository to get sample rows
-      const rows = await this.tableRepository.findRows(table.id, { 
-        limit, 
-        orderBy: 'created_at DESC' 
+      const rows = await this.tableRepository.getRows(table.id, {
+        limit,
+        offset: 0,
+        orderBy: 'created_at DESC'
       });
       
       console.log(`[INDEXING-DEBUG] Fetched ${rows.length} sample rows from table ${table.name}`);

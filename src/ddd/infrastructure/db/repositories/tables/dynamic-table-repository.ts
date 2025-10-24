@@ -409,30 +409,25 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
-  async findRows(tableId: TableId, options?: RowQueryOptions): Promise<Row[]> {
-    return await this.getRows(tableId, options);
-  }
-
-  async getRows(tableId: TableId, options?: RowQueryOptions): Promise<Row[]> {
+  async getRows(tableId: TableId, options: RowQueryOptions): Promise<Row[]> {
     try {
       const table = await this.findById(tableId);
       if (!table) {
         throw new Error('Table not found');
       }
 
-      const s3Path = S3TablePath.fromPath(table.storageLocation);
-      
-      // Load all rows from Arrow file (returns Row[] format directly)
-      const allRows = await this.loadTableData(s3Path);
-      
-      // Apply query options directly to Row entities
-      const filteredRows = this.applyQueryOptions(allRows, options);
-      
-      // Return Row entities directly - no conversion needed
-      return filteredRows;
+      // CRITICAL FIX: Pass options directly to datalake for server-side pagination
+      // This enables true pagination via gRPC Delta Lake instead of loading all rows
+      const result = await this.datalake.retrieveRows(table, options);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to retrieve rows');
+      }
+
+      return result.data || [];
 
     } catch (error) {
-      console.error('[TableService] Error finding rows:', error);
+      console.error('[DynamicTableRepository] Error getting rows:', error);
       throw error;
     }
   }
