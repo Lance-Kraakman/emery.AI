@@ -5,7 +5,10 @@
  * Orchestrates agent lookup, credential management, and OAuth execution.
  */
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { PipedreamClient } from '@pipedream/sdk';
+
+const logger = createDebugLogger('OAuthProxy');
 import { getExternalUserIdForAgent } from '@/lib/pipedream/client';
 import { ApiKey, UserId, AgentId } from '@/ddd/domain/shared/value-objects';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';

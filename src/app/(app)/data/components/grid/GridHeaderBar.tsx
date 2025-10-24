@@ -134,12 +134,12 @@ export const GridHeaderBar = () => {
       ))}
 
       {/* Clear All Button - shown when filters or sort are active */}
-      {(activeFilters.length > 0 || sortState?.field) && (
+      {(activeFilters.length > 0 || (sortState?.field != null && sortState?.order != null)) && (
         <Button
           variant="ghost"
           size="sm"
           onClick={() => {
-            // Clear filters first (which may also clear sort), then clear sort explicitly
+            // Clear both filters and sort independently
             onClearFilters()
             onClearSort()
           }}

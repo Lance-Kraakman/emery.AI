@@ -1,11 +1,14 @@
 /**
  * Team Application Service
- * 
+ *
  * Handles team business operations including CRUD, member management,
  * agent assignment, and organization scoping.
  */
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
+
+const logger = createDebugLogger('TeamService');
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { Result } from '@/ddd/domain/shared/result';
 import { Team } from '@/ddd/domain/teams/entities/team';

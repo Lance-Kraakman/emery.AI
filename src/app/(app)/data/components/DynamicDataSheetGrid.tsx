@@ -77,7 +77,7 @@ interface DynamicDataSheetGridProps {
   onAddFilter?: (filter: FilterConfig) => void;
   onRemoveFilter?: (index: number) => void;
   onClearFilters?: () => void;
-  sortState?: { field?: string, order: 'asc' | 'desc' };
+  sortState?: { field?: string, order?: 'asc' | 'desc' };
   onSort?: (field: string, direction: 'asc' | 'desc') => void;
   onClearSort?: () => void;
 }
@@ -381,7 +381,6 @@ export function DynamicDataSheetGrid({
     onAddColumn: handleAddColumn,
     onSort,
     onClearSort,
-    sortState,
     RelationCell,
     FileCell,
     DocumentCell,

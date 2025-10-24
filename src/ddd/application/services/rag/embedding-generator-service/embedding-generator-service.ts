@@ -2,7 +2,10 @@
 // Provides file processing using LlamaIndex library
 // Refactored with template functions for maintainable content enhancement
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import crypto from 'crypto';
+
+const logger = createDebugLogger('EmbeddingGenerator');
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import fs from 'fs/promises';

@@ -1,16 +1,19 @@
 /**
  * Document Application Service
- * 
+ *
  * Orchestrates document operations using the existing file infrastructure.
  * Documents are treated as enhanced file field values with additional metadata
  * and business logic. This service coordinates between DocumentField entities,
  * the existing FileUseCases, and storage operations.
- * 
+ *
  * AIDEV-NOTE: Documents reuse the entire file infrastructure (S3, FileUseCases, API routes)
  * while adding rich document semantics on top of the base file field system.
  */
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { DocumentField } from '@/ddd/domain/tables/entities/document-field-entity';
+
+const logger = createDebugLogger('DocumentService');
 import { DocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import { FileUseCases } from './file-application-service';
 import { OrganizationId, TableId, FieldId, UserId } from '@/ddd/domain/shared/value-objects';
