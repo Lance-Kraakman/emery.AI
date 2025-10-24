@@ -348,7 +348,7 @@ export function DataViewsClientSimplified() {
   }
 
   const handleClearSort = () => {
-    dataActions.setSorting('', 'asc')
+    dataActions.clearSorting()
   }
 
   // Refresh data using TanStack Query invalidation

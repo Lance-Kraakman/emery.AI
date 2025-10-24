@@ -11,9 +11,10 @@ interface ColumnHeaderProps {
   onDelete: (fieldName: string) => void
   sortState?: 'asc' | 'desc' | null
   onSort?: (field: string, direction: 'asc' | 'desc') => void
+  onClearSort?: () => void
 }
 
-export function ColumnHeader({ field, onEdit, onDelete, sortState, onSort }: ColumnHeaderProps) {
+export function ColumnHeader({ field, onEdit, onDelete, sortState, onSort, onClearSort }: ColumnHeaderProps) {
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (confirm(`Delete field "${field.name}"? This will permanently delete all data in this column.`)) {
@@ -36,8 +37,8 @@ export function ColumnHeader({ field, onEdit, onDelete, sortState, onSort }: Col
     } else if (sortState === 'asc') {
       onSort(field.name, 'desc')
     } else {
-      // Clear sort by passing empty field name
-      onSort('', 'asc')
+      // Clear sort using dedicated clear function
+      onClearSort?.()
     }
   }
 
