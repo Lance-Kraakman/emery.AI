@@ -112,7 +112,10 @@ export function DataViewsClientSimplified() {
     return infiniteRowsQuery.data?.pages?.[0]?.total ?? 0
   }, [searchTerm, searchQuery.data, infiniteRowsQuery.data])
 
-  const loading = fieldsQuery.isLoading || infiniteRowsQuery.isLoading || searchQuery.isLoading
+  // Separate initial loading from search loading to prevent table from disappearing during search
+  const isInitialLoading = fieldsQuery.isLoading || infiniteRowsQuery.isLoading
+  const isSearching = searchQuery.isLoading
+  const loading = isInitialLoading || isSearching
   const error = fieldsQuery.error || infiniteRowsQuery.error || searchQuery.error
 
   // Scroll handler for infinite scroll - throttled for performance
@@ -340,7 +343,7 @@ export function DataViewsClientSimplified() {
     <div className="h-full flex flex-col overflow-hidden">
       {/* Main content - full width, no padding, no header */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        {loading ? renderLoadingState() :
+        {isInitialLoading ? renderLoadingState() :
          error ? renderErrorState() :
          !selectedTable ? renderEmptyState() : (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -359,7 +362,7 @@ export function DataViewsClientSimplified() {
               onAddRows={handleAddRows}
               onDeleteRow={handleDeleteRow}
               onScroll={handleScrollThrottled}
-              isLoading={loading}
+              isLoading={isSearching}
               error={error ? String(error) : null}
             />
           </div>
