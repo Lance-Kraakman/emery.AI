@@ -31,8 +31,28 @@ enum FieldType {
   FIELD_TYPE_BOOLEAN = 3;
   FIELD_TYPE_DATE = 4;
   FIELD_TYPE_FILE = 5;        // Stored as JSON string
-  FIELD_TYPE_RELATION = 6;    // Stored as JSON string  
+  FIELD_TYPE_RELATION = 6;    // Stored as JSON string
   FIELD_TYPE_DOCUMENT = 7;    // Stored as JSON string
+}
+
+// Filter operators matching the TypeScript FilterOperator type
+enum FilterOperator {
+  FILTER_OP_UNSPECIFIED = 0;
+  FILTER_OP_EQ = 1;           // equals
+  FILTER_OP_NE = 2;           // not equals
+  FILTER_OP_GT = 3;           // greater than
+  FILTER_OP_GTE = 4;          // greater than or equal
+  FILTER_OP_LT = 5;           // less than
+  FILTER_OP_LTE = 6;          // less than or equal
+  FILTER_OP_LIKE = 7;         // SQL LIKE pattern
+  FILTER_OP_ILIKE = 8;        // case-insensitive LIKE
+  FILTER_OP_IN = 9;           // value in array
+  FILTER_OP_NOT_IN = 10;      // value not in array
+  FILTER_OP_IS_NULL = 11;     // IS NULL
+  FILTER_OP_IS_NOT_NULL = 12; // IS NOT NULL
+  FILTER_OP_CONTAINS = 13;    // Contains operator (for relation fields)
+  FILTER_OP_CONTAINED_BY = 14;// Contained by operator
+  FILTER_OP_HAS_KEY = 15;     // Has key operator
 }
 
 // Table field definition with strong typing
@@ -158,10 +178,18 @@ message DeleteRowsRequest {
   string s3_path = 5;                // S3 path for Delta Lake table data
 }
 
+// Row filter with operator support for advanced querying
+message RowFilter {
+  string field = 1;                 // field_{id} format or field name
+  FilterOperator operator = 2;      // Filter operator (eq, gt, like, etc.)
+  RowDataValue value = 3;           // Filter value (typed)
+  repeated RowDataValue values = 4; // Multiple values for IN/NOT_IN operators
+}
+
 message QueryRowsRequest {
   string table_id = 1;
   string s3_path = 2;
-  map<string, RowDataValue> filters = 3;  // Typed filters
+  repeated RowFilter filters = 3;   // Typed filters with operators
   string order_by = 4;
   string order_direction = 5;       // 'ASC' or 'DESC'
   int32 limit = 6;
