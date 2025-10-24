@@ -1073,7 +1073,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 logger.info(f"  - order_direction: '{request.order_direction}'")
                 logger.info(f"  - DataFrame shape: {df.shape}")
                 logger.info(f"  - DataFrame columns: {df.columns}")
-                logger.info(f"  - Delta Lake schema column names: {[field.name for field in schema]}")
+                # Schema is deltalake._internal.Schema, access field names via schema.names
+                logger.info(f"  - Delta Lake schema column names: {schema.names}")
 
                 # Check if sort column exists in DataFrame
                 if request.order_by not in df.columns:
