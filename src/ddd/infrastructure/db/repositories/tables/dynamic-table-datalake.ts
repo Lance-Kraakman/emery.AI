@@ -15,6 +15,9 @@ import { GrpcTableClient } from '@/ddd/infrastructure/db/repositories/tables/tab
 import { TableGrpcMapper } from '@/ddd/infrastructure/db/repositories/tables/table-grpc-mapper';
 import { RowSerializer } from './row-serializer';
 import { CreateTableRequest, DeleteTableRequest, UpdateTableRequest } from '@/lib/grpc/generated/table_service';
+import { createDebugLogger } from '@/lib/utils/debug-logger';
+
+const logger = createDebugLogger('DataLake');
 
 export class DynamicTableDataLake {
   constructor(
@@ -30,16 +33,13 @@ export class DynamicTableDataLake {
     table: DynamicTable
   ): Promise<Result<void>> {
     try {
-      console.log(`[DynamicTableDataLake] Creating ${rows.length} rows for table ${table.id}`);
-
-      // Debug logging for table object
-      console.log('[DynamicTableDataLake] Table object debug:');
-      console.log(`  - table.id: ${table.id?.value}`);
-      console.log(`  - table.organizationId: ${table.organizationId?.value}`);
-      console.log(`  - table.storageLocation: ${table.storageLocation}`);
-
       const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
-      console.log(`[DynamicTableDataLake] Using s3Path: ${s3Path}`);
+
+      logger.debug('Creating rows', {
+        tableId: table.id.value,
+        rowCount: rows.length,
+        s3Path
+      });
 
       // 1. Serialize rows for Delta Lake storage (arrays → JSON strings)
       // AIDEV-NOTE: RowSerializer handles complex field type serialization
@@ -63,14 +63,14 @@ export class DynamicTableDataLake {
 
       // 4. Handle response using TypeScript property access
       if (response && response.success) {
-        console.log(`[DynamicTableDataLake] Successfully created ${rows.length} rows`);
+        logger.summary('Created rows', { tableId: table.id.value, count: rows.length });
         return {
           success: true,
           data: undefined
         };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[DynamicTableDataLake] Failed to create rows: ${message}`);
+        logger.error('Failed to create rows', message);
         return {
           success: false,
           error: message || 'Failed to create rows via gRPC'
@@ -78,7 +78,7 @@ export class DynamicTableDataLake {
       }
 
     } catch (error) {
-      console.error('[DynamicTableDataLake] Error creating rows:', error);
+      logger.error('Error creating rows', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create rows via gRPC'
@@ -96,16 +96,12 @@ export class DynamicTableDataLake {
     table: DynamicTable
   ): Promise<Result<void>> {
     try {
-      console.log(`[DynamicTableDataLake] Updating ${rows.length} rows using merge for table ${table.id}`);
-
-      // Debug logging for table object
-      console.log('[DynamicTableDataLake] Table object debug:');
-      console.log(`  - table.id: ${table.id?.value}`);
-      console.log(`  - table.organizationId: ${table.organizationId?.value}`);
-      console.log(`  - table.storageLocation: ${table.storageLocation}`);
-
       const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
-      console.log(`[DynamicTableDataLake] Using s3Path: ${s3Path}`);
+
+      logger.debug('Updating rows via merge', {
+        tableId: table.id.value,
+        rowCount: rows.length
+      });
 
       // 1. Serialize rows for Delta Lake storage (arrays → JSON strings)
       // AIDEV-NOTE: RowSerializer handles complex field type serialization
@@ -127,14 +123,14 @@ export class DynamicTableDataLake {
 
       // 4. Handle response
       if (response && response.success) {
-        console.log(`[DynamicTableDataLake] Successfully updated ${rows.length} rows using Delta Lake merge`);
+        logger.summary('Updated rows', { tableId: table.id.value, count: rows.length });
         return {
           success: true,
           data: undefined
         };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[DynamicTableDataLake] Failed to update rows: ${message}`);
+        logger.error('Failed to update rows', message);
         return {
           success: false,
           error: message || 'Failed to update rows via gRPC'
@@ -142,7 +138,7 @@ export class DynamicTableDataLake {
       }
 
     } catch (error) {
-      console.error('[DynamicTableDataLake] Error updating rows:', error);
+      logger.error('Error updating rows', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update rows via gRPC'
@@ -159,16 +155,12 @@ export class DynamicTableDataLake {
     table: DynamicTable
   ): Promise<Result<void>> {
     try {
-      console.log(`[DynamicTableDataLake] Deleting ${rowIds.length} rows using Delta Lake delete for table ${table.id}`);
-
-      // Debug logging for table object
-      console.log('[DynamicTableDataLake] Table object debug:');
-      console.log(`  - table.id: ${table.id?.value}`);
-      console.log(`  - table.organizationId: ${table.organizationId?.value}`);
-      console.log(`  - table.storageLocation: ${table.storageLocation}`);
-
       const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
-      console.log(`[DynamicTableDataLake] Using s3Path: ${s3Path}`);
+
+      logger.debug('Deleting rows', {
+        tableId: table.id.value,
+        rowCount: rowIds.length
+      });
 
       // 1. Convert to protobuf DeleteRowsRequest
       const deleteRequest = TableGrpcMapper.toDeleteRowsRequest(
@@ -183,14 +175,14 @@ export class DynamicTableDataLake {
 
       // 3. Handle response
       if (response && response.success) {
-        console.log(`[DynamicTableDataLake] Successfully deleted ${rowIds.length} rows using Delta Lake delete`);
+        logger.summary('Deleted rows', { tableId: table.id.value, count: rowIds.length });
         return {
           success: true,
           data: undefined
         };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[DynamicTableDataLake] Failed to delete rows: ${message}`);
+        logger.error('Failed to delete rows', message);
         return {
           success: false,
           error: message || 'Failed to delete rows via gRPC'
@@ -198,7 +190,7 @@ export class DynamicTableDataLake {
       }
 
     } catch (error) {
-      console.error('[DynamicTableDataLake] Error deleting rows:', error);
+      logger.error('Error deleting rows', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to delete rows via gRPC'
@@ -222,24 +214,25 @@ export class DynamicTableDataLake {
       orderDirection?: 'ASC' | 'DESC';
     } = {}
   ): Promise<Result<{ rows: Row[]; totalCount: number }>> {
-    try {
-      console.log(`[DynamicTableDataLake.retrieveRows] === ENTRY ===`);
-      console.log(`[DynamicTableDataLake.retrieveRows] Table ID: ${table.id.value}`);
-      console.log(`[DynamicTableDataLake.retrieveRows] Table name: ${table.name}`);
-      console.log(`[DynamicTableDataLake.retrieveRows] Storage location: ${table.storageLocation}`);
-      console.log(`[DynamicTableDataLake.retrieveRows] Options:`, JSON.stringify(options, null, 2));
+    const startTime = Date.now();
 
+    try {
       const { limit = 1000, offset = 0, filters = {}, orderBy = '', orderDirection = 'ASC' } = options;
 
-      // 1. Create query request
-      const queryOptions = {
-        orderBy,
-        orderDirection,
+      // Build query summary for logging
+      const orderClause = orderBy ? `${orderBy} ${orderDirection}` : 'none';
+      const filterCount = Object.keys(filters).length;
+
+      logger.debug('Query started', {
+        table: `${table.name}(${table.id.value})`,
         limit,
         offset,
-        filters
-      };
+        orderBy: orderClause,
+        filters: filterCount
+      });
 
+      // 1. Create query request
+      const queryOptions = { orderBy, orderDirection, limit, offset, filters };
       const queryRequest = TableGrpcMapper.toQueryRowsRequest(
         table.id,
         table.storageLocation || `s3://emery-tables/${table.id.value}`,
@@ -247,25 +240,8 @@ export class DynamicTableDataLake {
         table.organizationId
       );
 
-      console.log(`[DynamicTableDataLake.retrieveRows] Query request created:`, {
-        tableId: table.id.value,
-        s3Path: table.storageLocation || `s3://emery-tables/${table.id.value}`,
-        limit,
-        offset,
-        orderBy,
-        orderDirection,
-        filterCount: Object.keys(filters).length
-      });
-
       // 2. Send to gRPC service
-      console.log(`[DynamicTableDataLake.retrieveRows] Calling grpcClient.queryRows...`);
       const response = await this.grpcClient.queryRows(queryRequest);
-      console.log(`[DynamicTableDataLake.retrieveRows] gRPC response received:`, {
-        success: response?.success,
-        hasArrowData: !!(response?.arrowIpcStream),
-        arrowDataLength: response?.arrowIpcStream?.length || 0,
-        message: response?.message
-      });
 
       // 3. Handle Arrow IPC response (zero-copy deserialization)
       if (response && response.success) {
@@ -273,21 +249,18 @@ export class DynamicTableDataLake {
         const totalCount = response.totalCount || 0;
 
         if (!arrowIpcBytes || arrowIpcBytes.length === 0) {
-          console.log(`[DynamicTableDataLake.retrieveRows] No Arrow data returned - table is empty`);
-          console.log(`[DynamicTableDataLake.retrieveRows] === EXIT === (empty result)`);
+          logger.summary('Query completed (empty)', { tableId: table.id.value, totalCount: 0 });
           return { success: true, data: { rows: [], totalCount } };
         }
-
-        console.log(`[DynamicTableDataLake.retrieveRows] Deserializing Arrow IPC bytes (${arrowIpcBytes.length} bytes)...`);
 
         // Deserialize Arrow IPC bytes to Arrow Table (zero-copy)
         const { tableFromIPC } = await import('apache-arrow');
         const arrowTable = tableFromIPC(arrowIpcBytes);
 
-        console.log(`[DynamicTableDataLake.retrieveRows] Arrow table deserialized:`, {
-          numRows: arrowTable.numRows,
-          numCols: arrowTable.numCols,
-          schema: arrowTable.schema.fields.map(f => ({ name: f.name, type: f.type.toString() }))
+        logger.debug('Arrow deserialized', {
+          rows: arrowTable.numRows,
+          columns: arrowTable.numCols,
+          bytes: arrowIpcBytes.length
         });
 
         // Convert Arrow Table to domain Row entities
@@ -310,15 +283,21 @@ export class DynamicTableDataLake {
           rows.push(row);
         }
 
-        console.log(`[DynamicTableDataLake.retrieveRows] Converted ${rows.length} Arrow rows to domain Row entities`);
-        console.log(`[DynamicTableDataLake.retrieveRows] Total count from gRPC: ${totalCount}`);
-        console.log(`[DynamicTableDataLake.retrieveRows] Sample row:`, rows[0]?.toPlainObject());
-        console.log(`[DynamicTableDataLake.retrieveRows] === EXIT === (success: ${rows.length} rows, total: ${totalCount})`);
+        const elapsed = Date.now() - startTime;
+        logger.summary('Query completed', {
+          tableId: table.id.value,
+          retrieved: rows.length,
+          total: totalCount,
+          time: `${elapsed}ms`
+        });
+
+        // Log sample row in debug mode only
+        logger.debug('Sample row', rows[0]?.toPlainObject());
+
         return { success: true, data: { rows, totalCount } };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[DynamicTableDataLake.retrieveRows] gRPC query failed: ${message}`);
-        console.error(`[DynamicTableDataLake.retrieveRows] === EXIT === (error)`);
+        logger.error('Query failed', message);
         return {
           success: false,
           error: message || 'Failed to retrieve data via gRPC'
@@ -326,10 +305,7 @@ export class DynamicTableDataLake {
       }
 
     } catch (error) {
-      console.error('[DynamicTableDataLake.retrieveRows] === EXCEPTION ===');
-      console.error('[DynamicTableDataLake.retrieveRows] Error retrieving data:', error);
-      console.error('[DynamicTableDataLake.retrieveRows] Error type:', error instanceof Error ? error.constructor.name : typeof error);
-      console.error('[DynamicTableDataLake.retrieveRows] Error stack:', error instanceof Error ? error.stack : 'N/A');
+      logger.error('Query exception', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to retrieve data via gRPC'
@@ -342,7 +318,10 @@ export class DynamicTableDataLake {
    */
   async createTable(table: DynamicTable): Promise<Result<string>> {
     try {
-      console.log(`[DynamicTableDataLake] Creating table ${table.name} with ${table.fields.length} fields`);
+      logger.debug('Creating table', {
+        name: table.name,
+        fieldCount: table.fields.length
+      });
 
       // Convert domain fields to protobuf format
       // AIDEV-NOTE: table.fields includes system 'id' field (added by repository)
@@ -369,23 +348,21 @@ export class DynamicTableDataLake {
         s3Path: table.storageLocation || `s3://emery-tables/${table.id.value}`
       });
 
-      console.log(`[DynamicTableDataLake] Creating table with schema:`, {
-        name: table.name,
-        fieldCount: protoFields.length,
-        fields: protoFields.map(f => f.name)
-      });
-
-      // 5. Send to gRPC service
+      // Send to gRPC service
       const response = await this.grpcClient.createTable(createRequest);
 
-      // 6. Handle response
+      // Handle response
       if (response && response.success) {
         const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
-        console.log(`[DynamicTableDataLake] Successfully created table ${table.name} at ${s3Path}`);
+        logger.summary('Created table', {
+          name: table.name,
+          tableId: table.id.value,
+          fields: table.fields.length
+        });
         return { success: true, data: s3Path };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[DynamicTableDataLake] Failed to create table: ${message}`);
+        logger.error('Failed to create table', message);
         return {
           success: false,
           error: message || 'Failed to create table via gRPC'
@@ -393,7 +370,7 @@ export class DynamicTableDataLake {
       }
 
     } catch (error) {
-      console.error('[DynamicTableDataLake] Error creating table:', error);
+      logger.error('Error creating table', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create table via gRPC'
@@ -406,7 +383,7 @@ export class DynamicTableDataLake {
    */
   async updateTable(table: DynamicTable): Promise<Result<void>> {
     try {
-      console.log(`[DynamicTableDataLake] Updating table ${table.id}`);
+      logger.debug('Updating table', { tableId: table.id.value, name: table.name });
 
       // 1. Convert domain table to protobuf
       const protoTable = TableGrpcMapper.toProtoTable(table);
@@ -427,11 +404,11 @@ export class DynamicTableDataLake {
 
       // 4. Handle response using TypeScript property access
       if (response && response.success) {
-        console.log(`[DynamicTableDataLake] Successfully updated table ${table.id}`);
+        logger.summary('Updated table', { tableId: table.id.value });
         return { success: true, data: undefined };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[DynamicTableDataLake] Failed to update table: ${message}`);
+        logger.error('Failed to update table', message);
         return {
           success: false,
           error: message || 'Failed to update table via gRPC'
@@ -439,7 +416,7 @@ export class DynamicTableDataLake {
       }
 
     } catch (error) {
-      console.error('[DynamicTableDataLake] Error updating table:', error);
+      logger.error('Error updating table', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update table via gRPC'
@@ -467,8 +444,6 @@ export class DynamicTableDataLake {
     lastModified: Date;
   }>> {
     try {
-      console.log(`[DynamicTableDataLake] Getting table stats for ${table.id} using Delta Lake metadata`);
-
       const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
 
       // Create getTableStats request
@@ -482,7 +457,11 @@ export class DynamicTableDataLake {
       const response = await this.grpcClient.getTableStats(statsRequest);
 
       if (response && response.success) {
-        console.log(`[DynamicTableDataLake] Table stats retrieved: ${response.rowCount} rows, ${response.sizeBytes} bytes`);
+        logger.summary('Table stats retrieved', {
+          tableId: table.id.value,
+          rows: response.rowCount,
+          bytes: response.sizeBytes
+        });
         return {
           success: true,
           data: {
@@ -493,14 +472,14 @@ export class DynamicTableDataLake {
         };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[DynamicTableDataLake] Failed to get table stats: ${message}`);
+        logger.error('Failed to get table stats', message);
         return {
           success: false,
           error: message || 'Failed to get table stats via gRPC'
         };
       }
     } catch (error) {
-      console.error('[DynamicTableDataLake] Error getting table stats:', error);
+      logger.error('Error getting table stats', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get table stats via gRPC'
@@ -539,9 +518,9 @@ export class DynamicTableDataLake {
    */
   async deleteTable(table: DynamicTable): Promise<Result<void>> {
     try {
-      console.log(`[DynamicTableDataLake] Deleting table storage for ${table.id}`);
-
       const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;
+
+      logger.debug('Deleting table storage', { tableId: table.id.value, s3Path });
 
       // Create delete table request
       const deleteRequest = DeleteTableRequest.create({
@@ -553,18 +532,18 @@ export class DynamicTableDataLake {
       const response = await this.grpcClient.deleteTable(deleteRequest);
 
       if (response && response.success) {
-        console.log(`[DynamicTableDataLake] Successfully deleted table storage for ${table.id}`);
+        logger.summary('Deleted table storage', { tableId: table.id.value });
         return { success: true, data: undefined };
       } else {
         const message = response?.message || 'Unknown response error';
-        console.error(`[DynamicTableDataLake] Failed to delete table storage: ${message}`);
+        logger.error('Failed to delete table storage', message);
         return {
           success: false,
           error: message || 'Failed to delete table storage via gRPC'
         };
       }
     } catch (error) {
-      console.error('[DynamicTableDataLake] Error deleting table storage:', error);
+      logger.error('Error deleting table storage', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to delete table storage via gRPC'
