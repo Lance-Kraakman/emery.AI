@@ -20,7 +20,14 @@ export function NewCapabilityView({ agent }: NewCapabilityViewProps) {
   const [formData, setFormData] = useState<CapabilityFormData>({
     name: '',
     description: '',
-    steps: []
+    steps: [
+      {
+        type: 'TOOL_STEP',
+        instructions: '',
+        tools: [],
+        servers: []
+      }
+    ]
   });
 
   const handleSave = async () => {
