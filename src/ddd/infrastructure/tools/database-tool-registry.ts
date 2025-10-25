@@ -251,6 +251,7 @@ export class DatabaseToolRegistry implements IToolRegistryService {
 
       // Add app filter if specified
       if (options?.appId) {
+        console.log(`[DatabaseToolRegistry] Adding app filter: appId="${options.appId}"`);
         whereConditions.push(eq(appTypes.id, options.appId));
       }
 
@@ -285,6 +286,12 @@ export class DatabaseToolRegistry implements IToolRegistryService {
         .orderBy(desc(tools.createdAt));
 
       // Apply where conditions if any
+      console.log(`[DatabaseToolRegistry] Executing query with ${whereConditions.length} conditions`, {
+        appId: options?.appId,
+        category: options?.category,
+        query: options?.searchQuery
+      });
+
       let results;
       if (whereConditions.length > 0) {
         results = await dbQuery.where(and(...whereConditions));
@@ -293,6 +300,13 @@ export class DatabaseToolRegistry implements IToolRegistryService {
       }
 
       console.log(`[DatabaseToolRegistry] Found ${results.length} tools from database`);
+      if (results.length > 0) {
+        console.log(`[DatabaseToolRegistry] Sample tool apps:`, results.slice(0, 3).map(r => ({
+          toolId: r.tool.id,
+          appId: r.tool.appId,
+          appName: r.app?.name
+        })));
+      }
       let toolMetadata = results.map(({ tool, app }) => this.convertToToolMetadata(tool, app));
 
       // Apply connection filter if needed (post-processing)

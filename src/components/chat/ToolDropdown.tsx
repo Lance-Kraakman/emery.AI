@@ -135,11 +135,12 @@ export function ToolDropdown({
 }: ToolDropdownProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectedCategories, setSelectedCategories] = useState<ReferenceCategory[]>([]);
-  const [selectedApp, setSelectedApp] = useState<string>('');
+  const [selectedApps, setSelectedApps] = useState<string[]>([]); // Changed to array for multi-select
   const [appSearchQuery, setAppSearchQuery] = useState<string>('');
   const [showAppDropdown, setShowAppDropdown] = useState(false);
   const [connectedOnly, setConnectedOnly] = useState(false);
-  const [requiresConnection, setRequiresConnection] = useState(false);
+  const [requiresConnection, setRequiresConnection] = useState<boolean | undefined>(undefined); // AIDEV-NOTE: undefined = no filter, true/false = explicit filter
+  const [showReferenceTools, setShowReferenceTools] = useState(true); // Toggle reference tools visibility
   const [isClient, setIsClient] = useState(false);
   const [focusedCategoryIndex, setFocusedCategoryIndex] = useState(-1);
   const [isInCategoryMode, setIsInCategoryMode] = useState(false);
@@ -156,35 +157,38 @@ export function ToolDropdown({
     setIsClient(true);
   }, []);
 
+  // Auto-hide reference tools when using app or connected-only filters
+  useEffect(() => {
+    if (selectedApps.length > 0 || connectedOnly) {
+      setShowReferenceTools(false);
+    } else if (selectedApps.length === 0 && !connectedOnly && selectedCategories.length === 0) {
+      setShowReferenceTools(true);
+    }
+  }, [selectedApps, connectedOnly, selectedCategories]);
+
   // Initial search query (resets on query change)
   const {
     data: initialSearchResult,
     isLoading,
     error
   } = useQuery({
-    queryKey: ['search-all-tools-initial', query, selectedCategories, selectedApp, connectedOnly, requiresConnection],
+    queryKey: ['search-all-tools-initial', query, selectedCategories, selectedApps, connectedOnly, requiresConnection, showReferenceTools],
     queryFn: async () => {
       try {
-        console.log(`[ToolDropdown] Initial search for query: "${query}"`);
+        console.log(`[ToolDropdown] Initial search for query: "${query}", showReferenceTools: ${showReferenceTools}`);
 
-        // Map ReferenceCategory to category strings for reference tools
-        const categories = selectedCategories.length > 0 ? selectedCategories.map(refCat => {
-          switch (refCat) {
-            case ReferenceCategory.DOC: return 'documents';
-            case ReferenceCategory.FILE: return 'files';
-            case ReferenceCategory.AGENT: return 'agents';
-            case ReferenceCategory.TABLE: return 'tables';
-            case ReferenceCategory.DATABASE: return 'databases';
-            default: return refCat;
-          }
-        }) : undefined;
+        // AIDEV-NOTE: ReferenceCategory enum values are already singular ('agent', 'file', etc.)
+        // Backend expects singular categories, so use them directly without mapping
+        const categories = selectedCategories.length > 0 ? selectedCategories : undefined;
+        const appIds = selectedApps.length > 0 ? selectedApps : undefined;
 
         const result = await searchAllTools({
           query,
           categories,
-          appId: selectedApp || undefined,
+          appIds,
           connectedOnly,
-          requiresConnection,
+          ...(requiresConnection !== undefined && { requiresConnection }), // Only pass if explicitly set
+          showReferenceTools,
           limit: 20,
           offset: 0
         });
@@ -263,24 +267,17 @@ export function ToolDropdown({
     try {
       console.log(`[ToolDropdown] Loading more tools with offset: ${offset}, query: "${query}"`);
 
-      // Map ReferenceCategory to category strings for reference tools
-      const categories = selectedCategories.length > 0 ? selectedCategories.map(refCat => {
-        switch (refCat) {
-          case ReferenceCategory.DOC: return 'documents';
-          case ReferenceCategory.FILE: return 'files';
-          case ReferenceCategory.AGENT: return 'agents';
-          case ReferenceCategory.TABLE: return 'tables';
-          case ReferenceCategory.DATABASE: return 'databases';
-          default: return refCat;
-        }
-      }) : undefined;
+      // AIDEV-NOTE: Use categories directly - already singular
+      const categories = selectedCategories.length > 0 ? selectedCategories : undefined;
+      const appIds = selectedApps.length > 0 ? selectedApps : undefined;
 
       const result = await searchAllTools({
         query,
         categories,
-        appId: selectedApp || undefined,
+        appIds,
         connectedOnly,
-        requiresConnection,
+        ...(requiresConnection !== undefined && { requiresConnection }), // Only pass if explicitly set
+        showReferenceTools,
         limit: 20,
         offset
       });
@@ -351,15 +348,16 @@ export function ToolDropdown({
   // Clear all filters
   const clearAllFilters = () => {
     setSelectedCategories([]);
-    setSelectedApp('');
+    setSelectedApps([]);
     setAppSearchQuery('');
     setConnectedOnly(false);
     setRequiresConnection(false);
+    setShowReferenceTools(true);
     console.log('[ToolDropdown] All filters cleared');
   };
 
   // Check if any filters are active
-  const hasActiveFilters = selectedCategories.length > 0 || selectedApp !== '' || connectedOnly || requiresConnection;
+  const hasActiveFilters = selectedCategories.length > 0 || selectedApps.length > 0 || connectedOnly || requiresConnection || !showReferenceTools;
 
   // Filter apps by search query
   const filteredApps = (availableAppsResult || []).filter(app =>
@@ -467,7 +465,7 @@ export function ToolDropdown({
 
   return (
     <div
-      className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-96 max-w-2xl h-96 flex flex-col"
+      className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-96 max-w-2xl h-96 flex flex-col text-gray-900"
       style={{
         top: position?.top || 0,
         left: position?.left || 0,
@@ -526,58 +524,75 @@ export function ToolDropdown({
 
       {/* Advanced Filters */}
       <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
-        <div className="flex items-center gap-2 text-xs flex-wrap">
-          {/* Searchable App Filter */}
+        <div className="flex items-center gap-2 text-xs flex-wrap text-gray-900">
+          {/* Multi-select App Filter */}
           <div className="flex items-center gap-1 flex-shrink-0 relative app-filter-container">
-            <label className="text-gray-600 whitespace-nowrap">App:</label>
-            <div className="relative">
+            <label className="text-gray-600 whitespace-nowrap">Apps:</label>
+            <div className="relative flex items-center gap-1">
+              {/* Selected apps badges */}
+              {selectedApps.length > 0 && !showAppDropdown && (
+                <div className="flex items-center gap-1">
+                  {selectedApps.map(appId => {
+                    const app = availableAppsResult?.find(a => a.id === appId);
+                    return (
+                      <span
+                        key={appId}
+                        className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded"
+                      >
+                        {app?.name || appId}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedApps(prev => prev.filter(id => id !== appId));
+                          }}
+                          className="hover:text-blue-900"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Search input */}
               <input
                 type="text"
-                value={
-                  showAppDropdown
-                    ? appSearchQuery
-                    : (selectedApp ? availableAppsResult?.find(a => a.id === selectedApp)?.name || '' : '')
-                }
+                value={appSearchQuery}
                 onChange={(e) => {
                   setAppSearchQuery(e.target.value);
                   setShowAppDropdown(true);
                 }}
-                onFocus={() => {
-                  setAppSearchQuery('');
-                  setShowAppDropdown(true);
-                }}
-                placeholder={isLoadingApps ? 'Loading...' : 'All apps'}
-                className="text-xs border border-gray-200 rounded px-2 py-1 bg-white min-w-[100px] pr-6"
+                onFocus={() => setShowAppDropdown(true)}
+                placeholder={isLoadingApps ? 'Loading...' : (selectedApps.length > 0 ? 'Add more...' : 'Search apps...')}
+                className="text-xs border border-gray-200 rounded px-2 py-1 bg-white min-w-[100px] text-gray-900 placeholder:text-gray-400"
                 disabled={isLoadingApps}
               />
-              {selectedApp && !showAppDropdown && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedApp('');
-                    setAppSearchQuery('');
-                  }}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 z-10"
-                  title="Clear app filter"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
+              {/* App dropdown with multi-select */}
               {showAppDropdown && !isLoadingApps && filteredApps.length > 0 && (
                 <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto z-[60] min-w-[200px]">
-                  {filteredApps.map((app) => (
-                    <button
-                      key={app.id}
-                      onClick={() => {
-                        setSelectedApp(app.id);
-                        setAppSearchQuery('');
-                        setShowAppDropdown(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 whitespace-nowrap"
-                    >
-                      {app.name}
-                    </button>
-                  ))}
+                  {filteredApps.map((app) => {
+                    const isSelected = selectedApps.includes(app.id);
+                    return (
+                      <button
+                        key={app.id}
+                        onClick={() => {
+                          setSelectedApps(prev =>
+                            prev.includes(app.id)
+                              ? prev.filter(id => id !== app.id)
+                              : [...prev, app.id]
+                          );
+                          setAppSearchQuery('');
+                        }}
+                        className={cn(
+                          'w-full text-left px-3 py-2 text-xs hover:bg-gray-50 whitespace-nowrap flex items-center justify-between text-gray-900',
+                          isSelected && 'bg-blue-50 font-medium'
+                        )}
+                      >
+                        <span>{app.name}</span>
+                        {isSelected && <span className="text-blue-600 font-bold">✓</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -603,6 +618,17 @@ export function ToolDropdown({
               className="w-3 h-3"
             />
             OAuth required
+          </label>
+
+          {/* Show Reference Tools Checkbox */}
+          <label className="flex items-center gap-1 text-gray-600 cursor-pointer flex-shrink-0 whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={showReferenceTools}
+              onChange={(e) => setShowReferenceTools(e.target.checked)}
+              className="w-3 h-3"
+            />
+            Show reference tools
           </label>
 
           {/* Clear All Filters Button */}
