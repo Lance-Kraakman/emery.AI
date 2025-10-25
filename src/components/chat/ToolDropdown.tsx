@@ -471,7 +471,7 @@ export function ToolDropdown({
         ...(position?.top !== undefined ? { top: position.top } : {}),
         ...(position?.bottom !== undefined ? { bottom: position.bottom } : {}),
         left: position?.left || 0,
-        maxHeight: position?.maxHeight ? `${position.maxHeight}px` : '600px',
+        height: position?.maxHeight ? `${position.maxHeight}px` : '600px',
       }}
       data-tool-dropdown
       aria-label="Toolbox"
