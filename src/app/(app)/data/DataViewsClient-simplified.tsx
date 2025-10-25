@@ -356,17 +356,17 @@ export function DataViewsClientSimplified() {
     dataActions.setSorting(field, direction)
   }, [])
 
-  const handleClearSort = () => {
+  const handleClearSort = useCallback(() => {
     dataActions.clearSorting()
-  }
+  }, [])
 
   // Refresh data using TanStack Query invalidation
-  const refreshTableData = () => {
+  const refreshTableData = useCallback(() => {
     if (selectedTableId) {
       queryClient.invalidateQueries({ queryKey: fieldQueryKeys.all(selectedTableId) })
       queryClient.invalidateQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
     }
-  }
+  }, [selectedTableId, queryClient])
 
   const renderEmptyState = () => (
     <div className="flex-1 flex items-center justify-center">
