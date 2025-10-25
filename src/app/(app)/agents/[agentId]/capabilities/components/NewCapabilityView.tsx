@@ -62,16 +62,23 @@ export function NewCapabilityView({ agent }: NewCapabilityViewProps) {
 
   return (
     <div className="space-y-4">
-      {/* Back Button */}
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => router.push(`/agents/${agent.id}/capabilities`)}
-        className="w-fit"
-      >
-        <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to {agent.name}
-      </Button>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Skill Builder</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Create a new skill for {agent.name}
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => router.push(`/agents/${agent.id}/capabilities`)}
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back
+        </Button>
+      </div>
 
       {/* Editor */}
       <Card className="p-6">

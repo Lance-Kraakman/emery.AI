@@ -32,6 +32,7 @@ export function StepInstructionsInput({
   tools,
   stepIndex
 }: StepInstructionsInputProps) {
+  const [localValue, setLocalValue] = useState(value);
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownQuery, setDropdownQuery] = useState('');
   const [dropdownPosition, setDropdownPosition] = useState<{
@@ -43,11 +44,17 @@ export function StepInstructionsInput({
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Sync with external value changes
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
   // Detect @ tools and show/hide dropdown
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
     const cursorPos = e.target.selectionStart || 0;
 
+    setLocalValue(newValue);
     onChange(newValue);
 
     // Find @ symbol before cursor - allow spaces in search but exclude completed tool references
@@ -101,8 +108,8 @@ export function StepInstructionsInput({
   // Handle tool selection - add to tools array and insert text reference
   const handleToolSelect = (tool: ToolDTO) => {
     const cursorPos = inputRef.current?.selectionStart || 0;
-    const beforeCursor = value.slice(0, cursorPos);
-    const afterCursor = value.slice(cursorPos);
+    const beforeCursor = localValue.slice(0, cursorPos);
+    const afterCursor = localValue.slice(cursorPos);
 
     // Find and replace the @ query with the full tool reference
     const atMatch = beforeCursor.match(/@[^@]*$/);
@@ -127,6 +134,9 @@ export function StepInstructionsInput({
       // Remove line breaks and extra whitespace
       const insertText = rawInsertText.replace(/[\n\r\t]+/g, ' ').replace(/\s+/g, ' ').trim();
       const newValue = beforeAt + insertText + ' ' + afterCursor;
+
+      // Update local state immediately for cursor positioning
+      setLocalValue(newValue);
       onChange(newValue);
 
       // Add to tools array
@@ -190,7 +200,7 @@ export function StepInstructionsInput({
       <Textarea
         ref={inputRef}
         id={`step-${stepIndex}-instructions`}
-        value={value}
+        value={localValue}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
         placeholder="Describe what this step should do... (Type @ to add tools)"
