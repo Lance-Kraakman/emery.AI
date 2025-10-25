@@ -20,6 +20,7 @@ services:
       - integration-test-network
 
   app-integration:
+    image: emery-integration-app:prod
     build:
       context: ../..
       dockerfile: Dockerfile
@@ -114,6 +115,7 @@ services:
       - integration-test-network
 
   scheduler-integration:
+    image: emery-integration-scheduler:prod
     build:
       context: ../..
       dockerfile: Dockerfile

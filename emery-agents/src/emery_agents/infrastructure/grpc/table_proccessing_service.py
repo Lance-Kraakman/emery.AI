@@ -56,6 +56,21 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         clean_path = path.strip('/')
         return f"s3://{bucket}/{clean_path}"
 
+    def _get_delta_schema_as_pyarrow(self, delta_table: DeltaTable) -> pa.Schema:
+        """Convert Delta Lake schema to PyArrow schema.
+
+        Reads schema from Delta Lake transaction log (metadata only, no data files).
+        Delta Lake's schema() returns deltalake._internal.Schema which has to_arrow()
+        that returns arro3.core.Schema. PyArrow consumes it via C Data Interface.
+
+        Args:
+            delta_table: DeltaTable instance
+
+        Returns:
+            PyArrow Schema object
+        """
+        return pa.schema(delta_table.schema().to_arrow())
+
     def _build_schema_from_table_fields(self, table_fields: List[table_service_pb2.TableField]) -> pa.Schema:
         """Convert protobuf TableField messages to PyArrow schema for Delta Lake."""
         try:
@@ -80,55 +95,95 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             logger.error(f"Error building schema from table fields: {e}")
             raise ValueError(f"Invalid table fields: {e}")
 
-    def _row_data_to_dataframe(self, rows_data: List[table_service_pb2.RowData]) -> pl.DataFrame:
-        """Convert protobuf RowData messages to Polars DataFrame.
+    def _create_dataframe_with_schema(
+        self,
+        rows_data: List[table_service_pb2.RowData],
+        delta_table: DeltaTable
+    ) -> pl.DataFrame:
+        """Create Polars DataFrame with explicit schema from Delta Lake (zero-copy).
 
-        Polars will infer types from the data, and Delta Lake will handle schema matching during write.
+        AIDEV-NOTE: SINGLE SOURCE OF TRUTH for schema-aware DataFrame creation.
+
+        Architecture:
+        - Delta Lake schema = Source of truth for column types
+        - Creates DataFrame with explicit schema (NO type inference)
+        - Preserves zero-copy when converting to Arrow (no cast operations)
+
+        Library Flow:
+        1. delta_table.schema() → deltalake._internal.Schema
+        2. schema.to_arrow(as_large_types=True) → arro3.core.Schema (Polars compatible)
+        3. pa.schema(arro3_schema) → pyarrow.Schema (via C Data Interface)
+        4. Build Polars schema dict from PyArrow fields
+        5. pl.DataFrame(records, schema=...) → Polars DataFrame (explicit types)
+        6. df.to_arrow() → Zero-copy conversion (types match)
+
+        Args:
+            rows_data: Protobuf row data messages
+            delta_table: DeltaTable instance with schema
+
+        Returns:
+            Polars DataFrame with columns matching Delta Lake schema
         """
-        try:
-            data = []
-            for row_data in rows_data:
-                record = {'id': row_data.id}
+        # 1. Get Delta Lake schema (source of truth)
+        # IMPORTANT: as_large_types=True for Polars compatibility
+        # Polars uses LargeUtf8 (int64 indices), not Utf8 (int32 indices)
+        delta_schema_arro3 = delta_table.schema().to_arrow(as_large_types=True)
+        delta_schema_pyarrow = pa.schema(delta_schema_arro3)
 
-                # Convert protobuf RowDataValue to Python types
-                for key, value in row_data.data.items():
-                    # AIDEV-NOTE: Debug logging for relation/document fields
-                    if key in ['relation', 'docs', 'document']:
-                        logger.info(f"[_row_data_to_dataframe] Processing field '{key}':")
-                        logger.info(f"  - HasField('text_value'): {value.HasField('text_value')}")
-                        logger.info(f"  - HasField('json_value'): {value.HasField('json_value')}")
-                        if value.HasField('text_value'):
-                            logger.info(f"  - text_value: {value.text_value[:100] if value.text_value else 'EMPTY'}")
-                        if value.HasField('json_value'):
-                            logger.info(f"  - json_value: {value.json_value[:100] if value.json_value else 'EMPTY'}")
+        logger.info(f"[_create_dataframe_with_schema] Delta Lake schema: {delta_schema_pyarrow}")
 
-                    if value.HasField('text_value'):
-                        record[key] = value.text_value
-                    elif value.HasField('number_value'):
-                        record[key] = value.number_value
-                    elif value.HasField('boolean_value'):
-                        record[key] = value.boolean_value
-                    elif value.HasField('date_value'):
-                        record[key] = value.date_value
-                    elif value.HasField('json_value'):
-                        # AIDEV-NOTE: Store JSON as string in Delta Lake (schema expects pa.string())
-                        # TypeScript will parse the JSON string when deserializing from storage
-                        record[key] = value.json_value
-                    else:
-                        record[key] = None  # Default for unset values
+        # 2. Build Polars schema dict from PyArrow schema
+        # AIDEV-NOTE: Inline type mapping (no separate helper needed)
+        polars_schema = {}
+        for field in delta_schema_pyarrow:
+            if pa.types.is_string(field.type) or pa.types.is_large_string(field.type):
+                polars_schema[field.name] = pl.Utf8  # Polars handles both
+            elif pa.types.is_floating(field.type):
+                polars_schema[field.name] = pl.Float64
+            elif pa.types.is_integer(field.type):
+                polars_schema[field.name] = pl.Int64
+            elif pa.types.is_boolean(field.type):
+                polars_schema[field.name] = pl.Boolean
+            elif pa.types.is_timestamp(field.type):
+                polars_schema[field.name] = pl.Datetime
+            else:
+                # Fallback to string for unknown types
+                logger.warning(f"Unknown Arrow type for '{field.name}': {field.type}, using Utf8")
+                polars_schema[field.name] = pl.Utf8
 
-                # Log the complete record for first row
-                if len(data) == 0:
-                    logger.info(f"[_row_data_to_dataframe] First record: {record}")
+        logger.info(f"[_create_dataframe_with_schema] Polars schema: {polars_schema}")
 
-                data.append(record)
+        # 3. Convert protobuf to Python dicts (type-agnostic conversion)
+        records = []
+        for row_data in rows_data:
+            record = {'id': row_data.id}
 
-            # Create Polars DataFrame - Polars will infer types
-            # Schema matching happens during write_deltalake()
-            return pl.DataFrame(data)
-        except Exception as e:
-            logger.error(f"Error converting row data to DataFrame: {e}")
-            raise ValueError(f"Invalid row data: {e}")
+            for key, value in row_data.data.items():
+                if value.HasField('text_value'):
+                    record[key] = value.text_value
+                elif value.HasField('number_value'):
+                    record[key] = value.number_value
+                elif value.HasField('boolean_value'):
+                    record[key] = value.boolean_value
+                elif value.HasField('date_value'):
+                    record[key] = value.date_value
+                elif value.HasField('json_value'):
+                    record[key] = value.json_value
+                else:
+                    record[key] = None  # Empty protobuf oneof = None
+
+            records.append(record)
+
+        # Log first record for debugging
+        if records:
+            logger.info(f"[_create_dataframe_with_schema] First record: {records[0]}")
+
+        # 4. Create DataFrame with EXPLICIT schema (no inference, no casting)
+        # AIDEV-NOTE: Zero-copy friendly - types match Delta Lake from creation
+        df = pl.DataFrame(records, schema=polars_schema)
+        logger.info(f"[_create_dataframe_with_schema] Final DataFrame schema: {df.schema}")
+
+        return df
 
     def _json_to_row_data(self, row_json: str) -> Dict[str, Any]:
         """Convert JSON string to row data dictionary."""
@@ -279,31 +334,34 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             
             logger.info(f"Creating {len(request.rows_data)} rows in table: {request.table_id} at {request.s3_path}")
 
-            # Convert to DataFrame (Polars infers types, Delta Lake handles schema matching)
-            df = self._row_data_to_dataframe(request.rows_data)
+            # Convert relative path to full S3 URI
+            s3_uri = self._to_s3_uri(request.s3_path)
+            storage_options = self._get_storage_options()
 
-            # DIAGNOSTIC: Log DataFrame details before write
+            # AIDEV-NOTE: Delta table MUST exist (created by CreateTable)
+            # Fail fast if table doesn't exist - this indicates a bug in the call sequence
+            try:
+                delta_table = DeltaTable(s3_uri, storage_options=storage_options)
+                logger.info(f"[CreateRows] Delta table exists (version {delta_table.version()})")
+            except Exception as e:
+                logger.error(f"[CreateRows] Delta table does not exist at {s3_uri}: {e}")
+                return table_service_pb2.CreateRowsResponse(
+                    success=False,
+                    message=f"Delta table not found. Call CreateTable before CreateRows: {e}"
+                )
+
+            # Always use schema-aware method (prevents Null type errors)
+            logger.info(f"[CreateRows] Using schema-aware DataFrame creation")
+            df = self._create_dataframe_with_schema(request.rows_data, delta_table)
+
+            # DIAGNOSTIC: Log DataFrame details after creation
             logger.info(f"[CreateRows] DataFrame details:")
             logger.info(f"  - Shape: {len(df)} rows x {len(df.columns)} columns")
             logger.info(f"  - Columns: {df.columns}")
             logger.info(f"  - Schema: {df.schema}")
             logger.info(f"  - Sample data (first row): {df.head(1)}")
 
-            # Convert relative path to full S3 URI
-            s3_uri = self._to_s3_uri(request.s3_path)
-            storage_options = self._get_storage_options()
-
             logger.info(f"Appending {len(df)} rows to S3 URI: {s3_uri}")
-
-            # Check existing Delta table state before write
-            try:
-                existing_table = DeltaTable(s3_uri, storage_options=storage_options)
-                logger.info(f"[CreateRows] Delta table BEFORE write:")
-                logger.info(f"  - Version: {existing_table.version()}")
-                logger.info(f"  - Files: {len(existing_table.files())}")
-                logger.info(f"  - Schema: {existing_table.schema()}")
-            except Exception as e:
-                logger.warning(f"[CreateRows] Could not read existing table (might be first write): {e}")
 
             # Write to Delta table with S3 storage
             # AIDEV-NOTE: schema_mode="merge" allows schema evolution (new columns added automatically)
@@ -434,9 +492,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Read existing Delta table to check current schema
             try:
                 delta_table = DeltaTable(s3_uri, storage_options=storage_options)
-                # AIDEV-NOTE: Convert deltalake schema to PyArrow schema for iteration
-                # delta_table.schema() returns deltalake._internal.Schema which is not iterable
-                current_schema = delta_table.schema().to_pyarrow()
+                # AIDEV-NOTE: Use helper method to convert Delta Lake schema to PyArrow
+                current_schema = self._get_delta_schema_as_pyarrow(delta_table)
                 current_columns = [field.name for field in current_schema]
                 logger.info(f"[UpdateTable] Current Delta Lake columns: {current_columns}")
             except Exception as e:
@@ -500,8 +557,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
             # Verify schema was updated
             updated_table = DeltaTable(s3_uri, storage_options=storage_options)
-            # AIDEV-NOTE: Convert deltalake schema to PyArrow schema for iteration
-            updated_schema = updated_table.schema().to_pyarrow()
+            # AIDEV-NOTE: Use helper method to convert Delta Lake schema to PyArrow
+            updated_schema = self._get_delta_schema_as_pyarrow(updated_table)
             updated_columns = [field.name for field in updated_schema]
             logger.info(f"[UpdateTable] Delta table AFTER schema evolution:")
             logger.info(f"  - Columns: {updated_columns}")
@@ -615,8 +672,25 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
             logger.info(f"Updating {len(request.rows_data)} rows in table: {request.table_id} at {request.s3_path}")
 
-            # Convert to DataFrame (Polars infers types, Delta Lake handles schema matching)
-            df = self._row_data_to_dataframe(request.rows_data)
+            # Convert relative path to full S3 URI
+            s3_uri = self._to_s3_uri(request.s3_path)
+            storage_options = self._get_storage_options()
+
+            # AIDEV-NOTE: Delta table MUST exist (we're updating existing rows)
+            # Fail fast if table doesn't exist
+            try:
+                delta_table = DeltaTable(s3_uri, storage_options=storage_options)
+                logger.info(f"[UpdateRows] Delta table exists (version {delta_table.version()})")
+            except Exception as e:
+                logger.error(f"[UpdateRows] Delta table does not exist: {e}")
+                return table_service_pb2.UpdateRowsResponse(
+                    success=False,
+                    message=f"Cannot update rows in non-existent table: {e}"
+                )
+
+            # Always use schema-aware method (prevents Null type errors)
+            logger.info(f"[UpdateRows] Using schema-aware DataFrame creation")
+            df = self._create_dataframe_with_schema(request.rows_data, delta_table)
 
             # DIAGNOSTIC: Log DataFrame details before merge
             logger.info(f"[UpdateRows] DataFrame details:")
@@ -625,30 +699,13 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             logger.info(f"  - Schema: {df.schema}")
             logger.info(f"  - Sample data (first row): {df.head(1)}")
 
-            # Convert relative path to full S3 URI
-            s3_uri = self._to_s3_uri(request.s3_path)
-            storage_options = self._get_storage_options()
-
             logger.info(f"Merging {len(df)} rows to S3 URI: {s3_uri}")
-
-            # Load existing Delta table
-            try:
-                dt = DeltaTable(s3_uri, storage_options=storage_options)
-                logger.info(f"[UpdateRows] Delta table BEFORE merge:")
-                logger.info(f"  - Version: {dt.version()}")
-                logger.info(f"  - Files: {len(dt.files())}")
-            except Exception as e:
-                logger.error(f"[UpdateRows] Could not read Delta table: {e}")
-                return table_service_pb2.UpdateRowsResponse(
-                    success=False,
-                    message=f"Delta table not found: {e}"
-                )
 
             # Perform merge operation using Delta Lake native merge
             # AIDEV-NOTE: This performs efficient row-level updates without rewriting entire table
             # Matches rows by 'id' field and updates all columns when matched
             logger.info(f"[UpdateRows] Executing Delta Lake merge operation...")
-            dt.merge(
+            delta_table.merge(
                 source=df.to_arrow(),  # Convert Polars DataFrame to PyArrow Table
                 predicate='target.id = source.id',
                 source_alias='source',
@@ -1044,9 +1101,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             delta_table = DeltaTable(s3_uri, storage_options=storage_options)
 
             # Get schema for type-safe filter casting
-            # AIDEV-NOTE: Convert deltalake schema to PyArrow schema for field access and iteration
-            # delta_table.schema() returns deltalake._internal.Schema which is not iterable
-            schema = delta_table.schema().to_pyarrow()
+            # AIDEV-NOTE: Use helper method to convert Delta Lake schema to PyArrow for filtering
+            schema = self._get_delta_schema_as_pyarrow(delta_table)
 
             # AIDEV-NOTE: Build PyArrow predicate for efficient filtering with predicate pushdown
             # This applies filters BEFORE loading data into memory (10-100x faster for large tables)
@@ -1116,7 +1172,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 logger.info(f"  - DataFrame columns: {df.columns}")
                 # Get schema field names - convert PyArrow schema to list of names
                 try:
-                    # AIDEV-NOTE: schema is already PyArrow after .to_pyarrow() call at line 1049
+                    # AIDEV-NOTE: schema is already PyArrow (from _get_delta_schema_as_pyarrow helper)
                     # Can iterate directly over PyArrow schema fields
                     schema_field_names = [field.name for field in schema]
                     logger.info(f"  - Delta Lake schema column names: {schema_field_names}")

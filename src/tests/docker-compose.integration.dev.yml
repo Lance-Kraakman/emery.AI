@@ -8,14 +8,16 @@
 
 services:
   app-integration:
+    image: emery-integration-app:dev
     build:
       context: ../..
       dockerfile: Dockerfile.dev
     command: ["dev"]
+    environment:
+      # Override production NODE_ENV from integration.yml
+      NODE_ENV: development
     volumes:
-      # Mount source code for live reloading
+      # Mount source code for live reloading (includes node_modules from host)
       - ../..:/app
-      # Prevent overwriting container's node_modules
-      - /app/node_modules
-      # Prevent overwriting .next directory
+      # Prevent overwriting .next directory to avoid permission issues
       - /app/.next

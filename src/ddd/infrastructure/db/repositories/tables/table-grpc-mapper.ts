@@ -311,8 +311,10 @@ export class TableGrpcMapper {
    */
   static toProtoRowDataValue(value: any): IRowDataValue {
     if (value === null || value === undefined) {
-      // Handle null/undefined - use empty string as default
-      return { textValue: '' };
+      // AIDEV-NOTE: Empty protobuf oneof represents null value
+      // Python/Polars will handle this as None/null for appropriate field types
+      // This prevents "Cannot cast string '' to Float64" errors
+      return {};
     } else if (typeof value === 'number') {
       // Numbers go to numberValue
       return { numberValue: value };
