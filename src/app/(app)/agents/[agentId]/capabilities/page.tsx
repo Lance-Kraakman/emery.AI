@@ -6,9 +6,9 @@ import { getAgent } from '@/app/actions/agents';
 import { CapabilitiesListView } from './components/CapabilitiesListView';
 
 interface PageProps {
-  params: {
+  params: Promise<{
     agentId: string;
-  };
+  }>;
 }
 
 export default async function CapabilitiesPage({ params }: PageProps) {
@@ -18,7 +18,8 @@ export default async function CapabilitiesPage({ params }: PageProps) {
     redirect('/auth/signin');
   }
 
-  const agentId = parseInt(params.agentId, 10);
+  const resolvedParams = await params;
+  const agentId = parseInt(resolvedParams.agentId, 10);
 
   if (isNaN(agentId)) {
     redirect('/agents');

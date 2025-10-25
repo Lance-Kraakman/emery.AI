@@ -134,8 +134,6 @@ export class RowSerializer {
         return value;
 
       case 'text':
-      case 'email':
-      case 'url':
         // Empty strings are valid for text fields
         return value;
 
@@ -246,8 +244,6 @@ export class RowSerializer {
           return false;
 
         case 'text':
-        case 'email':
-        case 'url':
         case 'number':
         case 'date':
           // Excel: Empty cell = empty string (NOT zero for numbers)
