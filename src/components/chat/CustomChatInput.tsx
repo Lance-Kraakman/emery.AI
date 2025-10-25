@@ -14,7 +14,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { ToolDropdown } from './ToolDropdown';
 import { resolveReferences } from '@/app/actions/references';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
@@ -41,10 +41,10 @@ export default function CustomChatInput({
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const [selectedTools, setSelectedTools] = useState<ToolDTO[]>([]);
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Detect @ tools and show/hide dropdown
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     const cursorPos = e.target.selectionStart || 0;
 
@@ -183,7 +183,7 @@ export default function CustomChatInput({
   };
 
   // Handle key presses
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // When dropdown is open, prevent default behavior for navigation keys
     if (showDropdown && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape', 'Tab'].includes(e.key)) {
       e.preventDefault();
@@ -191,6 +191,7 @@ export default function CustomChatInput({
       return; // Let ToolDropdown handle these
     }
 
+    // Enter without Shift sends message, Shift+Enter creates new line
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       e.stopPropagation(); // AIDEV-NOTE: Prevent event bubbling to parent forms
@@ -220,16 +221,16 @@ export default function CustomChatInput({
 
   return (
     <div className={`relative ${className}`}>
-      <div className="flex gap-2 items-center">
+      <div className="flex gap-2 items-start">
         <div className="flex-1 relative">
-          <Input
+          <Textarea
             ref={inputRef}
             value={inputValue}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             disabled={disabled}
-            className="pr-12"
+            className="min-h-[44px] max-h-32 resize-none px-0"
           />
 
           {/* Tool Dropdown */}
@@ -250,7 +251,7 @@ export default function CustomChatInput({
           onClick={handleSendMessage}
           disabled={!inputValue.trim() || disabled}
           size="sm"
-          className="px-3"
+          className="px-0 w-10"
         >
           <Send className="h-4 w-4" />
         </Button>
@@ -259,7 +260,7 @@ export default function CustomChatInput({
       {/* Helpful hint */}
       {!inputValue && (
         <div className="text-xs text-gray-400 mt-1">
-          Type @ to add tools, documents, agents, and more
+          Type @ to add tools, documents, agents, and more • Shift+Enter for new line
         </div>
       )}
     </div>
