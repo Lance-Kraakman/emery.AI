@@ -192,6 +192,14 @@ export function DataViewsClientSimplified() {
   // Each cell's updates are debounced independently to batch rapid changes
   const pendingMutationsRef = useRef<Map<string, { rowId: string; fieldId: number; value: any }>>(new Map())
 
+  // Helper: Convert field ID to field name for row data updates
+  // Grid component works with numeric field IDs (1, 2, 3...), but row data is keyed by field names ("email", "age", etc.)
+  // This conversion is needed because rows are stored as { email: "test@example.com", age: 25 }, not { 1: "test@example.com", 2: 25 }
+  const getFieldNameById = (fieldId: number): string | null => {
+    const field = fields.find(f => f.id === fieldId)
+    return field ? field.name : null
+  }
+
   // TanStack Mutations for optimistic updates
   const updateRowMutation = useMutation({
     // Built-in columns (textColumn, floatColumn, etc.) handle normalization automatically
@@ -199,13 +207,14 @@ export function DataViewsClientSimplified() {
     mutationFn: async ({ rowId, fieldId, value }: { rowId: string, fieldId: number, value: DomainFieldValue }) => {
       if (!selectedTableId) throw new Error('No table selected')
 
-      const field = fields.find(f => f.id === fieldId)
-      if (!field) throw new Error('Field not found')
+      // Convert field ID to field name (grid uses IDs, row data uses names)
+      const fieldName = getFieldNameById(fieldId)
+      if (!fieldName) throw new Error('Field not found')
 
       return updateRowData({
         tableId: selectedTableId,
         rowId,
-        data: { [field.name]: value },
+        data: { [fieldName]: value },
       })
     },
     onMutate: async ({ rowId, fieldId, value }) => {
@@ -220,9 +229,9 @@ export function DataViewsClientSimplified() {
       // Snapshot the previous data for rollback (using exact key)
       const previousData = queryClient.getQueryData(queryKey)
 
-      // Find the field to get its name
-      const field = fields.find(f => f.id === fieldId)
-      if (!field) return { previousData, queryKey }
+      // Convert field ID to field name for optimistic update
+      const fieldName = getFieldNameById(fieldId)
+      if (!fieldName) return { previousData, queryKey }
 
       // Optimistically update all pages in the infinite query (using exact key)
       queryClient.setQueryData(queryKey, (old: any) => {
@@ -232,7 +241,7 @@ export function DataViewsClientSimplified() {
           pages: old.pages.map((page: any) => ({
             ...page,
             rows: page.rows.map((row: DSGRow) =>
-              row.id === rowId ? { ...row, [field.name]: value } : row
+              row.id === rowId ? { ...row, [fieldName]: value } : row
             )
           }))
         }
@@ -353,13 +362,14 @@ export function DataViewsClientSimplified() {
     // 1. Immediate optimistic UI update (instant feedback to user)
     // 2. Debounced server write (batches rapid changes)
 
-    // Immediate optimistic update (using onMutate logic without triggering mutation)
+    // Step 1: Immediate optimistic UI update for instant feedback
     const queryKey = selectedTableId
       ? rowQueryKeys.infinite(selectedTableId, sortBy, activeFilters ?? [])
       : ['rows', null, 'infinite']
 
-    const field = fields.find(f => f.id === fieldId)
-    if (field) {
+    // Convert field ID to field name for cache update
+    const fieldName = getFieldNameById(fieldId)
+    if (fieldName) {
       queryClient.setQueryData(queryKey, (old: any) => {
         if (!old?.pages) return old
         return {
@@ -367,14 +377,15 @@ export function DataViewsClientSimplified() {
           pages: old.pages.map((page: any) => ({
             ...page,
             rows: page.rows.map((row: DSGRow) =>
-              row.id === rowId ? { ...row, [field.name]: value } : row
+              row.id === rowId ? { ...row, [fieldName]: value } : row
             )
           }))
         }
       })
     }
 
-    // Debounced server write (500ms delay, cancels previous pending writes for same cell)
+    // Step 2: Debounced server write (batches rapid changes, 500ms delay)
+    // Track pending mutation and trigger debounced save
     const key = `${rowId}-${fieldId}`
     pendingMutationsRef.current.set(key, { rowId, fieldId, value })
     debouncedMutateRef.current(rowId, fieldId, value)
