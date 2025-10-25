@@ -32,7 +32,7 @@ export function NewCapabilityView({ agent }: NewCapabilityViewProps) {
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      toast.error('Capability name is required');
+      toast.error('Skill name is required');
       return;
     }
 
@@ -47,13 +47,13 @@ export function NewCapabilityView({ agent }: NewCapabilityViewProps) {
       });
 
       if (result.success) {
-        toast.success('Capability created successfully');
+        toast.success('Skill created successfully');
         router.push(`/agents/${agent.id}/capabilities`);
       } else {
-        toast.error(result.error || 'Failed to create capability');
+        toast.error(result.error || 'Failed to create skill');
       }
     } catch (error) {
-      console.error('Error creating capability:', error);
+      console.error('Error creating skill:', error);
       toast.error('An unexpected error occurred');
     } finally {
       setIsSaving(false);
@@ -74,7 +74,7 @@ export function NewCapabilityView({ agent }: NewCapabilityViewProps) {
             Back
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">New Capability</h1>
+            <h1 className="text-3xl font-bold">New Skill</h1>
             <p className="text-muted-foreground mt-1">
               Agent: {agent.name}
             </p>
@@ -82,7 +82,7 @@ export function NewCapabilityView({ agent }: NewCapabilityViewProps) {
         </div>
         <Button onClick={handleSave} disabled={isSaving}>
           <Save className="h-4 w-4 mr-2" />
-          {isSaving ? 'Creating...' : 'Create Capability'}
+          {isSaving ? 'Creating...' : 'Create Skill'}
         </Button>
       </div>
 

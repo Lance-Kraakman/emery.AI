@@ -105,7 +105,7 @@ export function CapabilityEditor({
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="name" className="text-base font-medium">
-            Capability Name
+            Name
           </Label>
           <Input
             id="name"
@@ -122,7 +122,7 @@ export function CapabilityEditor({
 
         <div className="space-y-2">
           <Label htmlFor="description" className="text-base font-medium">
-            Description (Optional)
+            Description
           </Label>
           <Textarea
             id="description"
@@ -132,7 +132,7 @@ export function CapabilityEditor({
               setLocalValue(newValue);
               onChange(newValue);
             }}
-            placeholder="Briefly describe what this capability does..."
+            placeholder="Briefly describe what this skill does..."
             rows={2}
             className="text-base"
           />

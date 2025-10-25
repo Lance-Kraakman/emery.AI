@@ -3,12 +3,12 @@
 import React, { useState } from 'react';
 import { Trash2, ChevronDown, ChevronUp, ArrowUp, ArrowDown, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import type { ToolConfigDTO } from '@/app/mappers/capability-mapper';
 import { StepToolsSection } from './StepToolsSection';
+import { StepInstructionsInput } from './StepInstructionsInput';
 import {
   Collapsible,
   CollapsibleContent,
@@ -59,14 +59,7 @@ export function StepCard({
 }: StepCardProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
-  const [localInstructions, setLocalInstructions] = useState(instructions);
   const [localModel, setLocalModel] = useState(model || '');
-
-  const handleInstructionsBlur = () => {
-    if (localInstructions !== instructions) {
-      onUpdate({ instructions: localInstructions });
-    }
-  };
 
   const handleModelBlur = () => {
     if (localModel !== model) {
@@ -135,14 +128,13 @@ export function StepCard({
       {/* Content */}
       {isExpanded && (
         <div className="p-6 space-y-4">
-          {/* Main Instructions - No label, just textarea */}
-          <Textarea
-            id={`step-${stepIndex}-instructions`}
-            value={localInstructions}
-            onChange={(e) => setLocalInstructions(e.target.value)}
-            onBlur={handleInstructionsBlur}
-            placeholder="Describe what this step should do..."
-            className="min-h-[120px] resize-y text-base"
+          {/* Main Instructions - With @ mention support */}
+          <StepInstructionsInput
+            value={instructions}
+            onChange={(newInstructions) => onUpdate({ instructions: newInstructions })}
+            onToolsChange={(newTools) => onUpdate({ tools: newTools })}
+            tools={tools}
+            stepIndex={stepIndex}
           />
 
           {/* Tools and Advanced Settings - Horizontal Row */}
@@ -173,7 +165,7 @@ export function StepCard({
                   )}
                 </Button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="absolute right-6 mt-2 w-80 border rounded-lg bg-background shadow-lg p-4 space-y-3 z-10">
+              <CollapsibleContent className="absolute right-6 mt-2 w-96 border rounded-lg bg-background shadow-lg p-4 space-y-3 z-10">
                 {/* Model Override */}
                 <div className="space-y-2">
                   <Label htmlFor={`step-${stepIndex}-model`} className="text-sm text-muted-foreground">
