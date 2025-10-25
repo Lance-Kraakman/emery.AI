@@ -30,7 +30,7 @@ services:
       - ../../.env.local.test
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
-      NODE_ENV: development
+      NODE_ENV: production
       NEXTAUTH_URL: http://localhost:3002
       # Override WORKER_ADDRESS for internal container network
       WORKER_ADDRESS: agent-integration:50051
@@ -123,7 +123,7 @@ services:
       - ../../.env.local.test
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
-      NODE_ENV: development
+      NODE_ENV: production
       # Override WORKER_ADDRESS for internal container network to reach agent
       WORKER_ADDRESS: agent-integration:50051
       # MinIO S3 configuration for integration tests (internal container network)

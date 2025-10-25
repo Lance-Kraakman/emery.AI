@@ -47,7 +47,8 @@ export interface GridContextValue {
   onClearFilters: () => void
 
   // Sort
-  sortState: { field?: string, order: 'asc' | 'desc' }
+  // AIDEV-NOTE: order is optional to handle cleared sort state (sortBy becomes {})
+  sortState: { field?: string, order?: 'asc' | 'desc' }
   onSort: (field: string, direction: 'asc' | 'desc') => void
   onClearSort: () => void
 

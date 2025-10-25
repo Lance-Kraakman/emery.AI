@@ -11,11 +11,12 @@ import type { FilterConfig } from "@/lib/types/filters"
 
 /**
  * Sort state for query keys
- * Matches the store's sortBy type where field is optional
+ * Matches the store's sortBy type where both field and order are optional
+ * When sorting is cleared, sortBy becomes {} with both properties undefined
  */
 export interface SortState {
   field?: string
-  order: 'asc' | 'desc'
+  order?: 'asc' | 'desc'
 }
 
 /**
