@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   User,
   Settings,
@@ -37,6 +38,7 @@ interface User {
 }
 
 export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
+  const router = useRouter();
   const { openModal } = useModal();
   const [ownerName, setOwnerName] = useState<string>('Loading...');
   const [users, setUsers] = useState<User[]>([]);
@@ -218,7 +220,7 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
           getCapabilitiesStatus() === 'partial' ? 'Basic Setup' : 'Not Configured'
         }
         summary={getCapabilitiesSummary()}
-        onClick={() => openModal('capabilities', { agent })}
+        onClick={() => router.push(`/agents/${agent.id}/capabilities`)}
         actionText="Manage Capabilities"
         className="md:col-span-2"
       />
