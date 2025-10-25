@@ -465,66 +465,58 @@ export function ToolDropdown({
 
   return (
     <div
-      className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-96 max-w-2xl h-96 flex flex-col text-gray-900"
+      className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-[440px] flex flex-col text-gray-900"
       style={{
         top: position?.top || 0,
         left: position?.left || 0,
+        height: position?.maxHeight ? `${position.maxHeight}px` : '600px',
       }}
       data-tool-dropdown
       aria-label="Toolbox"
       role="dialog"
     >
       {/* Category Filters */}
-      <div className="p-3 border-b border-gray-100">
-        <div className="relative">
-          {/* Left scroll shadow */}
-          <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-white via-white/80 to-transparent pointer-events-none z-10" />
+      <div className="p-2.5 border-b border-gray-100">
+        <div className="flex flex-wrap gap-1.5">
+          {allCategories.map((category, index) => {
+            const Icon = categoryIcons[category];
+            const categoryInfo = REFERENCE_CATEGORY_INFO[category];
+            const isSelected = selectedCategories.includes(category);
+            const isFocused = isInCategoryMode && focusedCategoryIndex === index;
 
-          {/* Right scroll shadow */}
-          <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-white via-white/80 to-transparent pointer-events-none z-10" />
-
-          {/* Scrollable category buttons */}
-          <div className="flex gap-2 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 pb-1 px-6">
-            {allCategories.map((category, index) => {
-              const Icon = categoryIcons[category];
-              const categoryInfo = REFERENCE_CATEGORY_INFO[category];
-              const isSelected = selectedCategories.includes(category);
-              const isFocused = isInCategoryMode && focusedCategoryIndex === index;
-
-              return (
-                <button
-                  key={category}
-                  onClick={() => toggleCategory(category)}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap flex-shrink-0',
-                    isSelected
-                      ? cn(
-                          categoryColors[category],
-                          'ring-2 ring-offset-1 shadow-sm',
-                          // Ring colors by category
-                          category === ReferenceCategory.DOC && 'ring-blue-400',
-                          category === ReferenceCategory.FILE && 'ring-green-400',
-                          category === ReferenceCategory.AGENT && 'ring-purple-400',
-                          category === ReferenceCategory.TABLE && 'ring-orange-400',
-                          category === ReferenceCategory.DATABASE && 'ring-gray-400'
-                        )
-                      : 'text-gray-500 bg-gray-50 hover:bg-gray-100 hover:text-gray-700',
-                    isFocused && 'ring-2 ring-blue-500 ring-offset-1'
-                  )}
-                  title={categoryInfo.description}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {categoryInfo.label}
-                </button>
-              );
-            })}
-          </div>
+            return (
+              <button
+                key={category}
+                onClick={() => toggleCategory(category)}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap',
+                  isSelected
+                    ? cn(
+                        categoryColors[category],
+                        'ring-1 ring-offset-1 shadow-sm',
+                        // Ring colors by category
+                        category === ReferenceCategory.DOC && 'ring-blue-400',
+                        category === ReferenceCategory.FILE && 'ring-green-400',
+                        category === ReferenceCategory.AGENT && 'ring-purple-400',
+                        category === ReferenceCategory.TABLE && 'ring-orange-400',
+                        category === ReferenceCategory.DATABASE && 'ring-gray-400'
+                      )
+                    : 'text-gray-500 bg-gray-50 hover:bg-gray-100 hover:text-gray-700',
+                  isFocused && 'ring-2 ring-blue-500 ring-offset-1'
+                )}
+                title={categoryInfo.description}
+              >
+                <Icon className="w-3 h-3" />
+                {categoryInfo.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Advanced Filters */}
-      <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
-        <div className="flex items-center gap-2 text-xs flex-wrap text-gray-900">
+      <div className="px-2.5 py-2 border-b border-gray-100 bg-gray-50">
+        <div className="flex flex-col gap-2 text-xs text-gray-900">
           {/* Multi-select App Filter */}
           <div className="flex items-center gap-1 flex-shrink-0 relative app-filter-container">
             <label className="text-gray-600 whitespace-nowrap">Apps:</label>
@@ -598,50 +590,53 @@ export function ToolDropdown({
             </div>
           </div>
 
-          {/* Connected Only Checkbox */}
-          <label className="flex items-center gap-1 text-gray-600 cursor-pointer flex-shrink-0 whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={connectedOnly}
-              onChange={(e) => setConnectedOnly(e.target.checked)}
-              className="w-3 h-3"
-            />
-            Connected only
-          </label>
+          {/* Checkbox row */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Connected Only Checkbox */}
+            <label className="flex items-center gap-1 text-gray-600 cursor-pointer whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={connectedOnly}
+                onChange={(e) => setConnectedOnly(e.target.checked)}
+                className="w-3 h-3"
+              />
+              Connected only
+            </label>
 
-          {/* Requires Connection Checkbox */}
-          <label className="flex items-center gap-1 text-gray-600 cursor-pointer flex-shrink-0 whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={requiresConnection}
-              onChange={(e) => setRequiresConnection(e.target.checked)}
-              className="w-3 h-3"
-            />
-            OAuth required
-          </label>
+            {/* Requires Connection Checkbox */}
+            <label className="flex items-center gap-1 text-gray-600 cursor-pointer whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={requiresConnection}
+                onChange={(e) => setRequiresConnection(e.target.checked)}
+                className="w-3 h-3"
+              />
+              OAuth required
+            </label>
 
-          {/* Show Reference Tools Checkbox */}
-          <label className="flex items-center gap-1 text-gray-600 cursor-pointer flex-shrink-0 whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={showReferenceTools}
-              onChange={(e) => setShowReferenceTools(e.target.checked)}
-              className="w-3 h-3"
-            />
-            Show reference tools
-          </label>
+            {/* Show Reference Tools Checkbox */}
+            <label className="flex items-center gap-1 text-gray-600 cursor-pointer whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={showReferenceTools}
+                onChange={(e) => setShowReferenceTools(e.target.checked)}
+                className="w-3 h-3"
+              />
+              Show reference tools
+            </label>
 
-          {/* Clear All Filters Button */}
-          {hasActiveFilters && (
-            <button
-              onClick={clearAllFilters}
-              className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded transition-colors flex-shrink-0"
-              title="Clear all filters"
-            >
-              <X className="w-3 h-3" />
-              Clear all
-            </button>
-          )}
+            {/* Clear All Filters Button */}
+            {hasActiveFilters && (
+              <button
+                onClick={clearAllFilters}
+                className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded transition-colors ml-auto"
+                title="Clear all filters"
+              >
+                <X className="w-3 h-3" />
+                Clear all
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -711,8 +706,15 @@ export function ToolDropdown({
                         <Icon className="w-3 h-3" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm text-gray-900 truncate">
-                          {displayInfo.displayName}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="font-medium text-sm text-gray-900 truncate">
+                            {displayInfo.displayName}
+                          </div>
+                          {displayInfo.requiresConnection && (
+                            <span className="text-xs text-orange-500 whitespace-nowrap flex-shrink-0">
+                              Requires OAuth connection
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-gray-500 line-clamp-2">
                           {displayInfo.description}
@@ -735,15 +737,6 @@ export function ToolDropdown({
                                 {name}{param.required ? '*' : ''}
                               </span>
                             ))}
-                          </div>
-                        )}
-
-                        <div className="text-xs text-gray-400 mt-1 font-mono truncate">
-                          {displayInfo.insertText}
-                        </div>
-                        {displayInfo.requiresConnection && (
-                          <div className="text-xs text-orange-500 mt-1">
-                            Requires OAuth connection
                           </div>
                         )}
                       </div>
