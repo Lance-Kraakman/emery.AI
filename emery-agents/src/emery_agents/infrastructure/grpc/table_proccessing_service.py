@@ -1116,7 +1116,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 logger.info(f"  - DataFrame columns: {df.columns}")
                 # Get schema field names - convert PyArrow schema to list of names
                 try:
-                    # PyArrow schema can be converted to list to get field names
+                    # AIDEV-NOTE: schema is already PyArrow after .to_pyarrow() call at line 1049
+                    # Can iterate directly over PyArrow schema fields
                     schema_field_names = [field.name for field in schema]
                     logger.info(f"  - Delta Lake schema column names: {schema_field_names}")
                 except Exception as schema_error:
