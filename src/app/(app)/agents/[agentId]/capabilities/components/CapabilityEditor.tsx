@@ -4,23 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  useSortable,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { StepCard } from './step-editor/StepCard';
 import { AddStepButton } from './step-editor/AddStepButton';
 import type { ToolConfigDTO } from '@/app/mappers/capability-mapper';
@@ -44,55 +27,15 @@ interface CapabilityEditorProps {
   capabilityId?: number;
 }
 
-interface SortableStepProps {
-  step: CapabilityFormData['steps'][0];
-  index: number;
-  onUpdate: (index: number, data: Partial<CapabilityFormData['steps'][0]>) => void;
-  onDelete: (index: number) => void;
-}
-
-function SortableStep({ step, index, onUpdate, onDelete }: SortableStepProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: `step-${index}` });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  return (
-    <div ref={setNodeRef} style={style}>
-      <StepCard
-        stepIndex={index}
-        type={step.type}
-        instructions={step.instructions}
-        model={step.model}
-        tools={step.tools}
-        servers={step.servers}
-        onUpdate={(data) => onUpdate(index, data)}
-        onDelete={() => onDelete(index)}
-        isDragging={isDragging}
-        dragHandleProps={{ ...attributes, ...listeners }}
-      />
-    </div>
-  );
-}
-
 /**
- * CapabilityEditor Component
+ * Streamlined Capability Editor
  *
- * Full-featured capability editor with:
- * - Basic metadata (name, description)
- * - Step-by-step workflow builder
- * - Drag-and-drop step reordering
- * - Tool selection per step with @doc:, @file:, @agent: format
- * - Visual tool display similar to ToolPanel
+ * AIDEV-NOTE: Redesigned for non-technical users with:
+ * - Friendly language throughout
+ * - Simple reorder buttons (no drag-and-drop)
+ * - Focus on natural language instructions
+ * - Advanced settings hidden by default
+ * - Prepares for future template and chatbot integration
  */
 export function CapabilityEditor({
   value,
@@ -106,32 +49,6 @@ export function CapabilityEditor({
   useEffect(() => {
     setLocalValue(value);
   }, [value]);
-
-  // Configure drag sensors
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    if (over && active.id !== over.id) {
-      const oldIndex = parseInt(active.id.toString().replace('step-', ''));
-      const newIndex = parseInt(over.id.toString().replace('step-', ''));
-
-      const newSteps = arrayMove(localValue.steps, oldIndex, newIndex);
-      const newValue = { ...localValue, steps: newSteps };
-      setLocalValue(newValue);
-      onChange(newValue);
-    }
-  };
 
   const handleAddStep = (type: 'TOOL_STEP' | 'CODE_STEP') => {
     const newStep = {
@@ -164,12 +81,32 @@ export function CapabilityEditor({
     onChange(newValue);
   };
 
+  const handleMoveStepUp = (index: number) => {
+    if (index === 0) return;
+    const newSteps = [...localValue.steps];
+    [newSteps[index - 1], newSteps[index]] = [newSteps[index], newSteps[index - 1]];
+    const newValue = { ...localValue, steps: newSteps };
+    setLocalValue(newValue);
+    onChange(newValue);
+  };
+
+  const handleMoveStepDown = (index: number) => {
+    if (index === localValue.steps.length - 1) return;
+    const newSteps = [...localValue.steps];
+    [newSteps[index], newSteps[index + 1]] = [newSteps[index + 1], newSteps[index]];
+    const newValue = { ...localValue, steps: newSteps };
+    setLocalValue(newValue);
+    onChange(newValue);
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Basic Fields */}
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="name">Name *</Label>
+      <div className="space-y-6">
+        <div className="space-y-3">
+          <Label htmlFor="name" className="text-base font-medium">
+            Capability Name
+          </Label>
           <Input
             id="name"
             value={localValue.name}
@@ -178,12 +115,15 @@ export function CapabilityEditor({
               setLocalValue(newValue);
               onChange(newValue);
             }}
-            placeholder="Enter capability name..."
+            placeholder="e.g., Weekly Sales Report, Customer Onboarding, Data Analysis..."
+            className="text-base"
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="description">Description</Label>
+        <div className="space-y-3">
+          <Label htmlFor="description" className="text-base font-medium">
+            Description (Optional)
+          </Label>
           <Textarea
             id="description"
             value={localValue.description}
@@ -192,16 +132,22 @@ export function CapabilityEditor({
               setLocalValue(newValue);
               onChange(newValue);
             }}
-            placeholder="Enter capability description..."
+            placeholder="Briefly describe what this capability does..."
             rows={3}
+            className="text-base"
           />
         </div>
       </div>
 
       {/* Steps Section */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Label>Steps</Label>
+          <div>
+            <Label className="text-lg font-semibold">Workflow Steps</Label>
+            <p className="text-sm text-muted-foreground mt-1">
+              Break down your workflow into sequential steps
+            </p>
+          </div>
           {localValue.steps.length > 0 && (
             <span className="text-sm text-muted-foreground">
               {localValue.steps.length} step{localValue.steps.length !== 1 ? 's' : ''}
@@ -209,34 +155,36 @@ export function CapabilityEditor({
           )}
         </div>
 
-        {/* Steps List with Drag-and-Drop */}
+        {/* Steps List */}
         {localValue.steps.length > 0 ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={localValue.steps.map((_, i) => `step-${i}`)}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="space-y-3">
-                {localValue.steps.map((step, index) => (
-                  <SortableStep
-                    key={`step-${index}`}
-                    step={step}
-                    index={index}
-                    onUpdate={handleUpdateStep}
-                    onDelete={handleDeleteStep}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
+          <div className="space-y-4">
+            {localValue.steps.map((step, index) => (
+              <StepCard
+                key={index}
+                stepIndex={index}
+                totalSteps={localValue.steps.length}
+                type={step.type}
+                instructions={step.instructions}
+                model={step.model}
+                tools={step.tools}
+                servers={step.servers}
+                onUpdate={(data) => handleUpdateStep(index, data)}
+                onDelete={() => handleDeleteStep(index)}
+                onMoveUp={() => handleMoveStepUp(index)}
+                onMoveDown={() => handleMoveStepDown(index)}
+              />
+            ))}
+          </div>
         ) : (
-          <div className="border-2 border-dashed rounded-lg p-8 text-center text-muted-foreground">
-            <p>No steps yet</p>
-            <p className="text-sm mt-1">Add your first step to get started</p>
+          <div className="border-2 border-dashed rounded-lg p-12 text-center">
+            <div className="max-w-md mx-auto space-y-3">
+              <p className="text-lg font-medium text-muted-foreground">
+                No steps yet
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Add your first step to start building your workflow. Each step represents a phase in your process.
+              </p>
+            </div>
           </div>
         )}
 
