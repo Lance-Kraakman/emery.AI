@@ -61,30 +61,17 @@ export function NewCapabilityView({ agent }: NewCapabilityViewProps) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.push(`/agents/${agent.id}/capabilities`)}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">New Skill</h1>
-            <p className="text-muted-foreground mt-1">
-              Agent: {agent.name}
-            </p>
-          </div>
-        </div>
-        <Button onClick={handleSave} disabled={isSaving}>
-          <Save className="h-4 w-4 mr-2" />
-          {isSaving ? 'Creating...' : 'Create Skill'}
-        </Button>
-      </div>
+    <div className="space-y-4">
+      {/* Back Button */}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => router.push(`/agents/${agent.id}/capabilities`)}
+        className="w-fit"
+      >
+        <ArrowLeft className="h-4 w-4 mr-2" />
+        Back to {agent.name}
+      </Button>
 
       {/* Editor */}
       <Card className="p-6">
@@ -92,6 +79,8 @@ export function NewCapabilityView({ agent }: NewCapabilityViewProps) {
           value={formData}
           onChange={setFormData}
           agentId={agent.id}
+          onSave={handleSave}
+          isSaving={isSaving}
         />
       </Card>
     </div>

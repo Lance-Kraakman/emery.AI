@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { ChevronDown, ChevronUp, Save } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
 import { StepCard } from './step-editor/StepCard';
 import { AddStepButton } from './step-editor/AddStepButton';
 import type { ToolConfigDTO } from '@/app/mappers/capability-mapper';
@@ -25,6 +27,8 @@ interface CapabilityEditorProps {
   onChange: (value: CapabilityFormData) => void;
   agentId: number;
   capabilityId?: number;
+  onSave?: () => void;
+  isSaving?: boolean;
 }
 
 /**
@@ -41,9 +45,12 @@ export function CapabilityEditor({
   value,
   onChange,
   agentId,
-  capabilityId
+  capabilityId,
+  onSave,
+  isSaving
 }: CapabilityEditorProps) {
   const [localValue, setLocalValue] = useState(value);
+  const [showDescription, setShowDescription] = useState(false);
 
   // Sync with external value changes
   useEffect(() => {
@@ -100,30 +107,54 @@ export function CapabilityEditor({
   };
 
   return (
-    <div className="space-y-4">
-      {/* Basic Fields */}
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="name" className="text-base font-medium">
-            Name
-          </Label>
-          <Input
-            id="name"
-            value={localValue.name}
-            onChange={(e) => {
-              const newValue = { ...localValue, name: e.target.value };
-              setLocalValue(newValue);
-              onChange(newValue);
-            }}
-            placeholder="e.g., Weekly Sales Report, Customer Onboarding, Data Analysis..."
-            className="text-base"
-          />
+    <div className="space-y-6">
+      {/* Inline Name + Create Button */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <Input
+              id="name"
+              value={localValue.name}
+              onChange={(e) => {
+                const newValue = { ...localValue, name: e.target.value };
+                setLocalValue(newValue);
+                onChange(newValue);
+              }}
+              placeholder="Skill name (e.g., Weekly Sales Report, Customer Onboarding...)"
+              className="text-lg font-medium h-12"
+            />
+          </div>
+          {onSave && (
+            <Button onClick={onSave} disabled={isSaving} size="lg" className="h-12">
+              <Save className="h-4 w-4 mr-2" />
+              {isSaving ? 'Creating...' : 'Create Skill'}
+            </Button>
+          )}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="description" className="text-base font-medium">
-            Description
-          </Label>
+        {/* Add Description Link */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => setShowDescription(!showDescription)}
+        >
+          {showDescription ? (
+            <>
+              <ChevronUp className="h-3 w-3 mr-1" />
+              Hide description
+            </>
+          ) : (
+            <>
+              <ChevronDown className="h-3 w-3 mr-1" />
+              Add description (optional)
+            </>
+          )}
+        </Button>
+
+        {/* Collapsible Description */}
+        {showDescription && (
           <Textarea
             id="description"
             value={localValue.description}
@@ -136,7 +167,7 @@ export function CapabilityEditor({
             rows={2}
             className="text-base"
           />
-        </div>
+        )}
       </div>
 
       {/* Steps Section */}
