@@ -28,7 +28,8 @@ interface ToolDropdownProps {
   onClose: () => void;
   onSelect: (tool: ToolDTO) => void;
   position?: {
-    top: number;
+    top?: number;
+    bottom?: number;
     left: number;
     maxHeight?: number;
   };
@@ -467,9 +468,10 @@ export function ToolDropdown({
     <div
       className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-[440px] flex flex-col text-gray-900"
       style={{
-        top: position?.top || 0,
+        ...(position?.top !== undefined ? { top: position.top } : {}),
+        ...(position?.bottom !== undefined ? { bottom: position.bottom } : {}),
         left: position?.left || 0,
-        height: position?.maxHeight ? `${position.maxHeight}px` : '600px',
+        maxHeight: position?.maxHeight ? `${position.maxHeight}px` : '600px',
       }}
       data-tool-dropdown
       aria-label="Toolbox"
