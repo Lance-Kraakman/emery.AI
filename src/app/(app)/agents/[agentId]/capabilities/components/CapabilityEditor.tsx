@@ -100,10 +100,10 @@ export function CapabilityEditor({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       {/* Basic Fields */}
-      <div className="space-y-6">
-        <div className="space-y-3">
+      <div className="space-y-4">
+        <div className="space-y-2">
           <Label htmlFor="name" className="text-base font-medium">
             Capability Name
           </Label>
@@ -120,7 +120,7 @@ export function CapabilityEditor({
           />
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2">
           <Label htmlFor="description" className="text-base font-medium">
             Description (Optional)
           </Label>
@@ -133,7 +133,7 @@ export function CapabilityEditor({
               onChange(newValue);
             }}
             placeholder="Briefly describe what this capability does..."
-            rows={3}
+            rows={2}
             className="text-base"
           />
         </div>
@@ -156,37 +156,24 @@ export function CapabilityEditor({
         </div>
 
         {/* Steps List */}
-        {localValue.steps.length > 0 ? (
-          <div className="space-y-4">
-            {localValue.steps.map((step, index) => (
-              <StepCard
-                key={index}
-                stepIndex={index}
-                totalSteps={localValue.steps.length}
-                type={step.type}
-                instructions={step.instructions}
-                model={step.model}
-                tools={step.tools}
-                servers={step.servers}
-                onUpdate={(data) => handleUpdateStep(index, data)}
-                onDelete={() => handleDeleteStep(index)}
-                onMoveUp={() => handleMoveStepUp(index)}
-                onMoveDown={() => handleMoveStepDown(index)}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="border-2 border-dashed rounded-lg p-12 text-center">
-            <div className="max-w-md mx-auto space-y-3">
-              <p className="text-lg font-medium text-muted-foreground">
-                No steps yet
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Add your first step to start building your workflow. Each step represents a phase in your process.
-              </p>
-            </div>
-          </div>
-        )}
+        <div className="space-y-4">
+          {localValue.steps.map((step, index) => (
+            <StepCard
+              key={index}
+              stepIndex={index}
+              totalSteps={localValue.steps.length}
+              type={step.type}
+              instructions={step.instructions}
+              model={step.model}
+              tools={step.tools}
+              servers={step.servers}
+              onUpdate={(data) => handleUpdateStep(index, data)}
+              onDelete={() => handleDeleteStep(index)}
+              onMoveUp={() => handleMoveStepUp(index)}
+              onMoveDown={() => handleMoveStepDown(index)}
+            />
+          ))}
+        </div>
 
         {/* Add Step Button */}
         <AddStepButton onAddStep={handleAddStep} />
