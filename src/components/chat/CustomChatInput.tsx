@@ -221,40 +221,39 @@ export default function CustomChatInput({
 
   return (
     <div className={`relative ${className}`}>
-      <div className="flex gap-2 items-start">
-        <div className="flex-1 relative">
-          <Textarea
-            ref={inputRef}
-            value={inputValue}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={disabled}
-            className="min-h-[44px] max-h-32 resize-none px-0"
-          />
+      <div className="relative">
+        <Textarea
+          ref={inputRef}
+          value={inputValue}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          disabled={disabled}
+          className="min-h-[120px] max-h-[300px] resize-none px-0 pr-12"
+        />
 
-          {/* Tool Dropdown */}
-          <ToolDropdown
-            query={dropdownQuery}
-            isOpen={showDropdown}
-            onClose={() => setShowDropdown(false)}
-            onSelect={handleToolSelect}
-            position={{
-              top: dropdownPosition.top,
-              left: dropdownPosition.left,
-              maxHeight: 400,
-            }}
-          />
-        </div>
-
+        {/* Floating Send Button - positioned inside textarea */}
         <Button
           onClick={handleSendMessage}
           disabled={!inputValue.trim() || disabled}
           size="sm"
-          className="px-0 w-10"
+          className="absolute bottom-2 right-2 h-8 w-8 p-0 rounded-full shadow-sm hover:shadow-md transition-shadow"
         >
-          <Send className="h-4 w-4" />
+          <Send className="h-3 w-3" />
         </Button>
+
+        {/* Tool Dropdown */}
+        <ToolDropdown
+          query={dropdownQuery}
+          isOpen={showDropdown}
+          onClose={() => setShowDropdown(false)}
+          onSelect={handleToolSelect}
+          position={{
+            top: dropdownPosition.top,
+            left: dropdownPosition.left,
+            maxHeight: 400,
+          }}
+        />
       </div>
 
       {/* Helpful hint */}

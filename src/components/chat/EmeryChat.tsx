@@ -330,17 +330,6 @@ function ChatContentWithCanvas({
           />
 
         </div>
-
-        {/* Suggestions at bottom of messages area when no messages */}
-        {isClient && showSuggestions && handler.messages.length === 0 && (
-          <div className="flex-shrink-0 mt-auto">
-            <ChatSuggestions
-              onSuggestionClick={onSuggestionClick}
-              selectedIndex={selectedSuggestionIndex}
-              domainType={chatContext?.domainType}
-            />
-          </div>
-        )}
       </div>
 
       {/* Tool Panel - with direct canvas access */}
