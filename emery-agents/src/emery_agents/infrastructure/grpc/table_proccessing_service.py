@@ -434,7 +434,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Read existing Delta table to check current schema
             try:
                 delta_table = DeltaTable(s3_uri, storage_options=storage_options)
-                current_schema = delta_table.schema()
+                # AIDEV-NOTE: Convert deltalake schema to PyArrow schema for iteration
+                # delta_table.schema() returns deltalake._internal.Schema which is not iterable
+                current_schema = delta_table.schema().to_pyarrow()
                 current_columns = [field.name for field in current_schema]
                 logger.info(f"[UpdateTable] Current Delta Lake columns: {current_columns}")
             except Exception as e:
@@ -498,7 +500,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
             # Verify schema was updated
             updated_table = DeltaTable(s3_uri, storage_options=storage_options)
-            updated_schema = updated_table.schema()
+            # AIDEV-NOTE: Convert deltalake schema to PyArrow schema for iteration
+            updated_schema = updated_table.schema().to_pyarrow()
             updated_columns = [field.name for field in updated_schema]
             logger.info(f"[UpdateTable] Delta table AFTER schema evolution:")
             logger.info(f"  - Columns: {updated_columns}")
@@ -1041,7 +1044,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             delta_table = DeltaTable(s3_uri, storage_options=storage_options)
 
             # Get schema for type-safe filter casting
-            schema = delta_table.schema()
+            # AIDEV-NOTE: Convert deltalake schema to PyArrow schema for field access and iteration
+            # delta_table.schema() returns deltalake._internal.Schema which is not iterable
+            schema = delta_table.schema().to_pyarrow()
 
             # AIDEV-NOTE: Build PyArrow predicate for efficient filtering with predicate pushdown
             # This applies filters BEFORE loading data into memory (10-100x faster for large tables)
