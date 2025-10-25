@@ -1,126 +1,264 @@
 /**
  * Row Serializer
  *
- * Infrastructure component that handles serialization/deserialization of Row entities
- * for Delta Lake storage.
+ * ARCHITECTURE: SINGLE SOURCE OF TRUTH for field-aware data transformations
  *
- * ARCHITECTURE NOTE: Serialization logic belongs in the infrastructure layer, NOT domain.
- * - Domain layer (Row): Works with plain JavaScript objects/arrays
- * - Infrastructure layer (RowSerializer): Handles persistence format conversion
+ * Responsibilities:
+ * - Serialization: Domain → Storage (field-type-aware normalization)
+ * - Deserialization: Storage → Domain (field-type-aware parsing + Excel-like defaults)
+ * - Complex field wrapping for Delta Lake JSON storage
  *
- * AIDEV-NOTE: Python Delta Lake handles arrays/objects natively via Arrow.
- * We send arrays/objects directly - NO JSON string serialization needed.
- * Python parses jsonValue fields automatically, so trying to send JSON strings
- * results in double-serialization issues.
+ * AIDEV-NOTE: This is the ONLY place that understands field semantics.
+ * TableGrpcMapper is type-agnostic and just converts JS types ↔ Protobuf.
+ *
+ * Layer Responsibilities:
+ * - RowSerializer: Field-aware transformations (THIS FILE)
+ * - TableGrpcMapper: Type-agnostic JS ↔ Protobuf conversion
+ * - Python Service: Protobuf → Delta Lake via Arrow
  */
 
 import type { Row } from '@/ddd/domain/tables/value-objects/row';
 import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 
 export class RowSerializer {
+  // ============================================================================
+  // SERIALIZATION: Domain → Storage (Outbound)
+  // ============================================================================
+
   /**
    * Serialize Row for Delta Lake storage
-   * Filters out unexpected fields to prevent corruption
+   * Applies field-aware normalization and complex type wrapping
    *
    * @param row - Domain Row entity
    * @param fields - Table field definitions
-   * @returns Plain object ready for Delta Lake storage
+   * @returns Plain object ready for Delta Lake storage via protobuf
    */
   static serializeForStorage(row: Row, fields: readonly TableField[]): Record<string, any> {
     const plain = row.toPlainObject();
 
-    // AIDEV-NOTE: Build result from scratch to avoid preserving corrupted keys
-    // DO NOT use { ...plain } as it would preserve numeric keys from previous corruptions
-    const result: Record<string, any> = {};
+    // AIDEV-NOTE: Build result from scratch to avoid corrupted keys
+    // DO NOT use { ...plain } as it preserves numeric keys from corruption
+    const result: Record<string, any> = { id: plain.id };
 
     console.log(`[RowSerializer.serializeForStorage] Row ${row.id.value}:`, {
       fieldCount: fields.length,
       plainKeys: Object.keys(plain)
     });
 
-    // Only copy expected fields (id + field names)
-    result.id = plain.id;
-
     for (const field of fields) {
       const value = plain[field.name];
-
-      // AIDEV-NOTE: Complex field types need to be wrapped with field name for Delta Lake storage
-      // This creates: {fieldName: [...]} which allows proper deserialization
-      // The wrapper helps identify the field when parsing JSON from Delta Lake
-      if (['relation', 'document', 'file'].includes(field.type)) {
-        console.log(`[RowSerializer.serializeForStorage] Field "${field.name}":`, {
-          type: field.type,
-          valueType: typeof value,
-          isArray: Array.isArray(value),
-          value: Array.isArray(value) ? `array[${value.length}]` : value
-        });
-
-        // Wrap arrays/objects with field name: [...] → {fieldName: [...]}
-        if (value && (Array.isArray(value) || typeof value === 'object')) {
-          result[field.name] = { [field.name]: value };
-        } else {
-          // null, undefined, or primitive → keep as-is
-          result[field.name] = value;
-        }
-      } else {
-        // Non-complex fields: copy as-is
-        result[field.name] = value;
-      }
+      result[field.name] = this.serializeFieldValue(value, field);
     }
 
     return result;
   }
 
   /**
+   * Serialize a single field value for storage
+   * SINGLE SOURCE OF TRUTH for field-aware type normalization
+   *
+   * @param value - Raw value from domain
+   * @param field - Field definition with type information
+   * @returns Normalized value ready for storage
+   */
+  private static serializeFieldValue(value: any, field: TableField): any {
+    // Complex types need special wrapping for Delta Lake JSON storage
+    if (this.isComplexFieldType(field.type)) {
+      return this.wrapComplexFieldForStorage(value, field);
+    }
+
+    // Simple types: field-aware normalization
+    return this.normalizeSimpleFieldForStorage(value, field);
+  }
+
+  private static isComplexFieldType(type: string): boolean {
+    return ['relation', 'document', 'file'].includes(type);
+  }
+
+  /**
+   * Wrap complex field values for Delta Lake JSON storage
+   *
+   * AIDEV-NOTE: Delta Lake stores complex types as JSON strings.
+   * We wrap arrays/objects with field name for proper deserialization:
+   *
+   * Example:
+   *   Input:  docs = [{id: 1}, {id: 2}]
+   *   Output: docs = {docs: [{id: 1}, {id: 2}]}
+   *
+   * This wrapper helps identify the field when parsing JSON from Delta Lake,
+   * ensuring we unwrap to the correct structure during deserialization.
+   */
+  private static wrapComplexFieldForStorage(value: any, field: TableField): any {
+    console.log(`[RowSerializer.serializeForStorage] Field "${field.name}":`, {
+      type: field.type,
+      valueType: typeof value,
+      isArray: Array.isArray(value),
+      value: Array.isArray(value) ? `array[${value.length}]` : value
+    });
+
+    if (value && (Array.isArray(value) || typeof value === 'object')) {
+      // Wrap: [...] → {fieldName: [...]}
+      return { [field.name]: value };
+    }
+
+    // null, undefined, or primitive → store as-is
+    return value;
+  }
+
+  /**
+   * Normalize simple field values for Delta Lake storage
+   *
+   * AIDEV-NOTE: Delta Lake uses Arrow schema for type validation.
+   * Empty strings cannot be cast to numeric types (Float64, Int64, Boolean).
+   * We convert empty → null to enable proper Arrow type casting.
+   */
+  private static normalizeSimpleFieldForStorage(value: any, field: TableField): any {
+    const isEmpty = value === '' || value === null || value === undefined;
+
+    switch (field.type) {
+      case 'number':
+        // AIDEV-NOTE: Arrow cannot cast '' to Float64
+        // Convert empty → null for proper storage
+        return isEmpty ? null : value;
+
+      case 'boolean':
+        // AIDEV-NOTE: Arrow cannot cast '' to Boolean
+        // Convert empty → null for proper storage
+        if (isEmpty) return null;
+
+        // Convert string booleans from checkbox inputs
+        if (typeof value === 'string') {
+          return value === 'true' || value === '1';
+        }
+
+        return value;
+
+      case 'text':
+      case 'email':
+      case 'url':
+        // Empty strings are valid for text fields
+        return value;
+
+      case 'date':
+        // Empty → null for dates
+        return isEmpty ? null : value;
+
+      default:
+        // Unknown types: pass through
+        return value;
+    }
+  }
+
+  // ============================================================================
+  // DESERIALIZATION: Storage → Domain (Inbound)
+  // ============================================================================
+
+  /**
    * Deserialize data from Delta Lake storage to Row-compatible format
-   * Parses JSON strings for complex field types and filters out unexpected fields
+   * Parses JSON for complex types and applies Excel-like defaults
    *
    * @param data - Raw data from Delta Lake via Arrow IPC
    * @param fields - Table field definitions
    * @returns Plain object ready for Row.fromPlainObject()
    */
-  static deserializeFromStorage(data: Record<string, any>, fields: readonly TableField[]): Record<string, any> {
-    // AIDEV-NOTE: Build result from scratch to avoid preserving corrupted keys
-    // DO NOT use { ...data } as it would preserve numeric keys from corrupted data
-    const result: Record<string, any> = {};
+  static deserializeFromStorage(
+    data: Record<string, any>,
+    fields: readonly TableField[]
+  ): Record<string, any> {
+    // AIDEV-NOTE: Build result from scratch to avoid corrupted keys
+    const result: Record<string, any> = { id: data.id };
 
-    // Always include id field
-    result.id = data.id;
-
-    // Copy only expected fields
-    // Complex field types (relation, document, file) are stored as JSON strings in Delta Lake
     for (const field of fields) {
       const value = data[field.name];
-
-      // Parse JSON strings for complex field types
-      if (['relation', 'document', 'file'].includes(field.type)) {
-        if (typeof value === 'string' && value.length > 0) {
-          try {
-            const parsed = JSON.parse(value);
-
-            // AIDEV-NOTE: Unwrap the field-named wrapper object
-            // Storage format: '{"docs": [...]}' → Return: [...]
-            // This ensures the domain layer receives plain arrays, not wrapped objects
-            if (parsed && typeof parsed === 'object' && field.name in parsed) {
-              result[field.name] = parsed[field.name];
-            } else {
-              // Fallback: use parsed value directly (for legacy data)
-              result[field.name] = parsed;
-            }
-          } catch (e) {
-            console.warn(`[RowSerializer.deserializeFromStorage] Failed to parse JSON for field "${field.name}":`, e);
-            result[field.name] = value; // Keep as-is if parse fails
-          }
-        } else {
-          // null, undefined, or empty string
-          result[field.name] = value;
-        }
-      } else {
-        // Non-complex fields: copy as-is
-        result[field.name] = value;
-      }
+      result[field.name] = this.deserializeFieldValue(value, field);
     }
 
     return result;
+  }
+
+  /**
+   * Deserialize a single field value from storage
+   * SINGLE SOURCE OF TRUTH for field-aware parsing and Excel-like defaults
+   *
+   * @param value - Raw value from storage
+   * @param field - Field definition with type information
+   * @returns Parsed value with Excel-like defaults for domain layer
+   */
+  private static deserializeFieldValue(value: any, field: TableField): any {
+    // Complex types: unwrap JSON
+    if (this.isComplexFieldType(field.type)) {
+      return this.unwrapComplexFieldFromStorage(value, field);
+    }
+
+    // Simple types: apply Excel-like defaults
+    return this.applyExcelLikeDefaults(value, field);
+  }
+
+  /**
+   * Unwrap complex field values from Delta Lake JSON storage
+   *
+   * AIDEV-NOTE: Reverses the wrapping from serializeFieldValue.
+   *
+   * Example:
+   *   Storage: '{"docs": [{id: 1}]}'
+   *   Parsed:  {docs: [{id: 1}]}
+   *   Returned: [{id: 1}]  ← unwrapped
+   */
+  private static unwrapComplexFieldFromStorage(value: any, field: TableField): any {
+    if (typeof value === 'string' && value.length > 0) {
+      try {
+        const parsed = JSON.parse(value);
+
+        // Unwrap field-named wrapper: {docs: [...]} → [...]
+        if (parsed && typeof parsed === 'object' && field.name in parsed) {
+          return parsed[field.name];
+        }
+
+        // Fallback: use parsed value directly (legacy data)
+        return parsed;
+      } catch (e) {
+        console.warn(`[RowSerializer.deserializeFromStorage] Failed to parse JSON for field "${field.name}":`, e);
+        return value; // Keep as-is if parse fails
+      }
+    }
+
+    // null, undefined, or non-string
+    return value;
+  }
+
+  /**
+   * Apply Excel-like defaults for domain layer
+   *
+   * AIDEV-NOTE: Excel-like behavior for empty cells
+   * Excel treats empty cells consistently across field types:
+   * - Text fields: Display as empty string ''
+   * - Number fields: Display as empty string '' (NOT zero)
+   * - Boolean fields: Display as unchecked (false)
+   * - Date fields: Display as empty string ''
+   *
+   * This ensures consistent, predictable behavior matching spreadsheet UX.
+   */
+  private static applyExcelLikeDefaults(value: any, field: TableField): any {
+    if (value === null || value === undefined) {
+      switch (field.type) {
+        case 'boolean':
+          // Excel: Empty cell = unchecked checkbox
+          return false;
+
+        case 'text':
+        case 'email':
+        case 'url':
+        case 'number':
+        case 'date':
+          // Excel: Empty cell = empty string (NOT zero for numbers)
+          return '';
+
+        default:
+          return '';
+      }
+    }
+
+    // Non-null values: pass through as-is
+    return value;
   }
 }

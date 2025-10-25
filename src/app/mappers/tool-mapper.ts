@@ -39,7 +39,9 @@ export interface ToolDTO {
   // Tool type discrimination
   type: 'system' | 'reference'
 
-  // Configuration (type-safe from database schema)
+  // Configuration (static tool definition)
+  // Contains parameters, implementation details, UI config
+  // Constructed from toolMetadata.extra for both system and reference tools
   config: ToolDefinitionData
 
   // System tool properties
@@ -49,6 +51,30 @@ export interface ToolDTO {
   id?: string              // For @ mentions and reference identification
   insertText?: string      // For @ mentions in chat
   organizationId?: number  // For reference tools scoped to organization
+
+  // Runtime values for different reference tool types (from ToolConfigData)
+  // Agent tools
+  agentId?: number
+  ownerId?: string
+
+  // Table tools
+  tableId?: string | number
+  tableName?: string
+
+  // Document tools
+  documentId?: string
+
+  // File tools
+  fileId?: string
+  filename?: string
+  mimeType?: string
+
+  // Common for document/file tools
+  fieldId?: number
+  rowId?: string
+
+  // Database tools
+  databaseId?: string
 }
 
 /**
@@ -67,6 +93,9 @@ export class ToolMapper {
    * Convert Tool entity to DTO
    */
   static toDTO(tool: Tool): ToolDTO {
+    // Extract definition from toolMetadata.extra (where it's stored from DB)
+    const extra = tool.toolMetadata.extra || {};
+
     return {
       name: tool.getName(),
       displayName: tool.toolMetadata.displayName,
@@ -79,7 +108,16 @@ export class ToolMapper {
       connectionType: tool.toolMetadata.connectionType,
       supportsArtifacts: tool.supportsArtifacts(),
       type: 'system',
-      config: tool.toolConfig.config as ToolDefinitionData,  // Type-safe cast
+      // Construct ToolDefinitionData from metadata.extra
+      config: {
+        type: (extra.implementation as any)?.type || 'system',
+        parameters: extra.parameters || {},
+        implementation: extra.implementation || { backend_class: tool.getName(), requires_auth: false },
+        ui_config: {
+          insert_text: extra.insertText || `@tool:${tool.getName()}`,
+          supports_artifacts: extra.supportsArtifacts
+        }
+      } as ToolDefinitionData,
       requiredApps: tool.toolMetadata.requiredApps
       // Reference tool properties remain undefined for system tools
     }

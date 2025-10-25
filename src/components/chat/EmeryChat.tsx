@@ -247,21 +247,21 @@ function ChatContentWithCanvas({
 
     if (tool.category === ToolCategory.DOCUMENTS) {
       // Fetch real document data using server action
-      // Note: DocumentToolConfig uses tableId/fieldId, not documentTableId/documentFieldId
+      // Note: Runtime values are now in ToolDTO root level, not in config
       const result = await getDocumentFieldValue(
-        tool.config.documentId!,
-        tool.config.organizationId,
-        tool.config.tableId!,
-        tool.config.fieldId!
+        tool.documentId!,
+        tool.organizationId!,
+        tool.tableId as number,
+        tool.fieldId!
       )
 
       if (result.success && result.data) {
         // Get download URL for the document
         const urlResult = await getDocumentDownloadUrl(
-          tool.config.documentId!,
-          tool.config.organizationId,
-          tool.config.tableId!,
-          tool.config.fieldId!
+          tool.documentId!,
+          tool.organizationId!,
+          tool.tableId as number,
+          tool.fieldId!
         )
 
         const downloadUrl = urlResult.success ? urlResult.data! : undefined
@@ -269,9 +269,9 @@ function ChatContentWithCanvas({
         // Create artifact and open in canvas using global UI state
         const artifact = createDocumentArtifact(
           result.data,
-          tool.config.organizationId,
-          tool.config.tableId!,
-          tool.config.fieldId!,
+          tool.organizationId!,
+          tool.tableId as number,
+          tool.fieldId!,
           'view',
           downloadUrl
         )
@@ -283,19 +283,19 @@ function ChatContentWithCanvas({
         console.error('Failed to fetch document data:', result.error)
       }
     } else if (tool.category === ToolCategory.FILES) {
-      // Fetch real file data using DTO config
+      // Fetch real file data using DTO runtime values
       const fileResult = await fetchFileArtifactData(
-        tool.config.fileId!,
-        tool.config.organizationId,
-        tool.config.filename!,
-        tool.config.fileMimeType!
+        tool.fileId!,
+        tool.organizationId!,
+        tool.filename!,
+        tool.mimeType!
       )
 
       if (fileResult.success && fileResult.data) {
         // Get download URL for the file
         const urlResult = await getFileDownloadUrl(
-          tool.config.fileId!,
-          tool.config.organizationId
+          tool.fileId!,
+          tool.organizationId!
         )
 
         const downloadUrl = urlResult.success ? urlResult.data! : ''

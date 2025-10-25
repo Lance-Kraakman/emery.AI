@@ -18,13 +18,8 @@ RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
 # Install pnpm globally
 RUN npm i -g pnpm
 
-# Copy package files
-COPY package.json pnpm-lock.yaml ./
-
-# AIDEV-NOTE: Install dependencies including devDependencies for development
-RUN pnpm install @duckdb/node-api
-RUN pnpm install --frozen-lockfile
-
+# AIDEV-NOTE: Skip dependency installation in dev mode
+# Dependencies are provided via volume mount from host (faster iteration)
 # Copy source code
 COPY . .
 

@@ -906,7 +906,27 @@ export interface OAuthToolDefinitionData {
   };
 }
 
-export type ToolDefinitionData = SystemToolDefinitionData | OAuthToolDefinitionData;
+export interface ReferenceToolDefinitionData {
+  type: "reference";
+  implementation: {
+    type: string;
+    backend_class: string;
+    requires_auth: boolean;
+  };
+  ui_config: {
+    insert_text: string;
+    icon?: string;
+  };
+  parameters: {
+    [key: string]: {
+      type: string;
+      description?: string;
+      required: boolean;
+    };
+  };
+}
+
+export type ToolDefinitionData = SystemToolDefinitionData | OAuthToolDefinitionData | ReferenceToolDefinitionData;
 
 // Simplified app types table
 export const appTypes = pgTable("app_types", {
