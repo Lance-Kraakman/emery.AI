@@ -16,6 +16,8 @@ import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/da
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
 import type { IAgentExecutionRepository } from '@/ddd/domain/agents/repositories/agent-execution-repository';
+import type { ICapabilityRepository } from '@/ddd/domain/capabilities/repositories/capability-repository';
+import type { IStepRepository } from '@/ddd/domain/capabilities/repositories/step-repository';
 import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
 import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
 import type { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
@@ -25,6 +27,7 @@ import type { IIndexingDomainService, ISearchDomainService } from '@/ddd/domain/
 
 import type { AgentTaskApplicationService } from '@/ddd/application/services/agents/agent-task-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
+import type { CapabilityApplicationService } from '@/ddd/application/services/capabilities/capability-application-service';
 import type { TeamApplicationService } from '@/ddd/application/services/teams/team-application-service';
 import type { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
 import type { UserRoleApplicationService } from '@/ddd/application/services/user-organizations/user-role-application-service';
@@ -66,6 +69,10 @@ export interface RepositoryRegistry {
   ITaskRepository: ITaskRepository;
   IAgentExecutionRepository: IAgentExecutionRepository;
 
+  // Capability domain repositories
+  ICapabilityRepository: ICapabilityRepository;
+  IStepRepository: IStepRepository;
+
   // Database domain repositories
   IDatabaseRepository: IDatabaseRepository;
   IDynamicTableRepository: IDynamicTableRepository;
@@ -98,6 +105,9 @@ export interface RepositoryRegistry {
   // Agent application services
   AgentTaskApplicationService: AgentTaskApplicationService;
   AgentApplicationService: AgentApplicationService;
+
+  // Capability application services
+  CapabilityApplicationService: CapabilityApplicationService;
 
   // Database application services
   DatabaseApplicationService: DatabaseApplicationService;
