@@ -72,24 +72,19 @@ export default function CustomChatInput({
       // Position above input since chat is at bottom of screen
       if (inputRef.current) {
         const rect = inputRef.current.getBoundingClientRect();
-        const dropdownHeight = 400;
-        const gap = 4;
+        const gap = 8;
 
-        // Calculate optimal position to stay within viewport
-        let top = rect.top - dropdownHeight - gap;
+        // Calculate available space above the input
+        const maxDropdownHeight = rect.top - gap;
+
+        // Position dropdown so its bottom aligns with top of input
+        const dropdownHeight = Math.min(700, maxDropdownHeight); // Use up to 700px if available
+        const top = rect.top - dropdownHeight - gap;
+
         let left = rect.left;
 
-        // Prevent going off top of screen
-        if (top < 0) {
-          top = rect.bottom + gap; // Position below input instead
-        }
-
         // Prevent going off right side of screen
-        // Dropdown uses min-w-96 (384px) and max-w-2xl (768px)
-        // Calculate the actual width based on viewport
-        const maxDropdownWidth = Math.min(768, window.innerWidth - 32); // max-w-2xl with margin
-        const minDropdownWidth = 384; // min-w-96
-        const dropdownWidth = Math.max(minDropdownWidth, maxDropdownWidth);
+        const dropdownWidth = 440; // Match w-[440px] in ToolDropdown
 
         // Check if dropdown would overflow on right side
         if (left + dropdownWidth > window.innerWidth) {
@@ -102,7 +97,7 @@ export default function CustomChatInput({
           left = 16; // 16px margin
         }
 
-        setDropdownPosition({ top, left });
+        setDropdownPosition({ top, left, maxHeight: dropdownHeight });
       }
     } else {
       setShowDropdown(false);
@@ -142,7 +137,9 @@ export default function CustomChatInput({
         fallback: getReferenceFallback()
       });
 
-      const insertText = tool.insertText || getReferenceFallback();
+      const rawInsertText = tool.insertText || getReferenceFallback();
+      // AIDEV-NOTE: Remove line breaks, tabs, and extra whitespace from insert text
+      const insertText = rawInsertText.replace(/[\n\r\t]+/g, ' ').replace(/\s+/g, ' ').trim();
       const newValue = beforeAt + insertText + ' ' + afterCursor;
       setInputValue(newValue);
 
@@ -236,7 +233,7 @@ export default function CustomChatInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          className="min-h-[120px] max-h-[300px] resize-none px-0 pr-12"
+          className="min-h-[220px] max-h-[400px] resize-none px-0 pr-12"
         />
 
         {/* Floating Send Button - positioned inside textarea */}
