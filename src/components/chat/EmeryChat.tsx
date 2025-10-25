@@ -91,7 +91,7 @@ function EmeryChatHeader({
   }
 
   return (
-    <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
+    <div className="flex items-center justify-between py-4 border-b border-border bg-muted/20">
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -172,7 +172,7 @@ function ChatSuggestions({
   if (suggestions.length === 0) return null
 
   return (
-    <div className="px-4">
+    <div>
       <div className="mb-2">
         <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <Lightbulb className="h-3 w-3" />
@@ -314,19 +314,19 @@ function ChatContentWithCanvas({
   return (
     <div className="h-full flex flex-col">
       {/* Messages and suggestions container - scrollable */}
-      <div ref={handler.scrollRef} className="flex-1 overflow-y-auto flex flex-col px-1">
+      <div ref={handler.scrollRef} className="flex-1 overflow-y-auto flex flex-col">
         {/* Messages area */}
         <div className="flex-1">
           {/* Debug: Show message count */}
           {process.env.NODE_ENV === 'development' && (
-            <div className="text-xs text-gray-500 p-2">
+            <div className="text-xs text-gray-500 py-2">
               Messages: {handler.messages?.length || 0}
             </div>
           )}
 
           {/* ChatMessages component */}
           <ChatMessages
-            className="flex-1 h-full bg-transparent [&_.message]:bg-transparent [&_.message]:py-1 [&_.message]:px-2 [&_.message]:text-sm [&_.message]:leading-tight [&_p]:text-sm [&_p]:leading-5 [&_*]:text-sm"
+            className="flex-1 h-full bg-transparent [&_.message]:bg-transparent [&_.message]:py-1 [&_.message]:text-sm [&_.message]:leading-tight [&_p]:text-sm [&_p]:leading-5 [&_*]:text-sm"
           />
 
         </div>
@@ -353,7 +353,7 @@ function ChatContentWithCanvas({
       />
 
       {/* Input area */}
-      <div className="flex-shrink-0 p-4 border-t border-border/10 bg-card" onKeyDown={onKeyDown}>
+      <div className="flex-shrink-0 py-4 border-t border-border/10 bg-card" onKeyDown={onKeyDown}>
         <CustomChatInput
           onSendMessage={async (message) => {
             // Send message with tools
@@ -478,7 +478,7 @@ export function EmeryChat() {
   // Don't render if user is not authenticated
   if (!userId || !organizationId) {
     return (
-      <div className="w-96 h-full flex flex-col bg-card border-l border-border items-center justify-center p-8">
+      <div className="w-96 h-full flex flex-col bg-card border-l border-border items-center justify-center py-8">
         <p className="text-sm text-muted-foreground">Please sign in to use chat</p>
       </div>
     )
