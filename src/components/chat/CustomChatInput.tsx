@@ -85,8 +85,15 @@ export default function CustomChatInput({
         }
 
         // Prevent going off right side of screen
-        const dropdownWidth = 400; // min-w-96 = 384px, but give some buffer
+        // Dropdown uses min-w-96 (384px) and max-w-2xl (768px)
+        // Calculate the actual width based on viewport
+        const maxDropdownWidth = Math.min(768, window.innerWidth - 32); // max-w-2xl with margin
+        const minDropdownWidth = 384; // min-w-96
+        const dropdownWidth = Math.max(minDropdownWidth, maxDropdownWidth);
+
+        // Check if dropdown would overflow on right side
         if (left + dropdownWidth > window.innerWidth) {
+          // Position from right edge instead
           left = window.innerWidth - dropdownWidth - 16; // 16px margin
         }
 

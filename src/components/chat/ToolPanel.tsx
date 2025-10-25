@@ -216,7 +216,7 @@ export function ToolPanel({
 
   return (
     <div className={`border-t border-border bg-muted/10 ${className}`}>
-      <div className="px-2 py-1.5">
+      <div className="py-1.5">
         {/* Header */}
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2">
@@ -277,7 +277,7 @@ export function ToolPanel({
 
         {/* Tools */}
         {!isCollapsed && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Loading State */}
             {isLoading && (
               <>
