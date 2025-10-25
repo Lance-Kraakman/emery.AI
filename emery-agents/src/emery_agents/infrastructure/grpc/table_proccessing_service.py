@@ -1164,55 +1164,84 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
             # Apply ordering
             if request.order_by:
-                # AIDEV-NOTE: Debug logging for sort issues (especially boolean fields)
-                logger.info(f"[QueryRows] Attempting to sort:")
-                logger.info(f"  - order_by field: '{request.order_by}'")
-                logger.info(f"  - order_direction: '{request.order_direction}'")
-                logger.info(f"  - DataFrame shape: {df.shape}")
-                logger.info(f"  - DataFrame columns: {df.columns}")
-                # Get schema field names - convert PyArrow schema to list of names
-                try:
-                    # AIDEV-NOTE: schema is already PyArrow (from _get_delta_schema_as_pyarrow helper)
-                    # Can iterate directly over PyArrow schema fields
-                    schema_field_names = [field.name for field in schema]
-                    logger.info(f"  - Delta Lake schema column names: {schema_field_names}")
-                except Exception as schema_error:
-                    logger.warning(f"  - Could not extract schema field names: {schema_error}")
+                # User-specified sort
+                logger.info(f"[QueryRows] Sorting by '{request.order_by}' ({request.order_direction})")
 
-                # Check if sort column exists in DataFrame
+                # Validate column exists
                 if request.order_by not in df.columns:
-                    logger.error(f"[QueryRows] Sort column '{request.order_by}' does not exist in DataFrame!")
+                    logger.error(f"[QueryRows] Sort column '{request.order_by}' not found in DataFrame!")
                     logger.error(f"  - Available columns: {df.columns}")
                     return table_service_pb2.QueryRowsResponse(
                         success=False,
                         message=f"Sort column '{request.order_by}' not found in table"
                     )
 
-                # Log column type and sample values
-                try:
-                    col_dtype = df[request.order_by].dtype
-                    null_count = df[request.order_by].null_count()
-                    logger.info(f"  - Column '{request.order_by}' type: {col_dtype}")
-                    logger.info(f"  - Null count: {null_count}")
-                    logger.info(f"  - Sample values: {df[request.order_by].head(5).to_list()}")
-                except Exception as inspect_error:
-                    logger.warning(f"  - Could not inspect column: {inspect_error}")
+                # Get field type from schema to handle empty strings in numeric columns
+                field_type = None
+                for field in schema:
+                    if field.name == request.order_by:
+                        field_type = field.type
+                        break
 
-                # Attempt sort with error handling
+                # AIDEV-NOTE: Diagnostic logging for sorting
+                # Log sample values and statistics to help debug sorting issues
+                sort_col_data = df.select(request.order_by).to_series()
+                logger.info(f"[QueryRows] Sorting diagnostics for '{request.order_by}':")
+                logger.info(f"  - Field type: {field_type}")
+                logger.info(f"  - Total rows: {len(sort_col_data)}")
+                logger.info(f"  - Null count: {sort_col_data.null_count()}")
+                logger.info(f"  - Unique values count: {sort_col_data.n_unique()}")
+                logger.info(f"  - Sample unique values (first 10): {sort_col_data.unique().head(10).to_list()}")
+
+                # AIDEV-NOTE: Re-cast numeric/boolean columns for safe sorting
+                # Handles legacy data where empty strings might be mixed with numbers
+                # strict=False: converts invalid values (empty strings) to null automatically
+                if field_type and (pa.types.is_floating(field_type) or pa.types.is_integer(field_type) or pa.types.is_boolean(field_type)):
+                    # Determine target Polars type
+                    if pa.types.is_floating(field_type):
+                        target_type = pl.Float64
+                    elif pa.types.is_integer(field_type):
+                        target_type = pl.Int64
+                    elif pa.types.is_boolean(field_type):
+                        target_type = pl.Boolean
+
+                    logger.info(f"[QueryRows] Re-casting '{request.order_by}' to {target_type} for safe sorting")
+                    # Re-cast column with strict=False (empty strings → null, preserves valid values)
+                    df = df.with_columns(
+                        pl.col(request.order_by).cast(target_type, strict=False)
+                    )
+
+                # Perform sort with null handling
+                # AIDEV-NOTE: nulls_last=True ensures consistent behavior
+                # - Sorts null/None values to the end regardless of sort direction
+                # - Works with both ASC and DESC sorts
+                # - Excel-like: empty cells go to bottom
                 try:
-                    if request.order_direction.upper() == 'DESC':
-                        df = df.sort(request.order_by, descending=True)
-                    else:
-                        df = df.sort(request.order_by, descending=False)
+                    df = df.sort(
+                        request.order_by,
+                        descending=(request.order_direction.upper() == 'DESC'),
+                        nulls_last=True  # Always put nulls at the end
+                    )
                     logger.info(f"[QueryRows] Sort successful, result shape: {df.shape}")
                 except Exception as sort_error:
-                    logger.error(f"[QueryRows] Sort failed with error: {type(sort_error).__name__}: {str(sort_error)}")
+                    logger.error(f"[QueryRows] Sort failed: {type(sort_error).__name__}: {str(sort_error)}")
                     import traceback
                     logger.error(f"[QueryRows] Sort traceback: {traceback.format_exc()}")
                     return table_service_pb2.QueryRowsResponse(
                         success=False,
                         message=f"Failed to sort by '{request.order_by}': {str(sort_error)}"
                     )
+            else:
+                # AIDEV-NOTE: Default sort by 'id' to preserve insertion order
+                # Delta Lake file order is non-deterministic (compaction, merges change order)
+                # Sorting by 'id' ensures consistent, predictable row order matching insertion sequence
+                logger.info(f"[QueryRows] No order_by specified, defaulting to sort by 'id' ASC")
+                try:
+                    df = df.sort('id', descending=False, nulls_last=True)
+                    logger.info(f"[QueryRows] Default sort by 'id' successful")
+                except Exception as sort_error:
+                    logger.warning(f"[QueryRows] Could not sort by 'id': {sort_error}")
+                    # Continue without sort - will use Delta Lake's file order
 
             # Get total count before pagination
             total_count = len(df)
