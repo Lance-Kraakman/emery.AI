@@ -134,9 +134,9 @@ export function StepCard({
 
       {/* Content */}
       {isExpanded && (
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-4">
           {/* Main Instructions - Friendly Label */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             <Label htmlFor={`step-${stepIndex}-instructions`} className="text-base font-medium">
               What should this step do?
             </Label>
@@ -177,7 +177,7 @@ export function StepCard({
                 )}
               </Button>
             </CollapsibleTrigger>
-            <CollapsibleContent className="pt-4 space-y-4">
+            <CollapsibleContent className="pt-3 space-y-3">
               {/* Model Override */}
               <div className="space-y-2">
                 <Label htmlFor={`step-${stepIndex}-model`} className="text-sm text-muted-foreground">

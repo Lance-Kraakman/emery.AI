@@ -134,10 +134,10 @@ export function StepToolsSection({
   }, [showDropdown]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div>
         <Label className="text-sm font-medium">Tools (optional)</Label>
-        <p className="text-xs text-muted-foreground mt-1">
+        <p className="text-xs text-muted-foreground mt-0.5">
           Select tools this step can use to complete its task
         </p>
       </div>
