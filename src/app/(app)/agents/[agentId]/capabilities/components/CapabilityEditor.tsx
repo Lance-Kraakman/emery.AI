@@ -174,7 +174,7 @@ export function CapabilityEditor({
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-lg font-semibold">Workflow Steps</Label>
+            <Label className="text-lg font-semibold">Steps</Label>
             <p className="text-sm text-muted-foreground mt-1">
               Break down your workflow into sequential steps
             </p>
