@@ -12,6 +12,7 @@
 import { Tool } from '@/ddd/domain/tools/entities/tool'
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config'
 import { ToolMetadata, ToolCategory, ConnectionType } from '@/ddd/domain/tools/value-objects/tool-metadata'
+import type { ToolDefinitionData } from '@/lib/db/schema'
 
 // Export domain types for UI use
 export { ToolCategory, ConnectionType } from '@/ddd/domain/tools/value-objects/tool-metadata'
@@ -38,8 +39,8 @@ export interface ToolDTO {
   // Tool type discrimination
   type: 'system' | 'reference'
 
-  // Configuration (varies by tool type)
-  config: Record<string, any>
+  // Configuration (type-safe from database schema)
+  config: ToolDefinitionData
 
   // System tool properties
   requiredApps?: readonly string[]
@@ -78,7 +79,7 @@ export class ToolMapper {
       connectionType: tool.toolMetadata.connectionType,
       supportsArtifacts: tool.supportsArtifacts(),
       type: 'system',
-      config: tool.toolConfig.config,
+      config: tool.toolConfig.config as ToolDefinitionData,  // Type-safe cast
       requiredApps: tool.toolMetadata.requiredApps
       // Reference tool properties remain undefined for system tools
     }

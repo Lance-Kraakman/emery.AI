@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { searchAllTools } from '@/app/actions/tools';
 import { getAvailableApps } from '@/app/actions/connections';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
+import type { ToolDefinitionData } from '@/lib/db/schema';
 import { ReferenceCategory, REFERENCE_CATEGORY_INFO } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
 import { ChevronDown, Search, Loader2, FileText, Bot, Database, Table, File } from 'lucide-react';
@@ -90,6 +91,39 @@ function getToolInsertText(tool: ToolDTO): string {
 
   // System tools use @tool: prefix
   return `@tool:${tool.name}`;
+}
+
+// Helper function to generate insert text with parameters
+function getToolInsertTextWithParameters(tool: ToolDTO): string {
+  const baseTool = tool.insertText || getToolInsertText(tool);
+
+  // Type-safe access - no || {} needed!
+  const params = tool.config.parameters;
+  const paramEntries = Object.entries(params);
+
+  if (paramEntries.length === 0) {
+    return baseTool;
+  }
+
+  const required = paramEntries
+    .filter(([_, p]) => p.required)
+    .map(([name, _]) => `${name}: [value]`);
+
+  const optional = paramEntries
+    .filter(([_, p]) => !p.required)
+    .map(([name, _]) => `${name}: [value]`);
+
+  let result = `using ${baseTool}`;
+
+  if (required.length > 0) {
+    result += ` with ${required.join(', ')}`;
+  }
+
+  if (optional.length > 0) {
+    result += ` // optional: ${optional.join(', ')}`;
+  }
+
+  return result;
 }
 
 export function ToolDropdown({
@@ -325,7 +359,7 @@ export function ToolDropdown({
         // Tab key should select the current tool and close dropdown
         if (allTools[selectedIndex]) {
           const selectedTool = allTools[selectedIndex];
-          onSelect({...selectedTool, insertText: getToolInsertText(selectedTool)});
+          onSelect({...selectedTool, insertText: getToolInsertTextWithParameters(selectedTool)});
         } else {
           // If no tool is selected, close dropdown without selection
           onClose();
@@ -370,7 +404,7 @@ export function ToolDropdown({
         // Enter key selects the currently highlighted tool
         if (allTools[selectedIndex]) {
           const selectedTool = allTools[selectedIndex];
-          onSelect({...selectedTool, insertText: getToolInsertText(selectedTool)});
+          onSelect({...selectedTool, insertText: getToolInsertTextWithParameters(selectedTool)});
         }
         break;
       case 'Escape':
@@ -410,31 +444,49 @@ export function ToolDropdown({
     >
       {/* Category Filters */}
       <div className="p-3 border-b border-gray-100">
-        <div className="flex gap-2 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pb-1">
-          {allCategories.map((category, index) => {
-            const Icon = categoryIcons[category];
-            const categoryInfo = REFERENCE_CATEGORY_INFO[category];
-            const isSelected = selectedCategories.includes(category);
-            const isFocused = isInCategoryMode && focusedCategoryIndex === index;
+        <div className="relative">
+          {/* Left scroll shadow */}
+          <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-white via-white/80 to-transparent pointer-events-none z-10" />
 
-            return (
-              <button
-                key={category}
-                onClick={() => toggleCategory(category)}
-                className={cn(
-                  'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0',
-                  isSelected
-                    ? categoryColors[category]
-                    : 'text-gray-500 bg-gray-50 hover:bg-gray-100',
-                  isFocused && 'ring-2 ring-blue-500 ring-offset-1'
-                )}
-                title={categoryInfo.description}
-              >
-                <Icon className="w-3 h-3" />
-                {categoryInfo.label}
-              </button>
-            );
-          })}
+          {/* Right scroll shadow */}
+          <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-white via-white/80 to-transparent pointer-events-none z-10" />
+
+          {/* Scrollable category buttons */}
+          <div className="flex gap-2 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 pb-1 px-6">
+            {allCategories.map((category, index) => {
+              const Icon = categoryIcons[category];
+              const categoryInfo = REFERENCE_CATEGORY_INFO[category];
+              const isSelected = selectedCategories.includes(category);
+              const isFocused = isInCategoryMode && focusedCategoryIndex === index;
+
+              return (
+                <button
+                  key={category}
+                  onClick={() => toggleCategory(category)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap flex-shrink-0',
+                    isSelected
+                      ? cn(
+                          categoryColors[category],
+                          'ring-2 ring-offset-1 shadow-sm',
+                          // Ring colors by category
+                          category === ReferenceCategory.DOC && 'ring-blue-400',
+                          category === ReferenceCategory.FILE && 'ring-green-400',
+                          category === ReferenceCategory.AGENT && 'ring-purple-400',
+                          category === ReferenceCategory.TABLE && 'ring-orange-400',
+                          category === ReferenceCategory.DATABASE && 'ring-gray-400'
+                        )
+                      : 'text-gray-500 bg-gray-50 hover:bg-gray-100 hover:text-gray-700',
+                    isFocused && 'ring-2 ring-blue-500 ring-offset-1'
+                  )}
+                  title={categoryInfo.description}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {categoryInfo.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -508,11 +560,15 @@ export function ToolDropdown({
           <>
             {allTools.map((tool, index) => {
               try {
+                // Type-safe parameter extraction
+                const params = tool.config.parameters;
+                const paramEntries = Object.entries(params);
+
                 // Simple tool display using ToolDTO interface
                 const displayInfo = {
                   displayName: tool.displayName,
                   description: tool.description,
-                  insertText: getToolInsertText(tool),
+                  insertText: getToolInsertTextWithParameters(tool),
                   category: tool.category,
                   requiresConnection: tool.requiresConnection,
                   icon: tool.icon
@@ -550,10 +606,31 @@ export function ToolDropdown({
                         <div className="font-medium text-sm text-gray-900 truncate">
                           {displayInfo.displayName}
                         </div>
-                        <div className="text-xs text-gray-500 truncate">
+                        <div className="text-xs text-gray-500 line-clamp-2">
                           {displayInfo.description}
                         </div>
-                        <div className="text-xs text-gray-400 mt-1 font-mono">
+
+                        {/* Parameter display */}
+                        {paramEntries.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {paramEntries.map(([name, param]) => (
+                              <span
+                                key={name}
+                                title={`${param.type}${param.description ? ': ' + param.description : ''}`}
+                                className={cn(
+                                  'text-[10px] px-1.5 py-0.5 rounded cursor-help transition-colors',
+                                  param.required
+                                    ? 'text-red-700 bg-red-50 font-semibold hover:bg-red-100'
+                                    : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                                )}
+                              >
+                                {name}{param.required ? '*' : ''}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="text-xs text-gray-400 mt-1 font-mono truncate">
                           {displayInfo.insertText}
                         </div>
                         {displayInfo.requiresConnection && (
