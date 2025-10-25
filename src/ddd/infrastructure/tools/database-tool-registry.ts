@@ -428,12 +428,11 @@ export class DatabaseToolRegistry implements IToolRegistryService {
       searchQuery,
       limit = 50,
       offset = 0,
-      category
     } = options;
 
     try {
-      // Get tools with the specified criteria
-      const toolsFound = await this.searchToolsInternal(searchQuery, limit + 1, offset, { category });
+      // Get tools with the specified criteria - pass ALL options for proper filtering
+      const toolsFound = await this.searchToolsInternal(searchQuery, limit + 1, offset, options);
 
       // Check if there are more tools available
       const hasMore = toolsFound.length > limit;

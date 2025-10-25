@@ -19,7 +19,7 @@ import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import type { ToolDefinitionData } from '@/lib/db/schema';
 import { ReferenceCategory, REFERENCE_CATEGORY_INFO } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
-import { ChevronDown, Search, Loader2, FileText, Bot, Database, Table, File } from 'lucide-react';
+import { ChevronDown, Search, Loader2, FileText, Bot, Database, Table, File, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ToolDropdownProps {
@@ -136,6 +136,8 @@ export function ToolDropdown({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectedCategories, setSelectedCategories] = useState<ReferenceCategory[]>([]);
   const [selectedApp, setSelectedApp] = useState<string>('');
+  const [appSearchQuery, setAppSearchQuery] = useState<string>('');
+  const [showAppDropdown, setShowAppDropdown] = useState(false);
   const [connectedOnly, setConnectedOnly] = useState(false);
   const [requiresConnection, setRequiresConnection] = useState(false);
   const [isClient, setIsClient] = useState(false);
@@ -165,8 +167,8 @@ export function ToolDropdown({
       try {
         console.log(`[ToolDropdown] Initial search for query: "${query}"`);
 
-        // Map ReferenceCategory to ToolCategory for unified search
-        const toolCategories = selectedCategories.length > 0 ? selectedCategories.map(refCat => {
+        // Map ReferenceCategory to category strings for reference tools
+        const categories = selectedCategories.length > 0 ? selectedCategories.map(refCat => {
           switch (refCat) {
             case ReferenceCategory.DOC: return 'documents';
             case ReferenceCategory.FILE: return 'files';
@@ -179,7 +181,7 @@ export function ToolDropdown({
 
         const result = await searchAllTools({
           query,
-          toolCategories,
+          categories,
           appId: selectedApp || undefined,
           connectedOnly,
           requiresConnection,
@@ -261,8 +263,8 @@ export function ToolDropdown({
     try {
       console.log(`[ToolDropdown] Loading more tools with offset: ${offset}, query: "${query}"`);
 
-      // Map ReferenceCategory to ToolCategory for unified search
-      const toolCategories = selectedCategories.length > 0 ? selectedCategories.map(refCat => {
+      // Map ReferenceCategory to category strings for reference tools
+      const categories = selectedCategories.length > 0 ? selectedCategories.map(refCat => {
         switch (refCat) {
           case ReferenceCategory.DOC: return 'documents';
           case ReferenceCategory.FILE: return 'files';
@@ -275,7 +277,7 @@ export function ToolDropdown({
 
       const result = await searchAllTools({
         query,
-        toolCategories,
+        categories,
         appId: selectedApp || undefined,
         connectedOnly,
         requiresConnection,
@@ -346,6 +348,23 @@ export function ToolDropdown({
     });
   };
 
+  // Clear all filters
+  const clearAllFilters = () => {
+    setSelectedCategories([]);
+    setSelectedApp('');
+    setAppSearchQuery('');
+    setConnectedOnly(false);
+    setRequiresConnection(false);
+    console.log('[ToolDropdown] All filters cleared');
+  };
+
+  // Check if any filters are active
+  const hasActiveFilters = selectedCategories.length > 0 || selectedApp !== '' || connectedOnly || requiresConnection;
+
+  // Filter apps by search query
+  const filteredApps = (availableAppsResult || []).filter(app =>
+    app.name.toLowerCase().includes(appSearchQuery.toLowerCase())
+  );
 
   // Handle keyboard navigation
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -426,6 +445,21 @@ export function ToolDropdown({
     }
   }, [isOpen, handleKeyDown]);
 
+  // Close app dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showAppDropdown && !target.closest('.app-filter-container')) {
+        setShowAppDropdown(false);
+      }
+    };
+
+    if (showAppDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showAppDropdown]);
+
   // Don't render until client-side to prevent hydration mismatch
   if (!isOpen || !isClient) return null;
 
@@ -493,24 +527,60 @@ export function ToolDropdown({
       {/* Advanced Filters */}
       <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
         <div className="flex items-center gap-2 text-xs flex-wrap">
-          {/* App Filter */}
-          <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Searchable App Filter */}
+          <div className="flex items-center gap-1 flex-shrink-0 relative app-filter-container">
             <label className="text-gray-600 whitespace-nowrap">App:</label>
-            <select
-              value={selectedApp}
-              onChange={(e) => setSelectedApp(e.target.value)}
-              className="text-xs border border-gray-200 rounded px-2 py-1 bg-white min-w-[80px]"
-              disabled={isLoadingApps}
-            >
-              <option value="">
-                {isLoadingApps ? 'Loading...' : 'All'}
-              </option>
-              {availableAppsResult?.map((app) => (
-                <option key={app.id} value={app.id}>
-                  {app.name}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <input
+                type="text"
+                value={
+                  showAppDropdown
+                    ? appSearchQuery
+                    : (selectedApp ? availableAppsResult?.find(a => a.id === selectedApp)?.name || '' : '')
+                }
+                onChange={(e) => {
+                  setAppSearchQuery(e.target.value);
+                  setShowAppDropdown(true);
+                }}
+                onFocus={() => {
+                  setAppSearchQuery('');
+                  setShowAppDropdown(true);
+                }}
+                placeholder={isLoadingApps ? 'Loading...' : 'All apps'}
+                className="text-xs border border-gray-200 rounded px-2 py-1 bg-white min-w-[100px] pr-6"
+                disabled={isLoadingApps}
+              />
+              {selectedApp && !showAppDropdown && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedApp('');
+                    setAppSearchQuery('');
+                  }}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 z-10"
+                  title="Clear app filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+              {showAppDropdown && !isLoadingApps && filteredApps.length > 0 && (
+                <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto z-[60] min-w-[200px]">
+                  {filteredApps.map((app) => (
+                    <button
+                      key={app.id}
+                      onClick={() => {
+                        setSelectedApp(app.id);
+                        setAppSearchQuery('');
+                        setShowAppDropdown(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 whitespace-nowrap"
+                    >
+                      {app.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Connected Only Checkbox */}
@@ -532,8 +602,20 @@ export function ToolDropdown({
               onChange={(e) => setRequiresConnection(e.target.checked)}
               className="w-3 h-3"
             />
-            Needs auth
+            OAuth required
           </label>
+
+          {/* Clear All Filters Button */}
+          {hasActiveFilters && (
+            <button
+              onClick={clearAllFilters}
+              className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded transition-colors flex-shrink-0"
+              title="Clear all filters"
+            >
+              <X className="w-3 h-3" />
+              Clear all
+            </button>
+          )}
         </div>
       </div>
 

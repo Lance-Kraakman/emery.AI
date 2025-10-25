@@ -83,11 +83,21 @@ export class ToolSearchApplicationService {
       requiresConnection
     });
 
+    // Only search system tools when NO reference category filter is active
+    // Reference categories (documents, files, agents, tables, databases) are mutually exclusive with system tools
+    const shouldSearchSystemTools = !categories || categories.length === 0;
+
+    logger.debug(`Should search system tools: ${shouldSearchSystemTools} (categories: ${categories?.length || 0})`);
+
     // Search both reference tools and system tools in parallel
     // Get ALL results first, then apply unified pagination
+    const systemToolsPromise = shouldSearchSystemTools
+      ? this.searchSystemTools(query, toolCategories, appId, connectedOnly, requiresConnection, 1000, organizationId, userId)
+      : Promise.resolve([]);
+
     const [referenceToolsResult, systemTools] = await Promise.all([
       this.searchOnlyReferenceTools({ ...options, limit: 1000, offset: 0 }),
-      this.searchSystemTools(query, toolCategories, appId, connectedOnly, requiresConnection, 1000, organizationId, userId)
+      systemToolsPromise
     ]);
 
     logger.debug(`Found ${referenceToolsResult.referenceTools.length} reference tools, ${systemTools.length} system tools`);
@@ -276,14 +286,24 @@ export class ToolSearchApplicationService {
     limit: number,
     offset: number
   ): Promise<ReferenceTool[]> {
-    const agents = await this.agentApplicationService.getAgents({
+    // Get all agents for the organization
+    const allAgents = await this.agentApplicationService.getAgents({
       organizationId: organizationId.value,
-      searchQuery: searchText,
+      searchQuery: undefined, // Get all agents, we'll filter manually
       status: 'active'
     });
 
-    // Apply pagination manually since AgentApplicationService doesn't support offset
-    const paginatedAgents = agents.slice(offset, offset + limit);
+    // Filter by searchText if provided
+    const filteredAgents = !searchText
+      ? allAgents
+      : allAgents.filter(agent =>
+          agent.name.toLowerCase().includes(searchText.toLowerCase()) ||
+          agent.role?.toLowerCase().includes(searchText.toLowerCase()) ||
+          agent.description?.toLowerCase().includes(searchText.toLowerCase())
+        );
+
+    // Apply pagination
+    const paginatedAgents = filteredAgents.slice(offset, offset + limit);
 
     return paginatedAgents.map(agent => {
       return ReferenceTool.fromAgent(
