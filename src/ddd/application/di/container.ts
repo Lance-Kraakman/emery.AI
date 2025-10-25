@@ -15,6 +15,7 @@ import type { RepositoryRegistry } from './registry';
 // Import registration modules
 import { registerCoreServices, type CoreServices } from './modules/core-registration';
 import { registerAgentServices, type AgentServices } from './modules/agent-registration';
+import { registerCapabilityServices, type CapabilityServices } from './modules/capability-registration';
 import { registerDatabaseServices, type DatabaseServices } from './modules/database-registration';
 import { registerChatServices, type ChatServices } from './modules/chat-registration';
 import { registerToolsServices, type ToolsServices } from './modules/tools-registration';
@@ -81,7 +82,12 @@ export class DIContainer {
     const teamApplicationServiceWithAgent = coreServices.teamApplicationService;
     (teamApplicationServiceWithAgent as any).agentRepository = agentServices.agentRepository;
 
-    // Phase 3: Register database services (tables, files, documents)
+    // Phase 3: Register capability services
+    // Depends on: database (for storage)
+    const capabilityServices = registerCapabilityServices({ db });
+    this.registerServices('capability', capabilityServices);
+
+    // Phase 4: Register database services (tables, files, documents)
     // Depends on: organization repository
     const databaseServices = registerDatabaseServices({
       db,
@@ -89,7 +95,7 @@ export class DIContainer {
     });
     this.registerServices('database', databaseServices);
 
-    // Phase 4: Register chat services
+    // Phase 5: Register chat services
     // Depends on: dynamic table service, agent repository
     const chatServices = registerChatServices({
       db,
@@ -98,7 +104,7 @@ export class DIContainer {
     });
     this.registerServices('chat', chatServices);
 
-    // Phase 5: Register tools services
+    // Phase 6: Register tools services
     // Depends on: agent repository, table/agent/database application services
     const toolsServices = registerToolsServices({
       agentRepository: agentServices.agentRepository,
@@ -108,7 +114,7 @@ export class DIContainer {
     });
     this.registerServices('tools', toolsServices);
 
-    // Phase 6: Register RAG services
+    // Phase 7: Register RAG services
     // Depends on: many repositories from previous phases
     const ragServices = registerRagServices({
       db,
@@ -122,7 +128,7 @@ export class DIContainer {
     });
     this.registerServices('rag', ragServices);
 
-    // Phase 7: Register connection services (optional - Pipedream)
+    // Phase 8: Register connection services (optional - Pipedream)
     // Depends on: agent repository
     const connectionServices = registerConnectionServices({
       agentRepository: agentServices.agentRepository
@@ -138,7 +144,7 @@ export class DIContainer {
    */
   private registerServices(
     domain: string,
-    services: CoreServices | AgentServices | DatabaseServices | ChatServices | ToolsServices | RagServices | ConnectionServices
+    services: CoreServices | AgentServices | CapabilityServices | DatabaseServices | ChatServices | ToolsServices | RagServices | ConnectionServices
   ): void {
     // Map service names to container keys
     const serviceKeyMappings: Record<string, string> = {
@@ -158,6 +164,11 @@ export class DIContainer {
       'agentExecutionRepository': 'IAgentExecutionRepository',
       'agentTaskApplicationService': 'AgentTaskApplicationService',
       'agentApplicationService': 'AgentApplicationService',
+
+      // Capability domain
+      'stepRepository': 'IStepRepository',
+      'capabilityRepository': 'ICapabilityRepository',
+      'capabilityApplicationService': 'CapabilityApplicationService',
 
       // Database domain
       'databaseRepository': 'IDatabaseRepository',
@@ -270,6 +281,10 @@ export {
   getTaskRepository,
   getAgentExecutionRepository,
 
+  // Capability domain repositories
+  getCapabilityRepository,
+  getStepRepository,
+
   // Database domain repositories
   getDatabaseRepository,
   getDynamicTableRepository,
@@ -290,6 +305,9 @@ export {
   // Agent application services
   getAgentTaskApplicationService,
   getAgentApplicationService,
+
+  // Capability application services
+  getCapabilityApplicationService,
 
   // Database application services
   getDatabaseApplicationService,

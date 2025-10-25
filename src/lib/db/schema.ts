@@ -500,6 +500,146 @@ export const agents = pgTable("agents", {
   }),
 ]);
 
+// AIDEV-NOTE: Capabilities tables - migrated from agents.capabilities JSON field to proper relational structure
+export const capabilities = pgTable("capabilities", {
+  id: serial("id").primaryKey(),
+  agentId: integer("agent_id").notNull().references(() => agents.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  description: text("description").default(''),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  // RBAC-based policy inherits from agent permissions - if you can manage the agent, you can manage its capabilities
+  pgPolicy("capabilities_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM agents a
+      WHERE a.id = agent_id
+      AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        a.owner_id = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'agents:view',
+          a.organization_id,
+          'agent',
+          a.id
+        )
+      )
+    )`
+  }),
+  pgPolicy("capabilities_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM agents a
+      WHERE a.id = agent_id
+      AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        a.owner_id = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'agents:manage',
+          a.organization_id,
+          'agent',
+          a.id
+        )
+      )
+    )`,
+    withCheck: sql`EXISTS (
+      SELECT 1 FROM agents a
+      WHERE a.id = agent_id
+      AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        a.owner_id = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'agents:manage',
+          a.organization_id,
+          'agent',
+          a.id
+        )
+      )
+    )`
+  }),
+]);
+
+export const capabilitySteps = pgTable("capability_steps", {
+  id: serial("id").primaryKey(),
+  capabilityId: integer("capability_id").notNull().references(() => capabilities.id, { onDelete: 'cascade' }),
+  stepOrder: integer("step_order").notNull(),
+  type: text("type").notNull(), // 'TOOL_STEP' or 'CODE_STEP'
+  instructions: text("instructions").notNull(),
+  model: text("model"),
+  tools: jsonb("tools").default('[]').notNull(), // Array of ToolConfig objects
+  servers: jsonb("servers").default('[]').notNull(), // Array of ServerConfig objects
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  // RBAC-based policy inherits from capability -> agent permissions
+  pgPolicy("capability_steps_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM capabilities c
+      JOIN agents a ON a.id = c.agent_id
+      WHERE c.id = capability_id
+      AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        a.owner_id = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'agents:view',
+          a.organization_id,
+          'agent',
+          a.id
+        )
+      )
+    )`
+  }),
+  pgPolicy("capability_steps_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM capabilities c
+      JOIN agents a ON a.id = c.agent_id
+      WHERE c.id = capability_id
+      AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        a.owner_id = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'agents:manage',
+          a.organization_id,
+          'agent',
+          a.id
+        )
+      )
+    )`,
+    withCheck: sql`EXISTS (
+      SELECT 1 FROM capabilities c
+      JOIN agents a ON a.id = c.agent_id
+      WHERE c.id = capability_id
+      AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        a.owner_id = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'agents:manage',
+          a.organization_id,
+          'agent',
+          a.id
+        )
+      )
+    )`
+  }),
+]);
+
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
   agentId: integer("agent_id").notNull().references(() => agents.id), // WHICH agent executes this
