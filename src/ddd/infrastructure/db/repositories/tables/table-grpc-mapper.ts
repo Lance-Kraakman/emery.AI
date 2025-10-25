@@ -307,25 +307,32 @@ export class TableGrpcMapper {
 
   /**
    * Convert JavaScript value to protobuf RowDataValue interface
-   * AIDEV-NOTE: Simplified - no type detection. RowSerializer handles complex field serialization.
+   * AIDEV-NOTE: Handles type normalization including numeric strings to prevent type confusion
    */
   static toProtoRowDataValue(value: any): IRowDataValue {
     if (value === null || value === undefined) {
       // Handle null/undefined - use empty string as default
       return { textValue: '' };
-    } else if (typeof value === 'string') {
-      // All strings go to textValue (JSON strings from RowSerializer included)
-      // Check if it looks like a JSON string and use jsonValue for better storage
-      if (value.startsWith('{') || value.startsWith('[')) {
-        return { jsonValue: value };
-      }
-      return { textValue: value };
     } else if (typeof value === 'number') {
+      // Numbers go to numberValue
       return { numberValue: value };
     } else if (typeof value === 'boolean') {
       return { booleanValue: value };
     } else if (value instanceof Date) {
       return { dateValue: value.getTime() };
+    } else if (typeof value === 'string') {
+      // AIDEV-NOTE: Check if string is actually a number to prevent type confusion
+      // This handles cases where grid sends '234.0' instead of 234.0
+      const numericValue = Number(value);
+      if (!isNaN(numericValue) && value.trim() !== '' && /^-?\d+\.?\d*$/.test(value.trim())) {
+        return { numberValue: numericValue };
+      }
+
+      // Check if it looks like a JSON string and use jsonValue for better storage
+      if (value.startsWith('{') || value.startsWith('[')) {
+        return { jsonValue: value };
+      }
+      return { textValue: value };
     } else if (typeof value === 'object') {
       // Objects/arrays that weren't serialized by RowSerializer (shouldn't happen normally)
       // Stringify them for storage
