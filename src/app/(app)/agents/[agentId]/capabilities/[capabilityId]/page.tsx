@@ -6,10 +6,10 @@ import { getAgent } from '@/app/actions/agents';
 import { EditCapabilityView } from '../components/EditCapabilityView';
 
 interface PageProps {
-  params: {
+  params: Promise<{
     agentId: string;
     capabilityId: string;
-  };
+  }>;
 }
 
 export default async function EditCapabilityPage({ params }: PageProps) {
@@ -19,8 +19,9 @@ export default async function EditCapabilityPage({ params }: PageProps) {
     redirect('/auth/signin');
   }
 
-  const agentId = parseInt(params.agentId, 10);
-  const capabilityId = parseInt(params.capabilityId, 10);
+  const resolvedParams = await params;
+  const agentId = parseInt(resolvedParams.agentId, 10);
+  const capabilityId = parseInt(resolvedParams.capabilityId, 10);
 
   if (isNaN(agentId) || isNaN(capabilityId)) {
     redirect('/agents');
