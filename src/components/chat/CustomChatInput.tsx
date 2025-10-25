@@ -38,7 +38,7 @@ export default function CustomChatInput({
   const [inputValue, setInputValue] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownQuery, setDropdownQuery] = useState('');
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number; maxHeight?: number }>({ left: 0 });
   const [selectedTools, setSelectedTools] = useState<ToolDTO[]>([]);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -72,14 +72,11 @@ export default function CustomChatInput({
       // Position above input since chat is at bottom of screen
       if (inputRef.current) {
         const rect = inputRef.current.getBoundingClientRect();
-        const gap = 8;
+        const gap = 8; // Gap between dropdown and input
 
-        // Calculate available space above the input
-        const maxDropdownHeight = rect.top - gap;
-
-        // Position dropdown so its bottom aligns with top of input
-        const dropdownHeight = Math.min(700, maxDropdownHeight); // Use up to 700px if available
-        const top = rect.top - dropdownHeight - gap;
+        // Position dropdown so its bottom is at the top of the input
+        const bottom = window.innerHeight - rect.top + gap;
+        const maxHeight = rect.top - gap - 20; // 20px margin from top of viewport
 
         let left = rect.left;
 
@@ -97,7 +94,7 @@ export default function CustomChatInput({
           left = 16; // 16px margin
         }
 
-        setDropdownPosition({ top, left, maxHeight: dropdownHeight });
+        setDropdownPosition({ bottom, left, maxHeight });
       }
     } else {
       setShowDropdown(false);
@@ -252,20 +249,10 @@ export default function CustomChatInput({
           isOpen={showDropdown}
           onClose={() => setShowDropdown(false)}
           onSelect={handleToolSelect}
-          position={{
-            top: dropdownPosition.top,
-            left: dropdownPosition.left,
-            maxHeight: 400,
-          }}
+          position={dropdownPosition}
         />
       </div>
 
-      {/* Helpful hint */}
-      {!inputValue && (
-        <div className="text-xs text-gray-400 mt-1">
-          Type @ to add tools, documents, agents, and more • Shift+Enter for new line
-        </div>
-      )}
     </div>
   );
 }
