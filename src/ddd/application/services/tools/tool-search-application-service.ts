@@ -31,9 +31,10 @@ export interface SearchReferencesOptions {
   query: string;
   categories?: ReferenceCategory[];
   toolCategories?: ToolCategory[]; // Use existing ToolCategory enum for filtering
-  appId?: string; // Simple string for app filtering
+  appIds?: string[]; // Multi-select app filtering
   connectedOnly?: boolean; // Only show tools with active connections
   requiresConnection?: boolean; // Only show tools that require connections
+  showReferenceTools?: boolean; // Include reference tools (agents, tables, databases) in results (default: true)
   limit?: number;
   offset?: number;
   organizationId: OrganizationId;
@@ -72,15 +73,16 @@ export class ToolSearchApplicationService {
    * This is the new recommended method for tool search
    */
   async searchAllTools(options: SearchReferencesOptions): Promise<SearchToolsResult> {
-    const { query, categories, toolCategories, appId, connectedOnly, requiresConnection, limit = 20, offset = 0, organizationId, userId } = options;
+    const { query, categories, toolCategories, appIds, connectedOnly, requiresConnection, showReferenceTools = true, limit = 20, offset = 0, organizationId, userId } = options;
 
     logger.debug('Searching tools', {
       query,
       categories: categories?.join(', '),
       toolCategories: toolCategories?.join(', '),
-      appId,
+      appIds: appIds?.join(', '),
       connectedOnly,
-      requiresConnection
+      requiresConnection,
+      showReferenceTools
     });
 
     // Only search system tools when NO reference category filter is active
@@ -88,15 +90,20 @@ export class ToolSearchApplicationService {
     const shouldSearchSystemTools = !categories || categories.length === 0;
 
     logger.debug(`Should search system tools: ${shouldSearchSystemTools} (categories: ${categories?.length || 0})`);
+    logger.debug(`Should search reference tools: ${showReferenceTools}`);
 
     // Search both reference tools and system tools in parallel
     // Get ALL results first, then apply unified pagination
     const systemToolsPromise = shouldSearchSystemTools
-      ? this.searchSystemTools(query, toolCategories, appId, connectedOnly, requiresConnection, 1000, organizationId, userId)
+      ? this.searchSystemTools(query, toolCategories, appIds, connectedOnly, requiresConnection, 1000, organizationId, userId)
       : Promise.resolve([]);
 
+    const referenceToolsPromise = showReferenceTools
+      ? this.searchOnlyReferenceTools({ ...options, limit: 1000, offset: 0 })
+      : Promise.resolve({ referenceTools: [], hasMore: false, totalCount: 0 });
+
     const [referenceToolsResult, systemTools] = await Promise.all([
-      this.searchOnlyReferenceTools({ ...options, limit: 1000, offset: 0 }),
+      referenceToolsPromise,
       systemToolsPromise
     ]);
 
@@ -175,7 +182,7 @@ export class ToolSearchApplicationService {
   private async searchSystemTools(
     query: string,
     toolCategories: ToolCategory[] | undefined,
-    appId: string | undefined,
+    appIds: string[] | undefined,
     connectedOnly: boolean | undefined,
     requiresConnection: boolean | undefined,
     limit: number = 20,
@@ -185,12 +192,20 @@ export class ToolSearchApplicationService {
     logger.debug(`=== STARTING SYSTEM TOOLS SEARCH ===`);
     logger.debug(`Query: "${query}"`);
     logger.debug(`ToolCategories:`, toolCategories);
-    logger.debug(`AppId:`, appId);
+    logger.debug(`AppIds:`, appIds);
     logger.debug(`ConnectedOnly:`, connectedOnly);
     logger.debug(`RequiresConnection:`, requiresConnection);
     logger.debug(`Tool registry service:`, !!this.toolRegistryService);
 
     try {
+      // AIDEV-NOTE: For now, use first appId if provided (database registry supports single app filter)
+      // Future enhancement: update database-tool-registry to support multi-app OR filtering
+      const appId = appIds?.[0];
+
+      if (appIds && appIds.length > 0) {
+        logger.debug(`[ToolSearch] Using first appId from array: "${appId}" (total: ${appIds.length})`);
+      }
+
       // Use the tool registry service with enhanced filtering options
       const toolDiscoveryOptions = {
         searchQuery: query,
