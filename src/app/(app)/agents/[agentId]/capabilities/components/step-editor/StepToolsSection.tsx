@@ -134,55 +134,45 @@ export function StepToolsSection({
   }, [showDropdown]);
 
   return (
-    <div className="space-y-2">
-      <div>
-        <Label className="text-sm font-medium">Tools (optional)</Label>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Select tools this step can use to complete its task
-        </p>
-      </div>
-
-      {/* Inline Tools Display with Add Button */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {/* Selected Tools */}
-        {tools.map((tool, index) => (
-          <div key={index} className="relative flex items-center group">
-            <div
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs
-                transition-colors duration-150 flex-shrink-0 max-w-xs
-                border-border bg-background hover:bg-muted/50"
-              title={getDisplayName(tool)}
-            >
-              {getToolIcon(tool.name)}
-              <span className="truncate font-medium">
-                {getDisplayName(tool)}
-              </span>
-            </div>
-
-            {/* Remove button */}
-            <button
-              onClick={() => handleRemoveTool(index)}
-              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Remove tool"
-            >
-              <X className="w-2 h-2" />
-            </button>
+    <div className="flex items-center gap-2 flex-wrap">
+      {/* Selected Tools */}
+      {tools.map((tool, index) => (
+        <div key={index} className="relative flex items-center group">
+          <div
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs
+              transition-colors duration-150 flex-shrink-0 max-w-xs
+              border-border bg-background hover:bg-muted/50"
+            title={getDisplayName(tool)}
+          >
+            {getToolIcon(tool.name)}
+            <span className="truncate font-medium">
+              {getDisplayName(tool)}
+            </span>
           </div>
-        ))}
 
-        {/* Add Tool Button - Inline */}
-        <Button
-          ref={buttonRef}
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-[30px]"
-          onClick={handleAddTool}
-        >
-          <Plus className="h-3.5 w-3.5 mr-1.5" />
-          Add tool
-        </Button>
-      </div>
+          {/* Remove button */}
+          <button
+            onClick={() => handleRemoveTool(index)}
+            className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Remove tool"
+          >
+            <X className="w-2 h-2" />
+          </button>
+        </div>
+      ))}
+
+      {/* Add Tool Button - Inline */}
+      <Button
+        ref={buttonRef}
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-[30px]"
+        onClick={handleAddTool}
+      >
+        <Plus className="h-3.5 w-3.5 mr-1.5" />
+        {tools.length === 0 ? 'Add tools' : 'Add'}
+      </Button>
 
       {/* Tool Dropdown */}
       {showDropdown && (

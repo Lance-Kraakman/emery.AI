@@ -75,7 +75,7 @@ export function StepCard({
   };
 
   return (
-    <div className="border rounded-lg bg-background shadow-sm hover:shadow-md transition-shadow">
+    <div className="relative border rounded-lg bg-background shadow-sm hover:shadow-md transition-shadow">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b bg-muted/20">
         {/* Step Counter Badge */}
@@ -135,83 +135,80 @@ export function StepCard({
       {/* Content */}
       {isExpanded && (
         <div className="p-6 space-y-4">
-          {/* Main Instructions - Friendly Label */}
-          <div className="space-y-2">
-            <Label htmlFor={`step-${stepIndex}-instructions`} className="text-base font-medium">
-              What should this step do?
-            </Label>
-            <Textarea
-              id={`step-${stepIndex}-instructions`}
-              value={localInstructions}
-              onChange={(e) => setLocalInstructions(e.target.value)}
-              onBlur={handleInstructionsBlur}
-              placeholder="Describe what this step should accomplish. Use natural language - you can include conditions like 'if this happens, then do that'..."
-              className="min-h-[120px] resize-y text-base"
-            />
-            <p className="text-sm text-muted-foreground">
-              Tip: Write in plain language. The AI will understand conditionals and complex instructions.
-            </p>
-          </div>
-
-          {/* Tools Section - Inline */}
-          <StepToolsSection
-            tools={tools}
-            onToolsChange={(newTools) => onUpdate({ tools: newTools })}
-            stepIndex={stepIndex}
+          {/* Main Instructions - No label, just textarea */}
+          <Textarea
+            id={`step-${stepIndex}-instructions`}
+            value={localInstructions}
+            onChange={(e) => setLocalInstructions(e.target.value)}
+            onBlur={handleInstructionsBlur}
+            placeholder="Describe what this step should do..."
+            className="min-h-[120px] resize-y text-base"
           />
 
-          {/* Advanced Settings - Collapsible */}
-          <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
-            <CollapsibleTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start text-muted-foreground hover:text-foreground"
-              >
-                <Settings2 className="h-4 w-4 mr-2" />
-                Advanced settings (optional)
-                {isAdvancedOpen ? (
-                  <ChevronUp className="h-4 w-4 ml-auto" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 ml-auto" />
-                )}
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-3 space-y-3">
-              {/* Model Override */}
-              <div className="space-y-2">
-                <Label htmlFor={`step-${stepIndex}-model`} className="text-sm text-muted-foreground">
-                  AI Model Override
-                </Label>
-                <Input
-                  id={`step-${stepIndex}-model`}
-                  value={localModel}
-                  onChange={(e) => setLocalModel(e.target.value)}
-                  onBlur={handleModelBlur}
-                  placeholder="Leave empty to use default model"
-                  className="text-sm"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Only change this if you need a specific model for this step
-                </p>
-              </div>
+          {/* Tools and Advanced Settings - Horizontal Row */}
+          <div className="flex items-start gap-4">
+            {/* Tools Section - Compact */}
+            <div className="flex-1">
+              <StepToolsSection
+                tools={tools}
+                onToolsChange={(newTools) => onUpdate({ tools: newTools })}
+                stepIndex={stepIndex}
+              />
+            </div>
 
-              {/* Step Type Info */}
-              <div className="space-y-2">
-                <Label className="text-sm text-muted-foreground">Step Type</Label>
-                <div className="flex items-center gap-2">
-                  <Badge variant={type === 'TOOL_STEP' ? 'default' : 'outline'} className="text-xs">
-                    {type === 'TOOL_STEP' ? 'Tool Execution' : 'Code Execution'}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {type === 'TOOL_STEP'
-                      ? 'Uses selected tools to complete the task'
-                      : 'Executes code directly without external tools'}
-                  </span>
+            {/* Advanced Settings - Collapsible */}
+            <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-foreground whitespace-nowrap"
+                >
+                  <Settings2 className="h-4 w-4 mr-2" />
+                  Advanced
+                  {isAdvancedOpen ? (
+                    <ChevronUp className="h-4 w-4 ml-1" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 ml-1" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="absolute right-6 mt-2 w-80 border rounded-lg bg-background shadow-lg p-4 space-y-3 z-10">
+                {/* Model Override */}
+                <div className="space-y-2">
+                  <Label htmlFor={`step-${stepIndex}-model`} className="text-sm text-muted-foreground">
+                    AI Model Override
+                  </Label>
+                  <Input
+                    id={`step-${stepIndex}-model`}
+                    value={localModel}
+                    onChange={(e) => setLocalModel(e.target.value)}
+                    onBlur={handleModelBlur}
+                    placeholder="Leave empty to use default model"
+                    className="text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Only change this if you need a specific model for this step
+                  </p>
                 </div>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
+
+                {/* Step Type Info */}
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Step Type</Label>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={type === 'TOOL_STEP' ? 'default' : 'outline'} className="text-xs">
+                      {type === 'TOOL_STEP' ? 'Tool Execution' : 'Code Execution'}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {type === 'TOOL_STEP'
+                        ? 'Uses selected tools to complete the task'
+                        : 'Executes code directly without external tools'}
+                    </span>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
         </div>
       )}
     </div>
