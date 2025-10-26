@@ -386,7 +386,7 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
       console.log('[CapabilitiesModal] handleSaveAll - capabilitiesDTO after conversion:', JSON.stringify(capabilitiesDTO, null, 2));
 
       const result = await updateAgentFromClient(agent.id, {
-        capabilities: capabilitiesDTO
+        skills: capabilitiesDTO
       });
 
       if (!result.success) {

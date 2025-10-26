@@ -143,7 +143,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
         trigger: editFormData.trigger,
         tools: editFormData.tools,
         servers: editFormData.servers,
-        capabilities: editFormData.capabilities
+        skills: editFormData.capabilities
       });
       
       if (!result.success) {
