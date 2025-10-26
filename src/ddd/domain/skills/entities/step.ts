@@ -1,5 +1,5 @@
 import { StepId } from '../value-objects/step-id';
-import { CapabilityId } from '../value-objects/capability-id';
+import { SkillId } from '../value-objects/skill-id';
 import { StepTypeVO } from '../value-objects/step-type';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { ServerConfig } from '@/ddd/domain/agents/entities/agent';
@@ -7,12 +7,12 @@ import { ServerConfig } from '@/ddd/domain/agents/entities/agent';
 /**
  * Step Entity
  *
- * Represents a single step within a capability workflow.
+ * Represents a single step within a skill workflow.
  * Steps are ordered and can be either tool-based or code-based.
  */
 export interface Step {
   readonly id: StepId;
-  readonly capabilityId: CapabilityId;
+  readonly skillId: SkillId;
   readonly stepOrder: number;
   readonly type: StepTypeVO;
   readonly instructions: string;
@@ -27,7 +27,7 @@ export interface Step {
  * Properties required to create a new Step
  */
 export interface CreateStepProps {
-  capabilityId: CapabilityId;
+  skillId: SkillId;
   stepOrder: number;
   type: StepTypeVO;
   instructions: string;
@@ -75,7 +75,7 @@ export class StepEntity {
     }
 
     return {
-      capabilityId: props.capabilityId,
+      skillId: props.skillId,
       stepOrder: props.stepOrder,
       type: props.type,
       instructions: props.instructions.trim(),

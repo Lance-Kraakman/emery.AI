@@ -1,7 +1,7 @@
 /**
  * Step Type Enumeration
  *
- * Defines the types of steps that can be part of a capability.
+ * Defines the types of steps that can be part of a skill.
  * - TOOL_STEP: Step that uses tools to accomplish a task
  * - CODE_STEP: Step that executes code directly
  */

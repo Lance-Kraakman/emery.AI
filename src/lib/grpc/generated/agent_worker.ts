@@ -173,8 +173,8 @@ export interface TaskRequest {
   taskId: string;
   /** Agent to execute the task */
   agentId: number;
-  /** Direct capability execution */
-  capabilityName?:
+  /** Direct skill execution */
+  skillName?:
     | string
     | undefined;
   /** Instruction-based execution with auto-routing */
@@ -231,7 +231,7 @@ export interface CancelTaskResponse {
   message: string;
 }
 
-/** Worker health and capability information */
+/** Worker health and skill information */
 export interface WorkerInfo {
   /** Unique worker instance ID */
   workerId: string;
@@ -241,8 +241,8 @@ export interface WorkerInfo {
   organizationId: string;
   /** Current worker status */
   status: WorkerStatus;
-  /** Available agent capabilities */
-  capabilities: string[];
+  /** Available agent skills */
+  skills: string[];
   /** Number of currently running tasks */
   activeTasks: number;
   /** Maximum concurrent task capacity */
@@ -275,11 +275,11 @@ export interface AgentConfig {
   persona: string;
   tools: ToolConfig[];
   servers: ServerConfig[];
-  capabilities: CapabilityConfig[];
+  skills: SkillConfig[];
 }
 
-/** Capability configuration with steps */
-export interface CapabilityConfig {
+/** Skill configuration with steps */
+export interface SkillConfig {
   name: string;
   description: string;
   steps: StepConfig[];
@@ -476,7 +476,7 @@ function createBaseTaskRequest(): TaskRequest {
   return {
     taskId: "",
     agentId: 0,
-    capabilityName: undefined,
+    skillName: undefined,
     instructionConfig: undefined,
     agentConfig: undefined,
     triggerData: undefined,
@@ -495,8 +495,8 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     if (message.agentId !== 0) {
       writer.uint32(16).int32(message.agentId);
     }
-    if (message.capabilityName !== undefined) {
-      writer.uint32(26).string(message.capabilityName);
+    if (message.skillName !== undefined) {
+      writer.uint32(26).string(message.skillName);
     }
     if (message.instructionConfig !== undefined) {
       InstructionConfig.encode(message.instructionConfig, writer.uint32(74).fork()).join();
@@ -550,7 +550,7 @@ export const TaskRequest: MessageFns<TaskRequest> = {
             break;
           }
 
-          message.capabilityName = reader.string();
+          message.skillName = reader.string();
           continue;
         }
         case 9: {
@@ -622,7 +622,7 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     return {
       taskId: isSet(object.taskId) ? globalThis.String(object.taskId) : "",
       agentId: isSet(object.agentId) ? globalThis.Number(object.agentId) : 0,
-      capabilityName: isSet(object.capabilityName) ? globalThis.String(object.capabilityName) : undefined,
+      skillName: isSet(object.skillName) ? globalThis.String(object.skillName) : undefined,
       instructionConfig: isSet(object.instructionConfig)
         ? InstructionConfig.fromJSON(object.instructionConfig)
         : undefined,
@@ -643,8 +643,8 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     if (message.agentId !== 0) {
       obj.agentId = Math.round(message.agentId);
     }
-    if (message.capabilityName !== undefined) {
-      obj.capabilityName = message.capabilityName;
+    if (message.skillName !== undefined) {
+      obj.skillName = message.skillName;
     }
     if (message.instructionConfig !== undefined) {
       obj.instructionConfig = InstructionConfig.toJSON(message.instructionConfig);
@@ -677,7 +677,7 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     const message = createBaseTaskRequest();
     message.taskId = object.taskId ?? "";
     message.agentId = object.agentId ?? 0;
-    message.capabilityName = object.capabilityName ?? undefined;
+    message.skillName = object.skillName ?? undefined;
     message.instructionConfig = (object.instructionConfig !== undefined && object.instructionConfig !== null)
       ? InstructionConfig.fromPartial(object.instructionConfig)
       : undefined;
@@ -1034,7 +1034,7 @@ function createBaseWorkerInfo(): WorkerInfo {
     version: "",
     organizationId: "",
     status: 0,
-    capabilities: [],
+    skills: [],
     activeTasks: 0,
     maxConcurrentTasks: 0,
     uptimeSeconds: 0,
@@ -1056,7 +1056,7 @@ export const WorkerInfo: MessageFns<WorkerInfo> = {
     if (message.status !== 0) {
       writer.uint32(32).int32(message.status);
     }
-    for (const v of message.capabilities) {
+    for (const v of message.skills) {
       writer.uint32(42).string(v!);
     }
     if (message.activeTasks !== 0) {
@@ -1118,7 +1118,7 @@ export const WorkerInfo: MessageFns<WorkerInfo> = {
             break;
           }
 
-          message.capabilities.push(reader.string());
+          message.skills.push(reader.string());
           continue;
         }
         case 6: {
@@ -1168,9 +1168,7 @@ export const WorkerInfo: MessageFns<WorkerInfo> = {
       version: isSet(object.version) ? globalThis.String(object.version) : "",
       organizationId: isSet(object.organizationId) ? globalThis.String(object.organizationId) : "",
       status: isSet(object.status) ? workerStatusFromJSON(object.status) : 0,
-      capabilities: globalThis.Array.isArray(object?.capabilities)
-        ? object.capabilities.map((e: any) => globalThis.String(e))
-        : [],
+      skills: globalThis.Array.isArray(object?.skills) ? object.skills.map((e: any) => globalThis.String(e)) : [],
       activeTasks: isSet(object.activeTasks) ? globalThis.Number(object.activeTasks) : 0,
       maxConcurrentTasks: isSet(object.maxConcurrentTasks) ? globalThis.Number(object.maxConcurrentTasks) : 0,
       uptimeSeconds: isSet(object.uptimeSeconds) ? globalThis.Number(object.uptimeSeconds) : 0,
@@ -1194,8 +1192,8 @@ export const WorkerInfo: MessageFns<WorkerInfo> = {
     if (message.status !== 0) {
       obj.status = workerStatusToJSON(message.status);
     }
-    if (message.capabilities?.length) {
-      obj.capabilities = message.capabilities;
+    if (message.skills?.length) {
+      obj.skills = message.skills;
     }
     if (message.activeTasks !== 0) {
       obj.activeTasks = Math.round(message.activeTasks);
@@ -1221,7 +1219,7 @@ export const WorkerInfo: MessageFns<WorkerInfo> = {
     message.version = object.version ?? "";
     message.organizationId = object.organizationId ?? "";
     message.status = object.status ?? 0;
-    message.capabilities = object.capabilities?.map((e) => e) || [];
+    message.skills = object.skills?.map((e) => e) || [];
     message.activeTasks = object.activeTasks ?? 0;
     message.maxConcurrentTasks = object.maxConcurrentTasks ?? 0;
     message.uptimeSeconds = object.uptimeSeconds ?? 0;
@@ -1366,7 +1364,7 @@ export const ErrorResponse: MessageFns<ErrorResponse> = {
 };
 
 function createBaseAgentConfig(): AgentConfig {
-  return { name: "", role: "", description: "", persona: "", tools: [], servers: [], capabilities: [] };
+  return { name: "", role: "", description: "", persona: "", tools: [], servers: [], skills: [] };
 }
 
 export const AgentConfig: MessageFns<AgentConfig> = {
@@ -1389,8 +1387,8 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     for (const v of message.servers) {
       ServerConfig.encode(v!, writer.uint32(50).fork()).join();
     }
-    for (const v of message.capabilities) {
-      CapabilityConfig.encode(v!, writer.uint32(58).fork()).join();
+    for (const v of message.skills) {
+      SkillConfig.encode(v!, writer.uint32(58).fork()).join();
     }
     return writer;
   },
@@ -1455,7 +1453,7 @@ export const AgentConfig: MessageFns<AgentConfig> = {
             break;
           }
 
-          message.capabilities.push(CapabilityConfig.decode(reader, reader.uint32()));
+          message.skills.push(SkillConfig.decode(reader, reader.uint32()));
           continue;
         }
       }
@@ -1477,9 +1475,7 @@ export const AgentConfig: MessageFns<AgentConfig> = {
       servers: globalThis.Array.isArray(object?.servers)
         ? object.servers.map((e: any) => ServerConfig.fromJSON(e))
         : [],
-      capabilities: globalThis.Array.isArray(object?.capabilities)
-        ? object.capabilities.map((e: any) => CapabilityConfig.fromJSON(e))
-        : [],
+      skills: globalThis.Array.isArray(object?.skills) ? object.skills.map((e: any) => SkillConfig.fromJSON(e)) : [],
     };
   },
 
@@ -1503,8 +1499,8 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     if (message.servers?.length) {
       obj.servers = message.servers.map((e) => ServerConfig.toJSON(e));
     }
-    if (message.capabilities?.length) {
-      obj.capabilities = message.capabilities.map((e) => CapabilityConfig.toJSON(e));
+    if (message.skills?.length) {
+      obj.skills = message.skills.map((e) => SkillConfig.toJSON(e));
     }
     return obj;
   },
@@ -1520,17 +1516,17 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     message.persona = object.persona ?? "";
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     message.servers = object.servers?.map((e) => ServerConfig.fromPartial(e)) || [];
-    message.capabilities = object.capabilities?.map((e) => CapabilityConfig.fromPartial(e)) || [];
+    message.skills = object.skills?.map((e) => SkillConfig.fromPartial(e)) || [];
     return message;
   },
 };
 
-function createBaseCapabilityConfig(): CapabilityConfig {
+function createBaseSkillConfig(): SkillConfig {
   return { name: "", description: "", steps: [] };
 }
 
-export const CapabilityConfig: MessageFns<CapabilityConfig> = {
-  encode(message: CapabilityConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const SkillConfig: MessageFns<SkillConfig> = {
+  encode(message: SkillConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.name !== "") {
       writer.uint32(10).string(message.name);
     }
@@ -1543,10 +1539,10 @@ export const CapabilityConfig: MessageFns<CapabilityConfig> = {
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): CapabilityConfig {
+  decode(input: BinaryReader | Uint8Array, length?: number): SkillConfig {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseCapabilityConfig();
+    const message = createBaseSkillConfig();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -1583,7 +1579,7 @@ export const CapabilityConfig: MessageFns<CapabilityConfig> = {
     return message;
   },
 
-  fromJSON(object: any): CapabilityConfig {
+  fromJSON(object: any): SkillConfig {
     return {
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       description: isSet(object.description) ? globalThis.String(object.description) : "",
@@ -1591,7 +1587,7 @@ export const CapabilityConfig: MessageFns<CapabilityConfig> = {
     };
   },
 
-  toJSON(message: CapabilityConfig): unknown {
+  toJSON(message: SkillConfig): unknown {
     const obj: any = {};
     if (message.name !== "") {
       obj.name = message.name;
@@ -1605,11 +1601,11 @@ export const CapabilityConfig: MessageFns<CapabilityConfig> = {
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<CapabilityConfig>, I>>(base?: I): CapabilityConfig {
-    return CapabilityConfig.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<SkillConfig>, I>>(base?: I): SkillConfig {
+    return SkillConfig.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<CapabilityConfig>, I>>(object: I): CapabilityConfig {
-    const message = createBaseCapabilityConfig();
+  fromPartial<I extends Exact<DeepPartial<SkillConfig>, I>>(object: I): SkillConfig {
+    const message = createBaseSkillConfig();
     message.name = object.name ?? "";
     message.description = object.description ?? "";
     message.steps = object.steps?.map((e) => StepConfig.fromPartial(e)) || [];
@@ -3639,7 +3635,7 @@ export const AgentWorkerService = {
     responseSerialize: (value: TaskProgress): Buffer => Buffer.from(TaskProgress.encode(value).finish()),
     responseDeserialize: (value: Buffer): TaskProgress => TaskProgress.decode(value),
   },
-  /** Get worker health status and available capabilities */
+  /** Get worker health status and available skills */
   getWorkerInfo: {
     path: "/emery.agents.AgentWorker/GetWorkerInfo",
     requestStream: false,
@@ -3664,7 +3660,7 @@ export const AgentWorkerService = {
 export interface AgentWorkerServer extends UntypedServiceImplementation {
   /** Execute a task and stream progress updates back to the API server */
   executeTask: handleServerStreamingCall<TaskRequest, TaskProgress>;
-  /** Get worker health status and available capabilities */
+  /** Get worker health status and available skills */
   getWorkerInfo: handleUnaryCall<Empty, WorkerInfo>;
   /** Cancel a running task */
   cancelTask: handleUnaryCall<CancelTaskRequest, CancelTaskResponse>;
@@ -3678,7 +3674,7 @@ export interface AgentWorkerClient extends Client {
     metadata?: Metadata,
     options?: Partial<CallOptions>,
   ): ClientReadableStream<TaskProgress>;
-  /** Get worker health status and available capabilities */
+  /** Get worker health status and available skills */
   getWorkerInfo(request: Empty, callback: (error: ServiceError | null, response: WorkerInfo) => void): ClientUnaryCall;
   getWorkerInfo(
     request: Empty,

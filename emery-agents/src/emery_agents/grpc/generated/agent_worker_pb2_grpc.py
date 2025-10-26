@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import agent_worker_pb2 as agent__worker__pb2
+import agent_worker_pb2 as agent__worker__pb2
 
 GRPC_GENERATED_VERSION = '1.74.0'
 GRPC_VERSION = grpc.__version__
@@ -64,7 +64,7 @@ class AgentWorkerServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetWorkerInfo(self, request, context):
-        """Get worker health status and available capabilities
+        """Get worker health status and available skills
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

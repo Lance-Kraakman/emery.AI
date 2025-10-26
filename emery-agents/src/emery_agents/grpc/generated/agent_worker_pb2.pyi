@@ -43,10 +43,10 @@ CODE_STEP: StepType
 TOOL_STEP: StepType
 
 class TaskRequest(_message.Message):
-    __slots__ = ("task_id", "agent_id", "capability_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name")
+    __slots__ = ("task_id", "agent_id", "skill_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     AGENT_ID_FIELD_NUMBER: _ClassVar[int]
-    CAPABILITY_NAME_FIELD_NUMBER: _ClassVar[int]
+    SKILL_NAME_FIELD_NUMBER: _ClassVar[int]
     INSTRUCTION_CONFIG_FIELD_NUMBER: _ClassVar[int]
     AGENT_CONFIG_FIELD_NUMBER: _ClassVar[int]
     TRIGGER_DATA_FIELD_NUMBER: _ClassVar[int]
@@ -56,7 +56,7 @@ class TaskRequest(_message.Message):
     NAME_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     agent_id: int
-    capability_name: str
+    skill_name: str
     instruction_config: InstructionConfig
     agent_config: AgentConfig
     trigger_data: TriggerData
@@ -64,7 +64,7 @@ class TaskRequest(_message.Message):
     owner_id: str
     timeout_seconds: int
     name: str
-    def __init__(self, task_id: _Optional[str] = ..., agent_id: _Optional[int] = ..., capability_name: _Optional[str] = ..., instruction_config: _Optional[_Union[InstructionConfig, _Mapping]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., trigger_data: _Optional[_Union[TriggerData, _Mapping]] = ..., organization_id: _Optional[str] = ..., owner_id: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., name: _Optional[str] = ...) -> None: ...
+    def __init__(self, task_id: _Optional[str] = ..., agent_id: _Optional[int] = ..., skill_name: _Optional[str] = ..., instruction_config: _Optional[_Union[InstructionConfig, _Mapping]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., trigger_data: _Optional[_Union[TriggerData, _Mapping]] = ..., organization_id: _Optional[str] = ..., owner_id: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., name: _Optional[str] = ...) -> None: ...
 
 class TaskProgress(_message.Message):
     __slots__ = ("task_id", "status", "step_id", "step_type", "output_json", "error_message", "timestamp_ms", "progress_percent")
@@ -103,12 +103,12 @@ class CancelTaskResponse(_message.Message):
     def __init__(self, success: bool = ..., message: _Optional[str] = ...) -> None: ...
 
 class WorkerInfo(_message.Message):
-    __slots__ = ("worker_id", "version", "organization_id", "status", "capabilities", "active_tasks", "max_concurrent_tasks", "uptime_seconds", "supported_tools")
+    __slots__ = ("worker_id", "version", "organization_id", "status", "skills", "active_tasks", "max_concurrent_tasks", "uptime_seconds", "supported_tools")
     WORKER_ID_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
-    CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
+    SKILLS_FIELD_NUMBER: _ClassVar[int]
     ACTIVE_TASKS_FIELD_NUMBER: _ClassVar[int]
     MAX_CONCURRENT_TASKS_FIELD_NUMBER: _ClassVar[int]
     UPTIME_SECONDS_FIELD_NUMBER: _ClassVar[int]
@@ -117,12 +117,12 @@ class WorkerInfo(_message.Message):
     version: str
     organization_id: str
     status: WorkerStatus
-    capabilities: _containers.RepeatedScalarFieldContainer[str]
+    skills: _containers.RepeatedScalarFieldContainer[str]
     active_tasks: int
     max_concurrent_tasks: int
     uptime_seconds: int
     supported_tools: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, worker_id: _Optional[str] = ..., version: _Optional[str] = ..., organization_id: _Optional[str] = ..., status: _Optional[_Union[WorkerStatus, str]] = ..., capabilities: _Optional[_Iterable[str]] = ..., active_tasks: _Optional[int] = ..., max_concurrent_tasks: _Optional[int] = ..., uptime_seconds: _Optional[int] = ..., supported_tools: _Optional[_Iterable[str]] = ...) -> None: ...
+    def __init__(self, worker_id: _Optional[str] = ..., version: _Optional[str] = ..., organization_id: _Optional[str] = ..., status: _Optional[_Union[WorkerStatus, str]] = ..., skills: _Optional[_Iterable[str]] = ..., active_tasks: _Optional[int] = ..., max_concurrent_tasks: _Optional[int] = ..., uptime_seconds: _Optional[int] = ..., supported_tools: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class Empty(_message.Message):
     __slots__ = ()
@@ -139,24 +139,24 @@ class ErrorResponse(_message.Message):
     def __init__(self, code: _Optional[str] = ..., message: _Optional[str] = ..., details: _Optional[str] = ...) -> None: ...
 
 class AgentConfig(_message.Message):
-    __slots__ = ("name", "role", "description", "persona", "tools", "servers", "capabilities")
+    __slots__ = ("name", "role", "description", "persona", "tools", "servers", "skills")
     NAME_FIELD_NUMBER: _ClassVar[int]
     ROLE_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     PERSONA_FIELD_NUMBER: _ClassVar[int]
     TOOLS_FIELD_NUMBER: _ClassVar[int]
     SERVERS_FIELD_NUMBER: _ClassVar[int]
-    CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
+    SKILLS_FIELD_NUMBER: _ClassVar[int]
     name: str
     role: str
     description: str
     persona: str
     tools: _containers.RepeatedCompositeFieldContainer[ToolConfig]
     servers: _containers.RepeatedCompositeFieldContainer[ServerConfig]
-    capabilities: _containers.RepeatedCompositeFieldContainer[CapabilityConfig]
-    def __init__(self, name: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., persona: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., capabilities: _Optional[_Iterable[_Union[CapabilityConfig, _Mapping]]] = ...) -> None: ...
+    skills: _containers.RepeatedCompositeFieldContainer[SkillConfig]
+    def __init__(self, name: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., persona: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., skills: _Optional[_Iterable[_Union[SkillConfig, _Mapping]]] = ...) -> None: ...
 
-class CapabilityConfig(_message.Message):
+class SkillConfig(_message.Message):
     __slots__ = ("name", "description", "steps")
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
