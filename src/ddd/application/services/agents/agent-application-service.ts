@@ -92,20 +92,21 @@ export class AgentApplicationService {
       const agentWithDefaults = createAgentDefaults(agentData);
 
       // Create agent via repository
-      const createData = {
+      const createData: CreateAgentData = {
         name: agentWithDefaults.name,
-        type: agentWithDefaults.role,
+        role: agentWithDefaults.role,
         description: agentWithDefaults.description,
-        instructions: {
-          persona: agentWithDefaults.persona,
-          tools: agentWithDefaults.tools,
-          servers: agentWithDefaults.servers
-        },
-        capabilities: agentWithDefaults.skills?.map(c => c.name) || null,
-        organizationId: organizationId.value,
-        ownerId: ownerId.value,
-        isActive: true,
-        trigger: agentWithDefaults.trigger
+        persona: agentWithDefaults.persona,
+        tools: agentWithDefaults.tools,
+        servers: agentWithDefaults.servers,
+        skills: agentWithDefaults.skills || [],
+        organizationId: organizationId,
+        ownerId: ownerId,
+        status: agentWithDefaults.status,
+        trigger: agentWithDefaults.trigger,
+        agentType: agentWithDefaults.agentType,
+        specialization: agentWithDefaults.specialization,
+        databaseId: agentWithDefaults.databaseId
       };
 
       const savedAgent = await this.agentRepository.create(createData);
@@ -379,7 +380,8 @@ export class AgentApplicationService {
         };
       }
 
-      const newStatus = existingAgent.status.value === 'active' ? 'inactive' : 'active';
+      const newStatusValue = existingAgent.status.value === 'active' ? 'inactive' : 'active';
+      const newStatus = AgentStatus.fromString(newStatusValue);
 
       // Update agent with new status
       const savedAgent = await this.agentRepository.update(AgentId.fromNumber(agentId), {
