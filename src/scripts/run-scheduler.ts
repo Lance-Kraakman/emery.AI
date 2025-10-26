@@ -234,7 +234,7 @@ class EventDrivenScheduler {
               agentId: task.agentId.value,
               organizationId: task.organizationId.value,
               name: task.name,
-              capabilityName: task.capabilityName,
+              skillName: task.skillName,
               instructions: task.instructions,
               status: task.status.value,
               createdBy: task.createdBy?.value,

@@ -7,13 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import type { CapabilityDTO } from '@/app/mappers/capability-mapper';
-import { deleteCapability } from '@/app/actions/capabilities';
+import type { SkillDTO } from '@/app/mappers/skill-mapper';
+import { deleteSkill } from '@/app/actions/capabilities';
 import { toast } from 'sonner';
 
 interface CapabilitiesListViewProps {
   agent: AgentDTO;
-  initialCapabilities: CapabilityDTO[];
+  initialCapabilities: SkillDTO[];
 }
 
 export function CapabilitiesListView({
@@ -32,7 +32,7 @@ export function CapabilitiesListView({
     setDeletingId(capabilityId);
 
     try {
-      const result = await deleteCapability(capabilityId);
+      const result = await deleteSkill(capabilityId);
 
       if (result.success) {
         setCapabilities(capabilities.filter(c => c.id !== capabilityId));

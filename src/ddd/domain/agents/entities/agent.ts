@@ -47,7 +47,7 @@ export interface StepConfig {
   servers?: ServerConfig[];
 }
 
-export interface CapabilityConfig {
+export interface SkillConfig {
   name: string;
   description: string;
   steps: StepConfig[];
@@ -173,7 +173,7 @@ export interface CreateAgentData {
   tools?: ToolConfig[];                    // defaults to []
   servers?: ServerConfig[];                // defaults to []
   trigger?: TriggerConfig;             // optional trigger configuration
-  capabilities?: CapabilityConfig[];       // defaults to []
+  skills: CapabilityConfig[];       // defaults to []
   databaseId?: string;
   status?: AgentStatus;                    // defaults to 'active'
   organizationId?: OrganizationId;         // Set by application layer from session
@@ -191,7 +191,7 @@ export interface UpdateAgentData {
   tools?: ToolConfig[];
   servers?: ServerConfig[];
   trigger?: TriggerConfig;
-  capabilities?: CapabilityConfig[];
+  skills: CapabilityConfig[];
   databaseId?: string;
   status?: AgentStatus;
   agentType?: AgentType;

@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { StepCard } from './step-editor/StepCard';
 import { AddStepButton } from './step-editor/AddStepButton';
-import type { ToolConfigDTO } from '@/app/mappers/capability-mapper';
+import type { ToolConfigDTO } from '@/app/mappers/skill-mapper';
 
 export interface CapabilityFormData {
   name: string;

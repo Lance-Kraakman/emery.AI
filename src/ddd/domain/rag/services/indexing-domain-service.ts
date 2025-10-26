@@ -633,7 +633,7 @@ export class IndexingDomainService {
           agentId: task.agentId,
           organizationId: organizationId.value,
           status: task.status.value,
-          capabilityName: task.capabilityName,
+          skillName: task.skillName,
           hasResult: !!task.result,
           hasError: !!task.error,
           duration: task.duration,
@@ -912,8 +912,8 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
       ? `${task.instructions.instructions.substring(0, 297)}...`
       : task.instructions.instructions;
 
-    const capabilityInfo = task.capabilityName
-      ? `\nCapability: ${task.capabilityName}`
+    const capabilityInfo = task.skillName
+      ? `\nCapability: ${task.skillName}`
       : '';
 
     return `Task: ${task.name}

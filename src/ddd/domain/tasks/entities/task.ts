@@ -33,7 +33,7 @@ export interface TaskConfig {
   agentId: AgentId;
   organizationId: OrganizationId;
   name: string;
-  capabilityName?: string;
+  skillName?: string;
   instructions: TaskInstructions;
   status?: TaskStatus;
   result?: any;
@@ -48,7 +48,7 @@ export interface TaskConfig {
 export interface CreateTaskData {
   agentId: AgentId;
   name: string;
-  capabilityName?: string; // Optional - system can auto-route
+  skillName?: string; // Optional - system can auto-route
   instructions: TaskInstructions; // Task configuration
   createdBy?: UserId;
 }
@@ -59,7 +59,7 @@ export class Task {
     public readonly agentId: AgentId,
     public readonly organizationId: OrganizationId,
     public readonly name: string,
-    public readonly capabilityName: string | null,
+    public readonly skillName: string | null,
     public readonly instructions: TaskInstructions,
     private _status: TaskStatus,
     private _result: any | null,
@@ -89,7 +89,7 @@ export class Task {
       config.agentId,
       config.organizationId,
       config.name,
-      config.capabilityName || null,
+      config.skillName || null,
       config.instructions,
       config.status || TaskStatus.pending(),
       config.result || null,
@@ -107,7 +107,7 @@ export class Task {
     agentId: number;
     organizationId: number;
     name: string;
-    capabilityName?: string | null;
+    skillName?: string | null;
     instructions: any; // JSONB from database
     status: string;
     result?: any;
@@ -123,7 +123,7 @@ export class Task {
       AgentId.fromNumber(data.agentId),
       OrganizationId.fromNumber(data.organizationId),
       data.name,
-      data.capabilityName || null,
+      data.skillName || null,
       data.instructions as TaskInstructions,
       TaskStatus.fromString(data.status),
       data.result || null,
@@ -141,7 +141,7 @@ export class Task {
     agentId: number;
     organizationId: number;
     name: string;
-    capabilityName: string | null;
+    skillName: string | null;
     instructions: any;
     status: string;
     result: any;
@@ -157,7 +157,7 @@ export class Task {
       agentId: this.agentId.value,
       organizationId: this.organizationId.value,
       name: this.name,
-      capabilityName: this.capabilityName,
+      skillName: this.skillName,
       instructions: this.instructions,
       status: this._status.value,
       result: this._result,

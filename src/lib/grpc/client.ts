@@ -47,7 +47,7 @@ export interface WorkerInfo {
   version: string;
   organization_id: string;
   status: WorkerStatus;
-  capabilities: string[];
+  skills: string[];
   active_tasks: number;
   max_concurrent_tasks: number;
   uptime_seconds: string;

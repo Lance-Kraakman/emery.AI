@@ -45,13 +45,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { agentId, name, capabilityName, instructions } = body;
+    const { agentId, name, skillName, instructions } = body;
 
     // Validate required fields
-    if (!agentId || !name || !capabilityName) {
+    if (!agentId || !name || !skillName) {
       return NextResponse.json({
         success: false,
-        error: 'Missing required fields: agentId, name, capabilityName'
+        error: 'Missing required fields: agentId, name, skillName'
       }, { status: 400 });
     }
 
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     const dto: CreateTaskDTO = {
       agentId: parseInt(agentId),
       name,
-      capabilityName,
+      skillName,
       instructions: instructions || {},
       organizationId: authResult.user.organizationId!,
       createdBy: authResult.user.id

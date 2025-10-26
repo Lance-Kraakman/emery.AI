@@ -282,7 +282,7 @@ export {
   getAgentExecutionRepository,
 
   // Capability domain repositories
-  getCapabilityRepository,
+  getSkillRepository,
   getStepRepository,
 
   // Database domain repositories
@@ -307,7 +307,7 @@ export {
   getAgentApplicationService,
 
   // Capability application services
-  getCapabilityApplicationService,
+  getSkillApplicationService,
 
   // Database application services
   getDatabaseApplicationService,

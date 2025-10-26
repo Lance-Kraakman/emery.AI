@@ -86,7 +86,7 @@ export class AgentTaskApplicationService {
         agentId,
         organizationId,
         name: dto.name,
-        capabilityName: dto.capabilityName,
+        skillName: dto.skillName,
         instructions: dto.instructions,
         createdBy,
         status: TaskStatus.pending()
@@ -98,7 +98,7 @@ export class AgentTaskApplicationService {
         agentId: task.agentId.value,
         organizationId: task.organizationId.value,
         name: task.name,
-        capabilityName: task.capabilityName || null,
+        skillName: task.skillName || null,
         instructions: task.instructions,
         status: task.status.value,
         createdBy: task.createdBy?.value || null,
@@ -178,7 +178,7 @@ export class AgentTaskApplicationService {
       const executionRequest: AgentExecutionRequest = {
         agentId: task.agentId.value,
         instructions: task.instructions.instructions,
-        capabilityName: task.capabilityName || undefined,
+        skillName: task.skillName || undefined,
         tools: task.instructions.tools,
         servers: task.instructions.servers,
         executionId: task.id.value,

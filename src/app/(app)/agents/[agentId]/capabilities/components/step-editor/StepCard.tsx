@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import type { ToolConfigDTO } from '@/app/mappers/capability-mapper';
+import type { ToolConfigDTO } from '@/app/mappers/skill-mapper';
 import { StepToolsSection } from './StepToolsSection';
 import { StepInstructionsInput } from './StepInstructionsInput';
 import {

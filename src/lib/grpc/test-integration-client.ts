@@ -25,7 +25,7 @@ export interface TaskExecutionRequest {
   taskId: string;
   agentId: number;
   instructions?: string;
-  capabilityName?: string;
+  skillName?: string;
   agentConfig: {
     name: string;
     role?: string;
@@ -83,7 +83,7 @@ export class AgentWorkerTestClient {
           version: response.getVersion(),
           organizationId: response.getOrganizationId(),
           status: response.getStatus(),
-          capabilities: response.getCapabilitiesList(),
+          skills: response.getCapabilitiesList(),
           activeTasks: response.getActiveTasks(),
           maxConcurrentTasks: response.getMaxConcurrentTasks(),
           uptimeSeconds: response.getUptimeSeconds(),
@@ -124,7 +124,7 @@ export class AgentWorkerTestClient {
                 instructions: request.instructions
               } as InstructionConfig
             }
-          : { capability_name: request.capabilityName }
+          : { capability_name: request.skillName }
         )
       };
 

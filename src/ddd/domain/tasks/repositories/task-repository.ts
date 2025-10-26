@@ -15,7 +15,7 @@ export interface CreateTaskData {
   agentId: number;
   organizationId: number;
   name: string;
-  capabilityName?: string | null;
+  skillName?: string | null;
   instructions: any; // JSONB from database
   status?: string;
   result?: any;
