@@ -6,13 +6,13 @@
  * Re-exports AgentDTO from mapper to avoid duplication
  */
 
-import type { ToolConfigDTO, CapabilityConfigDTO, AgentDTO as AgentDTOFromMapper } from '@/app/mappers/agent-mapper';
+import type { ToolConfigDTO, SkillConfigDTO, AgentDTO as AgentDTOFromMapper } from '@/app/mappers/agent-mapper';
 import type { ServerConfig, AgentType } from '@/ddd/domain/agents/entities/agent';
 import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 // Re-export the canonical AgentDTO from mapper
 export type AgentDTO = AgentDTOFromMapper;
-export type { ToolConfigDTO, CapabilityConfigDTO };
+export type { ToolConfigDTO, SkillConfigDTO };
 
 /**
  * DTO for creating a new agent
@@ -30,7 +30,7 @@ export interface CreateAgentDTO {
   tools?: ToolConfigDTO[];
   servers?: ServerConfig[];
   trigger?: TriggerConfig;
-  capabilities?: CapabilityConfigDTO[];
+  skills?: SkillConfigDTO[];
   status?: 'active' | 'inactive' | 'archived';
 }
 
@@ -48,7 +48,7 @@ export interface UpdateAgentDTO {
   tools?: ToolConfigDTO[];
   servers?: ServerConfig[];
   trigger?: TriggerConfig;
-  capabilities?: CapabilityConfigDTO[];
+  skills?: SkillConfigDTO[];
   status?: 'active' | 'inactive' | 'archived';
 }
 

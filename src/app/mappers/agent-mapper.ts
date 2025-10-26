@@ -19,7 +19,7 @@ export interface StepConfigDTO {
   servers?: any[];
 }
 
-export interface CapabilityConfigDTO {
+export interface SkillConfigDTO {
   name: string;
   description: string;
   steps: StepConfigDTO[];
@@ -34,7 +34,7 @@ export interface AgentDTO {
   tools: ToolConfigDTO[];
   servers: any[];
   trigger?: TriggerConfig;
-  capabilities: CapabilityConfigDTO[];
+  skills: SkillConfigDTO[];
   databaseId?: string | null;
   status: string;
   organizationId: number;
@@ -58,11 +58,11 @@ export class AgentMapper {
       tools: agent.tools.map(tool => tool.toPlain()),
       servers: agent.servers,
       trigger: agent.trigger,
-      // Serialize capabilities with nested ToolConfig instances
-      capabilities: agent.capabilities.map(cap => ({
-        name: cap.name,
-        description: cap.description,
-        steps: cap.steps.map(step => ({
+      // Serialize skills with nested ToolConfig instances
+      skills: agent.skills.map(skill => ({
+        name: skill.name,
+        description: skill.description,
+        steps: skill.steps.map(step => ({
           type: step.type,
           instructions: step.instructions,
           model: step.model,

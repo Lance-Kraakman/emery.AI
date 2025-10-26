@@ -1,7 +1,7 @@
 import React from 'react';
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { getCapability } from '@/app/actions/capabilities';
+import { getSkill } from '@/app/actions/capabilities';
 import { getAgent } from '@/app/actions/agents';
 import { EditCapabilityView } from '../components/EditCapabilityView';
 
@@ -30,7 +30,7 @@ export default async function EditCapabilityPage({ params }: PageProps) {
   // Fetch agent and capability
   const [agent, capabilityResult] = await Promise.all([
     getAgent(agentId),
-    getCapability(capabilityId)
+    getSkill(capabilityId)
   ]);
 
   if (!agent) {

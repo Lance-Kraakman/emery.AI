@@ -8,7 +8,7 @@ import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/li
 import { type Result, type CreateAgentData, type CreateAgentClientData } from "./types";
 import { getAgentApplicationService } from "@/ddd/application/di/container";
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from "@/app/dtos/agent.dto";
-import type { CapabilityConfig } from "@/ddd/domain/agents/entities/agent";
+import type { SkillConfig } from "@/ddd/domain/agents/entities/agent";
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
 import { AgentMapper } from "@/app/mappers/agent-mapper";
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
@@ -38,7 +38,7 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
         tools: toolDTOs,
         servers: data.servers,
         trigger: data.trigger,
-        capabilities: data.capabilities,
+        skills: data.skills,
         status: (() => {
           const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
           return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
@@ -80,12 +80,12 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
   });
 }
 
-export async function addCapabilityToAgent(agentId: number, capability: CapabilityConfig) {
+export async function addSkillToAgent(agentId: number, skill: SkillConfig) {
   'use server';
   return withAuthContext(async () => {
     try {
       const agentApplicationService = getAgentApplicationService();
-      const result = await agentApplicationService.addCapabilityToAgent(AgentId.fromNumber(agentId), capability);
+      const result = await agentApplicationService.addSkillToAgent(AgentId.fromNumber(agentId), skill);
       
       if (!result.success) {
         throw new Error(result.error || "Failed to add capability");
@@ -107,10 +107,10 @@ export async function createAgentFromClient(data: CreateAgentClientData): Promis
     ?.map(plainTool => ToolConfig.fromPlain(plainTool));
 
   // Convert plain capabilities to domain CapabilityConfig with ToolConfig instances
-  const capabilities = data.capabilities?.map(plainCap => ({
-    name: plainCap.name,
-    description: plainCap.description,
-    steps: plainCap.steps.map(plainStep => ({
+  const skills = data.skills?.map(plainSkill => ({
+    name: plainSkill.name,
+    description: plainSkill.description,
+    steps: plainSkill.steps.map(plainStep => ({
       type: plainStep.type,
       instructions: plainStep.instructions,
       model: plainStep.model,
@@ -126,7 +126,7 @@ export async function createAgentFromClient(data: CreateAgentClientData): Promis
   const domainData: CreateAgentData = {
     ...data,
     tools,
-    capabilities,
+    skills,
     status: data.status ? AgentStatus.fromString(data.status) : AgentStatus.active(),
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
     ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,
@@ -138,15 +138,15 @@ export async function createAgentFromClient(data: CreateAgentClientData): Promis
 export async function updateAgentFromClient(agentId: number, data: Partial<CreateAgentClientData>, revalidateUrl?: string): Promise<Result> {
   console.log('[updateAgentFromClient] Received plain data:', JSON.stringify({
     agentId,
-    capabilities: data.capabilities,
-    capabilitiesCount: data.capabilities?.length || 0
+    skills: data.skills,
+    skillsCount: data.skills?.length || 0
   }, null, 2));
 
   // Log detailed tool information for debugging
-  if (data.capabilities) {
-    data.capabilities.forEach((cap, capIndex) => {
-      console.log(`[updateAgentFromClient] Capability ${capIndex} "${cap.name}":`);
-      cap.steps.forEach((step, stepIndex) => {
+  if (data.skills) {
+    data.skills.forEach((skill, skillIndex) => {
+      console.log(`[updateAgentFromClient] Skill ${skillIndex} "${skill.name}":`);
+      skill.steps.forEach((step, stepIndex) => {
         console.log(`[updateAgentFromClient]   Step ${stepIndex} (${step.type}): ${step.tools?.length || 0} tools`);
         step.tools?.forEach((tool, toolIndex) => {
           console.log(`[updateAgentFromClient]     Tool ${toolIndex}:`, JSON.stringify(tool));
@@ -171,12 +171,12 @@ export async function updateAgentFromClient(agentId: number, data: Partial<Creat
     }) || [];
 
   // Convert plain capabilities to domain CapabilityConfig with ToolConfig instances
-  const capabilities = data.capabilities?.map(plainCap => {
-    console.log('[updateAgentFromClient] Processing capability:', plainCap.name);
+  const skills = data.skills?.map(plainSkill => {
+    console.log('[updateAgentFromClient] Processing capability:', plainSkill.name);
     return {
-      name: plainCap.name,
-      description: plainCap.description,
-      steps: plainCap.steps.map(plainStep => {
+      name: plainSkill.name,
+      description: plainSkill.description,
+      steps: plainSkill.steps.map(plainStep => {
         console.log('[updateAgentFromClient] Processing step:', plainStep.type, 'tools:', plainStep.tools);
         // Convert plain tool configs to ToolConfig instances (filter out invalid tools first!)
         const validTools = (plainStep.tools || [])
@@ -208,14 +208,14 @@ export async function updateAgentFromClient(agentId: number, data: Partial<Creat
   const domainData: Partial<CreateAgentData> = {
     ...data,
     tools,
-    capabilities,
+    skills,
     status: data.status ? AgentStatus.fromString(data.status) : undefined,
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
     ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,
   };
 
   console.log('[updateAgentFromClient] Converted to domain data with ToolConfig instances:', JSON.stringify({
-    capabilities: domainData.capabilities?.map(c => ({
+    skills: domainData.skills?.map(c => ({
       name: c.name,
       steps: c.steps.map(s => ({
         type: s.type,
@@ -356,7 +356,7 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
         tools: toolDTOs,
         servers: data.servers,
         trigger: data.trigger,
-        capabilities: data.capabilities,
+        skills: data.skills,
         status: (() => {
           const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
           return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
@@ -365,9 +365,9 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
         })()
       };
 
-      console.log('[updateAgent] UpdateAgentDTO capabilities:', JSON.stringify({
-        capabilitiesCount: dto.capabilities?.length || 0,
-        capabilities: dto.capabilities?.map(c => ({
+      console.log('[updateAgent] UpdateAgentDTO skills:', JSON.stringify({
+        skillsCount: dto.skills?.length || 0,
+        skills: dto.skills?.map(c => ({
           name: c.name,
           stepsCount: c.steps.length,
           steps: c.steps.map(s => ({

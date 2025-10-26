@@ -38,13 +38,13 @@ export default function TaskFormDialog({ isOpen, onClose, agent }: TaskFormDialo
     try {
       const formData = new FormData(event.currentTarget);
       const name = formData.get('name') as string;
-      const capabilityName = formData.get('capability') as string;
+      const skillName = formData.get('capability') as string;
       const instructions = formData.get('instructions') as string;
 
       const result = await createTask({
         agentId: agent.id,
         name,
-        capabilityName: capabilityName || undefined, // Auto-route if empty
+        skillName: skillName || undefined, // Auto-route if empty
         instructions: {
           instructions,
           tools: selectedTools.length > 0 ? selectedTools : undefined,
@@ -92,7 +92,7 @@ export default function TaskFormDialog({ isOpen, onClose, agent }: TaskFormDialo
                 className="mt-1 block w-full p-2 border rounded"
               >
                 <option value="">Auto-select capability</option>
-                {(agent.capabilities as any[] || []).map((cap, index) => (
+                {(agent.skills as any[] || []).map((cap, index) => (
                   <option key={index} value={cap.name}>{cap.name}</option>
                 ))}
               </select>

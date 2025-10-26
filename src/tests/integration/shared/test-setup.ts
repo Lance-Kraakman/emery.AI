@@ -267,7 +267,7 @@ export async function createTestAgent(
       tools: [],
       servers: []
     },
-    capabilities: [],
+    skills: [],
     organizationId: organizationId.value,
     ownerId: ownerId.value,
     isActive: true

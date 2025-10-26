@@ -322,12 +322,12 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
 
     const agentApiKey = agent.apiKey.value;
 
-    // Clone agent with enriched capabilities
+    // Clone agent with enriched skills
     return {
       ...agent,
-      capabilities: agent.capabilities?.map(cap => ({
-        ...cap,
-        steps: cap.steps.map(step => ({
+      skills: agent.skills?.map(skill => ({
+        ...skill,
+        steps: skill.steps.map(step => ({
           ...step,
           tools: step.tools?.map(tool => {
             const config = tool.config as any;

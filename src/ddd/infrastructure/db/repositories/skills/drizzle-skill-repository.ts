@@ -23,7 +23,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
   async findById(id: SkillId): Promise<Skill | null> {
     const result = await this.db
       .select()
-      .from(capabilities)
+      .from(skills)
       .where(eq(skills.id, id.value))
       .limit(1);
 
@@ -47,7 +47,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
   async findByAgentId(agentId: AgentId): Promise<Skill[]> {
     const results = await this.db
       .select()
-      .from(capabilities)
+      .from(skills)
       .where(eq(skills.agentId, agentId.value));
 
     // Load steps for each skill
@@ -56,7 +56,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
         const steps = await this.stepRepository.findBySkillId(
           SkillId.fromNumber(skillRecord.id)
         );
-        return this.toDomain(cap, steps);
+        return this.toDomain(skillRecord, steps);
       })
     );
 
@@ -66,7 +66,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
   async create(props: CreateSkillProps): Promise<Skill> {
     const now = new Date();
     const result = await this.db
-      .insert(capabilities)
+      .insert(skills)
       .values({
         agentId: props.agentId.value,
         name: props.name,
@@ -90,13 +90,13 @@ export class DrizzleSkillRepository implements ISkillRepository {
     }
 
     const result = await this.db
-      .update(capabilities)
+      .update(skills)
       .set(updateData)
       .where(eq(skills.id, id.value))
       .returning();
 
     if (result.length === 0) {
-      throw new Error(`Skill${id.value} not found`);
+      throw new Error(`Skill ${id.value} not found`);
     }
 
     // Load current steps
@@ -108,21 +108,21 @@ export class DrizzleSkillRepository implements ISkillRepository {
   async delete(id: SkillId): Promise<void> {
     // Cascade delete will handle steps automatically via foreign key
     await this.db
-      .delete(capabilities)
+      .delete(skills)
       .where(eq(skills.id, id.value));
   }
 
   async deleteByAgentId(agentId: AgentId): Promise<void> {
     // Cascade delete will handle steps automatically
     await this.db
-      .delete(capabilities)
+      .delete(skills)
       .where(eq(skills.agentId, agentId.value));
   }
 
   async exists(id: SkillId): Promise<boolean> {
     const result = await this.db
       .select({ id: skills.id })
-      .from(capabilities)
+      .from(skills)
       .where(eq(skills.id, id.value))
       .limit(1);
 
@@ -132,7 +132,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
   async countByAgentId(agentId: AgentId): Promise<number> {
     const results = await this.db
       .select()
-      .from(capabilities)
+      .from(skills)
       .where(eq(skills.agentId, agentId.value));
 
     return results.length;

@@ -84,7 +84,7 @@ export class AgentApplicationService {
         servers: dto.servers,
         trigger: dto.trigger,
         // CapabilityConfigDTO and CapabilityConfig are structurally identical
-        capabilities: dto.capabilities as any as CapabilityConfig[],
+        capabilities: dto.skills as any as CapabilityConfig[],
         status: dto.status ? AgentStatus.fromString(dto.status) : undefined
       };
 
@@ -101,7 +101,7 @@ export class AgentApplicationService {
           tools: agentWithDefaults.tools,
           servers: agentWithDefaults.servers
         },
-        capabilities: agentWithDefaults.capabilities?.map(c => c.name) || null,
+        capabilities: agentWithDefaults.skills?.map(c => c.name) || null,
         organizationId: organizationId.value,
         ownerId: ownerId.value,
         isActive: true,
@@ -159,7 +159,7 @@ export class AgentApplicationService {
       }
       if (dto.servers !== undefined) updateData.servers = dto.servers;
       if (dto.trigger !== undefined) updateData.trigger = dto.trigger;
-      if (dto.capabilities !== undefined) updateData.capabilities = dto.capabilities;
+      if (dto.skills !== undefined) updateData.skills = dto.skills;
       if (dto.status !== undefined) updateData.status = dto.status;
 
       // Update agent via repository
@@ -287,7 +287,7 @@ export class AgentApplicationService {
    * Add capability to agent
    * AIDEV-NOTE: Now returns DTO for consistent serialization
    */
-  async addCapabilityToAgent(agentId: AgentId, capability: CapabilityConfig): Promise<Result<AgentDTO>> {
+  async addSkillToAgent(agentId: AgentId, skill: SkillConfig): Promise<Result<AgentDTO>> {
     try {
       const existingAgent = await this.agentRepository.findById(agentId);
       if (!existingAgent) {
@@ -297,13 +297,13 @@ export class AgentApplicationService {
         };
       }
 
-      // Get existing capabilities and add new one
-      const existingCapabilities = existingAgent.capabilities || [];
-      const updatedCapabilities = [...existingCapabilities, capability];
+      // Get existing skills and add new one
+      const existingSkills = existingAgent.skills || [];
+      const updatedSkills = [...existingSkills, skill];
 
-      // Update agent with new capability
+      // Update agent with new skill
       const savedAgent = await this.agentRepository.update(agentId, {
-        capabilities: updatedCapabilities.map(c => c.name)
+        skills: updatedSkills.map(s => s.name)
       });
 
       // Convert domain entity to DTO for serialization

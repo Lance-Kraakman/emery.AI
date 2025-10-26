@@ -21,8 +21,8 @@ import {
   Play,
   Code2
 } from 'lucide-react';
-import type { AgentDTO, CapabilityConfigDTO, StepConfigDTO, ToolConfigDTO } from '@/app/mappers/agent-mapper';
-import type { CapabilityConfig, StepConfig } from '@/ddd/domain/agents/entities/agent';
+import type { AgentDTO, SkillConfigDTO, StepConfigDTO, ToolConfigDTO } from '@/app/mappers/agent-mapper';
+import type { SkillConfig, StepConfig } from '@/ddd/domain/agents/entities/agent';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import { ToolDropdown } from '@/components/chat/ToolDropdown';
@@ -39,8 +39,8 @@ type ModalView = 'list' | 'create' | 'edit' | 'step-detail';
 
 export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: CapabilitiesModalProps) {
   const [view, setView] = useState<ModalView>('list');
-  const [capabilities, setCapabilities] = useState<CapabilityConfig[]>([]);
-  const [editingCapability, setEditingCapability] = useState<CapabilityConfig | null>(null);
+  const [capabilities, setCapabilities] = useState<SkillConfig[]>([]);
+  const [editingCapability, setEditingCapability] = useState<SkillConfig | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingStepIndex, setEditingStepIndex] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -58,7 +58,7 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
   // Initialize capabilities
   useEffect(() => {
     if (isOpen) {
-      setCapabilities((agent.capabilities as CapabilityConfig[]) || []);
+      setCapabilities((agent.skills as SkillConfig[]) || []);
       setView('list');
       setEditingCapability(null);
       setEditingIndex(null);
@@ -67,7 +67,7 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
   }, [isOpen, agent]);
 
   const handleCreateCapability = () => {
-    const newCapability: CapabilityConfig = {
+    const newCapability: SkillConfig = {
       name: '',
       description: '',
       steps: []
@@ -77,7 +77,7 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
     setView('create');
   };
 
-  const handleEditCapability = (capability: CapabilityConfig, index: number) => {
+  const handleEditCapability = (capability: SkillConfig, index: number) => {
     setEditingCapability({ ...capability });
     setEditingIndex(index);
     setView('edit');
@@ -361,7 +361,7 @@ export function CapabilitiesModal({ isOpen, onClose, agent, onUpdate }: Capabili
       });
 
       // Convert domain capabilities to DTOs before sending to server action
-      const capabilitiesDTO: CapabilityConfigDTO[] = capabilities.map(cap => ({
+      const capabilitiesDTO: SkillConfigDTO[] = capabilities.map(cap => ({
         name: cap.name,
         description: cap.description,
         steps: cap.steps.map(step => ({

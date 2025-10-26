@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Edit, ChevronDown, ChevronRight, Activity, Cog, Save, X, Loader2, Calendar, Plus, Trash2 } from 'lucide-react';
-import type { AgentDTO, ToolConfigDTO, CapabilityConfigDTO } from '@/app/mappers/agent-mapper';
+import type { AgentDTO, ToolConfigDTO, SkillConfigDTO } from '@/app/mappers/agent-mapper';
 import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import { discoverTools, createToolConfigFromMetadata, type ToolMetadataDTO } from '@/app/actions/tool-registry';
@@ -48,7 +48,7 @@ interface EditFormData {
   trigger: TriggerConfig;
   tools: ToolConfigDTO[];
   servers: ServerConfig[];
-  capabilities: CapabilityConfigDTO[];
+  capabilities: SkillConfigDTO[];
 }
 
 export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetailsViewProps) {
@@ -66,7 +66,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
     trigger: agent.trigger || TriggerConfigs.manual(),
     tools: agent.tools || [],
     servers: agent.servers || [],
-    capabilities: agent.capabilities || []
+    capabilities: agent.skills || []
   });
 
   const handleEdit = () => {
@@ -80,7 +80,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       trigger: agent.trigger || TriggerConfigs.manual(),
       tools: agent.tools || [],
       servers: agent.servers || [],
-      capabilities: agent.capabilities || []
+      capabilities: agent.skills || []
     });
   };
 
@@ -95,7 +95,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       trigger: agent.trigger || TriggerConfigs.manual(),
       tools: agent.tools || [],
       servers: agent.servers || [],
-      capabilities: agent.capabilities || []
+      capabilities: agent.skills || []
     });
   };
 

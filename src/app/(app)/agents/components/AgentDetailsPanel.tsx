@@ -84,7 +84,7 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   };
 
   const getCapabilitiesStatus = () => {
-    const count = agent.capabilities?.length || 0;
+    const count = agent.skills?.length || 0;
     if (count === 0) return 'empty';
     if (count < 3) return 'partial';
     return 'configured';
@@ -124,10 +124,10 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   };
 
   const getCapabilitiesSummary = () => {
-    const count = agent.capabilities?.length || 0;
+    const count = agent.skills?.length || 0;
     if (count === 0) return 'No capabilities defined';
 
-    const totalSteps = agent.capabilities?.reduce((sum, cap) => sum + (cap.steps?.length || 0), 0) || 0;
+    const totalSteps = agent.skills?.reduce((sum, cap) => sum + (cap.steps?.length || 0), 0) || 0;
     return `${count} capability${count !== 1 ? 'ies' : ''} • ${totalSteps} total steps`;
   };
 

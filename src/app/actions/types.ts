@@ -4,7 +4,7 @@ import { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { Row } from '@/ddd/domain/tables/value-objects/row';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-import type { ServerConfig, CapabilityConfig } from '@/ddd/domain/agents/entities/agent';
+import type { ServerConfig, SkillConfig } from '@/ddd/domain/agents/entities/agent';
 import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 // Export the unified Result interface for use in Server Actions
@@ -96,7 +96,7 @@ export interface CreateAgentFormData {
 
 // AIDEV-NOTE: Import DTO types from agent mapper (following ToolMapper pattern)
 // These DTOs use plain serializable types that can pass through Next.js Server Actions
-import type { ToolConfigDTO, CapabilityConfigDTO } from '@/app/mappers/agent-mapper';
+import type { ToolConfigDTO, SkillConfigDTO } from '@/app/mappers/agent-mapper';
 
 // AIDEV-NOTE: Re-export CreateAgentDTO from consolidated DTOs
 // CreateAgentClientData is now an alias for CreateAgentDTO
@@ -106,7 +106,7 @@ export type { CreateAgentDTO as CreateAgentClientData } from '@/app/dtos/agent.d
 export type {
   ServerConfig,
   StepConfig,
-  CapabilityConfig,
+  SkillConfig,
   CreateAgentData
 } from '@/ddd/domain/agents/entities/agent';
 
