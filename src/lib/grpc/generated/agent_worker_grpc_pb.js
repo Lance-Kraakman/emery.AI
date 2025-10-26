@@ -107,7 +107,7 @@ executeTask: {
     responseSerialize: serialize_emery_agents_TaskProgress,
     responseDeserialize: deserialize_emery_agents_TaskProgress,
   },
-  // Get worker health status and available capabilities
+  // Get worker health status and available skills
 getWorkerInfo: {
     path: '/emery.agents.AgentWorker/GetWorkerInfo',
     requestStream: false,

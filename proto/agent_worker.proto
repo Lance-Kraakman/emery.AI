@@ -6,8 +6,8 @@ package emery.agents;
 service AgentWorker {
   // Execute a task and stream progress updates back to the API server
   rpc ExecuteTask(TaskRequest) returns (stream TaskProgress);
-  
-  // Get worker health status and available capabilities
+
+  // Get worker health status and available skills
   rpc GetWorkerInfo(Empty) returns (WorkerInfo);
   
   // Cancel a running task
@@ -19,7 +19,7 @@ message TaskRequest {
   string task_id = 1;              // Unique task identifier
   int32 agent_id = 2;              // Agent to execute the task
   oneof execution_mode {
-    string capability_name = 3;     // Direct capability execution
+    string skill_name = 3;          // Direct skill execution
     InstructionConfig instruction_config = 9; // Instruction-based execution with auto-routing
   }
   AgentConfig agent_config = 4;    // Complete agent configuration
@@ -64,13 +64,13 @@ message CancelTaskResponse {
   string message = 2;
 }
 
-// Worker health and capability information
+// Worker health and skill information
 message WorkerInfo {
   string worker_id = 1;            // Unique worker instance ID
   string version = 2;              // Worker software version
   string organization_id = 3;      // Organization this worker serves
   WorkerStatus status = 4;         // Current worker status
-  repeated string capabilities = 5; // Available agent capabilities
+  repeated string skills = 5;      // Available agent skills
   int32 active_tasks = 6;          // Number of currently running tasks
   int32 max_concurrent_tasks = 7;  // Maximum concurrent task capacity
   int64 uptime_seconds = 8;        // Worker uptime
@@ -103,11 +103,11 @@ message AgentConfig {
   string persona = 4;
   repeated ToolConfig tools = 5;
   repeated ServerConfig servers = 6;
-  repeated CapabilityConfig capabilities = 7;
+  repeated SkillConfig skills = 7;
 }
 
-// Capability configuration with steps
-message CapabilityConfig {
+// Skill configuration with steps
+message SkillConfig {
   string name = 1;
   string description = 2;
   repeated StepConfig steps = 3;
