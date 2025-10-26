@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StepInstructionsInput } from './step-editor/StepInstructionsInput';
 import { StepToolsSection } from './step-editor/StepToolsSection';
+import { SkillInputsSection } from './step-editor/SkillInputsSection';
+import { SkillOutputsSection } from './step-editor/SkillOutputsSection';
 import type { ToolConfigDTO, SkillInput, SkillOutput } from '@/app/mappers/skill-mapper';
 
 export interface SkillFormData {
@@ -58,44 +60,6 @@ export function SkillEditor({
     const newValue = { ...localValue, ...updates };
     setLocalValue(newValue);
     onChange(newValue);
-  };
-
-  // Input management
-  const addInput = () => {
-    handleChange({
-      inputs: [...localValue.inputs, { name: '', required: true }]
-    });
-  };
-
-  const updateInput = (index: number, updates: Partial<SkillInput>) => {
-    const newInputs = [...localValue.inputs];
-    newInputs[index] = { ...newInputs[index], ...updates };
-    handleChange({ inputs: newInputs });
-  };
-
-  const removeInput = (index: number) => {
-    handleChange({
-      inputs: localValue.inputs.filter((_, i) => i !== index)
-    });
-  };
-
-  // Output management
-  const addOutput = () => {
-    handleChange({
-      outputs: [...localValue.outputs, { name: '' }]
-    });
-  };
-
-  const updateOutput = (index: number, name: string) => {
-    const newOutputs = [...localValue.outputs];
-    newOutputs[index] = { name };
-    handleChange({ outputs: newOutputs });
-  };
-
-  const removeOutput = (index: number) => {
-    handleChange({
-      outputs: localValue.outputs.filter((_, i) => i !== index)
-    });
   };
 
   return (
@@ -155,54 +119,17 @@ export function SkillEditor({
       </div>
 
       {/* Inputs Section */}
-      <div className="space-y-3">
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label className="text-base font-semibold">Inputs</Label>
+          <Label className="text-sm text-muted-foreground">Inputs</Label>
           <span className="text-xs text-muted-foreground">
             {localValue.inputs.length} input{localValue.inputs.length !== 1 ? 's' : ''}
           </span>
         </div>
-        <div className="space-y-2">
-          {localValue.inputs.map((input, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <Input
-                value={input.name}
-                onChange={(e) => updateInput(index, { name: e.target.value })}
-                placeholder="customer_email"
-                className="flex-1 h-10 font-mono text-sm"
-              />
-              <Select
-                value={input.required ? 'required' : 'optional'}
-                onValueChange={(v) => updateInput(index, { required: v === 'required' })}
-              >
-                <SelectTrigger className="w-32 h-10">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="required">Required</SelectItem>
-                  <SelectItem value="optional">Optional</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-10 w-10 p-0 text-destructive hover:bg-destructive/10"
-                onClick={() => removeInput(index)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={addInput}
-            className="w-full"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add input
-          </Button>
-        </div>
+        <SkillInputsSection
+          inputs={localValue.inputs}
+          onInputsChange={(inputs) => handleChange({ inputs })}
+        />
         <p className="text-xs text-muted-foreground">
           Reference inputs in instructions using {'{input_name}'} syntax
         </p>
@@ -240,42 +167,17 @@ export function SkillEditor({
       </div>
 
       {/* Outputs Section */}
-      <div className="space-y-3">
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label className="text-base font-semibold">Outputs</Label>
+          <Label className="text-sm text-muted-foreground">Outputs</Label>
           <span className="text-xs text-muted-foreground">
             {localValue.outputs.length} output{localValue.outputs.length !== 1 ? 's' : ''}
           </span>
         </div>
-        <div className="space-y-2">
-          {localValue.outputs.map((output, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <Input
-                value={output.name}
-                onChange={(e) => updateOutput(index, e.target.value)}
-                placeholder="confirmation_message"
-                className="flex-1 h-10 font-mono text-sm"
-              />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-10 w-10 p-0 text-destructive hover:bg-destructive/10"
-                onClick={() => removeOutput(index)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={addOutput}
-            className="w-full"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add output
-          </Button>
-        </div>
+        <SkillOutputsSection
+          outputs={localValue.outputs}
+          onOutputsChange={(outputs) => handleChange({ outputs })}
+        />
         <p className="text-xs text-muted-foreground">
           Define what data this skill returns
         </p>
