@@ -56,7 +56,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       ownerId: userId,
       organizationId: parseInt(organizationId),
       trigger: trigger || { type: 'MANUAL', enabled: true },
-      capabilities: capabilities || [],
+      skills: skills || [],
       tools: tools || [],
       servers: servers || []
     };

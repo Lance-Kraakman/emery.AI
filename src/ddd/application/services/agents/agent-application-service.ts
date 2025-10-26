@@ -14,7 +14,7 @@ import {
   type CreateAgentData,
   type UpdateAgentData,
   type ServerConfig,
-  type CapabilityConfig,
+  type SkillConfig,
   type AgentType
 } from '@/ddd/domain/agents/entities/agent';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
@@ -83,8 +83,8 @@ export class AgentApplicationService {
         tools,
         servers: dto.servers,
         trigger: dto.trigger,
-        // CapabilityConfigDTO and CapabilityConfig are structurally identical
-        capabilities: dto.skills as any as CapabilityConfig[],
+        // SkillConfigDTO and SkillConfig are structurally identical
+        skills: dto.skills as any as SkillConfig[],
         status: dto.status ? AgentStatus.fromString(dto.status) : undefined
       };
 
@@ -303,7 +303,7 @@ export class AgentApplicationService {
 
       // Update agent with new skill
       const savedAgent = await this.agentRepository.update(agentId, {
-        skills: updatedSkills.map(s => s.name)
+        skills: updatedSkills
       });
 
       // Convert domain entity to DTO for serialization

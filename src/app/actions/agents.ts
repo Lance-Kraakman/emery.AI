@@ -126,7 +126,7 @@ export async function createAgentFromClient(data: CreateAgentClientData): Promis
   const domainData: CreateAgentData = {
     ...data,
     tools,
-    skills,
+    skills: skills || [],
     status: data.status ? AgentStatus.fromString(data.status) : AgentStatus.active(),
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
     ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,

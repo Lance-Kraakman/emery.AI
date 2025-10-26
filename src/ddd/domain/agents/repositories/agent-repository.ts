@@ -1,44 +1,22 @@
 // AIDEV-NOTE: Agent repository interface
 // Defines data access operations for Agent entities
 
-import type { Agent } from '../entities/agent';
+import type { Agent, CreateAgentData as CreateAgentDataEntity, UpdateAgentData as UpdateAgentDataEntity } from '../entities/agent';
 import type { AgentId, OrganizationId, UserId, ApiKey } from '@/ddd/domain/shared/value-objects';
 
-// Data transfer objects for repository operations
-export interface CreateAgentData {
-  name: string;
-  type: string;
-  description?: string | null;
-  instructions?: any | null;
-  capabilities?: string[] | null;
-  organizationId: number;
-  ownerId: string;
-  isActive?: boolean;
-  trigger?: any | null;
-}
-
-export interface UpdateAgentData {
-  name?: string;
-  type?: string;
-  description?: string | null;
-  instructions?: any | null;
-  capabilities?: string[] | null;
-  isActive?: boolean;
-  trigger?: any | null;
-  apiKey?: string;
-  status?: string;
-}
+// Re-export for backward compatibility
+export type { CreateAgentDataEntity as CreateAgentData, UpdateAgentDataEntity as UpdateAgentData };
 
 export interface IAgentRepository {
   /**
    * Create a new agent
    */
-  create(data: CreateAgentData): Promise<Agent>;
+  create(data: CreateAgentDataEntity): Promise<Agent>;
 
   /**
    * Update an existing agent
    */
-  update(id: AgentId, data: UpdateAgentData): Promise<Agent>;
+  update(id: AgentId, data: UpdateAgentDataEntity): Promise<Agent>;
 
   /**
    * Find agent by ID
