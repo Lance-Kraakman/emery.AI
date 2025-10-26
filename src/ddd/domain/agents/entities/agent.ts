@@ -196,8 +196,8 @@ export interface UpdateAgentData {
   status?: AgentStatus;
   agentType?: AgentType;
   specialization?: AgentSpecialization;
+  apiKey?: string;  // API key updates for regeneration
   // Note: organizationId typically not changed after creation
-  // apiKey updates handled through separate methods for security
 }
 
 // AIDEV-NOTE: Agent status constants moved to Value Object
