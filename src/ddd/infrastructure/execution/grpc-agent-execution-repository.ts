@@ -106,16 +106,14 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       
       // 6. Execute task via gRPC with streaming progress updates
       await workerClient.executeTask(taskRequest as any, async (progress: TaskProgress) => {
-        console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Step ${progress.stepId} - Status: ${progress.status} (${progress.progressPercent}%)`);
+        console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Status: ${progress.status} (${progress.progressPercent}%)`);
 
         // DEBUG: Log full TaskProgress object
         console.log(`[GRPC-DEBUG] TaskProgress received:`, JSON.stringify(progress, null, 2));
         console.log(`[GRPC-DEBUG] outputJson content:`, progress.outputJson);
-        console.log(`[GRPC-DEBUG] stepId:`, progress.stepId);
-        console.log(`[GRPC-DEBUG] stepType:`, progress.stepType);
 
-        // Create log message from TaskProgress
-        const logMessage = `Step ${progress.stepId} (${progress.stepType}): ${progress.status} - ${progress.progressPercent}% ${progress.outputJson ? `| Output: ${progress.outputJson.substring(0, 200)}${progress.outputJson.length > 200 ? '...' : ''}` : ''}${progress.errorMessage ? ` | Error: ${progress.errorMessage}` : ''}`;
+        // Create log message from TaskProgress (simplified - no step info)
+        const logMessage = `${progress.status} - ${progress.progressPercent}% ${progress.outputJson ? `| Output: ${progress.outputJson.substring(0, 200)}${progress.outputJson.length > 200 ? '...' : ''}` : ''}${progress.errorMessage ? ` | Error: ${progress.errorMessage}` : ''}`;
 
         console.log(`[GRPC-DEBUG] Formatted log message:`, logMessage);
 
@@ -129,17 +127,16 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
 
         // Map proto progress to TypeScript types
         const taskUpdate = mapTaskProgressFromProto(progress);
-        
+
         // Calculate completion time for terminal states
         const isTerminal = ['completed', 'failed', 'cancelled'].includes(taskUpdate.status?.value || '');
         const calculatedCompletedAt = isTerminal ? new Date() : undefined;
-        
+
         // Update execution tracking
         this.activeExecutions.set(executionId, {
           executionId,
           status: (taskUpdate.status?.value as ExecutionStatus['status']) || 'in_progress',
           progress: progress.progressPercent,
-          currentStep: progress.stepId,
           result: taskUpdate.result,
           error: taskUpdate.error,
           startedAt,
