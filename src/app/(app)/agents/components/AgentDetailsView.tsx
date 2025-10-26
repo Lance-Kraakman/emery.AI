@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { updateAgentFromClient } from '@/app/actions/agents';
-import CapabilityManager from './CapabilityManager';
+import SkillManager from './SkillManager';
 import AgentActivityPanel from './AgentActivityPanel';
 import ScheduleManager from './ScheduleManager';
 import {
@@ -618,11 +618,11 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="px-3 pb-3">
-              <CapabilityManager
+              <SkillManager
                 agent={isEditMode ? undefined : agent}
                 capabilities={isEditMode ? editFormData.capabilities : undefined}
                 isEditable={isEditMode}
-                onCapabilitiesChange={(capabilities) => {
+                onCapabilitiesChange={(capabilities: SkillConfigDTO[]) => {
                   setEditFormData(prev => ({ ...prev, capabilities }));
                 }}
               />

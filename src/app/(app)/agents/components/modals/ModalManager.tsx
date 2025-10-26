@@ -4,7 +4,7 @@ import React from 'react';
 import { useModal } from './ModalContext';
 import { BasicInfoModal } from './BasicInfoModal';
 import { TriggerConfigModal } from './TriggerConfigModal';
-import { CapabilitiesModal } from './CapabilitiesModal';
+import { SkillsModal } from './SkillsModal';
 import { ToolsServersModal } from './ToolsServersModal';
 import { ActivityDetailsModal } from './ActivityDetailsModal';
 
@@ -42,7 +42,7 @@ export function ModalManager({ onUpdate }: ModalManagerProps) {
 
     case 'capabilities':
       return (
-        <CapabilitiesModal
+        <SkillsModal
           isOpen={true}
           onClose={closeModal}
           agent={modalState.data?.agent}
