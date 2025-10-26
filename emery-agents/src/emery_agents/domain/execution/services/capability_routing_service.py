@@ -2,14 +2,14 @@
 Capability Routing Domain Service
 
 AIDEV-NOTE: Pure domain service for routing execution modes.
+Simplified for single-instruction model - removed StepConfig/StepType.
 Contains business logic for determining execution strategy.
 """
 
 from typing import Optional
-from ....core.entities import SkillConfig
+from ....core.entities import SkillConfig, SkillInput, SkillOutput, ToolConfig
 from ..entities.execution_context import ExecutionContext, ExecutionMode
-from ....core.entities import TaskRequest, StepConfig
-from ....core.types import StepType
+from ....core.entities import TaskRequest
 from ...shared.value_objects.ids import AgentId, OrganizationId
 
 class CapabilityRoutingService:
@@ -73,34 +73,31 @@ class CapabilityRoutingService:
         """
         Create a dynamic capability from instruction configuration.
 
+        AIDEV-NOTE: Simplified for single-instruction model - no steps, just direct instruction.
+
         Args:
             instructions: Task instructions
-            tools: Optional list of tools
-            servers: Optional list of servers
+            tools: Optional list of ToolConfig objects
+            servers: Optional list of servers (not used in single-instruction model)
 
         Returns:
             SkillConfig for execution
         """
-        # Determine step type based on tools availability
-        step_type = StepType.TOOL_STEP if tools else StepType.CODE_STEP
-
-        step = StepConfig(
-            id="dynamic_instruction_step",
-            type=step_type,
-            instructions=instructions,
-            model="Qwen/Qwen2.5-14B-Instruct",  # Default model
-            tools=tools or [],
-            servers=servers or []
-        )
-
         return SkillConfig(
             name="dynamic_capability",
             description=f"Dynamic capability: {instructions[:100]}...",
-            steps=[step]
+            inputs=[],  # No predefined inputs for dynamic capabilities
+            outputs=[],  # No predefined outputs for dynamic capabilities
+            instructions=instructions,
+            tools=tools or []
         )
     
     def _create_capability_context(self, request: TaskRequest) -> ExecutionContext:
-        """Create execution context for capability-based execution."""
+        """
+        Create execution context for capability-based execution.
+
+        AIDEV-NOTE: Simplified for single-instruction model - tools are directly on capability.
+        """
         capability = self.find_capability_by_name(
             request.agent_config.skills,
             request.capability_name
@@ -109,18 +106,13 @@ class CapabilityRoutingService:
         if not capability:
             raise ValueError(f"Capability '{request.capability_name}' not found")
 
-        # Extract tools from capability steps
-        all_tools = []
-        for step in capability.steps:
-            if hasattr(step, 'tools') and step.tools:
-                all_tools.extend([tool.name for tool in step.tools])
+        # Extract tool names from capability's tools list (single-instruction model)
+        tool_names = [tool.name for tool in capability.tools] if capability.tools else []
 
-        # AIDEV-NOTE: Pass full capability configuration to preserve multi-step execution
-        # The capability object contains all step configurations with tools and instructions
         return ExecutionContext(
             mode=ExecutionMode.CAPABILITY_BASED,
-            instructions=capability.description,
-            available_tools=list(set(all_tools)),  # Remove duplicates
+            instructions=capability.instructions,  # Use instructions field instead of description
+            available_tools=tool_names,
             agent_id=AgentId(request.agent_id) if hasattr(request, 'agent_id') and request.agent_id else None,
             organization_id=self._parse_organization_id(request.organization_id),
             capability_name=request.capability_name,

@@ -1,8 +1,8 @@
 """
 Pure SmolAgents Execution Repository Implementation
 
-AIDEV-NOTE: Pure DDD infrastructure implementation. 
-Ports all smolagents execution logic from infrastructure/execution/smolagents_execution_service.py.
+AIDEV-NOTE: Pure DDD infrastructure implementation.
+Simplified for single-instruction model - removed step iteration logic.
 Works directly with ExecutionContext - no TaskRequest conversion bridge pattern.
 """
 
@@ -18,8 +18,7 @@ from ...domain.execution.repositories.execution_repository import IExecutionRepo
 from ...domain.execution.entities.execution_context import ExecutionContext, ExecutionMode
 from ...domain.tools.repositories.tool_registry_repository import IToolRegistryRepository
 from ...domain.ai.services.model_provider_service import IModelProviderService
-from ...core.entities import ToolConfig, SkillConfig, StepConfig
-from ...core.types import StepType
+from ...core.entities import ToolConfig, SkillConfig
 
 logger = logging.getLogger(__name__)
 
@@ -54,45 +53,39 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
             # Yield initial progress
             yield {
                 "status": "in_progress",
-                "step_id": "setup",
-                "step_type": "SETUP",
-                "output": {"message": "Setting up execution"},
+                "output": json.dumps({"message": "Setting up execution"}),
                 "error_message": "",
                 "timestamp_ms": int(time.time() * 1000),
                 "progress_percent": 10.0
             }
-            
+
             # Handle instruction-based execution (direct tool execution)
             if context.is_instruction_mode:
                 yield {
                     "status": "in_progress",
-                    "step_id": "direct_execution",
-                    "step_type": "TOOL_EXECUTION",
-                    "output": {"message": "Using direct tool execution"},
+                    "output": json.dumps({"message": "Using direct tool execution"}),
                     "error_message": "",
                     "timestamp_ms": int(time.time() * 1000),
                     "progress_percent": 30.0
                 }
-                
+
                 # Create direct tool execution agent
                 agent = await self._create_direct_execution_agent(context)
-                
+
                 # Execute instructions directly
                 result = agent.run(context.instructions)
-                
+
                 yield {
                     "status": "completed",
-                    "step_id": "direct_execution",
-                    "step_type": "TOOL_EXECUTION",
-                    "output": {"result": str(result)},
+                    "output": json.dumps({"result": str(result)}),
                     "error_message": "",
                     "timestamp_ms": int(time.time() * 1000),
                     "progress_percent": 100.0
                 }
-                
+
                 return
             
-            # Handle capability-based execution
+            # Handle capability-based execution (single-instruction model)
             if context.is_capability_mode:
                 # AIDEV-NOTE: Capability MUST be provided in context for capability-based execution
                 # Fail fast if capability is missing - don't create stub capability
@@ -102,60 +95,42 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
                     raise ValueError(error_msg)
 
                 capability = context.capability
-                logger.info(f"Using actual capability '{capability.name}' with {len(capability.steps)} steps")
+                tool_count = len(capability.tools) if capability.tools else 0
+                logger.info(f"Using capability '{capability.name}' with {tool_count} tools (single-instruction model)")
 
                 yield {
                     "status": "in_progress",
-                    "step_id": "capability_setup",
-                    "step_type": "SETUP",
-                    "output": {"capability": capability.name, "steps": len(capability.steps)},
+                    "output": json.dumps({"capability": capability.name, "tools": tool_count}),
                     "error_message": "",
                     "timestamp_ms": int(time.time() * 1000),
                     "progress_percent": 20.0
                 }
 
-                # Create smolagents agent for this capability
+                # Create smolagents agent for this capability (single instruction)
                 smolagents_agent = await self._create_capability_agent(capability, context_id)
-                
-                # Execute each step with progress updates
-                total_steps = len(capability.steps)
-                for i, step in enumerate(capability.steps):
-                    step_progress = 30.0 + (60.0 * i / total_steps)
-                    
-                    yield {
-                        "status": "in_progress",
-                        "step_id": step.id,
-                        "step_type": step.type.name,
-                        "output": {"message": f"Executing step: {step.instructions[:100]}"},
-                        "error_message": "",
-                        "timestamp_ms": int(time.time() * 1000),
-                        "progress_percent": step_progress
-                    }
-                    
-                    # Execute step
-                    result = smolagents_agent.run(step.instructions)
-                    
-                    yield {
-                        "status": "in_progress",
-                        "step_id": step.id,
-                        "step_type": step.type.name,
-                        "output": {"result": str(result)},
-                        "error_message": "",
-                        "timestamp_ms": int(time.time() * 1000),
-                        "progress_percent": 30.0 + (60.0 * (i + 1) / total_steps)
-                    }
-                
+
+                # Execute the single instruction
+                yield {
+                    "status": "in_progress",
+                    "output": json.dumps({"message": f"Executing: {capability.instructions[:100]}..."}),
+                    "error_message": "",
+                    "timestamp_ms": int(time.time() * 1000),
+                    "progress_percent": 50.0
+                }
+
+                # Execute capability instructions directly
+                result = smolagents_agent.run(capability.instructions)
+
                 # Final completion
                 duration_ms = int((time.time() - start_time) * 1000)
                 yield {
                     "status": "completed",
-                    "step_id": "completed",
-                    "step_type": "COMPLETION",
-                    "output": {
+                    "output": json.dumps({
+                        "result": str(result),
                         "message": "Task completed successfully",
                         "duration_ms": duration_ms,
                         "capability": capability.name
-                    },
+                    }),
                     "error_message": "",
                     "timestamp_ms": int(time.time() * 1000),
                     "progress_percent": 100.0
@@ -165,9 +140,7 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
             logger.exception(f"SmolAgents execution failed: {e}")
             yield {
                 "status": "failed",
-                "step_id": "error",
-                "step_type": "ERROR",
-                "output": {"error": str(e)},
+                "output": json.dumps({"error": str(e)}),
                 "error_message": str(e),
                 "timestamp_ms": int(time.time() * 1000),
                 "progress_percent": 0.0
@@ -247,36 +220,45 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
         
         return agent
     
-    async def _create_capability_agent(self, capability: SkillConfig, context_id: str) -> CodeAgent:
+    async def _create_capability_agent(self, capability: SkillConfig, context_id: str) -> Union[CodeAgent, ToolCallingAgent]:
         """
-        Create smolagents agent from skill configuration.
+        Create smolagents agent from skill configuration (single-instruction model).
 
-        AIDEV-NOTE: Updated to use centralized model provider instead of hardcoded model creation.
+        AIDEV-NOTE: Simplified for single-instruction model - no step agents, just direct tool execution.
+        Uses centralized model provider.
         """
         if context_id in self.agent_cache:
             return self.agent_cache[context_id]
-        
-        # Create step agents for this capability
-        step_agents = []
-        for step in capability.steps:
-            step_agent = await self._create_step_agent(step)
-            step_agent.name = step.id
-            step_agent.description = step.instructions
-            step_agents.append(step_agent)
-        
-        # Create capability-level agent that manages step agents
-        model = self.model_provider.get_model('default')
-        
-        capability_agent = CodeAgent(
-            tools=[],  # Capability agent delegates to step agents
-            model=model,
-            managed_agents=step_agents,
-            additional_authorized_imports=["time", "json", "os", "sys"]
-        )
-        
+
+        # Load tools for this capability
+        tools = []
+        if capability.tools:
+            try:
+                tools = self.tool_registry_repository.load_tools(capability.tools)
+                logger.info(f"Loaded {len(tools)} tools for capability '{capability.name}'")
+            except Exception as e:
+                logger.warning(f"Failed to load some tools for capability {capability.name}: {e}")
+
+        # Get appropriate model from provider
+        model = self.model_provider.get_model('tool_calling' if tools else 'default')
+
+        # Create ToolCallingAgent if we have tools, otherwise CodeAgent
+        if tools:
+            capability_agent = ToolCallingAgent(
+                tools=tools,
+                model=model,
+                max_steps=10
+            )
+        else:
+            capability_agent = CodeAgent(
+                tools=[],
+                model=model,
+                additional_authorized_imports=["time", "json", "os", "sys"]
+            )
+
         capability_agent.name = capability.name
         capability_agent.description = capability.description
-        
+
         self.agent_cache[context_id] = capability_agent
         return capability_agent
     
@@ -320,42 +302,7 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
             ))
         
         return tool_configs
-    
-    async def _create_step_agent(self, step: StepConfig) -> Union[CodeAgent, ToolCallingAgent]:
-        """
-        Create step-level agent based on step type.
-        
-        AIDEV-NOTE: Updated to use centralized model provider with proper step type routing.
-        """
-        # Get appropriate model using simplified provider
-        if step.model:
-            # Use custom model if specified (would need to extend provider for this)
-            model = self.model_provider.get_model('default')
-        else:
-            # Use tool_calling for TOOL_STEP, default for others
-            model_type = 'tool_calling' if step.type.name == 'TOOL_STEP' else 'default'
-            model = self.model_provider.get_model(model_type)
-        
-        # Load tools for this step - tools already have enhanced config from capability creation
-        step_tools = []
-        if hasattr(step, 'tools') and step.tools:
-            try:
-                step_tools = self.tool_registry_repository.load_tools(step.tools)
-            except Exception as e:
-                logger.warning(f"Failed to load some tools for step {step.id}: {e}")
-        
-        if step.type == StepType.CODE_STEP:
-            return CodeAgent(
-                tools=step_tools,
-                model=model,
-                additional_authorized_imports=["time", "json", "os", "sys"]
-            )
-        else:
-            return ToolCallingAgent(
-                tools=step_tools,
-                model=model
-            )
-    
+
     def clear_cache(self):
         """Clear cached agents (useful for testing)."""
         self.agent_cache.clear()
