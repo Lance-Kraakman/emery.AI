@@ -1,12 +1,12 @@
 import { eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { IStepRepository } from '@/ddd/domain/capabilities/repositories/step-repository';
-import { Step, CreateStepProps, UpdateStepProps } from '@/ddd/domain/capabilities/entities/step';
-import { StepId } from '@/ddd/domain/capabilities/value-objects/step-id';
-import { CapabilityId } from '@/ddd/domain/capabilities/value-objects/capability-id';
-import { StepTypeVO } from '@/ddd/domain/capabilities/value-objects/step-type';
+import { IStepRepository } from '@/ddd/domain/skills/repositories/step-repository';
+import { Step, CreateStepProps, UpdateStepProps } from '@/ddd/domain/skills/entities/step';
+import { StepId } from '@/ddd/domain/skills/value-objects/step-id';
+import { SkillId } from '@/ddd/domain/skills/value-objects/skill-id';
+import { StepTypeVO } from '@/ddd/domain/skills/value-objects/step-type';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-import { capabilitySteps } from '@/lib/db/schema';
+import { skillSteps } from '@/lib/db/schema';
 
 /**
  * Drizzle ORM implementation of Step Repository
@@ -19,19 +19,19 @@ export class DrizzleStepRepository implements IStepRepository {
   async findById(id: StepId): Promise<Step | null> {
     const result = await this.db
       .select()
-      .from(capabilitySteps)
-      .where(eq(capabilitySteps.id, id.value))
+      .from(skillSteps)
+      .where(eq(skillSteps.id, id.value))
       .limit(1);
 
     return result.length > 0 ? this.toDomain(result[0]) : null;
   }
 
-  async findByCapabilityId(capabilityId: CapabilityId): Promise<Step[]> {
+  async findBySkillId(skillId: SkillId): Promise<Step[]> {
     const results = await this.db
       .select()
-      .from(capabilitySteps)
-      .where(eq(capabilitySteps.capabilityId, capabilityId.value))
-      .orderBy(capabilitySteps.stepOrder);
+      .from(skillSteps)
+      .where(eq(skillSteps.skillId, skillId.value))
+      .orderBy(skillSteps.stepOrder);
 
     return results.map(r => this.toDomain(r));
   }
@@ -39,9 +39,9 @@ export class DrizzleStepRepository implements IStepRepository {
   async create(props: CreateStepProps): Promise<Step> {
     const now = new Date();
     const result = await this.db
-      .insert(capabilitySteps)
+      .insert(skillSteps)
       .values({
-        capabilityId: props.capabilityId.value,
+        skillId: props.skillId.value,
         stepOrder: props.stepOrder,
         type: props.type.toString(),
         instructions: props.instructions,
@@ -76,9 +76,9 @@ export class DrizzleStepRepository implements IStepRepository {
     }
 
     const result = await this.db
-      .update(capabilitySteps)
+      .update(skillSteps)
       .set(updateData)
-      .where(eq(capabilitySteps.id, id.value))
+      .where(eq(skillSteps.id, id.value))
       .returning();
 
     if (result.length === 0) {
@@ -90,14 +90,14 @@ export class DrizzleStepRepository implements IStepRepository {
 
   async delete(id: StepId): Promise<void> {
     await this.db
-      .delete(capabilitySteps)
-      .where(eq(capabilitySteps.id, id.value));
+      .delete(skillSteps)
+      .where(eq(skillSteps.id, id.value));
   }
 
-  async deleteByCapabilityId(capabilityId: CapabilityId): Promise<void> {
+  async deleteBySkillId(skillId: SkillId): Promise<void> {
     await this.db
-      .delete(capabilitySteps)
-      .where(eq(capabilitySteps.capabilityId, capabilityId.value));
+      .delete(skillSteps)
+      .where(eq(skillSteps.skillId, skillId.value));
   }
 
   async createMany(steps: CreateStepProps[]): Promise<Step[]> {
@@ -105,7 +105,7 @@ export class DrizzleStepRepository implements IStepRepository {
 
     const now = new Date();
     const values = steps.map(s => ({
-      capabilityId: s.capabilityId.value,
+      skillId: s.skillId.value,
       stepOrder: s.stepOrder,
       type: s.type.toString(),
       instructions: s.instructions,
@@ -117,7 +117,7 @@ export class DrizzleStepRepository implements IStepRepository {
     }));
 
     const results = await this.db
-      .insert(capabilitySteps)
+      .insert(skillSteps)
       .values(values)
       .returning();
 
@@ -129,20 +129,20 @@ export class DrizzleStepRepository implements IStepRepository {
     await Promise.all(
       updates.map(({ id, stepOrder }) =>
         this.db
-          .update(capabilitySteps)
+          .update(skillSteps)
           .set({ stepOrder, updatedAt: new Date() })
-          .where(eq(capabilitySteps.id, id.value))
+          .where(eq(skillSteps.id, id.value))
       )
     );
   }
 
-  async getNextStepOrder(capabilityId: CapabilityId): Promise<number> {
-    const steps = await this.findByCapabilityId(capabilityId);
+  async getNextStepOrder(skillId: SkillId): Promise<number> {
+    const steps = await this.findBySkillId(skillId);
     return steps.length;
   }
 
-  async countByCapabilityId(capabilityId: CapabilityId): Promise<number> {
-    const steps = await this.findByCapabilityId(capabilityId);
+  async countBySkillId(skillId: SkillId): Promise<number> {
+    const steps = await this.findBySkillId(skillId);
     return steps.length;
   }
 
@@ -162,7 +162,7 @@ export class DrizzleStepRepository implements IStepRepository {
 
     return {
       id: StepId.fromNumber(record.id),
-      capabilityId: CapabilityId.fromNumber(record.capabilityId),
+      skillId: SkillId.fromNumber(record.skillId),
       stepOrder: record.stepOrder,
       type: StepTypeVO.fromString(record.type),
       instructions: record.instructions,
