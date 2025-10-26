@@ -6,7 +6,7 @@ Contains business logic for determining execution strategy.
 """
 
 from typing import Optional
-from ....core.entities import CapabilityConfig
+from ....core.entities import SkillConfig
 from ..entities.execution_context import ExecutionContext, ExecutionMode
 from ....core.entities import TaskRequest, StepConfig
 from ....core.types import StepType
@@ -51,39 +51,39 @@ class CapabilityRoutingService:
         else:
             raise ValueError("TaskRequest must specify either capability_name or instruction_config")
     
-    def find_capability_by_name(self, agent_capabilities: list[CapabilityConfig], 
-                               capability_name: str) -> Optional[CapabilityConfig]:
+    def find_capability_by_name(self, agent_capabilities: list[SkillConfig],
+                               capability_name: str) -> Optional[SkillConfig]:
         """
         Find specific capability by name in agent capabilities.
-        
+
         Args:
-            agent_capabilities: List of available capabilities
+            agent_capabilities: List of available skills
             capability_name: Name of capability to find
-            
+
         Returns:
-            CapabilityConfig if found, None otherwise
+            SkillConfig if found, None otherwise
         """
         for capability in agent_capabilities:
             if capability.name == capability_name:
                 return capability
         return None
-    
-    def create_dynamic_capability(self, instructions: str, tools: list = None, 
-                                 servers: list = None) -> CapabilityConfig:
+
+    def create_dynamic_capability(self, instructions: str, tools: list = None,
+                                 servers: list = None) -> SkillConfig:
         """
         Create a dynamic capability from instruction configuration.
-        
+
         Args:
             instructions: Task instructions
             tools: Optional list of tools
             servers: Optional list of servers
-            
+
         Returns:
-            CapabilityConfig for execution
+            SkillConfig for execution
         """
         # Determine step type based on tools availability
         step_type = StepType.TOOL_STEP if tools else StepType.CODE_STEP
-        
+
         step = StepConfig(
             id="dynamic_instruction_step",
             type=step_type,
@@ -92,8 +92,8 @@ class CapabilityRoutingService:
             tools=tools or [],
             servers=servers or []
         )
-        
-        return CapabilityConfig(
+
+        return SkillConfig(
             name="dynamic_capability",
             description=f"Dynamic capability: {instructions[:100]}...",
             steps=[step]
@@ -102,7 +102,7 @@ class CapabilityRoutingService:
     def _create_capability_context(self, request: TaskRequest) -> ExecutionContext:
         """Create execution context for capability-based execution."""
         capability = self.find_capability_by_name(
-            request.agent_config.capabilities,
+            request.agent_config.skills,
             request.capability_name
         )
 

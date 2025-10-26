@@ -18,7 +18,7 @@ from ...domain.execution.repositories.execution_repository import IExecutionRepo
 from ...domain.execution.entities.execution_context import ExecutionContext, ExecutionMode
 from ...domain.tools.repositories.tool_registry_repository import IToolRegistryRepository
 from ...domain.ai.services.model_provider_service import IModelProviderService
-from ...core.entities import ToolConfig, CapabilityConfig, StepConfig
+from ...core.entities import ToolConfig, SkillConfig, StepConfig
 from ...core.types import StepType
 
 logger = logging.getLogger(__name__)
@@ -247,10 +247,10 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
         
         return agent
     
-    async def _create_capability_agent(self, capability: CapabilityConfig, context_id: str) -> CodeAgent:
+    async def _create_capability_agent(self, capability: SkillConfig, context_id: str) -> CodeAgent:
         """
-        Create smolagents agent from capability configuration.
-        
+        Create smolagents agent from skill configuration.
+
         AIDEV-NOTE: Updated to use centralized model provider instead of hardcoded model creation.
         """
         if context_id in self.agent_cache:
