@@ -30,13 +30,12 @@ message TaskRequest {
   string name = 10;
 }
 
+// AIDEV-NOTE: Simplified for single-instruction execution (removed step_id and step_type)
 // Streaming progress updates during task execution
 message TaskProgress {
   string task_id = 1;              // Task being updated
   TaskStatus status = 2;           // Current task status
-  string step_id = 3;              // Current step being executed
-  string step_type = 4;            // Type of step (TOOL_STEP, CODE_STEP)
-  string output_json = 5;          // Step output data as JSON
+  string output_json = 5;          // Execution output data as JSON
   string error_message = 6;        // Error details if failed
   int64 timestamp_ms = 7;          // Update timestamp
   float progress_percent = 8;      // Completion percentage (0-100)
@@ -106,21 +105,26 @@ message AgentConfig {
   repeated SkillConfig skills = 7;
 }
 
-// Skill configuration with steps
+// AIDEV-NOTE: Simplified single-instruction skill model (removed multi-step workflow)
+// Skill configuration with single instruction block
 message SkillConfig {
   string name = 1;
   string description = 2;
-  repeated StepConfig steps = 3;
+  repeated SkillInput inputs = 3;
+  repeated SkillOutput outputs = 4;
+  string instructions = 5;
+  repeated ToolConfig tools = 6;
 }
 
-// Individual step configuration
-message StepConfig {
-  string id = 1;
-  StepType type = 2;
-  string instructions = 3;
-  string model = 4;
-  repeated ToolConfig tools = 5;
-  repeated ServerConfig servers = 6;
+// Skill input parameter
+message SkillInput {
+  string name = 1;
+  bool required = 2;
+}
+
+// Skill output value
+message SkillOutput {
+  string name = 1;
 }
 
 
@@ -131,17 +135,11 @@ message ToolConfig {
   map<string, string> config = 3;
 }
 
-// Server configuration  
+// Server configuration
 message ServerConfig {
   string name = 1;
   string endpoint = 2;
   map<string, string> config = 3;
-}
-
-// Step execution types
-enum StepType {
-  CODE_STEP = 0;
-  TOOL_STEP = 1;
 }
 
 // Trigger data payload

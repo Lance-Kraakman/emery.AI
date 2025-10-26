@@ -6,21 +6,23 @@ This package provides:
 - Core domain entities matching protobuf schema exactly
 - Smolagents integration with streaming progress
 - Dual execution modes: capability-based and instruction-based
+
+AIDEV-NOTE: Simplified to single-instruction model - removed StepConfig and StepType.
 """
 
 # Core entities matching protobuf
 from .core.entities import (
     TaskRequest, TaskProgress, AgentConfig, SkillConfig,
-    StepConfig, ToolConfig, ServerConfig, InstructionConfig,
+    SkillInput, SkillOutput, ToolConfig, ServerConfig, InstructionConfig,
     WorkerInfo, CancelTaskRequest, CancelTaskResponse
 )
-from .core.types import StepType, TaskStatus, WorkerStatus
+from .core.types import TaskStatus, WorkerStatus
 
 # DDD Application services
 from .application.di.container import container
 from .domain.execution.services.capability_routing_service import CapabilityRoutingService
 
-__version__ = "2.0.0-protobuf"
+__version__ = "2.0.0-single-instruction"
 __author__ = "Lance Kraakman"
 __email__ = "lance@aifactory.nz"
 
@@ -30,7 +32,8 @@ __all__ = [
     "TaskProgress",
     "AgentConfig",
     "SkillConfig",
-    "StepConfig",
+    "SkillInput",
+    "SkillOutput",
     "ToolConfig",
     "ServerConfig",
     "InstructionConfig",
@@ -39,7 +42,6 @@ __all__ = [
     "CancelTaskResponse",
 
     # Core types
-    "StepType",
     "TaskStatus",
     "WorkerStatus",
 

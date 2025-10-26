@@ -1,9 +1,13 @@
-"""Core module for simple domain entities and types."""
+"""Core module for simple domain entities and types.
+
+AIDEV-NOTE: Removed StepConfig and StepType exports (simplified to single-instruction model).
+"""
 
 from .entities import (
     ToolConfig,
     ServerConfig,
-    StepConfig,
+    SkillInput,
+    SkillOutput,
     SkillConfig,
     AgentConfig,
     InstructionConfig,
@@ -17,15 +21,15 @@ from .entities import (
 )
 
 from .types import (
-    StepType,
-    TaskStatus, 
+    TaskStatus,
     WorkerStatus,
 )
 
 __all__ = [
     "ToolConfig",
     "ServerConfig",
-    "StepConfig",
+    "SkillInput",
+    "SkillOutput",
     "SkillConfig",
     "AgentConfig",
     "InstructionConfig",
@@ -36,7 +40,6 @@ __all__ = [
     "CancelTaskRequest",
     "CancelTaskResponse",
     "ErrorResponse",
-    "StepType",
     "TaskStatus",
     "WorkerStatus",
 ]
