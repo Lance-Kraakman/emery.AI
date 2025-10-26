@@ -204,7 +204,7 @@ export function StepInstructionsInput({
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
         placeholder="Describe what this step should do... (Type @ to add tools)"
-        className="min-h-[120px] resize-y text-base"
+        className="min-h-[300px] resize-y text-base"
       />
 
       {/* Tool Dropdown */}
