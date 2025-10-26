@@ -38,8 +38,8 @@ class StepConfig:
 
 
 @dataclass
-class CapabilityConfig:
-    """Capability configuration matching protobuf CapabilityConfig."""
+class SkillConfig:
+    """Skill configuration matching protobuf SkillConfig."""
     name: str
     description: str
     steps: List[StepConfig]
@@ -54,7 +54,7 @@ class AgentConfig:
     persona: str
     tools: List[ToolConfig]
     servers: List[ServerConfig]
-    capabilities: List[CapabilityConfig]
+    skills: List[SkillConfig]
 
 
 @dataclass

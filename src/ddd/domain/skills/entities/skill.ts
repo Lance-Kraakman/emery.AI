@@ -53,7 +53,7 @@ export interface Skill {
 export interface CreateSkillProps {
   agentId: AgentId;
   name: string;
-  description: string;
+  description?: string;
   inputs?: SkillInput[];
   outputs?: SkillOutput[];
   instructions: string;

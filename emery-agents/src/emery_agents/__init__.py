@@ -10,7 +10,7 @@ This package provides:
 
 # Core entities matching protobuf
 from .core.entities import (
-    TaskRequest, TaskProgress, AgentConfig, CapabilityConfig, 
+    TaskRequest, TaskProgress, AgentConfig, SkillConfig,
     StepConfig, ToolConfig, ServerConfig, InstructionConfig,
     WorkerInfo, CancelTaskRequest, CancelTaskResponse
 )
@@ -27,9 +27,9 @@ __email__ = "lance@aifactory.nz"
 __all__ = [
     # Core entities
     "TaskRequest",
-    "TaskProgress", 
+    "TaskProgress",
     "AgentConfig",
-    "CapabilityConfig",
+    "SkillConfig",
     "StepConfig",
     "ToolConfig",
     "ServerConfig",
@@ -37,12 +37,12 @@ __all__ = [
     "WorkerInfo",
     "CancelTaskRequest",
     "CancelTaskResponse",
-    
+
     # Core types
     "StepType",
-    "TaskStatus", 
+    "TaskStatus",
     "WorkerStatus",
-    
+
     # DDD Application services
     "container",
     "CapabilityRoutingService",

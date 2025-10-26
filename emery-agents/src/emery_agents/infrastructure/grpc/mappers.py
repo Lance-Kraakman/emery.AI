@@ -9,7 +9,7 @@ from typing import List, Dict, Any, Optional
 from ...grpc.generated import agent_worker_pb2
 from ...core.entities import (
     TaskRequest, TaskProgress, WorkerInfo, CancelTaskRequest, CancelTaskResponse,
-    AgentConfig, CapabilityConfig, StepConfig, ToolConfig, ServerConfig,
+    AgentConfig, SkillConfig, StepConfig, ToolConfig, ServerConfig,
     InstructionConfig, TriggerData
 )
 from ...core.types import StepType, TaskStatus, WorkerStatus
@@ -114,8 +114,8 @@ class ProtoMapper:
         """Convert protobuf AgentConfig to domain entity."""
         tools = [self._tool_config_from_proto(tool) for tool in proto.tools]
         servers = [self._server_config_from_proto(server) for server in proto.servers]
-        capabilities = [self._capability_config_from_proto(cap) for cap in proto.capabilities]
-        
+        skills = [self._skill_config_from_proto(skill) for skill in proto.skills]
+
         return AgentConfig(
             name=proto.name,
             role=proto.role,
@@ -123,14 +123,14 @@ class ProtoMapper:
             persona=proto.persona,
             tools=tools,
             servers=servers,
-            capabilities=capabilities
+            skills=skills
         )
     
-    def _capability_config_from_proto(self, proto: agent_worker_pb2.CapabilityConfig) -> CapabilityConfig:
-        """Convert protobuf CapabilityConfig to domain entity."""
+    def _skill_config_from_proto(self, proto: agent_worker_pb2.SkillConfig) -> SkillConfig:
+        """Convert protobuf SkillConfig to domain entity."""
         steps = [self._step_config_from_proto(step) for step in proto.steps]
-        
-        return CapabilityConfig(
+
+        return SkillConfig(
             name=proto.name,
             description=proto.description,
             steps=steps

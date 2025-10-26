@@ -2,9 +2,9 @@
 
 from .entities import (
     ToolConfig,
-    ServerConfig, 
+    ServerConfig,
     StepConfig,
-    CapabilityConfig,
+    SkillConfig,
     AgentConfig,
     InstructionConfig,
     TriggerData,
@@ -25,8 +25,8 @@ from .types import (
 __all__ = [
     "ToolConfig",
     "ServerConfig",
-    "StepConfig", 
-    "CapabilityConfig",
+    "StepConfig",
+    "SkillConfig",
     "AgentConfig",
     "InstructionConfig",
     "TriggerData",

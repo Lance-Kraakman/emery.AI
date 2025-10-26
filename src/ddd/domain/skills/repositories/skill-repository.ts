@@ -5,51 +5,41 @@ import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 /**
  * Skill Repository Interface
  *
+ * AIDEV-NOTE: Simplified single-instruction model
+ * Removed: findByIdWithSteps (no steps anymore)
+ *
  * Defines the contract for persisting and retrieving Skill aggregates.
  * Implementations are provided in the infrastructure layer.
- *
- * AIDEV-NOTE: This is a domain interface - implementations go in infrastructure layer.
  */
 export interface ISkillRepository {
   /**
-   * Find a skill by its ID (without steps loaded)
+   * Find a skill by its ID
    */
   findById(id: SkillId): Promise<Skill | null>;
 
   /**
-   * Find all capabilities for a specific agent
-   * Steps are loaded for each skill
+   * Find all skills for a specific agent
    */
   findByAgentId(agentId: AgentId): Promise<Skill[]>;
 
   /**
-   * Find a skill by ID with all steps loaded
-   * Steps are ordered by stepOrder
-   */
-  findByIdWithSteps(id: SkillId): Promise<Skill | null>;
-
-  /**
-   * Create a new skill
-   * Steps should be created separately via step repository
+   * Create a new skill with inputs, outputs, instructions, and tools
    */
   create(props: CreateSkillProps): Promise<Skill>;
 
   /**
    * Update an existing skill
-   * Only updates skill metadata (name, description)
-   * Steps are managed separately
+   * Can update name, description, inputs, outputs, instructions, tools
    */
   update(id: SkillId, updates: UpdateSkillProps): Promise<Skill>;
 
   /**
    * Delete a skill
-   * Cascade deletes all associated steps
    */
   delete(id: SkillId): Promise<void>;
 
   /**
-   * Delete all capabilities for an agent
-   * Cascade deletes all associated steps
+   * Delete all skills for an agent
    */
   deleteByAgentId(agentId: AgentId): Promise<void>;
 
@@ -59,7 +49,7 @@ export interface ISkillRepository {
   exists(id: SkillId): Promise<boolean>;
 
   /**
-   * Count capabilities for an agent
+   * Count skills for an agent
    */
   countByAgentId(agentId: AgentId): Promise<number>;
 }

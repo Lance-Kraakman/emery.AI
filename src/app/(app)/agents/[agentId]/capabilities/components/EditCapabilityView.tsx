@@ -23,13 +23,10 @@ export function EditCapabilityView({ agent, capability }: EditCapabilityViewProp
   const [formData, setFormData] = useState<CapabilityFormData>({
     name: capability.name,
     description: capability.description,
-    steps: capability.steps.map(step => ({
-      type: step.type as 'TOOL_STEP' | 'CODE_STEP',
-      instructions: step.instructions,
-      model: step.model,
-      tools: step.tools,
-      servers: step.servers
-    }))
+    inputs: capability.inputs,
+    outputs: capability.outputs,
+    instructions: capability.instructions,
+    tools: capability.tools
   });
 
   const handleSave = async () => {
@@ -43,7 +40,11 @@ export function EditCapabilityView({ agent, capability }: EditCapabilityViewProp
     try {
       const result = await updateSkill(capability.id, {
         name: formData.name,
-        description: formData.description
+        description: formData.description,
+        inputs: formData.inputs,
+        outputs: formData.outputs,
+        instructions: formData.instructions,
+        tools: formData.tools
       });
 
       if (result.success) {

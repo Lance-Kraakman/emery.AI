@@ -116,14 +116,20 @@ export function CapabilitiesListView({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline">
-                    {capability.steps.length} {capability.steps.length === 1 ? 'step' : 'steps'}
-                  </Badge>
-                  {capability.steps.some(s => s.type === 'TOOL_STEP') && (
-                    <Badge variant="secondary">Tools</Badge>
+                  {capability.inputs.length > 0 && (
+                    <Badge variant="outline">
+                      {capability.inputs.length} {capability.inputs.length === 1 ? 'input' : 'inputs'}
+                    </Badge>
                   )}
-                  {capability.steps.some(s => s.type === 'CODE_STEP') && (
-                    <Badge variant="secondary">Code</Badge>
+                  {capability.outputs.length > 0 && (
+                    <Badge variant="outline">
+                      {capability.outputs.length} {capability.outputs.length === 1 ? 'output' : 'outputs'}
+                    </Badge>
+                  )}
+                  {capability.tools.length > 0 && (
+                    <Badge variant="secondary">
+                      {capability.tools.length} {capability.tools.length === 1 ? 'tool' : 'tools'}
+                    </Badge>
                   )}
                 </div>
 

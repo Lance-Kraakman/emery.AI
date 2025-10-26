@@ -165,10 +165,9 @@ export class DIContainer {
       'agentTaskApplicationService': 'AgentTaskApplicationService',
       'agentApplicationService': 'AgentApplicationService',
 
-      // Capability domain
-      'stepRepository': 'IStepRepository',
-      'capabilityRepository': 'ICapabilityRepository',
-      'capabilityApplicationService': 'CapabilityApplicationService',
+      // Skill domain (formerly Capability)
+      'skillRepository': 'ISkillRepository',
+      'skillApplicationService': 'SkillApplicationService',
 
       // Database domain
       'databaseRepository': 'IDatabaseRepository',
