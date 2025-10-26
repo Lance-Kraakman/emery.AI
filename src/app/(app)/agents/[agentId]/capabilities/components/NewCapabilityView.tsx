@@ -18,7 +18,7 @@ export function NewCapabilityView({ agent }: NewCapabilityViewProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState<CapabilityFormData>({
-    name: '',
+    name: 'Untitled Skill',
     description: '',
     steps: [
       {
