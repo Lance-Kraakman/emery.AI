@@ -130,7 +130,7 @@ export type { TaskDTO as Task } from '@/app/mappers/task-mapper';
 export interface CreateTaskData {
   agentId: number;
   name: string;
-  capabilityName?: string;
+  skillName?: string;
   instructions: TaskInstructions;
   createdBy?: string;
 }

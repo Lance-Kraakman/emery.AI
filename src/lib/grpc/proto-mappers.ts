@@ -10,7 +10,7 @@
  * - Proto messages (proto/agent_worker.proto) - Transport layer only
  */
 
-import { Agent, CapabilityConfig, ServerConfig, StepConfig } from '@/ddd/domain/agents/entities/agent';
+import { Agent, SkillConfig, ServerConfig, StepConfig } from '@/ddd/domain/agents/entities/agent';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 import { 
@@ -18,7 +18,7 @@ import {
   ToolConfig as ToolConfigProto,
   ServerConfig as ServerConfigProto,
   StepConfig as StepConfigProto,
-  CapabilityConfig as CapabilityConfigProto,
+  SkillConfig as SkillConfigProto,
   TaskRequest,
   TaskProgress as TaskProgressProto,
   TriggerData,
@@ -37,7 +37,7 @@ export interface AgentData {
   tools?: ToolConfig[];
   servers?: ServerConfig[];
   trigger?: any;
-  capabilities?: CapabilityConfig[];
+  capabilities?: SkillConfig[];
   status?: any;
   organizationId: number;
   ownerId: string;
@@ -94,9 +94,9 @@ export function mapStepToProto(step: StepConfig): StepConfigProto {
 }
 
 /**
- * Map TypeScript CapabilityConfig to protobuf CapabilityConfig
+ * Map TypeScript SkillConfig to protobuf SkillConfig
  */
-export function mapCapabilityToProto(capability: CapabilityConfig): CapabilityConfigProto {
+export function mapCapabilityToProto(capability: SkillConfig): SkillConfigProto {
   return {
     name: capability.name,
     description: capability.description,
@@ -115,7 +115,7 @@ export function mapAgentToProto(agent: Agent): AgentConfigProto {
     persona: agent.persona || '',
     tools: agent.tools?.filter(tool => tool !== null && tool !== undefined)?.map(mapToolToProto) || [],
     servers: agent.servers?.filter(server => server !== null && server !== undefined)?.map(mapServerToProto) || [],
-    capabilities: agent.capabilities?.filter(capability => capability !== null && capability !== undefined)?.map(mapCapabilityToProto) || []
+    skills: agent.capabilities?.filter(capability => capability !== null && capability !== undefined)?.map(mapCapabilityToProto) || []
   };
 }
 
@@ -142,7 +142,7 @@ export function createTaskRequest(params: {
   taskId: string;
   agentId: number;
   // Execution mode - use one of the following
-  capabilityName?: string;  // Direct capability execution
+  skillName?: string;  // Direct capability execution
   instructionConfig?: {     // Instruction-based execution with auto-routing
     instructions: string;
     tools?: ToolConfig[];
@@ -166,7 +166,7 @@ export function createTaskRequest(params: {
 
   // Build the base request
   const request: TaskRequest = {
-    name: params.capabilityName || 'instruction_based_task',
+    name: params.skillName || 'instruction_based_task',
     taskId: params.taskId,
     agentId: params.agentId,
     agentConfig: mapAgentToProto(params.agent),
@@ -177,12 +177,12 @@ export function createTaskRequest(params: {
   };
 
   // Set execution mode (oneof field)
-  if (params.capabilityName) {
-    request.capabilityName = params.capabilityName;
+  if (params.skillName) {
+    request.skillName = params.skillName;
   } else if (params.instructionConfig) {
     request.instructionConfig = mapInstructionConfigToProto(params.instructionConfig);
   } else {
-    throw new Error('Either capabilityName or instructionConfig must be provided');
+    throw new Error('Either skillName or instructionConfig must be provided');
   }
 
   return request;

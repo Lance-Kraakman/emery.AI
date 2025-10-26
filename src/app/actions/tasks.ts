@@ -11,7 +11,7 @@ import type { CreateTaskDTO } from "@/app/dtos/task.dto";
 export async function createTask(data: CreateTaskData): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const { agentId, name, capabilityName, instructions, createdBy } = data;
+      const { agentId, name, skillName, instructions, createdBy } = data;
 
       if (!name || !instructions?.instructions) {
         return {
@@ -30,7 +30,7 @@ export async function createTask(data: CreateTaskData): Promise<Result> {
         agentId,
         name,
         instructions,
-        capabilityName,
+        skillName,
         createdBy: createdBy || session.user.id,
         organizationId: currentOrg.id
       };

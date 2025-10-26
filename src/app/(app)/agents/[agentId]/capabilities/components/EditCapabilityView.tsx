@@ -6,14 +6,14 @@ import { ArrowLeft, Save, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import type { CapabilityDTO } from '@/app/mappers/capability-mapper';
-import { updateCapability, deleteCapability } from '@/app/actions/capabilities';
+import type { SkillDTO } from '@/app/mappers/skill-mapper';
+import { updateSkill, deleteSkill } from '@/app/actions/capabilities';
 import { toast } from 'sonner';
 import { CapabilityEditor, type CapabilityFormData } from './CapabilityEditor';
 
 interface EditCapabilityViewProps {
   agent: AgentDTO;
-  capability: CapabilityDTO;
+  capability: SkillDTO;
 }
 
 export function EditCapabilityView({ agent, capability }: EditCapabilityViewProps) {
@@ -41,7 +41,7 @@ export function EditCapabilityView({ agent, capability }: EditCapabilityViewProp
     setIsSaving(true);
 
     try {
-      const result = await updateCapability(capability.id, {
+      const result = await updateSkill(capability.id, {
         name: formData.name,
         description: formData.description
       });
@@ -68,7 +68,7 @@ export function EditCapabilityView({ agent, capability }: EditCapabilityViewProp
     setIsDeleting(true);
 
     try {
-      const result = await deleteCapability(capability.id);
+      const result = await deleteSkill(capability.id);
 
       if (result.success) {
         toast.success('Capability deleted successfully');

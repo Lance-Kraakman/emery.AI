@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { ToolDropdown } from '@/components/chat/ToolDropdown';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
-import type { ToolConfigDTO } from '@/app/mappers/capability-mapper';
+import type { ToolConfigDTO } from '@/app/mappers/skill-mapper';
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
 
 interface StepToolsSectionProps {

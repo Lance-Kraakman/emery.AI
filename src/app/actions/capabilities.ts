@@ -1,11 +1,11 @@
 'use server';
 
-import { getCapabilityApplicationService } from '@/ddd/application/di/container';
-import { CapabilityMapper } from '@/app/mappers/capability-mapper';
+import { getSkillApplicationService } from '@/ddd/application/di/container';
+import { SkillMapper } from '@/app/mappers/skill-mapper';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import type { Result } from '@/ddd/domain/shared/result';
-import type { CapabilityDTO, StepDTO } from '@/app/mappers/capability-mapper';
+import type { SkillDTO, StepDTO } from '@/app/mappers/skill-mapper';
 
 /**
  * Server Actions for Capability Management
@@ -19,7 +19,7 @@ import type { CapabilityDTO, StepDTO } from '@/app/mappers/capability-mapper';
 /**
  * Create a new capability with optional steps
  */
-export async function createCapability(command: {
+export async function createSkill(command: {
   agentId: number;
   name: string;
   description: string;
@@ -30,32 +30,32 @@ export async function createCapability(command: {
     tools?: Array<{ name: string; config: any }>;
     servers?: any[];
   }>;
-}): Promise<Result<CapabilityDTO>> {
+}): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return { success: false, error: 'Unauthorized' };
     }
 
-    const service = getCapabilityApplicationService();
-    const result = await service.createCapability(command);
+    const service = getSkillApplicationService();
+    const result = await service.createSkill(command);
 
     if (!result.success) {
       return { success: false, error: result.error };
     }
 
     // Fetch the created capability with steps to return full DTO
-    const capabilityResult = await service.getCapability(result.data!.value);
+    const capabilityResult = await service.getSkill(result.data!.value);
     if (!capabilityResult.success || !capabilityResult.data) {
       return { success: false, error: 'Failed to fetch created capability' };
     }
 
     return {
       success: true,
-      data: CapabilityMapper.toDTO(capabilityResult.data)
+      data: SkillMapper.toDTO(capabilityResult.data)
     };
   } catch (error) {
-    console.error('[createCapability] error:', error);
+    console.error('[createSkill] error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create capability'
@@ -66,38 +66,38 @@ export async function createCapability(command: {
 /**
  * Update an existing capability's metadata (name, description)
  */
-export async function updateCapability(
+export async function updateSkill(
   capabilityId: number,
   command: {
     name?: string;
     description?: string;
   }
-): Promise<Result<CapabilityDTO>> {
+): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return { success: false, error: 'Unauthorized' };
     }
 
-    const service = getCapabilityApplicationService();
-    const result = await service.updateCapability(capabilityId, command);
+    const service = getSkillApplicationService();
+    const result = await service.updateSkill(capabilityId, command);
 
     if (!result.success) {
       return { success: false, error: result.error };
     }
 
     // Fetch updated capability to return full DTO
-    const capabilityResult = await service.getCapability(capabilityId);
+    const capabilityResult = await service.getSkill(capabilityId);
     if (!capabilityResult.success || !capabilityResult.data) {
       return { success: false, error: 'Failed to fetch updated capability' };
     }
 
     return {
       success: true,
-      data: CapabilityMapper.toDTO(capabilityResult.data)
+      data: SkillMapper.toDTO(capabilityResult.data)
     };
   } catch (error) {
-    console.error('[updateCapability] error:', error);
+    console.error('[updateSkill] error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to update capability'
@@ -108,17 +108,17 @@ export async function updateCapability(
 /**
  * Delete a capability (cascade deletes all steps)
  */
-export async function deleteCapability(capabilityId: number): Promise<Result<void>> {
+export async function deleteSkill(capabilityId: number): Promise<Result<void>> {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return { success: false, error: 'Unauthorized' };
     }
 
-    const service = getCapabilityApplicationService();
-    return await service.deleteCapability(capabilityId);
+    const service = getSkillApplicationService();
+    return await service.deleteSkill(capabilityId);
   } catch (error) {
-    console.error('[deleteCapability] error:', error);
+    console.error('[deleteSkill] error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to delete capability'
@@ -129,15 +129,15 @@ export async function deleteCapability(capabilityId: number): Promise<Result<voi
 /**
  * Get a capability by ID with all steps
  */
-export async function getCapability(capabilityId: number): Promise<Result<CapabilityDTO | null>> {
+export async function getSkill(capabilityId: number): Promise<Result<SkillDTO | null>> {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return { success: false, error: 'Unauthorized' };
     }
 
-    const service = getCapabilityApplicationService();
-    const result = await service.getCapability(capabilityId);
+    const service = getSkillApplicationService();
+    const result = await service.getSkill(capabilityId);
 
     if (!result.success) {
       return { success: false, error: result.error };
@@ -149,10 +149,10 @@ export async function getCapability(capabilityId: number): Promise<Result<Capabi
 
     return {
       success: true,
-      data: CapabilityMapper.toDTO(result.data)
+      data: SkillMapper.toDTO(result.data)
     };
   } catch (error) {
-    console.error('[getCapability] error:', error);
+    console.error('[getSkill] error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get capability'
@@ -163,15 +163,15 @@ export async function getCapability(capabilityId: number): Promise<Result<Capabi
 /**
  * Get all capabilities for an agent
  */
-export async function getCapabilitiesByAgent(agentId: number): Promise<Result<CapabilityDTO[]>> {
+export async function getSkillsByAgent(agentId: number): Promise<Result<SkillDTO[]>> {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return { success: false, error: 'Unauthorized' };
     }
 
-    const service = getCapabilityApplicationService();
-    const result = await service.getCapabilitiesByAgent(agentId);
+    const service = getSkillApplicationService();
+    const result = await service.getSkillsByAgent(agentId);
 
     if (!result.success) {
       return { success: false, error: result.error };
@@ -179,10 +179,10 @@ export async function getCapabilitiesByAgent(agentId: number): Promise<Result<Ca
 
     return {
       success: true,
-      data: CapabilityMapper.toDTOList(result.data!)
+      data: SkillMapper.toDTOList(result.data!)
     };
   } catch (error) {
-    console.error('[getCapabilitiesByAgent] error:', error);
+    console.error('[getSkillsByAgent] error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get capabilities'
@@ -204,14 +204,14 @@ export async function addStep(
     tools?: Array<{ name: string; config: any }>;
     servers?: any[];
   }
-): Promise<Result<CapabilityDTO>> {
+): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return { success: false, error: 'Unauthorized' };
     }
 
-    const service = getCapabilityApplicationService();
+    const service = getSkillApplicationService();
     const result = await service.addStep(capabilityId, stepData);
 
     if (!result.success) {
@@ -219,14 +219,14 @@ export async function addStep(
     }
 
     // Fetch updated capability with new step to return full DTO
-    const capabilityResult = await service.getCapability(capabilityId);
+    const capabilityResult = await service.getSkill(capabilityId);
     if (!capabilityResult.success || !capabilityResult.data) {
       return { success: false, error: 'Failed to fetch updated capability' };
     }
 
     return {
       success: true,
-      data: CapabilityMapper.toDTO(capabilityResult.data)
+      data: SkillMapper.toDTO(capabilityResult.data)
     };
   } catch (error) {
     console.error('[addStep] error:', error);
@@ -249,14 +249,14 @@ export async function updateStep(
     tools?: Array<{ name: string; config: any }>;
     servers?: any[];
   }
-): Promise<Result<CapabilityDTO>> {
+): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return { success: false, error: 'Unauthorized' };
     }
 
-    const service = getCapabilityApplicationService();
+    const service = getSkillApplicationService();
     const result = await service.updateStep(stepId, command);
 
     if (!result.success) {
@@ -264,14 +264,14 @@ export async function updateStep(
     }
 
     // Fetch updated capability to return full DTO
-    const capabilityResult = await service.getCapability(capabilityId);
+    const capabilityResult = await service.getSkill(capabilityId);
     if (!capabilityResult.success || !capabilityResult.data) {
       return { success: false, error: 'Failed to fetch updated capability' };
     }
 
     return {
       success: true,
-      data: CapabilityMapper.toDTO(capabilityResult.data)
+      data: SkillMapper.toDTO(capabilityResult.data)
     };
   } catch (error) {
     console.error('[updateStep] error:', error);
@@ -288,14 +288,14 @@ export async function updateStep(
 export async function deleteStep(
   stepId: number,
   capabilityId: number
-): Promise<Result<CapabilityDTO>> {
+): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return { success: false, error: 'Unauthorized' };
     }
 
-    const service = getCapabilityApplicationService();
+    const service = getSkillApplicationService();
     const result = await service.deleteStep(stepId);
 
     if (!result.success) {
@@ -303,14 +303,14 @@ export async function deleteStep(
     }
 
     // Fetch updated capability to return full DTO
-    const capabilityResult = await service.getCapability(capabilityId);
+    const capabilityResult = await service.getSkill(capabilityId);
     if (!capabilityResult.success || !capabilityResult.data) {
       return { success: false, error: 'Failed to fetch updated capability' };
     }
 
     return {
       success: true,
-      data: CapabilityMapper.toDTO(capabilityResult.data)
+      data: SkillMapper.toDTO(capabilityResult.data)
     };
   } catch (error) {
     console.error('[deleteStep] error:', error);
@@ -327,14 +327,14 @@ export async function deleteStep(
 export async function reorderSteps(
   capabilityId: number,
   stepIds: number[]
-): Promise<Result<CapabilityDTO>> {
+): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return { success: false, error: 'Unauthorized' };
     }
 
-    const service = getCapabilityApplicationService();
+    const service = getSkillApplicationService();
     const result = await service.reorderSteps(capabilityId, stepIds);
 
     if (!result.success) {
@@ -342,14 +342,14 @@ export async function reorderSteps(
     }
 
     // Fetch updated capability to return full DTO
-    const capabilityResult = await service.getCapability(capabilityId);
+    const capabilityResult = await service.getSkill(capabilityId);
     if (!capabilityResult.success || !capabilityResult.data) {
       return { success: false, error: 'Failed to fetch updated capability' };
     }
 
     return {
       success: true,
-      data: CapabilityMapper.toDTO(capabilityResult.data)
+      data: SkillMapper.toDTO(capabilityResult.data)
     };
   } catch (error) {
     console.error('[reorderSteps] error:', error);

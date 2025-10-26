@@ -15,7 +15,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { ToolDropdown } from '@/components/chat/ToolDropdown';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
-import type { ToolConfigDTO } from '@/app/mappers/capability-mapper';
+import type { ToolConfigDTO } from '@/app/mappers/skill-mapper';
 
 interface StepInstructionsInputProps {
   value: string;

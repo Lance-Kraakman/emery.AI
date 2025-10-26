@@ -6,7 +6,7 @@ import { ArrowLeft, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import { createCapability } from '@/app/actions/capabilities';
+import { createSkill } from '@/app/actions/capabilities';
 import { toast } from 'sonner';
 import { CapabilityEditor, type CapabilityFormData } from './CapabilityEditor';
 
@@ -39,7 +39,7 @@ export function NewCapabilityView({ agent }: NewCapabilityViewProps) {
     setIsSaving(true);
 
     try {
-      const result = await createCapability({
+      const result = await createSkill({
         agentId: agent.id,
         name: formData.name,
         description: formData.description,

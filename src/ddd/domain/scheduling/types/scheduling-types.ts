@@ -15,7 +15,7 @@ export interface TaskExecutionRequest {
   agentId: AgentId;
   organizationId: OrganizationId;
   name: string;
-  capabilityName?: string;
+  skillName?: string;
   instructions: TaskInstructions;
   priority?: number;
   scheduledFor?: Date;
@@ -29,7 +29,7 @@ export interface ScheduleTaskRequest {
   agentId: AgentId;
   organizationId: OrganizationId;
   name: string;
-  capabilityName?: string;
+  skillName?: string;
   instructions: TaskInstructions;
   trigger: TriggerConfig;
 }
@@ -41,7 +41,7 @@ export interface ScheduledTask {
   agentId: AgentId;
   organizationId: OrganizationId;
   name: string;
-  capabilityName?: string;
+  skillName?: string;
   instructions: TaskInstructions;
   trigger: TriggerConfig;
   isActive: boolean;

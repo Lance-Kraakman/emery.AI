@@ -13,7 +13,7 @@ export interface TaskDTO {
   agentId: number;                    // Converted from AgentId value object
   organizationId: number;             // Converted from OrganizationId value object
   name: string;
-  capabilityName: string | null;
+  skillName: string | null;
   instructions: TaskInstructions;
   status: string;                     // Converted from TaskStatus value object
   result: any;
@@ -34,7 +34,7 @@ export function taskToDTO(task: TaskEntity): TaskDTO {
     agentId: task.agentId.value,
     organizationId: task.organizationId.value,
     name: task.name,
-    capabilityName: task.capabilityName,
+    skillName: task.skillName,
     instructions: task.instructions,
     status: task.status.value,
     result: task.result,

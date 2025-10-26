@@ -25,18 +25,18 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
    * Execute agent via gRPC worker
    */
   async executeAgent(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
-    const { agentId, instructions, capabilityName, tools, servers, executionId, organizationId, timeoutSeconds, onProgress } = request;
+    const { agentId, instructions, skillName, tools, servers, executionId, organizationId, timeoutSeconds, onProgress } = request;
 
     console.log(`[GRPC-EXECUTION-REPO] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
     console.log(`[GRPC-EXECUTION-REPO-DEBUG] Capability routing:`, {
-      capabilityName,
-      capabilityNameType: typeof capabilityName,
-      capabilityNameTruthy: !!capabilityName,
-      capabilityNameLength: capabilityName?.length,
-      willUseCapabilityMode: !!capabilityName
+      skillName,
+      skillNameType: typeof skillName,
+      skillNameTruthy: !!skillName,
+      skillNameLength: skillName?.length,
+      willUseCapabilityMode: !!skillName
     });
-    if (capabilityName) {
-      console.log(`[GRPC-EXECUTION-REPO] Capability-based execution: ${capabilityName}`);
+    if (skillName) {
+      console.log(`[GRPC-EXECUTION-REPO] Capability-based execution: ${skillName}`);
     } else {
       console.log(`[GRPC-EXECUTION-REPO] Instruction-based execution (no capability name)`);
     }
@@ -60,12 +60,12 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       // 4. Enrich agent with API key in tools (following chat pattern)
       const enrichedAgent = this.enrichAgentTools(agent);
 
-      // 5. Create proto task request - use capability mode if capabilityName provided
-      const taskRequest = capabilityName
+      // 5. Create proto task request - use capability mode if skillName provided
+      const taskRequest = skillName
         ? createTaskRequest({
             taskId: executionId,
             agentId: agent.id.value,
-            capabilityName: capabilityName, // Use capability-based execution
+            skillName: skillName, // Use capability-based execution
             agent: enrichedAgent, // Use enriched agent with API key in tool configs
             triggerData: {}, // Empty for proto compatibility
             organizationId: organizationIdStr,

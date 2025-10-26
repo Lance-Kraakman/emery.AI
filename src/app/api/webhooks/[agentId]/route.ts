@@ -170,7 +170,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           agentId: agent.id.value,
           organizationId: agent.organizationId.value,
           name: 'Webhook Trigger',
-          capabilityName: undefined,
+          skillName: undefined,
           instructions: {
             instructions: payload.message || 'Webhook triggered task',
             metadata: payload.data
