@@ -13,17 +13,15 @@
 import { Agent, SkillConfig, ServerConfig, StepConfig } from '@/ddd/domain/agents/entities/agent';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
-import { 
+import {
   AgentConfig as AgentConfigProto,
   ToolConfig as ToolConfigProto,
   ServerConfig as ServerConfigProto,
-  StepConfig as StepConfigProto,
   SkillConfig as SkillConfigProto,
   TaskRequest,
   TaskProgress as TaskProgressProto,
   TriggerData,
-  InstructionConfig as InstructionConfigProto,
-  StepType
+  InstructionConfig as InstructionConfigProto
 } from './generated/agent_worker';
 import { Task, TaskStatus } from '@/ddd/domain/tasks/entities/task';
 
@@ -73,34 +71,37 @@ export function mapServerToProto(server: ServerConfig): ServerConfigProto {
   };
 }
 
-/**
- * Map TypeScript StepConfig to protobuf StepConfig
- */
-export function mapStepToProto(step: StepConfig): StepConfigProto {
-  // Map TypeScript string enum to proto enum
-  const stepTypeMap: Record<string, StepType> = {
-    'CODE_STEP': StepType.CODE_STEP,
-    'TOOL_STEP': StepType.TOOL_STEP
-  };
-
-  return {
-    id: `step_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, // Generate ID for proto
-    type: stepTypeMap[step.type] || StepType.TOOL_STEP,
-    instructions: step.instructions,
-    model: step.model || '',
-    tools: step.tools?.filter(tool => tool !== null && tool !== undefined)?.map(mapToolToProto) || [],
-    servers: step.servers?.filter(server => server !== null && server !== undefined)?.map(mapServerToProto) || []
-  };
-}
+// AIDEV-NOTE: mapStepToProto() removed - proto no longer supports multi-step execution
+// Domain model maintains StepConfig[] for backward compatibility, but proto uses single-instruction model
+// See mapCapabilityToProto() for how multi-step domain config is flattened for worker execution
 
 /**
  * Map TypeScript SkillConfig to protobuf SkillConfig
+ * AIDEV-NOTE: Transforms domain's multi-step model to proto's single-instruction model
+ * - Uses first step's instructions as the main instruction block
+ * - Merges all tools from all steps into a single tools array
+ * - Merges all servers from all steps into a single servers array
  */
 export function mapCapabilityToProto(capability: SkillConfig): SkillConfigProto {
+  // Flatten multi-step config into single instruction
+  const firstStep = capability.steps?.[0];
+  const instructions = firstStep?.instructions || '';
+
+  // Merge all tools from all steps
+  const allTools: ToolConfig[] = [];
+  capability.steps?.forEach(step => {
+    if (step.tools) {
+      allTools.push(...step.tools.filter(tool => tool !== null && tool !== undefined));
+    }
+  });
+
   return {
     name: capability.name,
     description: capability.description,
-    steps: capability.steps.map(mapStepToProto)
+    inputs: [], // Proto has inputs/outputs but domain doesn't use them yet
+    outputs: [],
+    instructions: instructions,
+    tools: allTools.map(mapToolToProto)
   };
 }
 
