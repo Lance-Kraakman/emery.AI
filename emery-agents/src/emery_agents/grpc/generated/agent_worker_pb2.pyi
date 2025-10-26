@@ -23,11 +23,6 @@ class WorkerStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     WORKER_DEGRADED: _ClassVar[WorkerStatus]
     WORKER_UNHEALTHY: _ClassVar[WorkerStatus]
     WORKER_SHUTTING_DOWN: _ClassVar[WorkerStatus]
-
-class StepType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    CODE_STEP: _ClassVar[StepType]
-    TOOL_STEP: _ClassVar[StepType]
 TASK_PENDING: TaskStatus
 TASK_IN_PROGRESS: TaskStatus
 TASK_COMPLETED: TaskStatus
@@ -39,8 +34,6 @@ WORKER_BUSY: WorkerStatus
 WORKER_DEGRADED: WorkerStatus
 WORKER_UNHEALTHY: WorkerStatus
 WORKER_SHUTTING_DOWN: WorkerStatus
-CODE_STEP: StepType
-TOOL_STEP: StepType
 
 class TaskRequest(_message.Message):
     __slots__ = ("task_id", "agent_id", "skill_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name")
@@ -67,24 +60,20 @@ class TaskRequest(_message.Message):
     def __init__(self, task_id: _Optional[str] = ..., agent_id: _Optional[int] = ..., skill_name: _Optional[str] = ..., instruction_config: _Optional[_Union[InstructionConfig, _Mapping]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., trigger_data: _Optional[_Union[TriggerData, _Mapping]] = ..., organization_id: _Optional[str] = ..., owner_id: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., name: _Optional[str] = ...) -> None: ...
 
 class TaskProgress(_message.Message):
-    __slots__ = ("task_id", "status", "step_id", "step_type", "output_json", "error_message", "timestamp_ms", "progress_percent")
+    __slots__ = ("task_id", "status", "output_json", "error_message", "timestamp_ms", "progress_percent")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
-    STEP_ID_FIELD_NUMBER: _ClassVar[int]
-    STEP_TYPE_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_JSON_FIELD_NUMBER: _ClassVar[int]
     ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_MS_FIELD_NUMBER: _ClassVar[int]
     PROGRESS_PERCENT_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     status: TaskStatus
-    step_id: str
-    step_type: str
     output_json: str
     error_message: str
     timestamp_ms: int
     progress_percent: float
-    def __init__(self, task_id: _Optional[str] = ..., status: _Optional[_Union[TaskStatus, str]] = ..., step_id: _Optional[str] = ..., step_type: _Optional[str] = ..., output_json: _Optional[str] = ..., error_message: _Optional[str] = ..., timestamp_ms: _Optional[int] = ..., progress_percent: _Optional[float] = ...) -> None: ...
+    def __init__(self, task_id: _Optional[str] = ..., status: _Optional[_Union[TaskStatus, str]] = ..., output_json: _Optional[str] = ..., error_message: _Optional[str] = ..., timestamp_ms: _Optional[int] = ..., progress_percent: _Optional[float] = ...) -> None: ...
 
 class CancelTaskRequest(_message.Message):
     __slots__ = ("task_id", "reason")
@@ -157,30 +146,34 @@ class AgentConfig(_message.Message):
     def __init__(self, name: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., persona: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., skills: _Optional[_Iterable[_Union[SkillConfig, _Mapping]]] = ...) -> None: ...
 
 class SkillConfig(_message.Message):
-    __slots__ = ("name", "description", "steps")
+    __slots__ = ("name", "description", "inputs", "outputs", "instructions", "tools")
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
-    STEPS_FIELD_NUMBER: _ClassVar[int]
+    INPUTS_FIELD_NUMBER: _ClassVar[int]
+    OUTPUTS_FIELD_NUMBER: _ClassVar[int]
+    INSTRUCTIONS_FIELD_NUMBER: _ClassVar[int]
+    TOOLS_FIELD_NUMBER: _ClassVar[int]
     name: str
     description: str
-    steps: _containers.RepeatedCompositeFieldContainer[StepConfig]
-    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., steps: _Optional[_Iterable[_Union[StepConfig, _Mapping]]] = ...) -> None: ...
-
-class StepConfig(_message.Message):
-    __slots__ = ("id", "type", "instructions", "model", "tools", "servers")
-    ID_FIELD_NUMBER: _ClassVar[int]
-    TYPE_FIELD_NUMBER: _ClassVar[int]
-    INSTRUCTIONS_FIELD_NUMBER: _ClassVar[int]
-    MODEL_FIELD_NUMBER: _ClassVar[int]
-    TOOLS_FIELD_NUMBER: _ClassVar[int]
-    SERVERS_FIELD_NUMBER: _ClassVar[int]
-    id: str
-    type: StepType
+    inputs: _containers.RepeatedCompositeFieldContainer[SkillInput]
+    outputs: _containers.RepeatedCompositeFieldContainer[SkillOutput]
     instructions: str
-    model: str
     tools: _containers.RepeatedCompositeFieldContainer[ToolConfig]
-    servers: _containers.RepeatedCompositeFieldContainer[ServerConfig]
-    def __init__(self, id: _Optional[str] = ..., type: _Optional[_Union[StepType, str]] = ..., instructions: _Optional[str] = ..., model: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ...) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., inputs: _Optional[_Iterable[_Union[SkillInput, _Mapping]]] = ..., outputs: _Optional[_Iterable[_Union[SkillOutput, _Mapping]]] = ..., instructions: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ...) -> None: ...
+
+class SkillInput(_message.Message):
+    __slots__ = ("name", "required")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    REQUIRED_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    required: bool
+    def __init__(self, name: _Optional[str] = ..., required: bool = ...) -> None: ...
+
+class SkillOutput(_message.Message):
+    __slots__ = ("name",)
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    def __init__(self, name: _Optional[str] = ...) -> None: ...
 
 class ToolConfig(_message.Message):
     __slots__ = ("name", "version", "config")

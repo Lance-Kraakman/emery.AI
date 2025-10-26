@@ -7,7 +7,6 @@ No complex DDD patterns - just simple dataclasses for protobuf mapping.
 
 from dataclasses import dataclass
 from typing import Dict, List, Optional
-from .types import StepType
 
 
 @dataclass
@@ -18,7 +17,7 @@ class ToolConfig:
     config: Dict[str, str]  # map<string, string> in protobuf
 
 
-@dataclass  
+@dataclass
 class ServerConfig:
     """Server configuration matching protobuf ServerConfig."""
     name: str
@@ -27,22 +26,37 @@ class ServerConfig:
 
 
 @dataclass
-class StepConfig:
-    """Step configuration matching protobuf StepConfig."""
-    id: str
-    type: StepType
-    instructions: str
-    model: str
-    tools: List[ToolConfig]
-    servers: List[ServerConfig]
+class SkillInput:
+    """Skill input parameter matching protobuf SkillInput.
+
+    AIDEV-NOTE: Part of simplified single-instruction model.
+    """
+    name: str
+    required: bool
+
+
+@dataclass
+class SkillOutput:
+    """Skill output value matching protobuf SkillOutput.
+
+    AIDEV-NOTE: Part of simplified single-instruction model.
+    """
+    name: str
 
 
 @dataclass
 class SkillConfig:
-    """Skill configuration matching protobuf SkillConfig."""
+    """Skill configuration matching protobuf SkillConfig.
+
+    AIDEV-NOTE: Simplified single-instruction model - removed multi-step workflow.
+    Now contains: inputs, outputs, single instructions field, and tools.
+    """
     name: str
     description: str
-    steps: List[StepConfig]
+    inputs: List[SkillInput]
+    outputs: List[SkillOutput]
+    instructions: str
+    tools: List[ToolConfig]
 
 
 @dataclass
@@ -89,11 +103,12 @@ class TaskRequest:
 
 @dataclass
 class TaskProgress:
-    """Task progress matching protobuf TaskProgress."""
+    """Task progress matching protobuf TaskProgress.
+
+    AIDEV-NOTE: Simplified for single-instruction execution - removed step_id and step_type.
+    """
     task_id: str
     status: str  # TaskStatus enum as string
-    step_id: str
-    step_type: str  # StepType enum as string
     output_json: str
     error_message: str
     timestamp_ms: int

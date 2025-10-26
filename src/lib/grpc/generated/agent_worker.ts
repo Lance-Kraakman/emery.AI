@@ -133,40 +133,6 @@ export function workerStatusToJSON(object: WorkerStatus): string {
   }
 }
 
-/** Step execution types */
-export enum StepType {
-  CODE_STEP = 0,
-  TOOL_STEP = 1,
-  UNRECOGNIZED = -1,
-}
-
-export function stepTypeFromJSON(object: any): StepType {
-  switch (object) {
-    case 0:
-    case "CODE_STEP":
-      return StepType.CODE_STEP;
-    case 1:
-    case "TOOL_STEP":
-      return StepType.TOOL_STEP;
-    case -1:
-    case "UNRECOGNIZED":
-    default:
-      return StepType.UNRECOGNIZED;
-  }
-}
-
-export function stepTypeToJSON(object: StepType): string {
-  switch (object) {
-    case StepType.CODE_STEP:
-      return "CODE_STEP";
-    case StepType.TOOL_STEP:
-      return "TOOL_STEP";
-    case StepType.UNRECOGNIZED:
-    default:
-      return "UNRECOGNIZED";
-  }
-}
-
 /** Request to execute a specific agent task */
 export interface TaskRequest {
   /** Unique task identifier */
@@ -198,17 +164,16 @@ export interface TaskRequest {
   name: string;
 }
 
-/** Streaming progress updates during task execution */
+/**
+ * AIDEV-NOTE: Simplified for single-instruction execution (removed step_id and step_type)
+ * Streaming progress updates during task execution
+ */
 export interface TaskProgress {
   /** Task being updated */
   taskId: string;
   /** Current task status */
   status: TaskStatus;
-  /** Current step being executed */
-  stepId: string;
-  /** Type of step (TOOL_STEP, CODE_STEP) */
-  stepType: string;
-  /** Step output data as JSON */
+  /** Execution output data as JSON */
   outputJson: string;
   /** Error details if failed */
   errorMessage: string;
@@ -278,21 +243,28 @@ export interface AgentConfig {
   skills: SkillConfig[];
 }
 
-/** Skill configuration with steps */
+/**
+ * AIDEV-NOTE: Simplified single-instruction skill model (removed multi-step workflow)
+ * Skill configuration with single instruction block
+ */
 export interface SkillConfig {
   name: string;
   description: string;
-  steps: StepConfig[];
+  inputs: SkillInput[];
+  outputs: SkillOutput[];
+  instructions: string;
+  tools: ToolConfig[];
 }
 
-/** Individual step configuration */
-export interface StepConfig {
-  id: string;
-  type: StepType;
-  instructions: string;
-  model: string;
-  tools: ToolConfig[];
-  servers: ServerConfig[];
+/** Skill input parameter */
+export interface SkillInput {
+  name: string;
+  required: boolean;
+}
+
+/** Skill output value */
+export interface SkillOutput {
+  name: string;
 }
 
 /** Tool configuration */
@@ -696,16 +668,7 @@ export const TaskRequest: MessageFns<TaskRequest> = {
 };
 
 function createBaseTaskProgress(): TaskProgress {
-  return {
-    taskId: "",
-    status: 0,
-    stepId: "",
-    stepType: "",
-    outputJson: "",
-    errorMessage: "",
-    timestampMs: 0,
-    progressPercent: 0,
-  };
+  return { taskId: "", status: 0, outputJson: "", errorMessage: "", timestampMs: 0, progressPercent: 0 };
 }
 
 export const TaskProgress: MessageFns<TaskProgress> = {
@@ -715,12 +678,6 @@ export const TaskProgress: MessageFns<TaskProgress> = {
     }
     if (message.status !== 0) {
       writer.uint32(16).int32(message.status);
-    }
-    if (message.stepId !== "") {
-      writer.uint32(26).string(message.stepId);
-    }
-    if (message.stepType !== "") {
-      writer.uint32(34).string(message.stepType);
     }
     if (message.outputJson !== "") {
       writer.uint32(42).string(message.outputJson);
@@ -758,22 +715,6 @@ export const TaskProgress: MessageFns<TaskProgress> = {
           }
 
           message.status = reader.int32() as any;
-          continue;
-        }
-        case 3: {
-          if (tag !== 26) {
-            break;
-          }
-
-          message.stepId = reader.string();
-          continue;
-        }
-        case 4: {
-          if (tag !== 34) {
-            break;
-          }
-
-          message.stepType = reader.string();
           continue;
         }
         case 5: {
@@ -821,8 +762,6 @@ export const TaskProgress: MessageFns<TaskProgress> = {
     return {
       taskId: isSet(object.taskId) ? globalThis.String(object.taskId) : "",
       status: isSet(object.status) ? taskStatusFromJSON(object.status) : 0,
-      stepId: isSet(object.stepId) ? globalThis.String(object.stepId) : "",
-      stepType: isSet(object.stepType) ? globalThis.String(object.stepType) : "",
       outputJson: isSet(object.outputJson) ? globalThis.String(object.outputJson) : "",
       errorMessage: isSet(object.errorMessage) ? globalThis.String(object.errorMessage) : "",
       timestampMs: isSet(object.timestampMs) ? globalThis.Number(object.timestampMs) : 0,
@@ -837,12 +776,6 @@ export const TaskProgress: MessageFns<TaskProgress> = {
     }
     if (message.status !== 0) {
       obj.status = taskStatusToJSON(message.status);
-    }
-    if (message.stepId !== "") {
-      obj.stepId = message.stepId;
-    }
-    if (message.stepType !== "") {
-      obj.stepType = message.stepType;
     }
     if (message.outputJson !== "") {
       obj.outputJson = message.outputJson;
@@ -866,8 +799,6 @@ export const TaskProgress: MessageFns<TaskProgress> = {
     const message = createBaseTaskProgress();
     message.taskId = object.taskId ?? "";
     message.status = object.status ?? 0;
-    message.stepId = object.stepId ?? "";
-    message.stepType = object.stepType ?? "";
     message.outputJson = object.outputJson ?? "";
     message.errorMessage = object.errorMessage ?? "";
     message.timestampMs = object.timestampMs ?? 0;
@@ -1522,7 +1453,7 @@ export const AgentConfig: MessageFns<AgentConfig> = {
 };
 
 function createBaseSkillConfig(): SkillConfig {
-  return { name: "", description: "", steps: [] };
+  return { name: "", description: "", inputs: [], outputs: [], instructions: "", tools: [] };
 }
 
 export const SkillConfig: MessageFns<SkillConfig> = {
@@ -1533,8 +1464,17 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     if (message.description !== "") {
       writer.uint32(18).string(message.description);
     }
-    for (const v of message.steps) {
-      StepConfig.encode(v!, writer.uint32(26).fork()).join();
+    for (const v of message.inputs) {
+      SkillInput.encode(v!, writer.uint32(26).fork()).join();
+    }
+    for (const v of message.outputs) {
+      SkillOutput.encode(v!, writer.uint32(34).fork()).join();
+    }
+    if (message.instructions !== "") {
+      writer.uint32(42).string(message.instructions);
+    }
+    for (const v of message.tools) {
+      ToolConfig.encode(v!, writer.uint32(50).fork()).join();
     }
     return writer;
   },
@@ -1567,7 +1507,31 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.steps.push(StepConfig.decode(reader, reader.uint32()));
+          message.inputs.push(SkillInput.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.outputs.push(SkillOutput.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.instructions = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.tools.push(ToolConfig.decode(reader, reader.uint32()));
           continue;
         }
       }
@@ -1583,7 +1547,10 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     return {
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       description: isSet(object.description) ? globalThis.String(object.description) : "",
-      steps: globalThis.Array.isArray(object?.steps) ? object.steps.map((e: any) => StepConfig.fromJSON(e)) : [],
+      inputs: globalThis.Array.isArray(object?.inputs) ? object.inputs.map((e: any) => SkillInput.fromJSON(e)) : [],
+      outputs: globalThis.Array.isArray(object?.outputs) ? object.outputs.map((e: any) => SkillOutput.fromJSON(e)) : [],
+      instructions: isSet(object.instructions) ? globalThis.String(object.instructions) : "",
+      tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
     };
   },
 
@@ -1595,8 +1562,17 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     if (message.description !== "") {
       obj.description = message.description;
     }
-    if (message.steps?.length) {
-      obj.steps = message.steps.map((e) => StepConfig.toJSON(e));
+    if (message.inputs?.length) {
+      obj.inputs = message.inputs.map((e) => SkillInput.toJSON(e));
+    }
+    if (message.outputs?.length) {
+      obj.outputs = message.outputs.map((e) => SkillOutput.toJSON(e));
+    }
+    if (message.instructions !== "") {
+      obj.instructions = message.instructions;
+    }
+    if (message.tools?.length) {
+      obj.tools = message.tools.map((e) => ToolConfig.toJSON(e));
     }
     return obj;
   },
@@ -1608,42 +1584,33 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     const message = createBaseSkillConfig();
     message.name = object.name ?? "";
     message.description = object.description ?? "";
-    message.steps = object.steps?.map((e) => StepConfig.fromPartial(e)) || [];
+    message.inputs = object.inputs?.map((e) => SkillInput.fromPartial(e)) || [];
+    message.outputs = object.outputs?.map((e) => SkillOutput.fromPartial(e)) || [];
+    message.instructions = object.instructions ?? "";
+    message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     return message;
   },
 };
 
-function createBaseStepConfig(): StepConfig {
-  return { id: "", type: 0, instructions: "", model: "", tools: [], servers: [] };
+function createBaseSkillInput(): SkillInput {
+  return { name: "", required: false };
 }
 
-export const StepConfig: MessageFns<StepConfig> = {
-  encode(message: StepConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.id !== "") {
-      writer.uint32(10).string(message.id);
+export const SkillInput: MessageFns<SkillInput> = {
+  encode(message: SkillInput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
     }
-    if (message.type !== 0) {
-      writer.uint32(16).int32(message.type);
-    }
-    if (message.instructions !== "") {
-      writer.uint32(26).string(message.instructions);
-    }
-    if (message.model !== "") {
-      writer.uint32(34).string(message.model);
-    }
-    for (const v of message.tools) {
-      ToolConfig.encode(v!, writer.uint32(42).fork()).join();
-    }
-    for (const v of message.servers) {
-      ServerConfig.encode(v!, writer.uint32(50).fork()).join();
+    if (message.required !== false) {
+      writer.uint32(16).bool(message.required);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): StepConfig {
+  decode(input: BinaryReader | Uint8Array, length?: number): SkillInput {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseStepConfig();
+    const message = createBaseSkillInput();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -1652,7 +1619,7 @@ export const StepConfig: MessageFns<StepConfig> = {
             break;
           }
 
-          message.id = reader.string();
+          message.name = reader.string();
           continue;
         }
         case 2: {
@@ -1660,39 +1627,7 @@ export const StepConfig: MessageFns<StepConfig> = {
             break;
           }
 
-          message.type = reader.int32() as any;
-          continue;
-        }
-        case 3: {
-          if (tag !== 26) {
-            break;
-          }
-
-          message.instructions = reader.string();
-          continue;
-        }
-        case 4: {
-          if (tag !== 34) {
-            break;
-          }
-
-          message.model = reader.string();
-          continue;
-        }
-        case 5: {
-          if (tag !== 42) {
-            break;
-          }
-
-          message.tools.push(ToolConfig.decode(reader, reader.uint32()));
-          continue;
-        }
-        case 6: {
-          if (tag !== 50) {
-            break;
-          }
-
-          message.servers.push(ServerConfig.decode(reader, reader.uint32()));
+          message.required = reader.bool();
           continue;
         }
       }
@@ -1704,53 +1639,89 @@ export const StepConfig: MessageFns<StepConfig> = {
     return message;
   },
 
-  fromJSON(object: any): StepConfig {
+  fromJSON(object: any): SkillInput {
     return {
-      id: isSet(object.id) ? globalThis.String(object.id) : "",
-      type: isSet(object.type) ? stepTypeFromJSON(object.type) : 0,
-      instructions: isSet(object.instructions) ? globalThis.String(object.instructions) : "",
-      model: isSet(object.model) ? globalThis.String(object.model) : "",
-      tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
-      servers: globalThis.Array.isArray(object?.servers)
-        ? object.servers.map((e: any) => ServerConfig.fromJSON(e))
-        : [],
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      required: isSet(object.required) ? globalThis.Boolean(object.required) : false,
     };
   },
 
-  toJSON(message: StepConfig): unknown {
+  toJSON(message: SkillInput): unknown {
     const obj: any = {};
-    if (message.id !== "") {
-      obj.id = message.id;
+    if (message.name !== "") {
+      obj.name = message.name;
     }
-    if (message.type !== 0) {
-      obj.type = stepTypeToJSON(message.type);
-    }
-    if (message.instructions !== "") {
-      obj.instructions = message.instructions;
-    }
-    if (message.model !== "") {
-      obj.model = message.model;
-    }
-    if (message.tools?.length) {
-      obj.tools = message.tools.map((e) => ToolConfig.toJSON(e));
-    }
-    if (message.servers?.length) {
-      obj.servers = message.servers.map((e) => ServerConfig.toJSON(e));
+    if (message.required !== false) {
+      obj.required = message.required;
     }
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<StepConfig>, I>>(base?: I): StepConfig {
-    return StepConfig.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<SkillInput>, I>>(base?: I): SkillInput {
+    return SkillInput.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<StepConfig>, I>>(object: I): StepConfig {
-    const message = createBaseStepConfig();
-    message.id = object.id ?? "";
-    message.type = object.type ?? 0;
-    message.instructions = object.instructions ?? "";
-    message.model = object.model ?? "";
-    message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
-    message.servers = object.servers?.map((e) => ServerConfig.fromPartial(e)) || [];
+  fromPartial<I extends Exact<DeepPartial<SkillInput>, I>>(object: I): SkillInput {
+    const message = createBaseSkillInput();
+    message.name = object.name ?? "";
+    message.required = object.required ?? false;
+    return message;
+  },
+};
+
+function createBaseSkillOutput(): SkillOutput {
+  return { name: "" };
+}
+
+export const SkillOutput: MessageFns<SkillOutput> = {
+  encode(message: SkillOutput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SkillOutput {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSkillOutput();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SkillOutput {
+    return { name: isSet(object.name) ? globalThis.String(object.name) : "" };
+  },
+
+  toJSON(message: SkillOutput): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SkillOutput>, I>>(base?: I): SkillOutput {
+    return SkillOutput.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SkillOutput>, I>>(object: I): SkillOutput {
+    const message = createBaseSkillOutput();
+    message.name = object.name ?? "";
     return message;
   },
 };

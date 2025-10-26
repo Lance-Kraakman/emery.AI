@@ -2,30 +2,63 @@
 Skill Configuration Entity
 
 AIDEV-NOTE: Domain entity for agent skill configuration.
+Simplified single-instruction model - removed multi-step workflow.
 Matches the protobuf SkillConfig message exactly.
-Renamed from CapabilityConfig to align with TypeScript refactor.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
-from .step_config import StepConfig
+from emery_agents.core.entities import ToolConfig
+
+
+@dataclass
+class SkillInput:
+    """
+    Skill input parameter.
+
+    AIDEV-NOTE: Matches protobuf message SkillInput {
+        string name = 1;
+        bool required = 2;
+    }
+    """
+    name: str
+    required: bool
+
+
+@dataclass
+class SkillOutput:
+    """
+    Skill output value.
+
+    AIDEV-NOTE: Matches protobuf message SkillOutput {
+        string name = 1;
+    }
+    """
+    name: str
 
 
 @dataclass
 class SkillConfig:
     """
-    Agent skill configuration.
+    Agent skill configuration with single-instruction model.
 
-    AIDEV-NOTE: Matches protobuf message SkillConfig {
+    AIDEV-NOTE: Simplified from multi-step workflow to single instruction block.
+    Matches protobuf message SkillConfig {
         string name = 1;
         string description = 2;
-        repeated StepConfig steps = 3;
+        repeated SkillInput inputs = 3;
+        repeated SkillOutput outputs = 4;
+        string instructions = 5;
+        repeated ToolConfig tools = 6;
     }
     """
 
     name: str
     description: str
-    steps: List[StepConfig]
+    inputs: List[SkillInput] = field(default_factory=list)
+    outputs: List[SkillOutput] = field(default_factory=list)
+    instructions: str = ""
+    tools: List[ToolConfig] = field(default_factory=list)
 
     def __post_init__(self):
         """Validate skill configuration."""
@@ -35,54 +68,57 @@ class SkillConfig:
         if not self.description or not self.description.strip():
             raise ValueError("Skill description cannot be empty")
 
-        if not self.steps:
-            raise ValueError("Skill must have at least one step")
+        if not self.instructions or not self.instructions.strip():
+            raise ValueError("Skill instructions cannot be empty")
 
-        # Validate all steps
-        for i, step in enumerate(self.steps):
-            if not isinstance(step, StepConfig):
-                raise TypeError(f"Step {i} must be a StepConfig instance")
+        # Validate inputs have non-empty names
+        for i, skill_input in enumerate(self.inputs):
+            if not skill_input.name or not skill_input.name.strip():
+                raise ValueError(f"Input {i} must have a non-empty name")
 
-    @property
-    def step_count(self) -> int:
-        """Get total number of steps in this skill."""
-        return len(self.steps)
+        # Validate outputs have non-empty names
+        for i, skill_output in enumerate(self.outputs):
+            if not skill_output.name or not skill_output.name.strip():
+                raise ValueError(f"Output {i} must have a non-empty name")
 
     @property
     def normalized_name(self) -> str:
         """Get normalized skill name."""
         return self.name.strip().lower().replace(" ", "_")
 
-    def get_step_by_id(self, step_id: str) -> StepConfig:
-        """Get step by ID, raises ValueError if not found."""
-        for step in self.steps:
-            if step.id == step_id:
-                return step
-        raise ValueError(f"Step '{step_id}' not found in skill '{self.name}'")
+    @property
+    def required_inputs(self) -> List[SkillInput]:
+        """Get list of required inputs."""
+        return [inp for inp in self.inputs if inp.required]
 
-    def has_step(self, step_id: str) -> bool:
-        """Check if skill has a step with given ID."""
-        return any(step.id == step_id for step in self.steps)
-
-    def get_code_steps(self) -> List[StepConfig]:
-        """Get all CODE_STEP steps in this skill."""
-        from .step_config import StepType
-        return [step for step in self.steps if step.type == StepType.CODE_STEP]
-
-    def get_tool_steps(self) -> List[StepConfig]:
-        """Get all TOOL_STEP steps in this skill."""
-        from .step_config import StepType
-        return [step for step in self.steps if step.type == StepType.TOOL_STEP]
+    @property
+    def optional_inputs(self) -> List[SkillInput]:
+        """Get list of optional inputs."""
+        return [inp for inp in self.inputs if not inp.required]
 
     @classmethod
     def from_dict(cls, data: dict) -> "SkillConfig":
         """Create SkillConfig from dictionary (protobuf conversion)."""
-        from .step_config import StepConfig
-
         return cls(
             name=data["name"],
             description=data["description"],
-            steps=[StepConfig.from_dict(step_data) for step_data in data.get("steps", [])]
+            inputs=[
+                SkillInput(name=inp["name"], required=inp["required"])
+                for inp in data.get("inputs", [])
+            ],
+            outputs=[
+                SkillOutput(name=out["name"])
+                for out in data.get("outputs", [])
+            ],
+            instructions=data.get("instructions", ""),
+            tools=[
+                ToolConfig(
+                    name=tool["name"],
+                    version=tool.get("version", "1.0"),
+                    config=tool.get("config", {})
+                )
+                for tool in data.get("tools", [])
+            ]
         )
 
     def to_dict(self) -> dict:
@@ -90,5 +126,21 @@ class SkillConfig:
         return {
             "name": self.name,
             "description": self.description,
-            "steps": [step.to_dict() for step in self.steps]
+            "inputs": [
+                {"name": inp.name, "required": inp.required}
+                for inp in self.inputs
+            ],
+            "outputs": [
+                {"name": out.name}
+                for out in self.outputs
+            ],
+            "instructions": self.instructions,
+            "tools": [
+                {
+                    "name": tool.name,
+                    "version": tool.version,
+                    "config": tool.config
+                }
+                for tool in self.tools
+            ]
         }
