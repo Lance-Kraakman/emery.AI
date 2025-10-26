@@ -11,27 +11,27 @@ import { Textarea } from '@/components/ui/textarea';
 import { ToolDropdown } from '@/components/chat/ToolDropdown';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 
-// AIDEV-NOTE: Capability manager with full CRUD functionality
+// AIDEV-NOTE: Skill manager with full CRUD functionality
 // Supports both view and edit modes with compact UI
 
-// Using domain CapabilityConfig type instead of local interface
+// Using domain SkillConfig type instead of local interface
 
-interface CapabilityManagerProps {
+interface SkillManagerProps {
   agent?: AgentDTO;  // Optional for creation mode
-  capabilities?: SkillConfigDTO[];  // Alternative for creation mode
+  skills?: SkillConfigDTO[];  // Alternative for creation mode
   isEditable?: boolean;
-  onCapabilitiesChange?: (capabilities: SkillConfigDTO[]) => void;
+  onSkillsChange?: (skills: SkillConfigDTO[]) => void;
 }
 
-export default function CapabilityManager({
+export default function SkillManager({
   agent,
-  capabilities: propCapabilities,
+  skills: propSkills,
   isEditable = false,
-  onCapabilitiesChange
-}: CapabilityManagerProps) {
-  const initialCapabilities = (propCapabilities || agent?.skills || []) as SkillConfigDTO[];
+  onSkillsChange
+}: SkillManagerProps) {
+  const initialSkills = (propSkills || agent?.skills || []) as SkillConfigDTO[];
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editingCapability, setEditingCapability] = useState<SkillConfigDTO | null>(null);
+  const [editingSkill, setEditingSkill] = useState<SkillConfigDTO | null>(null);
   const [showToolDropdown, setShowToolDropdown] = useState(false);
   const [dropdownQuery, setDropdownQuery] = useState('');
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
@@ -39,17 +39,17 @@ export default function CapabilityManager({
 
   const toolInputRef = useRef<HTMLInputElement>(null);
 
-  const capabilities = initialCapabilities;
+  const skills = initialSkills;
 
-  // Log whenever editingCapability changes
+  // Log whenever editingSkill changes
   useEffect(() => {
-    console.log('[CapabilityManager] editingCapability changed:', JSON.stringify(editingCapability, null, 2));
-    
-    // Log tools in editingCapability
-    editingCapability?.steps?.forEach((step, stepIndex) => {
-      console.log(`[CapabilityManager] editingCapability changed - Step ${stepIndex} tools:`, step.tools);
+    console.log('[SkillManager] editingSkill changed:', JSON.stringify(editingSkill, null, 2));
+
+    // Log tools in editingSkill
+    editingSkill?.steps?.forEach((step, stepIndex) => {
+      console.log(`[SkillManager] editingSkill changed - Step ${stepIndex} tools:`, step.tools);
       step.tools?.forEach((tool, toolIndex) => {
-        console.log(`[CapabilityManager] editingCapability changed - Step ${stepIndex} Tool ${toolIndex}:`, {
+        console.log(`[SkillManager] editingSkill changed - Step ${stepIndex} Tool ${toolIndex}:`, {
           value: tool,
           type: typeof tool,
           isFunction: typeof tool === 'function',
@@ -58,27 +58,27 @@ export default function CapabilityManager({
         });
       });
     });
-  }, [editingCapability]);
+  }, [editingSkill]);
 
   const handleAdd = () => {
-    const newCapability: SkillConfigDTO = {
-      name: 'New Capability',
+    const newSkill: SkillConfigDTO = {
+      name: 'New Skill',
       description: '',
       steps: []
     };
-    setEditingCapability(newCapability);
-    setEditingIndex(-1); // -1 indicates new capability
+    setEditingSkill(newSkill);
+    setEditingIndex(-1); // -1 indicates new skill
   };
 
   const handleEdit = (index: number) => {
-    console.log(`[CapabilityManager] handleEdit - Editing capability at index ${index}`);
-    console.log('[CapabilityManager] handleEdit - Original capability:', JSON.stringify(capabilities[index], null, 2));
+    console.log(`[SkillManager] handleEdit - Editing capability at index ${index}`);
+    console.log('[SkillManager] handleEdit - Original capability:', JSON.stringify(skills[index], null, 2));
     
     // Log tools in original capability
-    capabilities[index].steps?.forEach((step, stepIndex) => {
-      console.log(`[CapabilityManager] handleEdit - Original step ${stepIndex} tools:`, step.tools);
+    skills[index].steps?.forEach((step, stepIndex) => {
+      console.log(`[SkillManager] handleEdit - Original step ${stepIndex} tools:`, step.tools);
       step.tools?.forEach((tool, toolIndex) => {
-        console.log(`[CapabilityManager] handleEdit - Original tool ${toolIndex}:`, {
+        console.log(`[SkillManager] handleEdit - Original tool ${toolIndex}:`, {
           value: tool,
           type: typeof tool,
           isFunction: typeof tool === 'function',
@@ -88,14 +88,14 @@ export default function CapabilityManager({
       });
     });
     
-    const capabilityCopy = { ...capabilities[index] };
-    console.log('[CapabilityManager] handleEdit - Capability copy:', JSON.stringify(capabilityCopy, null, 2));
+    const skillCopy = { ...skills[index] };
+    console.log('[SkillManager] handleEdit - Capability copy:', JSON.stringify(skillCopy, null, 2));
     
     // Log tools in copied capability
-    capabilityCopy.steps?.forEach((step, stepIndex) => {
-      console.log(`[CapabilityManager] handleEdit - Copied step ${stepIndex} tools:`, step.tools);
+    skillCopy.steps?.forEach((step, stepIndex) => {
+      console.log(`[SkillManager] handleEdit - Copied step ${stepIndex} tools:`, step.tools);
       step.tools?.forEach((tool, toolIndex) => {
-        console.log(`[CapabilityManager] handleEdit - Copied tool ${toolIndex}:`, {
+        console.log(`[SkillManager] handleEdit - Copied tool ${toolIndex}:`, {
           value: tool,
           type: typeof tool,
           isFunction: typeof tool === 'function',
@@ -105,19 +105,19 @@ export default function CapabilityManager({
       });
     });
     
-    setEditingCapability(capabilityCopy);
+    setEditingSkill(skillCopy);
     setEditingIndex(index);
   };
 
   const handleSave = () => {
-    if (!editingCapability || !onCapabilitiesChange || editingIndex === null) return;
+    if (!editingSkill || !onSkillsChange || editingIndex === null) return;
 
-    console.log('[CapabilityManager] handleSave - BEFORE cleaning:', JSON.stringify(editingCapability, null, 2));
+    console.log('[SkillManager] handleSave - BEFORE cleaning:', JSON.stringify(editingSkill, null, 2));
     
     // Log the actual data types and values
-    console.log('[CapabilityManager] handleSave - Raw tools array:', editingCapability.steps[0]?.tools);
-    editingCapability.steps[0]?.tools?.forEach((tool, index) => {
-      console.log(`[CapabilityManager] handleSave - Tool ${index}:`, {
+    console.log('[SkillManager] handleSave - Raw tools array:', editingSkill.steps[0]?.tools);
+    editingSkill.steps[0]?.tools?.forEach((tool, index) => {
+      console.log(`[SkillManager] handleSave - Tool ${index}:`, {
         value: tool,
         type: typeof tool,
         constructor: tool?.constructor?.name,
@@ -128,34 +128,34 @@ export default function CapabilityManager({
     });
 
     // Filter out invalid tools (null, undefined, functions, empty placeholders) before saving
-    const cleanedCapability = {
-      ...editingCapability,
-      steps: editingCapability.steps.map(step => {
+    const cleanedSkill = {
+      ...editingSkill,
+      steps: editingSkill.steps.map(step => {
         const originalTools = step.tools;
         const filteredTools = step.tools?.filter(tool => {
-          console.log(`[CapabilityManager] Filtering tool: ${JSON.stringify(tool)}`);
+          console.log(`[SkillManager] Filtering tool: ${JSON.stringify(tool)}`);
           // Remove null/undefined using loose equality check
           if (tool == null) {
-            console.log('[CapabilityManager] Filtering out null/undefined tool');
+            console.log('[SkillManager] Filtering out null/undefined tool');
             return false;
           }
           // Remove functions
           if (typeof tool === 'function') {
-            console.log('[CapabilityManager] Filtering out function tool');
+            console.log('[SkillManager] Filtering out function tool');
             return false;
           }
           // Remove empty placeholder @tool:
           if (tool.name === '@tool:') {
-            console.log('[CapabilityManager] Filtering out empty placeholder @tool:');
+            console.log('[SkillManager] Filtering out empty placeholder @tool:');
             return false;
           }
           // Keep all valid tools with proper names
           const isValid = tool.name && tool.name.length > 7;
-          console.log(`[CapabilityManager] Tool "${tool.name}" - valid: ${isValid} (length: ${tool.name?.length || 0})`);
+          console.log(`[SkillManager] Tool "${tool.name}" - valid: ${isValid} (length: ${tool.name?.length || 0})`);
           return isValid;
         }) || [];
 
-        console.log(`[CapabilityManager] Step tools: ${originalTools?.length || 0} → ${filteredTools.length}`);
+        console.log(`[SkillManager] Step tools: ${originalTools?.length || 0} → ${filteredTools.length}`);
         return {
           ...step,
           tools: filteredTools
@@ -163,27 +163,27 @@ export default function CapabilityManager({
       })
     };
 
-    console.log('[CapabilityManager] handleSave - AFTER cleaning:', JSON.stringify(cleanedCapability, null, 2));
+    console.log('[SkillManager] handleSave - AFTER cleaning:', JSON.stringify(cleanedSkill, null, 2));
 
-    const newCapabilities = [...capabilities];
+    const newSkills = [...skills];
     if (editingIndex === -1) {
-      // Adding new capability
-      console.log('[CapabilityManager] Adding NEW capability');
-      newCapabilities.push(cleanedCapability);
+      // Adding new skill
+      console.log('[SkillManager] Adding NEW skill');
+      newSkills.push(cleanedSkill);
     } else {
-      // Updating existing capability
-      console.log(`[CapabilityManager] Updating capability at index ${editingIndex}`);
-      newCapabilities[editingIndex] = cleanedCapability;
+      // Updating existing skill
+      console.log(`[SkillManager] Updating skill at index ${editingIndex}`);
+      newSkills[editingIndex] = cleanedSkill;
     }
 
-    console.log('[CapabilityManager] Calling onCapabilitiesChange with:', JSON.stringify(newCapabilities, null, 2));
-    console.log('[CapabilityManager] Final capabilities array being sent to parent:', newCapabilities);
-    
+    console.log('[SkillManager] Calling onSkillsChange with:', JSON.stringify(newSkills, null, 2));
+    console.log('[SkillManager] Final skills array being sent to parent:', newSkills);
+
     // Check if any tools are still non-serializable
-    newCapabilities.forEach((cap, capIndex) => {
-      cap.steps.forEach((step, stepIndex) => {
+    newSkills.forEach((skill, skillIndex) => {
+      skill.steps.forEach((step, stepIndex) => {
         step.tools?.forEach((tool, toolIndex) => {
-          console.log(`[CapabilityManager] Final check - Capability ${capIndex}, Step ${stepIndex}, Tool ${toolIndex}:`, {
+          console.log(`[SkillManager] Final check - Skill ${skillIndex}, Step ${stepIndex}, Tool ${toolIndex}:`, {
             value: tool,
             type: typeof tool,
             isString: typeof tool === 'string',
@@ -193,53 +193,53 @@ export default function CapabilityManager({
         });
       });
     });
-    onCapabilitiesChange(newCapabilities);
-    setEditingCapability(null);
+    onSkillsChange(newSkills);
+    setEditingSkill(null);
     setEditingIndex(null);
   };
 
   const handleCancel = () => {
-    setEditingCapability(null);
+    setEditingSkill(null);
     setEditingIndex(null);
   };
 
   const handleDelete = (index: number) => {
-    if (!onCapabilitiesChange) return;
-    const newCapabilities = capabilities.filter((_, i) => i !== index);
-    onCapabilitiesChange(newCapabilities);
+    if (!onSkillsChange) return;
+    const newSkills = skills.filter((_: any, i: number) => i !== index);
+    onSkillsChange(newSkills);
   };
 
   const handleAddStep = () => {
-    if (!editingCapability) return;
+    if (!editingSkill) return;
     const newStep: StepConfigDTO = {
       type: 'TOOL_STEP',
       instructions: 'New step instructions',
       tools: [],
       servers: []
     };
-    setEditingCapability({
-      ...editingCapability,
-      steps: [...(editingCapability.steps || []), newStep]
+    setEditingSkill({
+      ...editingSkill,
+      steps: [...(editingSkill.steps || []), newStep]
     });
   };
 
   const handleRemoveStep = (stepIndex: number) => {
-    if (!editingCapability) return;
-    setEditingCapability({
-      ...editingCapability,
-      steps: editingCapability.steps?.filter((_, i) => i !== stepIndex) || []
+    if (!editingSkill) return;
+    setEditingSkill({
+      ...editingSkill,
+      steps: editingSkill.steps?.filter((_, i) => i !== stepIndex) || []
     });
   };
 
   const handleUpdateStep = (stepIndex: number, updatedStep: Partial<StepConfigDTO>) => {
-    if (!editingCapability) return;
-    console.log(`[CapabilityManager] handleUpdateStep - stepIndex:${stepIndex}`);
-    console.log('[CapabilityManager] handleUpdateStep - updatedStep:', JSON.stringify(updatedStep, null, 2));
-    console.log('[CapabilityManager] handleUpdateStep - current step tools:', JSON.stringify(editingCapability.steps[stepIndex]?.tools, null, 2));
+    if (!editingSkill) return;
+    console.log(`[SkillManager] handleUpdateStep - stepIndex:${stepIndex}`);
+    console.log('[SkillManager] handleUpdateStep - updatedStep:', JSON.stringify(updatedStep, null, 2));
+    console.log('[SkillManager] handleUpdateStep - current step tools:', JSON.stringify(editingSkill.steps[stepIndex]?.tools, null, 2));
     
     // Check if updatedStep.tools contains any functions
     if (updatedStep.tools) {
-      console.log('[CapabilityManager] handleUpdateStep - updatedStep.tools contains:');
+      console.log('[SkillManager] handleUpdateStep - updatedStep.tools contains:');
       updatedStep.tools.forEach((tool, i) => {
         console.log(`  Tool ${i}:`, {
           value: tool,
@@ -250,35 +250,35 @@ export default function CapabilityManager({
       });
     }
     
-    const newCapability = {
-      ...editingCapability,
-      steps: editingCapability.steps?.map((step, i) =>
+    const newSkill = {
+      ...editingSkill,
+      steps: editingSkill.steps?.map((step, i) =>
         i === stepIndex ? { ...step, ...updatedStep } : step
       ) || []
     };
     
-    console.log('[CapabilityManager] handleUpdateStep - new capability step tools:', JSON.stringify(newCapability.steps[stepIndex]?.tools, null, 2));
-    setEditingCapability(newCapability);
+    console.log('[SkillManager] handleUpdateStep - new capability step tools:', JSON.stringify(newSkill.steps[stepIndex]?.tools, null, 2));
+    setEditingSkill(newSkill);
   };
 
   const handleAddStepTool = (stepIndex: number) => {
-    if (!editingCapability) return;
-    console.log(`[CapabilityManager] handleAddStepTool - Adding tool to step ${stepIndex}`);
-    console.log('[CapabilityManager] handleAddStepTool - Current step tools before adding:', editingCapability.steps[stepIndex]?.tools);
+    if (!editingSkill) return;
+    console.log(`[SkillManager] handleAddStepTool - Adding tool to step ${stepIndex}`);
+    console.log('[SkillManager] handleAddStepTool - Current step tools before adding:', editingSkill.steps[stepIndex]?.tools);
     
     // Create empty tool placeholder as plain DTO - will be filled via @tool: dropdown
     const newTool: ToolConfigDTO = { name: '@tool:', config: {} };
-    console.log('[CapabilityManager] handleAddStepTool - Creating new tool:', JSON.stringify(newTool));
+    console.log('[SkillManager] handleAddStepTool - Creating new tool:', JSON.stringify(newTool));
     
     const updatedStep = {
-      ...editingCapability.steps[stepIndex],
-      tools: [...(editingCapability.steps[stepIndex].tools || []), newTool]
+      ...editingSkill.steps[stepIndex],
+      tools: [...(editingSkill.steps[stepIndex].tools || []), newTool]
     };
-    console.log('[CapabilityManager] handleAddStepTool - Updated step tools after adding:', JSON.stringify(updatedStep.tools));
+    console.log('[SkillManager] handleAddStepTool - Updated step tools after adding:', JSON.stringify(updatedStep.tools));
     
     // Log all tools in the updated step
     updatedStep.tools?.forEach((tool, toolIndex) => {
-      console.log(`[CapabilityManager] handleAddStepTool - Tool ${toolIndex} after adding:`, {
+      console.log(`[SkillManager] handleAddStepTool - Tool ${toolIndex} after adding:`, {
         value: tool,
         type: typeof tool,
         isFunction: typeof tool === 'function',
@@ -339,18 +339,18 @@ export default function CapabilityManager({
 
   // Handle tool selection from dropdown
   const handleToolSelect = (tool: ToolDTO) => {
-    console.log('[CapabilityManager] handleToolSelect - Tool selected:', JSON.stringify(tool, null, 2));
+    console.log('[SkillManager] handleToolSelect - Tool selected:', JSON.stringify(tool, null, 2));
     if (!editingStepToolIndex) {
-      console.log('[CapabilityManager] handleToolSelect - No editingStepToolIndex, returning');
+      console.log('[SkillManager] handleToolSelect - No editingStepToolIndex, returning');
       return;
     }
 
     const { stepIndex, toolIndex } = editingStepToolIndex;
-    console.log(`[CapabilityManager] handleToolSelect - stepIndex:${stepIndex}, toolIndex:${toolIndex}`);
+    console.log(`[SkillManager] handleToolSelect - stepIndex:${stepIndex}, toolIndex:${toolIndex}`);
 
     // All tools from dropdown are now ToolDTO
     const toolName = `@tool:${tool.name}`;
-    console.log(`[CapabilityManager] handleToolSelect - Generated toolName:"${toolName}"`);
+    console.log(`[SkillManager] handleToolSelect - Generated toolName:"${toolName}"`);
 
     // Handle OAuth requirements for tools that require connection
     if (tool.requiresConnection && tool.connectionType === 'oauth') {
@@ -359,7 +359,7 @@ export default function CapabilityManager({
       console.log(`Tool ${tool.displayName} requires OAuth authentication`);
     }
 
-    console.log(`[CapabilityManager] handleToolSelect - Calling handleUpdateStepTool with name:"${toolName}"`);
+    console.log(`[SkillManager] handleToolSelect - Calling handleUpdateStepTool with name:"${toolName}"`);
     // Update the tool with selected name
     handleUpdateStepTool(stepIndex, toolIndex, 'name', toolName);
 
@@ -368,22 +368,22 @@ export default function CapabilityManager({
   };
 
   const handleRemoveStepTool = (stepIndex: number, toolIndex: number) => {
-    if (!editingCapability) return;
+    if (!editingSkill) return;
     const updatedStep = {
-      ...editingCapability.steps[stepIndex],
-      tools: editingCapability.steps[stepIndex].tools?.filter((_, i) => i !== toolIndex) || []
+      ...editingSkill.steps[stepIndex],
+      tools: editingSkill.steps[stepIndex].tools?.filter((_, i) => i !== toolIndex) || []
     };
     handleUpdateStep(stepIndex, updatedStep);
   };
 
   const handleUpdateStepTool = (stepIndex: number, toolIndex: number, field: keyof ToolConfigDTO, value: string) => {
-    if (!editingCapability) return;
-    console.log(`[CapabilityManager] handleUpdateStepTool - step:${stepIndex} tool:${toolIndex} field:${field} value:"${value}"`);
-    console.log('[CapabilityManager] handleUpdateStepTool - Current tools array before update:', editingCapability.steps[stepIndex].tools);
+    if (!editingSkill) return;
+    console.log(`[SkillManager] handleUpdateStepTool - step:${stepIndex} tool:${toolIndex} field:${field} value:"${value}"`);
+    console.log('[SkillManager] handleUpdateStepTool - Current tools array before update:', editingSkill.steps[stepIndex].tools);
     
     // Log all tools before update
-    editingCapability.steps[stepIndex].tools?.forEach((tool, i) => {
-      console.log(`[CapabilityManager] handleUpdateStepTool - Tool ${i} before update:`, {
+    editingSkill.steps[stepIndex].tools?.forEach((tool, i) => {
+      console.log(`[SkillManager] handleUpdateStepTool - Tool ${i} before update:`, {
         value: tool,
         type: typeof tool,
         isFunction: typeof tool === 'function',
@@ -392,15 +392,15 @@ export default function CapabilityManager({
       });
     });
     
-    console.log('[CapabilityManager] handleUpdateStepTool - Current tool being updated:', editingCapability.steps[stepIndex].tools?.[toolIndex]);
+    console.log('[SkillManager] handleUpdateStepTool - Current tool being updated:', editingSkill.steps[stepIndex].tools?.[toolIndex]);
     
-    const updatedTools = editingCapability.steps[stepIndex].tools?.map((tool, i) => {
+    const updatedTools = editingSkill.steps[stepIndex].tools?.map((tool, i) => {
       if (i === toolIndex) {
-        console.log('[CapabilityManager] handleUpdateStepTool - Found tool to update:', tool);
+        console.log('[SkillManager] handleUpdateStepTool - Found tool to update:', tool);
         // Create new plain tool DTO with updated field
         if (field === 'name') {
           const updatedTool = { name: value || '', config: tool.config };
-          console.log('[CapabilityManager] handleUpdateStepTool - Updated tool name:', JSON.stringify(updatedTool));
+          console.log('[SkillManager] handleUpdateStepTool - Updated tool name:', JSON.stringify(updatedTool));
           return updatedTool;
         } else if (field === 'config') {
           return { name: tool.name, config: { ...tool.config, ...(value ? JSON.parse(value) : {}) } };
@@ -412,7 +412,7 @@ export default function CapabilityManager({
     
     // Log all tools after update
     updatedTools.forEach((tool, i) => {
-      console.log(`[CapabilityManager] handleUpdateStepTool - Tool ${i} after update:`, {
+      console.log(`[SkillManager] handleUpdateStepTool - Tool ${i} after update:`, {
         value: tool,
         type: typeof tool,
         isFunction: typeof tool === 'function',
@@ -422,58 +422,58 @@ export default function CapabilityManager({
     });
     
     const updatedStep = {
-      ...editingCapability.steps[stepIndex],
+      ...editingSkill.steps[stepIndex],
       tools: updatedTools
     };
-    console.log('[CapabilityManager] handleUpdateStepTool - Step tools after update:', JSON.stringify(updatedStep.tools));
+    console.log('[SkillManager] handleUpdateStepTool - Step tools after update:', JSON.stringify(updatedStep.tools));
     handleUpdateStep(stepIndex, updatedStep);
   };
 
   const handleAddStepServer = (stepIndex: number) => {
-    if (!editingCapability) return;
+    if (!editingSkill) return;
     const newServer: ServerConfig = { name: '', endpoint: undefined, config: undefined };
     const updatedStep = {
-      ...editingCapability.steps[stepIndex],
-      servers: [...(editingCapability.steps[stepIndex].servers || []), newServer]
+      ...editingSkill.steps[stepIndex],
+      servers: [...(editingSkill.steps[stepIndex].servers || []), newServer]
     };
     handleUpdateStep(stepIndex, updatedStep);
   };
 
   const handleRemoveStepServer = (stepIndex: number, serverIndex: number) => {
-    if (!editingCapability) return;
+    if (!editingSkill) return;
     const updatedStep = {
-      ...editingCapability.steps[stepIndex],
-      servers: editingCapability.steps[stepIndex].servers?.filter((_, i) => i !== serverIndex) || []
+      ...editingSkill.steps[stepIndex],
+      servers: editingSkill.steps[stepIndex].servers?.filter((_, i) => i !== serverIndex) || []
     };
     handleUpdateStep(stepIndex, updatedStep);
   };
 
   const handleUpdateStepServer = (stepIndex: number, serverIndex: number, field: keyof ServerConfig, value: string) => {
-    if (!editingCapability) return;
-    const updatedServers = editingCapability.steps[stepIndex].servers?.map((server, i) => 
+    if (!editingSkill) return;
+    const updatedServers = editingSkill.steps[stepIndex].servers?.map((server, i) => 
       i === serverIndex ? { ...server, [field]: value || undefined } : server
     ) || [];
     const updatedStep = {
-      ...editingCapability.steps[stepIndex],
+      ...editingSkill.steps[stepIndex],
       servers: updatedServers
     };
     handleUpdateStep(stepIndex, updatedStep);
   };
 
   // If editing a capability, show the edit form
-  if (editingCapability !== null) {
+  if (editingSkill !== null) {
     return (
       <div className="space-y-3 border rounded-lg p-3">
         <div className="space-y-2">
           <Input
-            value={editingCapability.name}
-            onChange={(e) => setEditingCapability({ ...editingCapability, name: e.target.value })}
-            placeholder="Capability name"
+            value={editingSkill.name}
+            onChange={(e) => setEditingSkill({ ...editingSkill, name: e.target.value })}
+            placeholder="Skill name"
             className="text-sm"
           />
           <Textarea
-            value={editingCapability.description || ''}
-            onChange={(e) => setEditingCapability({ ...editingCapability, description: e.target.value })}
+            value={editingSkill.description || ''}
+            onChange={(e) => setEditingSkill({ ...editingSkill, description: e.target.value })}
             placeholder="Description (optional)"
             rows={2}
             className="text-sm"
@@ -495,7 +495,7 @@ export default function CapabilityManager({
             </div>
             
             <div className="space-y-3">
-              {editingCapability.steps?.map((step, stepIndex) => (
+              {editingSkill.steps?.map((step, stepIndex) => (
                 <div key={stepIndex} className="border rounded-lg p-3 bg-muted/30">
                   <div className="space-y-2">
                     {/* Step Header */}
@@ -614,7 +614,7 @@ export default function CapabilityManager({
                 </div>
               ))}
               
-              {(!editingCapability.steps || editingCapability.steps.length === 0) && (
+              {(!editingSkill.steps || editingSkill.steps.length === 0) && (
                 <div className="text-sm text-muted-foreground text-center py-4 border-2 border-dashed rounded-lg">
                   No steps defined. Click "Add Step" to create the first step.
                 </div>
@@ -661,28 +661,28 @@ export default function CapabilityManager({
           size="sm" 
           className="w-full"
         >
-          <Plus size={14} className="mr-1" /> Add Capability
+          <Plus size={14} className="mr-1" /> Add Skill
         </Button>
       )}
       
-      {capabilities.length > 0 ? (
+      {skills.length > 0 ? (
         <div className="space-y-2">
-          {capabilities.map((cap, index) => (
+          {skills.map((skill: any, index: number) => (
             <div key={index} className="border rounded-lg p-2">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-1 mb-1">
                     <Settings size={14} className="text-muted-foreground" />
-                    <span className="font-medium text-sm">{cap.name}</span>
+                    <span className="font-medium text-sm">{skill.name}</span>
                   </div>
-                  
-                  {cap.description && (
-                    <p className="text-xs text-muted-foreground mb-1">{cap.description}</p>
+
+                  {skill.description && (
+                    <p className="text-xs text-muted-foreground mb-1">{skill.description}</p>
                   )}
-                  
-                  {cap.steps && cap.steps.length > 0 && (
+
+                  {skill.steps && skill.steps.length > 0 && (
                     <div className="flex flex-wrap gap-1">
-                      {cap.steps.map((step, stepIndex: number) => (
+                      {skill.steps.map((step: any, stepIndex: number) => (
                         <Badge key={stepIndex} variant="secondary" className="text-xs py-0">
                           {step.type}
                         </Badge>
@@ -719,7 +719,7 @@ export default function CapabilityManager({
         !isEditable && (
           <div className="text-center py-3 text-muted-foreground">
             <Settings className="mx-auto h-5 w-5 mb-1" />
-            <p className="text-xs">No capabilities configured</p>
+            <p className="text-xs">No skills configured</p>
           </div>
         )
       )}

@@ -83,17 +83,17 @@ export default function TaskFormDialog({ isOpen, onClose, agent }: TaskFormDialo
               />
             </div>
             <div>
-              <label htmlFor="capability" className="block text-sm font-medium text-muted-foreground">
-                Capability <span className="text-xs text-muted-foreground">(optional - system will auto-route)</span>
+              <label htmlFor="skill" className="block text-sm font-medium text-muted-foreground">
+                Skill <span className="text-xs text-muted-foreground">(optional - system will auto-route)</span>
               </label>
               <select
-                id="capability"
-                name="capability"
+                id="skill"
+                name="skill"
                 className="mt-1 block w-full p-2 border rounded"
               >
-                <option value="">Auto-select capability</option>
-                {(agent.skills as any[] || []).map((cap, index) => (
-                  <option key={index} value={cap.name}>{cap.name}</option>
+                <option value="">Auto-select skill</option>
+                {(agent.skills as any[] || []).map((skill, index) => (
+                  <option key={index} value={skill.name}>{skill.name}</option>
                 ))}
               </select>
             </div>
