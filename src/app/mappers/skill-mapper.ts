@@ -1,5 +1,5 @@
-import type { Capability } from '@/ddd/domain/capabilities/entities/capability';
-import type { Step } from '@/ddd/domain/capabilities/entities/step';
+import type { Skill } from '@/ddd/domain/skills/entities/skill';
+import type { Step } from '@/ddd/domain/skills/entities/step';
 
 /**
  * DTO for Tool Configuration
@@ -16,7 +16,7 @@ export interface ToolConfigDTO {
  */
 export interface StepDTO {
   id: number;
-  capabilityId: number;
+  skillId: number;
   stepOrder: number;
   type: 'TOOL_STEP' | 'CODE_STEP';
   instructions: string;
@@ -28,10 +28,10 @@ export interface StepDTO {
 }
 
 /**
- * DTO for Capability
- * Serializable representation of Capability aggregate for API responses
+ * DTO for Skill
+ * Serializable representation of Skill aggregate for API responses
  */
-export interface CapabilityDTO {
+export interface SkillDTO {
   id: number;
   agentId: number;
   name: string;
@@ -42,24 +42,24 @@ export interface CapabilityDTO {
 }
 
 /**
- * Capability Mapper
+ * Skill Mapper
  *
  * Maps between domain entities and DTOs for API layer.
  * Provides type-safe conversions between domain and presentation layers.
  */
-export class CapabilityMapper {
+export class SkillMapper {
   /**
-   * Convert Capability domain entity to DTO
+   * Convert Skill domain entity to DTO
    */
-  static toDTO(capability: Capability): CapabilityDTO {
+  static toDTO(skill: Skill): SkillDTO {
     return {
-      id: capability.id.value,
-      agentId: capability.agentId.value,
-      name: capability.name,
-      description: capability.description,
-      steps: capability.steps.map(s => this.stepToDTO(s)),
-      createdAt: capability.createdAt.toISOString(),
-      updatedAt: capability.updatedAt.toISOString()
+      id: skill.id.value,
+      agentId: skill.agentId.value,
+      name: skill.name,
+      description: skill.description,
+      steps: skill.steps.map(s => this.stepToDTO(s)),
+      createdAt: skill.createdAt.toISOString(),
+      updatedAt: skill.updatedAt.toISOString()
     };
   }
 
@@ -69,7 +69,7 @@ export class CapabilityMapper {
   static stepToDTO(step: Step): StepDTO {
     return {
       id: step.id.value,
-      capabilityId: step.capabilityId.value,
+      skillId: step.skillId.value,
       stepOrder: step.stepOrder,
       type: step.type.value,
       instructions: step.instructions,
@@ -82,10 +82,10 @@ export class CapabilityMapper {
   }
 
   /**
-   * Convert list of Capabilities to DTOs
+   * Convert list of Skills to DTOs
    */
-  static toDTOList(capabilities: Capability[]): CapabilityDTO[] {
-    return capabilities.map(c => this.toDTO(c));
+  static toDTOList(skills: Skill[]): SkillDTO[] {
+    return skills.map(c => this.toDTO(c));
   }
 
   /**
