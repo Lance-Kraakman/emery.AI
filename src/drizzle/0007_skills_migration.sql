@@ -1,4 +1,7 @@
-CREATE TABLE "capabilities" (
+-- Skills Migration (renamed from capabilities)
+-- Creates skills and skill_steps tables, renames capability_name to skill_name in tasks
+
+CREATE TABLE "skills" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"agent_id" integer NOT NULL,
 	"name" text NOT NULL,
@@ -7,10 +10,10 @@ CREATE TABLE "capabilities" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "capabilities" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE TABLE "capability_steps" (
+ALTER TABLE "skills" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "skill_steps" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"capability_id" integer NOT NULL,
+	"skill_id" integer NOT NULL,
 	"step_order" integer NOT NULL,
 	"type" text NOT NULL,
 	"instructions" text NOT NULL,
@@ -21,10 +24,11 @@ CREATE TABLE "capability_steps" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "capability_steps" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
-ALTER TABLE "capabilities" ADD CONSTRAINT "capabilities_agent_id_agents_id_fk" FOREIGN KEY ("agent_id") REFERENCES "public"."agents"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "capability_steps" ADD CONSTRAINT "capability_steps_capability_id_capabilities_id_fk" FOREIGN KEY ("capability_id") REFERENCES "public"."capabilities"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE POLICY "capabilities_view_permission" ON "capabilities" AS PERMISSIVE FOR SELECT TO public USING (EXISTS (
+ALTER TABLE "skill_steps" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "tasks" RENAME COLUMN "capability_name" TO "skill_name";--> statement-breakpoint
+ALTER TABLE "skills" ADD CONSTRAINT "skills_agent_id_agents_id_fk" FOREIGN KEY ("agent_id") REFERENCES "public"."agents"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "skill_steps" ADD CONSTRAINT "skill_steps_skill_id_skills_id_fk" FOREIGN KEY ("skill_id") REFERENCES "public"."skills"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE POLICY "skills_view_permission" ON "skills" AS PERMISSIVE FOR SELECT TO public USING (EXISTS (
       SELECT 1 FROM agents a
       WHERE a.id = agent_id
       AND a.organization_id = current_setting('app.current_organization_id')::integer
@@ -39,7 +43,7 @@ CREATE POLICY "capabilities_view_permission" ON "capabilities" AS PERMISSIVE FOR
         )
       )
     ));--> statement-breakpoint
-CREATE POLICY "capabilities_manage_permission" ON "capabilities" AS PERMISSIVE FOR ALL TO public USING (EXISTS (
+CREATE POLICY "skills_manage_permission" ON "skills" AS PERMISSIVE FOR ALL TO public USING (EXISTS (
       SELECT 1 FROM agents a
       WHERE a.id = agent_id
       AND a.organization_id = current_setting('app.current_organization_id')::integer
@@ -68,10 +72,10 @@ CREATE POLICY "capabilities_manage_permission" ON "capabilities" AS PERMISSIVE F
         )
       )
     ));--> statement-breakpoint
-CREATE POLICY "capability_steps_view_permission" ON "capability_steps" AS PERMISSIVE FOR SELECT TO public USING (EXISTS (
-      SELECT 1 FROM capabilities c
-      JOIN agents a ON a.id = c.agent_id
-      WHERE c.id = capability_id
+CREATE POLICY "skill_steps_view_permission" ON "skill_steps" AS PERMISSIVE FOR SELECT TO public USING (EXISTS (
+      SELECT 1 FROM skills s
+      JOIN agents a ON a.id = s.agent_id
+      WHERE s.id = skill_id
       AND a.organization_id = current_setting('app.current_organization_id')::integer
       AND (
         a.owner_id = current_setting('app.current_user_id')::uuid
@@ -84,10 +88,10 @@ CREATE POLICY "capability_steps_view_permission" ON "capability_steps" AS PERMIS
         )
       )
     ));--> statement-breakpoint
-CREATE POLICY "capability_steps_manage_permission" ON "capability_steps" AS PERMISSIVE FOR ALL TO public USING (EXISTS (
-      SELECT 1 FROM capabilities c
-      JOIN agents a ON a.id = c.agent_id
-      WHERE c.id = capability_id
+CREATE POLICY "skill_steps_manage_permission" ON "skill_steps" AS PERMISSIVE FOR ALL TO public USING (EXISTS (
+      SELECT 1 FROM skills s
+      JOIN agents a ON a.id = s.agent_id
+      WHERE s.id = skill_id
       AND a.organization_id = current_setting('app.current_organization_id')::integer
       AND (
         a.owner_id = current_setting('app.current_user_id')::uuid
@@ -100,9 +104,9 @@ CREATE POLICY "capability_steps_manage_permission" ON "capability_steps" AS PERM
         )
       )
     )) WITH CHECK (EXISTS (
-      SELECT 1 FROM capabilities c
-      JOIN agents a ON a.id = c.agent_id
-      WHERE c.id = capability_id
+      SELECT 1 FROM skills s
+      JOIN agents a ON a.id = s.agent_id
+      WHERE s.id = skill_id
       AND a.organization_id = current_setting('app.current_organization_id')::integer
       AND (
         a.owner_id = current_setting('app.current_user_id')::uuid

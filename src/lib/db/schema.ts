@@ -500,8 +500,8 @@ export const agents = pgTable("agents", {
   }),
 ]);
 
-// AIDEV-NOTE: Capabilities tables - migrated from agents.capabilities JSON field to proper relational structure
-export const capabilities = pgTable("capabilities", {
+// AIDEV-NOTE: Skills tables - migrated from agents.capabilities JSON field to proper relational structure
+export const skills = pgTable("skills", {
   id: serial("id").primaryKey(),
   agentId: integer("agent_id").notNull().references(() => agents.id, { onDelete: 'cascade' }),
   name: text("name").notNull(),
@@ -509,8 +509,8 @@ export const capabilities = pgTable("capabilities", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
-  // RBAC-based policy inherits from agent permissions - if you can manage the agent, you can manage its capabilities
-  pgPolicy("capabilities_view_permission", {
+  // RBAC-based policy inherits from agent permissions - if you can manage the agent, you can manage its skills
+  pgPolicy("skills_view_permission", {
     as: "permissive",
     for: "select",
     to: "public",
@@ -530,7 +530,7 @@ export const capabilities = pgTable("capabilities", {
       )
     )`
   }),
-  pgPolicy("capabilities_manage_permission", {
+  pgPolicy("skills_manage_permission", {
     as: "permissive",
     for: "all",
     to: "public",
@@ -567,9 +567,9 @@ export const capabilities = pgTable("capabilities", {
   }),
 ]);
 
-export const capabilitySteps = pgTable("capability_steps", {
+export const skillSteps = pgTable("skill_steps", {
   id: serial("id").primaryKey(),
-  capabilityId: integer("capability_id").notNull().references(() => capabilities.id, { onDelete: 'cascade' }),
+  skillId: integer("skill_id").notNull().references(() => skills.id, { onDelete: 'cascade' }),
   stepOrder: integer("step_order").notNull(),
   type: text("type").notNull(), // 'TOOL_STEP' or 'CODE_STEP'
   instructions: text("instructions").notNull(),
@@ -579,15 +579,15 @@ export const capabilitySteps = pgTable("capability_steps", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
-  // RBAC-based policy inherits from capability -> agent permissions
-  pgPolicy("capability_steps_view_permission", {
+  // RBAC-based policy inherits from skill -> agent permissions
+  pgPolicy("skill_steps_view_permission", {
     as: "permissive",
     for: "select",
     to: "public",
     using: sql`EXISTS (
-      SELECT 1 FROM capabilities c
-      JOIN agents a ON a.id = c.agent_id
-      WHERE c.id = capability_id
+      SELECT 1 FROM skills s
+      JOIN agents a ON a.id = s.agent_id
+      WHERE s.id = skill_id
       AND a.organization_id = current_setting('app.current_organization_id')::integer
       AND (
         a.owner_id = current_setting('app.current_user_id')::uuid
@@ -601,14 +601,14 @@ export const capabilitySteps = pgTable("capability_steps", {
       )
     )`
   }),
-  pgPolicy("capability_steps_manage_permission", {
+  pgPolicy("skill_steps_manage_permission", {
     as: "permissive",
     for: "all",
     to: "public",
     using: sql`EXISTS (
-      SELECT 1 FROM capabilities c
-      JOIN agents a ON a.id = c.agent_id
-      WHERE c.id = capability_id
+      SELECT 1 FROM skills s
+      JOIN agents a ON a.id = s.agent_id
+      WHERE s.id = skill_id
       AND a.organization_id = current_setting('app.current_organization_id')::integer
       AND (
         a.owner_id = current_setting('app.current_user_id')::uuid
@@ -622,9 +622,9 @@ export const capabilitySteps = pgTable("capability_steps", {
       )
     )`,
     withCheck: sql`EXISTS (
-      SELECT 1 FROM capabilities c
-      JOIN agents a ON a.id = c.agent_id
-      WHERE c.id = capability_id
+      SELECT 1 FROM skills s
+      JOIN agents a ON a.id = s.agent_id
+      WHERE s.id = skill_id
       AND a.organization_id = current_setting('app.current_organization_id')::integer
       AND (
         a.owner_id = current_setting('app.current_user_id')::uuid
@@ -645,7 +645,7 @@ export const tasks = pgTable("tasks", {
   agentId: integer("agent_id").notNull().references(() => agents.id), // WHICH agent executes this
   organizationId: integer("organization_id").notNull().references(() => organizations.id), // Organization for RLS
   name: text("name").notNull(),
-  capabilityName: text("capability_name"), // Optional - system can auto-route if not specified
+  skillName: text("skill_name"), // Optional - system can auto-route if not specified
   instructions: jsonb("instructions").notNull(), // Step-like config: {instructions: string, tools?: ToolConfig[], servers?: ServerConfig[]}
   status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed, cancelled, timeout
   result: jsonb("result"), // Final output data
