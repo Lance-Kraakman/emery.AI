@@ -5,7 +5,7 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 export type ModalType =
   | 'basic-info'
   | 'trigger-config'
-  | 'capabilities'
+  | 'skills'
   | 'tools-servers'
   | 'activity-details';
 

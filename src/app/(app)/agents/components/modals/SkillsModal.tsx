@@ -39,7 +39,7 @@ type ModalView = 'list' | 'create' | 'edit' | 'step-detail';
 
 export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalProps) {
   const [view, setView] = useState<ModalView>('list');
-  const [skills, setCapabilities] = useState<SkillConfig[]>([]);
+  const [skills, setSkills] = useState<SkillConfig[]>([]);
   const [editingSkill, setEditingSkill] = useState<SkillConfig | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingStepIndex, setEditingStepIndex] = useState<number | null>(null);
@@ -58,7 +58,7 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
   // Initialize skills
   useEffect(() => {
     if (isOpen) {
-      setCapabilities((agent.skills as SkillConfig[]) || []);
+      setSkills((agent.skills as SkillConfig[]) || []);
       setView('list');
       setEditingSkill(null);
       setEditingIndex(null);
@@ -84,21 +84,21 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
   };
 
   const handleDeleteSkill = (index: number) => {
-    const newCapabilities = skills.filter((_, i) => i !== index);
-    setCapabilities(newCapabilities);
+    const newSkills = skills.filter((_, i) => i !== index);
+    setSkills(newSkills);
   };
 
   const handleSaveSkill = () => {
     if (!editingSkill) return;
 
-    const newCapabilities = [...skills];
+    const newSkills = [...skills];
     if (editingIndex === -1) {
-      newCapabilities.push(editingSkill);
+      newSkills.push(editingSkill);
     } else if (editingIndex !== null) {
-      newCapabilities[editingIndex] = editingSkill;
+      newSkills[editingIndex] = editingSkill;
     }
 
-    setCapabilities(newCapabilities);
+    setSkills(newSkills);
     setView('list');
     setEditingSkill(null);
     setEditingIndex(null);
@@ -341,15 +341,15 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
     try {
       setIsSaving(true);
 
-      console.log('[CapabilitiesModal] handleSaveAll - skills before conversion:', JSON.stringify(skills, null, 2));
+      console.log('[SkillsModal] handleSaveAll - skills before conversion:', JSON.stringify(skills, null, 2));
       
       // Log detailed tool information
       skills.forEach((cap, capIndex) => {
-        console.log(`[CapabilitiesModal] handleSaveAll - Skill ${capIndex}:`, cap.name);
+        console.log(`[SkillsModal] handleSaveAll - Skill ${capIndex}:`, cap.name);
         cap.steps?.forEach((step, stepIndex) => {
-          console.log(`[CapabilitiesModal] handleSaveAll - Step ${stepIndex}:`, step.type, 'tools:', step.tools);
+          console.log(`[SkillsModal] handleSaveAll - Step ${stepIndex}:`, step.type, 'tools:', step.tools);
           step.tools?.forEach((tool, toolIndex) => {
-            console.log(`[CapabilitiesModal] handleSaveAll - Tool ${toolIndex}:`, {
+            console.log(`[SkillsModal] handleSaveAll - Tool ${toolIndex}:`, {
               value: tool,
               type: typeof tool,
               isFunction: typeof tool === 'function',
@@ -375,7 +375,7 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
             } else if (tool && typeof tool === 'object' && Object.getPrototypeOf(tool) === Object.prototype) {
               return tool as ToolConfigDTO; // Already a plain object
             } else {
-              console.warn('[CapabilitiesModal] Invalid tool found:', tool);
+              console.warn('[SkillsModal] Invalid tool found:', tool);
               return null;
             }
           }).filter((tool): tool is ToolConfigDTO => tool !== null) || [],
@@ -383,7 +383,7 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
         }))
       }));
 
-      console.log('[CapabilitiesModal] handleSaveAll - skillsDTO after conversion:', JSON.stringify(skillsDTO, null, 2));
+      console.log('[SkillsModal] handleSaveAll - skillsDTO after conversion:', JSON.stringify(skillsDTO, null, 2));
 
       const result = await updateAgentFromClient(agent.id, {
         skills: skillsDTO
@@ -405,7 +405,7 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
   const getModalTitle = () => {
     switch (view) {
       case 'list':
-        return 'Manage Capabilities';
+        return 'Manage Skills';
       case 'create':
         return 'Create New Skill';
       case 'edit':
@@ -413,7 +413,7 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
       case 'step-detail':
         return 'Configure Step';
       default:
-        return 'Capabilities';
+        return 'Skills';
     }
   };
 
@@ -491,7 +491,7 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-medium">Capabilities ({skills.length})</h3>
+                <h3 className="text-lg font-medium">Skills ({skills.length})</h3>
                 <p className="text-sm text-muted-foreground">
                   Multi-step workflows this agent can perform
                 </p>
@@ -506,7 +506,7 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
               <Card>
                 <CardContent className="p-8 text-center">
                   <Settings className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">No Capabilities Yet</h3>
+                  <h3 className="text-lg font-medium mb-2">No Skills Yet</h3>
                   <p className="text-muted-foreground mb-4">
                     Create your first capability to define what this agent can do
                   </p>
