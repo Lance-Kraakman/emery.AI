@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StepInstructionsInput } from './step-editor/StepInstructionsInput';
+import { StepToolsSection } from './step-editor/StepToolsSection';
 import type { ToolConfigDTO, SkillInput, SkillOutput } from '@/app/mappers/skill-mapper';
 
 export interface CapabilityFormData {
@@ -217,6 +218,22 @@ export function CapabilityEditor({
           tools={localValue.tools}
           stepIndex={0}
         />
+
+        {/* Tools Display - BELOW instructions */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm text-muted-foreground">Tools Used</Label>
+            <span className="text-xs text-muted-foreground">
+              {localValue.tools.length} tool{localValue.tools.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <StepToolsSection
+            tools={localValue.tools}
+            onToolsChange={(tools) => handleChange({ tools })}
+            stepIndex={0}
+          />
+        </div>
+
         <p className="text-xs text-muted-foreground">
           Type @ to reference tools, documents, or other skills
         </p>
