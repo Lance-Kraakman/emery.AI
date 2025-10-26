@@ -39,8 +39,8 @@ type ModalView = 'list' | 'create' | 'edit' | 'step-detail';
 
 export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalProps) {
   const [view, setView] = useState<ModalView>('list');
-  const [capabilities, setCapabilities] = useState<SkillConfig[]>([]);
-  const [editingCapability, setEditingCapability] = useState<SkillConfig | null>(null);
+  const [skills, setCapabilities] = useState<SkillConfig[]>([]);
+  const [editingSkill, setEditingSkill] = useState<SkillConfig | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingStepIndex, setEditingStepIndex] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -55,57 +55,57 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
     inputRef: HTMLInputElement | HTMLTextAreaElement | null;
   } | null>(null);
 
-  // Initialize capabilities
+  // Initialize skills
   useEffect(() => {
     if (isOpen) {
       setCapabilities((agent.skills as SkillConfig[]) || []);
       setView('list');
-      setEditingCapability(null);
+      setEditingSkill(null);
       setEditingIndex(null);
       setEditingStepIndex(null);
     }
   }, [isOpen, agent]);
 
-  const handleCreateCapability = () => {
-    const newCapability: SkillConfig = {
+  const handleCreateSkill = () => {
+    const newSkill: SkillConfig = {
       name: '',
       description: '',
       steps: []
     };
-    setEditingCapability(newCapability);
+    setEditingSkill(newSkill);
     setEditingIndex(-1); // -1 indicates creating new
     setView('create');
   };
 
-  const handleEditCapability = (capability: SkillConfig, index: number) => {
-    setEditingCapability({ ...capability });
+  const handleEditSkill = (capability: SkillConfig, index: number) => {
+    setEditingSkill({ ...capability });
     setEditingIndex(index);
     setView('edit');
   };
 
-  const handleDeleteCapability = (index: number) => {
-    const newCapabilities = capabilities.filter((_, i) => i !== index);
+  const handleDeleteSkill = (index: number) => {
+    const newCapabilities = skills.filter((_, i) => i !== index);
     setCapabilities(newCapabilities);
   };
 
-  const handleSaveCapability = () => {
-    if (!editingCapability) return;
+  const handleSaveSkill = () => {
+    if (!editingSkill) return;
 
-    const newCapabilities = [...capabilities];
+    const newCapabilities = [...skills];
     if (editingIndex === -1) {
-      newCapabilities.push(editingCapability);
+      newCapabilities.push(editingSkill);
     } else if (editingIndex !== null) {
-      newCapabilities[editingIndex] = editingCapability;
+      newCapabilities[editingIndex] = editingSkill;
     }
 
     setCapabilities(newCapabilities);
     setView('list');
-    setEditingCapability(null);
+    setEditingSkill(null);
     setEditingIndex(null);
   };
 
   const handleAddStep = () => {
-    if (!editingCapability) return;
+    if (!editingSkill) return;
 
     const newStep: StepConfig = {
       type: 'TOOL_STEP',
@@ -114,44 +114,44 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
       servers: []
     };
 
-    setEditingCapability({
-      ...editingCapability,
-      steps: [...(editingCapability.steps || []), newStep]
+    setEditingSkill({
+      ...editingSkill,
+      steps: [...(editingSkill.steps || []), newStep]
     });
   };
 
   const handleDeleteStep = (stepIndex: number) => {
-    if (!editingCapability) return;
+    if (!editingSkill) return;
 
-    setEditingCapability({
-      ...editingCapability,
-      steps: editingCapability.steps?.filter((_, i) => i !== stepIndex) || []
+    setEditingSkill({
+      ...editingSkill,
+      steps: editingSkill.steps?.filter((_, i) => i !== stepIndex) || []
     });
   };
 
   const handleUpdateStep = (stepIndex: number, updates: Partial<StepConfig>) => {
-    if (!editingCapability) return;
+    if (!editingSkill) return;
 
-    setEditingCapability({
-      ...editingCapability,
-      steps: editingCapability.steps?.map((step, i) =>
+    setEditingSkill({
+      ...editingSkill,
+      steps: editingSkill.steps?.map((step, i) =>
         i === stepIndex ? { ...step, ...updates } : step
       ) || []
     });
   };
 
   const handleAddStepTool = (stepIndex: number) => {
-    if (!editingCapability) return;
+    if (!editingSkill) return;
 
     const newTool = ToolConfig.create('@', {}); // Start with @ to trigger dropdown
-    const updatedSteps = editingCapability.steps?.map((step, i) =>
+    const updatedSteps = editingSkill.steps?.map((step, i) =>
       i === stepIndex
         ? { ...step, tools: [...(step.tools || []), newTool] }
         : step
     ) || [];
 
-    setEditingCapability({
-      ...editingCapability,
+    setEditingSkill({
+      ...editingSkill,
       steps: updatedSteps
     });
 
@@ -171,16 +171,16 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
   };
 
   const handleRemoveStepTool = (stepIndex: number, toolIndex: number) => {
-    if (!editingCapability) return;
+    if (!editingSkill) return;
 
-    const updatedSteps = editingCapability.steps?.map((step, i) =>
+    const updatedSteps = editingSkill.steps?.map((step, i) =>
       i === stepIndex
         ? { ...step, tools: step.tools?.filter((_, ti) => ti !== toolIndex) || [] }
         : step
     ) || [];
 
-    setEditingCapability({
-      ...editingCapability,
+    setEditingSkill({
+      ...editingSkill,
       steps: updatedSteps
     });
   };
@@ -223,12 +223,12 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
   };
 
   const handleUpdateStepTool = (stepIndex: number, toolIndex: number, name: string) => {
-    if (!editingCapability) return;
+    if (!editingSkill) return;
 
     // Ensure we always have a valid name for ToolConfig
     const toolName = name?.trim() || 'New Tool';
 
-    const updatedSteps = editingCapability.steps?.map((step, i) =>
+    const updatedSteps = editingSkill.steps?.map((step, i) =>
       i === stepIndex
         ? {
             ...step,
@@ -239,8 +239,8 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
         : step
     ) || [];
 
-    setEditingCapability({
-      ...editingCapability,
+    setEditingSkill({
+      ...editingSkill,
       steps: updatedSteps
     });
   };
@@ -304,8 +304,8 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
           const newTool = ToolConfig.create(toolName, {});
 
           // Update both instructions and add tool to step
-          if (!editingCapability) return;
-          const updatedSteps = editingCapability.steps?.map((step, i) =>
+          if (!editingSkill) return;
+          const updatedSteps = editingSkill.steps?.map((step, i) =>
             i === stepIndex
               ? {
                   ...step,
@@ -315,8 +315,8 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
               : step
           ) || [];
 
-          setEditingCapability({
-            ...editingCapability,
+          setEditingSkill({
+            ...editingSkill,
             steps: updatedSteps
           });
 
@@ -341,11 +341,11 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
     try {
       setIsSaving(true);
 
-      console.log('[CapabilitiesModal] handleSaveAll - capabilities before conversion:', JSON.stringify(capabilities, null, 2));
+      console.log('[CapabilitiesModal] handleSaveAll - skills before conversion:', JSON.stringify(skills, null, 2));
       
       // Log detailed tool information
-      capabilities.forEach((cap, capIndex) => {
-        console.log(`[CapabilitiesModal] handleSaveAll - Capability ${capIndex}:`, cap.name);
+      skills.forEach((cap, capIndex) => {
+        console.log(`[CapabilitiesModal] handleSaveAll - Skill ${capIndex}:`, cap.name);
         cap.steps?.forEach((step, stepIndex) => {
           console.log(`[CapabilitiesModal] handleSaveAll - Step ${stepIndex}:`, step.type, 'tools:', step.tools);
           step.tools?.forEach((tool, toolIndex) => {
@@ -360,8 +360,8 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
         });
       });
 
-      // Convert domain capabilities to DTOs before sending to server action
-      const capabilitiesDTO: SkillConfigDTO[] = capabilities.map(cap => ({
+      // Convert domain skills to DTOs before sending to server action
+      const skillsDTO: SkillConfigDTO[] = skills.map(cap => ({
         name: cap.name,
         description: cap.description,
         steps: cap.steps.map(step => ({
@@ -383,20 +383,20 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
         }))
       }));
 
-      console.log('[CapabilitiesModal] handleSaveAll - capabilitiesDTO after conversion:', JSON.stringify(capabilitiesDTO, null, 2));
+      console.log('[CapabilitiesModal] handleSaveAll - skillsDTO after conversion:', JSON.stringify(skillsDTO, null, 2));
 
       const result = await updateAgentFromClient(agent.id, {
-        skills: capabilitiesDTO
+        skills: skillsDTO
       });
 
       if (!result.success) {
-        throw new Error(result.error || 'Failed to update capabilities');
+        throw new Error(result.error || 'Failed to update skills');
       }
 
       onUpdate?.();
       onClose();
     } catch (error) {
-      console.error('Error saving capabilities:', error);
+      console.error('Error saving skills:', error);
     } finally {
       setIsSaving(false);
     }
@@ -407,9 +407,9 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
       case 'list':
         return 'Manage Capabilities';
       case 'create':
-        return 'Create New Capability';
+        return 'Create New Skill';
       case 'edit':
-        return 'Edit Capability';
+        return 'Edit Skill';
       case 'step-detail':
         return 'Configure Step';
       default:
@@ -464,11 +464,11 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
 
         {(view === 'create' || view === 'edit') && (
           <Button
-            onClick={handleSaveCapability}
-            disabled={!editingCapability?.name.trim() || isSaving}
+            onClick={handleSaveSkill}
+            disabled={!editingSkill?.name.trim() || isSaving}
           >
             <Save className="h-4 w-4 mr-2" />
-            Save Capability
+            Save Skill
           </Button>
         )}
       </div>
@@ -491,18 +491,18 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-medium">Capabilities ({capabilities.length})</h3>
+                <h3 className="text-lg font-medium">Capabilities ({skills.length})</h3>
                 <p className="text-sm text-muted-foreground">
                   Multi-step workflows this agent can perform
                 </p>
               </div>
-              <Button onClick={handleCreateCapability}>
+              <Button onClick={handleCreateSkill}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add Capability
+                Add Skill
               </Button>
             </div>
 
-            {capabilities.length === 0 ? (
+            {skills.length === 0 ? (
               <Card>
                 <CardContent className="p-8 text-center">
                   <Settings className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -510,15 +510,15 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
                   <p className="text-muted-foreground mb-4">
                     Create your first capability to define what this agent can do
                   </p>
-                  <Button onClick={handleCreateCapability}>
+                  <Button onClick={handleCreateSkill}>
                     <Plus className="h-4 w-4 mr-2" />
-                    Create First Capability
+                    Create First Skill
                   </Button>
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-3">
-                {capabilities.map((capability, index) => (
+                {skills.map((capability, index) => (
                   <Card key={index}>
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between">
@@ -544,14 +544,14 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleEditCapability(capability, index)}
+                            onClick={() => handleEditSkill(capability, index)}
                           >
                             <Edit2 className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDeleteCapability(index)}
+                            onClick={() => handleDeleteSkill(index)}
                             className="text-destructive hover:text-destructive"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -566,17 +566,17 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
           </div>
         )}
 
-        {(view === 'create' || view === 'edit') && editingCapability && (
+        {(view === 'create' || view === 'edit') && editingSkill && (
           <div className="space-y-6">
             {/* Basic Info */}
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="capability-name">Capability Name *</Label>
+                <Label htmlFor="capability-name">Skill Name *</Label>
                 <Input
                   id="capability-name"
-                  value={editingCapability.name}
+                  value={editingSkill.name}
                   onChange={(e) =>
-                    setEditingCapability({ ...editingCapability, name: e.target.value })
+                    setEditingSkill({ ...editingSkill, name: e.target.value })
                   }
                   placeholder="e.g., Data Analysis, Customer Support, Content Generation"
                 />
@@ -586,9 +586,9 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
                 <Label htmlFor="capability-description">Description</Label>
                 <Textarea
                   id="capability-description"
-                  value={editingCapability.description || ''}
+                  value={editingSkill.description || ''}
                   onChange={(e) =>
-                    setEditingCapability({ ...editingCapability, description: e.target.value })
+                    setEditingSkill({ ...editingSkill, description: e.target.value })
                   }
                   placeholder="Describe what this capability does and when to use it"
                   rows={3}
@@ -606,7 +606,7 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
                 </Button>
               </div>
 
-              {(!editingCapability.steps || editingCapability.steps.length === 0) ? (
+              {(!editingSkill.steps || editingSkill.steps.length === 0) ? (
                 <Card>
                   <CardContent className="p-6 text-center">
                     <Code2 className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
@@ -617,7 +617,7 @@ export function SkillsModal({ isOpen, onClose, agent, onUpdate }: SkillsModalPro
                 </Card>
               ) : (
                 <div className="space-y-2">
-                  {editingCapability.steps.map((step, stepIndex) => (
+                  {editingSkill.steps.map((step, stepIndex) => (
                     <Card key={stepIndex} className="border-l-4 border-l-primary">
                       <CardHeader className="pb-3">
                         <div className="flex items-center justify-between">

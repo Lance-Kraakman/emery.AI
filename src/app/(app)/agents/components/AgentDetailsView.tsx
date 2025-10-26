@@ -48,11 +48,11 @@ interface EditFormData {
   trigger: TriggerConfig;
   tools: ToolConfigDTO[];
   servers: ServerConfig[];
-  capabilities: SkillConfigDTO[];
+  skills: SkillConfigDTO[];
 }
 
 export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetailsViewProps) {
-  const [isCapabilitiesOpen, setIsCapabilitiesOpen] = useState(false);
+  const [isSkillsOpen, setIsSkillsOpen] = useState(false);
   const [isActivityOpen, setIsActivityOpen] = useState(false);
   const [isTriggerConfigOpen, setIsTriggerConfigOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -66,7 +66,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
     trigger: agent.trigger || TriggerConfigs.manual(),
     tools: agent.tools || [],
     servers: agent.servers || [],
-    capabilities: agent.skills || []
+    skills: agent.skills || []
   });
 
   const handleEdit = () => {
@@ -80,7 +80,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       trigger: agent.trigger || TriggerConfigs.manual(),
       tools: agent.tools || [],
       servers: agent.servers || [],
-      capabilities: agent.skills || []
+      skills: agent.skills || []
     });
   };
 
@@ -95,7 +95,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       trigger: agent.trigger || TriggerConfigs.manual(),
       tools: agent.tools || [],
       servers: agent.servers || [],
-      capabilities: agent.skills || []
+      skills: agent.skills || []
     });
   };
 
@@ -105,11 +105,11 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       
       console.log('[AgentDetailsView] handleSave - editFormData before save:', JSON.stringify(editFormData, null, 2));
       
-      // Log capabilities details
-      console.log('[AgentDetailsView] handleSave - capabilities being sent:');
-      editFormData.capabilities?.forEach((cap, capIndex) => {
-        console.log(`  Capability ${capIndex}:`, cap.name);
-        cap.steps?.forEach((step, stepIndex) => {
+      // Log skills details
+      console.log('[AgentDetailsView] handleSave - skills being sent:');
+      editFormData.skills?.forEach((skill, skillIndex) => {
+        console.log(`  Skill ${skillIndex}:`, skill.name);
+        skill.steps?.forEach((step, stepIndex) => {
           console.log(`    Step ${stepIndex}:`, step.type, 'tools:', step.tools);
           step.tools?.forEach((tool, toolIndex) => {
             console.log(`      Tool ${toolIndex}:`, {
@@ -132,7 +132,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
         status: editFormData.status
       };
 
-      console.log('[AgentDetailsView] handleSave - Calling updateAgentFromClient with capabilities:', editFormData.capabilities);
+      console.log('[AgentDetailsView] handleSave - Calling updateAgentFromClient with skills:', editFormData.skills);
 
       const result = await updateAgentFromClient(agent.id, {
         name: editFormData.name.trim(),
@@ -143,7 +143,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
         trigger: editFormData.trigger,
         tools: editFormData.tools,
         servers: editFormData.servers,
-        skills: editFormData.capabilities
+        skills: editFormData.skills
       });
       
       if (!result.success) {
@@ -601,29 +601,29 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
         </CardContent>
       </Card>
 
-      {/* Capabilities Section - Collapsible */}
-      <Collapsible open={isCapabilitiesOpen} onOpenChange={setIsCapabilitiesOpen}>
+      {/* Skills Section - Collapsible */}
+      <Collapsible open={isSkillsOpen} onOpenChange={setIsSkillsOpen}>
         <div className="border rounded-lg">
           <CollapsibleTrigger asChild>
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               className="w-full justify-between h-auto p-3 hover:bg-muted/50"
             >
               <div className="flex items-center gap-2">
                 <Cog size={16} />
-                <span className="font-medium text-sm">Capabilities</span>
+                <span className="font-medium text-sm">Skills</span>
               </div>
-              {isCapabilitiesOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              {isSkillsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="px-3 pb-3">
               <SkillManager
                 agent={isEditMode ? undefined : agent}
-                capabilities={isEditMode ? editFormData.capabilities : undefined}
+                skills={isEditMode ? editFormData.skills : undefined}
                 isEditable={isEditMode}
-                onCapabilitiesChange={(capabilities: SkillConfigDTO[]) => {
-                  setEditFormData(prev => ({ ...prev, capabilities }));
+                onSkillsChange={(skills: SkillConfigDTO[]) => {
+                  setEditFormData(prev => ({ ...prev, skills }));
                 }}
               />
             </div>
