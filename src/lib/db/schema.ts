@@ -500,12 +500,26 @@ export const agents = pgTable("agents", {
   }),
 ]);
 
-// AIDEV-NOTE: Skills tables - migrated from agents.capabilities JSON field to proper relational structure
+// AIDEV-NOTE: Skills - simplified single-instruction model
+// Removed: skillSteps table (multi-step workflow)
+// Added: inputs, outputs, instructions (single natural language block), tools
 export const skills = pgTable("skills", {
   id: serial("id").primaryKey(),
   agentId: integer("agent_id").notNull().references(() => agents.id, { onDelete: 'cascade' }),
   name: text("name").notNull(),
   description: text("description").default(''),
+
+  // NEW: Simplified single-instruction model
+  inputs: jsonb("inputs").$type<Array<{
+    name: string;
+    required: boolean;
+  }>>().default([]),
+  outputs: jsonb("outputs").$type<Array<{
+    name: string;
+  }>>().default([]),
+  instructions: text("instructions").notNull().default(''),
+  tools: jsonb("tools").default('[]').notNull(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -567,78 +581,7 @@ export const skills = pgTable("skills", {
   }),
 ]);
 
-export const skillSteps = pgTable("skill_steps", {
-  id: serial("id").primaryKey(),
-  skillId: integer("skill_id").notNull().references(() => skills.id, { onDelete: 'cascade' }),
-  stepOrder: integer("step_order").notNull(),
-  type: text("type").notNull(), // 'TOOL_STEP' or 'CODE_STEP'
-  instructions: text("instructions").notNull(),
-  model: text("model"),
-  tools: jsonb("tools").default('[]').notNull(), // Array of ToolConfig objects
-  servers: jsonb("servers").default('[]').notNull(), // Array of ServerConfig objects
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => [
-  // RBAC-based policy inherits from skill -> agent permissions
-  pgPolicy("skill_steps_view_permission", {
-    as: "permissive",
-    for: "select",
-    to: "public",
-    using: sql`EXISTS (
-      SELECT 1 FROM skills s
-      JOIN agents a ON a.id = s.agent_id
-      WHERE s.id = skill_id
-      AND a.organization_id = current_setting('app.current_organization_id')::integer
-      AND (
-        a.owner_id = current_setting('app.current_user_id')::uuid
-        OR user_has_permission(
-          current_setting('app.current_user_id')::uuid,
-          'agents:view',
-          a.organization_id,
-          'agent',
-          a.id
-        )
-      )
-    )`
-  }),
-  pgPolicy("skill_steps_manage_permission", {
-    as: "permissive",
-    for: "all",
-    to: "public",
-    using: sql`EXISTS (
-      SELECT 1 FROM skills s
-      JOIN agents a ON a.id = s.agent_id
-      WHERE s.id = skill_id
-      AND a.organization_id = current_setting('app.current_organization_id')::integer
-      AND (
-        a.owner_id = current_setting('app.current_user_id')::uuid
-        OR user_has_permission(
-          current_setting('app.current_user_id')::uuid,
-          'agents:manage',
-          a.organization_id,
-          'agent',
-          a.id
-        )
-      )
-    )`,
-    withCheck: sql`EXISTS (
-      SELECT 1 FROM skills s
-      JOIN agents a ON a.id = s.agent_id
-      WHERE s.id = skill_id
-      AND a.organization_id = current_setting('app.current_organization_id')::integer
-      AND (
-        a.owner_id = current_setting('app.current_user_id')::uuid
-        OR user_has_permission(
-          current_setting('app.current_user_id')::uuid,
-          'agents:manage',
-          a.organization_id,
-          'agent',
-          a.id
-        )
-      )
-    )`
-  }),
-]);
+// AIDEV-NOTE: skillSteps table removed - replaced with single instructions field in skills table
 
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),

@@ -5,19 +5,19 @@ import { Skill, CreateSkillProps, UpdateSkillProps } from '@/ddd/domain/skills/e
 import { SkillId } from '@/ddd/domain/skills/value-objects/skill-id';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { skills } from '@/lib/db/schema';
-import { IStepRepository } from '@/ddd/domain/skills/repositories/step-repository';
-import type { Step } from '@/ddd/domain/skills/entities/step';
 
 /**
  * Drizzle ORM implementation of SkillRepository
  *
- * Handles persistence of Skillaggregates using PostgreSQL via Drizzle.
- * Delegates step management to IStepRepository.
+ * AIDEV-NOTE: Simplified to handle single-instruction skills
+ * Removed: IStepRepository dependency and all step-related methods
+ * Added: inputs, outputs, instructions, tools fields
+ *
+ * Handles persistence of Skill aggregates using PostgreSQL via Drizzle.
  */
 export class DrizzleSkillRepository implements ISkillRepository {
   constructor(
-    private db: NodePgDatabase<any>,
-    private stepRepository: IStepRepository
+    private db: NodePgDatabase<any>
   ) {}
 
   async findById(id: SkillId): Promise<Skill | null> {
@@ -29,19 +29,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
 
     if (result.length === 0) return null;
 
-    return this.toDomain(result[0], []);
-  }
-
-  async findByIdWithSteps(id: SkillId): Promise<Skill | null> {
-    const skill = await this.findById(id);
-    if (!skill) return null;
-
-    const steps = await this.stepRepository.findBySkillId(id);
-
-    return {
-      ...skill,
-      steps: steps.sort((a, b) => a.stepOrder - b.stepOrder)
-    };
+    return this.toDomain(result[0]);
   }
 
   async findByAgentId(agentId: AgentId): Promise<Skill[]> {
@@ -50,17 +38,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
       .from(skills)
       .where(eq(skills.agentId, agentId.value));
 
-    // Load steps for each skill
-    const skillsWithSteps = await Promise.all(
-      results.map(async (skillRecord) => {
-        const steps = await this.stepRepository.findBySkillId(
-          SkillId.fromNumber(skillRecord.id)
-        );
-        return this.toDomain(skillRecord, steps);
-      })
-    );
-
-    return skillsWithSteps;
+    return results.map(record => this.toDomain(record));
   }
 
   async create(props: CreateSkillProps): Promise<Skill> {
@@ -71,12 +49,16 @@ export class DrizzleSkillRepository implements ISkillRepository {
         agentId: props.agentId.value,
         name: props.name,
         description: props.description || '',
+        inputs: props.inputs || [],
+        outputs: props.outputs || [],
+        instructions: props.instructions,
+        tools: props.tools || [],
         createdAt: now,
         updatedAt: now
       })
       .returning();
 
-    return this.toDomain(result[0], []);
+    return this.toDomain(result[0]);
   }
 
   async update(id: SkillId, updates: UpdateSkillProps): Promise<Skill> {
@@ -87,6 +69,18 @@ export class DrizzleSkillRepository implements ISkillRepository {
     }
     if (updates.description !== undefined) {
       updateData.description = updates.description;
+    }
+    if (updates.inputs !== undefined) {
+      updateData.inputs = updates.inputs;
+    }
+    if (updates.outputs !== undefined) {
+      updateData.outputs = updates.outputs;
+    }
+    if (updates.instructions !== undefined) {
+      updateData.instructions = updates.instructions;
+    }
+    if (updates.tools !== undefined) {
+      updateData.tools = updates.tools;
     }
 
     const result = await this.db
@@ -99,21 +93,16 @@ export class DrizzleSkillRepository implements ISkillRepository {
       throw new Error(`Skill ${id.value} not found`);
     }
 
-    // Load current steps
-    const steps = await this.stepRepository.findBySkillId(id);
-
-    return this.toDomain(result[0], steps);
+    return this.toDomain(result[0]);
   }
 
   async delete(id: SkillId): Promise<void> {
-    // Cascade delete will handle steps automatically via foreign key
     await this.db
       .delete(skills)
       .where(eq(skills.id, id.value));
   }
 
   async deleteByAgentId(agentId: AgentId): Promise<void> {
-    // Cascade delete will handle steps automatically
     await this.db
       .delete(skills)
       .where(eq(skills.agentId, agentId.value));
@@ -139,15 +128,18 @@ export class DrizzleSkillRepository implements ISkillRepository {
   }
 
   /**
-   * Convert database record to domain Skillentity
+   * Convert database record to domain Skill entity
    */
-  private toDomain(record: any, steps: Step[]): Skill{
+  private toDomain(record: any): Skill {
     return {
       id: SkillId.fromNumber(record.id),
       agentId: AgentId.fromNumber(record.agentId),
       name: record.name,
       description: record.description || '',
-      steps: steps.sort((a, b) => a.stepOrder - b.stepOrder),
+      inputs: record.inputs || [],
+      outputs: record.outputs || [],
+      instructions: record.instructions || '',
+      tools: record.tools || [],
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     };
