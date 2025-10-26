@@ -1,30 +1,30 @@
 import { eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { ICapabilityRepository } from '@/ddd/domain/capabilities/repositories/capability-repository';
-import { Capability, CreateCapabilityProps, UpdateCapabilityProps } from '@/ddd/domain/capabilities/entities/capability';
-import { CapabilityId } from '@/ddd/domain/capabilities/value-objects/capability-id';
+import { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
+import { Skill, CreateSkillProps, UpdateSkillProps } from '@/ddd/domain/skills/entities/skill';
+import { SkillId } from '@/ddd/domain/skills/value-objects/skill-id';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
-import { capabilities } from '@/lib/db/schema';
-import { IStepRepository } from '@/ddd/domain/capabilities/repositories/step-repository';
-import type { Step } from '@/ddd/domain/capabilities/entities/step';
+import { skills } from '@/lib/db/schema';
+import { IStepRepository } from '@/ddd/domain/skills/repositories/step-repository';
+import type { Step } from '@/ddd/domain/skills/entities/step';
 
 /**
- * Drizzle ORM implementation of Capability Repository
+ * Drizzle ORM implementation of SkillRepository
  *
- * Handles persistence of Capability aggregates using PostgreSQL via Drizzle.
+ * Handles persistence of Skillaggregates using PostgreSQL via Drizzle.
  * Delegates step management to IStepRepository.
  */
-export class DrizzleCapabilityRepository implements ICapabilityRepository {
+export class DrizzleSkillRepository implements ISkillRepository {
   constructor(
     private db: NodePgDatabase<any>,
     private stepRepository: IStepRepository
   ) {}
 
-  async findById(id: CapabilityId): Promise<Capability | null> {
+  async findById(id: SkillId): Promise<Skill | null> {
     const result = await this.db
       .select()
       .from(capabilities)
-      .where(eq(capabilities.id, id.value))
+      .where(eq(skills.id, id.value))
       .limit(1);
 
     if (result.length === 0) return null;
@@ -32,38 +32,38 @@ export class DrizzleCapabilityRepository implements ICapabilityRepository {
     return this.toDomain(result[0], []);
   }
 
-  async findByIdWithSteps(id: CapabilityId): Promise<Capability | null> {
-    const capability = await this.findById(id);
-    if (!capability) return null;
+  async findByIdWithSteps(id: SkillId): Promise<Skill | null> {
+    const skill = await this.findById(id);
+    if (!skill) return null;
 
-    const steps = await this.stepRepository.findByCapabilityId(id);
+    const steps = await this.stepRepository.findBySkillId(id);
 
     return {
-      ...capability,
+      ...skill,
       steps: steps.sort((a, b) => a.stepOrder - b.stepOrder)
     };
   }
 
-  async findByAgentId(agentId: AgentId): Promise<Capability[]> {
+  async findByAgentId(agentId: AgentId): Promise<Skill[]> {
     const results = await this.db
       .select()
       .from(capabilities)
-      .where(eq(capabilities.agentId, agentId.value));
+      .where(eq(skills.agentId, agentId.value));
 
-    // Load steps for each capability
-    const capsWithSteps = await Promise.all(
-      results.map(async (cap) => {
-        const steps = await this.stepRepository.findByCapabilityId(
-          CapabilityId.fromNumber(cap.id)
+    // Load steps for each skill
+    const skillsWithSteps = await Promise.all(
+      results.map(async (skillRecord) => {
+        const steps = await this.stepRepository.findBySkillId(
+          SkillId.fromNumber(skillRecord.id)
         );
         return this.toDomain(cap, steps);
       })
     );
 
-    return capsWithSteps;
+    return skillsWithSteps;
   }
 
-  async create(props: CreateCapabilityProps): Promise<Capability> {
+  async create(props: CreateSkillProps): Promise<Skill> {
     const now = new Date();
     const result = await this.db
       .insert(capabilities)
@@ -79,7 +79,7 @@ export class DrizzleCapabilityRepository implements ICapabilityRepository {
     return this.toDomain(result[0], []);
   }
 
-  async update(id: CapabilityId, updates: UpdateCapabilityProps): Promise<Capability> {
+  async update(id: SkillId, updates: UpdateSkillProps): Promise<Skill> {
     const updateData: any = { updatedAt: new Date() };
 
     if (updates.name !== undefined) {
@@ -92,38 +92,38 @@ export class DrizzleCapabilityRepository implements ICapabilityRepository {
     const result = await this.db
       .update(capabilities)
       .set(updateData)
-      .where(eq(capabilities.id, id.value))
+      .where(eq(skills.id, id.value))
       .returning();
 
     if (result.length === 0) {
-      throw new Error(`Capability ${id.value} not found`);
+      throw new Error(`Skill${id.value} not found`);
     }
 
     // Load current steps
-    const steps = await this.stepRepository.findByCapabilityId(id);
+    const steps = await this.stepRepository.findBySkillId(id);
 
     return this.toDomain(result[0], steps);
   }
 
-  async delete(id: CapabilityId): Promise<void> {
+  async delete(id: SkillId): Promise<void> {
     // Cascade delete will handle steps automatically via foreign key
     await this.db
       .delete(capabilities)
-      .where(eq(capabilities.id, id.value));
+      .where(eq(skills.id, id.value));
   }
 
   async deleteByAgentId(agentId: AgentId): Promise<void> {
     // Cascade delete will handle steps automatically
     await this.db
       .delete(capabilities)
-      .where(eq(capabilities.agentId, agentId.value));
+      .where(eq(skills.agentId, agentId.value));
   }
 
-  async exists(id: CapabilityId): Promise<boolean> {
+  async exists(id: SkillId): Promise<boolean> {
     const result = await this.db
-      .select({ id: capabilities.id })
+      .select({ id: skills.id })
       .from(capabilities)
-      .where(eq(capabilities.id, id.value))
+      .where(eq(skills.id, id.value))
       .limit(1);
 
     return result.length > 0;
@@ -133,17 +133,17 @@ export class DrizzleCapabilityRepository implements ICapabilityRepository {
     const results = await this.db
       .select()
       .from(capabilities)
-      .where(eq(capabilities.agentId, agentId.value));
+      .where(eq(skills.agentId, agentId.value));
 
     return results.length;
   }
 
   /**
-   * Convert database record to domain Capability entity
+   * Convert database record to domain Skillentity
    */
-  private toDomain(record: any, steps: Step[]): Capability {
+  private toDomain(record: any, steps: Step[]): Skill{
     return {
-      id: CapabilityId.fromNumber(record.id),
+      id: SkillId.fromNumber(record.id),
       agentId: AgentId.fromNumber(record.agentId),
       name: record.name,
       description: record.description || '',
