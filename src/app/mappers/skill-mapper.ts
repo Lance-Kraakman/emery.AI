@@ -1,5 +1,4 @@
 import type { Skill } from '@/ddd/domain/skills/entities/skill';
-import type { Step } from '@/ddd/domain/skills/entities/step';
 
 /**
  * DTO for Tool Configuration
@@ -7,36 +6,40 @@ import type { Step } from '@/ddd/domain/skills/entities/step';
  */
 export interface ToolConfigDTO {
   name: string;
-  config: Record<string, any>;
+  config?: Record<string, any>;
 }
 
 /**
- * DTO for Step
- * Serializable representation of Step entity for API responses
+ * DTO for Skill Input
+ * Defines an input parameter for a skill
  */
-export interface StepDTO {
-  id: number;
-  skillId: number;
-  stepOrder: number;
-  type: 'TOOL_STEP' | 'CODE_STEP';
-  instructions: string;
-  model?: string;
-  tools: ToolConfigDTO[];
-  servers: any[];
-  createdAt: string;
-  updatedAt: string;
+export interface SkillInput {
+  name: string;
+  required: boolean;
+}
+
+/**
+ * DTO for Skill Output
+ * Defines an output value from a skill
+ */
+export interface SkillOutput {
+  name: string;
 }
 
 /**
  * DTO for Skill
- * Serializable representation of Skill aggregate for API responses
+ * Simplified single-instruction model
+ * AIDEV-NOTE: Removed steps array, replaced with single instructions field + inputs/outputs
  */
 export interface SkillDTO {
   id: number;
   agentId: number;
   name: string;
   description: string;
-  steps: StepDTO[];
+  inputs: SkillInput[];
+  outputs: SkillOutput[];
+  instructions: string;
+  tools: ToolConfigDTO[];
   createdAt: string;
   updatedAt: string;
 }
@@ -57,27 +60,12 @@ export class SkillMapper {
       agentId: skill.agentId.value,
       name: skill.name,
       description: skill.description,
-      steps: skill.steps.map(s => this.stepToDTO(s)),
+      inputs: skill.inputs,
+      outputs: skill.outputs,
+      instructions: skill.instructions,
+      tools: skill.tools,
       createdAt: skill.createdAt.toISOString(),
       updatedAt: skill.updatedAt.toISOString()
-    };
-  }
-
-  /**
-   * Convert Step domain entity to DTO
-   */
-  static stepToDTO(step: Step): StepDTO {
-    return {
-      id: step.id.value,
-      skillId: step.skillId.value,
-      stepOrder: step.stepOrder,
-      type: step.type.value,
-      instructions: step.instructions,
-      model: step.model,
-      tools: step.tools.map(t => t.toPlain()),
-      servers: step.servers,
-      createdAt: step.createdAt.toISOString(),
-      updatedAt: step.updatedAt.toISOString()
     };
   }
 
@@ -86,12 +74,5 @@ export class SkillMapper {
    */
   static toDTOList(skills: Skill[]): SkillDTO[] {
     return skills.map(c => this.toDTO(c));
-  }
-
-  /**
-   * Convert list of Steps to DTOs
-   */
-  static stepsToDTOList(steps: Step[]): StepDTO[] {
-    return steps.map(s => this.stepToDTO(s));
   }
 }

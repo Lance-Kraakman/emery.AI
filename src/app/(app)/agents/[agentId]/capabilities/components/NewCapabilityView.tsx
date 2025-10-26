@@ -20,14 +20,10 @@ export function NewCapabilityView({ agent }: NewCapabilityViewProps) {
   const [formData, setFormData] = useState<CapabilityFormData>({
     name: 'Untitled Skill',
     description: '',
-    steps: [
-      {
-        type: 'TOOL_STEP',
-        instructions: '',
-        tools: [],
-        servers: []
-      }
-    ]
+    inputs: [],
+    outputs: [],
+    instructions: '',
+    tools: []
   });
 
   const handleSave = async () => {
@@ -43,7 +39,10 @@ export function NewCapabilityView({ agent }: NewCapabilityViewProps) {
         agentId: agent.id,
         name: formData.name,
         description: formData.description,
-        steps: formData.steps
+        inputs: formData.inputs,
+        outputs: formData.outputs,
+        instructions: formData.instructions,
+        tools: formData.tools
       });
 
       if (result.success) {
