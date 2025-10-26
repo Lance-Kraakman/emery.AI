@@ -120,12 +120,12 @@ export function CapabilityEditor({
                 setLocalValue(newValue);
                 onChange(newValue);
               }}
-              placeholder="Skill name (e.g., Weekly Sales Report, Customer Onboarding...)"
-              className="text-lg font-medium h-12"
+              placeholder="e.g., Weekly Sales Report, Customer Onboarding, Data Analysis..."
+              className="text-base h-10"
             />
           </div>
           {onSave && (
-            <Button onClick={onSave} disabled={isSaving} size="lg" className="h-12">
+            <Button onClick={onSave} disabled={isSaving} className="h-10">
               <Save className="h-4 w-4 mr-2" />
               {isSaving ? 'Creating...' : 'Create Skill'}
             </Button>
@@ -171,11 +171,11 @@ export function CapabilityEditor({
       </div>
 
       {/* Steps Section */}
-      <div className="space-y-4">
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-lg font-semibold">Steps</Label>
-            <p className="text-sm text-muted-foreground mt-1">
+            <Label className="text-base font-semibold">Steps</Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
               Break down your workflow into sequential steps
             </p>
           </div>
