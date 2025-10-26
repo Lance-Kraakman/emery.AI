@@ -83,7 +83,7 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
     return 'configured';
   };
 
-  const getCapabilitiesStatus = () => {
+  const getSkillsStatus = () => {
     const count = agent.skills?.length || 0;
     if (count === 0) return 'empty';
     if (count < 3) return 'partial';
@@ -123,12 +123,12 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
     return getTriggerTypeLabel(agent.trigger.type);
   };
 
-  const getCapabilitiesSummary = () => {
+  const getSkillsSummary = () => {
     const count = agent.skills?.length || 0;
-    if (count === 0) return 'No capabilities defined';
+    if (count === 0) return 'No skills defined';
 
-    const totalSteps = agent.skills?.reduce((sum, cap) => sum + (cap.steps?.length || 0), 0) || 0;
-    return `${count} capability${count !== 1 ? 'ies' : ''} • ${totalSteps} total steps`;
+    const totalSteps = agent.skills?.reduce((sum, skill) => sum + (skill.steps?.length || 0), 0) || 0;
+    return `${count} skill${count !== 1 ? 's' : ''} • ${totalSteps} total steps`;
   };
 
   const getToolsSummary = () => {
@@ -209,19 +209,19 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
         />
       </div>
 
-      {/* Capabilities - Full Width */}
+      {/* Skills - Full Width */}
       <ConfigurationCard
-        title="Capabilities"
+        title="Skills"
         description="Multi-step workflows and tasks"
         icon={Settings}
-        status={getCapabilitiesStatus()}
+        status={getSkillsStatus()}
         statusText={
-          getCapabilitiesStatus() === 'configured' ? 'Well Configured' :
-          getCapabilitiesStatus() === 'partial' ? 'Basic Setup' : 'Not Configured'
+          getSkillsStatus() === 'configured' ? 'Well Configured' :
+          getSkillsStatus() === 'partial' ? 'Basic Setup' : 'Not Configured'
         }
-        summary={getCapabilitiesSummary()}
-        onClick={() => router.push(`/agents/${agent.id}/capabilities`)}
-        actionText="Manage Capabilities"
+        summary={getSkillsSummary()}
+        onClick={() => router.push(`/agents/${agent.id}/skills`)}
+        actionText="Manage Skills"
         className="md:col-span-2"
       />
     </div>

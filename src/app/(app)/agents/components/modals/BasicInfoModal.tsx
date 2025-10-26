@@ -298,7 +298,7 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
             disabled={isSaving}
           />
           <p className="text-xs text-muted-foreground">
-            Optional: Provide details about the agent's purpose and capabilities
+            Optional: Provide details about the agent's purpose and skills
           </p>
         </div>
       </div>

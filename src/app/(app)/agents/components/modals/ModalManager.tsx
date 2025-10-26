@@ -40,7 +40,7 @@ export function ModalManager({ onUpdate }: ModalManagerProps) {
         />
       );
 
-    case 'capabilities':
+    case 'skills':
       return (
         <SkillsModal
           isOpen={true}
