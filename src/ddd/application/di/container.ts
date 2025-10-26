@@ -15,7 +15,7 @@ import type { RepositoryRegistry } from './registry';
 // Import registration modules
 import { registerCoreServices, type CoreServices } from './modules/core-registration';
 import { registerAgentServices, type AgentServices } from './modules/agent-registration';
-import { registerCapabilityServices, type CapabilityServices } from './modules/capability-registration';
+import { registerSkillServices, type SkillServices } from './modules/skill-registration';
 import { registerDatabaseServices, type DatabaseServices } from './modules/database-registration';
 import { registerChatServices, type ChatServices } from './modules/chat-registration';
 import { registerToolsServices, type ToolsServices } from './modules/tools-registration';
@@ -84,8 +84,8 @@ export class DIContainer {
 
     // Phase 3: Register capability services
     // Depends on: database (for storage)
-    const capabilityServices = registerCapabilityServices({ db });
-    this.registerServices('capability', capabilityServices);
+    const skillServices = registerSkillServices({ db });
+    this.registerServices('skill', skillServices);
 
     // Phase 4: Register database services (tables, files, documents)
     // Depends on: organization repository
@@ -144,7 +144,7 @@ export class DIContainer {
    */
   private registerServices(
     domain: string,
-    services: CoreServices | AgentServices | CapabilityServices | DatabaseServices | ChatServices | ToolsServices | RagServices | ConnectionServices
+    services: CoreServices | AgentServices | SkillServices | DatabaseServices | ChatServices | ToolsServices | RagServices | ConnectionServices
   ): void {
     // Map service names to container keys
     const serviceKeyMappings: Record<string, string> = {

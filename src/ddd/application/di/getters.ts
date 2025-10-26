@@ -12,8 +12,8 @@ import type { IFileStorageRepository } from '@/ddd/domain/tables/repositories/fi
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
 import type { IAgentExecutionRepository } from '@/ddd/domain/agents/repositories/agent-execution-repository';
-import type { ICapabilityRepository } from '@/ddd/domain/capabilities/repositories/capability-repository';
-import type { IStepRepository } from '@/ddd/domain/capabilities/repositories/step-repository';
+import type { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
+import type { IStepRepository } from '@/ddd/domain/skills/repositories/step-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
 import type { IInvitationRepository } from '@/ddd/domain/invitations/repositories/invitation-repository';
 import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
@@ -26,7 +26,7 @@ import type { IIndexingDomainService, ISearchDomainService } from '@/ddd/domain/
 
 import type { AgentTaskApplicationService } from '@/ddd/application/services/agents/agent-task-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
-import type { CapabilityApplicationService } from '@/ddd/application/services/capabilities/capability-application-service';
+import type { SkillApplicationService } from '@/ddd/application/services/skills/skill-application-service';
 import type { TeamApplicationService } from '@/ddd/application/services/teams/team-application-service';
 import type { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
 import type { UserRoleApplicationService } from '@/ddd/application/services/user-organizations/user-role-application-service';
@@ -66,7 +66,7 @@ type ServiceMap = {
   AgentRepository: IAgentRepository;
   TaskRepository: ITaskRepository;
   AgentExecutionRepository: IAgentExecutionRepository;
-  CapabilityRepository: ICapabilityRepository;
+  SkillRepository: ISkillRepository;
   StepRepository: IStepRepository;
   TeamRepository: ITeamRepository;
   InvitationRepository: IInvitationRepository;
@@ -81,7 +81,7 @@ type ServiceMap = {
   // Application services
   AgentTaskApplicationService: AgentTaskApplicationService;
   AgentApplicationService: AgentApplicationService;
-  CapabilityApplicationService: CapabilityApplicationService;
+  SkillApplicationService: SkillApplicationService;
   TeamApplicationService: TeamApplicationService;
   DatabaseApplicationService: DatabaseApplicationService;
   UserRoleApplicationService: UserRoleApplicationService;
@@ -155,7 +155,7 @@ export const getTaskRepository = createGetter('TaskRepository');
 export const getAgentExecutionRepository = createGetter('AgentExecutionRepository');
 
 // Capability domain repository getters
-export const getCapabilityRepository = createGetter('CapabilityRepository');
+export const getSkillRepository = createGetter('SkillRepository');
 export const getStepRepository = createGetter('StepRepository');
 
 // Database domain repository getters
@@ -180,7 +180,7 @@ export const getAgentTaskApplicationService = createGetter('AgentTaskApplication
 export const getAgentApplicationService = createGetter('AgentApplicationService');
 
 // Capability application service getters
-export const getCapabilityApplicationService = createGetter('CapabilityApplicationService');
+export const getSkillApplicationService = createGetter('SkillApplicationService');
 
 // Database application service getters
 export const getDatabaseApplicationService = createGetter('DatabaseApplicationService');
