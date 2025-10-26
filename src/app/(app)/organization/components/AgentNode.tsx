@@ -88,18 +88,18 @@ export default function AgentNode({ data, selected }: AgentNodeProps) {
           )) as any}
 
           {/* Capabilities */}
-          {data.capabilities && Array.isArray(data.capabilities) && data.capabilities.length > 0 && (
+          {data.skills && Array.isArray(data.skills) && data.skills.length > 0 && (
             <div>
               <p className="text-xs font-medium text-gray-700 mb-1">Capabilities:</p>
               <div className="flex flex-wrap gap-1">
-                {data.capabilities.slice(0, 2).map((capability: any, index: number) => (
+                {data.skills.slice(0, 2).map((capability: any, index: number) => (
                   <Badge key={index} variant="secondary" className="text-xs">
                     {capability.name || capability}
                   </Badge>
                 ))}
-                {data.capabilities.length > 2 && (
+                {data.skills.length > 2 && (
                   <Badge variant="outline" className="text-xs">
-                    +{data.capabilities.length - 2} more
+                    +{data.skills.length - 2} more
                   </Badge>
                 )}
               </div>

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Settings, Plus, Edit, Trash2, Save, X } from 'lucide-react';
-import type { AgentDTO, ToolConfigDTO, CapabilityConfigDTO, StepConfigDTO } from '@/app/mappers/agent-mapper';
+import type { AgentDTO, ToolConfigDTO, SkillConfigDTO, StepConfigDTO } from '@/app/mappers/agent-mapper';
 import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,9 +18,9 @@ import type { ToolDTO } from '@/app/mappers/tool-mapper';
 
 interface CapabilityManagerProps {
   agent?: AgentDTO;  // Optional for creation mode
-  capabilities?: CapabilityConfigDTO[];  // Alternative for creation mode
+  capabilities?: SkillConfigDTO[];  // Alternative for creation mode
   isEditable?: boolean;
-  onCapabilitiesChange?: (capabilities: CapabilityConfigDTO[]) => void;
+  onCapabilitiesChange?: (capabilities: SkillConfigDTO[]) => void;
 }
 
 export default function CapabilityManager({
@@ -29,9 +29,9 @@ export default function CapabilityManager({
   isEditable = false,
   onCapabilitiesChange
 }: CapabilityManagerProps) {
-  const initialCapabilities = (propCapabilities || agent?.capabilities || []) as CapabilityConfigDTO[];
+  const initialCapabilities = (propCapabilities || agent?.skills || []) as SkillConfigDTO[];
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editingCapability, setEditingCapability] = useState<CapabilityConfigDTO | null>(null);
+  const [editingCapability, setEditingCapability] = useState<SkillConfigDTO | null>(null);
   const [showToolDropdown, setShowToolDropdown] = useState(false);
   const [dropdownQuery, setDropdownQuery] = useState('');
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
@@ -61,7 +61,7 @@ export default function CapabilityManager({
   }, [editingCapability]);
 
   const handleAdd = () => {
-    const newCapability: CapabilityConfigDTO = {
+    const newCapability: SkillConfigDTO = {
       name: 'New Capability',
       description: '',
       steps: []

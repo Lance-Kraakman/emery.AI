@@ -131,7 +131,7 @@ describe('Agent Task Execution Integration Tests', () => {
           ToolConfig.basic('web_search').toPlain(),
           ToolConfig.basic('calculator').toPlain()
         ],
-        capabilities: [
+        skills: [
           {
             name: 'Data Collection and Analysis',
             description: 'Collect and analyze data using Python tools',
@@ -474,7 +474,7 @@ describe('Agent Task Execution Integration Tests', () => {
           ToolConfig.basic('web_search'),
           ToolConfig.basic('calculator')
         ],
-        capabilities: [
+        skills: [
           {
             name: 'Basic Task Execution',
             description: 'Execute basic tasks for isolation testing',

@@ -140,7 +140,7 @@ export default function AgentActivityPanel({ agent }: AgentActivityPanelProps) {
                       key={task.id}
                       task={{
                         ...task,
-                        capabilityName: task.capabilityName || undefined,
+                        skillName: task.skillName || undefined,
                         error: task.error || undefined,
                         logs: task.logs || [],
                         completedAt: task.completedAt ? (typeof task.completedAt === 'string' ? task.completedAt : task.completedAt.toISOString()) : undefined,

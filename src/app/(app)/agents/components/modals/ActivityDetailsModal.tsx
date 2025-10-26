@@ -22,7 +22,7 @@ interface Task {
   id: string;
   name: string;
   instructions: string | { instructions: string; tools?: any[]; servers?: any[] };
-  capabilityName?: string;
+  skillName?: string;
   status: string;
   createdAt: string;
   completedAt?: string;
@@ -164,9 +164,9 @@ export function ActivityDetailsModal({ isOpen, onClose, agent, onUpdate }: Activ
                             {task.name}
                           </CardTitle>
                           <div className="flex items-center gap-2 mt-1">
-                            {task.capabilityName && (
+                            {task.skillName && (
                               <Badge variant="outline" className="text-xs">
-                                {task.capabilityName}
+                                {task.skillName}
                               </Badge>
                             )}
                             <span className="text-xs text-muted-foreground">

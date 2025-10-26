@@ -57,12 +57,12 @@ export interface Agent {
   id: AgentId;                             // DDD Value Object for type safety
   name: string;
   role: string;                            // required with default 'assistant'
-  description: string;                     // required with default ''  
+  description: string;                     // required with default ''
   persona: string;                         // required with default ''
   tools: ToolConfig[];                     // required with default []
   servers: ServerConfig[];                 // required with default []
   trigger?: TriggerConfig;              // optional trigger configuration
-  capabilities: CapabilityConfig[];        // required with default []
+  skills: SkillConfig[];                   // required with default []
   databaseId?: string | null;              // optional - can be null
   status: AgentStatus;                     // required with default 'active'
   organizationId: OrganizationId;          // DDD Value Object for type safety
@@ -84,7 +84,7 @@ export interface AgentPersistenceRecord {
   tools: any;
   servers: any;
   trigger?: any;
-  capabilities: any;
+  skills: any;
   databaseId?: string | null;
   status: string;
   organizationId: number;
@@ -110,9 +110,9 @@ export class AgentFactory {
       ),
       servers: record.servers || [],
       trigger: record.trigger,
-      capabilities: (record.capabilities || []).map((cap: any) => ({
-        ...cap,
-        steps: (cap.steps || []).map((step: any) => ({
+      skills: (record.skills || []).map((skill: any) => ({
+        ...skill,
+        steps: (skill.steps || []).map((step: any) => ({
           ...step,
           tools: (step.tools || [])
             .filter((tool: any) => tool !== null && tool !== undefined)
@@ -143,9 +143,9 @@ export class AgentFactory {
       tools: agent.tools.map(tool => tool.toPlain()),
       servers: agent.servers,
       trigger: agent.trigger,
-      capabilities: agent.capabilities.map(cap => ({
-        ...cap,
-        steps: cap.steps.map(step => ({
+      skills: agent.skills.map(skill => ({
+        ...skill,
+        steps: skill.steps.map(step => ({
           ...step,
           tools: step.tools?.map(tool =>
             tool instanceof ToolConfig ? tool.toPlain() : tool
@@ -173,7 +173,7 @@ export interface CreateAgentData {
   tools?: ToolConfig[];                    // defaults to []
   servers?: ServerConfig[];                // defaults to []
   trigger?: TriggerConfig;             // optional trigger configuration
-  skills: CapabilityConfig[];       // defaults to []
+  skills: SkillConfig[];                   // defaults to []
   databaseId?: string;
   status?: AgentStatus;                    // defaults to 'active'
   organizationId?: OrganizationId;         // Set by application layer from session
@@ -191,7 +191,7 @@ export interface UpdateAgentData {
   tools?: ToolConfig[];
   servers?: ServerConfig[];
   trigger?: TriggerConfig;
-  skills: CapabilityConfig[];
+  skills?: SkillConfig[];
   databaseId?: string;
   status?: AgentStatus;
   agentType?: AgentType;
@@ -224,17 +224,17 @@ export const getAgentDisplayName = (agent: Agent): string => {
 };
 
 export const getCapabilitiesCount = (agent: Agent): number => {
-  return agent.capabilities?.length || 0;
+  return agent.skills?.length || 0;
 };
 
 // Default values for agent creation - ensures all required fields have defaults
-export const createAgentDefaults = (data: CreateAgentData): Omit<CreateAgentData, 'organizationId' | 'ownerId'> & { 
+export const createAgentDefaults = (data: CreateAgentData): Omit<CreateAgentData, 'organizationId' | 'ownerId'> & {
   role: string;
   description: string;
   persona: string;
   tools: ToolConfig[];
   servers: ServerConfig[];
-  capabilities: CapabilityConfig[];
+  skills: SkillConfig[];
   status: AgentStatus;
   organizationId?: OrganizationId;
   ownerId?: UserId;
@@ -242,7 +242,7 @@ export const createAgentDefaults = (data: CreateAgentData): Omit<CreateAgentData
   const role: string = data.role || AGENT_ROLES.ASSISTANT;
   const description: string = data.description || '';
   const persona: string = data.persona || '';
-  
+
   return {
     name: data.name,
     role,
@@ -253,10 +253,10 @@ export const createAgentDefaults = (data: CreateAgentData): Omit<CreateAgentData
     tools: data.tools || [],
     servers: data.servers || [],
     trigger: data.trigger,
-    capabilities: data.capabilities || [],
+    skills: data.skills || [],
     status: data.status || AgentStatus.active(),
     organizationId: data.organizationId, // Should be provided by application layer
-    ownerId: data.ownerId, // Should be provided by application layer  
+    ownerId: data.ownerId, // Should be provided by application layer
     databaseId: data.databaseId,
   };
 };

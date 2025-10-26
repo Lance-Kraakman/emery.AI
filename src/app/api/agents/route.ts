@@ -33,7 +33,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       persona, 
       organizationId,
       trigger,
-      capabilities,
+      skills,
       tools,
       servers 
     } = body;

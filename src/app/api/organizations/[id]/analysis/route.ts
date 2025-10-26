@@ -76,7 +76,7 @@ export async function POST(
           ),
           servers: [],
           trigger: triggerConfig,
-          capabilities: [],
+          skills: [],
           specialization: getDefaultSpecializationForType(agentType),
           status: 'active' as const
         };

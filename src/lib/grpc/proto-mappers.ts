@@ -115,7 +115,7 @@ export function mapAgentToProto(agent: Agent): AgentConfigProto {
     persona: agent.persona || '',
     tools: agent.tools?.filter(tool => tool !== null && tool !== undefined)?.map(mapToolToProto) || [],
     servers: agent.servers?.filter(server => server !== null && server !== undefined)?.map(mapServerToProto) || [],
-    skills: agent.capabilities?.filter(capability => capability !== null && capability !== undefined)?.map(mapCapabilityToProto) || []
+    skills: agent.skills?.filter(skill => skill !== null && skill !== undefined)?.map(mapCapabilityToProto) || []
   };
 }
 
