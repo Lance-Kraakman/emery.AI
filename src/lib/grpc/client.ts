@@ -9,7 +9,7 @@ import path from 'path';
 // Load protobuf definition
 const PROTO_PATH = path.join(process.cwd(), 'proto', 'agent_worker.proto');
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
-  keepCase: true,
+  keepCase: false,  // Convert to camelCase to match generated TypeScript interfaces
   longs: String,
   enums: String,
   defaults: true,
@@ -21,15 +21,16 @@ const AgentWorkerService = protoDescriptor.emery.agents.AgentWorker;
 import { TaskProgress } from './generated/agent_worker';
 export type { TaskProgress };
 
-// Type definitions for our gRPC calls
+// Type definitions for our gRPC calls (camelCase to match loader config)
 export interface TaskRequest {
-  task_id: string;
-  agent_id: number;
-  capability_name: string;
-  trigger_data_json: string;
-  organization_id: string;
-  owner_id: string;
-  timeout_seconds?: number;
+  taskId: string;
+  agentId: number;
+  skillName?: string;
+  instructionConfig?: any;
+  triggerData: any;
+  organizationId: string;
+  ownerId: string;
+  timeoutSeconds?: number;
 }
 
 
@@ -63,7 +64,7 @@ export enum WorkerStatus {
 }
 
 export interface CancelTaskRequest {
-  task_id: string;
+  taskId: string;
   reason?: string;
 }
 
@@ -142,7 +143,7 @@ export class AgentWorkerClient {
     return new Promise((resolve, reject) => {
       this.client.CancelTask(request, (error: grpc.ServiceError | null, response: CancelTaskResponse) => {
         if (error) {
-          console.error(`[GRPC-ERROR] CancelTask ${request.task_id}:`, error);
+          console.error(`[GRPC-ERROR] CancelTask ${request.taskId}:`, error);
           reject(error);
         } else {
           resolve(response);
