@@ -41,7 +41,7 @@ export async function startTestContainers(): Promise<void> {
   // Start containers
   console.log('🐳 Starting Docker containers...');
   try {
-    execSync(`docker-compose -f ${DOCKER_COMPOSE_FILE} up -d --force-recreate`, {
+    execSync(`docker-compose -f ${DOCKER_COMPOSE_FILE} up -d --build --force-recreate`, {
       stdio: 'inherit',
       cwd: process.cwd()
     });

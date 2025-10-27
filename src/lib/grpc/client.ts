@@ -95,22 +95,22 @@ export class AgentWorkerClient {
     request: TaskRequest,
     onProgress: (progress: TaskProgress) => void
   ): Promise<void> {
-    console.log(`[GRPC-CLIENT] Executing task ${request.task_id} on worker ${this.address}`);
+    console.log(`[GRPC-CLIENT] Executing task ${request.taskId} on worker ${this.address}`);
     return new Promise((resolve, reject) => {
       const call = this.client.ExecuteTask(request);
 
       call.on('data', (progress: TaskProgress) => {
-        console.log(`[GRPC-PROGRESS] Task ${request.task_id}: ${progress.status}`, progress);
+        console.log(`[GRPC-PROGRESS] Task ${request.taskId}: ${progress.status}`, progress);
         onProgress(progress);
       });
 
       call.on('end', () => {
-        console.log(`[GRPC-END] Task ${request.task_id} stream ended`);
+        console.log(`[GRPC-END] Task ${request.taskId} stream ended`);
         resolve();
       });
 
       call.on('error', (error: grpc.ServiceError) => {
-        console.error(`[GRPC-ERROR] Task ${request.task_id} failed:`, error);
+        console.error(`[GRPC-ERROR] Task ${request.taskId} failed:`, error);
         if (error.code === grpc.status.UNAVAILABLE) {
           console.error(`[GRPC-CLIENT] Worker at ${this.address} is unavailable. Please ensure the worker is running.`);
         }

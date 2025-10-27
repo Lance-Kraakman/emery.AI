@@ -88,7 +88,20 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
             ownerId: agent.ownerId.value,
             timeoutSeconds: timeoutSeconds || 300
           });
-      
+
+      // AIDEV-DEBUG: Log what we're actually sending to Python
+      console.log('[GRPC-DEBUG] TaskRequest being sent:', JSON.stringify({
+        taskId: taskRequest.taskId,
+        agentId: taskRequest.agentId,
+        skillName: taskRequest.skillName,
+        hasInstructionConfig: !!taskRequest.instructionConfig,
+        instructionConfig: taskRequest.instructionConfig,
+        instructionsText: instructions,
+        toolsCount: tools?.length || 0,
+        serversCount: servers?.length || 0,
+        organizationId: taskRequest.organizationId
+      }, null, 2));
+
       // 5. Initialize execution tracking
       let finalStatus: 'completed' | 'failed' | 'in_progress' = 'in_progress';
       let finalOutputData: any = null;
