@@ -38,27 +38,27 @@ def parse_task_request(request: agent_worker_pb2.TaskRequest) -> Task:
 
 
 def create_task_progress(
-    task_id: str, 
-    status: int, 
-    step_id: str = "",
-    step_type: str = "",
+    task_id: str,
+    status: int,
     output_data: Optional[Dict[str, Any]] = None,
     error_message: Optional[str] = None,
     progress_percent: float = 0.0
 ) -> agent_worker_pb2.TaskProgress:
-    """Create TaskProgress protobuf message."""
+    """Create TaskProgress protobuf message (simplified for single-instruction model)."""
     progress = agent_worker_pb2.TaskProgress()
     progress.task_id = task_id
     progress.status = status
-    progress.step_id = step_id
-    progress.step_type = step_type
     progress.timestamp_ms = int(datetime.now().timestamp() * 1000)
     progress.progress_percent = progress_percent
-    
+
     if output_data:
         progress.output_json = json.dumps(output_data)
-    
+    else:
+        progress.output_json = ""
+
     if error_message:
         progress.error_message = error_message
-    
+    else:
+        progress.error_message = ""
+
     return progress
