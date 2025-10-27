@@ -90,7 +90,7 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
                 # AIDEV-NOTE: Capability MUST be provided in context for capability-based execution
                 # Fail fast if capability is missing - don't create stub capability
                 if not context.capability:
-                    error_msg = f"Capability-based execution requires context.capability to be set. Got capability_name='{context.capability_name}' but no capability object."
+                    error_msg = f"Capability-based execution requires context.capability to be set. Got skill_name='{context.skill_name}' but no capability object."
                     logger.error(error_msg)
                     raise ValueError(error_msg)
 

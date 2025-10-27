@@ -97,7 +97,7 @@ class TaskRequest:
     timeout_seconds: int
     name: str
     # oneof execution_mode:
-    capability_name: Optional[str] = None
+    skill_name: Optional[str] = None
     instruction_config: Optional[InstructionConfig] = None
 
 

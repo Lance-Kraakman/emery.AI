@@ -1,22 +1,26 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import { createSkill } from '@/app/actions/capabilities';
+import { createSkill, getSkillTemplate } from '@/app/actions/skills';
 import { toast } from 'sonner';
 import { SkillEditor, type SkillFormData } from './SkillEditor';
 
 interface NewSkillViewProps {
   agent: AgentDTO;
+  templateId?: number;
 }
 
-export function NewSkillView({ agent }: NewSkillViewProps) {
+export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingTemplate, setIsLoadingTemplate] = useState(!!templateId);
+  const [templateName, setTemplateName] = useState<string | null>(null);
   const [formData, setFormData] = useState<SkillFormData>({
     name: 'Untitled Skill',
     description: '',
@@ -25,6 +29,42 @@ export function NewSkillView({ agent }: NewSkillViewProps) {
     instructions: '',
     tools: []
   });
+
+  // Load template if templateId is provided
+  useEffect(() => {
+    if (!templateId) return;
+
+    async function loadTemplate() {
+      if (!templateId) return; // Type guard
+
+      try {
+        setIsLoadingTemplate(true);
+        const result = await getSkillTemplate(templateId);
+
+        if (result.success && result.data) {
+          setTemplateName(result.data.name);
+          setFormData({
+            name: result.data.name,
+            description: result.data.description,
+            inputs: result.data.inputs,
+            outputs: result.data.outputs,
+            instructions: result.data.instructions,
+            tools: result.data.tools
+          });
+          toast.success('Template loaded successfully');
+        } else {
+          toast.error(result.error || 'Failed to load template');
+        }
+      } catch (error) {
+        console.error('Error loading template:', error);
+        toast.error('An unexpected error occurred');
+      } finally {
+        setIsLoadingTemplate(false);
+      }
+    }
+
+    loadTemplate();
+  }, [templateId]);
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
@@ -64,9 +104,19 @@ export function NewSkillView({ agent }: NewSkillViewProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Skill Builder</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold">Skill Builder</h1>
+            {templateName && (
+              <Badge variant="secondary">
+                Based on: {templateName}
+              </Badge>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Create a new skill for {agent.name}
+            {templateName
+              ? `Creating skill from template for ${agent.name}`
+              : `Create a new skill for ${agent.name}`
+            }
           </p>
         </div>
         <Button
@@ -81,13 +131,22 @@ export function NewSkillView({ agent }: NewSkillViewProps) {
 
       {/* Editor */}
       <Card className="p-6">
-        <SkillEditor
-          value={formData}
-          onChange={setFormData}
-          agentId={agent.id}
-          onSave={handleSave}
-          isSaving={isSaving}
-        />
+        {isLoadingTemplate ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading template...</p>
+            </div>
+          </div>
+        ) : (
+          <SkillEditor
+            value={formData}
+            onChange={setFormData}
+            agentId={agent.id}
+            onSave={handleSave}
+            isSaving={isSaving}
+          />
+        )}
       </Card>
     </div>
   );

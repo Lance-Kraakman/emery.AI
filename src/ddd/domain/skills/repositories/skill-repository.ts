@@ -8,7 +8,7 @@ import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-i
  *
  * AIDEV-NOTE: Simplified single-instruction model
  * Removed: findByIdWithSteps (no steps anymore)
- * Added: Global skills support (findByOrganizationId, findGlobalSkills)
+ * Added: Organization skills support (findByOrganizationId, findOrganizationSkills)
  *
  * Defines the contract for persisting and retrieving Skill aggregates.
  * Implementations are provided in the infrastructure layer.
@@ -25,18 +25,18 @@ export interface ISkillRepository {
   findByAgentId(agentId: AgentId): Promise<Skill[]>;
 
   /**
-   * Find all global skills for an organization (agentId is null)
+   * Find all organization skills for an organization (agentId is null)
    */
-  findGlobalSkillsByOrganization(organizationId: OrganizationId): Promise<Skill[]>;
+  findOrganizationSkills(organizationId: OrganizationId): Promise<Skill[]>;
 
   /**
-   * Find all skills for an organization (both global and agent-scoped)
+   * Find all skills for an organization (both organization-scoped and agent-scoped)
    */
   findByOrganizationId(organizationId: OrganizationId): Promise<Skill[]>;
 
   /**
    * Create a new skill with inputs, outputs, instructions, and tools
-   * Can be agent-scoped (agentId set) or global (agentId null)
+   * Can be agent-scoped (agentId set) or organization-scoped (agentId null)
    */
   create(props: CreateSkillProps): Promise<Skill>;
 
@@ -67,7 +67,7 @@ export interface ISkillRepository {
   countByAgentId(agentId: AgentId): Promise<number>;
 
   /**
-   * Count global skills for an organization
+   * Count organization skills for an organization
    */
-  countGlobalSkillsByOrganization(organizationId: OrganizationId): Promise<number>;
+  countOrganizationSkills(organizationId: OrganizationId): Promise<number>;
 }

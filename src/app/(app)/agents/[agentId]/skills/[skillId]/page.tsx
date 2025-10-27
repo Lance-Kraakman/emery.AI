@@ -1,7 +1,7 @@
 import React from 'react';
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { getSkill } from '@/app/actions/capabilities';
+import { getSkill } from '@/app/actions/skills';
 import { getAgent } from '@/app/actions/agents';
 import { EditSkillView } from '../components/EditSkillView';
 

@@ -8,9 +8,12 @@ interface PageProps {
   params: Promise<{
     agentId: string;
   }>;
+  searchParams: Promise<{
+    templateId?: string;
+  }>;
 }
 
-export default async function NewSkillPage({ params }: PageProps) {
+export default async function NewSkillPage({ params, searchParams }: PageProps) {
   const session = await auth();
 
   if (!session?.user) {
@@ -31,10 +34,16 @@ export default async function NewSkillPage({ params }: PageProps) {
     redirect('/agents');
   }
 
+  // Parse templateId from search params
+  const resolvedSearchParams = await searchParams;
+  const templateId = resolvedSearchParams.templateId
+    ? parseInt(resolvedSearchParams.templateId, 10)
+    : undefined;
+
   return (
     <div className="container mx-auto p-6">
       <div className="max-w-6xl mx-auto">
-        <NewSkillView agent={agent} />
+        <NewSkillView agent={agent} templateId={templateId} />
       </div>
     </div>
   );

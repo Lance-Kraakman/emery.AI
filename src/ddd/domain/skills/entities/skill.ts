@@ -38,12 +38,12 @@ export interface ToolConfig {
  *
  * Skills can be:
  * - Agent-scoped: agentId is set, owned by specific agent
- * - Global/Organization-scoped: agentId is null, reusable across all agents
+ * - Organization-scoped: agentId is null, reusable across all agents in organization
  */
 export interface Skill {
   readonly id: SkillId;
   readonly organizationId: OrganizationId;
-  readonly agentId: AgentId | null; // null for global skills
+  readonly agentId: AgentId | null; // null for organization skills
   readonly name: string;
   readonly description: string;
   readonly inputs: SkillInput[];
@@ -59,7 +59,7 @@ export interface Skill {
  */
 export interface CreateSkillProps {
   organizationId: OrganizationId;
-  agentId?: AgentId | null; // Optional: null or undefined for global skills
+  agentId?: AgentId | null; // Optional: null or undefined for organization skills
   name: string;
   description?: string;
   inputs?: SkillInput[];
@@ -189,9 +189,9 @@ export class SkillEntity {
   }
 
   /**
-   * Check if skill is global (organization-scoped)
+   * Check if skill is organization-scoped
    */
-  static isGlobal(skill: Skill): boolean {
+  static isOrganizationScoped(skill: Skill): boolean {
     return skill.agentId === null;
   }
 
@@ -206,7 +206,7 @@ export class SkillEntity {
    * Get skill scope label for display
    */
   static getScopeLabel(skill: Skill): string {
-    return this.isGlobal(skill) ? 'Global' : 'Agent';
+    return this.isOrganizationScoped(skill) ? 'Organization' : 'Agent';
   }
 
   /**

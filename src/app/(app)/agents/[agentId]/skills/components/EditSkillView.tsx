@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
-import { updateSkill, deleteSkill } from '@/app/actions/capabilities';
+import { updateSkill, deleteSkill } from '@/app/actions/skills';
 import { toast } from 'sonner';
 import { SkillEditor, type SkillFormData } from './SkillEditor';
 

@@ -67,13 +67,13 @@ class IModelProviderService(ABC):
         pass
 
     @abstractmethod
-    def get_default_model_for_capability(self, capability_name: Optional[str] = None) -> Any:
+    def get_default_model_for_capability(self, skill_name: Optional[str] = None) -> Any:
         """
-        Get default model for a specific capability or general use.
-        
+        Get default model for a specific skill or general use.
+
         Args:
-            capability_name: Optional capability name for specialized models
-            
+            skill_name: Optional skill name for specialized models
+
         Returns:
             Configured AI model instance (implementation-specific type)
         """

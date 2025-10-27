@@ -28,12 +28,14 @@ export interface SkillOutput {
 
 /**
  * DTO for Skill
- * Simplified single-instruction model
+ * Simplified single-instruction model with global skills support
  * AIDEV-NOTE: Removed steps array, replaced with single instructions field + inputs/outputs
+ * Added: organizationId, agentId nullable for global skills
  */
 export interface SkillDTO {
   id: number;
-  agentId: number;
+  organizationId: number;
+  agentId: number | null; // null for global skills
   name: string;
   description: string;
   inputs: SkillInput[];
@@ -57,7 +59,8 @@ export class SkillMapper {
   static toDTO(skill: Skill): SkillDTO {
     return {
       id: skill.id.value,
-      agentId: skill.agentId.value,
+      organizationId: skill.organizationId.value,
+      agentId: skill.agentId?.value || null,
       name: skill.name,
       description: skill.description,
       inputs: skill.inputs,
