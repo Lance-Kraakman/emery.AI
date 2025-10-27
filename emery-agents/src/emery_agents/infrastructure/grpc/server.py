@@ -88,9 +88,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                 task_progress = TaskProgress(
                     task_id=task_request.task_id,
                     status=status_map.get(progress_dict["status"], TaskStatus.TASK_IN_PROGRESS).name,
-                    step_id=progress_dict["step_id"],
-                    step_type=progress_dict["step_type"],
-                    output_json=json.dumps(progress_dict["output"]) if not isinstance(progress_dict["output"], str) else progress_dict["output"],
+                    output_json=progress_dict.get("output", ""),
                     error_message=progress_dict.get("error_message", ""),
                     timestamp_ms=progress_dict["timestamp_ms"],
                     progress_percent=progress_dict["progress_percent"]
@@ -112,8 +110,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             error_progress = agent_worker_pb2.TaskProgress(
                 task_id=task_request.task_id,
                 status=agent_worker_pb2.TASK_FAILED,
-                step_id="error",
-                step_type="ERROR",
+                output_json="",
                 error_message=str(e),
                 timestamp_ms=int(time.time() * 1000),
                 progress_percent=0.0
