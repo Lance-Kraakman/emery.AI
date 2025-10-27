@@ -10,7 +10,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 from ...shared.value_objects.ids import AgentId, OrganizationId, TaskId, OwnerId
-from ...execution.value_objects.execution_value_objects import CapabilityName
+from ...execution.value_objects.execution_value_objects import SkillName
 
 TaskStatus = Union[str, Any]  # 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout'
 
@@ -31,7 +31,7 @@ class TaskConfig:
     name: str
     instructions: TaskInstructions
     id: Optional[TaskId] = None
-    capability_name: Optional[CapabilityName] = None
+    skill_name: Optional[SkillName] = None
     status: Optional[str] = None
     result: Optional[Any] = None
     error: Optional[str] = None
@@ -50,7 +50,7 @@ class Task:
         agent_id: AgentId,
         organization_id: OrganizationId,
         name: str,
-        capability_name: Optional[CapabilityName],
+        skill_name: Optional[SkillName],
         instructions: TaskInstructions,
         status: str,
         result: Optional[Any],
@@ -64,7 +64,7 @@ class Task:
         self.agent_id = agent_id
         self.organization_id = organization_id
         self.name = name
-        self.capability_name = capability_name
+        self.skill_name = skill_name
         self.instructions = instructions
         self._status = status
         self._result = result
@@ -84,7 +84,7 @@ class Task:
             agent_id=config.agent_id,
             organization_id=config.organization_id,
             name=config.name,
-            capability_name=config.capability_name,
+            skill_name=config.skill_name,
             instructions=config.instructions,
             status=config.status or "pending",
             result=config.result,
@@ -109,7 +109,7 @@ class Task:
             agent_id=AgentId(data["agent_id"]),
             organization_id=OrganizationId(data["organization_id"]),
             name=data["name"],
-            capability_name=CapabilityName(data["capability_name"]) if data.get("capability_name") else None,
+            skill_name=SkillName(data["skill_name"]) if data.get("skill_name") else None,
             instructions=instructions,
             status=data["status"],
             result=data.get("result"),

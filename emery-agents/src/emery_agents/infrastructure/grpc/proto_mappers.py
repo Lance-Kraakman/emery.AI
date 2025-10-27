@@ -13,13 +13,13 @@ from dataclasses import dataclass
 from ...grpc.generated import agent_worker_pb2
 
 
-@dataclass 
+@dataclass
 class Task:
     """Simple task data class for testing."""
     id: str
     agent: str
     instructions: str
-    capabilityName: Optional[str] = None
+    skillName: Optional[str] = None
 
 
 def parse_task_request(request: agent_worker_pb2.TaskRequest) -> Task:
@@ -28,12 +28,12 @@ def parse_task_request(request: agent_worker_pb2.TaskRequest) -> Task:
     instructions = ""
     if hasattr(request, 'instruction_config') and request.instruction_config:
         instructions = request.instruction_config.instructions
-    
+
     return Task(
         id=request.task_id,
         agent=str(request.agent_id),
         instructions=instructions,
-        capabilityName=request.capability_name if request.capability_name else None
+        skillName=request.skill_name if request.skill_name else None
     )
 
 

@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
-import { deleteSkill } from '@/app/actions/capabilities';
+import { deleteSkill } from '@/app/actions/skills';
 import { toast } from 'sonner';
 
 interface SkillsListViewProps {

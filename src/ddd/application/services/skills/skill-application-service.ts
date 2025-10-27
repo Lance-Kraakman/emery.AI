@@ -1,6 +1,7 @@
 import { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
 import { SkillId } from '@/ddd/domain/skills/value-objects/skill-id';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
 import { SkillEntity, type Skill, type SkillInput, type SkillOutput, type ToolConfig } from '@/ddd/domain/skills/entities/skill';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
@@ -10,9 +11,11 @@ const logger = createDebugLogger('SkillService');
 /**
  * Command to create a new skill
  * AIDEV-NOTE: Simplified to single-instruction model
+ * agentId is optional - null/undefined for global skills
  */
 export interface CreateSkillCommand {
-  agentId: number;
+  agentId?: number | null; // Optional: null/undefined for global skills
+  organizationId: number; // Required for all skills
   name: string;
   description?: string;
   inputs: SkillInput[];
@@ -55,15 +58,19 @@ export class SkillApplicationService {
     try {
       logger.debug('[SkillApplicationService] createSkill', {
         agentId: command.agentId,
+        organizationId: command.organizationId,
         name: command.name,
         inputCount: command.inputs.length,
-        outputCount: command.outputs.length
+        outputCount: command.outputs.length,
+        isGlobal: !command.agentId
       });
 
-      const agentId = AgentId.fromNumber(command.agentId);
+      const organizationId = OrganizationId.fromNumber(command.organizationId);
+      const agentId = command.agentId ? AgentId.fromNumber(command.agentId) : null;
 
       // Create skill with all fields
       const skill = await this.skillRepository.create({
+        organizationId,
         agentId,
         name: command.name,
         description: command.description,
@@ -74,7 +81,8 @@ export class SkillApplicationService {
       });
 
       logger.debug('[SkillApplicationService] skill created', {
-        skillId: skill.id.value
+        skillId: skill.id.value,
+        isGlobal: !agentId
       });
 
       return { success: true, data: skill.id };
@@ -163,6 +171,48 @@ export class SkillApplicationService {
     } catch (error) {
       logger.error('[SkillApplicationService] getSkillsByAgent error', error);
       return { success: false, error: error instanceof Error ? error.message : 'Failed to get skills' };
+    }
+  }
+
+  /**
+   * Get all organization skills for an organization
+   */
+  async getOrganizationSkills(organizationId: number): Promise<Result<Skill[]>> {
+    try {
+      logger.debug('[SkillApplicationService] getOrganizationSkills', { organizationId });
+
+      const id = OrganizationId.fromNumber(organizationId);
+      const skills = await this.skillRepository.findOrganizationSkills(id);
+
+      logger.debug('[SkillApplicationService] organization skills retrieved', {
+        count: skills.length
+      });
+
+      return { success: true, data: skills };
+    } catch (error) {
+      logger.error('[SkillApplicationService] getOrganizationSkills error', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to get organization skills' };
+    }
+  }
+
+  /**
+   * Get all skills for an organization (both global and agent-scoped)
+   */
+  async getSkillsByOrganization(organizationId: number): Promise<Result<Skill[]>> {
+    try {
+      logger.debug('[SkillApplicationService] getSkillsByOrganization', { organizationId });
+
+      const id = OrganizationId.fromNumber(organizationId);
+      const skills = await this.skillRepository.findByOrganizationId(id);
+
+      logger.debug('[SkillApplicationService] organization skills retrieved', {
+        count: skills.length
+      });
+
+      return { success: true, data: skills };
+    } catch (error) {
+      logger.error('[SkillApplicationService] getSkillsByOrganization error', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to get organization skills' };
     }
   }
 }

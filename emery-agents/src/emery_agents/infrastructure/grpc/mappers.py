@@ -30,14 +30,14 @@ class ProtoMapper:
         )
         
         # Handle oneof execution_mode
-        capability_name = None
+        skill_name = None
         instruction_config = None
-        
-        if proto.HasField("capability_name"):
-            capability_name = proto.capability_name
+
+        if proto.HasField("skill_name"):
+            skill_name = proto.skill_name
         elif proto.HasField("instruction_config"):
             instruction_config = self._instruction_config_from_proto(proto.instruction_config)
-        
+
         return TaskRequest(
             task_id=proto.task_id,
             agent_id=proto.agent_id,
@@ -47,7 +47,7 @@ class ProtoMapper:
             owner_id=proto.owner_id,
             timeout_seconds=proto.timeout_seconds,
             name=proto.name,
-            capability_name=capability_name,
+            skill_name=skill_name,
             instruction_config=instruction_config
         )
     

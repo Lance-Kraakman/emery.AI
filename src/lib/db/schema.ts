@@ -507,7 +507,7 @@ export const agents = pgTable("agents", {
 export const skills = pgTable("skills", {
   id: serial("id").primaryKey(),
   organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
-  agentId: integer("agent_id").references(() => agents.id, { onDelete: 'cascade' }), // nullable for global skills
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: 'cascade' }), // nullable for organization skills
   name: text("name").notNull(),
   description: text("description").default(''),
 
@@ -528,61 +528,98 @@ export const skills = pgTable("skills", {
   // Index for organization and agent queries
   index("skills_organization_idx").on(table.organizationId),
   index("skills_agent_idx").on(table.agentId),
-  // RBAC-based policy: agent-scoped skills inherit from agent permissions, global skills require 'skills:manage'
+  // RBAC-based policy: handles both agent-scoped skills and organization skills
+  // AIDEV-NOTE: Must explicitly check agent_id IS NULL vs IS NOT NULL because SQL NULL comparisons return UNKNOWN
   pgPolicy("skills_view_permission", {
     as: "permissive",
     for: "select",
     to: "public",
-    using: sql`EXISTS (
-      SELECT 1 FROM agents a
-      WHERE a.id = agent_id
-      AND a.organization_id = current_setting('app.current_organization_id')::integer
+    using: sql`
+      organization_id = current_setting('app.current_organization_id')::integer
       AND (
-        a.owner_id = current_setting('app.current_user_id')::uuid
-        OR user_has_permission(
+        (agent_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM agents a
+          WHERE a.id = agent_id
+          AND (
+            a.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'agents:view',
+              a.organization_id,
+              'agent',
+              a.id
+            )
+          )
+        ))
+        OR
+        (agent_id IS NULL AND user_has_permission(
           current_setting('app.current_user_id')::uuid,
-          'agents:view',
-          a.organization_id,
-          'agent',
-          a.id
-        )
+          'skills:view',
+          organization_id,
+          'organization',
+          organization_id
+        ))
       )
-    )`
+    `
   }),
   pgPolicy("skills_manage_permission", {
     as: "permissive",
     for: "all",
     to: "public",
-    using: sql`EXISTS (
-      SELECT 1 FROM agents a
-      WHERE a.id = agent_id
-      AND a.organization_id = current_setting('app.current_organization_id')::integer
+    using: sql`
+      organization_id = current_setting('app.current_organization_id')::integer
       AND (
-        a.owner_id = current_setting('app.current_user_id')::uuid
-        OR user_has_permission(
+        (agent_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM agents a
+          WHERE a.id = agent_id
+          AND (
+            a.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'agents:manage',
+              a.organization_id,
+              'agent',
+              a.id
+            )
+          )
+        ))
+        OR
+        (agent_id IS NULL AND user_has_permission(
           current_setting('app.current_user_id')::uuid,
-          'agents:manage',
-          a.organization_id,
-          'agent',
-          a.id
-        )
+          'skills:manage',
+          organization_id,
+          'organization',
+          organization_id
+        ))
       )
-    )`,
-    withCheck: sql`EXISTS (
-      SELECT 1 FROM agents a
-      WHERE a.id = agent_id
-      AND a.organization_id = current_setting('app.current_organization_id')::integer
+    `,
+    withCheck: sql`
+      organization_id = current_setting('app.current_organization_id')::integer
       AND (
-        a.owner_id = current_setting('app.current_user_id')::uuid
-        OR user_has_permission(
+        (agent_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM agents a
+          WHERE a.id = agent_id
+          AND (
+            a.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'agents:manage',
+              a.organization_id,
+              'agent',
+              a.id
+            )
+          )
+        ))
+        OR
+        (agent_id IS NULL AND user_has_permission(
           current_setting('app.current_user_id')::uuid,
-          'agents:manage',
-          a.organization_id,
-          'agent',
-          a.id
-        )
+          'skills:manage',
+          organization_id,
+          'organization',
+          organization_id
+        ))
       )
-    )`
+    `
   }),
 ]);
 

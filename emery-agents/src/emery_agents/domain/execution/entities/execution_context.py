@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from enum import Enum
 from ...shared.value_objects.ids import AgentId, OrganizationId
-from ..value_objects.execution_value_objects import CapabilityName, TimeoutSeconds, MaxSteps
+from ..value_objects.execution_value_objects import SkillName, TimeoutSeconds, MaxSteps
 
 # AIDEV-NOTE: Use TYPE_CHECKING to avoid circular imports
 if TYPE_CHECKING:
@@ -35,7 +35,7 @@ class ExecutionContext:
     # Optional context
     agent_id: Optional[AgentId] = None
     organization_id: Optional[OrganizationId] = None
-    capability_name: Optional[CapabilityName] = None
+    skill_name: Optional[SkillName] = None
     max_steps: Optional[MaxSteps] = None
     timeout_seconds: Optional[TimeoutSeconds] = None
 
@@ -75,7 +75,7 @@ class ExecutionContext:
             available_tools=tools,
             agent_id=self.agent_id,
             organization_id=self.organization_id,
-            capability_name=self.capability_name,
+            skill_name=self.skill_name,
             max_steps=self.max_steps,
             timeout_seconds=self.timeout_seconds,
             capability=self.capability,

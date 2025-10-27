@@ -42,6 +42,7 @@ const orchestrationNavItems = [
   { href: "/organization", label: "Organization Chart", icon: Building2 },
   { href: "/teams", label: "Teams", icon: Users },
   { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/skills", label: "Skills", icon: Workflow },
 ]
 
 const settingsNavItems = [

@@ -25,7 +25,7 @@ export interface SkillFormData {
 interface SkillEditorProps {
   value: SkillFormData;
   onChange: (value: SkillFormData) => void;
-  agentId: number;
+  agentId?: number | null; // Optional: null for organization skills, number for agent-scoped skills
   skillId?: number;
   onSave?: () => void;
   isSaving?: boolean;

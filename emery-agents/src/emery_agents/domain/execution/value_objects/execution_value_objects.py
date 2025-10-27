@@ -10,56 +10,60 @@ from typing import ClassVar
 from ...shared.value_objects.base import StringValueObject, IntegerValueObject, ValueObject
 
 
-class CapabilityName(StringValueObject):
+class SkillName(StringValueObject):
     """
-    Capability name value object.
-    
-    Represents a unique name for an agent capability.
-    Must follow naming conventions for capabilities.
+    Skill name value object.
+
+    Represents a unique name for an agent skill.
+    Must follow naming conventions for skills.
     """
-    
+
     MIN_LENGTH: ClassVar[int] = 3
     MAX_LENGTH: ClassVar[int] = 100
-    
+
     def _validate(self, value: str) -> None:
-        """Validate capability name format."""
+        """Validate skill name format."""
         super()._validate(value)
-        
+
         cleaned_value = value.strip()
-        
+
         if len(cleaned_value) < self.MIN_LENGTH:
-            raise ValueError(f"CapabilityName must be at least {self.MIN_LENGTH} characters")
-        
+            raise ValueError(f"SkillName must be at least {self.MIN_LENGTH} characters")
+
         if len(cleaned_value) > self.MAX_LENGTH:
-            raise ValueError(f"CapabilityName must not exceed {self.MAX_LENGTH} characters")
-        
+            raise ValueError(f"SkillName must not exceed {self.MAX_LENGTH} characters")
+
         # Allow alphanumeric, underscores, hyphens, and dots (for namespacing)
         if not re.match(r'^[a-zA-Z][a-zA-Z0-9_.-]*$', cleaned_value):
             raise ValueError(
-                "CapabilityName must start with a letter and contain only "
+                "SkillName must start with a letter and contain only "
                 "alphanumeric characters, underscores, hyphens, and dots"
             )
-        
+
         self._value = cleaned_value
-    
+
     @classmethod
-    def from_string(cls, value: str) -> "CapabilityName":
-        """Create CapabilityName from string."""
+    def from_string(cls, value: str) -> "SkillName":
+        """Create SkillName from string."""
         return cls(value)
-    
+
     @property
     def namespace(self) -> str:
-        """Get namespace part if capability is namespaced (e.g., 'email.send' -> 'email')."""
+        """Get namespace part if skill is namespaced (e.g., 'email.send' -> 'email')."""
         if '.' in self._value:
             return self._value.split('.')[0]
         return self._value
-    
+
     @property
     def action(self) -> str:
-        """Get action part if capability is namespaced (e.g., 'email.send' -> 'send')."""
+        """Get action part if skill is namespaced (e.g., 'email.send' -> 'send')."""
         if '.' in self._value:
             return self._value.split('.')[-1]
         return self._value
+
+
+# AIDEV-NOTE: Backward compatibility alias - deprecated, use SkillName instead
+CapabilityName = SkillName
 
 
 class TimeoutSeconds(IntegerValueObject):
