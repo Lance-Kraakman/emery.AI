@@ -57,6 +57,13 @@
       "when": 1761509395843,
       "tag": "0007_lowly_talkback",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1761555745446,
+      "tag": "0008_add_global_skills_support",
+      "breakpoints": true
     }
   ]
 }

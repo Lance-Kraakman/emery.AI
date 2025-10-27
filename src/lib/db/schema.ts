@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, serial, bigserial, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, serial, bigserial, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole, index } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
@@ -500,12 +500,14 @@ export const agents = pgTable("agents", {
   }),
 ]);
 
-// AIDEV-NOTE: Skills - simplified single-instruction model
+// AIDEV-NOTE: Skills - simplified single-instruction model with global skills support
 // Removed: skillSteps table (multi-step workflow)
 // Added: inputs, outputs, instructions (single natural language block), tools
+// Added: organizationId (required), agentId nullable (null = global skill)
 export const skills = pgTable("skills", {
   id: serial("id").primaryKey(),
-  agentId: integer("agent_id").notNull().references(() => agents.id, { onDelete: 'cascade' }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: 'cascade' }), // nullable for global skills
   name: text("name").notNull(),
   description: text("description").default(''),
 
@@ -523,7 +525,10 @@ export const skills = pgTable("skills", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
-  // RBAC-based policy inherits from agent permissions - if you can manage the agent, you can manage its skills
+  // Index for organization and agent queries
+  index("skills_organization_idx").on(table.organizationId),
+  index("skills_agent_idx").on(table.agentId),
+  // RBAC-based policy: agent-scoped skills inherit from agent permissions, global skills require 'skills:manage'
   pgPolicy("skills_view_permission", {
     as: "permissive",
     for: "select",

@@ -1,5 +1,6 @@
 import { SkillId } from '../value-objects/skill-id';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
 
 /**
  * Skill Input Definition
@@ -30,13 +31,19 @@ export interface ToolConfig {
  * AIDEV-NOTE: Simplified single-instruction model
  * Removed: multi-step workflow (steps array)
  * Added: inputs, outputs, instructions (single text block), tools
+ * Added: Global skills support (organizationId + optional agentId)
  *
  * Represents a reusable skill with natural language instructions.
  * Skills have explicit inputs/outputs and can reference tools via @ mentions.
+ *
+ * Skills can be:
+ * - Agent-scoped: agentId is set, owned by specific agent
+ * - Global/Organization-scoped: agentId is null, reusable across all agents
  */
 export interface Skill {
   readonly id: SkillId;
-  readonly agentId: AgentId;
+  readonly organizationId: OrganizationId;
+  readonly agentId: AgentId | null; // null for global skills
   readonly name: string;
   readonly description: string;
   readonly inputs: SkillInput[];
@@ -51,7 +58,8 @@ export interface Skill {
  * Properties required to create a new Skill
  */
 export interface CreateSkillProps {
-  agentId: AgentId;
+  organizationId: OrganizationId;
+  agentId?: AgentId | null; // Optional: null or undefined for global skills
   name: string;
   description?: string;
   inputs?: SkillInput[];
@@ -115,7 +123,8 @@ export class SkillEntity {
     }
 
     return {
-      agentId: props.agentId,
+      organizationId: props.organizationId,
+      agentId: props.agentId || null,
       name: props.name.trim(),
       description: props.description?.trim() || '',
       inputs: inputs,
@@ -177,6 +186,27 @@ export class SkillEntity {
       tools: updates.tools !== undefined ? updates.tools : skill.tools,
       updatedAt: new Date()
     };
+  }
+
+  /**
+   * Check if skill is global (organization-scoped)
+   */
+  static isGlobal(skill: Skill): boolean {
+    return skill.agentId === null;
+  }
+
+  /**
+   * Check if skill is agent-scoped
+   */
+  static isAgentScoped(skill: Skill): boolean {
+    return skill.agentId !== null;
+  }
+
+  /**
+   * Get skill scope label for display
+   */
+  static getScopeLabel(skill: Skill): string {
+    return this.isGlobal(skill) ? 'Global' : 'Agent';
   }
 
   /**
