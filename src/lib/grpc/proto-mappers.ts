@@ -165,7 +165,7 @@ export function createTaskRequest(params: {
     payload: triggerPayload
   };
 
-  // Build the base request
+  // Build the base request (using camelCase - generator handles wire format conversion)
   const request: TaskRequest = {
     name: params.skillName || 'instruction_based_task',
     taskId: params.taskId,
