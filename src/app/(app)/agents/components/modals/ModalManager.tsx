@@ -4,7 +4,6 @@ import React from 'react';
 import { useModal } from './ModalContext';
 import { BasicInfoModal } from './BasicInfoModal';
 import { TriggerConfigModal } from './TriggerConfigModal';
-import { ToolsServersModal } from './ToolsServersModal';
 import { ActivityDetailsModal } from './ActivityDetailsModal';
 
 interface ModalManagerProps {
@@ -32,16 +31,6 @@ export function ModalManager({ onUpdate }: ModalManagerProps) {
     case 'trigger-config':
       return (
         <TriggerConfigModal
-          isOpen={true}
-          onClose={closeModal}
-          agent={modalState.data?.agent}
-          onUpdate={onUpdate}
-        />
-      );
-
-    case 'tools-servers':
-      return (
-        <ToolsServersModal
           isOpen={true}
           onClose={closeModal}
           agent={modalState.data?.agent}
