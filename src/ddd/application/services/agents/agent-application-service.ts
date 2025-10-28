@@ -9,6 +9,8 @@
 
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
+import type { CredentialDelegationApplicationService } from '@/ddd/application/services/delegations/credential-delegation-application-service';
+import type { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service';
 import {
   Agent,
   type CreateAgentData,
@@ -17,6 +19,7 @@ import {
 import type { Result } from '@/ddd/domain/shared/result';
 import { createAgentDefaults } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, OrganizationId, UserId, TeamId, AgentStatus, ApiKey, AGENT_STATUS } from '@/ddd/domain/shared/value-objects';
+import { AppName } from '@/ddd/domain/connections/value-objects';
 import { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from '@/app/dtos/agent.dto';
 import { AgentMapper } from '@/app/mappers/agent-mapper';
@@ -31,7 +34,9 @@ export type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO };
 export class AgentApplicationService {
   constructor(
     private readonly agentRepository: IAgentRepository,
-    private readonly teamRepository: ITeamRepository
+    private readonly teamRepository: ITeamRepository,
+    private readonly delegationService?: CredentialDelegationApplicationService,
+    private readonly connectionService?: ConnectionApplicationService
   ) {}
 
   /**
@@ -92,6 +97,48 @@ export class AgentApplicationService {
       };
 
       const savedAgent = await this.agentRepository.create(createData);
+
+      // SECURITY: Auto-create credential delegation for owner's OAuth services
+      if (this.delegationService && this.connectionService) {
+        try {
+          logger.debug('Creating automatic credential delegation', {
+            agentId: savedAgent.id.value,
+            ownerId: savedAgent.ownerId.value
+          });
+
+          // Get owner's connected OAuth services
+          const connectionsResult = await this.connectionService.getUserConnections(
+            savedAgent.ownerId
+          );
+
+          if (connectionsResult.success && connectionsResult.data) {
+            const services = connectionsResult.data.map(conn => conn.appName);
+
+            if (services.length > 0) {
+              // Create auto-approved delegation for all owner's services
+              await this.delegationService.createDelegation({
+                ownerId: savedAgent.ownerId,
+                agentId: savedAgent.id,
+                services,
+                status: 'approved' as any // Auto-approve for owner's own agent
+              });
+
+              logger.summary('Auto-created credential delegation', {
+                agentId: savedAgent.id.value,
+                serviceCount: services.length,
+                services: services.map(s => s.value)
+              });
+            } else {
+              logger.debug('No OAuth services to delegate', {
+                agentId: savedAgent.id.value
+              });
+            }
+          }
+        } catch (delegationError) {
+          // Log but don't fail agent creation if delegation fails
+          logger.error('Failed to create automatic delegation', delegationError);
+        }
+      }
 
       // Convert domain entity to DTO for serialization
       const agentDTO = AgentMapper.toDTO(savedAgent);

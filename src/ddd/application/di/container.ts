@@ -21,6 +21,7 @@ import { registerChatServices, type ChatServices } from './modules/chat-registra
 import { registerToolsServices, type ToolsServices } from './modules/tools-registration';
 import { registerRagServices, type RagServices } from './modules/rag-registration';
 import { registerConnectionServices, type ConnectionServices } from './modules/connection-registration';
+import { registerDelegationServices, type DelegationServices } from './modules/delegation-registration';
 
 export class DIContainer {
   private static instance: DIContainer;
@@ -128,12 +129,24 @@ export class DIContainer {
     });
     this.registerServices('rag', ragServices);
 
-    // Phase 8: Register connection services (optional - Pipedream)
-    // Depends on: agent repository
+    // Phase 8: Register delegation services
+    // Depends on: database (for credential delegation storage)
+    const delegationServices = registerDelegationServices({ db });
+    this.registerServices('delegation', delegationServices);
+
+    // Phase 9: Register connection services (optional - Pipedream)
+    // Depends on: agent repository, delegation service (for security)
     const connectionServices = registerConnectionServices({
-      agentRepository: agentServices.agentRepository
+      agentRepository: agentServices.agentRepository,
+      delegationApplicationService: delegationServices.delegationApplicationService
     });
     this.registerServices('connection', connectionServices);
+
+    // Update AgentApplicationService with delegation and connection services now that they exist
+    if (delegationServices.delegationApplicationService && connectionServices.connectionApplicationService) {
+      (agentServices.agentApplicationService as any).delegationService = delegationServices.delegationApplicationService;
+      (agentServices.agentApplicationService as any).connectionService = connectionServices.connectionApplicationService;
+    }
 
     this.isInitialized = true;
     console.log('✅ DIContainer initialized with all domain services');
@@ -144,7 +157,7 @@ export class DIContainer {
    */
   private registerServices(
     domain: string,
-    services: CoreServices | AgentServices | SkillServices | DatabaseServices | ChatServices | ToolsServices | RagServices | ConnectionServices
+    services: CoreServices | AgentServices | SkillServices | DatabaseServices | ChatServices | ToolsServices | RagServices | ConnectionServices | DelegationServices
   ): void {
     // Map service names to container keys
     const serviceKeyMappings: Record<string, string> = {
@@ -205,7 +218,11 @@ export class DIContainer {
       // Connection domain
       'connectionRepository': 'IConnectionRepository',
       'connectionApplicationService': 'ConnectionApplicationService',
-      'oauthProxyApplicationService': 'OAuthProxyApplicationService'
+      'oauthProxyApplicationService': 'OAuthProxyApplicationService',
+
+      // Delegation domain
+      'delegationRepository': 'IDelegationRepository',
+      'delegationApplicationService': 'CredentialDelegationApplicationService'
     };
 
     // Register all services from the module
@@ -282,7 +299,6 @@ export {
 
   // Capability domain repositories
   getSkillRepository,
-  getStepRepository,
 
   // Database domain repositories
   getDatabaseRepository,

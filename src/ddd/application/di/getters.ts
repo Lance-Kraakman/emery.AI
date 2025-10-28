@@ -13,7 +13,6 @@ import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-re
 import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
 import type { IAgentExecutionRepository } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 import type { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
-import type { IStepRepository } from '@/ddd/domain/skills/repositories/step-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
 import type { IInvitationRepository } from '@/ddd/domain/invitations/repositories/invitation-repository';
 import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
@@ -67,7 +66,6 @@ type ServiceMap = {
   TaskRepository: ITaskRepository;
   AgentExecutionRepository: IAgentExecutionRepository;
   SkillRepository: ISkillRepository;
-  StepRepository: IStepRepository;
   TeamRepository: ITeamRepository;
   InvitationRepository: IInvitationRepository;
   RBACRepository: IRBACRepository;
@@ -156,7 +154,6 @@ export const getAgentExecutionRepository = createGetter('AgentExecutionRepositor
 
 // Capability domain repository getters
 export const getSkillRepository = createGetter('SkillRepository');
-export const getStepRepository = createGetter('StepRepository');
 
 // Database domain repository getters
 export const getDatabaseRepository = createGetter('DatabaseRepository');

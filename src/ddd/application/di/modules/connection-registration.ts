@@ -12,6 +12,7 @@
 
 import type { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import type { CredentialDelegationApplicationService } from '@/ddd/application/services/delegations/credential-delegation-application-service';
 
 import { PipedreamConnectionRepository } from '@/ddd/infrastructure/external/pipedream/pipedream-connection-repository';
 import { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service';
@@ -26,10 +27,11 @@ export interface ConnectionServices {
 
 export interface ConnectionDependencies {
   agentRepository: IAgentRepository;
+  delegationApplicationService?: CredentialDelegationApplicationService;
 }
 
 export function registerConnectionServices(deps: ConnectionDependencies): ConnectionServices {
-  const { agentRepository } = deps;
+  const { agentRepository, delegationApplicationService } = deps;
 
   // Check if Pipedream client is available
   if (!pipedreamClient) {
@@ -48,10 +50,12 @@ export function registerConnectionServices(deps: ConnectionDependencies): Connec
   const connectionApplicationService = new ConnectionApplicationService(connectionRepository);
   const oauthProxyApplicationService = new OAuthProxyApplicationService(
     agentRepository,
-    pipedreamClient
+    pipedreamClient,
+    delegationApplicationService
   );
 
-  console.log('✅ Connection services registered with Pipedream client');
+  console.log('✅ Connection services registered with Pipedream client' +
+    (delegationApplicationService ? ' (with delegation enforcement)' : ''));
 
   return {
     connectionRepository,

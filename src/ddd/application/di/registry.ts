@@ -17,10 +17,10 @@ import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-re
 import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
 import type { IAgentExecutionRepository } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 import type { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
-import type { IStepRepository } from '@/ddd/domain/skills/repositories/step-repository';
 import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
 import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
 import type { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
+import type { IDelegationRepository } from '@/ddd/domain/delegations/repositories/delegation-repository';
 import type { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
 import type { IToolConfigurationService } from '@/ddd/domain/tools/services/tool-configuration-service';
 import type { IIndexingDomainService, ISearchDomainService } from '@/ddd/domain/rag/services';
@@ -40,6 +40,7 @@ import type { ToolSearchApplicationService } from '@/ddd/application/services/to
 import type { ToolConfigurationApplicationService } from '@/ddd/application/services/tools/tool-configuration-application-service';
 import type { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service';
 import type { OAuthProxyApplicationService } from '@/ddd/application/services/connections/oauth-proxy-application-service';
+import type { CredentialDelegationApplicationService } from '@/ddd/application/services/delegations/credential-delegation-application-service';
 import type { EmbeddingService } from '@/ddd/application/services/embedding-service';
 import type { SearchAnalyticsService } from '@/ddd/application/services/search-analytics-service';
 import type { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
@@ -71,7 +72,6 @@ export interface RepositoryRegistry {
 
   // Capability domain repositories
   ISkillRepository: ISkillRepository;
-  IStepRepository: IStepRepository;
 
   // Database domain repositories
   IDatabaseRepository: IDatabaseRepository;
@@ -89,6 +89,9 @@ export interface RepositoryRegistry {
 
   // Connection domain repositories (nullable when Pipedream not configured)
   IConnectionRepository: IConnectionRepository | null;
+
+  // Delegation domain repositories
+  IDelegationRepository: IDelegationRepository;
 
   // Tool domain services
   IToolRegistryService: IToolRegistryService;
@@ -134,4 +137,7 @@ export interface RepositoryRegistry {
   // Connection application services (nullable when Pipedream not configured)
   ConnectionApplicationService: ConnectionApplicationService | null;
   OAuthProxyApplicationService: OAuthProxyApplicationService | null;
+
+  // Delegation application services
+  CredentialDelegationApplicationService: CredentialDelegationApplicationService;
 }
