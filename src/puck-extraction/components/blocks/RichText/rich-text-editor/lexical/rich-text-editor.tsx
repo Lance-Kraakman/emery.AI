@@ -7,11 +7,12 @@ import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { AutoLinkNode, LinkNode } from "@lexical/link";
 import { ListItemNode, ListNode } from "@lexical/list";
-import { CodeHighlightNode, CodeNode } from "@lexical/code";
+import { CodeNode } from "@lexical/code";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { useState } from "react";
 import { FocusPlugin } from "./plugins/focus-plugin";
 import { ToolbarPlugin } from "./plugins/toolbar-plugin";
+import { Code } from "lucide-react";
 
 export const InlineRichTextEditor = ({
   id,
@@ -39,7 +40,6 @@ export const InlineRichTextEditor = ({
           LinkNode,
           ListItemNode,
           ListNode,
-          CodeHighlightNode,
           CodeNode,
         ],
         onError(error: unknown) {

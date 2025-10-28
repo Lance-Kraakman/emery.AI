@@ -4,7 +4,7 @@ import { createHeadlessEditor } from "@lexical/headless";
 import { JSDOM } from "jsdom";
 import DOMPurify from "dompurify";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
-import { CodeHighlightNode, CodeNode } from "@lexical/code";
+import { CodeNode } from "@lexical/code";
 import { AutoLinkNode, LinkNode } from "@lexical/link";
 import { ListItemNode, ListNode } from "@lexical/list";
 
@@ -17,7 +17,6 @@ const editor = createHeadlessEditor({
     LinkNode,
     ListItemNode,
     ListNode,
-    CodeHighlightNode,
     CodeNode,
   ],
   onError: (error) => {
