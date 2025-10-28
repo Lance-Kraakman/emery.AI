@@ -37,7 +37,7 @@ export async function GET(
       id: agent.id,
       name: agent.name,
       status: agent.status,
-      triggerConfig: agent.trigger,
+      triggerConfig: agent.schedules[0],
       tools: Array.isArray(agent.tools) ? agent.tools.map((t: any) => t.name) : [],
       lastActivity: agent.updatedAt,
       specialization: agent.specialization

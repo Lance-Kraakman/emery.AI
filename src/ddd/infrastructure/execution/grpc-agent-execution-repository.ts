@@ -9,7 +9,7 @@ import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-re
 import { workerRegistry } from '@/lib/grpc/client';
 import type { TaskProgress } from '@/lib/grpc/client';
 import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/lib/grpc/proto-mappers';
-import { getAgentDisplayName, getCapabilitiesCount, type Agent } from '@/ddd/domain/agents/entities/agent';
+import { getAgentDisplayName, type Agent } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, UserId, OrganizationId, TaskStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
@@ -52,7 +52,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       const targetOrganizationId = organizationId || agent.organizationId;
       const organizationIdStr = targetOrganizationId.toString();
 
-      console.log(`[GRPC-EXECUTION-REPO] Using agent: ${getAgentDisplayName(agent)} with ${getCapabilitiesCount(agent)} capabilities`);
+      console.log(`[GRPC-EXECUTION-REPO] Using agent: ${getAgentDisplayName(agent)}`);
 
       // 3. Get worker client for organization
       const workerClient = workerRegistry.getWorkerForOrganization(organizationIdStr);
@@ -322,43 +322,12 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
   }
 
   /**
-   * Enrich agent with API key in all tool configs (for capability execution)
-   * Clones agent and enriches capability step tools with API key
+   * Enrich agent with API key in all tool configs
+   * AIDEV-NOTE: Skills are now in separate table, so this just returns agent unchanged
+   * Tool enrichment for skills should happen when skills are queried separately
    */
   private enrichAgentTools(agent: Agent): Agent {
-    if (!agent.apiKey) {
-      return agent;
-    }
-
-    const agentApiKey = agent.apiKey.value;
-
-    // Clone agent with enriched skills
-    return {
-      ...agent,
-      skills: agent.skills?.map(skill => ({
-        ...skill,
-        steps: skill.steps.map(step => ({
-          ...step,
-          tools: step.tools?.map(tool => {
-            const config = tool.config as any;
-
-            // If tool already has authentication, preserve it
-            if (config?.api_key || config?.oauth_token) {
-              return tool;
-            }
-
-            // Add API key with agent mode
-            return ToolConfig.fromPlain({
-              name: tool.name,
-              config: {
-                ...(config || {}),
-                api_key: agentApiKey,
-                api_key_mode: 'agent'
-              }
-            });
-          })
-        }))
-      }))
-    };
+    // Skills are in separate table now, not embedded in Agent entity
+    return agent;
   }
 }

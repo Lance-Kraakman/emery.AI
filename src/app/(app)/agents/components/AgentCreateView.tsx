@@ -37,6 +37,9 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
   // Collapsible section states
   const [isTriggerConfigOpen, setIsTriggerConfigOpen] = useState(false);
 
+  // Internal form state (trigger kept as single item for UI simplicity)
+  const [trigger, setTrigger] = useState<TriggerConfig>(TriggerConfigs.manual());
+
   const form = useForm({
     defaultValues: {
       name: '',
@@ -46,15 +49,27 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
       status: 'active',
       tools: [],
       servers: [],
-      trigger: TriggerConfigs.manual(),
       organizationId: undefined,
       roleId: undefined
-    } as CreateFormData,
-    onSubmit: async ({ value }: { value: CreateFormData }) => {
+    } as Omit<CreateFormData, 'schedules'>,
+    onSubmit: async ({ value }: { value: Omit<CreateFormData, 'schedules'> }) => {
       try {
         setIsSaving(true);
         setError(null);
-        
+
+        // Convert TriggerConfig to ScheduleConfigurationDTO with default task instructions
+        const scheduleDTO = {
+          trigger: trigger.toJSON() as any,
+          taskInstructions: {
+            instructions: '',  // User will add via Schedule Management modal
+            tools: [],
+            metadata: {}
+          },
+          enabled: true,
+          name: 'Default Schedule',
+          description: trigger.description
+        };
+
         const result = await createAgentFromClient({
           name: value.name.trim(),
           role: value.role?.trim(),
@@ -63,17 +78,17 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
           status: value.status,
           tools: value.tools || [],
           servers: value.servers || [],
-          trigger: value.trigger,
+          schedules: [scheduleDTO], // ScheduleConfigurationDTO with default values
           organizationId: value.organizationId
         });
-        
+
         if (!result.success) {
           throw new Error(result.error || 'Failed to create agent');
         }
-        
+
         onCreated?.();
         onCancel(); // Close create view after successful creation
-        
+
       } catch (error) {
         console.error('Error creating agent:', error);
         setError(error instanceof Error ? error.message : 'An error occurred while creating the agent');
@@ -179,7 +194,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
 
   const handleTriggerTypeChange = (triggerType: TriggerType) => {
     let newTrigger: TriggerConfig;
-    
+
     switch (triggerType) {
       case 'MANUAL':
         newTrigger = TriggerConfigs.manual();
@@ -196,13 +211,12 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
       default:
         newTrigger = TriggerConfigs.manual();
     }
-    
-    form.setFieldValue('trigger', newTrigger);
+
+    setTrigger(newTrigger);
   };
 
   const handleTriggerConfigChange = (config: Partial<TriggerConfig>) => {
-    const currentTrigger = form.getFieldValue('trigger');
-    form.setFieldValue('trigger', { ...currentTrigger, ...config } as TriggerConfig);
+    setTrigger({ ...trigger, ...config } as TriggerConfig);
   };
 
   return (
@@ -439,7 +453,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
             <div className="px-3 pb-3 space-y-3">
               <div>
                 <h4 className="font-medium text-foreground mb-2 text-sm">Trigger Type</h4>
-                <Select value={form.getFieldValue('trigger')?.type || 'MANUAL'} onValueChange={handleTriggerTypeChange}>
+                <Select value={trigger?.type || 'MANUAL'} onValueChange={handleTriggerTypeChange}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
@@ -453,7 +467,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
               </div>
 
               {/* Trigger Type Specific Configuration */}
-              {form.getFieldValue('trigger')?.type === 'MANUAL' && (
+              {trigger?.type === 'MANUAL' && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
                     Agent will execute only when manually triggered by users.
@@ -461,13 +475,13 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                 </div>
               )}
 
-              {form.getFieldValue('trigger')?.type === 'CALENDAR' && (
+              {trigger?.type === 'CALENDAR' && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
                     Configure recurring schedules using the calendar interface.
                   </p>
-                  <ScheduleManager 
-                    initialRRule={getCalendarRRule(form.getFieldValue('trigger') || TriggerConfigs.manual())}
+                  <ScheduleManager
+                    initialRRule={getCalendarRRule(trigger || TriggerConfigs.manual())}
                     onScheduleChange={(rrule) => {
                       handleTriggerConfigChange({ rrule });
                     }}
@@ -476,7 +490,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                 </div>
               )}
 
-              {form.getFieldValue('trigger')?.type === 'DATABASE_EVENT' && (
+              {trigger?.type === 'DATABASE_EVENT' && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
                     Trigger agent execution when database changes occur.
@@ -486,12 +500,12 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                     <div className="flex gap-2 text-xs">
                       {['INSERT', 'UPDATE', 'DELETE'].map((op) => (
                         <label key={op} className="flex items-center gap-1">
-                          <input 
-                            type="checkbox" 
-                            checked={(form.getFieldValue('trigger') as any)?.operations?.includes(op) || false}
+                          <input
+                            type="checkbox"
+                            checked={(trigger as any)?.operations?.includes(op) || false}
                             onChange={(e) => {
-                              const current = (form.getFieldValue('trigger') as any)?.operations || [];
-                              const newOps = e.target.checked 
+                              const current = (trigger as any)?.operations || [];
+                              const newOps = e.target.checked
                                 ? [...current, op]
                                 : current.filter((o: string) => o !== op);
                               handleTriggerConfigChange({ operations: newOps });
@@ -506,7 +520,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
               )}
 
 
-              {form.getFieldValue('trigger')?.type === 'WEBHOOK' && (
+              {trigger?.type === 'WEBHOOK' && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
                     Trigger agent execution via webhook HTTP calls.
@@ -516,16 +530,16 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                       <h5 className="font-medium text-sm mb-1">Webhook Secret</h5>
                       <Input
                         type="password"
-                        value={(form.getFieldValue('trigger') as any)?.webhookSecret || ''}
+                        value={(trigger as any)?.webhookSecret || ''}
                         onChange={(e) => handleTriggerConfigChange({ webhookSecret: e.target.value })}
                         placeholder="Optional security secret"
                         className="text-sm"
                       />
                     </div>
                     <label className="flex items-center gap-2 text-xs">
-                      <input 
-                        type="checkbox" 
-                        checked={(form.getFieldValue('trigger') as any)?.requiresSignature || false}
+                      <input
+                        type="checkbox"
+                        checked={(trigger as any)?.requiresSignature || false}
                         onChange={(e) => handleTriggerConfigChange({ requiresSignature: e.target.checked })}
                       />
                       <span>Require HMAC signature verification</span>

@@ -67,34 +67,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
     
-    // Check if agent has webhook trigger configured
-    if (!agent.trigger) {
-      return NextResponse.json(
-        { error: 'Agent does not have webhook trigger configured' },
-        { status: 400 }
-      );
-    }
-    
-    let webhookConfig: WebhookTriggerConfig;
-    try {
-      const triggerConfig = TriggerConfigFromJSON(agent.trigger);
-      if (!(triggerConfig instanceof WebhookTriggerConfig)) {
-        return NextResponse.json(
-          { error: 'Agent is not configured for webhook triggers' },
-          { status: 400 }
-        );
+    // Find matching webhook schedule
+    let webhookConfig: WebhookTriggerConfig | null = null;
+
+    for (const schedule of agent.schedules) {
+      if (schedule instanceof WebhookTriggerConfig && schedule.isEnabled()) {
+        webhookConfig = schedule;
+        break; // Use first matching enabled webhook schedule
       }
-      webhookConfig = triggerConfig;
-    } catch (error) {
-      return NextResponse.json(
-        { error: 'Invalid webhook trigger configuration' },
-        { status: 500 }
-      );
     }
-    
-    if (!webhookConfig.isEnabled()) {
+
+    if (!webhookConfig) {
       return NextResponse.json(
-        { error: 'Webhook trigger is disabled for this agent' },
+        { error: 'Agent does not have an enabled webhook schedule configured' },
         { status: 400 }
       );
     }
@@ -235,28 +220,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
     
-    // Check if agent has webhook trigger configured
-    if (!agent.trigger) {
-      return NextResponse.json({
-        configured: false,
-        message: 'Agent does not have webhook trigger configured'
-      });
-    }
-    
-    let webhookConfig: WebhookTriggerConfig;
-    try {
-      const triggerConfig = TriggerConfigFromJSON(agent.trigger);
-      if (!(triggerConfig instanceof WebhookTriggerConfig)) {
-        return NextResponse.json({
-          configured: false,
-          message: 'Agent is not configured for webhook triggers'
-        });
+    // Find webhook schedule
+    let webhookConfig: WebhookTriggerConfig | null = null;
+
+    for (const schedule of agent.schedules) {
+      if (schedule instanceof WebhookTriggerConfig) {
+        webhookConfig = schedule;
+        break; // Use first webhook schedule found
       }
-      webhookConfig = triggerConfig;
-    } catch (error) {
+    }
+
+    if (!webhookConfig) {
       return NextResponse.json({
         configured: false,
-        message: 'Invalid webhook trigger configuration'
+        message: 'Agent does not have a webhook schedule configured'
       });
     }
     

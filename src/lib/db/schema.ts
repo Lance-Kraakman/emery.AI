@@ -413,9 +413,8 @@ export const agents = pgTable("agents", {
   persona: text("persona"),
   ownerId: uuid("owner_id").notNull().references(() => users.id), // Agent owner (user)
   tools: jsonb("tools"), // Available tools as JSONB for rich configuration
-  servers: jsonb("servers"), // Available servers as JSONB for rich configuration  
-  trigger: jsonb("trigger"), // Trigger configuration (JSON blob)
-  capabilities: jsonb("capabilities"), // STATIC: Array of Capability objects with steps (JSON blob)
+  servers: jsonb("servers"), // Available servers as JSONB for rich configuration
+  schedules: jsonb("schedules").$type<any[]>().default(sql`'[]'::jsonb`).notNull(), // Array of schedule configurations (TriggerConfig[])
   databaseId: text("database_id"),
   status: text("status").default("active"),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),

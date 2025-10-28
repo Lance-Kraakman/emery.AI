@@ -55,10 +55,23 @@ export async function POST(
     // Create trigger config based on schedule preference
     const triggerConfig: TriggerConfig = createTriggerConfig(schedule);
 
+    // Convert to ScheduleConfigurationDTO with default task instructions
+    const scheduleDTO = {
+      trigger: triggerConfig.toJSON() as any,
+      taskInstructions: {
+        instructions: 'Automated organizational analysis task',
+        tools: [],
+        metadata: {}
+      },
+      enabled: true,
+      name: `${schedule} Analysis Schedule`,
+      description: `Automated ${schedule} analysis for organization ${organizationId}`
+    };
+
     // Create each specialized agent
     for (const agentType of agentTypes) {
       const config = getAgentTypeConfig(agentType);
-      
+
       try {
         const command: CreateAgentDTO = {
           name: `${config.description} - ${organizationId}`,
@@ -75,8 +88,7 @@ export async function POST(
             )
           ),
           servers: [],
-          trigger: triggerConfig,
-          skills: [],
+          schedules: [scheduleDTO],
           specialization: getDefaultSpecializationForType(agentType),
           status: 'active' as const
         };
@@ -151,7 +163,7 @@ export async function GET(
       name: agent.name,
       agentType: agent.agentType,
       status: agent.status,
-      triggerConfig: agent.trigger,
+      triggerConfig: agent.schedules?.[0],
       tools: Array.isArray(agent.tools) ? agent.tools.map((t: any) => t.name) : [],
       lastActivity: agent.updatedAt,
       specialization: agent.specialization
@@ -225,10 +237,23 @@ export async function PATCH(
 
     const agent = agents[0];
 
-    // Update the agent's trigger config
+    // Convert TriggerConfig to ScheduleConfigurationDTO
+    const scheduleDTO = {
+      trigger: triggerConfig.toJSON ? triggerConfig.toJSON() : triggerConfig as any,
+      taskInstructions: {
+        instructions: 'Updated analysis schedule',
+        tools: [],
+        metadata: {}
+      },
+      enabled: true,
+      name: `${agentType} Schedule`,
+      description: `Updated schedule for ${agentType} agent`
+    };
+
+    // Update the agent's schedule config
     const updateResult = await agentService.updateAgent({
       id: agent.id,
-      trigger: triggerConfig
+      schedules: [scheduleDTO]
     });
 
     if (!updateResult.success) {

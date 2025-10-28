@@ -82,21 +82,7 @@ export default function TaskFormDialog({ isOpen, onClose, agent }: TaskFormDialo
                 placeholder="e.g., Generate weekly sales report"
               />
             </div>
-            <div>
-              <label htmlFor="skill" className="block text-sm font-medium text-muted-foreground">
-                Skill <span className="text-xs text-muted-foreground">(optional - system will auto-route)</span>
-              </label>
-              <select
-                id="skill"
-                name="skill"
-                className="mt-1 block w-full p-2 border rounded"
-              >
-                <option value="">Auto-select skill</option>
-                {(agent.skills as any[] || []).map((skill, index) => (
-                  <option key={index} value={skill.name}>{skill.name}</option>
-                ))}
-              </select>
-            </div>
+            {/* AIDEV-NOTE: Skill selection removed - skills are now in separate table, system will auto-route */}
             <div>
               <label htmlFor="instructions" className="block text-sm font-medium text-muted-foreground">Instructions</label>
               <textarea

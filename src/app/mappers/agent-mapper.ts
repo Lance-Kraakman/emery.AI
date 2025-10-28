@@ -1,6 +1,7 @@
 import type { Agent, AgentType, AgentSpecialization } from '@/ddd/domain/agents/entities/agent';
 import { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import { ScheduleMapper } from './schedule-mapper';
 
 // AIDEV-NOTE: Serializable DTO types following the ToolMapper pattern
 // ToolConfig class instances cannot be serialized by Next.js Server Actions
@@ -11,20 +12,6 @@ export interface ToolConfigDTO {
   config: Record<string, any>;
 }
 
-export interface StepConfigDTO {
-  type: 'CODE_STEP' | 'TOOL_STEP';
-  instructions: string;
-  model?: string;
-  tools?: ToolConfigDTO[];
-  servers?: any[];
-}
-
-export interface SkillConfigDTO {
-  name: string;
-  description: string;
-  steps: StepConfigDTO[];
-}
-
 export interface AgentDTO {
   id: number;
   name: string;
@@ -33,8 +20,7 @@ export interface AgentDTO {
   persona: string;
   tools: ToolConfigDTO[];
   servers: any[];
-  trigger?: TriggerConfig;
-  skills: SkillConfigDTO[];
+  schedules: any[]; // TriggerConfig array
   databaseId?: string | null;
   status: string;
   organizationId: number;
@@ -57,22 +43,8 @@ export class AgentMapper {
       // Serialize ToolConfig instances to plain DTOs
       tools: agent.tools.map(tool => tool.toPlain()),
       servers: agent.servers,
-      trigger: agent.trigger,
-      // Serialize skills with nested ToolConfig instances
-      skills: agent.skills.map(skill => ({
-        name: skill.name,
-        description: skill.description,
-        steps: skill.steps.map(step => ({
-          type: step.type,
-          instructions: step.instructions,
-          model: step.model,
-          // Serialize step tools to plain DTOs
-          tools: step.tools?.map(tool =>
-            tool instanceof ToolConfig ? tool.toPlain() : tool
-          ) || [],
-          servers: step.servers
-        }))
-      })),
+      // Use ScheduleMapper to convert ScheduleConfiguration to ScheduleConfigurationDTO
+      schedules: agent.schedules.map(schedule => ScheduleMapper.toDTO(schedule)),
       databaseId: agent.databaseId,
       status: agent.status.value,
       organizationId: agent.organizationId.value,

@@ -7,6 +7,7 @@
 import type { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 import type { TriggerConfig } from '../value-objects/trigger-config';
+import type { ScheduleConfiguration } from '@/ddd/domain/agents/entities/agent';
 
 /**
  * Request to execute a task (immediately or scheduled)
@@ -24,6 +25,7 @@ export interface TaskExecutionRequest {
 
 /**
  * Request to schedule a recurring task
+ * AIDEV-NOTE: Updated to use full ScheduleConfiguration with task instructions
  */
 export interface ScheduleTaskRequest {
   agentId: AgentId;
@@ -31,7 +33,7 @@ export interface ScheduleTaskRequest {
   name: string;
   skillName?: string;
   instructions: TaskInstructions;
-  trigger: TriggerConfig;
+  schedule: ScheduleConfiguration;
 }
 
 /**

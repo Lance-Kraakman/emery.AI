@@ -54,14 +54,19 @@ export interface IAgentRepository {
   countByOrganization(organizationId: OrganizationId): Promise<number>;
 
   /**
-   * Find active agents with trigger configurations for scheduling
+   * Find active agents with schedule configurations for scheduling
    */
-  findActiveAgentsWithTriggers(organizationId?: OrganizationId): Promise<Agent[]>;
+  findActiveAgentsWithSchedules(organizationId?: OrganizationId): Promise<Agent[]>;
 
   /**
-   * Find all agents with trigger configurations (active and inactive)
+   * Find all agents with schedule configurations (active and inactive)
    */
-  findAgentsWithTriggers(organizationId?: OrganizationId): Promise<Agent[]>;
+  findAgentsWithSchedules(organizationId?: OrganizationId): Promise<Agent[]>;
+
+  /**
+   * Find all agents (for scheduler service)
+   */
+  findAll(organizationId?: OrganizationId): Promise<Agent[]>;
 
   /**
    * Find agent by API key

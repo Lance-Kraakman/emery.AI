@@ -8,7 +8,6 @@ import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/li
 import { type Result, type CreateAgentData, type CreateAgentClientData } from "./types";
 import { getAgentApplicationService } from "@/ddd/application/di/container";
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from "@/app/dtos/agent.dto";
-import type { SkillConfig } from "@/ddd/domain/agents/entities/agent";
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
 import { AgentMapper } from "@/app/mappers/agent-mapper";
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
@@ -37,8 +36,6 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
         organizationId: session.user.currentOrganizationId,
         tools: toolDTOs,
         servers: data.servers,
-        trigger: data.trigger,
-        skills: data.skills,
         status: (() => {
           const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
           return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
@@ -80,25 +77,6 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
   });
 }
 
-export async function addSkillToAgent(agentId: number, skill: SkillConfig) {
-  'use server';
-  return withAuthContext(async () => {
-    try {
-      const agentApplicationService = getAgentApplicationService();
-      const result = await agentApplicationService.addSkillToAgent(AgentId.fromNumber(agentId), skill);
-      
-      if (!result.success) {
-        throw new Error(result.error || "Failed to add capability");
-      }
-      
-      return result.data;
-    } catch (error) {
-      console.error("Error adding capability to agent:", error);
-      throw error;
-    }
-  });
-}
-
 // Helper function for creating agents from client data (with plain types)
 export async function createAgentFromClient(data: CreateAgentClientData): Promise<Result> {
   // Convert plain tools to ToolConfig instances (filter out nulls/undefined first)
@@ -106,27 +84,21 @@ export async function createAgentFromClient(data: CreateAgentClientData): Promis
     ?.filter(tool => tool != null) // catches both null and undefined
     ?.map(plainTool => ToolConfig.fromPlain(plainTool));
 
-  // Convert plain capabilities to domain CapabilityConfig with ToolConfig instances
-  const skills = data.skills?.map(plainSkill => ({
-    name: plainSkill.name,
-    description: plainSkill.description,
-    steps: plainSkill.steps.map(plainStep => ({
-      type: plainStep.type,
-      instructions: plainStep.instructions,
-      model: plainStep.model,
-      // Convert plain tool configs to ToolConfig instances (filter out nulls/undefined first!)
-      tools: plainStep.tools
-        ?.filter(tool => tool != null) // catches both null and undefined
-        ?.map(plainTool => ToolConfig.fromPlain(plainTool)) || [],
-      servers: plainStep.servers || []
-    }))
-  }));
+  // AIDEV-NOTE: Serialize TriggerConfig instances to JSON for database storage
+  const schedules = data.schedules
+    ?.filter(schedule => schedule != null)
+    ?.map(schedule => {
+      if (schedule && typeof schedule === 'object' && 'toJSON' in schedule && typeof schedule.toJSON === 'function') {
+        return schedule.toJSON();
+      }
+      return schedule;
+    });
 
   // Convert client data to domain data format
   const domainData: CreateAgentData = {
     ...data,
     tools,
-    skills: skills || [],
+    schedules: schedules || data.schedules,
     status: data.status ? AgentStatus.fromString(data.status) : AgentStatus.active(),
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
     ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,
@@ -136,94 +108,34 @@ export async function createAgentFromClient(data: CreateAgentClientData): Promis
 
 // Helper function for updating agents from client data (with plain types)
 export async function updateAgentFromClient(agentId: number, data: Partial<CreateAgentClientData>, revalidateUrl?: string): Promise<Result> {
-  console.log('[updateAgentFromClient] Received plain data:', JSON.stringify({
-    agentId,
-    skills: data.skills,
-    skillsCount: data.skills?.length || 0
-  }, null, 2));
-
-  // Log detailed tool information for debugging
-  if (data.skills) {
-    data.skills.forEach((skill, skillIndex) => {
-      console.log(`[updateAgentFromClient] Skill ${skillIndex} "${skill.name}":`);
-      skill.steps.forEach((step, stepIndex) => {
-        console.log(`[updateAgentFromClient]   Step ${stepIndex} (${step.type}): ${step.tools?.length || 0} tools`);
-        step.tools?.forEach((tool, toolIndex) => {
-          console.log(`[updateAgentFromClient]     Tool ${toolIndex}:`, JSON.stringify(tool));
-          console.log(`[updateAgentFromClient]     Tool ${toolIndex} name: "${tool?.name}"`, tool?.name === '@tool:' ? '(EMPTY PLACEHOLDER)' : '');
-          console.log(`[updateAgentFromClient]     Tool ${toolIndex} is null/undefined:`, tool === null || tool === undefined);
-        });
-      });
-    });
-  }
-
   // Convert plain tools to ToolConfig instances (filter out invalid tools first)
   const tools = data.tools
-    ?.filter(tool => {
-      console.log('[updateAgentFromClient] Filtering tool:', tool);
-      const isValid = tool !== null && tool !== undefined && tool !== undefined;
-      console.log('[updateAgentFromClient] Tool is valid:', isValid);
-      return isValid;
-    })
-    ?.map(plainTool => {
-      console.log('[updateAgentFromClient] Converting tool to ToolConfig:', plainTool);
-      return ToolConfig.fromPlain(plainTool);
-    }) || [];
+    ?.filter(tool => tool !== null && tool !== undefined)
+    ?.map(plainTool => ToolConfig.fromPlain(plainTool)) || [];
 
-  // Convert plain capabilities to domain CapabilityConfig with ToolConfig instances
-  const skills = data.skills?.map(plainSkill => {
-    console.log('[updateAgentFromClient] Processing capability:', plainSkill.name);
-    return {
-      name: plainSkill.name,
-      description: plainSkill.description,
-      steps: plainSkill.steps.map(plainStep => {
-        console.log('[updateAgentFromClient] Processing step:', plainStep.type, 'tools:', plainStep.tools);
-        // Convert plain tool configs to ToolConfig instances (filter out invalid tools first!)
-        const validTools = (plainStep.tools || [])
-          .filter(tool => {
-            console.log('[updateAgentFromClient] Filtering step tool:', tool);
-            const isValid = tool !== null && tool !== undefined && tool !== undefined;
-            console.log('[updateAgentFromClient] Step tool is valid:', isValid);
-            return isValid;
-          })
-          .map(plainTool => {
-            console.log('[updateAgentFromClient] Converting step tool to ToolConfig:', plainTool);
-            return ToolConfig.fromPlain(plainTool);
-          });
-        
-        console.log('[updateAgentFromClient] Valid tools after filtering:', validTools.length);
-        
-        return {
-          type: plainStep.type,
-          instructions: plainStep.instructions,
-          model: plainStep.model,
-          tools: validTools,
-          servers: plainStep.servers || []
-        };
-      })
-    };
-  }) || [];
+  // AIDEV-NOTE: Serialize TriggerConfig instances to JSON for database storage
+  // TriggerConfig.toJSON() must be called to convert class instances to plain objects
+  // Otherwise Drizzle receives class instances and serializes them as empty objects
+  const schedules = data.schedules
+    ?.filter(schedule => schedule !== null && schedule !== undefined)
+    ?.map(schedule => {
+      // If it's a TriggerConfig instance with toJSON method, serialize it
+      if (schedule && typeof schedule === 'object' && 'toJSON' in schedule && typeof schedule.toJSON === 'function') {
+        return schedule.toJSON();
+      }
+      // If it's already a plain object, keep it as-is
+      return schedule;
+    });
 
   // Convert client data to domain data format
   const domainData: Partial<CreateAgentData> = {
     ...data,
     tools,
-    skills,
+    schedules: schedules !== undefined ? schedules : data.schedules,
     status: data.status ? AgentStatus.fromString(data.status) : undefined,
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
     ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,
   };
-
-  console.log('[updateAgentFromClient] Converted to domain data with ToolConfig instances:', JSON.stringify({
-    skills: domainData.skills?.map(c => ({
-      name: c.name,
-      steps: c.steps.map(s => ({
-        type: s.type,
-        toolsCount: s.tools?.length || 0,
-        tools: s.tools?.map(t => ({ name: t.name, isToolConfig: t instanceof ToolConfig }))
-      }))
-    }))
-  }, null, 2));
 
   return updateAgent(agentId, domainData, revalidateUrl);
 }
@@ -355,8 +267,6 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
         ownerId: data.ownerId instanceof UserId ? data.ownerId.value : data.ownerId,
         tools: toolDTOs,
         servers: data.servers,
-        trigger: data.trigger,
-        skills: data.skills,
         status: (() => {
           const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
           return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
@@ -364,19 +274,6 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
             : undefined;
         })()
       };
-
-      console.log('[updateAgent] UpdateAgentDTO skills:', JSON.stringify({
-        skillsCount: dto.skills?.length || 0,
-        skills: dto.skills?.map(c => ({
-          name: c.name,
-          stepsCount: c.steps.length,
-          steps: c.steps.map(s => ({
-            type: s.type,
-            toolsCount: s.tools?.length || 0,
-            tools: s.tools?.map(t => ({ name: t.name, config: t.config }))
-          }))
-        }))
-      }, null, 2));
 
       const result = await agentApplicationService.updateAgent(dto);
 

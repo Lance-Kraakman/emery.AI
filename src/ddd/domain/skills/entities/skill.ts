@@ -8,6 +8,7 @@ import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-i
 export interface SkillInput {
   name: string;
   required: boolean;
+  default?: any; // Default value for @-mention insertion
 }
 
 /**

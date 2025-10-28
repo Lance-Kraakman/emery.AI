@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfigurationCard } from './ConfigurationCard';
 import { useModal } from './modals/ModalContext';
+import { ScheduleManagerModal } from './modals/ScheduleManagerModal';
 import { getOrganizationMembers } from '@/app/actions/invitations';
 import {
   isCalendarTrigger,
@@ -42,6 +43,7 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   const { openModal } = useModal();
   const [ownerName, setOwnerName] = useState<string>('Loading...');
   const [users, setUsers] = useState<User[]>([]);
+  const [isScheduleManagerOpen, setIsScheduleManagerOpen] = useState(false);
 
   // Load organization members to get owner name
   useEffect(() => {
@@ -79,14 +81,9 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   };
 
   const getTriggerStatus = () => {
-    if (!agent.trigger || agent.trigger.type === 'MANUAL') return 'partial';
-    return 'configured';
-  };
-
-  const getSkillsStatus = () => {
-    const count = agent.skills?.length || 0;
-    if (count === 0) return 'empty';
-    if (count < 3) return 'partial';
+    if (!agent.schedules || agent.schedules.length === 0) return 'partial';
+    const firstSchedule = agent.schedules[0];
+    if (!firstSchedule || firstSchedule.type === 'MANUAL') return 'partial';
     return 'configured';
   };
 
@@ -100,35 +97,38 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
 
   // Generate summaries for each configuration area
   const getTriggerSummary = () => {
-    if (!agent.trigger || agent.trigger.type === 'MANUAL') {
+    if (!agent.schedules || agent.schedules.length === 0) {
       return 'Manual execution only';
     }
 
-    if (isCalendarTrigger(agent.trigger)) {
-      const timezone = agent.trigger.timezone || 'UTC';
-      return `Scheduled execution • ${timezone}`;
+    const scheduleCount = agent.schedules.length;
+    const firstSchedule = agent.schedules[0];
+
+    if (!firstSchedule || firstSchedule.type === 'MANUAL') {
+      return 'Manual execution only';
     }
 
-    if (isDatabaseEventTrigger(agent.trigger)) {
-      const ops = agent.trigger.operations.join(', ');
-      const table = agent.trigger.tableId ? ` on ${agent.trigger.tableId}` : ' on all tables';
-      return `${ops}${table}`;
+    let summary = '';
+
+    if (isCalendarTrigger(firstSchedule)) {
+      const timezone = firstSchedule.timezone || 'UTC';
+      summary = `Scheduled execution • ${timezone}`;
+    } else if (isDatabaseEventTrigger(firstSchedule)) {
+      const ops = firstSchedule.operations.join(', ');
+      const table = firstSchedule.tableId ? ` on ${firstSchedule.tableId}` : ' on all tables';
+      summary = `${ops}${table}`;
+    } else if (isWebhookTrigger(firstSchedule)) {
+      const security = firstSchedule.requiresSignature ? 'Secured' : 'Open';
+      summary = `Webhook trigger • ${security}`;
+    } else {
+      summary = getTriggerTypeLabel(firstSchedule.type);
     }
 
-    if (isWebhookTrigger(agent.trigger)) {
-      const security = agent.trigger.requiresSignature ? 'Secured' : 'Open';
-      return `Webhook trigger • ${security}`;
+    if (scheduleCount > 1) {
+      summary += ` (+${scheduleCount - 1} more)`;
     }
 
-    return getTriggerTypeLabel(agent.trigger.type);
-  };
-
-  const getSkillsSummary = () => {
-    const count = agent.skills?.length || 0;
-    if (count === 0) return 'No skills defined';
-
-    const totalSteps = agent.skills?.reduce((sum, skill) => sum + (skill.steps?.length || 0), 0) || 0;
-    return `${count} skill${count !== 1 ? 's' : ''} • ${totalSteps} total steps`;
+    return summary;
   };
 
   const getToolsSummary = () => {
@@ -167,18 +167,18 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
           actionText="Edit Details"
         />
 
-        {/* Trigger Configuration */}
+        {/* Schedule Configuration */}
         <ConfigurationCard
-          title="Trigger Configuration"
-          description="Execution timing and conditions"
-          icon={agent.trigger?.type === 'CALENDAR' ? Calendar :
-                agent.trigger?.type === 'DATABASE_EVENT' ? Database :
-                agent.trigger?.type === 'WEBHOOK' ? Globe : Zap}
+          title="Schedule Configuration"
+          description="Manage multiple execution triggers"
+          icon={agent.schedules?.[0]?.type === 'CALENDAR' ? Calendar :
+                agent.schedules?.[0]?.type === 'DATABASE_EVENT' ? Database :
+                agent.schedules?.[0]?.type === 'WEBHOOK' ? Globe : Zap}
           status={getTriggerStatus()}
           statusText={getTriggerStatus() === 'configured' ? 'Configured' : 'Default'}
           summary={getTriggerSummary()}
-          onClick={() => openModal('trigger-config', { agent })}
-          actionText="Configure Trigger"
+          onClick={() => setIsScheduleManagerOpen(true)}
+          actionText="Manage Schedules"
         />
 
         {/* Tools & Servers */}
@@ -207,22 +207,26 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
           onClick={() => openModal('activity-details', { agent })}
           actionText="View Activity"
         />
+
+        {/* Skills - Linked to separate page */}
+        <ConfigurationCard
+          title="Skills"
+          description="Multi-step workflows and tasks"
+          icon={Settings}
+          status="partial"
+          statusText="View Skills"
+          summary="Skills are managed separately per agent"
+          onClick={() => router.push(`/agents/${agent.id}/skills`)}
+          actionText="Manage Skills"
+        />
       </div>
 
-      {/* Skills - Full Width */}
-      <ConfigurationCard
-        title="Skills"
-        description="Multi-step workflows and tasks"
-        icon={Settings}
-        status={getSkillsStatus()}
-        statusText={
-          getSkillsStatus() === 'configured' ? 'Well Configured' :
-          getSkillsStatus() === 'partial' ? 'Basic Setup' : 'Not Configured'
-        }
-        summary={getSkillsSummary()}
-        onClick={() => router.push(`/agents/${agent.id}/skills`)}
-        actionText="Manage Skills"
-        className="md:col-span-2"
+      {/* Schedule Manager Modal */}
+      <ScheduleManagerModal
+        isOpen={isScheduleManagerOpen}
+        onClose={() => setIsScheduleManagerOpen(false)}
+        agent={agent}
+        onUpdate={onUpdate}
       />
     </div>
   );
