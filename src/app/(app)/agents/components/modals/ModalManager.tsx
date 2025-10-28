@@ -5,6 +5,7 @@ import { useModal } from './ModalContext';
 import { BasicInfoModal } from './BasicInfoModal';
 import { TriggerConfigModal } from './TriggerConfigModal';
 import { ActivityDetailsModal } from './ActivityDetailsModal';
+import { AuthorizedConnectionsModal } from './AuthorizedConnectionsModal';
 
 interface ModalManagerProps {
   onUpdate?: () => void;
@@ -41,6 +42,16 @@ export function ModalManager({ onUpdate }: ModalManagerProps) {
     case 'activity-details':
       return (
         <ActivityDetailsModal
+          isOpen={true}
+          onClose={closeModal}
+          agent={modalState.data?.agent}
+          onUpdate={onUpdate}
+        />
+      );
+
+    case 'authorized-connections':
+      return (
+        <AuthorizedConnectionsModal
           isOpen={true}
           onClose={closeModal}
           agent={modalState.data?.agent}
