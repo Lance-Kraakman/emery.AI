@@ -130,39 +130,6 @@ describe('Agent Task Execution Integration Tests', () => {
           ToolConfig.basic('file_reader').toPlain(),
           ToolConfig.basic('web_search').toPlain(),
           ToolConfig.basic('calculator').toPlain()
-        ],
-        skills: [
-          {
-            name: 'Data Collection and Analysis',
-            description: 'Collect and analyze data using Python tools',
-            steps: [
-              {
-                type: 'TOOL_STEP',
-                instructions: 'Use available tools to collect and analyze data as requested',
-                tools: [
-                  ToolConfig.basic('python_repl').toPlain(),
-                  ToolConfig.basic('web_search').toPlain(),
-                  ToolConfig.basic('calculator').toPlain()
-                ],
-                servers: []
-              }
-            ]
-          },
-          {
-            name: 'File Operations',
-            description: 'Handle file reading and processing tasks',
-            steps: [
-              {
-                type: 'TOOL_STEP',
-                instructions: 'Read, process, or manipulate files as requested',
-                tools: [
-                  ToolConfig.basic('file_reader').toPlain(),
-                  ToolConfig.basic('python_repl').toPlain()
-                ],
-                servers: []
-              }
-            ]
-          }
         ]
       };
 
@@ -473,23 +440,6 @@ describe('Agent Task Execution Integration Tests', () => {
           ToolConfig.basic('file_reader'),
           ToolConfig.basic('web_search'),
           ToolConfig.basic('calculator')
-        ],
-        skills: [
-          {
-            name: 'Basic Task Execution',
-            description: 'Execute basic tasks for isolation testing',
-            steps: [
-              {
-                type: 'TOOL_STEP',
-                instructions: 'Execute the requested task using available tools',
-                tools: [
-                  ToolConfig.basic('python_repl'),
-                  ToolConfig.basic('calculator')
-                ],
-                servers: []
-              }
-            ]
-          }
         ]
       });
       

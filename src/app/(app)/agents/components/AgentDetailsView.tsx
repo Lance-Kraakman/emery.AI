@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Edit, ChevronDown, ChevronRight, Activity, Cog, Save, X, Loader2, Calendar, Plus, Trash2 } from 'lucide-react';
-import type { AgentDTO, ToolConfigDTO, SkillConfigDTO } from '@/app/mappers/agent-mapper';
+import type { AgentDTO, ToolConfigDTO } from '@/app/mappers/agent-mapper';
 import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import { discoverTools, createToolConfigFromMetadata, type ToolMetadataDTO } from '@/app/actions/tool-registry';
@@ -15,7 +15,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { updateAgentFromClient } from '@/app/actions/agents';
-import SkillManager from './SkillManager';
 import AgentActivityPanel from './AgentActivityPanel';
 import ScheduleManager from './ScheduleManager';
 import {
@@ -45,14 +44,12 @@ interface EditFormData {
   description: string;
   persona: string;
   status: string;
-  trigger: TriggerConfig;
+  schedules: any[]; // ScheduleConfigurationDTO[] - use any during migration
   tools: ToolConfigDTO[];
   servers: ServerConfig[];
-  skills: SkillConfigDTO[];
 }
 
 export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetailsViewProps) {
-  const [isSkillsOpen, setIsSkillsOpen] = useState(false);
   const [isActivityOpen, setIsActivityOpen] = useState(false);
   const [isTriggerConfigOpen, setIsTriggerConfigOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -63,10 +60,9 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
     description: agent.description || '',
     persona: agent.persona || '',
     status: agent.status || 'active',
-    trigger: agent.trigger || TriggerConfigs.manual(),
+    schedules: agent.schedules || [TriggerConfigs.manual()],
     tools: agent.tools || [],
-    servers: agent.servers || [],
-    skills: agent.skills || []
+    servers: agent.servers || []
   });
 
   const handleEdit = () => {
@@ -77,10 +73,9 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       description: agent.description || '',
       persona: agent.persona || '',
       status: agent.status || 'active',
-      trigger: agent.trigger || TriggerConfigs.manual(),
+      schedules: agent.schedules || [TriggerConfigs.manual()],
       tools: agent.tools || [],
-      servers: agent.servers || [],
-      skills: agent.skills || []
+      servers: agent.servers || []
     });
   };
 
@@ -92,10 +87,9 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       description: agent.description || '',
       persona: agent.persona || '',
       status: agent.status || 'active',
-      trigger: agent.trigger || TriggerConfigs.manual(),
+      schedules: agent.schedules || [TriggerConfigs.manual()],
       tools: agent.tools || [],
-      servers: agent.servers || [],
-      skills: agent.skills || []
+      servers: agent.servers || []
     });
   };
 
@@ -104,25 +98,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       setIsSaving(true);
       
       console.log('[AgentDetailsView] handleSave - editFormData before save:', JSON.stringify(editFormData, null, 2));
-      
-      // Log skills details
-      console.log('[AgentDetailsView] handleSave - skills being sent:');
-      editFormData.skills?.forEach((skill, skillIndex) => {
-        console.log(`  Skill ${skillIndex}:`, skill.name);
-        skill.steps?.forEach((step, stepIndex) => {
-          console.log(`    Step ${stepIndex}:`, step.type, 'tools:', step.tools);
-          step.tools?.forEach((tool, toolIndex) => {
-            console.log(`      Tool ${toolIndex}:`, {
-              value: tool,
-              type: typeof tool,
-              isFunction: typeof tool === 'function',
-              constructor: tool?.constructor?.name,
-              keys: tool && typeof tool === 'object' ? Object.keys(tool) : 'N/A'
-            });
-          });
-        });
-      });
-      
+
       const updatedAgent = {
         ...agent,
         name: editFormData.name.trim(),
@@ -132,7 +108,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
         status: editFormData.status
       };
 
-      console.log('[AgentDetailsView] handleSave - Calling updateAgentFromClient with skills:', editFormData.skills);
+      console.log('[AgentDetailsView] handleSave - Calling updateAgentFromClient');
 
       const result = await updateAgentFromClient(agent.id, {
         name: editFormData.name.trim(),
@@ -140,10 +116,9 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
         description: editFormData.description.trim(),
         persona: editFormData.persona.trim(),
         status: editFormData.status as 'active' | 'inactive' | 'archived',
-        trigger: editFormData.trigger,
+        schedules: editFormData.schedules,
         tools: editFormData.tools,
-        servers: editFormData.servers,
-        skills: editFormData.skills
+        servers: editFormData.servers
       });
       
       if (!result.success) {
@@ -168,7 +143,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
 
   const handleTriggerTypeChange = (triggerType: TriggerType) => {
     let newTrigger: TriggerConfig;
-    
+
     switch (triggerType) {
       case 'MANUAL':
         newTrigger = TriggerConfigs.manual();
@@ -185,86 +160,15 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       default:
         newTrigger = TriggerConfigs.manual();
     }
-    
-    setEditFormData(prev => ({ ...prev, trigger: newTrigger }));
+
+    setEditFormData(prev => ({ ...prev, schedules: [newTrigger] }));
   };
 
-  const handleTriggerConfigChange = (config: any) => {
+  const handleTriggerConfigChange = (config: Partial<TriggerConfig>) => {
     setEditFormData(prev => {
-      // Type-safe trigger config update that preserves discriminated union
-      let updatedTrigger: TriggerConfig;
-      
-      if (config.type && config.type !== prev.trigger.type) {
-        // If changing trigger type, use factory function to create new trigger
-        switch (config.type) {
-          case 'MANUAL':
-            updatedTrigger = TriggerConfigs.manual(config.enabled, config.description);
-            break;
-          case 'CALENDAR':
-            updatedTrigger = TriggerConfigs.calendar('FREQ=DAILY;INTERVAL=1', {
-              enabled: config.enabled,
-              description: config.description
-            });
-            break;
-          case 'DATABASE_EVENT':
-            updatedTrigger = TriggerConfigs.databaseEvent(['INSERT', 'UPDATE'], {
-              enabled: config.enabled,
-              description: config.description
-            });
-            break;
-          case 'WEBHOOK':
-            updatedTrigger = TriggerConfigs.webhook({
-              enabled: config.enabled,
-              description: config.description
-            });
-            break;
-          default:
-            updatedTrigger = prev.trigger;
-        }
-      } else {
-        // Same type, create new instance with updated values
-        const currentTrigger = prev.trigger;
-        
-        if (currentTrigger instanceof TriggerConfigs.manual().constructor) {
-          updatedTrigger = TriggerConfigs.manual(
-            config.enabled !== undefined ? config.enabled : currentTrigger.enabled,
-            config.description !== undefined ? config.description : currentTrigger.description
-          );
-        } else if (currentTrigger instanceof TriggerConfigs.calendar('FREQ=DAILY').constructor) {
-          const current = currentTrigger as any;
-          updatedTrigger = TriggerConfigs.calendar(current.rrule, {
-            timezone: current.timezone,
-            startDate: current.startDate,
-            endDate: current.endDate,
-            enabled: config.enabled !== undefined ? config.enabled : current.enabled,
-            description: config.description !== undefined ? config.description : current.description
-          });
-        } else if (currentTrigger instanceof TriggerConfigs.databaseEvent(['INSERT']).constructor) {
-          const current = currentTrigger as any;
-          updatedTrigger = TriggerConfigs.databaseEvent(
-            config.operations !== undefined ? config.operations : current.operations,
-            {
-              tableId: config.tableId !== undefined ? config.tableId : current.tableId,
-              conditions: current.conditions,
-              enabled: config.enabled !== undefined ? config.enabled : current.enabled,
-              description: config.description !== undefined ? config.description : current.description
-            }
-          );
-        } else if (currentTrigger instanceof TriggerConfigs.webhook().constructor) {
-          const current = currentTrigger as any;
-          updatedTrigger = TriggerConfigs.webhook({
-            webhookSecret: current.webhookSecret,
-            allowedOrigins: current.allowedOrigins,
-            requiresSignature: current.requiresSignature,
-            enabled: config.enabled !== undefined ? config.enabled : current.enabled,
-            description: config.description !== undefined ? config.description : current.description
-          });
-        } else {
-          updatedTrigger = currentTrigger;
-        }
-      }
-      
-      return { ...prev, trigger: updatedTrigger };
+      const currentSchedule = prev.schedules[0] || TriggerConfigs.manual();
+      const updatedSchedule = { ...currentSchedule, ...config } as TriggerConfig;
+      return { ...prev, schedules: [updatedSchedule] };
     });
   };
 
@@ -601,36 +505,6 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
         </CardContent>
       </Card>
 
-      {/* Skills Section - Collapsible */}
-      <Collapsible open={isSkillsOpen} onOpenChange={setIsSkillsOpen}>
-        <div className="border rounded-lg">
-          <CollapsibleTrigger asChild>
-            <Button
-              variant="ghost"
-              className="w-full justify-between h-auto p-3 hover:bg-muted/50"
-            >
-              <div className="flex items-center gap-2">
-                <Cog size={16} />
-                <span className="font-medium text-sm">Skills</span>
-              </div>
-              {isSkillsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="px-3 pb-3">
-              <SkillManager
-                agent={isEditMode ? undefined : agent}
-                skills={isEditMode ? editFormData.skills : undefined}
-                isEditable={isEditMode}
-                onSkillsChange={(skills: SkillConfigDTO[]) => {
-                  setEditFormData(prev => ({ ...prev, skills }));
-                }}
-              />
-            </div>
-          </CollapsibleContent>
-        </div>
-      </Collapsible>
-
       {/* Trigger Configuration Section - Collapsible */}
       <Collapsible open={isTriggerConfigOpen} onOpenChange={setIsTriggerConfigOpen}>
         <div className="border rounded-lg">
@@ -654,53 +528,53 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                   <div>
                     <h4 className="font-medium text-foreground mb-1 text-sm">Trigger Type</h4>
                     <Badge variant="outline" className="text-xs">
-                      {agent.trigger ? getTriggerTypeLabel(agent.trigger.type) : 'Manual Execution'}
+                      {agent.schedules?.[0] ? getTriggerTypeLabel(agent.schedules[0].type) : 'Manual Execution'}
                     </Badge>
                   </div>
-                  
-                  {agent.trigger && isCalendarTrigger(agent.trigger) && (
+
+                  {agent.schedules?.[0] && isCalendarTrigger(agent.schedules[0]) && (
                     <div className="space-y-2">
-                      {agent.trigger.rrule && (
+                      {agent.schedules[0].rrule && (
                         <div>
                           <h5 className="font-medium text-sm mb-1">Schedule</h5>
                           <Badge variant="outline" className="text-xs font-mono">
-                            {agent.trigger.rrule}
+                            {agent.schedules[0].rrule}
                           </Badge>
                         </div>
                       )}
-                      {agent.trigger.timezone && (
+                      {agent.schedules[0].timezone && (
                         <div>
                           <h5 className="font-medium text-sm mb-1">Timezone</h5>
                           <Badge variant="secondary" className="text-xs">
-                            {agent.trigger.timezone}
+                            {agent.schedules[0].timezone}
                           </Badge>
                         </div>
                       )}
-                      {agent.trigger.startDate && (
+                      {agent.schedules[0].startDate && (
                         <div>
                           <h5 className="font-medium text-sm mb-1">Start Date</h5>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(agent.trigger.startDate).toLocaleString()}
+                            {new Date(agent.schedules[0].startDate).toLocaleString()}
                           </p>
                         </div>
                       )}
                     </div>
                   )}
-                  
-                  {agent.trigger && isDatabaseEventTrigger(agent.trigger) && (
+
+                  {agent.schedules?.[0] && isDatabaseEventTrigger(agent.schedules[0]) && (
                     <div className="space-y-2">
-                      {agent.trigger.tableId && (
+                      {agent.schedules[0].tableId && (
                         <div>
                           <h5 className="font-medium text-sm mb-1">Table</h5>
                           <Badge variant="outline" className="text-xs">
-                            Table: {agent.trigger.tableId}
+                            Table: {agent.schedules[0].tableId}
                           </Badge>
                         </div>
                       )}
                       <div>
                         <h5 className="font-medium text-sm mb-1">Operations</h5>
                         <div className="flex gap-1">
-                          {agent.trigger.operations.map((op, index) => (
+                          {agent.schedules[0].operations.map((op: string, index: number) => (
                             <Badge key={index} variant="secondary" className="text-xs">
                               {op}
                             </Badge>
@@ -709,9 +583,9 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                       </div>
                     </div>
                   )}
-                  
-                  
-                  {agent.trigger && isWebhookTrigger(agent.trigger) && (
+
+
+                  {agent.schedules?.[0] && isWebhookTrigger(agent.schedules[0]) && (
                     <div className="space-y-2">
                       <div>
                         <h5 className="font-medium text-sm mb-1">Webhook URL</h5>
@@ -719,11 +593,11 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                           {`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/agents/${agent.id}/trigger`}
                         </div>
                       </div>
-                      {agent.trigger.allowedOrigins && agent.trigger.allowedOrigins.length > 0 && (
+                      {agent.schedules[0].allowedOrigins && agent.schedules[0].allowedOrigins.length > 0 && (
                         <div>
                           <h5 className="font-medium text-sm mb-1">Allowed Origins</h5>
                           <div className="flex flex-wrap gap-1">
-                            {agent.trigger.allowedOrigins.map((origin, index) => (
+                            {agent.schedules[0].allowedOrigins.map((origin: string, index: number) => (
                               <Badge key={index} variant="outline" className="text-xs">
                                 {origin}
                               </Badge>
@@ -734,10 +608,10 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                       <div>
                         <h5 className="font-medium text-sm mb-1">Security</h5>
                         <div className="flex gap-2">
-                          <Badge variant={agent.trigger.requiresSignature ? 'default' : 'secondary'} className="text-xs">
-                            {agent.trigger.requiresSignature ? 'Signature Required' : 'No Signature'}
+                          <Badge variant={agent.schedules[0].requiresSignature ? 'default' : 'secondary'} className="text-xs">
+                            {agent.schedules[0].requiresSignature ? 'Signature Required' : 'No Signature'}
                           </Badge>
-                          {agent.trigger.webhookSecret && (
+                          {agent.schedules[0].webhookSecret && (
                             <Badge variant="outline" className="text-xs">
                               Secret Configured
                             </Badge>
@@ -752,7 +626,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                 <div className="space-y-3">
                   <div>
                     <h4 className="font-medium text-foreground mb-2 text-sm">Trigger Type</h4>
-                    <Select value={editFormData.trigger?.type || 'MANUAL'} onValueChange={handleTriggerTypeChange}>
+                    <Select value={editFormData.schedules[0].type || 'MANUAL'} onValueChange={handleTriggerTypeChange}>
                       <SelectTrigger className="w-full">
                         <SelectValue />
                       </SelectTrigger>
@@ -766,7 +640,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                   </div>
 
                   {/* Trigger Type Specific Configuration */}
-                  {editFormData.trigger?.type === 'MANUAL' && (
+                  {editFormData.schedules[0].type === 'MANUAL' && (
                     <div className="space-y-3">
                       <p className="text-xs text-muted-foreground">
                         Agent will execute only when manually triggered by users.
@@ -782,7 +656,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                       <div>
                         <h5 className="font-medium text-sm mb-1">Execution Context</h5>
                         <Input
-                          value={editFormData.trigger?.description || ''}
+                          value={editFormData.schedules[0].description || ''}
                           onChange={(e) => handleTriggerConfigChange({ description: e.target.value })}
                           placeholder="Optional: Describe when this agent should be triggered"
                           className="text-sm"
@@ -794,7 +668,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                     </div>
                   )}
 
-                  {editFormData.trigger?.type === 'CALENDAR' && (
+                  {editFormData.schedules[0].type === 'CALENDAR' && (
                     <div className="space-y-3">
                       <p className="text-xs text-muted-foreground">
                         Configure recurring schedules using the calendar interface.
@@ -804,7 +678,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                         <div>
                           <h5 className="font-medium text-sm mb-1">Timezone</h5>
                           <Input
-                            value={isCalendarTrigger(editFormData.trigger) ? editFormData.trigger.timezone || '' : ''}
+                            value={isCalendarTrigger(editFormData.schedules[0]) ? editFormData.schedules[0].timezone || '' : ''}
                             onChange={(e) => handleTriggerConfigChange({ timezone: e.target.value })}
                             placeholder="UTC"
                             className="text-sm"
@@ -818,8 +692,8 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                           <h5 className="font-medium text-sm mb-1">Start Date</h5>
                           <Input
                             type="datetime-local"
-                            value={isCalendarTrigger(editFormData.trigger) && editFormData.trigger.startDate
-                              ? new Date(editFormData.trigger.startDate).toISOString().slice(0, 16)
+                            value={isCalendarTrigger(editFormData.schedules[0]) && editFormData.schedules[0].startDate
+                              ? new Date(editFormData.schedules[0].startDate).toISOString().slice(0, 16)
                               : ''
                             }
                             onChange={(e) => {
@@ -834,7 +708,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                       <div>
                         <h5 className="font-medium text-sm mb-2">Schedule Configuration</h5>
                         <ScheduleManager
-                          initialRRule={getCalendarRRule(editFormData.trigger)}
+                          initialRRule={getCalendarRRule(editFormData.schedules[0])}
                           onScheduleChange={(rrule) => {
                             handleTriggerConfigChange({ rrule });
                           }}
@@ -844,7 +718,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                     </div>
                   )}
 
-                  {editFormData.trigger?.type === 'DATABASE_EVENT' && (
+                  {editFormData.schedules[0].type === 'DATABASE_EVENT' && (
                     <div className="space-y-3">
                       <p className="text-xs text-muted-foreground">
                         Trigger agent execution when database changes occur.
@@ -853,7 +727,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                       <div>
                         <h5 className="font-medium text-sm mb-2">Table Selection</h5>
                         <TableSelector
-                          value={getDatabaseEventTableId(editFormData.trigger)}
+                          value={getDatabaseEventTableId(editFormData.schedules[0])}
                           onValueChange={(tableId) => {
                             handleTriggerConfigChange({ tableId });
                           }}
@@ -872,9 +746,9 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                             <label key={op} className="flex items-center gap-1">
                               <input
                                 type="checkbox"
-                                checked={getDatabaseEventOperations(editFormData.trigger).includes(op as 'INSERT' | 'UPDATE' | 'DELETE')}
+                                checked={getDatabaseEventOperations(editFormData.schedules[0]).includes(op as 'INSERT' | 'UPDATE' | 'DELETE')}
                                 onChange={(e) => {
-                                  const current = getDatabaseEventOperations(editFormData.trigger);
+                                  const current = getDatabaseEventOperations(editFormData.schedules[0]);
                                   const newOps = e.target.checked
                                     ? [...current, op as 'INSERT' | 'UPDATE' | 'DELETE']
                                     : current.filter((o) => o !== op);
@@ -890,7 +764,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                   )}
 
 
-                  {editFormData.trigger?.type === 'WEBHOOK' && (
+                  {editFormData.schedules[0].type === 'WEBHOOK' && (
                     <div className="space-y-3">
                       <p className="text-xs text-muted-foreground">
                         Trigger agent execution via webhook HTTP calls.
@@ -911,7 +785,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                           <h5 className="font-medium text-sm mb-1">Webhook Secret</h5>
                           <Input
                             type="password"
-                            value={getWebhookSecret(editFormData.trigger) || ''}
+                            value={getWebhookSecret(editFormData.schedules[0]) || ''}
                             onChange={(e) => handleTriggerConfigChange({ webhookSecret: e.target.value })}
                             placeholder="Optional security secret"
                             className="text-sm"
@@ -924,7 +798,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                         <div>
                           <h5 className="font-medium text-sm mb-1">Allowed Origins</h5>
                           <Input
-                            value={isWebhookTrigger(editFormData.trigger) ? editFormData.trigger.allowedOrigins?.join(', ') || '' : ''}
+                            value={isWebhookTrigger(editFormData.schedules[0]) ? editFormData.schedules[0].allowedOrigins?.join(', ') || '' : ''}
                             onChange={(e) => {
                               const origins = e.target.value.split(',').map(o => o.trim()).filter(o => o);
                               handleTriggerConfigChange({ allowedOrigins: origins.length > 0 ? origins : undefined });
@@ -940,7 +814,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                         <label className="flex items-center gap-2 text-sm">
                           <input
                             type="checkbox"
-                            checked={getWebhookRequiresSignature(editFormData.trigger)}
+                            checked={getWebhookRequiresSignature(editFormData.schedules[0])}
                             onChange={(e) => handleTriggerConfigChange({ requiresSignature: e.target.checked })}
                           />
                           <span>Require HMAC signature verification</span>

@@ -55,8 +55,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       persona,
       ownerId: userId,
       organizationId: parseInt(organizationId),
-      trigger: trigger || { type: 'MANUAL', enabled: true },
-      skills: skills || [],
+      schedules: trigger ? [trigger] : [{ type: 'MANUAL', enabled: true }],
       tools: tools || [],
       servers: servers || []
     };

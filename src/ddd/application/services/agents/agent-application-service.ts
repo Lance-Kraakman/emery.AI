@@ -14,7 +14,6 @@ import {
   type CreateAgentData,
   type UpdateAgentData,
   type ServerConfig,
-  type SkillConfig,
   type AgentType
 } from '@/ddd/domain/agents/entities/agent';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
@@ -24,6 +23,7 @@ import { AgentId, OrganizationId, UserId, TeamId, AgentStatus, ApiKey, AGENT_STA
 import { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from '@/app/dtos/agent.dto';
 import { AgentMapper } from '@/app/mappers/agent-mapper';
+import { ScheduleMapper } from '@/app/mappers/schedule-mapper';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 
 const logger = createDebugLogger('AgentService');
@@ -82,9 +82,8 @@ export class AgentApplicationService {
         specialization: dto.specialization,
         tools,
         servers: dto.servers,
-        trigger: dto.trigger,
-        // SkillConfigDTO and SkillConfig are structurally identical
-        skills: dto.skills as any as SkillConfig[],
+        // Convert ScheduleConfigurationDTO[] to ScheduleConfiguration[]
+        schedules: dto.schedules ? ScheduleMapper.fromDTOs(dto.schedules) : [],
         status: dto.status ? AgentStatus.fromString(dto.status) : undefined
       };
 
@@ -99,11 +98,10 @@ export class AgentApplicationService {
         persona: agentWithDefaults.persona,
         tools: agentWithDefaults.tools,
         servers: agentWithDefaults.servers,
-        skills: agentWithDefaults.skills || [],
+        schedules: agentWithDefaults.schedules,
         organizationId: organizationId,
         ownerId: ownerId,
         status: agentWithDefaults.status,
-        trigger: agentWithDefaults.trigger,
         agentType: agentWithDefaults.agentType,
         specialization: agentWithDefaults.specialization,
         databaseId: agentWithDefaults.databaseId
@@ -159,8 +157,8 @@ export class AgentApplicationService {
         );
       }
       if (dto.servers !== undefined) updateData.servers = dto.servers;
-      if (dto.trigger !== undefined) updateData.trigger = dto.trigger;
-      if (dto.skills !== undefined) updateData.skills = dto.skills;
+      // Convert ScheduleConfigurationDTO[] to ScheduleConfiguration[]
+      if (dto.schedules !== undefined) updateData.schedules = ScheduleMapper.fromDTOs(dto.schedules);
       if (dto.status !== undefined) updateData.status = dto.status;
 
       // Update agent via repository
@@ -281,45 +279,6 @@ export class AgentApplicationService {
     } catch (error) {
       logger.error("Error fetching agents", error);
       throw new Error("Failed to fetch agents");
-    }
-  }
-
-  /**
-   * Add capability to agent
-   * AIDEV-NOTE: Now returns DTO for consistent serialization
-   */
-  async addSkillToAgent(agentId: AgentId, skill: SkillConfig): Promise<Result<AgentDTO>> {
-    try {
-      const existingAgent = await this.agentRepository.findById(agentId);
-      if (!existingAgent) {
-        return {
-          success: false,
-          error: `Agent with ID ${agentId} not found`
-        };
-      }
-
-      // Get existing skills and add new one
-      const existingSkills = existingAgent.skills || [];
-      const updatedSkills = [...existingSkills, skill];
-
-      // Update agent with new skill
-      const savedAgent = await this.agentRepository.update(agentId, {
-        skills: updatedSkills
-      });
-
-      // Convert domain entity to DTO for serialization
-      const agentDTO = AgentMapper.toDTO(savedAgent);
-
-      return {
-        success: true,
-        data: agentDTO
-      };
-    } catch (error) {
-      logger.error("Error adding capability to agent", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Failed to add capability"
-      };
     }
   }
 

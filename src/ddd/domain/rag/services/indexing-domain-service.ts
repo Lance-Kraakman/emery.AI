@@ -18,7 +18,6 @@ import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import type { FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import { getCapabilitiesCount } from '@/ddd/domain/agents/entities/agent';
 import type { Database } from '@/ddd/domain/databases/entities/database';
 import type { Team } from '@/ddd/domain/teams/entities/team';
 import type { Task } from '@/ddd/domain/tasks/entities/task';
@@ -447,7 +446,7 @@ export class IndexingDomainService {
           organizationId: organizationId.value,
           toolCount: agent.tools ? Object.keys(agent.tools).length : 0,
           serverCount: agent.servers ? Object.keys(agent.servers).length : 0,
-          capabilityCount: getCapabilitiesCount(agent),
+          schedulesCount: agent.schedules?.length || 0,
         },
         embedding,
         contentHash,
@@ -813,10 +812,10 @@ Usage: This table supports data analysis, reporting, workflow automation, and in
       ? `\nServers: ${Object.keys(agent.servers).join(', ')}`
       : '\nServers: None configured';
 
-    const capabilityCount = getCapabilitiesCount(agent);
-    const capabilitiesDesc = capabilityCount > 0
-      ? `\nCapabilities: ${capabilityCount} configured capabilities`
-      : '\nCapabilities: None configured';
+    const schedulesCount = agent.schedules?.length || 0;
+    const schedulesDesc = schedulesCount > 0
+      ? `\nSchedules: ${schedulesCount} configured schedule${schedulesCount > 1 ? 's' : ''}`
+      : '\nSchedules: None configured';
 
     const createdDate = agent.createdAt 
       ? `\nCreated: ${agent.createdAt.toLocaleDateString()}`
@@ -826,11 +825,11 @@ Usage: This table supports data analysis, reporting, workflow automation, and in
 ${agent.role ? `Role: ${agent.role}` : 'Role: Not specified'}
 ${agent.description ? `Description: ${agent.description}` : 'Description: Not provided'}
 ${agent.persona ? `Persona: ${agent.persona}` : 'Persona: Default assistant'}
-Status: ${agent.status || 'active'}${createdDate}${toolsList}${serversList}${capabilitiesDesc}
+Status: ${agent.status || 'active'}${createdDate}${toolsList}${serversList}${schedulesDesc}
 
 About: ${agent.name} is an AI agent configured within the Emery platform for workflow automation and task execution. This agent can process requests, execute workflows, and integrate with various tools and services to accomplish organizational objectives.
 
-Functionality: The agent operates within the Emery ecosystem to handle automated workflows, data processing, integration tasks, and other organizational processes as configured through its capabilities and available tools.`;
+Functionality: The agent operates within the Emery ecosystem to handle automated workflows, data processing, integration tasks, and other organizational processes as configured through its schedules and available tools.`;
   }
 
   private generateDatabaseContent(database: Database): string {
