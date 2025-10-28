@@ -30,6 +30,7 @@ interface DelegationData {
 
 /**
  * Get agent's delegation and owner's OAuth connections
+ * Auto-creates delegation if owner has connections but no delegation exists
  */
 export async function getAgentDelegation(agentId: number): Promise<{ success: boolean; data?: DelegationData; error?: string }> {
   return withAuthContext(async () => {
@@ -46,13 +47,7 @@ export async function getAgentDelegation(agentId: number): Promise<{ success: bo
         };
       }
 
-      // Get agent's current delegation
-      const delegationResult = await delegationService.getDelegationForAgent(
-        AgentId.fromNumber(agentId)
-      );
-
-      // Get owner's OAuth connections
-      // Note: We need to get the agent to find the owner
+      // Get agent to find owner
       const agentRepository = container.get('IAgentRepository');
       const agent = await agentRepository?.findById(AgentId.fromNumber(agentId));
 
@@ -63,6 +58,7 @@ export async function getAgentDelegation(agentId: number): Promise<{ success: bo
         };
       }
 
+      // Get owner's OAuth connections
       const connectionsResult = await connectionService.getUserConnections(agent.ownerId);
 
       if (!connectionsResult.success) {
@@ -70,6 +66,33 @@ export async function getAgentDelegation(agentId: number): Promise<{ success: bo
           success: false,
           error: connectionsResult.error || "Failed to fetch connections"
         };
+      }
+
+      const connections = connectionsResult.data || [];
+
+      // Get agent's current delegation
+      let delegationResult = await delegationService.getDelegationForAgent(
+        AgentId.fromNumber(agentId)
+      );
+
+      // Auto-create delegation if none exists but owner has connections
+      if ((!delegationResult.success || !delegationResult.data) && connections.length > 0) {
+        console.log(`[Delegation] Auto-creating delegation for agent ${agentId} with ${connections.length} owner connections`);
+
+        const services = connections.map(conn => conn.appName);
+        const createResult = await delegationService.createDelegation({
+          ownerId: agent.ownerId,
+          agentId: agent.id,
+          services,
+          status: 'approved' as any
+        });
+
+        if (createResult.success && createResult.data) {
+          // Fetch the newly created delegation
+          delegationResult = await delegationService.getDelegationForAgent(
+            AgentId.fromNumber(agentId)
+          );
+        }
       }
 
       // Format delegation data
@@ -82,11 +105,11 @@ export async function getAgentDelegation(agentId: number): Promise<{ success: bo
       } : null;
 
       // Format connections data
-      const connectionsData = connectionsResult.data?.map(conn => ({
+      const connectionsData = connections.map(conn => ({
         appName: conn.appName.value,
         accountName: conn.accountName,
         status: conn.status
-      })) || [];
+      }));
 
       return {
         success: true,
@@ -107,6 +130,7 @@ export async function getAgentDelegation(agentId: number): Promise<{ success: bo
 
 /**
  * Update which OAuth services are delegated to an agent
+ * Creates delegation if it doesn't exist
  */
 export async function updateAgentDelegationServices(
   agentId: number,
@@ -126,22 +150,42 @@ export async function updateAgentDelegationServices(
       }
 
       // Get current delegation
-      const currentResult = await delegationService.getDelegationForAgent(
+      let currentResult = await delegationService.getDelegationForAgent(
         AgentId.fromNumber(agentId)
       );
 
-      if (!currentResult.success || !currentResult.data) {
-        return {
-          success: false,
-          error: "No delegation found for this agent"
-        };
-      }
+      let result;
 
-      // Update delegation services
-      const result = await delegationService.updateDelegationServices(
-        currentResult.data.id,
-        services.map(s => AppName.fromString(s))
-      );
+      if (!currentResult.success || !currentResult.data) {
+        // No delegation exists - create one
+        console.log(`[Delegation] Creating new delegation for agent ${agentId} with ${services.length} services`);
+
+        const agentRepository = container.get('IAgentRepository');
+        const agent = await agentRepository?.findById(AgentId.fromNumber(agentId));
+
+        if (!agent) {
+          return {
+            success: false,
+            error: "Agent not found"
+          };
+        }
+
+        // Create new delegation with specified services
+        result = await delegationService.createDelegation({
+          ownerId: agent.ownerId,
+          agentId: agent.id,
+          services: services.map(s => AppName.fromString(s)),
+          status: 'approved' as any
+        });
+      } else {
+        // Update existing delegation services
+        console.log(`[Delegation] Updating delegation for agent ${agentId} to ${services.length} services`);
+
+        result = await delegationService.updateDelegationServices(
+          currentResult.data.id,
+          services.map(s => AppName.fromString(s))
+        );
+      }
 
       if (!result.success) {
         return {
@@ -190,13 +234,16 @@ export async function revokeAgentDelegation(agentId: number): Promise<{ success:
       );
 
       if (!currentResult.success || !currentResult.data) {
+        // No delegation exists - nothing to revoke, consider it success
+        console.log(`[Delegation] No delegation found for agent ${agentId}, nothing to revoke`);
         return {
-          success: false,
-          error: "No delegation found for this agent"
+          success: true
         };
       }
 
       // Revoke delegation
+      console.log(`[Delegation] Revoking delegation for agent ${agentId}`);
+
       const result = await delegationService.revokeDelegation(
         currentResult.data.id
       );
