@@ -662,39 +662,7 @@ export async function validateAgentConnections(
         valid: true,
         warnings: [],
         missingConnections: [],
-          toolStatuses: []
-        }
-      };
-    }
-
-    // Get tool connection status
-    const toolStatusResult = await getToolConnectionStatus(tools, session.user.id);
-
-    if (!toolStatusResult.success) {
-      return {
-        success: false,
-        error: toolStatusResult.error
-      };
-    }
-
-    const toolStatuses = toolStatusResult.data || [];
-    const allMissingApps = new Set<string>();
-    const warnings: string[] = [];
-
-    toolStatuses.forEach(tool => {
-      tool.missingApps.forEach(app => allMissingApps.add(app));
-      warnings.push(...tool.warnings);
-    });
-
-    const valid = allMissingApps.size === 0;
-
-    return {
-      success: true,
-      data: {
-        valid,
-        warnings,
-        missingConnections: Array.from(allMissingApps),
-        toolStatuses
+        toolStatuses: []
       }
     };
   } catch (error) {
