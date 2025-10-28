@@ -309,53 +309,53 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                   <div>
                     <h4 className="font-medium text-foreground mb-1 text-sm">Trigger Type</h4>
                     <Badge variant="outline" className="text-xs">
-                      {agent.schedules?.[0] ? getTriggerTypeLabel(agent.schedules[0].type) : 'Manual Execution'}
+                      {agent.schedules?.[0] ? getTriggerTypeLabel(agent.schedules[0].trigger.type) : 'Manual Execution'}
                     </Badge>
                   </div>
 
-                  {agent.schedules?.[0] && isCalendarTrigger(agent.schedules[0]) && (
+                  {agent.schedules?.[0] && agent.schedules[0].trigger.type === 'CALENDAR' && (
                     <div className="space-y-2">
-                      {agent.schedules[0].rrule && (
+                      {agent.schedules[0].trigger.rrule && (
                         <div>
                           <h5 className="font-medium text-sm mb-1">Schedule</h5>
                           <Badge variant="outline" className="text-xs font-mono">
-                            {agent.schedules[0].rrule}
+                            {agent.schedules[0].trigger.rrule}
                           </Badge>
                         </div>
                       )}
-                      {agent.schedules[0].timezone && (
+                      {agent.schedules[0].trigger.timezone && (
                         <div>
                           <h5 className="font-medium text-sm mb-1">Timezone</h5>
                           <Badge variant="secondary" className="text-xs">
-                            {agent.schedules[0].timezone}
+                            {agent.schedules[0].trigger.timezone}
                           </Badge>
                         </div>
                       )}
-                      {agent.schedules[0].startDate && (
+                      {agent.schedules[0].trigger.startDate && (
                         <div>
                           <h5 className="font-medium text-sm mb-1">Start Date</h5>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(agent.schedules[0].startDate).toLocaleString()}
+                            {new Date(agent.schedules[0].trigger.startDate).toLocaleString()}
                           </p>
                         </div>
                       )}
                     </div>
                   )}
 
-                  {agent.schedules?.[0] && isDatabaseEventTrigger(agent.schedules[0]) && (
+                  {agent.schedules?.[0] && agent.schedules[0].trigger.type === 'DATABASE_EVENT' && (
                     <div className="space-y-2">
-                      {agent.schedules[0].tableId && (
+                      {agent.schedules[0].trigger.tableId && (
                         <div>
                           <h5 className="font-medium text-sm mb-1">Table</h5>
                           <Badge variant="outline" className="text-xs">
-                            Table: {agent.schedules[0].tableId}
+                            Table: {agent.schedules[0].trigger.tableId}
                           </Badge>
                         </div>
                       )}
                       <div>
                         <h5 className="font-medium text-sm mb-1">Operations</h5>
                         <div className="flex gap-1">
-                          {agent.schedules[0].operations.map((op: string, index: number) => (
+                          {agent.schedules[0].trigger.operations?.map((op: string, index: number) => (
                             <Badge key={index} variant="secondary" className="text-xs">
                               {op}
                             </Badge>
@@ -366,7 +366,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                   )}
 
 
-                  {agent.schedules?.[0] && isWebhookTrigger(agent.schedules[0]) && (
+                  {agent.schedules?.[0] && agent.schedules[0].trigger.type === 'WEBHOOK' && (
                     <div className="space-y-2">
                       <div>
                         <h5 className="font-medium text-sm mb-1">Webhook URL</h5>
@@ -374,11 +374,11 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                           {`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/agents/${agent.id}/trigger`}
                         </div>
                       </div>
-                      {agent.schedules[0].allowedOrigins && agent.schedules[0].allowedOrigins.length > 0 && (
+                      {agent.schedules[0].trigger.allowedOrigins && agent.schedules[0].trigger.allowedOrigins.length > 0 && (
                         <div>
                           <h5 className="font-medium text-sm mb-1">Allowed Origins</h5>
                           <div className="flex flex-wrap gap-1">
-                            {agent.schedules[0].allowedOrigins.map((origin: string, index: number) => (
+                            {agent.schedules[0].trigger.allowedOrigins.map((origin: string, index: number) => (
                               <Badge key={index} variant="outline" className="text-xs">
                                 {origin}
                               </Badge>
@@ -389,10 +389,10 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                       <div>
                         <h5 className="font-medium text-sm mb-1">Security</h5>
                         <div className="flex gap-2">
-                          <Badge variant={agent.schedules[0].requiresSignature ? 'default' : 'secondary'} className="text-xs">
-                            {agent.schedules[0].requiresSignature ? 'Signature Required' : 'No Signature'}
+                          <Badge variant={agent.schedules[0].trigger.requiresSignature ? 'default' : 'secondary'} className="text-xs">
+                            {agent.schedules[0].trigger.requiresSignature ? 'Signature Required' : 'No Signature'}
                           </Badge>
-                          {agent.schedules[0].webhookSecret && (
+                          {agent.schedules[0].trigger.webhookSecret && (
                             <Badge variant="outline" className="text-xs">
                               Secret Configured
                             </Badge>

@@ -18,6 +18,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { ScheduleConfigurationDTO } from '@/app/dtos/schedule.dto';
 import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import {
   isCalendarTrigger,
@@ -36,7 +37,7 @@ interface ScheduleManagerModalProps {
 }
 
 interface ScheduleCardProps {
-  schedule: TriggerConfig;
+  schedule: ScheduleConfigurationDTO;
   index: number;
   totalCount: number;
   onEdit: () => void;
@@ -46,8 +47,9 @@ interface ScheduleCardProps {
   isToggling: boolean;
 }
 
-function getScheduleIcon(schedule: TriggerConfig) {
-  switch (schedule.type) {
+function getScheduleIcon(schedule: ScheduleConfigurationDTO) {
+  const trigger = schedule.trigger;
+  switch (trigger.type) {
     case 'MANUAL':
       return Zap;
     case 'CALENDAR':
@@ -61,26 +63,28 @@ function getScheduleIcon(schedule: TriggerConfig) {
   }
 }
 
-function getScheduleSummary(schedule: TriggerConfig): string {
-  if (schedule.type === 'MANUAL') {
-    return schedule.description || 'Manual execution on demand';
+function getScheduleSummary(schedule: ScheduleConfigurationDTO): string {
+  const trigger = schedule.trigger;
+
+  if (trigger.type === 'MANUAL') {
+    return trigger.description || 'Manual execution on demand';
   }
 
-  if (isCalendarTrigger(schedule)) {
-    const rrule = schedule.rrule || 'Not configured';
-    const timezone = schedule.timezone || 'UTC';
+  if (trigger.type === 'CALENDAR') {
+    const rrule = trigger.rrule || 'Not configured';
+    const timezone = trigger.timezone || 'UTC';
     return `${rrule} (${timezone})`;
   }
 
-  if (isDatabaseEventTrigger(schedule)) {
-    const ops = schedule.operations?.join(', ') || 'No operations';
-    const table = schedule.tableId ? `on table ${schedule.tableId}` : 'No table selected';
+  if (trigger.type === 'DATABASE_EVENT') {
+    const ops = trigger.operations?.join(', ') || 'No operations';
+    const table = trigger.tableId ? `on table ${trigger.tableId}` : 'No table selected';
     return `${ops} ${table}`;
   }
 
-  if (isWebhookTrigger(schedule)) {
-    const hasSecret = schedule.webhookSecret ? 'Secured' : 'Unsecured';
-    const signature = schedule.requiresSignature ? ' • Signature required' : '';
+  if (trigger.type === 'WEBHOOK') {
+    const hasSecret = trigger.webhookSecret ? 'Secured' : 'Unsecured';
+    const signature = trigger.requiresSignature ? ' • Signature required' : '';
     return `${hasSecret}${signature}`;
   }
 
@@ -121,7 +125,7 @@ function ScheduleCard({
               </CardTitle>
               <div className="flex gap-2 mt-1">
                 <Badge variant="secondary" className="text-xs">
-                  {getTriggerTypeLabel(schedule.type)}
+                  {getTriggerTypeLabel(schedule.trigger.type)}
                 </Badge>
                 {toolsCount > 0 && (
                   <Badge variant="outline" className="text-xs">
