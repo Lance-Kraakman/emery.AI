@@ -22,6 +22,7 @@ import { registerToolsServices, type ToolsServices } from './modules/tools-regis
 import { registerRagServices, type RagServices } from './modules/rag-registration';
 import { registerConnectionServices, type ConnectionServices } from './modules/connection-registration';
 import { registerDelegationServices, type DelegationServices } from './modules/delegation-registration';
+import { registerPuckServices, type PuckServices } from './modules/puck-registration';
 
 export class DIContainer {
   private static instance: DIContainer;
@@ -134,7 +135,15 @@ export class DIContainer {
     const delegationServices = registerDelegationServices({ db });
     this.registerServices('delegation', delegationServices);
 
-    // Phase 9: Register connection services (optional - Pipedream)
+    // Phase 9: Register Puck services
+    // Depends on: organization repository
+    const puckServices = registerPuckServices({
+      db,
+      organizationRepository: coreServices.organizationRepository
+    });
+    this.registerServices('puck', puckServices);
+
+    // Phase 10: Register connection services (optional - Pipedream)
     // Depends on: agent repository, delegation service (for security)
     const connectionServices = registerConnectionServices({
       agentRepository: agentServices.agentRepository,
@@ -157,7 +166,7 @@ export class DIContainer {
    */
   private registerServices(
     domain: string,
-    services: CoreServices | AgentServices | SkillServices | DatabaseServices | ChatServices | ToolsServices | RagServices | ConnectionServices | DelegationServices
+    services: CoreServices | AgentServices | SkillServices | DatabaseServices | ChatServices | ToolsServices | RagServices | ConnectionServices | DelegationServices | PuckServices
   ): void {
     // Map service names to container keys
     const serviceKeyMappings: Record<string, string> = {
@@ -222,7 +231,13 @@ export class DIContainer {
 
       // Delegation domain
       'delegationRepository': 'IDelegationRepository',
-      'delegationApplicationService': 'CredentialDelegationApplicationService'
+      'delegationApplicationService': 'CredentialDelegationApplicationService',
+
+      // Puck domain
+      'puckAppRepository': 'IPuckAppRepository',
+      'puckPageRepository': 'IPuckPageRepository',
+      'puckAppApplicationService': 'PuckAppApplicationService',
+      'puckPageApplicationService': 'PuckPageApplicationService'
     };
 
     // Register all services from the module
@@ -352,5 +367,11 @@ export {
   // Connection services
   getConnectionRepository,
   getConnectionApplicationService,
-  getOAuthProxyApplicationService
+  getOAuthProxyApplicationService,
+
+  // Puck services
+  getPuckAppRepository,
+  getPuckPageRepository,
+  getPuckAppApplicationService,
+  getPuckPageApplicationService
 } from './getters';
