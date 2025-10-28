@@ -9,7 +9,6 @@
  */
 
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import { TaskId } from '../value-objects/task-id';
 import { TaskStatus, TASK_STATUS } from '../value-objects/task-status';
 import { 
@@ -24,7 +23,6 @@ export { TaskStatus };
 export interface TaskInstructions {
   instructions: string;
   tools?: ToolConfig[];
-  servers?: ServerConfig[];
   metadata?: Record<string, any>;
 }
 

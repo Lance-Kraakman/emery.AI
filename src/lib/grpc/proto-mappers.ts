@@ -10,13 +10,12 @@
  * - Proto messages (proto/agent_worker.proto) - Transport layer only
  */
 
-import { Agent, ServerConfig } from '@/ddd/domain/agents/entities/agent';
+import { Agent, ScheduleConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 import {
   AgentConfig as AgentConfigProto,
   ToolConfig as ToolConfigProto,
-  ServerConfig as ServerConfigProto,
   SkillConfig as SkillConfigProto,
   TaskRequest,
   TaskProgress as TaskProgressProto,
@@ -34,8 +33,7 @@ export interface AgentData {
   description?: string;
   persona?: string;
   tools?: ToolConfig[];
-  servers?: ServerConfig[];
-  schedules?: any[];  // TriggerConfig array
+  schedules?: ScheduleConfigurationJSON[];
   status?: any;
   organizationId: number;
   ownerId: string;
@@ -61,17 +59,6 @@ export function mapToolToProto(tool: ToolConfig): ToolConfigProto {
 }
 
 /**
- * Map TypeScript ServerConfig to protobuf ServerConfig
- */
-export function mapServerToProto(server: ServerConfig): ServerConfigProto {
-  return {
-    name: server.name,
-    endpoint: server.endpoint || '',
-    config: server.config || {}
-  };
-}
-
-/**
  * Map TypeScript AgentData to protobuf AgentConfig
  * AIDEV-NOTE: Skills are now in separate table, queried separately when needed
  */
@@ -93,12 +80,11 @@ export function mapAgentToProto(agent: Agent): AgentConfigProto {
 export function mapInstructionConfigToProto(instructionConfig: {
   instructions: string;
   tools?: ToolConfig[];
-  servers?: ServerConfig[];
 }): InstructionConfigProto {
   return {
     instructions: instructionConfig.instructions,
     tools: instructionConfig.tools?.filter(tool => tool !== null && tool !== undefined)?.map(mapToolToProto) || [],
-    servers: instructionConfig.servers?.filter(server => server !== null && server !== undefined)?.map(mapServerToProto) || []
+    servers: [] // Servers removed from task instructions
   };
 }
 
@@ -114,7 +100,6 @@ export function createTaskRequest(params: {
   instructionConfig?: {     // Instruction-based execution with auto-routing
     instructions: string;
     tools?: ToolConfig[];
-    servers?: ServerConfig[];
   };
   agent: Agent;
   triggerData: Record<string, any>;

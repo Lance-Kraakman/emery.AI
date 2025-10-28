@@ -639,7 +639,6 @@ export class IndexingDomainService {
           completedAt: task.completedAt,
           isTerminal: task.isTerminal,
           toolCount: task.instructions.tools?.length || 0,
-          serverCount: task.instructions.servers?.length || 0,
         },
         embedding,
         contentHash,
@@ -869,10 +868,6 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
       ? `\nTools: ${task.instructions.tools.map(tool => tool.name).join(', ')}`
       : '\nTools: None configured';
 
-    const serversList = task.instructions.servers && task.instructions.servers.length > 0
-      ? `\nServers: ${task.instructions.servers.map(server => server.name).join(', ')}`
-      : '\nServers: None configured';
-
     const createdDate = task.createdAt 
       ? `\nCreated: ${task.createdAt.toLocaleDateString()}`
       : '';
@@ -909,7 +904,7 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
 Agent ID: ${task.agentId.value}${capabilityInfo}
 Status: ${task.status.value}${createdDate}${startedDate}${completedDate}${durationInfo}
 
-Instructions: ${instructionsSummary}${toolsList}${serversList}${resultInfo}
+Instructions: ${instructionsSummary}${toolsList}${resultInfo}
 
 About: ${task.name} is an execution task within the Emery platform, tracking automated agent workflows and their outcomes. This task provides insight into agent performance, workflow patterns, and organizational automation activities.
 
