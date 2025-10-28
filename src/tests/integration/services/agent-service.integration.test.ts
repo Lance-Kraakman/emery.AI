@@ -130,8 +130,7 @@ describe('Agent Application Service Integration Tests', () => {
           description: 'Test agent description',
           ownerId: testCase.input.ownerId.value,
           organizationId: testCase.input.organizationId.value,
-          role: testCase.input.role,
-          agentType: 'data-collector'
+          role: testCase.input.role
         };
 
         console.log(`🔍 Creating agent with DTO:`, {
@@ -186,8 +185,7 @@ describe('Agent Application Service Integration Tests', () => {
         description: 'Agent for testing retrieval',
         ownerId: testContext.ownerUserId.value,
         organizationId: testContext.organizationId.value,
-        role: 'assistant',
-        agentType: 'process-analyst'
+        role: 'assistant'
       };
 
       const createResult = await agentApplicationService.createAgent(dto);
@@ -224,8 +222,7 @@ describe('Agent Application Service Integration Tests', () => {
         description: 'Agent in organization 1',
         ownerId: testContext.ownerUserId.value,
         organizationId: testContext.organizationId.value,
-        role: 'assistant',
-        agentType: 'data-collector'
+        role: 'assistant'
       };
 
       const org2DTO: CreateAgentDTO = {
@@ -233,8 +230,7 @@ describe('Agent Application Service Integration Tests', () => {
         description: 'Agent in organization 2',
         ownerId: user2Id.value,
         organizationId: testOrg2Id.value,
-        role: 'data-analyst',
-        agentType: 'kpi-calculator'
+        role: 'data-analyst'
       };
 
       // Create agent in org 1

@@ -12,8 +12,7 @@ import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repos
 import {
   Agent,
   type CreateAgentData,
-  type UpdateAgentData,
-  type AgentType
+  type UpdateAgentData
 } from '@/ddd/domain/agents/entities/agent';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createAgentDefaults } from '@/ddd/domain/agents/entities/agent';
@@ -71,7 +70,6 @@ export class AgentApplicationService {
         persona: dto.persona,
         ownerId,
         organizationId,
-        agentType: dto.agentType,
         specialization: dto.specialization,
         // Convert ScheduleConfigurationDTO[] to ScheduleConfiguration[]
         schedules: dto.schedules ? ScheduleMapper.fromDTOs(dto.schedules) : [],
@@ -91,7 +89,6 @@ export class AgentApplicationService {
         organizationId: organizationId,
         ownerId: ownerId,
         status: agentWithDefaults.status,
-        agentType: agentWithDefaults.agentType,
         specialization: agentWithDefaults.specialization,
         databaseId: agentWithDefaults.databaseId
       };
@@ -235,13 +232,6 @@ export class AgentApplicationService {
         agents = agents.filter(agent => 
           agent.name.toLowerCase().includes(searchLower) ||
           agent.description?.toLowerCase().includes(searchLower)
-        );
-      }
-
-      // Apply agent type filter
-      if (filters.agentTypes && filters.agentTypes.length > 0) {
-        agents = agents.filter(agent => 
-          agent.agentType && filters.agentTypes!.includes(agent.agentType)
         );
       }
 

@@ -123,8 +123,7 @@ describe('Agent Task Execution Integration Tests', () => {
         description: 'Agent specifically for testing task execution workflow',
         ownerId: testContext.ownerUserId.value,
         organizationId: testContext.organizationId.value,
-        role: 'assistant',
-        agentType: 'data-collector'
+        role: 'assistant'
       };
 
       const agentResult = await agentApplicationService.createAgent(agentDTO);
@@ -427,8 +426,7 @@ describe('Agent Task Execution Integration Tests', () => {
         description: 'Agent for testing organization isolation',
         ownerId: org2Context.ownerUserId.value,
         organizationId: org2Context.organizationId.value,
-        role: 'assistant',
-        agentType: 'data-collector'
+        role: 'assistant'
       });
       
       expect(agent2Result.success).toBe(true);

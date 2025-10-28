@@ -418,7 +418,6 @@ export const agents = pgTable("agents", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   apiKey: text("api_key").unique(), // For API authentication
   lastUsedAt: timestamp("last_used_at"), // Track API key usage
-  agentType: text("agent_type").default("general"), // Agent specialization type
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   // RBAC-based policy for viewing agents (resource-aware)

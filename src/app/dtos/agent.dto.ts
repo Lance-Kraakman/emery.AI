@@ -7,7 +7,6 @@
  */
 
 import type { ToolConfigDTO, AgentDTO as AgentDTOFromMapper } from '@/app/mappers/agent-mapper';
-import type { AgentType } from '@/ddd/domain/agents/entities/agent';
 import type { ScheduleConfigurationDTO } from './schedule.dto';
 
 // Re-export the canonical AgentDTO from mapper
@@ -27,7 +26,6 @@ export interface CreateAgentDTO {
   persona?: string;
   ownerId?: string; // User ID string - converted to UserId Value Object in application layer - used for OAuth resolution
   organizationId?: number; // Organization ID - converted to OrganizationId Value Object in application layer
-  agentType?: AgentType;
   specialization?: any;
   schedules?: ScheduleConfigurationDTO[]; // Schedules with task instructions
   status?: 'active' | 'inactive' | 'archived';
@@ -56,5 +54,4 @@ export interface AgentFiltersDTO {
   searchQuery?: string;
   organizationId: number;
   status?: 'active' | 'inactive' | 'archived';
-  agentTypes?: AgentType[];
 }

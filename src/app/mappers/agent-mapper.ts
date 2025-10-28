@@ -1,4 +1,4 @@
-import type { Agent, AgentType, AgentSpecialization } from '@/ddd/domain/agents/entities/agent';
+import type { Agent, AgentSpecialization } from '@/ddd/domain/agents/entities/agent';
 import { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { ScheduleMapper } from './schedule-mapper';
@@ -24,7 +24,6 @@ export interface AgentDTO {
   organizationId: number;
   ownerId: string; // Used for OAuth resolution via proxy
   apiKey?: string | null;
-  agentType?: AgentType;
   specialization?: AgentSpecialization;
   createdAt?: Date | null;
   updatedAt?: Date | null;
@@ -45,7 +44,6 @@ export class AgentMapper {
       organizationId: agent.organizationId.value,
       ownerId: agent.ownerId.value,
       apiKey: agent.apiKey?.value || null,
-      agentType: agent.agentType,
       specialization: agent.specialization,
       createdAt: agent.createdAt,
       updatedAt: agent.updatedAt
