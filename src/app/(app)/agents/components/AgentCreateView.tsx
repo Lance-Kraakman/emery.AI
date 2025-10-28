@@ -12,10 +12,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { createAgentFromClient } from '@/app/actions/agents';
 import type { CreateAgentClientData } from '@/app/actions/types';
 import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
-import { discoverTools, createToolConfigFromMetadata, type ToolMetadataDTO } from '@/app/actions/tool-registry';
-import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
 import ScheduleManager from './ScheduleManager';
 import { getCalendarRRule, getDatabaseEventOperations, getWebhookSecret, getWebhookRequiresSignature } from './trigger-utils';
 
@@ -47,8 +43,6 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
       description: '',
       persona: '',
       status: 'active',
-      tools: [],
-      servers: [],
       organizationId: undefined,
       roleId: undefined
     } as Omit<CreateFormData, 'schedules'>,
@@ -76,8 +70,6 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
           description: value.description?.trim(),
           persona: value.persona?.trim(),
           status: value.status,
-          tools: value.tools || [],
-          servers: value.servers || [],
           schedules: [scheduleDTO], // ScheduleConfigurationDTO with default values
           organizationId: value.organizationId
         });
@@ -99,98 +91,6 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
   });
 
   const handleSave = form.handleSubmit;
-
-  // State for tool selection
-  const [availableTools, setAvailableTools] = useState<ToolMetadataDTO[]>([]);
-  const [toolsLoading, setToolsLoading] = useState(false);
-  const [showToolSelector, setShowToolSelector] = useState(false);
-
-  // Load available tools
-  const loadAvailableTools = async () => {
-    try {
-      setToolsLoading(true);
-      const result = await discoverTools({ limit: 100 });
-      if (result.success) {
-        setAvailableTools(result.data?.tools || []);
-      } else {
-        console.error('Failed to load tools:', result.error);
-      }
-    } catch (error) {
-      console.error('Error loading tools:', error);
-    } finally {
-      setToolsLoading(false);
-    }
-  };
-
-  // Load tools on component mount
-  React.useEffect(() => {
-    loadAvailableTools();
-  }, []);
-
-  // Helper functions for managing tools and servers
-  const addToolFromRegistry = async (toolMetadata: ToolMetadataDTO) => {
-    try {
-      const result = await createToolConfigFromMetadata(toolMetadata.name);
-      if (result.success && result.data) {
-        const newTool = ToolConfig.create(result.data.name, result.data.config);
-        form.setFieldValue('tools', [...(form.getFieldValue('tools') || []), newTool]);
-        setShowToolSelector(false);
-      } else {
-        console.error('Failed to create tool config:', result.error);
-      }
-    } catch (error) {
-      console.error('Error adding tool:', error);
-    }
-  };
-
-  const addTool = () => {
-    setShowToolSelector(true);
-  };
-
-  const removeTool = (index: number) => {
-    const tools = form.getFieldValue('tools') || [];
-    form.setFieldValue('tools', tools.filter((_, i) => i !== index));
-  };
-
-  const updateTool = (index: number, field: keyof ToolConfig, value: string) => {
-    const tools = form.getFieldValue('tools') || [];
-    const updatedTools = tools.map((tool, i) => {
-      if (i === index) {
-        // Create a new ToolConfig with updated field
-        const updatedData = {
-          name: tool.name,
-          config: tool.config
-        };
-
-        if (field === 'name') updatedData.name = value || '';
-        if (field === 'config') updatedData.config = value ? JSON.parse(value) : {};
-
-        return ToolConfig.create(updatedData.name, updatedData.config);
-      }
-      return tool;
-    });
-    form.setFieldValue('tools', updatedTools);
-  };
-
-  const addServer = () => {
-    const newServer: ServerConfig = { name: '', endpoint: undefined, config: undefined };
-    form.setFieldValue('servers', [...(form.getFieldValue('servers') || []), newServer]);
-  };
-
-  const removeServer = (index: number) => {
-    const servers = form.getFieldValue('servers') || [];
-    form.setFieldValue('servers', servers.filter((_, i) => i !== index));
-  };
-
-  const updateServer = (index: number, field: keyof ServerConfig, value: string) => {
-    const servers = form.getFieldValue('servers') || [];
-    const updatedServers = servers.map((server, i) => 
-      i === index 
-        ? { ...server, [field]: value || undefined }
-        : server
-    );
-    form.setFieldValue('servers', updatedServers);
-  };
 
   const handleTriggerTypeChange = (triggerType: TriggerType) => {
     let newTrigger: TriggerConfig;
@@ -328,109 +228,6 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
               />
             </div>
           </div>
-          
-          {/* Tools & Servers in a grid */}
-          <div className="grid gap-3 md:grid-cols-2 mt-4">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <h4 className="font-medium text-foreground text-sm">Tools</h4>
-                <Button
-                  type="button"
-                  onClick={addTool}
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                >
-                  <Plus size={12} className="mr-1" />
-                  Add
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {form.getFieldValue('tools')?.map((tool, index) => (
-                  <div key={index} className="space-y-1 p-2 border rounded-md bg-muted/20">
-                    <div className="flex gap-2">
-                      <Input
-                        value={tool.name}
-                        onChange={(e) => updateTool(index, 'name', e.target.value)}
-                        placeholder="Tool name"
-                        className="text-sm flex-1"
-                      />
-                      <Button
-                        type="button"
-                        onClick={() => removeTool(index)}
-                        variant="outline"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                      >
-                        <Trash2 size={12} />
-                      </Button>
-                    </div>
-                    <div className="flex gap-2">
-                      <Input
-                        value={JSON.stringify(tool.config)}
-                        onChange={(e) => updateTool(index, 'config', e.target.value)}
-                        placeholder="Tool configuration (JSON)"
-                        className="text-xs flex-1"
-                      />
-                    </div>
-                  </div>
-                )) || []}
-                {(!form.getFieldValue('tools') || form.getFieldValue('tools')?.length === 0) && (
-                  <p className="text-sm text-muted-foreground">No tools configured</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <h4 className="font-medium text-foreground text-sm">Servers</h4>
-                <Button
-                  type="button"
-                  onClick={addServer}
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                >
-                  <Plus size={12} className="mr-1" />
-                  Add
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {form.getFieldValue('servers')?.map((server, index) => (
-                  <div key={index} className="space-y-1 p-2 border rounded-md bg-muted/20">
-                    <div className="flex gap-2">
-                      <Input
-                        value={server.name}
-                        onChange={(e) => updateServer(index, 'name', e.target.value)}
-                        placeholder="Server name"
-                        className="text-sm flex-1"
-                      />
-                      <Button
-                        type="button"
-                        onClick={() => removeServer(index)}
-                        variant="outline"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                      >
-                        <Trash2 size={12} />
-                      </Button>
-                    </div>
-                    <div className="flex gap-2">
-                      <Input
-                        value={server.endpoint || ''}
-                        onChange={(e) => updateServer(index, 'endpoint', e.target.value)}
-                        placeholder="Endpoint (optional)"
-                        className="text-xs flex-1"
-                      />
-                    </div>
-                  </div>
-                )) || []}
-                {(!form.getFieldValue('servers') || form.getFieldValue('servers')?.length === 0) && (
-                  <p className="text-sm text-muted-foreground">No servers configured</p>
-                )}
-              </div>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
@@ -551,62 +348,6 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
           </CollapsibleContent>
         </div>
       </Collapsible>
-
-      {/* Tool Selector Modal */}
-      {showToolSelector && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-background border rounded-lg shadow-lg w-full max-w-2xl max-h-[80vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-medium">Select Tool</h3>
-              <Button
-                onClick={() => setShowToolSelector(false)}
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-              >
-                <X size={16} />
-              </Button>
-            </div>
-
-            <div className="p-4 overflow-y-auto max-h-96">
-              {toolsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin mr-2" />
-                  <span>Loading tools...</span>
-                </div>
-              ) : (
-                <div className="grid gap-2">
-                  {availableTools.map((tool) => (
-                    <button
-                      key={tool.name}
-                      onClick={() => addToolFromRegistry(tool)}
-                      className="flex items-start gap-3 p-3 border rounded-md hover:bg-muted/50 text-left transition-colors"
-                    >
-                      <div className="flex-1">
-                        <div className="font-medium text-sm">{tool.displayName}</div>
-                        <div className="text-xs text-muted-foreground mb-1">{tool.description}</div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs bg-muted px-2 py-0.5 rounded">
-                            {tool.category}
-                          </span>
-                          {tool.requiresConnection && (
-                            <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">
-                              Requires {tool.connectionType}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                  {availableTools.length === 0 && !toolsLoading && (
-                    <p className="text-center text-muted-foreground py-8">No tools available</p>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

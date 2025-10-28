@@ -38,7 +38,6 @@ export async function GET(
       name: agent.name,
       status: agent.status,
       triggerConfig: agent.schedules[0],
-      tools: Array.isArray(agent.tools) ? agent.tools.map((t: any) => t.name) : [],
       lastActivity: agent.updatedAt,
       specialization: agent.specialization
     }));
@@ -51,12 +50,6 @@ export async function GET(
         agentCount: processAnalystDisplayData.length,
         agents: processAnalystDisplayData,
         capabilities: {
-          processApi: processAnalystDisplayData.some(agent => 
-            agent.tools.includes('process_api')
-          ),
-          measurementApi: processAnalystDisplayData.some(agent => 
-            agent.tools.includes('measurement_api')
-          ),
           bottleneckAnalysis: processAnalystDisplayData.length > 0,
           performanceTracking: processAnalystDisplayData.length > 0
         }

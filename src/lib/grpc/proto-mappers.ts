@@ -81,8 +81,8 @@ export function mapAgentToProto(agent: Agent): AgentConfigProto {
     role: agent.role || '',
     description: agent.description || '',
     persona: agent.persona || '',
-    tools: agent.tools?.filter(tool => tool !== null && tool !== undefined)?.map(mapToolToProto) || [],
-    servers: agent.servers?.filter(server => server !== null && server !== undefined)?.map(mapServerToProto) || [],
+    tools: [], // Tools are now defined per-task (in skills and schedule configurations)
+    servers: [], // Servers removed from agent-level configuration
     skills: [] // Skills queried separately from skills table
   };
 }

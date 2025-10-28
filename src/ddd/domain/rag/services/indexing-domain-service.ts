@@ -444,8 +444,6 @@ export class IndexingDomainService {
           role: agent.role,
           status: agent.status,
           organizationId: organizationId.value,
-          toolCount: agent.tools ? Object.keys(agent.tools).length : 0,
-          serverCount: agent.servers ? Object.keys(agent.servers).length : 0,
           schedulesCount: agent.schedules?.length || 0,
         },
         embedding,
@@ -804,20 +802,12 @@ Usage: This table supports data analysis, reporting, workflow automation, and in
   }
 
   private generateAgentContent(agent: Agent): string {
-    const toolsList = agent.tools && typeof agent.tools === 'object'
-      ? `\nTools: ${Object.keys(agent.tools).join(', ')}`
-      : '\nTools: None configured';
-
-    const serversList = agent.servers && typeof agent.servers === 'object'
-      ? `\nServers: ${Object.keys(agent.servers).join(', ')}`
-      : '\nServers: None configured';
-
     const schedulesCount = agent.schedules?.length || 0;
     const schedulesDesc = schedulesCount > 0
       ? `\nSchedules: ${schedulesCount} configured schedule${schedulesCount > 1 ? 's' : ''}`
       : '\nSchedules: None configured';
 
-    const createdDate = agent.createdAt 
+    const createdDate = agent.createdAt
       ? `\nCreated: ${agent.createdAt.toLocaleDateString()}`
       : '';
 
@@ -825,11 +815,11 @@ Usage: This table supports data analysis, reporting, workflow automation, and in
 ${agent.role ? `Role: ${agent.role}` : 'Role: Not specified'}
 ${agent.description ? `Description: ${agent.description}` : 'Description: Not provided'}
 ${agent.persona ? `Persona: ${agent.persona}` : 'Persona: Default assistant'}
-Status: ${agent.status || 'active'}${createdDate}${toolsList}${serversList}${schedulesDesc}
+Status: ${agent.status || 'active'}${createdDate}${schedulesDesc}
 
 About: ${agent.name} is an AI agent configured within the Emery platform for workflow automation and task execution. This agent can process requests, execute workflows, and integrate with various tools and services to accomplish organizational objectives.
 
-Functionality: The agent operates within the Emery ecosystem to handle automated workflows, data processing, integration tasks, and other organizational processes as configured through its schedules and available tools.`;
+Functionality: The agent operates within the Emery ecosystem to handle automated workflows, data processing, integration tasks, and other organizational processes as configured through its schedules. Tools are defined per-task in skills and schedule configurations.`;
   }
 
   private generateDatabaseContent(database: Database): string {
