@@ -20,6 +20,14 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
       const session = await requirePermission("agents:manage");
       const agentApplicationService = getAgentApplicationService();
 
+      // Serialize schedules if they're ScheduleConfiguration instances
+      const scheduleDTOs = data.schedules?.map(schedule => {
+        if (schedule && typeof schedule === 'object' && 'toJSON' in schedule && typeof schedule.toJSON === 'function') {
+          return schedule.toJSON();
+        }
+        return schedule;
+      });
+
       // Build DTO - Application Service handles Value Object conversion
       const dto: CreateAgentDTO = {
         name: data.name,
@@ -28,7 +36,7 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
         persona: data.persona,
         ownerId: session.user.id,
         organizationId: session.user.currentOrganizationId,
-        schedules: data.schedules,
+        schedules: scheduleDTOs as any,
         status: (() => {
           const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
           return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
@@ -213,6 +221,14 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       const session = await requireResourcePermission("agents:manage", "agent", agentId);
       const agentApplicationService = getAgentApplicationService();
 
+      // Serialize schedules if they're ScheduleConfiguration instances
+      const scheduleDTOs = data.schedules?.map(schedule => {
+        if (schedule && typeof schedule === 'object' && 'toJSON' in schedule && typeof schedule.toJSON === 'function') {
+          return schedule.toJSON();
+        }
+        return schedule;
+      });
+
       // Build DTO - Application Service handles Value Object conversion
       const dto: UpdateAgentDTO = {
         id: agentId,
@@ -221,7 +237,7 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
         description: data.description,
         persona: data.persona,
         ownerId: data.ownerId instanceof UserId ? data.ownerId.value : data.ownerId,
-        schedules: data.schedules,
+        schedules: scheduleDTOs as any,
         status: (() => {
           const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
           return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')

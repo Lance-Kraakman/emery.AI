@@ -26,21 +26,19 @@ export async function POST(request: NextRequest): Promise<Response> {
     const userId = authResult.user.id;
 
     const body = await request.json();
-    const { 
-      name, 
-      role, 
-      description, 
-      persona, 
+    const {
+      name,
+      role,
+      description,
+      persona,
       organizationId,
       trigger,
-      skills,
-      tools,
-      servers 
+      skills
     } = body;
 
     if (!name || !organizationId) {
-      return Response.json({ 
-        error: 'Missing required fields: name, organizationId' 
+      return Response.json({
+        error: 'Missing required fields: name, organizationId'
       }, { status: 400 });
     }
 
@@ -55,9 +53,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       persona,
       ownerId: userId,
       organizationId: parseInt(organizationId),
-      schedules: trigger ? [trigger] : [{ type: 'MANUAL', enabled: true }],
-      tools: tools || [],
-      servers: servers || []
+      schedules: trigger ? [trigger] : [{ type: 'MANUAL', enabled: true }]
     };
 
     const result = await agentApplicationService.createAgent(dto);
