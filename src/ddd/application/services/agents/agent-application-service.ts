@@ -13,10 +13,8 @@ import {
   Agent,
   type CreateAgentData,
   type UpdateAgentData,
-  type ServerConfig,
   type AgentType
 } from '@/ddd/domain/agents/entities/agent';
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createAgentDefaults } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, OrganizationId, UserId, TeamId, AgentStatus, ApiKey, AGENT_STATUS } from '@/ddd/domain/shared/value-objects';
@@ -62,11 +60,6 @@ export class AgentApplicationService {
         };
       }
 
-      // Convert tool DTOs to ToolConfig instances
-      const tools = dto.tools?.map(toolDto =>
-        new ToolConfig(toolDto.name, toolDto.config)
-      );
-
       // Generate API key for agent authentication
       const apiKey = ApiKey.generate();
 
@@ -80,8 +73,6 @@ export class AgentApplicationService {
         organizationId,
         agentType: dto.agentType,
         specialization: dto.specialization,
-        tools,
-        servers: dto.servers,
         // Convert ScheduleConfigurationDTO[] to ScheduleConfiguration[]
         schedules: dto.schedules ? ScheduleMapper.fromDTOs(dto.schedules) : [],
         status: dto.status ? AgentStatus.fromString(dto.status) : undefined
@@ -96,8 +87,6 @@ export class AgentApplicationService {
         role: agentWithDefaults.role,
         description: agentWithDefaults.description,
         persona: agentWithDefaults.persona,
-        tools: agentWithDefaults.tools,
-        servers: agentWithDefaults.servers,
         schedules: agentWithDefaults.schedules,
         organizationId: organizationId,
         ownerId: ownerId,
@@ -151,12 +140,6 @@ export class AgentApplicationService {
       if (dto.description !== undefined) updateData.description = dto.description;
       if (dto.persona !== undefined) updateData.persona = dto.persona;
       if (dto.ownerId !== undefined) updateData.ownerId = UserId.fromString(dto.ownerId);
-      if (dto.tools !== undefined) {
-        updateData.tools = dto.tools.map(toolDto =>
-          new ToolConfig(toolDto.name, toolDto.config)
-        );
-      }
-      if (dto.servers !== undefined) updateData.servers = dto.servers;
       // Convert ScheduleConfigurationDTO[] to ScheduleConfiguration[]
       if (dto.schedules !== undefined) updateData.schedules = ScheduleMapper.fromDTOs(dto.schedules);
       if (dto.status !== undefined) updateData.status = dto.status;

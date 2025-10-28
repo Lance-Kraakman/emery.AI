@@ -86,12 +86,12 @@ export class SchedulerService implements ISchedulerService {
       // Iterate through each agent's schedules
       for (const schedule of agent.schedules) {
         // Only process enabled calendar triggers
-        if (!schedule.enabled || !(schedule instanceof CalendarTriggerConfig)) {
+        if (!schedule.enabled || schedule.trigger.type !== 'CALENDAR') {
           continue;
         }
 
         // Check if schedule is due for execution
-        const nextRun = this.calculateNextExecution(schedule);
+        const nextRun = this.calculateNextExecution(schedule.trigger);
         if (!nextRun || nextRun > before) {
           continue;
         }
@@ -100,12 +100,14 @@ export class SchedulerService implements ISchedulerService {
         const task = Task.create({
           agentId: agent.id,
           organizationId: agent.organizationId,
-          name: `Scheduled: ${schedule.description || 'Calendar Task'}`,
+          name: schedule.name || `Scheduled: ${schedule.taskInstructions.instructions.substring(0, 50)}`,
           skillName: undefined,
           instructions: {
-            instructions: schedule.description || 'Execute scheduled task',
+            instructions: schedule.taskInstructions.instructions,
+            tools: schedule.taskInstructions.tools,
             metadata: {
-              scheduleType: schedule.type,
+              ...schedule.taskInstructions.metadata,
+              scheduleType: schedule.trigger.type,
               scheduledFor: nextRun.toISOString()
             }
           }

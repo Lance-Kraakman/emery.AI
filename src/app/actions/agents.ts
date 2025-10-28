@@ -10,7 +10,6 @@ import { getAgentApplicationService } from "@/ddd/application/di/container";
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from "@/app/dtos/agent.dto";
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
 import { AgentMapper } from "@/app/mappers/agent-mapper";
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
 // AIDEV-NOTE: Now using DTOs directly instead of Commands for simplified architecture
@@ -21,11 +20,6 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
       const session = await requirePermission("agents:manage");
       const agentApplicationService = getAgentApplicationService();
 
-      // Convert tools to ToolConfigDTOs for the DTO
-      const toolDTOs = data.tools?.map(tool =>
-        tool instanceof ToolConfig ? tool.toPlain() : tool
-      );
-
       // Build DTO - Application Service handles Value Object conversion
       const dto: CreateAgentDTO = {
         name: data.name,
@@ -34,8 +28,7 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
         persona: data.persona,
         ownerId: session.user.id,
         organizationId: session.user.currentOrganizationId,
-        tools: toolDTOs,
-        servers: data.servers,
+        schedules: data.schedules,
         status: (() => {
           const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
           return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
@@ -79,11 +72,6 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
 
 // Helper function for creating agents from client data (with plain types)
 export async function createAgentFromClient(data: CreateAgentClientData): Promise<Result> {
-  // Convert plain tools to ToolConfig instances (filter out nulls/undefined first)
-  const tools = data.tools
-    ?.filter(tool => tool != null) // catches both null and undefined
-    ?.map(plainTool => ToolConfig.fromPlain(plainTool));
-
   // AIDEV-NOTE: Serialize TriggerConfig instances to JSON for database storage
   const schedules = data.schedules
     ?.filter(schedule => schedule != null)
@@ -97,7 +85,6 @@ export async function createAgentFromClient(data: CreateAgentClientData): Promis
   // Convert client data to domain data format
   const domainData: CreateAgentData = {
     ...data,
-    tools,
     schedules: schedules || data.schedules,
     status: data.status ? AgentStatus.fromString(data.status) : AgentStatus.active(),
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
@@ -108,11 +95,6 @@ export async function createAgentFromClient(data: CreateAgentClientData): Promis
 
 // Helper function for updating agents from client data (with plain types)
 export async function updateAgentFromClient(agentId: number, data: Partial<CreateAgentClientData>, revalidateUrl?: string): Promise<Result> {
-  // Convert plain tools to ToolConfig instances (filter out invalid tools first)
-  const tools = data.tools
-    ?.filter(tool => tool !== null && tool !== undefined)
-    ?.map(plainTool => ToolConfig.fromPlain(plainTool)) || [];
-
   // AIDEV-NOTE: Serialize TriggerConfig instances to JSON for database storage
   // TriggerConfig.toJSON() must be called to convert class instances to plain objects
   // Otherwise Drizzle receives class instances and serializes them as empty objects
@@ -130,7 +112,6 @@ export async function updateAgentFromClient(agentId: number, data: Partial<Creat
   // Convert client data to domain data format
   const domainData: Partial<CreateAgentData> = {
     ...data,
-    tools,
     schedules: schedules !== undefined ? schedules : data.schedules,
     status: data.status ? AgentStatus.fromString(data.status) : undefined,
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
@@ -148,33 +129,13 @@ export async function createAgentAction(formData: FormData): Promise<Result> {
       // Parse form data
       const rawData = parseFormDataToAgent(formData);
       const dataWithOrg = { ...rawData, organizationId: currentOrg.id };
-      
+
       // Validate using Zod schema
       const validatedData = createAgentSchema.parse(dataWithOrg);
-      
-      // Parse tools and servers from form if they exist
-      const toolsStr = formData.get('tools') as string;
-      const serversStr = formData.get('servers') as string;
-      
-      const tools = toolsStr
-        ? toolsStr.split(',')
-            .map(t => t.trim())
-            .filter(t => t)
-            .map(toolName => ToolConfig.create(toolName, {})) // Create proper ToolConfig instances
-        : undefined;
-      
-      const servers = serversStr 
-        ? serversStr.split(',')
-            .map(s => s.trim())
-            .filter(s => s)
-            .map(serverName => ({ name: serverName })) // Simple format, can be enhanced later
-        : undefined;
 
-      const result = await createAgentFromClient({ 
+      const result = await createAgentFromClient({
         ...validatedData,
         organizationId: currentOrg.id,
-        tools, 
-        servers,
         status: 'active' // Use plain string - will be converted to AgentStatus
       });
       
@@ -252,11 +213,6 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       const session = await requireResourcePermission("agents:manage", "agent", agentId);
       const agentApplicationService = getAgentApplicationService();
 
-      // Convert tools to ToolConfigDTOs
-      const toolDTOs = data.tools?.map(tool =>
-        tool instanceof ToolConfig ? tool.toPlain() : tool
-      );
-
       // Build DTO - Application Service handles Value Object conversion
       const dto: UpdateAgentDTO = {
         id: agentId,
@@ -265,8 +221,7 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
         description: data.description,
         persona: data.persona,
         ownerId: data.ownerId instanceof UserId ? data.ownerId.value : data.ownerId,
-        tools: toolDTOs,
-        servers: data.servers,
+        schedules: data.schedules,
         status: (() => {
           const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
           return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
