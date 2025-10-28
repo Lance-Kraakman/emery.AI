@@ -560,6 +560,16 @@ export async function getAgentsNeedingConnections(): Promise<Result<AgentConnect
 
     const agentSummaries: AgentConnectionSummary[] = [];
 
+    // AIDEV-NOTE: Agents no longer have tools at agent-level
+    // Tools are defined per-task (in skills and schedules)
+    // This function now returns empty array - connection management
+    // should be done at user/organization level, not agent level
+    return {
+      success: true,
+      data: agentSummaries
+    };
+
+    /* Legacy agent tools logic - no longer applicable
     for (const agent of agents) {
       const tools = agent.tools || [];
 
@@ -693,15 +703,15 @@ export async function validateAgentConnections(
       };
     }
 
-    const tools = agent.tools || [];
-
-    if (tools.length === 0) {
-      return {
-        success: true,
-        data: {
-          valid: true,
-          warnings: [],
-          missingConnections: [],
+    // AIDEV-NOTE: Agents no longer have tools at agent-level
+    // Tools are defined per-task (in skills and schedules)
+    // Always return valid since connection validation is per-task now
+    return {
+      success: true,
+      data: {
+        valid: true,
+        warnings: [],
+        missingConnections: [],
           toolStatuses: []
         }
       };
