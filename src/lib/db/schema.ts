@@ -497,6 +497,67 @@ export const agents = pgTable("agents", {
   }),
 ]);
 
+// AIDEV-NOTE: Credential Delegations - OAuth credential sharing permissions
+// Tracks which agents have permission to use which owner's OAuth credentials (per service)
+// Security: Explicit approval required before agent can use owner's Gmail, Slack, etc.
+export const credentialDelegations = pgTable("credential_delegations", {
+  id: serial("id").primaryKey(),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: 'cascade' }), // User sharing their credentials
+  agentId: integer("agent_id").notNull().references(() => agents.id, { onDelete: 'cascade' }), // Agent authorized to use credentials
+  services: text("services").array().notNull(), // Array of OAuth services: ['gmail', 'slack', 'github']
+  status: text("status").notNull().default('approved'), // approved | pending | revoked
+  approvedAt: timestamp("approved_at"),
+  expiresAt: timestamp("expires_at"), // Optional time-limited delegation
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  // Unique constraint: one delegation per owner-agent pair
+  unique("unique_owner_agent_delegation").on(table.ownerId, table.agentId),
+  // Index for fast lookups by agent (most common query path)
+  index("delegations_agent_idx").on(table.agentId),
+  // Index for owner dashboard queries
+  index("delegations_owner_idx").on(table.ownerId),
+  // RLS: Users can view delegations they own or delegations for their agents
+  pgPolicy("delegations_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`
+      owner_id = current_setting('app.current_user_id')::uuid
+      OR EXISTS (
+        SELECT 1 FROM agents a
+        WHERE a.id = agent_id
+        AND a.organization_id = current_setting('app.current_organization_id')::integer
+        AND (
+          a.owner_id = current_setting('app.current_user_id')::uuid
+          OR user_has_permission(
+            current_setting('app.current_user_id')::uuid,
+            'agents:view',
+            a.organization_id,
+            'agent',
+            a.id
+          )
+        )
+      )
+    `
+  }),
+  // RLS: Only owners can create delegations for their credentials
+  pgPolicy("delegations_create_permission", {
+    as: "permissive",
+    for: "insert",
+    to: "public",
+    withCheck: sql`owner_id = current_setting('app.current_user_id')::uuid`
+  }),
+  // RLS: Only owners can update/delete their delegations
+  pgPolicy("delegations_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`owner_id = current_setting('app.current_user_id')::uuid`,
+    withCheck: sql`owner_id = current_setting('app.current_user_id')::uuid`
+  }),
+]);
+
 // AIDEV-NOTE: Skills - simplified single-instruction model with global skills support
 // Removed: skillSteps table (multi-step workflow)
 // Added: inputs, outputs, instructions (single natural language block), tools

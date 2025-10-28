@@ -17,6 +17,7 @@ export { InvitationId } from './invitation-id';
 export { FieldId } from './field-id';
 export { DatabaseId } from './database-id';
 export { TableId } from './table-id';
+export { DelegationId } from './delegation-id';
 
 // Authentication & Security Value Objects
 export { EmailAddress } from './email-address';
