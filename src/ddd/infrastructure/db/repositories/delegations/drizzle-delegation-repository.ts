@@ -69,7 +69,8 @@ export class DrizzleDelegationRepository implements IDelegationRepository {
   }
 
   async create(delegation: CredentialDelegation): Promise<CredentialDelegation> {
-    const data = this.toPersistence(delegation);
+    // Exclude ID from insert - let database generate via serial
+    const data = this.toPersistence(delegation, false);
 
     const [record] = await this.db
       .insert(credentialDelegations)
@@ -80,7 +81,8 @@ export class DrizzleDelegationRepository implements IDelegationRepository {
   }
 
   async update(delegation: CredentialDelegation): Promise<CredentialDelegation> {
-    const data = this.toPersistence(delegation);
+    // Include ID for update operations
+    const data = this.toPersistence(delegation, true);
 
     const [record] = await this.db
       .update(credentialDelegations)
@@ -120,9 +122,13 @@ export class DrizzleDelegationRepository implements IDelegationRepository {
     };
   }
 
-  private toPersistence(delegation: CredentialDelegation): Partial<DelegationRow> {
-    return {
-      id: delegation.id.value,
+  /**
+   * Convert domain entity to persistence model
+   * @param delegation - Domain entity to convert
+   * @param isUpdate - True for UPDATE operations (includes ID), false for INSERT (excludes ID)
+   */
+  private toPersistence(delegation: CredentialDelegation, isUpdate: boolean = false): Partial<DelegationRow> {
+    const data: Partial<DelegationRow> = {
       ownerId: delegation.ownerId.value,
       agentId: delegation.agentId.value,
       services: delegation.services.map(service => service.value),
@@ -132,5 +138,12 @@ export class DrizzleDelegationRepository implements IDelegationRepository {
       createdAt: delegation.createdAt,
       updatedAt: delegation.updatedAt
     };
+
+    // Only include ID for updates, not inserts (database generates ID via serial)
+    if (isUpdate) {
+      data.id = delegation.id.value;
+    }
+
+    return data;
   }
 }
