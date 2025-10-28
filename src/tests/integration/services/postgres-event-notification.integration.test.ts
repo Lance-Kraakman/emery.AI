@@ -47,8 +47,7 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
         description: 'Agent for testing event notifications',
         ownerId: testContext.ownerUserId.value,
         organizationId: testContext.organizationId.value,
-        role: 'assistant',
-        agentType: 'data-collector'
+        role: 'assistant'
       });
 
       if (agentResult.success && agentResult.data) {
