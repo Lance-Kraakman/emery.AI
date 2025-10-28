@@ -411,10 +411,8 @@ export const agents = pgTable("agents", {
   role: text("role"),
   description: text("description"),
   persona: text("persona"),
-  ownerId: uuid("owner_id").notNull().references(() => users.id), // Agent owner (user)
-  tools: jsonb("tools"), // Available tools as JSONB for rich configuration
-  servers: jsonb("servers"), // Available servers as JSONB for rich configuration
-  schedules: jsonb("schedules").$type<any[]>().default(sql`'[]'::jsonb`).notNull(), // Array of schedule configurations (TriggerConfig[])
+  ownerId: uuid("owner_id").notNull().references(() => users.id), // Agent owner - used for OAuth credential resolution via proxy
+  schedules: jsonb("schedules").$type<any[]>().default(sql`'[]'::jsonb`).notNull(), // Array of schedule configurations with task instructions
   databaseId: text("database_id"),
   status: text("status").default("active"),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
