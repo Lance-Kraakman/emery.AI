@@ -4,11 +4,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/app/actions/permissions';
 import { getAgentApplicationService } from '@/ddd/application/di/container';
-import { getAgentTypeConfig, getDefaultToolsForType, getDefaultSpecializationForType } from '@/lib/agents/agent-type-configs';
+import { getAgentTypeConfig, getDefaultSpecializationForType } from '@/lib/agents/agent-type-configs';
 import type { AgentType } from '@/ddd/domain/agents/entities/agent';
 import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { TriggerConfigs } from '@/ddd/domain/scheduling/value-objects/trigger-config';
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
 
@@ -81,13 +80,6 @@ export async function POST(
           ownerId: session.user.id,
           organizationId: organizationId,
           agentType,
-          tools: getDefaultToolsForType(agentType).map(toolName =>
-            ToolConfig.create(
-              toolName,
-              toolName.includes('_api') ? { organization_id: organizationId.toString() } : {}
-            )
-          ),
-          servers: [],
           schedules: [scheduleDTO],
           specialization: getDefaultSpecializationForType(agentType),
           status: 'active' as const
@@ -98,8 +90,7 @@ export async function POST(
           createdAgents.push({
             agentId: result.data.id,
             agentType,
-            name: result.data.name,
-            tools: command.tools!.map(t => t.name)
+            name: result.data.name
           });
         }
       } catch (error) {
@@ -164,7 +155,6 @@ export async function GET(
       agentType: agent.agentType,
       status: agent.status,
       triggerConfig: agent.schedules?.[0],
-      tools: Array.isArray(agent.tools) ? agent.tools.map((t: any) => t.name) : [],
       lastActivity: agent.updatedAt,
       specialization: agent.specialization
     }));

@@ -38,7 +38,6 @@ export async function GET(
       name: agent.name,
       status: agent.status,
       triggerConfig: agent.schedules[0],
-      tools: Array.isArray(agent.tools) ? agent.tools.map((t: any) => t.name) : [],
       lastActivity: agent.updatedAt,
       specialization: agent.specialization
     }));
@@ -51,12 +50,6 @@ export async function GET(
         agentCount: dataCollectorDisplayData.length,
         agents: dataCollectorDisplayData,
         capabilities: {
-          measurementApi: dataCollectorDisplayData.some(agent => 
-            agent.tools.includes('measurement_api')
-          ),
-          databaseAccess: dataCollectorDisplayData.some(agent => 
-            agent.tools.includes('emery_database')
-          ),
           dataValidation: dataCollectorDisplayData.length > 0
         }
       },

@@ -124,13 +124,7 @@ describe('Agent Task Execution Integration Tests', () => {
         ownerId: testContext.ownerUserId.value,
         organizationId: testContext.organizationId.value,
         role: 'assistant',
-        agentType: 'data-collector',
-        tools: [
-          ToolConfig.basic('python_repl').toPlain(),
-          ToolConfig.basic('file_reader').toPlain(),
-          ToolConfig.basic('web_search').toPlain(),
-          ToolConfig.basic('calculator').toPlain()
-        ]
+        agentType: 'data-collector'
       };
 
       const agentResult = await agentApplicationService.createAgent(agentDTO);
@@ -434,13 +428,7 @@ describe('Agent Task Execution Integration Tests', () => {
         ownerId: org2Context.ownerUserId.value,
         organizationId: org2Context.organizationId.value,
         role: 'assistant',
-        agentType: 'data-collector',
-        tools: [
-          ToolConfig.basic('python_repl'),
-          ToolConfig.basic('file_reader'),
-          ToolConfig.basic('web_search'),
-          ToolConfig.basic('calculator')
-        ]
+        agentType: 'data-collector'
       });
       
       expect(agent2Result.success).toBe(true);

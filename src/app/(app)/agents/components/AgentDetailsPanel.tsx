@@ -7,7 +7,6 @@ import {
   Settings,
   Calendar,
   Database,
-  Wrench,
   Activity,
   Zap,
   Globe
@@ -87,13 +86,6 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
     return 'configured';
   };
 
-  const getToolsStatus = () => {
-    const toolCount = agent.tools?.length || 0;
-    const serverCount = agent.servers?.length || 0;
-    if (toolCount === 0 && serverCount === 0) return 'empty';
-    if (toolCount > 0 && serverCount > 0) return 'configured';
-    return 'partial';
-  };
 
   // Generate summaries for each configuration area
   const getTriggerSummary = () => {
@@ -131,18 +123,6 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
     return summary;
   };
 
-  const getToolsSummary = () => {
-    const toolCount = agent.tools?.length || 0;
-    const serverCount = agent.servers?.length || 0;
-
-    if (toolCount === 0 && serverCount === 0) return 'No tools or servers configured';
-
-    const parts = [];
-    if (toolCount > 0) parts.push(`${toolCount} tool${toolCount !== 1 ? 's' : ''}`);
-    if (serverCount > 0) parts.push(`${serverCount} server${serverCount !== 1 ? 's' : ''}`);
-
-    return parts.join(' • ');
-  };
 
   return (
     <div className="space-y-3">
@@ -179,21 +159,6 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
           summary={getTriggerSummary()}
           onClick={() => setIsScheduleManagerOpen(true)}
           actionText="Manage Schedules"
-        />
-
-        {/* Tools & Servers */}
-        <ConfigurationCard
-          title="Tools & Servers"
-          description="External integrations"
-          icon={Wrench}
-          status={getToolsStatus()}
-          statusText={
-            getToolsStatus() === 'configured' ? 'Configured' :
-            getToolsStatus() === 'partial' ? 'Partial' : 'None'
-          }
-          summary={getToolsSummary()}
-          onClick={() => openModal('tools-servers', { agent })}
-          actionText="Manage Tools"
         />
 
         {/* Activity */}

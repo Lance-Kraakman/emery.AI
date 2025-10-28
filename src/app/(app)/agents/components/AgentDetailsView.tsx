@@ -2,10 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Edit, ChevronDown, ChevronRight, Activity, Cog, Save, X, Loader2, Calendar, Plus, Trash2 } from 'lucide-react';
-import type { AgentDTO, ToolConfigDTO } from '@/app/mappers/agent-mapper';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
-import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
-import { discoverTools, createToolConfigFromMetadata, type ToolMetadataDTO } from '@/app/actions/tool-registry';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +11,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import AgentActivityPanel from './AgentActivityPanel';
 import ScheduleManager from './ScheduleManager';
@@ -45,8 +42,6 @@ interface EditFormData {
   persona: string;
   status: string;
   schedules: any[]; // ScheduleConfigurationDTO[] - use any during migration
-  tools: ToolConfigDTO[];
-  servers: ServerConfig[];
 }
 
 export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetailsViewProps) {
@@ -60,9 +55,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
     description: agent.description || '',
     persona: agent.persona || '',
     status: agent.status || 'active',
-    schedules: agent.schedules || [TriggerConfigs.manual()],
-    tools: agent.tools || [],
-    servers: agent.servers || []
+    schedules: agent.schedules || [TriggerConfigs.manual()]
   });
 
   const handleEdit = () => {
@@ -73,9 +66,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       description: agent.description || '',
       persona: agent.persona || '',
       status: agent.status || 'active',
-      schedules: agent.schedules || [TriggerConfigs.manual()],
-      tools: agent.tools || [],
-      servers: agent.servers || []
+      schedules: agent.schedules || [TriggerConfigs.manual()]
     });
   };
 
@@ -87,9 +78,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       description: agent.description || '',
       persona: agent.persona || '',
       status: agent.status || 'active',
-      schedules: agent.schedules || [TriggerConfigs.manual()],
-      tools: agent.tools || [],
-      servers: agent.servers || []
+      schedules: agent.schedules || [TriggerConfigs.manual()]
     });
   };
 
@@ -116,9 +105,7 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
         description: editFormData.description.trim(),
         persona: editFormData.persona.trim(),
         status: editFormData.status as 'active' | 'inactive' | 'archived',
-        schedules: editFormData.schedules,
-        tools: editFormData.tools,
-        servers: editFormData.servers
+        schedules: editFormData.schedules
       });
       
       if (!result.success) {
@@ -172,69 +159,6 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
     });
   };
 
-  // Tool management functions
-  const [availableTools, setAvailableTools] = useState<ToolMetadataDTO[]>([]);
-  const [isToolSelectorOpen, setIsToolSelectorOpen] = useState(false);
-
-  useEffect(() => {
-    const loadAvailableTools = async () => {
-      const result = await discoverTools({});
-      if (result.success && result.data) {
-        setAvailableTools(result.data.tools);
-      }
-    };
-    loadAvailableTools();
-  }, []);
-
-  const addToolFromRegistry = async (toolMetadata: ToolMetadataDTO) => {
-    const result = await createToolConfigFromMetadata(toolMetadata.name);
-    if (result.success && result.data) {
-      // Create plain DTO instead of ToolConfig instance (for Next.js serialization)
-      const newToolDTO: ToolConfigDTO = {
-        name: result.data.name,
-        config: result.data.config
-      };
-      setEditFormData(prev => ({
-        ...prev,
-        tools: [...prev.tools, newToolDTO]
-      }));
-    }
-    setIsToolSelectorOpen(false);
-  };
-
-  const removeTool = (index: number) => {
-    setEditFormData(prev => ({
-      ...prev,
-      tools: prev.tools.filter((_, i) => i !== index)
-    }));
-  };
-
-  // Server management functions
-  const addServer = () => {
-    const newServer: ServerConfig = { name: '', endpoint: undefined, config: undefined };
-    setEditFormData(prev => ({
-      ...prev,
-      servers: [...prev.servers, newServer]
-    }));
-  };
-
-  const removeServer = (index: number) => {
-    setEditFormData(prev => ({
-      ...prev,
-      servers: prev.servers.filter((_, i) => i !== index)
-    }));
-  };
-
-  const updateServer = (index: number, field: keyof ServerConfig, value: string) => {
-    setEditFormData(prev => ({
-      ...prev,
-      servers: prev.servers.map((server, i) => 
-        i === index 
-          ? { ...server, [field]: value || undefined }
-          : server
-      )
-    }));
-  };
 
   return (
     <div className="space-y-3 max-h-full overflow-y-auto">
@@ -356,149 +280,6 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
                 <p className="text-sm text-muted-foreground">
                   {agent.persona || 'No persona defined'}
                 </p>
-              )}
-            </div>
-          </div>
-          
-          {/* Tools & Servers in a grid */}
-          <div className="grid gap-3 md:grid-cols-2 mt-4">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <h4 className="font-medium text-foreground text-sm">Tools</h4>
-                {isEditMode && (
-                  <Button
-                    type="button"
-                    onClick={() => setIsToolSelectorOpen(true)}
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                  >
-                    <Plus size={12} className="mr-1" />
-                    Add Tool
-                  </Button>
-                )}
-              </div>
-              {isEditMode ? (
-                <div className="space-y-2">
-                  {editFormData.tools?.map((tool, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 border rounded-md bg-muted/20">
-                      <div className="flex-1">
-                        <div className="font-medium text-sm">{tool.name}</div>
-                        <div className="text-xs text-muted-foreground">Config: {JSON.stringify(tool.config)}</div>
-                      </div>
-                      <Button
-                        type="button"
-                        onClick={() => removeTool(index)}
-                        variant="outline"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                      >
-                        <Trash2 size={12} />
-                      </Button>
-                    </div>
-                  ))}
-                  {editFormData.tools.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No tools configured</p>
-                  )}
-                </div>
-              ) : (
-                agent.tools && Array.isArray(agent.tools) && agent.tools.length > 0 ? (
-                  <div className="space-y-1">
-                    {agent.tools.slice(0, 3).map((tool: any, index: number) => (
-                      <div key={index} className="flex items-center gap-2 text-xs">
-                        <Badge variant="outline" className="text-xs py-0">
-                          {typeof tool === 'string' ? tool : tool.name || 'Unknown'}
-                        </Badge>
-                        {typeof tool === 'object' && tool.version && (
-                          <span className="text-muted-foreground">v{tool.version}</span>
-                        )}
-                      </div>
-                    ))}
-                    {agent.tools.length > 3 && (
-                      <Badge variant="secondary" className="text-xs py-0">
-                        +{agent.tools.length - 3} more
-                      </Badge>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No tools configured</p>
-                )
-              )}
-            </div>
-            
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <h4 className="font-medium text-foreground text-sm">Servers</h4>
-                {isEditMode && (
-                  <Button
-                    type="button"
-                    onClick={addServer}
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                  >
-                    <Plus size={12} className="mr-1" />
-                    Add
-                  </Button>
-                )}
-              </div>
-              {isEditMode ? (
-                <div className="space-y-2">
-                  {editFormData.servers?.map((server, index) => (
-                    <div key={index} className="space-y-1 p-2 border rounded-md bg-muted/20">
-                      <div className="flex gap-2">
-                        <Input
-                          value={server.name}
-                          onChange={(e) => updateServer(index, 'name', e.target.value)}
-                          placeholder="Server name"
-                          className="text-sm flex-1"
-                        />
-                        <Button
-                          type="button"
-                          onClick={() => removeServer(index)}
-                          variant="outline"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                        >
-                          <Trash2 size={12} />
-                        </Button>
-                      </div>
-                      <div className="flex gap-2">
-                        <Input
-                          value={server.endpoint || ''}
-                          onChange={(e) => updateServer(index, 'endpoint', e.target.value)}
-                          placeholder="Endpoint (optional)"
-                          className="text-xs flex-1"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  {editFormData.servers.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No servers configured</p>
-                  )}
-                </div>
-              ) : (
-                agent.servers && Array.isArray(agent.servers) && agent.servers.length > 0 ? (
-                  <div className="space-y-1">
-                    {agent.servers.slice(0, 3).map((server: any, index: number) => (
-                      <div key={index} className="flex items-center gap-2 text-xs">
-                        <Badge variant="outline" className="text-xs py-0">
-                          {typeof server === 'string' ? server : server.name || 'Unknown'}
-                        </Badge>
-                        {typeof server === 'object' && server.endpoint && (
-                          <span className="text-muted-foreground">{server.endpoint}</span>
-                        )}
-                      </div>
-                    ))}
-                    {agent.servers.length > 3 && (
-                      <Badge variant="secondary" className="text-xs py-0">
-                        +{agent.servers.length - 3} more
-                      </Badge>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No servers configured</p>
-                )
               )}
             </div>
           </div>
@@ -851,44 +632,6 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
           </CollapsibleContent>
         </div>
       </Collapsible>
-
-      {/* Tool Selector Modal */}
-      <Dialog open={isToolSelectorOpen} onOpenChange={setIsToolSelectorOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Add Tool</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
-            <div className="grid gap-2">
-              {availableTools.map((tool) => (
-                <div
-                  key={tool.name}
-                  className="p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
-                  onClick={() => addToolFromRegistry(tool)}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">{tool.displayName}</div>
-                      <div className="text-xs text-muted-foreground mt-1">{tool.description}</div>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant="outline" className="text-xs">{tool.category}</Badge>
-                        {tool.requiresConnection && (
-                          <Badge variant="secondary" className="text-xs">Requires Connection</Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {availableTools.length === 0 && (
-                <div className="text-center text-muted-foreground py-8">
-                  No tools available
-                </div>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

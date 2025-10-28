@@ -2,8 +2,6 @@
 
 import React, { useState } from 'react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
 import { createTask } from '@/app/actions/tasks';
 
 interface TaskFormDialogProps {
@@ -13,8 +11,6 @@ interface TaskFormDialogProps {
 }
 
 export default function TaskFormDialog({ isOpen, onClose, agent }: TaskFormDialogProps) {
-  const [selectedTools, setSelectedTools] = useState<ToolConfig[]>([]);
-  const [selectedServers, setSelectedServers] = useState<ServerConfig[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,8 +19,6 @@ export default function TaskFormDialog({ isOpen, onClose, agent }: TaskFormDialo
     if (isOpen) {
       setError(null);
       setIsSubmitting(false);
-      setSelectedTools([]);
-      setSelectedServers([]);
     }
   }, [isOpen]);
 
@@ -47,8 +41,8 @@ export default function TaskFormDialog({ isOpen, onClose, agent }: TaskFormDialo
         skillName: skillName || undefined, // Auto-route if empty
         instructions: {
           instructions,
-          tools: selectedTools.length > 0 ? selectedTools : undefined,
-          servers: selectedServers.length > 0 ? selectedServers : undefined,
+          tools: undefined,
+          metadata: {}
         }
       });
 
@@ -93,52 +87,9 @@ export default function TaskFormDialog({ isOpen, onClose, agent }: TaskFormDialo
                 className="mt-1 block w-full p-2 border rounded"
                 placeholder="e.g., Read my emails for today and summarize any important messages"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground">
-                Available Tools <span className="text-xs text-muted-foreground">(optional)</span>
-              </label>
-              <div className="mt-1 space-y-1 max-h-20 overflow-y-auto">
-                {(agent.tools as any[] || []).map((tool, index) => (
-                  <label key={index} className="flex items-center text-sm">
-                    <input
-                      type="checkbox"
-                      className="mr-2"
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedTools([...selectedTools, tool]);
-                        } else {
-                          setSelectedTools(selectedTools.filter(t => t.name !== tool.name));
-                        }
-                      }}
-                    />
-                    {tool.name}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground">
-                Available Servers <span className="text-xs text-muted-foreground">(optional)</span>
-              </label>
-              <div className="mt-1 space-y-1 max-h-20 overflow-y-auto">
-                {(agent.servers as any[] || []).map((server, index) => (
-                  <label key={index} className="flex items-center text-sm">
-                    <input
-                      type="checkbox"
-                      className="mr-2"
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedServers([...selectedServers, server]);
-                        } else {
-                          setSelectedServers(selectedServers.filter(s => s.name !== server.name));
-                        }
-                      }}
-                    />
-                    {server.name} {server.endpoint && `(${server.endpoint})`}
-                  </label>
-                ))}
-              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Tools can be referenced in instructions using @ mentions
+              </p>
             </div>
           </div>
 
