@@ -558,61 +558,11 @@ export async function getAgentsNeedingConnections(): Promise<Result<AgentConnect
       organizationId: session.user.currentOrganizationId!
     });
 
-    const agentSummaries: AgentConnectionSummary[] = [];
-
     // AIDEV-NOTE: Agents no longer have tools at agent-level
     // Tools are defined per-task (in skills and schedules)
     // This function now returns empty array - connection management
     // should be done at user/organization level, not agent level
-    return {
-      success: true,
-      data: agentSummaries
-    };
-
-    /* Legacy agent tools logic - no longer applicable
-    for (const agent of agents) {
-      const tools = agent.tools || [];
-
-      if (tools.length === 0) continue;
-
-      // Get connection status for agent tools
-      const toolStatusResult = await getToolConnectionStatus(tools, session.user.id);
-
-      if (!toolStatusResult.success) continue;
-
-      const toolStatuses = toolStatusResult.data || [];
-      const connectedTools = toolStatuses.filter(t => t.isConnected).length;
-      const disconnectedTools = toolStatuses.length - connectedTools;
-
-      // Collect all missing apps
-      const allMissingApps = new Set<string>();
-      toolStatuses.forEach(tool => {
-        tool.missingApps.forEach(app => allMissingApps.add(app));
-      });
-
-      // Determine connection health
-      let connectionHealth: 'healthy' | 'warning' | 'critical';
-      if (disconnectedTools === 0) {
-        connectionHealth = 'healthy';
-      } else if (connectedTools > disconnectedTools) {
-        connectionHealth = 'warning';
-      } else {
-        connectionHealth = 'critical';
-      }
-
-      // Only include agents that need connections
-      if (disconnectedTools > 0) {
-        agentSummaries.push({
-          agentId: agent.id,
-          agentName: agent.name,
-          totalTools: toolStatuses.length,
-          connectedTools,
-          disconnectedTools,
-          missingApps: Array.from(allMissingApps),
-          connectionHealth
-        });
-      }
-    }
+    const agentSummaries: AgentConnectionSummary[] = [];
 
     return {
       success: true,
