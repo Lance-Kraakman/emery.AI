@@ -1,0 +1,11 @@
+.flex {
+  display: flex;
+  gap: 24px;
+  min-height: 0;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.item {
+  flex: 1;
+}
