@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
 import type { ScheduleConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
+import type { PuckDataStructure } from '@/ddd/domain/puck/value-objects/puck-data';
 
 // AIDEV-NOTE: Authenticated user role for RLS policies
 export const authenticatedRole = pgRole('authenticated', {
@@ -1134,3 +1135,62 @@ export const tools = pgTable("tools", {
   config: jsonb("config").$type<ToolDefinitionData>().notNull(), // Typed JSONB configuration
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// AIDEV-NOTE: Puck CMS Tables - Visual page builder system
+// Organization-scoped apps containing pages with Puck template data
+
+export const puckApps = pgTable("puck_apps", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  description: text("description"),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  unique("puck_apps_org_slug_unique").on(table.organizationId, table.slug),
+  index("puck_apps_org_idx").on(table.organizationId),
+  pgPolicy("puck_apps_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+  }),
+]);
+
+export const puckPages = pgTable("puck_pages", {
+  id: serial("id").primaryKey(),
+  appId: integer("app_id")
+    .notNull()
+    .references(() => puckApps.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  description: text("description"),
+  order: integer("order").default(0).notNull(),
+  templateData: jsonb("template_data").notNull().$type<PuckDataStructure>(),
+  isPublished: boolean("is_published").default(false).notNull(),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  unique("puck_pages_app_slug_unique").on(table.appId, table.slug),
+  index("puck_pages_app_idx").on(table.appId),
+  index("puck_pages_order_idx").on(table.appId, table.order),
+  pgPolicy("puck_pages_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM puck_apps a
+      WHERE a.id = app_id
+      AND a.organization_id = current_setting('app.current_organization_id')::integer
+    )`,
+  }),
+]);
