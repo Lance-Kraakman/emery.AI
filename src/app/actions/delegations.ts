@@ -88,10 +88,8 @@ export async function getAgentDelegation(agentId: number): Promise<{ success: bo
         });
 
         if (createResult.success && createResult.data) {
-          // Fetch the newly created delegation
-          delegationResult = await delegationService.getDelegationForAgent(
-            AgentId.fromNumber(agentId)
-          );
+          // Use the newly created delegation directly (no need to re-fetch)
+          delegationResult = createResult;
         }
       }
 
