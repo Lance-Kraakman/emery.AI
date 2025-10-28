@@ -1,7 +1,8 @@
-import type { Agent, AgentSpecialization } from '@/ddd/domain/agents/entities/agent';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { ScheduleMapper } from './schedule-mapper';
+import type { ScheduleConfigurationDTO } from '@/app/dtos/schedule.dto';
 
 // AIDEV-NOTE: Serializable DTO types following the ToolMapper pattern
 // ToolConfig class instances cannot be serialized by Next.js Server Actions
@@ -18,13 +19,12 @@ export interface AgentDTO {
   role: string;
   description: string;
   persona: string;
-  schedules: any[]; // ScheduleConfiguration array with task instructions
+  schedules: ScheduleConfigurationDTO[];
   databaseId?: string | null;
   status: string;
   organizationId: number;
   ownerId: string; // Used for OAuth resolution via proxy
   apiKey?: string | null;
-  specialization?: AgentSpecialization;
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
@@ -44,7 +44,6 @@ export class AgentMapper {
       organizationId: agent.organizationId.value,
       ownerId: agent.ownerId.value,
       apiKey: agent.apiKey?.value || null,
-      specialization: agent.specialization,
       createdAt: agent.createdAt,
       updatedAt: agent.updatedAt
     };

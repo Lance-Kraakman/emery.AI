@@ -4,7 +4,6 @@ import { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { Row } from '@/ddd/domain/tables/value-objects/row';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-import type { ServerConfig } from '@/ddd/domain/agents/entities/agent';
 
 // Export the unified Result interface for use in Server Actions
 export type { Result } from '@/ddd/domain/shared/result';
@@ -103,7 +102,6 @@ export type { CreateAgentDTO as CreateAgentClientData } from '@/app/dtos/agent.d
 
 // Import agent types from domain layer
 export type {
-  ServerConfig,
   CreateAgentData
 } from '@/ddd/domain/agents/entities/agent';
 

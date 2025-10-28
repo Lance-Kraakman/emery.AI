@@ -26,7 +26,6 @@ export interface CreateAgentDTO {
   persona?: string;
   ownerId?: string; // User ID string - converted to UserId Value Object in application layer - used for OAuth resolution
   organizationId?: number; // Organization ID - converted to OrganizationId Value Object in application layer
-  specialization?: any;
   schedules?: ScheduleConfigurationDTO[]; // Schedules with task instructions
   status?: 'active' | 'inactive' | 'archived';
 }

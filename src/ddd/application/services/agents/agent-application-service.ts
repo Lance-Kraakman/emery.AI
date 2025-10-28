@@ -70,7 +70,6 @@ export class AgentApplicationService {
         persona: dto.persona,
         ownerId,
         organizationId,
-        specialization: dto.specialization,
         // Convert ScheduleConfigurationDTO[] to ScheduleConfiguration[]
         schedules: dto.schedules ? ScheduleMapper.fromDTOs(dto.schedules) : [],
         status: dto.status ? AgentStatus.fromString(dto.status) : undefined
@@ -89,7 +88,6 @@ export class AgentApplicationService {
         organizationId: organizationId,
         ownerId: ownerId,
         status: agentWithDefaults.status,
-        specialization: agentWithDefaults.specialization,
         databaseId: agentWithDefaults.databaseId
       };
 

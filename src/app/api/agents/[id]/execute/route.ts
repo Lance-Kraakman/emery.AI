@@ -15,7 +15,6 @@ import crypto from 'crypto';
 export interface AgentExecuteRequest {
   instructions: string; // Main instruction text
   tools?: Array<{name: string, version?: string, config?: Record<string, any>}>; // Optional tools
-  servers?: Array<{name: string, endpoint?: string, config?: Record<string, any>}>; // Optional servers
   metadata?: Record<string, any>; // Optional context metadata
   webhook_url?: string;
   timeout?: number;
@@ -70,7 +69,7 @@ export async function POST(
     }
 
     const body: AgentExecuteRequest = await request.json();
-    const { instructions, tools, servers, metadata, webhook_url, timeout = 30000 } = body;
+    const { instructions, tools, metadata, webhook_url, timeout = 30000 } = body;
 
     if (!instructions) {
       return Response.json({
@@ -95,7 +94,6 @@ export async function POST(
     const taskInstructions: TaskInstructions = {
       instructions,
       tools: toolConfigs,
-      servers,
       metadata
     };
     

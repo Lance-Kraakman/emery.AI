@@ -25,7 +25,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
    * Execute agent via gRPC worker
    */
   async executeAgent(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
-    const { agentId, instructions, skillName, tools, servers, executionId, organizationId, timeoutSeconds, onProgress } = request;
+    const { agentId, instructions, skillName, tools, executionId, organizationId, timeoutSeconds, onProgress } = request;
 
     console.log(`[GRPC-EXECUTION-REPO] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
     console.log(`[GRPC-EXECUTION-REPO-DEBUG] Capability routing:`, {
@@ -79,8 +79,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
               instructions,
               tools: this.enrichTools((tools || []).map(tool =>
                 tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
-              ), agent.apiKey?.value),
-              servers: servers || []
+              ), agent.apiKey?.value)
             },
             agent: enrichedAgent,
             triggerData: {}, // Empty for proto compatibility
@@ -98,7 +97,6 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         instructionConfig: taskRequest.instructionConfig,
         instructionsText: instructions,
         toolsCount: tools?.length || 0,
-        serversCount: servers?.length || 0,
         organizationId: taskRequest.organizationId
       }, null, 2));
 

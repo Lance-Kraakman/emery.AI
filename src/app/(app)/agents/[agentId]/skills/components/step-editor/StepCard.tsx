@@ -22,12 +22,10 @@ interface StepCardProps {
   instructions: string;
   model?: string;
   tools?: ToolConfigDTO[];
-  servers?: any[];
   onUpdate: (data: {
     instructions?: string;
     model?: string;
     tools?: ToolConfigDTO[];
-    servers?: any[];
   }) => void;
   onDelete: () => void;
   onMoveUp?: () => void;
@@ -51,7 +49,6 @@ export function StepCard({
   instructions,
   model,
   tools = [],
-  servers = [],
   onUpdate,
   onDelete,
   onMoveUp,

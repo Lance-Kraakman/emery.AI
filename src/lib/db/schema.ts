@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
+import type { ScheduleConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
 
 // AIDEV-NOTE: Authenticated user role for RLS policies
 export const authenticatedRole = pgRole('authenticated', {
@@ -412,7 +413,7 @@ export const agents = pgTable("agents", {
   description: text("description"),
   persona: text("persona"),
   ownerId: uuid("owner_id").notNull().references(() => users.id), // Agent owner - used for OAuth credential resolution via proxy
-  schedules: jsonb("schedules").$type<any[]>().default(sql`'[]'::jsonb`).notNull(), // Array of schedule configurations with task instructions
+  schedules: jsonb("schedules").$type<ScheduleConfigurationJSON[]>().default(sql`'[]'::jsonb`).notNull(), // Array of schedule configurations with task instructions
   databaseId: text("database_id"),
   status: text("status").default("active"),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),

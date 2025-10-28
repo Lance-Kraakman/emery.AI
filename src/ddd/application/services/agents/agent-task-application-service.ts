@@ -180,7 +180,6 @@ export class AgentTaskApplicationService {
         instructions: task.instructions.instructions,
         skillName: task.skillName || undefined,
         tools: task.instructions.tools,
-        servers: task.instructions.servers,
         executionId: task.id.value,
         organizationId: task.organizationId.value,
         ownerId: agent.ownerId.value,

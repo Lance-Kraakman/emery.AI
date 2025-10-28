@@ -21,7 +21,7 @@ interface ActivityDetailsModalProps {
 interface Task {
   id: string;
   name: string;
-  instructions: string | { instructions: string; tools?: any[]; servers?: any[] };
+  instructions: string | { instructions: string; tools?: any[] };
   skillName?: string;
   status: string;
   createdAt: string;
