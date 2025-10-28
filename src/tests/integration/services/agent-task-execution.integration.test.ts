@@ -35,7 +35,6 @@ interface CreateAndExecuteTaskTestInput {
   name: string;
   instructions: string;
   tools: ToolConfig[];
-  servers: { name: string }[];
   timeoutSeconds?: number;
 }
 
@@ -56,7 +55,6 @@ function createTaskExecutionTestCases(testAgentId: number): TestCase<CreateAndEx
         name: 'Simple Python Calculation',
         instructions: 'Calculate 2 + 2 using python and return the result',
         tools: [ToolConfig.basic('python_repl')],
-        servers: [],
         timeoutSeconds: 30
       },
       expected: { success: true, executionSuccess: true, taskCompleted: true }
@@ -68,7 +66,6 @@ function createTaskExecutionTestCases(testAgentId: number): TestCase<CreateAndEx
         name: 'Calculator Test',
         instructions: 'Use the calculator to compute 5 * 3',
         tools: [ToolConfig.basic('calculator')],
-        servers: [],
         timeoutSeconds: 30
       },
       expected: { success: true, executionSuccess: true, taskCompleted: true }
@@ -80,7 +77,6 @@ function createTaskExecutionTestCases(testAgentId: number): TestCase<CreateAndEx
         name: 'Math Expression Test',
         instructions: 'Calculate the square root of 16',
         tools: [ToolConfig.basic('calculator')],
-        servers: [],
         timeoutSeconds: 30
       },
       expected: { success: true, executionSuccess: true, taskCompleted: true }
@@ -162,8 +158,7 @@ describe('Agent Task Execution Integration Tests', () => {
         name: 'Creation Test Task',
         instructions: {
           instructions: 'Test task creation without execution',
-          tools: [ToolConfig.basic('python_repl')],
-          servers: []
+          tools: [ToolConfig.basic('python_repl')]
         }
       };
 
@@ -194,8 +189,7 @@ describe('Agent Task Execution Integration Tests', () => {
         name: 'Individual Execution Test',
         instructions: {
           instructions: 'Calculate 3 + 5 using python',
-          tools: [ToolConfig.basic('python_repl')],
-          servers: []
+          tools: [ToolConfig.basic('python_repl')]
         }
       };
 
@@ -251,8 +245,7 @@ describe('Agent Task Execution Integration Tests', () => {
           name: testCase.input.name,
           instructions: {
             instructions: testCase.input.instructions,
-            tools: testCase.input.tools,
-            servers: testCase.input.servers
+            tools: testCase.input.tools
           },
           createdBy: testContext.ownerUserId.value,
           timeoutSeconds: testCase.input.timeoutSeconds
@@ -315,7 +308,6 @@ describe('Agent Task Execution Integration Tests', () => {
           instructions: {
             instructions: `Task instructions for ${name}`,
             tools: [ToolConfig.basic('python_repl')],
-            servers: []
           }
         });
         expect(result.success).toBe(true);
@@ -357,7 +349,6 @@ describe('Agent Task Execution Integration Tests', () => {
         instructions: {
           instructions: 'This task will be cancelled',
           tools: [ToolConfig.basic('python_repl')],
-          servers: []
         }
       });
 
@@ -440,7 +431,6 @@ describe('Agent Task Execution Integration Tests', () => {
         instructions: {
           instructions: 'Task in organization 1',
           tools: [ToolConfig.basic('python_repl')],
-          servers: []
         }
       });
       expect(task1Result.success).toBe(true);
@@ -452,7 +442,6 @@ describe('Agent Task Execution Integration Tests', () => {
         instructions: {
           instructions: 'Task in organization 2',
           tools: [ToolConfig.basic('python_repl')],
-          servers: []
         }
       });
       expect(task2Result.success).toBe(true);

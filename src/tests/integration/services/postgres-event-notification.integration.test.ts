@@ -111,7 +111,6 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
           instructions: {
             instructions: 'Test event notification system',
             tools: [],
-            servers: []
           }
         });
         expect(result.success).toBe(true);
@@ -178,8 +177,7 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
             instructions: {
               instructions: `Concurrent test task ${i + 1}`,
               tools: [],
-              servers: []
-            }
+              }
           })
         );
 
@@ -303,7 +301,6 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
           instructions: {
             instructions: 'Test immediate event notification',
             tools: [],
-            servers: []
           }
         });
         expect(result.success).toBe(true);
