@@ -135,26 +135,27 @@ export function TriggerConfigModal({
     } else if (mode === 'edit' && agent.schedules[scheduleIndex]) {
       // Load existing schedule for editing
       const schedule = agent.schedules[scheduleIndex];
-      setSelectedType(schedule.type);
+      const trigger = schedule.trigger;
+      setSelectedType(trigger.type);
 
-      if (schedule.type === 'MANUAL') {
-        setManualConfig({ description: schedule.description || '' });
-      } else if (isCalendarTrigger(schedule)) {
+      if (trigger.type === 'MANUAL') {
+        setManualConfig({ description: trigger.description || '' });
+      } else if (trigger.type === 'CALENDAR') {
         setCalendarConfig({
-          rrule: schedule.rrule || '',
-          timezone: schedule.timezone || 'UTC',
-          startDate: schedule.startDate ? new Date(schedule.startDate) : undefined
+          rrule: trigger.rrule || '',
+          timezone: trigger.timezone || 'UTC',
+          startDate: trigger.startDate ? new Date(trigger.startDate) : undefined
         });
-      } else if (isDatabaseEventTrigger(schedule)) {
+      } else if (trigger.type === 'DATABASE_EVENT') {
         setDatabaseConfig({
-          operations: schedule.operations || ['INSERT', 'UPDATE'],
-          tableId: schedule.tableId
+          operations: trigger.operations || ['INSERT', 'UPDATE'],
+          tableId: trigger.tableId
         });
-      } else if (isWebhookTrigger(schedule)) {
+      } else if (trigger.type === 'WEBHOOK') {
         setWebhookConfig({
-          webhookSecret: schedule.webhookSecret || '',
-          requiresSignature: schedule.requiresSignature || false,
-          allowedOrigins: schedule.allowedOrigins || []
+          webhookSecret: trigger.webhookSecret || '',
+          requiresSignature: trigger.requiresSignature || false,
+          allowedOrigins: trigger.allowedOrigins || []
         });
       }
 
