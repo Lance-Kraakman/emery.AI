@@ -1,0 +1,20 @@
+{
+  "name": "your-app",
+  "dependencies": {
+    "@measured/puck": "^0.18.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^9.0.0",
+    "lexical": "^0.20.0",
+    "@lexical/react": "^0.20.0",
+    "@lexical/list": "^0.20.0",
+    "@lexical/rich-text": "^0.20.0",
+    "@lexical/link": "^0.20.0",
+    "@lexical/selection": "^0.20.0",
+    "@lexical/utils": "^0.20.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
+  }
+}
