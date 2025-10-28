@@ -18,13 +18,11 @@ export interface AgentDTO {
   role: string;
   description: string;
   persona: string;
-  tools: ToolConfigDTO[];
-  servers: any[];
-  schedules: any[]; // TriggerConfig array
+  schedules: any[]; // ScheduleConfiguration array with task instructions
   databaseId?: string | null;
   status: string;
   organizationId: number;
-  ownerId: string;
+  ownerId: string; // Used for OAuth resolution via proxy
   apiKey?: string | null;
   agentType?: AgentType;
   specialization?: AgentSpecialization;
@@ -40,9 +38,6 @@ export class AgentMapper {
       role: agent.role,
       description: agent.description,
       persona: agent.persona,
-      // Serialize ToolConfig instances to plain DTOs
-      tools: agent.tools.map(tool => tool.toPlain()),
-      servers: agent.servers,
       // Use ScheduleMapper to convert ScheduleConfiguration to ScheduleConfigurationDTO
       schedules: agent.schedules.map(schedule => ScheduleMapper.toDTO(schedule)),
       databaseId: agent.databaseId,

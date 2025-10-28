@@ -7,7 +7,7 @@
  */
 
 import type { ToolConfigDTO, AgentDTO as AgentDTOFromMapper } from '@/app/mappers/agent-mapper';
-import type { ServerConfig, AgentType } from '@/ddd/domain/agents/entities/agent';
+import type { AgentType } from '@/ddd/domain/agents/entities/agent';
 import type { ScheduleConfigurationDTO } from './schedule.dto';
 
 // Re-export the canonical AgentDTO from mapper
@@ -17,18 +17,18 @@ export type { ToolConfigDTO };
 /**
  * DTO for creating a new agent
  * Used by both client and application layer
+ * AIDEV-NOTE: Tools are defined per-task (skills/schedules/chat), not per-agent
+ * OAuth credentials resolved via agent.ownerId through proxy
  */
 export interface CreateAgentDTO {
   name: string;
   role?: string;
   description?: string;
   persona?: string;
-  ownerId?: string; // User ID string - converted to UserId Value Object in application layer
+  ownerId?: string; // User ID string - converted to UserId Value Object in application layer - used for OAuth resolution
   organizationId?: number; // Organization ID - converted to OrganizationId Value Object in application layer
   agentType?: AgentType;
   specialization?: any;
-  tools?: ToolConfigDTO[];
-  servers?: ServerConfig[];
   schedules?: ScheduleConfigurationDTO[]; // Schedules with task instructions
   status?: 'active' | 'inactive' | 'archived';
 }
@@ -44,8 +44,6 @@ export interface UpdateAgentDTO {
   description?: string;
   persona?: string;
   ownerId?: string;
-  tools?: ToolConfigDTO[];
-  servers?: ServerConfig[];
   schedules?: ScheduleConfigurationDTO[]; // Schedules with task instructions
   status?: 'active' | 'inactive' | 'archived';
 }
