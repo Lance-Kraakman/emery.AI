@@ -53,7 +53,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
     description: agent.description || '',
     persona: agent.persona || '',
     status: agent.status || 'active',
-    schedules: agent.schedules || [TriggerConfigs.manual()]
+    schedules: agent.schedules?.length > 0 ? agent.schedules : [TriggerConfigs.manual()]
   });
 
   const handleEdit = () => {
@@ -64,7 +64,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
       description: agent.description || '',
       persona: agent.persona || '',
       status: agent.status || 'active',
-      schedules: agent.schedules || [TriggerConfigs.manual()]
+      schedules: agent.schedules?.length > 0 ? agent.schedules : [TriggerConfigs.manual()]
     });
   };
 
@@ -76,7 +76,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
       description: agent.description || '',
       persona: agent.persona || '',
       status: agent.status || 'active',
-      schedules: agent.schedules || [TriggerConfigs.manual()]
+      schedules: agent.schedules?.length > 0 ? agent.schedules : [TriggerConfigs.manual()]
     });
   };
 
@@ -405,7 +405,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                 <div className="space-y-3">
                   <div>
                     <h4 className="font-medium text-foreground mb-2 text-sm">Trigger Type</h4>
-                    <Select value={editFormData.schedules[0].type || 'MANUAL'} onValueChange={handleTriggerTypeChange}>
+                    <Select value={editFormData.schedules?.[0]?.type || 'MANUAL'} onValueChange={handleTriggerTypeChange}>
                       <SelectTrigger className="w-full">
                         <SelectValue />
                       </SelectTrigger>
@@ -419,7 +419,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                   </div>
 
                   {/* Trigger Type Specific Configuration */}
-                  {editFormData.schedules[0].type === 'MANUAL' && (
+                  {editFormData.schedules?.[0]?.type === 'MANUAL' && (
                     <div className="space-y-3">
                       <p className="text-xs text-muted-foreground">
                         Agent will execute only when manually triggered by users.
@@ -435,7 +435,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                       <div>
                         <h5 className="font-medium text-sm mb-1">Execution Context</h5>
                         <Input
-                          value={editFormData.schedules[0].description || ''}
+                          value={editFormData.schedules?.[0]?.description || ''}
                           onChange={(e) => handleTriggerConfigChange({ description: e.target.value })}
                           placeholder="Optional: Describe when this agent should be triggered"
                           className="text-sm"
@@ -447,7 +447,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                     </div>
                   )}
 
-                  {editFormData.schedules[0].type === 'CALENDAR' && (
+                  {editFormData.schedules?.[0]?.type === 'CALENDAR' && (
                     <div className="space-y-3">
                       <p className="text-xs text-muted-foreground">
                         Configure recurring schedules using the calendar interface.
@@ -457,7 +457,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                         <div>
                           <h5 className="font-medium text-sm mb-1">Timezone</h5>
                           <Input
-                            value={isCalendarTrigger(editFormData.schedules[0]) ? editFormData.schedules[0].timezone || '' : ''}
+                            value={isCalendarTrigger(editFormData.schedules?.[0]) ? editFormData.schedules?.[0]?.timezone || '' : ''}
                             onChange={(e) => handleTriggerConfigChange({ timezone: e.target.value })}
                             placeholder="UTC"
                             className="text-sm"
@@ -471,7 +471,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                           <h5 className="font-medium text-sm mb-1">Start Date</h5>
                           <Input
                             type="datetime-local"
-                            value={isCalendarTrigger(editFormData.schedules[0]) && editFormData.schedules[0].startDate
+                            value={isCalendarTrigger(editFormData.schedules?.[0]) && editFormData.schedules?.[0]?.startDate
                               ? new Date(editFormData.schedules[0].startDate).toISOString().slice(0, 16)
                               : ''
                             }
@@ -487,7 +487,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                       <div>
                         <h5 className="font-medium text-sm mb-2">Schedule Configuration</h5>
                         <ScheduleManager
-                          initialRRule={getCalendarRRule(editFormData.schedules[0])}
+                          initialRRule={getCalendarRRule(editFormData.schedules?.[0])}
                           onScheduleChange={(rrule) => {
                             handleTriggerConfigChange({ rrule });
                           }}
@@ -497,7 +497,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                     </div>
                   )}
 
-                  {editFormData.schedules[0].type === 'DATABASE_EVENT' && (
+                  {editFormData.schedules?.[0]?.type === 'DATABASE_EVENT' && (
                     <div className="space-y-3">
                       <p className="text-xs text-muted-foreground">
                         Trigger agent execution when database changes occur.
@@ -506,7 +506,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                       <div>
                         <h5 className="font-medium text-sm mb-2">Table Selection</h5>
                         <TableSelector
-                          value={getDatabaseEventTableId(editFormData.schedules[0])}
+                          value={getDatabaseEventTableId(editFormData.schedules?.[0])}
                           onValueChange={(tableId) => {
                             handleTriggerConfigChange({ tableId });
                           }}
@@ -525,9 +525,9 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                             <label key={op} className="flex items-center gap-1">
                               <input
                                 type="checkbox"
-                                checked={getDatabaseEventOperations(editFormData.schedules[0]).includes(op as 'INSERT' | 'UPDATE' | 'DELETE')}
+                                checked={getDatabaseEventOperations(editFormData.schedules?.[0]).includes(op as 'INSERT' | 'UPDATE' | 'DELETE')}
                                 onChange={(e) => {
-                                  const current = getDatabaseEventOperations(editFormData.schedules[0]);
+                                  const current = getDatabaseEventOperations(editFormData.schedules?.[0]);
                                   const newOps = e.target.checked
                                     ? [...current, op as 'INSERT' | 'UPDATE' | 'DELETE']
                                     : current.filter((o) => o !== op);
@@ -543,7 +543,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                   )}
 
 
-                  {editFormData.schedules[0].type === 'WEBHOOK' && (
+                  {editFormData.schedules?.[0]?.type === 'WEBHOOK' && (
                     <div className="space-y-3">
                       <p className="text-xs text-muted-foreground">
                         Trigger agent execution via webhook HTTP calls.
@@ -564,7 +564,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                           <h5 className="font-medium text-sm mb-1">Webhook Secret</h5>
                           <Input
                             type="password"
-                            value={getWebhookSecret(editFormData.schedules[0]) || ''}
+                            value={getWebhookSecret(editFormData.schedules?.[0]) || ''}
                             onChange={(e) => handleTriggerConfigChange({ webhookSecret: e.target.value })}
                             placeholder="Optional security secret"
                             className="text-sm"
@@ -577,7 +577,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                         <div>
                           <h5 className="font-medium text-sm mb-1">Allowed Origins</h5>
                           <Input
-                            value={isWebhookTrigger(editFormData.schedules[0]) ? editFormData.schedules[0].allowedOrigins?.join(', ') || '' : ''}
+                            value={isWebhookTrigger(editFormData.schedules?.[0]) ? editFormData.schedules?.[0]?.allowedOrigins?.join(', ') || '' : ''}
                             onChange={(e) => {
                               const origins = e.target.value.split(',').map(o => o.trim()).filter(o => o);
                               handleTriggerConfigChange({ allowedOrigins: origins.length > 0 ? origins : undefined });
@@ -593,7 +593,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                         <label className="flex items-center gap-2 text-sm">
                           <input
                             type="checkbox"
-                            checked={getWebhookRequiresSignature(editFormData.schedules[0])}
+                            checked={getWebhookRequiresSignature(editFormData.schedules?.[0])}
                             onChange={(e) => handleTriggerConfigChange({ requiresSignature: e.target.checked })}
                           />
                           <span>Require HMAC signature verification</span>
