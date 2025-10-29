@@ -34,22 +34,23 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
   const [loadingPages, setLoadingPages] = useState(true);
 
   // Load pages for this app
-  useEffect(() => {
-    async function loadPages() {
-      try {
-        setLoadingPages(true);
-        const pagesData = await getPages(app.id);
-        setPages(pagesData);
-        appsActions.setPages(pagesData);
-      } catch (error) {
-        console.error('Error loading pages:', error);
-        toast.error("Failed to load pages for this app");
-      } finally {
-        setLoadingPages(false);
-      }
+  const loadPages = async () => {
+    try {
+      setLoadingPages(true);
+      const pagesData = await getPages(app.id);
+      setPages(pagesData);
+      appsActions.setPages(pagesData);
+    } catch (error) {
+      console.error('Error loading pages:', error);
+      toast.error("Failed to load pages for this app");
+    } finally {
+      setLoadingPages(false);
     }
+  };
+
+  useEffect(() => {
     loadPages();
-  }, [app.id, toast]);
+  }, [app.id]);
 
   const handleEdit = () => {
     appsActions.setEditMode(true, app.id);
@@ -129,7 +130,7 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
       </Card>
 
       {/* Pages Section */}
-      <PagesSection appId={app.id} pages={pages} loading={loadingPages} />
+      <PagesSection appId={app.id} pages={pages} loading={loadingPages} onPagesChange={loadPages} />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
