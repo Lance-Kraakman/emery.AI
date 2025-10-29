@@ -403,3 +403,32 @@ export async function getSkillsByOrganization(organizationId: number): Promise<R
     };
   }
 }
+
+/**
+ * Create a default organization skill with minimal data
+ * Used for quick creation from sidebar + button
+ */
+export async function createDefaultOrganizationSkill(): Promise<Result<SkillDTO>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id || !session?.user?.currentOrganizationId) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    return createOrganizationSkill({
+      organizationId: session.user.currentOrganizationId,
+      name: "Untitled Skill",
+      description: "",
+      inputs: [],
+      outputs: [],
+      instructions: "Add instructions here...",
+      tools: []
+    });
+  } catch (error) {
+    console.error('[createDefaultOrganizationSkill] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to create default skill'
+    };
+  }
+}
