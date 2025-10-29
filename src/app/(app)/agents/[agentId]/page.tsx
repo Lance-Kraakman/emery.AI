@@ -2,12 +2,12 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getAgent } from "@/app/actions/agents";
 import { CanvasBase } from "@/components/canvas";
-import AgentDetailsView from "../components/AgentDetailsView";
+import { AgentDetailsWrapper } from "../components/AgentDetailsWrapper";
 import { Suspense } from "react";
 import { Loading } from "@/components/ui/loading";
 
-// AIDEV-NOTE: Agent detail page - renders individual agent view
-// Uses CanvasBase for minimal wrapper with collapse functionality
+// AIDEV-NOTE: Agent detail page - renders NewAgentDetailsView with configuration cards
+// Shows Basic Information, Schedule Configuration, Authorized Connections, Activity, and Skills
 
 interface AgentPageProps {
   params: Promise<{ agentId: string }>;
@@ -36,7 +36,7 @@ export default async function AgentPage({ params }: AgentPageProps) {
   return (
     <CanvasBase>
       <Suspense fallback={<Loading text="Loading agent..." />}>
-        <AgentDetailsView agent={agent} />
+        <AgentDetailsWrapper agent={agent} />
       </Suspense>
     </CanvasBase>
   );

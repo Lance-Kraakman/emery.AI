@@ -1,41 +1,23 @@
 'use client';
 
-// AIDEV-NOTE: Main agents list view with list/detail pattern
-// Shows agent cards in list view, switches to NewAgentDetailsView for details
+// AIDEV-NOTE: Agents list view showing grid of all agents
+// Clicking an agent navigates to /agents/[id] for detail view
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Plus, Bot, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import { NewAgentDetailsView } from './NewAgentDetailsView';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 interface AgentsListViewProps {
   agents: AgentDTO[];
 }
 
-export function AgentsListView({ agents: initialAgents }: AgentsListViewProps) {
+export function AgentsListView({ agents }: AgentsListViewProps) {
   const router = useRouter();
-  const [agents, setAgents] = useState(initialAgents);
-  const [selectedAgent, setSelectedAgent] = useState<AgentDTO | null>(null);
-
-  // Handle agent updates from detail view
-  const handleUpdate = () => {
-    router.refresh(); // Refresh server data
-  };
-
-  // If an agent is selected, show detail view
-  if (selectedAgent) {
-    return (
-      <NewAgentDetailsView
-        agent={selectedAgent}
-        onBack={() => setSelectedAgent(null)}
-        onUpdate={handleUpdate}
-      />
-    );
-  }
 
   // Show list view
   return (
@@ -76,11 +58,8 @@ export function AgentsListView({ agents: initialAgents }: AgentsListViewProps) {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {agents.map(agent => (
-            <Card
-              key={agent.id}
-              className="p-6 hover:shadow-lg transition-shadow cursor-pointer group"
-              onClick={() => setSelectedAgent(agent)}
-            >
+            <Link key={agent.id} href={`/agents/${agent.id}`}>
+              <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer group">
               <div className="space-y-4">
                 {/* Agent Header */}
                 <div className="flex items-start justify-between">
@@ -132,7 +111,8 @@ export function AgentsListView({ agents: initialAgents }: AgentsListViewProps) {
                   </div>
                 )}
               </div>
-            </Card>
+              </Card>
+            </Link>
           ))}
         </div>
       )}
