@@ -44,6 +44,8 @@ import { createPage } from "@/app/actions/puck-pages"
 import { createDefaultAgent } from "@/app/actions/agents"
 import { createDefaultTeam } from "@/app/actions/teams"
 import { createDefaultOrganizationSkill } from "@/app/actions/skills"
+import { createDatabase } from "@/app/actions/databases"
+import { createTable } from "@/app/actions/tables"
 import { toast } from "sonner"
 
 // AIDEV-NOTE: New sidebar using shadcn/ui sidebar component
@@ -53,12 +55,14 @@ import { toast } from "sonner"
 interface AppData {
   id: number
   name: string
+  slug: string
   pages?: PageData[]
 }
 
 interface PageData {
   id: number
   name: string
+  slug: string
   appId: number
 }
 
@@ -195,6 +199,42 @@ export function AppSidebar({
     }
   }
 
+  const handleCreateDatabase = async () => {
+    setIsCreating(true)
+    try {
+      const result = await createDatabase({ name: "Untitled Database" })
+      if (result.success && result.data) {
+        toast.success("Database created")
+        router.push(`/data`)
+        router.refresh()
+      } else {
+        toast.error(result.error || "Failed to create database")
+      }
+    } catch (error) {
+      toast.error("Failed to create database")
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  const handleCreateTable = async (databaseId: number) => {
+    setIsCreating(true)
+    try {
+      const result = await createTable({ name: "Untitled Table", databaseId })
+      if (result.success && result.data) {
+        toast.success("Table created")
+        router.push(`/data`)
+        router.refresh()
+      } else {
+        toast.error(result.error || "Failed to create table")
+      }
+    } catch (error) {
+      toast.error("Failed to create table")
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
   return (
     <Sidebar>
       <SidebarHeader className="border-b p-4">
@@ -268,7 +308,7 @@ export function AppSidebar({
                               {app.pages.map((page) => (
                                 <SidebarMenuSubItem key={page.id}>
                                   <SidebarMenuSubButton asChild>
-                                    <a href={`/apps/${app.id}/pages/${page.id}`}>
+                                    <a href={`/puck-demo${app.slug}${page.slug}`}>
                                       <FileText className="h-3 w-3" />
                                       <span>{page.name}</span>
                                     </a>
@@ -427,7 +467,7 @@ export function AppSidebar({
           </SidebarGroup>
         </Collapsible>
 
-        {/* Data (Keep existing nested pattern) */}
+        {/* Data - Databases with nested tables */}
         <Collapsible defaultOpen={pathname?.startsWith("/data")}>
           <SidebarGroup>
             <SidebarGroupLabel asChild>
@@ -439,11 +479,58 @@ export function AppSidebar({
             <CollapsibleContent>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {/* TODO: Implement databases list */}
+                  {databases.map((database) => (
+                    <Collapsible key={database.id}>
+                      <SidebarMenuItem>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton
+                            asChild
+                            isActive={pathname === `/data`}
+                          >
+                            <a href={`/data`}>{database.name}</a>
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+                        {database.tables && database.tables.length > 0 && (
+                          <CollapsibleContent>
+                            <SidebarMenuSub>
+                              {database.tables.map((table) => (
+                                <SidebarMenuSubItem key={table.id}>
+                                  <SidebarMenuSubButton asChild>
+                                    <a href={`/data`}>
+                                      <FileText className="h-3 w-3" />
+                                      <span>{table.name}</span>
+                                    </a>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              ))}
+                              <SidebarMenuSubItem>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="w-full justify-start h-8"
+                                  onClick={() => handleCreateTable(database.id)}
+                                  disabled={isCreating}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                  <span>Add Table</span>
+                                </Button>
+                              </SidebarMenuSubItem>
+                            </SidebarMenuSub>
+                          </CollapsibleContent>
+                        )}
+                      </SidebarMenuItem>
+                    </Collapsible>
+                  ))}
                   <SidebarMenuItem>
-                    <SidebarMenuButton asChild>
-                      <a href="/data">View Databases</a>
-                    </SidebarMenuButton>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start"
+                      onClick={handleCreateDatabase}
+                      disabled={isCreating}
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Add Database</span>
+                    </Button>
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
