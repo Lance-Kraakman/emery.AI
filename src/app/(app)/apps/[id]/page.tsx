@@ -1,0 +1,44 @@
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { getApp, getPages } from "@/app/actions/puck-apps";
+import { AppWindow } from "lucide-react";
+import { BasePage } from "@/components/canvas";
+import { AppDetailsView } from "../components/AppDetailsView";
+import { Suspense } from "react";
+import { Loading } from "@/components/ui/loading";
+
+interface AppPageProps {
+  params: { id: string };
+}
+
+export default async function AppPage({ params }: AppPageProps) {
+  const session = await auth();
+
+  if (!session?.user) {
+    redirect("/auth/signin");
+  }
+
+  const appId = parseInt(params.id, 10);
+
+  if (isNaN(appId)) {
+    redirect("/mission-control");
+  }
+
+  const app = await getApp(appId);
+
+  if (!app) {
+    redirect("/mission-control");
+  }
+
+  return (
+    <BasePage
+      title={app.name}
+      subtitle={`Manage app and pages`}
+      icon={<AppWindow className="h-5 w-5" />}
+    >
+      <Suspense fallback={<Loading text="Loading app..." />}>
+        <AppDetailsView app={app} />
+      </Suspense>
+    </BasePage>
+  );
+}

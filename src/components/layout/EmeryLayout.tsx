@@ -1,7 +1,8 @@
 'use client'
 
 import React, { Suspense } from 'react'
-import { EmerySidebar } from '@/components/EmerySidebar'
+import { AppSidebarWrapper } from '@/components/app-sidebar-wrapper'
+import { SidebarProvider } from '@/components/ui/sidebar'
 import { Loading } from '@/components/ui/loading'
 import { EmeryCanvas } from '@/components/chat/EmeryCanvas'
 import { EmeryChat } from '@/components/chat/EmeryChat'
