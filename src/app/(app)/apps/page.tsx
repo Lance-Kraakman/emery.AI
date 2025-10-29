@@ -1,36 +1,16 @@
-import React, { Suspense } from 'react';
+import { redirect } from 'next/navigation';
 import { getApps } from '@/app/actions/puck-apps';
-import { Loading } from '@/components/ui/loading';
-import { auth } from '@/lib/auth';
-import { AppsPage as AppsPageLayout } from '@/components/canvas';
-import AppsDashboardClient from './components/AppsDashboardClient';
 
-// AIDEV-NOTE: Apps page for Puck CMS visual page builder management
-// Uses canvas architecture with collapsible layout for chat integration
+// AIDEV-NOTE: Apps list now shown in sidebar
+// This page redirects to first app or mission-control
 
 export default async function AppsPage() {
-  // Get current user's organization
-  const session = await auth();
-  const organizationId = session?.user?.currentOrganizationId;
-
-  if (!organizationId) {
-    return (
-      <AppsPageLayout>
-        <div className="flex items-center justify-center h-full">
-          <p className="text-muted-foreground">No organization selected</p>
-        </div>
-      </AppsPageLayout>
-    );
-  }
-
-  // Fetch initial data on the server
   const apps = await getApps();
 
-  return (
-    <AppsPageLayout>
-      <Suspense fallback={<Loading text="Loading apps..." />}>
-        <AppsDashboardClient initialApps={apps} />
-      </Suspense>
-    </AppsPageLayout>
-  );
+  // Redirect to first app if exists, otherwise to mission-control
+  if (apps && apps.length > 0) {
+    redirect(`/apps/${apps[0].id}`);
+  }
+
+  redirect("/mission-control/dashboard");
 }
