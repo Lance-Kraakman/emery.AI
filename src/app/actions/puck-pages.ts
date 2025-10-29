@@ -16,11 +16,11 @@ import { PuckPageMapper, type PageDTO } from "@/app/mappers/puck-page-mapper"
 
 const createPageSchema = z.object({
   appId: z.number(),
-  name: z.string().min(1, "Page name is required"),
+  name: z.string().min(1, "Page name is required").optional(),
   slug: z.string().min(1, "Page slug is required").regex(
     /^\/[a-z0-9-\/]*[a-z0-9]$/,
     "Slug must start with /, contain only lowercase letters, numbers, hyphens, and forward slashes, and end with a letter or number"
-  ),
+  ).optional(),
   description: z.string().optional(),
   templateData: z.any().optional(), // Puck JSON structure
 })
@@ -142,19 +142,34 @@ export async function getPageBySlug(appId: number, slug: string): Promise<PageDT
 
 /**
  * Create a new Puck page
+ * If name/slug not provided, creates "Untitled Page" with auto-generated slug
  */
 export async function createPage(data: z.infer<typeof createPageSchema>, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("apps:create");
 
     const validatedData = createPageSchema.parse(data);
-
     const pageService = getPuckPageApplicationService();
+
+    // Generate defaults if not provided
+    const name = validatedData.name || "Untitled Page";
+    let slug = validatedData.slug;
+
+    if (!slug) {
+      const slugResult = await pageService.generateSlugFromName(
+        AppId.fromNumber(validatedData.appId),
+        name
+      );
+      if (!slugResult.success) {
+        return { success: false, error: "Failed to generate slug" };
+      }
+      slug = slugResult.data!;
+    }
 
     const result = await pageService.createPage({
       appId: AppId.fromNumber(validatedData.appId),
-      name: validatedData.name,
-      slug: validatedData.slug,
+      name,
+      slug,
       description: validatedData.description,
       templateData: validatedData.templateData,
       createdBy: UserId.fromString(session.user.id)

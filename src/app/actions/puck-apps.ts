@@ -16,11 +16,11 @@ import { AppId } from "@/ddd/domain/puck/value-objects/app-id"
 import { AppMapper, type AppDTO } from "@/app/mappers/puck-app-mapper"
 
 const createAppSchema = z.object({
-  name: z.string().min(1, "App name is required"),
+  name: z.string().min(1, "App name is required").optional(),
   slug: z.string().min(1, "App slug is required").regex(
     /^[a-z][a-z0-9-]*[a-z0-9]$/,
     "Slug must start with a letter, contain only lowercase letters, numbers, and hyphens, and end with a letter or number"
-  ),
+  ).optional(),
   description: z.string().optional(),
 })
 
@@ -142,19 +142,34 @@ export async function getAppWithPages(id: number) {
 
 /**
  * Create a new Puck app
+ * If no data is provided, creates a default "Untitled App" with auto-generated slug
  */
-export async function createApp(data: z.infer<typeof createAppSchema>, revalidateUrl?: string): Promise<Result> {
+export async function createApp(data?: z.infer<typeof createAppSchema>, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("apps:create");
     const currentOrg = await requireCurrentOrganization();
 
-    const validatedData = createAppSchema.parse(data);
-
+    const validatedData = createAppSchema.parse(data || {});
     const appService = getAppApplicationService();
 
+    // Generate defaults if not provided
+    const name = validatedData.name || "Untitled App";
+    let slug = validatedData.slug;
+
+    if (!slug) {
+      const slugResult = await appService.generateSlugFromName(
+        OrganizationId.fromNumber(currentOrg.id),
+        name
+      );
+      if (!slugResult.success) {
+        return { success: false, error: "Failed to generate slug" };
+      }
+      slug = slugResult.data!;
+    }
+
     const result = await appService.createApp({
-      name: validatedData.name,
-      slug: validatedData.slug,
+      name,
+      slug,
       description: validatedData.description,
       organizationId: OrganizationId.fromNumber(currentOrg.id),
       createdBy: UserId.fromString(session.user.id)

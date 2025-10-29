@@ -101,6 +101,23 @@ export async function createAgentFromClient(data: CreateAgentClientData): Promis
   return createAgent(domainData);
 }
 
+/**
+ * Create a default agent with minimal data
+ * Used for quick creation from sidebar + button
+ */
+export async function createDefaultAgent(): Promise<Result> {
+  return withAuthContext(async () => {
+    const defaultData: CreateAgentClientData = {
+      name: "Untitled Agent",
+      role: "Assistant",
+      description: "",
+      persona: "",
+      status: "active",
+    };
+    return createAgentFromClient(defaultData);
+  });
+}
+
 // Helper function for updating agents from client data (with plain types)
 export async function updateAgentFromClient(agentId: number, data: Partial<CreateAgentClientData>, revalidateUrl?: string): Promise<Result> {
   // AIDEV-NOTE: Serialize TriggerConfig instances to JSON for database storage

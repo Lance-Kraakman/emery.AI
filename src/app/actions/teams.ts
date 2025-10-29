@@ -24,6 +24,21 @@ export async function createTeamFromClient(data: CreateTeamClientData): Promise<
   return withAuthContext(() => createTeam(data));
 }
 
+/**
+ * Create a default team with minimal data
+ * Used for quick creation from sidebar + button
+ */
+export async function createDefaultTeam(): Promise<Result> {
+  return withAuthContext(async () => {
+    const defaultData: CreateTeamClientData = {
+      name: "Untitled Team",
+      purpose: "",
+      description: "",
+    };
+    return createTeamFromClient(defaultData);
+  });
+}
+
 // Helper function for updating teams from client data (with plain types)
 export async function updateTeamFromClient(teamId: number, data: Partial<CreateTeamClientData>): Promise<Result> {
   // No conversion needed for teams since they use the same plain types
