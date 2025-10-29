@@ -1,19 +1,17 @@
 'use client'
 
 import React from 'react'
-import { BasePage } from './BasePage'
+import { CanvasBase } from './CanvasBase'
 import { BarChart, Database, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 /**
- * MissionControlPage - Page for Mission Control dashboard
- * 
- * Features:
- * - Overview dashboard with key metrics
- * - Quick access to main system areas
- * - Status indicators and recent activity
- * 
- * AIDEV-NOTE: Mission Control page showing dashboard overview.
+ * MissionControlPage - Wrapper for Mission Control dashboard
+ *
+ * Uses CanvasBase for minimal wrapper with collapse functionality.
+ * Pages manage their own headers and styling.
+ *
+ * AIDEV-NOTE: Mission Control page wrapper showing dashboard overview.
  */
 
 interface MissionControlPageProps {
@@ -22,16 +20,7 @@ interface MissionControlPageProps {
 
 export function MissionControlPage({ children }: MissionControlPageProps) {
   return (
-    <BasePage
-      title="Mission Control Dashboard"
-      subtitle="System overview and quick actions"
-      icon={<BarChart className="h-5 w-5" />}
-      headerActions={
-        <Button variant="outline" size="sm">
-          Refresh
-        </Button>
-      }
-    >
+    <CanvasBase>
       {children || (
         <div className="h-full flex flex-col overflow-auto">
           <div className="flex-1 p-6">
@@ -89,6 +78,6 @@ export function MissionControlPage({ children }: MissionControlPageProps) {
           </div>
         </div>
       )}
-    </BasePage>
+    </CanvasBase>
   )
 }

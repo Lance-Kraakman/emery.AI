@@ -14,7 +14,7 @@ import React from 'react';
 import { InstructionsWithToolsInput } from '@/components/shared/InstructionsWithToolsInput';
 import type { ToolConfigDTO } from '@/app/mappers/skill-mapper';
 
-interface StepInstructionsInputProps {
+interface InstructionsInputProps {
   value: string;
   onChange: (value: string) => void;
   onToolsChange: (tools: ToolConfigDTO[]) => void;
@@ -22,13 +22,13 @@ interface StepInstructionsInputProps {
   stepIndex: number;
 }
 
-export function StepInstructionsInput({
+export function InstructionsInput({
   value,
   onChange,
   onToolsChange,
   tools,
   stepIndex
-}: StepInstructionsInputProps) {
+}: InstructionsInputProps) {
   return (
     <InstructionsWithToolsInput
       value={value}

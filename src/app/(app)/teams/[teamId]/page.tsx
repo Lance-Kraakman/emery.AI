@@ -2,14 +2,13 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getTeam } from "@/app/actions/teams";
 import { getAgents } from "@/app/actions/agents";
-import { Users } from "lucide-react";
-import { BasePage } from "@/components/canvas";
+import { CanvasBase } from "@/components/canvas";
 import TeamDetailsView from "../components/TeamDetailsView";
 import { Suspense } from "react";
 import { Loading } from "@/components/ui/loading";
 
 // AIDEV-NOTE: Team detail page - renders individual team view
-// Created to fix 404 errors when navigating from sidebar
+// Uses CanvasBase for minimal wrapper with collapse functionality
 
 interface TeamPageProps {
   params: Promise<{ teamId: string }>;
@@ -40,14 +39,10 @@ export default async function TeamPage({ params }: TeamPageProps) {
   }
 
   return (
-    <BasePage
-      title={team.name}
-      subtitle={team.purpose || "Team"}
-      icon={<Users className="h-5 w-5" />}
-    >
+    <CanvasBase>
       <Suspense fallback={<Loading text="Loading team..." />}>
         <TeamDetailsView team={team} agents={agents || []} />
       </Suspense>
-    </BasePage>
+    </CanvasBase>
   );
 }

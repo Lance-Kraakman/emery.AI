@@ -1,19 +1,17 @@
 'use client'
 
 import React from 'react'
-import { BasePage } from './BasePage'
+import { CanvasBase } from './CanvasBase'
 import { Database, Plus, Table } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 /**
- * DataPage - Page for Data tables management
- * 
- * Features:
- * - Data table listing and management
- * - Table creation and schema editing
- * - Data viewing and editing
- * 
- * AIDEV-NOTE: Data page for managing database tables and data.
+ * DataPage - Wrapper for Data tables management
+ *
+ * Uses CanvasBase for minimal wrapper with collapse functionality.
+ * Pages manage their own headers and styling.
+ *
+ * AIDEV-NOTE: Data page wrapper for managing database tables and data.
  */
 
 interface DataPageProps {
@@ -23,15 +21,8 @@ interface DataPageProps {
 }
 
 export function DataPage({ tableId, tableName, children }: DataPageProps) {
-  const title = tableId ? (tableName || 'Data Table') : 'Data Tables'
-  const subtitle = tableId ? `Manage table data and schema` : 'Create and manage your data tables'
-
   return (
-    <BasePage
-      title={title}
-      subtitle={subtitle}
-      icon={tableId ? <Table className="h-5 w-5" /> : <Database className="h-5 w-5" />}
-    >
+    <CanvasBase>
       <div className="h-full flex flex-col overflow-hidden">
         {children || (
           <div className="flex-1 flex items-center justify-center p-6">
@@ -49,6 +40,6 @@ export function DataPage({ tableId, tableName, children }: DataPageProps) {
           </div>
         )}
       </div>
-    </BasePage>
+    </CanvasBase>
   )
 }
