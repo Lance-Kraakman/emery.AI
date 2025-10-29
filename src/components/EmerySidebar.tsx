@@ -19,6 +19,7 @@ import {
   Plus,
   SlidersHorizontal,
   LogOut,
+  AppWindow,
 } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -35,6 +36,7 @@ import { storeActions, uiStateActions } from '@/stores/actions'
 const navItems = [
   { href: "/mission-control", label: "Mission Control", icon: Target },
   { href: "/organization", label: "Orchestration", icon: Workflow },
+  { href: "/apps", label: "Apps", icon: AppWindow },
   { href: "/connections", label: "Settings", icon: Settings },
 ]
 
@@ -92,6 +94,8 @@ export function EmerySidebar() {
       uiStateActions.setOpenCollapsibles(["Orchestration"])
     } else if (settingsPaths.includes(pathname)) {
       uiStateActions.setOpenCollapsibles(["Settings"])
+    } else if (pathname?.startsWith("/apps")) {
+      uiStateActions.setOpenCollapsibles(["Apps"])
     } else if (pathname?.startsWith("/data")) {
       uiStateActions.setOpenCollapsibles(["Data", ...(data?.databases || []).map(db => db.id.toString())])
     } else {
@@ -141,7 +145,7 @@ export function EmerySidebar() {
               const isActive = pathname === href || (href !== '/mission-control' && pathname?.startsWith(href))
               
               const renderSeparator = () => {
-                if (label === "Orchestration") {
+                if (label === "Orchestration" || label === "Apps") {
                   return <Separator className="my-2" />
                 }
                 return null
@@ -183,7 +187,51 @@ export function EmerySidebar() {
                         </CollapsibleContent>
                       )}
                     </Collapsible>
-                    
+                  </div>
+                )
+              }
+
+              if (label === "Apps") {
+                return (
+                  <div key={label}>
+                    {renderSeparator()}
+                    <Collapsible
+                      open={!isCollapsed && openCollapsibles.includes(label)}
+                      onOpenChange={() => toggleCollapsible(label)}
+                    >
+                      <CollapsibleTrigger asChild>
+                        <Link
+                          href={href}
+                          className={`flex items-center w-full gap-3 rounded-lg px-3 py-2 text-foreground/70 transition-all hover:text-primary hover:bg-muted ${
+                            isActive ? "bg-muted text-primary" : ""
+                          } ${isCollapsed ? "justify-center" : "justify-between"}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <Icon className="h-4 w-4" />
+                            {!isCollapsed && label}
+                          </div>
+                          {!isCollapsed && <ChevronDown className="h-4 w-4 transition-transform duration-200 data-[state=open]:rotate-180" />}
+                        </Link>
+                      </CollapsibleTrigger>
+                      {!isCollapsed && (
+                        <CollapsibleContent className="pl-7 py-1 space-y-1">
+                          {/* Future: List apps here */}
+                          {/* Add App button */}
+                          <button
+                            onClick={() => {
+                              // AIDEV-TODO: Open app creation dialog
+                              // This will be connected to appsActions.setFormDialogOpen(true)
+                              window.location.href = '/apps'
+                            }}
+                            className="flex items-center justify-center w-full rounded-md px-3 py-2 text-foreground/60 transition-all hover:text-primary text-xs hover:bg-muted"
+                            title="Create App"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </CollapsibleContent>
+                      )}
+                    </Collapsible>
+
                     {/* Data Section - Show tables organized by databases */}
                     <div>
                       <Separator className="my-2" />

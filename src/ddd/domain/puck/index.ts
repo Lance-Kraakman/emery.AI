@@ -9,11 +9,11 @@ export { PageOrder } from './value-objects/page-order';
 export { PuckData, type PuckDataStructure } from './value-objects/puck-data';
 
 // Entities
-export { PuckApp } from './entities/puck-app';
+export { App } from './entities/app';
 export { PuckPage } from './entities/puck-page';
 
 // Repository Interfaces
-export type { IPuckAppRepository } from './repositories/puck-app-repository';
+export type { IAppRepository } from './repositories/app-repository';
 export type { IPuckPageRepository } from './repositories/puck-page-repository';
 
 // Domain Services

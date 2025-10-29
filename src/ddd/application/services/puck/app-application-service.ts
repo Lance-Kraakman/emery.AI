@@ -1,10 +1,11 @@
-// AIDEV-NOTE: PuckApp Application Service - orchestrates app operations
+// AIDEV-NOTE: App Application Service - orchestrates app operations
 // Handles business logic, validation, and coordination between domain and infrastructure
+// Uses Puck for visual page building, but that's an implementation detail
 
-import type { IPuckAppRepository } from '@/ddd/domain/puck/repositories/puck-app-repository';
+import type { IAppRepository } from '@/ddd/domain/puck/repositories/app-repository';
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
-import { PuckApp } from '@/ddd/domain/puck/entities/puck-app';
+import { App } from '@/ddd/domain/puck/entities/app';
 import { AppId } from '@/ddd/domain/puck/value-objects/app-id';
 import { AppSlug } from '@/ddd/domain/puck/value-objects/app-slug';
 import { AppSlugGenerator } from '@/ddd/domain/puck/services/app-slug-generator';
@@ -13,7 +14,7 @@ import type { Result } from '@/ddd/domain/shared/result';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 
-const logger = createDebugLogger('PuckAppApplicationService');
+const logger = createDebugLogger('AppApplicationService');
 
 // Command DTOs
 export interface CreateAppCommand {
@@ -33,15 +34,15 @@ export interface UpdateAppCommand {
 
 // Response DTOs
 export interface AppWithPagesDTO {
-  app: PuckApp;
+  app: App;
   pageCount: number;
 }
 
-export class PuckAppApplicationService {
+export class AppApplicationService {
   private readonly slugGenerator: AppSlugGenerator;
 
   constructor(
-    private readonly appRepository: IPuckAppRepository,
+    private readonly appRepository: IAppRepository,
     private readonly pageRepository: IPuckPageRepository,
     private readonly organizationRepository: IOrganizationRepository
   ) {
@@ -49,9 +50,9 @@ export class PuckAppApplicationService {
   }
 
   /**
-   * Create a new Puck app
+   * Create a new app
    */
-  async createApp(command: CreateAppCommand): Promise<Result<PuckApp>> {
+  async createApp(command: CreateAppCommand): Promise<Result<App>> {
     try {
       logger.debug('Creating app', { name: command.name, orgId: command.organizationId.value });
 
@@ -75,16 +76,13 @@ export class PuckAppApplicationService {
         return ResultHelpers.failure(`An app with slug '${command.slug}' already exists in this organization`);
       }
 
-      // 4. Create domain entity
-      const app = PuckApp.fromPersistence({
-        id: 0, // Will be set by database
-        organizationId: command.organizationId.value,
+      // 4. Create domain entity (without ID - will be set by repository)
+      const app = App.create({
         name: command.name,
-        slug: command.slug,
+        slug: appSlug,
         description: command.description,
-        createdBy: command.createdBy.value,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        organizationId: command.organizationId,
+        createdBy: command.createdBy
       });
 
       // 5. Save to repository
@@ -102,7 +100,7 @@ export class PuckAppApplicationService {
   /**
    * Update an existing app
    */
-  async updateApp(command: UpdateAppCommand): Promise<Result<PuckApp>> {
+  async updateApp(command: UpdateAppCommand): Promise<Result<App>> {
     try {
       logger.debug('Updating app', { id: command.id.value });
 
@@ -183,7 +181,7 @@ export class PuckAppApplicationService {
   /**
    * Get an app by ID
    */
-  async getApp(id: AppId): Promise<PuckApp | null> {
+  async getApp(id: AppId): Promise<App | null> {
     try {
       return await this.appRepository.findById(id);
     } catch (error) {
@@ -195,7 +193,7 @@ export class PuckAppApplicationService {
   /**
    * Get an app by slug within an organization
    */
-  async getAppBySlug(organizationId: OrganizationId, slug: string): Promise<PuckApp | null> {
+  async getAppBySlug(organizationId: OrganizationId, slug: string): Promise<App | null> {
     try {
       const slugResult = AppSlug.create(slug);
       if (!slugResult.success || !slugResult.data) {
@@ -212,7 +210,7 @@ export class PuckAppApplicationService {
   /**
    * Get all apps for an organization
    */
-  async getAppsByOrganization(organizationId: OrganizationId): Promise<PuckApp[]> {
+  async getAppsByOrganization(organizationId: OrganizationId): Promise<App[]> {
     try {
       return await this.appRepository.findByOrganization(organizationId);
     } catch (error) {

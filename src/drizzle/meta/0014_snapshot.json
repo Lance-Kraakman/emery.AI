@@ -1,5 +1,5 @@
 {
-  "id": "f1cd2d04-6132-4b6e-a2d9-4249ed4846cc",
+  "id": "7f469b0e-0799-4904-8f66-d2a371aef85f",
   "prevId": "ce6d7c88-1b7a-4646-b079-d3aceb12ef1e",
   "version": "7",
   "dialect": "postgresql",
@@ -333,6 +333,158 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.apps": {
+      "name": "apps",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "apps_org_idx": {
+          "name": "apps_org_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "apps_organization_id_organizations_id_fk": {
+          "name": "apps_organization_id_organizations_id_fk",
+          "tableFrom": "apps",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "apps_created_by_users_id_fk": {
+          "name": "apps_created_by_users_id_fk",
+          "tableFrom": "apps",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "apps_org_slug_unique": {
+          "name": "apps_org_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organization_id",
+            "slug"
+          ]
+        }
+      },
+      "policies": {
+        "apps_view_permission": {
+          "name": "apps_view_permission",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "public"
+          ],
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'apps:view',\n        current_setting('app.current_organization_id')::integer\n      )"
+        },
+        "apps_create_permission": {
+          "name": "apps_create_permission",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "public"
+          ],
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'apps:create',\n        current_setting('app.current_organization_id')::integer\n      )"
+        },
+        "apps_manage_permission": {
+          "name": "apps_manage_permission",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'apps:manage',\n        current_setting('app.current_organization_id')::integer\n      )"
+        },
+        "apps_public_read": {
+          "name": "apps_public_read",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "public"
+          ],
+          "using": "EXISTS (\n      SELECT 1 FROM pages p\n      WHERE p.app_id = id\n      AND p.is_published = true\n    )"
+        }
+      },
       "checkConstraints": {},
       "isRLSEnabled": false
     },
@@ -1172,186 +1324,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.permissions": {
-      "name": "permissions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "resource": {
-          "name": "resource",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "action": {
-          "name": "action",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "unique_permission": {
-          "name": "unique_permission",
-          "nullsNotDistinct": false,
-          "columns": [
-            "resource",
-            "action"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.puck_apps": {
-      "name": "puck_apps",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "slug": {
-          "name": "slug",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "puck_apps_org_idx": {
-          "name": "puck_apps_org_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "puck_apps_organization_id_organizations_id_fk": {
-          "name": "puck_apps_organization_id_organizations_id_fk",
-          "tableFrom": "puck_apps",
-          "tableTo": "organizations",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "puck_apps_created_by_users_id_fk": {
-          "name": "puck_apps_created_by_users_id_fk",
-          "tableFrom": "puck_apps",
-          "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "puck_apps_org_slug_unique": {
-          "name": "puck_apps_org_slug_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "organization_id",
-            "slug"
-          ]
-        }
-      },
-      "policies": {
-        "puck_apps_tenant_isolation": {
-          "name": "puck_apps_tenant_isolation",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "public"
-          ],
-          "using": "organization_id = current_setting('app.current_organization_id')::integer"
-        }
-      },
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.puck_pages": {
-      "name": "puck_pages",
+    "public.pages": {
+      "name": "pages",
       "schema": "",
       "columns": {
         "id": {
@@ -1426,8 +1400,8 @@
         }
       },
       "indexes": {
-        "puck_pages_app_idx": {
-          "name": "puck_pages_app_idx",
+        "pages_app_idx": {
+          "name": "pages_app_idx",
           "columns": [
             {
               "expression": "app_id",
@@ -1441,8 +1415,8 @@
           "method": "btree",
           "with": {}
         },
-        "puck_pages_order_idx": {
-          "name": "puck_pages_order_idx",
+        "pages_order_idx": {
+          "name": "pages_order_idx",
           "columns": [
             {
               "expression": "app_id",
@@ -1464,10 +1438,10 @@
         }
       },
       "foreignKeys": {
-        "puck_pages_app_id_puck_apps_id_fk": {
-          "name": "puck_pages_app_id_puck_apps_id_fk",
-          "tableFrom": "puck_pages",
-          "tableTo": "puck_apps",
+        "pages_app_id_apps_id_fk": {
+          "name": "pages_app_id_apps_id_fk",
+          "tableFrom": "pages",
+          "tableTo": "apps",
           "columnsFrom": [
             "app_id"
           ],
@@ -1477,9 +1451,9 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "puck_pages_created_by_users_id_fk": {
-          "name": "puck_pages_created_by_users_id_fk",
-          "tableFrom": "puck_pages",
+        "pages_created_by_users_id_fk": {
+          "name": "pages_created_by_users_id_fk",
+          "tableFrom": "pages",
           "tableTo": "users",
           "columnsFrom": [
             "created_by"
@@ -1493,8 +1467,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "puck_pages_app_slug_unique": {
-          "name": "puck_pages_app_slug_unique",
+        "pages_app_slug_unique": {
+          "name": "pages_app_slug_unique",
           "nullsNotDistinct": false,
           "columns": [
             "app_id",
@@ -1503,16 +1477,96 @@
         }
       },
       "policies": {
-        "puck_pages_tenant_isolation": {
-          "name": "puck_pages_tenant_isolation",
+        "pages_view_permission": {
+          "name": "pages_view_permission",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "public"
+          ],
+          "using": "EXISTS (\n      SELECT 1 FROM apps a\n      WHERE a.id = app_id\n      AND a.organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'apps:view',\n        current_setting('app.current_organization_id')::integer\n      )\n    )"
+        },
+        "pages_manage_permission": {
+          "name": "pages_manage_permission",
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": [
             "public"
           ],
-          "using": "EXISTS (\n      SELECT 1 FROM puck_apps a\n      WHERE a.id = app_id\n      AND a.organization_id = current_setting('app.current_organization_id')::integer\n    )"
+          "using": "EXISTS (\n      SELECT 1 FROM apps a\n      WHERE a.id = app_id\n      AND a.organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'apps:manage',\n        current_setting('app.current_organization_id')::integer\n      )\n    )"
+        },
+        "pages_publish_permission": {
+          "name": "pages_publish_permission",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "public"
+          ],
+          "using": "EXISTS (\n      SELECT 1 FROM apps a\n      WHERE a.id = app_id\n      AND a.organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'apps:publish',\n        current_setting('app.current_organization_id')::integer\n      )\n    )"
+        },
+        "pages_public_read": {
+          "name": "pages_public_read",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "public"
+          ],
+          "using": "is_published = true"
         }
       },
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.permissions": {
+      "name": "permissions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "resource": {
+          "name": "resource",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "unique_permission": {
+          "name": "unique_permission",
+          "nullsNotDistinct": false,
+          "columns": [
+            "resource",
+            "action"
+          ]
+        }
+      },
+      "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
     },

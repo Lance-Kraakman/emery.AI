@@ -1,11 +1,12 @@
-// AIDEV-NOTE: PuckApp domain entity - aggregate root for Puck applications
+// AIDEV-NOTE: App domain entity - aggregate root for applications
 // Represents a container for pages with business rules and validation
+// Implementation uses Puck visual page builder, but that's an infrastructure detail
 
 import type { AppId } from '../value-objects/app-id';
 import type { AppSlug } from '../value-objects/app-slug';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
-export class PuckApp {
+export class App {
   private constructor(
     private readonly _id: AppId,
     private readonly _organizationId: OrganizationId,
@@ -113,7 +114,49 @@ export class PuckApp {
   // Factory methods
 
   /**
-   * Create a PuckApp from persistence data
+   * Create a new App (before persistence)
+   * Used when creating a new app that hasn't been saved to the database yet
+   */
+  static create(data: {
+    name: string;
+    slug: AppSlug;
+    description?: string;
+    organizationId: OrganizationId;
+    createdBy: UserId;
+  }): App {
+    // Import here to avoid circular dependencies
+    const { AppId } = require('../value-objects/app-id');
+
+    // Validate name
+    if (!data.name || data.name.trim().length === 0) {
+      throw new Error('App name cannot be empty');
+    }
+
+    if (data.name.length > 100) {
+      throw new Error('App name cannot exceed 100 characters');
+    }
+
+    // Validate description if provided
+    if (data.description !== undefined && data.description.length > 500) {
+      throw new Error('App description cannot exceed 500 characters');
+    }
+
+    const now = new Date();
+
+    return new App(
+      AppId.temporary(), // Temporary ID until persisted
+      data.organizationId,
+      data.name.trim(),
+      data.slug,
+      data.description,
+      data.createdBy,
+      now,
+      now
+    );
+  }
+
+  /**
+   * Create an App from persistence data
    */
   static fromPersistence(data: {
     id: number;
@@ -124,7 +167,7 @@ export class PuckApp {
     createdBy: string;
     createdAt: Date;
     updatedAt: Date;
-  }): PuckApp {
+  }): App {
     // Import here to avoid circular dependencies
     const { AppId } = require('../value-objects/app-id');
     const { AppSlug } = require('../value-objects/app-slug');
@@ -134,7 +177,7 @@ export class PuckApp {
       throw new Error(`Invalid app slug in persistence data: ${slugResult.error}`);
     }
 
-    return new PuckApp(
+    return new App(
       AppId.fromNumber(data.id),
       OrganizationId.fromNumber(data.organizationId),
       data.name,

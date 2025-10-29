@@ -234,9 +234,9 @@ export class DIContainer {
       'delegationApplicationService': 'CredentialDelegationApplicationService',
 
       // Puck domain
-      'puckAppRepository': 'IPuckAppRepository',
+      'puckAppRepository': 'IAppRepository',
       'puckPageRepository': 'IPuckPageRepository',
-      'puckAppApplicationService': 'PuckAppApplicationService',
+      'puckAppApplicationService': 'AppApplicationService',
       'puckPageApplicationService': 'PuckPageApplicationService'
     };
 
@@ -370,8 +370,8 @@ export {
   getOAuthProxyApplicationService,
 
   // Puck services
-  getPuckAppRepository,
+  getAppRepository,
   getPuckPageRepository,
-  getPuckAppApplicationService,
+  getAppApplicationService,
   getPuckPageApplicationService
 } from './getters';

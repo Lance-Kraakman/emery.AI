@@ -53,7 +53,7 @@ const reorderPagesSchema = z.object({
  */
 export async function getPages(appId: number): Promise<PageDTO[]> {
   try {
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("apps:view");
 
     if (!appId) {
       throw new Error("App ID is required");
@@ -94,7 +94,7 @@ export async function getPublishedPages(appId: number): Promise<PageDTO[]> {
  */
 export async function getPage(id: number): Promise<PageDTO> {
   try {
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("apps:view");
 
     if (!id) {
       throw new Error("Page ID is required");
@@ -120,7 +120,7 @@ export async function getPage(id: number): Promise<PageDTO> {
 export async function getPageBySlug(appId: number, slug: string): Promise<PageDTO> {
   try {
     // Note: Public pages are accessible without auth, but we'll check permissions for consistency
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("apps:view");
 
     if (!appId || !slug) {
       throw new Error("App ID and page slug are required");
@@ -145,7 +145,7 @@ export async function getPageBySlug(appId: number, slug: string): Promise<PageDT
  */
 export async function createPage(data: z.infer<typeof createPageSchema>, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:create");
+    const session = await requirePermission("apps:create");
 
     const validatedData = createPageSchema.parse(data);
 
@@ -197,7 +197,7 @@ export async function createPage(data: z.infer<typeof createPageSchema>, revalid
  */
 export async function updatePage(data: z.infer<typeof updatePageSchema>, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("apps:manage");
 
     const validatedData = updatePageSchema.parse(data);
 
@@ -251,7 +251,7 @@ export async function updatePage(data: z.infer<typeof updatePageSchema>, revalid
  */
 export async function updatePageContent(data: z.infer<typeof updatePageContentSchema>, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("apps:manage");
 
     const validatedData = updatePageContentSchema.parse(data);
 
@@ -303,7 +303,7 @@ export async function updatePageContent(data: z.infer<typeof updatePageContentSc
  */
 export async function publishPage(id: number, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("apps:publish");
 
     if (!id) {
       return { success: false, error: "Page ID is required" };
@@ -341,7 +341,7 @@ export async function publishPage(id: number, revalidateUrl?: string): Promise<R
  */
 export async function unpublishPage(id: number, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("apps:publish");
 
     if (!id) {
       return { success: false, error: "Page ID is required" };
@@ -379,7 +379,7 @@ export async function unpublishPage(id: number, revalidateUrl?: string): Promise
  */
 export async function deletePage(id: number, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("apps:manage");
 
     if (!id) {
       return { success: false, error: "Page ID is required" };
@@ -417,7 +417,7 @@ export async function deletePage(id: number, revalidateUrl?: string): Promise<Re
  */
 export async function reorderPages(data: z.infer<typeof reorderPagesSchema>, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("apps:manage");
 
     const validatedData = reorderPagesSchema.parse(data);
 
@@ -491,7 +491,7 @@ export async function buildNavigation(appId: number, publishedOnly: boolean = fa
  */
 export async function generatePageSlug(appId: number, name: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("apps:view");
 
     if (!appId || !name) {
       return { success: false, error: "App ID and page name are required" };
@@ -522,7 +522,7 @@ export async function generatePageSlug(appId: number, name: string): Promise<Res
  */
 export async function getPageCount(appId: number) {
   try {
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("apps:view");
 
     if (!appId) {
       throw new Error("App ID is required");

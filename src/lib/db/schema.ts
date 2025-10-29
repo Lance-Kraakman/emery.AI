@@ -1139,7 +1139,7 @@ export const tools = pgTable("tools", {
 // AIDEV-NOTE: Puck CMS Tables - Visual page builder system
 // Organization-scoped apps containing pages with Puck template data
 
-export const puckApps = pgTable("puck_apps", {
+export const apps = pgTable("apps", {
   id: serial("id").primaryKey(),
   organizationId: integer("organization_id")
     .notNull()
@@ -1153,21 +1153,66 @@ export const puckApps = pgTable("puck_apps", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
-  unique("puck_apps_org_slug_unique").on(table.organizationId, table.slug),
-  index("puck_apps_org_idx").on(table.organizationId),
-  pgPolicy("puck_apps_tenant_isolation", {
+  unique("apps_org_slug_unique").on(table.organizationId, table.slug),
+  index("apps_org_idx").on(table.organizationId),
+
+  // View permission: Users with apps:view in their org
+  pgPolicy("apps_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:view',
+        current_setting('app.current_organization_id')::integer
+      )`,
+  }),
+
+  // Create permission: Users with apps:create
+  pgPolicy("apps_create_permission", {
+    as: "permissive",
+    for: "insert",
+    to: "public",
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:create',
+        current_setting('app.current_organization_id')::integer
+      )`,
+  }),
+
+  // Manage permission: Users with apps:manage
+  pgPolicy("apps_manage_permission", {
     as: "permissive",
     for: "all",
     to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:manage',
+        current_setting('app.current_organization_id')::integer
+      )`,
+  }),
+
+  // Public read: Apps with published pages (NO AUTH REQUIRED)
+  pgPolicy("apps_public_read", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM pages p
+      WHERE p.app_id = id
+      AND p.is_published = true
+    )`,
   }),
 ]);
 
-export const puckPages = pgTable("puck_pages", {
+export const pages = pgTable("pages", {
   id: serial("id").primaryKey(),
   appId: integer("app_id")
     .notNull()
-    .references(() => puckApps.id, { onDelete: 'cascade' }),
+    .references(() => apps.id, { onDelete: 'cascade' }),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
   description: text("description"),
@@ -1180,17 +1225,66 @@ export const puckPages = pgTable("puck_pages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
-  unique("puck_pages_app_slug_unique").on(table.appId, table.slug),
-  index("puck_pages_app_idx").on(table.appId),
-  index("puck_pages_order_idx").on(table.appId, table.order),
-  pgPolicy("puck_pages_tenant_isolation", {
+  unique("pages_app_slug_unique").on(table.appId, table.slug),
+  index("pages_app_idx").on(table.appId),
+  index("pages_order_idx").on(table.appId, table.order),
+
+  // View permission: Users with apps:view in their org
+  pgPolicy("pages_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM apps a
+      WHERE a.id = app_id
+      AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:view',
+        current_setting('app.current_organization_id')::integer
+      )
+    )`,
+  }),
+
+  // Manage permission: Users with apps:manage (for all operations)
+  pgPolicy("pages_manage_permission", {
     as: "permissive",
     for: "all",
     to: "public",
     using: sql`EXISTS (
-      SELECT 1 FROM puck_apps a
+      SELECT 1 FROM apps a
       WHERE a.id = app_id
       AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:manage',
+        current_setting('app.current_organization_id')::integer
+      )
     )`,
+  }),
+
+  // Publish permission: Users with apps:publish (for UPDATE on is_published)
+  pgPolicy("pages_publish_permission", {
+    as: "permissive",
+    for: "update",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM apps a
+      WHERE a.id = app_id
+      AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:publish',
+        current_setting('app.current_organization_id')::integer
+      )
+    )`,
+  }),
+
+  // Public read: Published pages only (NO AUTH REQUIRED)
+  pgPolicy("pages_public_read", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`is_published = true`,
   }),
 ]);

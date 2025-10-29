@@ -5,14 +5,15 @@
 
 import { z } from "zod"
 import { revalidatePath } from "next/cache"
+import { auth } from "@/lib/auth"
 import { requirePermission } from "./permissions"
 import { requireCurrentOrganization } from "./user-organizations"
-import { getPuckAppApplicationService } from "@/ddd/application/di/container"
+import { getAppApplicationService } from "@/ddd/application/di/container"
 import type { Result } from "./types"
 
 import { OrganizationId, UserId } from "@/ddd/domain/shared/value-objects"
 import { AppId } from "@/ddd/domain/puck/value-objects/app-id"
-import { PuckAppMapper, type AppDTO } from "@/app/mappers/puck-app-mapper"
+import { AppMapper, type AppDTO } from "@/app/mappers/puck-app-mapper"
 
 const createAppSchema = z.object({
   name: z.string().min(1, "App name is required"),
@@ -38,16 +39,25 @@ const updateAppSchema = z.object({
  */
 export async function getApps(): Promise<AppDTO[]> {
   try {
-    const session = await requirePermission("data:view");
+    // Check session first
+    const session = await auth();
+    if (!session?.user) {
+      console.log('[getApps] No session found');
+      return [];
+    }
+
+    // Then check permission
+    await requirePermission("apps:view");
     const currentOrg = await requireCurrentOrganization();
 
-    const appService = getPuckAppApplicationService();
+    const appService = getAppApplicationService();
     const apps = await appService.getAppsByOrganization(OrganizationId.fromNumber(currentOrg.id));
 
-    return PuckAppMapper.toDTOs(apps);
+    return AppMapper.toDTOs(apps);
   } catch (error) {
     console.error('Error fetching Puck apps:', error)
-    throw new Error('Failed to fetch Puck apps')
+    // Return empty array instead of throwing to prevent page crash
+    return []
   }
 }
 
@@ -56,20 +66,20 @@ export async function getApps(): Promise<AppDTO[]> {
  */
 export async function getApp(id: number): Promise<AppDTO> {
   try {
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("apps:view");
 
     if (!id) {
       throw new Error("App ID is required");
     }
 
-    const appService = getPuckAppApplicationService();
+    const appService = getAppApplicationService();
     const app = await appService.getApp(AppId.fromNumber(id));
 
     if (!app) {
       throw new Error("App not found");
     }
 
-    return PuckAppMapper.toDTO(app);
+    return AppMapper.toDTO(app);
   } catch (error) {
     console.error('Error fetching Puck app:', error)
     throw new Error('Failed to fetch Puck app')
@@ -81,21 +91,21 @@ export async function getApp(id: number): Promise<AppDTO> {
  */
 export async function getAppBySlug(slug: string): Promise<AppDTO> {
   try {
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("apps:view");
     const currentOrg = await requireCurrentOrganization();
 
     if (!slug) {
       throw new Error("App slug is required");
     }
 
-    const appService = getPuckAppApplicationService();
+    const appService = getAppApplicationService();
     const app = await appService.getAppBySlug(OrganizationId.fromNumber(currentOrg.id), slug);
 
     if (!app) {
       throw new Error("App not found");
     }
 
-    return PuckAppMapper.toDTO(app);
+    return AppMapper.toDTO(app);
   } catch (error) {
     console.error('Error fetching Puck app by slug:', error);
     throw new Error('Failed to fetch Puck app by slug');
@@ -107,13 +117,13 @@ export async function getAppBySlug(slug: string): Promise<AppDTO> {
  */
 export async function getAppWithPages(id: number) {
   try {
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("apps:view");
 
     if (!id) {
       throw new Error("App ID is required");
     }
 
-    const appService = getPuckAppApplicationService();
+    const appService = getAppApplicationService();
     const result = await appService.getAppWithPages(AppId.fromNumber(id));
 
     if (!result) {
@@ -121,7 +131,7 @@ export async function getAppWithPages(id: number) {
     }
 
     return {
-      app: PuckAppMapper.toDTO(result.app),
+      app: AppMapper.toDTO(result.app),
       pageCount: result.pageCount
     };
   } catch (error) {
@@ -135,12 +145,12 @@ export async function getAppWithPages(id: number) {
  */
 export async function createApp(data: z.infer<typeof createAppSchema>, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:create");
+    const session = await requirePermission("apps:create");
     const currentOrg = await requireCurrentOrganization();
 
     const validatedData = createAppSchema.parse(data);
 
-    const appService = getPuckAppApplicationService();
+    const appService = getAppApplicationService();
 
     const result = await appService.createApp({
       name: validatedData.name,
@@ -166,7 +176,7 @@ export async function createApp(data: z.infer<typeof createAppSchema>, revalidat
 
     return {
       success: true,
-      data: result.data ? PuckAppMapper.toDTO(result.data) : undefined
+      data: result.data ? AppMapper.toDTO(result.data) : undefined
     };
   } catch (error) {
     console.error('Error creating Puck app:', error)
@@ -187,7 +197,7 @@ export async function createApp(data: z.infer<typeof createAppSchema>, revalidat
  */
 export async function updateApp(data: z.infer<typeof updateAppSchema>, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("apps:manage");
 
     const validatedData = updateAppSchema.parse(data);
 
@@ -195,7 +205,7 @@ export async function updateApp(data: z.infer<typeof updateAppSchema>, revalidat
       return { success: false, error: "App ID is required" };
     }
 
-    const appService = getPuckAppApplicationService();
+    const appService = getAppApplicationService();
 
     const result = await appService.updateApp({
       id: AppId.fromNumber(validatedData.id),
@@ -220,7 +230,7 @@ export async function updateApp(data: z.infer<typeof updateAppSchema>, revalidat
 
     return {
       success: true,
-      data: result.data ? PuckAppMapper.toDTO(result.data) : undefined
+      data: result.data ? AppMapper.toDTO(result.data) : undefined
     };
   } catch (error) {
     console.error('Error updating Puck app:', error)
@@ -241,13 +251,13 @@ export async function updateApp(data: z.infer<typeof updateAppSchema>, revalidat
  */
 export async function deleteApp(id: number, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("apps:manage");
 
     if (!id) {
       return { success: false, error: "App ID is required" };
     }
 
-    const appService = getPuckAppApplicationService();
+    const appService = getAppApplicationService();
     const result = await appService.deleteApp(AppId.fromNumber(id));
 
     if (!result.success) {
@@ -279,14 +289,14 @@ export async function deleteApp(id: number, revalidateUrl?: string): Promise<Res
  */
 export async function generateAppSlug(name: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("apps:view");
     const currentOrg = await requireCurrentOrganization();
 
     if (!name) {
       return { success: false, error: "App name is required" };
     }
 
-    const appService = getPuckAppApplicationService();
+    const appService = getAppApplicationService();
     const result = await appService.generateSlugFromName(OrganizationId.fromNumber(currentOrg.id), name);
 
     if (!result.success) {
@@ -311,10 +321,10 @@ export async function generateAppSlug(name: string): Promise<Result> {
  */
 export async function getAppCount() {
   try {
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("apps:view");
     const currentOrg = await requireCurrentOrganization();
 
-    const appService = getPuckAppApplicationService();
+    const appService = getAppApplicationService();
     return await appService.countApps(OrganizationId.fromNumber(currentOrg.id));
   } catch (error) {
     console.error('Error fetching app count:', error);

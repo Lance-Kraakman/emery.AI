@@ -2,7 +2,7 @@
 // Handles page creation, updates, publishing, and ordering
 
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
-import type { IPuckAppRepository } from '@/ddd/domain/puck/repositories/puck-app-repository';
+import type { IAppRepository } from '@/ddd/domain/puck/repositories/app-repository';
 import { PuckPage } from '@/ddd/domain/puck/entities/puck-page';
 import { PageId } from '@/ddd/domain/puck/value-objects/page-id';
 import { AppId } from '@/ddd/domain/puck/value-objects/app-id';
@@ -51,7 +51,7 @@ export class PuckPageApplicationService {
 
   constructor(
     private readonly pageRepository: IPuckPageRepository,
-    private readonly appRepository: IPuckAppRepository
+    private readonly appRepository: IAppRepository
   ) {
     this.slugGenerator = new PageSlugGenerator(pageRepository);
     this.navigationService = new PageNavigationService();
