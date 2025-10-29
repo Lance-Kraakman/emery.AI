@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { useSearchParams } from 'next/navigation'
-import { MissionControlPage } from '@/components/canvas'
+import { MissionControlPage } from './MissionControlPageClient'
 
 /**
  * MissionControlClient - Mission Control page with canvas structure

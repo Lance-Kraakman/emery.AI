@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { CanvasBase } from './CanvasBase'
+import { CanvasBase } from '../../../components/canvas/CanvasBase'
 import { BarChart, Database, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
