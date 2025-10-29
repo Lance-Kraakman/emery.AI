@@ -1,32 +1,16 @@
-import React, { Suspense } from 'react';
+import { redirect } from 'next/navigation';
 import { getTeams } from '@/app/actions/teams';
-import { getAgents } from '@/app/actions/agents';
-import { Loading } from '@/components/ui/loading';
-import { auth } from '@/lib/auth';
-import { TeamsPage as TeamsPageLayout } from '@/components/canvas';
-import TeamDashboardClient from './components/TeamDashboardClient';
 
-// AIDEV-NOTE: Teams page updated to use canvas architecture with collapsible layout
-// AIDEV-NOTE: Page is dynamic due to session/organization context requirements
-
-export const dynamic = 'force-dynamic';
+// AIDEV-NOTE: Teams list now shown in sidebar
+// This page redirects to first team or mission-control
 
 export default async function TeamsPage() {
-  // Get current user's organization
-  const session = await auth();
-  const organizationId = session?.user?.currentOrganizationId;
+  const teams = await getTeams();
 
-  // Fetch initial data on the server
-  const [teams, agents] = await Promise.all([
-    getTeams(organizationId),
-    getAgents(),
-  ]);
+  // Redirect to first team if exists, otherwise to mission-control
+  if (teams && teams.length > 0) {
+    redirect(`/teams/${teams[0].id}`);
+  }
 
-  return (
-    <TeamsPageLayout>
-      <Suspense fallback={<Loading text="Loading teams..." />}>
-        <TeamDashboardClient initialTeams={teams} agents={agents} />
-      </Suspense>
-    </TeamsPageLayout>
-  );
+  redirect("/mission-control/dashboard");
 }

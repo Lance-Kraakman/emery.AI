@@ -12,15 +12,55 @@ import { useSession } from "next-auth/react"
 // AIDEV-NOTE: Client-side wrapper that fetches sidebar data
 // This is a temporary solution - ideally we'd fetch on server and pass as props
 
+interface SidebarPage {
+  id: number
+  name: string
+  appId: number
+}
+
+interface SidebarApp {
+  id: number
+  name: string
+  pages: SidebarPage[]
+}
+
+interface SidebarAgent {
+  id: number
+  name: string
+}
+
+interface SidebarTeam {
+  id: number
+  name: string
+}
+
+interface SidebarSkill {
+  id: number
+  name: string
+}
+
+interface SidebarTable {
+  id: number
+  name: string
+}
+
+interface SidebarDatabase {
+  id: number
+  name: string
+  tables: SidebarTable[]
+}
+
+interface SidebarData {
+  apps: SidebarApp[]
+  agents: SidebarAgent[]
+  teams: SidebarTeam[]
+  skills: SidebarSkill[]
+  databases: SidebarDatabase[]
+}
+
 export function AppSidebarClient() {
   const { data: session } = useSession()
-  const [data, setData] = useState<{
-    apps: any[]
-    agents: any[]
-    teams: any[]
-    skills: any[]
-    databases: any[]
-  }>({
+  const [data, setData] = useState<SidebarData>({
     apps: [],
     agents: [],
     teams: [],
@@ -46,7 +86,7 @@ export function AppSidebarClient() {
 
         // Fetch pages for each app
         const appsWithPages = await Promise.all(
-          (appsResult || []).map(async (app: any) => {
+          (appsResult || []).map(async (app) => {
             const pages = await getPages(app.id)
             return {
               ...app,
@@ -56,24 +96,24 @@ export function AppSidebarClient() {
         )
 
         setData({
-          apps: appsWithPages.map((app: any) => ({
+          apps: appsWithPages.map((app) => ({
             id: app.id,
             name: app.name,
-            pages: app.pages.map((page: any) => ({
+            pages: app.pages.map((page) => ({
               id: page.id,
               name: page.name,
               appId: app.id
             }))
           })),
-          agents: (agentsResult || []).map((agent: any) => ({
+          agents: (agentsResult || []).map((agent) => ({
             id: agent.id,
             name: agent.name
           })),
-          teams: (teamsResult || []).map((team: any) => ({
+          teams: (teamsResult || []).map((team) => ({
             id: team.id,
             name: team.name
           })),
-          skills: (skillsResult?.success && skillsResult?.data ? skillsResult.data : []).map((skill: any) => ({
+          skills: (skillsResult?.success && skillsResult?.data ? skillsResult.data : []).map((skill) => ({
             id: skill.id,
             name: skill.name
           })),
