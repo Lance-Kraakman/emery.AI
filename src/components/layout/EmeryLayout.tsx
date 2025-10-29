@@ -1,7 +1,7 @@
 'use client'
 
 import React, { Suspense } from 'react'
-import { AppSidebarClient } from '@/components/app-sidebar-client'
+import { AppSidebar } from '@/components/app-sidebar'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { Loading } from '@/components/ui/loading'
 import { EmeryCanvas } from '@/components/chat/EmeryCanvas'
@@ -25,15 +25,25 @@ import { ChatProvider } from '@/components/chat/ChatProvider'
  * become the main view when canvas is collapsed, like current mission-control.
  */
 
+interface SidebarData {
+  apps: any[]
+  agents: any[]
+  teams: any[]
+  skills: any[]
+  databases: any[]
+}
+
 interface EmeryLayoutInnerProps extends EmeryLayoutProps {
   // This component needs layout context, so it must be wrapped by LayoutProvider
+  sidebarData?: SidebarData
 }
 
 
 function EmeryLayoutInner({
   children,
   chatContext,
-  enableChat = true
+  enableChat = true,
+  sidebarData
 }: EmeryLayoutInnerProps) {
   // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders when unrelated state changes
   const sidebarState = useStore(uiStateStore, uiStateSelectors.sidebarState)
@@ -62,9 +72,15 @@ function EmeryLayoutInner({
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full overflow-hidden bg-background">
-        {/* Sidebar */}
+        {/* Sidebar - now receives server-fetched data */}
         <Suspense fallback={<SidebarSkeleton />}>
-          <AppSidebarClient />
+          <AppSidebar
+            apps={sidebarData?.apps || []}
+            agents={sidebarData?.agents || []}
+            teams={sidebarData?.teams || []}
+            skills={sidebarData?.skills || []}
+            databases={sidebarData?.databases || []}
+          />
         </Suspense>
 
         {/* Main Content Area + Chat */}
@@ -99,7 +115,7 @@ function EmeryLayoutInner({
 }
 
 // Main exported component that ensures LayoutProvider is available
-export function EmeryLayout(props: EmeryLayoutProps) {
+export function EmeryLayout(props: EmeryLayoutInnerProps) {
   return (
     <EmeryLayoutInner {...props} />
   )

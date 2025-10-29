@@ -48,9 +48,9 @@ export function BasePage({
   // BasePage always renders and lets EmeryChat decide when to show it
 
   return (
-    <div className={`flex flex-col h-full bg-card ${className}`}>
+    <div className={`flex flex-col h-full bg-card/95 backdrop-blur-sm ${className}`}>
       {/* Page Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20 relative">
+      <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20 backdrop-blur-sm relative">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {icon && (
             <div className="flex-shrink-0 text-primary">
