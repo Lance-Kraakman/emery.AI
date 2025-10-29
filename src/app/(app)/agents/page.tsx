@@ -1,16 +1,20 @@
-import { redirect } from 'next/navigation';
 import { getAgents } from '@/app/actions/agents';
+import { Suspense } from 'react';
+import { Loading } from '@/components/ui/loading';
+import { CanvasBase } from '@/components/canvas/CanvasBase';
+import { AgentsListView } from './components/AgentsListView';
 
-// AIDEV-NOTE: Agents list now shown in sidebar
-// This page redirects to first agent or mission-control
+// AIDEV-NOTE: Main agents page with list/detail view pattern
+// Uses AgentsListView for agent management and NewAgentDetailsView for details
 
 export default async function AgentsPage() {
   const agents = await getAgents();
 
-  // Redirect to first agent if exists, otherwise to mission-control
-  if (agents && agents.length > 0) {
-    redirect(`/agents/${agents[0].id}`);
-  }
-
-  redirect("/mission-control/dashboard");
+  return (
+    <CanvasBase>
+      <Suspense fallback={<Loading text="Loading agents..." />}>
+        <AgentsListView agents={agents || []} />
+      </Suspense>
+    </CanvasBase>
+  );
 }

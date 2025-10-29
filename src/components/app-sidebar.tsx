@@ -538,7 +538,7 @@ export function AppSidebar({
                             {database.tables && database.tables.map((table) => (
                               <SidebarMenuSubItem key={table.id}>
                                 <SidebarMenuSubButton asChild>
-                                  <Link href={`/data`}>
+                                  <Link href={`/data?tableId=${table.id}`}>
                                     <FileText className="h-3 w-3" />
                                     <span>{table.name}</span>
                                   </Link>

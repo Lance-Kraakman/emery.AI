@@ -212,8 +212,11 @@ export class PuckPage {
       throw new Error(`Invalid template data in persistence data: ${puckDataResult.error}`);
     }
 
+    // AIDEV-NOTE: Use PageId.create() for new entities (id = 0) to bypass validation
+    const pageId = data.id === 0 ? PageId.create() : PageId.fromNumber(data.id);
+
     return new PuckPage(
-      PageId.fromNumber(data.id),
+      pageId,
       AppId.fromNumber(data.appId),
       data.name,
       slugResult.data,
