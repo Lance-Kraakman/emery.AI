@@ -1,8 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getApp } from "@/app/actions/puck-apps";
-import { AppWindow } from "lucide-react";
-import { BasePage } from "@/components/canvas";
+import { CanvasBase } from "@/components/canvas";
 import { AppDetailsView } from "../components/AppDetailsView";
 import { Suspense } from "react";
 import { Loading } from "@/components/ui/loading";
@@ -32,14 +31,10 @@ export default async function AppPage({ params }: AppPageProps) {
   }
 
   return (
-    <BasePage
-      title={app.name}
-      subtitle={`Manage app and pages`}
-      icon={<AppWindow className="h-5 w-5" />}
-    >
+    <CanvasBase>
       <Suspense fallback={<Loading text="Loading app..." />}>
         <AppDetailsView app={app} />
       </Suspense>
-    </BasePage>
+    </CanvasBase>
   );
 }

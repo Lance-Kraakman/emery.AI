@@ -7,10 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { StepInstructionsInput } from './step-editor/StepInstructionsInput';
-import { StepToolsSection } from './step-editor/StepToolsSection';
-import { SkillInputsSection } from './step-editor/SkillInputsSection';
-import { SkillOutputsSection } from './step-editor/SkillOutputsSection';
+import { InstructionsInput } from './editor/InstructionsInput';
+import { ToolsSection } from './editor/ToolsSection';
+import { SkillInputsSection } from './editor/SkillInputsSection';
+import { SkillOutputsSection } from './editor/SkillOutputsSection';
 import type { ToolConfigDTO, SkillInput, SkillOutput } from '@/app/mappers/skill-mapper';
 
 export interface SkillFormData {
@@ -138,7 +138,7 @@ export function SkillEditor({
       {/* Instructions Section */}
       <div className="space-y-3">
         <Label className="text-base font-semibold">Instructions</Label>
-        <StepInstructionsInput
+        <InstructionsInput
           value={localValue.instructions}
           onChange={(text) => handleChange({ instructions: text })}
           onToolsChange={(tools) => handleChange({ tools })}
@@ -154,7 +154,7 @@ export function SkillEditor({
               {localValue.tools.length} tool{localValue.tools.length !== 1 ? 's' : ''}
             </span>
           </div>
-          <StepToolsSection
+          <ToolsSection
             tools={localValue.tools}
             onToolsChange={(tools) => handleChange({ tools })}
             stepIndex={0}

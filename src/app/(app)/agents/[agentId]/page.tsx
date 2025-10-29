@@ -1,14 +1,13 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getAgent } from "@/app/actions/agents";
-import { Bot } from "lucide-react";
-import { BasePage } from "@/components/canvas";
+import { CanvasBase } from "@/components/canvas";
 import AgentDetailsView from "../components/AgentDetailsView";
 import { Suspense } from "react";
 import { Loading } from "@/components/ui/loading";
 
 // AIDEV-NOTE: Agent detail page - renders individual agent view
-// Created to fix 404 errors when navigating from sidebar
+// Uses CanvasBase for minimal wrapper with collapse functionality
 
 interface AgentPageProps {
   params: Promise<{ agentId: string }>;
@@ -35,14 +34,10 @@ export default async function AgentPage({ params }: AgentPageProps) {
   }
 
   return (
-    <BasePage
-      title={agent.name}
-      subtitle={agent.role || "Agent"}
-      icon={<Bot className="h-5 w-5" />}
-    >
+    <CanvasBase>
       <Suspense fallback={<Loading text="Loading agent..." />}>
         <AgentDetailsView agent={agent} />
       </Suspense>
-    </BasePage>
+    </CanvasBase>
   );
 }

@@ -9,17 +9,17 @@ import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import type { ToolConfigDTO } from '@/app/mappers/skill-mapper';
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
 
-interface StepToolsSectionProps {
+interface ToolsSectionProps {
   tools: ToolConfigDTO[];
   onToolsChange: (tools: ToolConfigDTO[]) => void;
   stepIndex: number;
 }
 
-export function StepToolsSection({
+export function ToolsSection({
   tools,
   onToolsChange,
   stepIndex
-}: StepToolsSectionProps) {
+}: ToolsSectionProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState<{
     top?: number;
