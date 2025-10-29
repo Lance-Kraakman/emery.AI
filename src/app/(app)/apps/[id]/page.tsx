@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { getApp, getPages } from "@/app/actions/puck-apps";
+import { getApp } from "@/app/actions/puck-apps";
 import { AppWindow } from "lucide-react";
 import { BasePage } from "@/components/canvas";
 import { AppDetailsView } from "../components/AppDetailsView";
@@ -8,7 +8,7 @@ import { Suspense } from "react";
 import { Loading } from "@/components/ui/loading";
 
 interface AppPageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default async function AppPage({ params }: AppPageProps) {
@@ -18,7 +18,8 @@ export default async function AppPage({ params }: AppPageProps) {
     redirect("/auth/signin");
   }
 
-  const appId = parseInt(params.id, 10);
+  const { id } = await params;
+  const appId = parseInt(id, 10);
 
   if (isNaN(appId)) {
     redirect("/mission-control");
@@ -37,7 +38,7 @@ export default async function AppPage({ params }: AppPageProps) {
       icon={<AppWindow className="h-5 w-5" />}
     >
       <Suspense fallback={<Loading text="Loading app..." />}>
-        <AppDetailsView app={app} />
+        <AppDetailsView app={app} onBack={() => {}} />
       </Suspense>
     </BasePage>
   );
