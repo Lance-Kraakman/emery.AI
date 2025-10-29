@@ -302,34 +302,32 @@ export function AppSidebar({
                             <a href={`/apps/${app.id}`}>{app.name}</a>
                           </SidebarMenuButton>
                         </CollapsibleTrigger>
-                        {app.pages && app.pages.length > 0 && (
-                          <CollapsibleContent>
-                            <SidebarMenuSub>
-                              {app.pages.map((page) => (
-                                <SidebarMenuSubItem key={page.id}>
-                                  <SidebarMenuSubButton asChild>
-                                    <a href={`/puck-demo${app.slug}${page.slug}`}>
-                                      <FileText className="h-3 w-3" />
-                                      <span>{page.name}</span>
-                                    </a>
-                                  </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              ))}
-                              <SidebarMenuSubItem>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="w-full justify-start h-8"
-                                  onClick={() => handleCreatePage(app.id)}
-                                  disabled={isCreating}
-                                >
-                                  <Plus className="h-3 w-3" />
-                                  <span>Add Page</span>
-                                </Button>
+                        <CollapsibleContent>
+                          <SidebarMenuSub>
+                            {app.pages && app.pages.map((page) => (
+                              <SidebarMenuSubItem key={page.id}>
+                                <SidebarMenuSubButton asChild>
+                                  <a href={`/puck-demo${app.slug}${page.slug}`}>
+                                    <FileText className="h-3 w-3" />
+                                    <span>{page.name}</span>
+                                  </a>
+                                </SidebarMenuSubButton>
                               </SidebarMenuSubItem>
-                            </SidebarMenuSub>
-                          </CollapsibleContent>
-                        )}
+                            ))}
+                            <SidebarMenuSubItem>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start h-8"
+                                onClick={() => handleCreatePage(app.id)}
+                                disabled={isCreating}
+                              >
+                                <Plus className="h-3 w-3" />
+                                <span>Add Page</span>
+                              </Button>
+                            </SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
                       </SidebarMenuItem>
                     </Collapsible>
                   ))}
@@ -490,34 +488,32 @@ export function AppSidebar({
                             <a href={`/data`}>{database.name}</a>
                           </SidebarMenuButton>
                         </CollapsibleTrigger>
-                        {database.tables && database.tables.length > 0 && (
-                          <CollapsibleContent>
-                            <SidebarMenuSub>
-                              {database.tables.map((table) => (
-                                <SidebarMenuSubItem key={table.id}>
-                                  <SidebarMenuSubButton asChild>
-                                    <a href={`/data`}>
-                                      <FileText className="h-3 w-3" />
-                                      <span>{table.name}</span>
-                                    </a>
-                                  </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              ))}
-                              <SidebarMenuSubItem>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="w-full justify-start h-8"
-                                  onClick={() => handleCreateTable(database.id)}
-                                  disabled={isCreating}
-                                >
-                                  <Plus className="h-3 w-3" />
-                                  <span>Add Table</span>
-                                </Button>
+                        <CollapsibleContent>
+                          <SidebarMenuSub>
+                            {database.tables && database.tables.map((table) => (
+                              <SidebarMenuSubItem key={table.id}>
+                                <SidebarMenuSubButton asChild>
+                                  <a href={`/data`}>
+                                    <FileText className="h-3 w-3" />
+                                    <span>{table.name}</span>
+                                  </a>
+                                </SidebarMenuSubButton>
                               </SidebarMenuSubItem>
-                            </SidebarMenuSub>
-                          </CollapsibleContent>
-                        )}
+                            ))}
+                            <SidebarMenuSubItem>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start h-8"
+                                onClick={() => handleCreateTable(database.id)}
+                                disabled={isCreating}
+                              >
+                                <Plus className="h-3 w-3" />
+                                <span>Add Table</span>
+                              </Button>
+                            </SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
                       </SidebarMenuItem>
                     </Collapsible>
                   ))}
