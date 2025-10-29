@@ -67,7 +67,7 @@
     "@llamaindex/chat-ui": "^0.5.17",
     "@llamaindex/core": "^0.6.19",
     "@llamaindex/readers": "^3.1.18",
-    "@measured/puck": "^0.18.3",
+    "@measured/puck": "^0.20.2",
     "@nanostores/react": "https://github.com/ai/react.git",
     "@pipedream/sdk": "2.0.0-rc.3",
     "@radix-ui/react-accordion": "^1.2.11",

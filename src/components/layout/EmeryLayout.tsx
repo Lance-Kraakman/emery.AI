@@ -71,7 +71,7 @@ function EmeryLayoutInner({
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full overflow-hidden bg-background">
+      <div className="flex h-screen w-full overflow-hidden bg-transparent">
         {/* Sidebar - now receives server-fetched data */}
         <Suspense fallback={<SidebarSkeleton />}>
           <AppSidebar
@@ -119,24 +119,6 @@ export function EmeryLayout(props: EmeryLayoutInnerProps) {
   return (
     <EmeryLayoutInner {...props} />
   )
-}
-
-// Utility functions for responsive widths
-function getSidebarWidth(state: string, isMobile: boolean): string {
-  if (isMobile) {
-    return 'w-64' // Fixed width on mobile (overlay)
-  }
-  
-  switch (state) {
-    case 'collapsed':
-      return 'w-16'
-    case 'expanded':
-      return 'w-64'
-    case 'hidden':
-      return 'w-0'
-    default:
-      return 'w-64'
-  }
 }
 
 // Loading skeletons
