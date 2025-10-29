@@ -16,6 +16,8 @@ import {
   Plug,
   SlidersHorizontal,
   FileText,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react"
 
 import {
@@ -113,6 +115,34 @@ export function AppSidebar({
   const { data: sessionData } = useSession()
 
   const [isCreating, setIsCreating] = React.useState(false)
+
+  // Track open state for nested collapsibles
+  const [openApps, setOpenApps] = React.useState<Set<number>>(new Set())
+  const [openDatabases, setOpenDatabases] = React.useState<Set<number>>(new Set())
+
+  const toggleApp = (appId: number) => {
+    setOpenApps(prev => {
+      const next = new Set(prev)
+      if (next.has(appId)) {
+        next.delete(appId)
+      } else {
+        next.add(appId)
+      }
+      return next
+    })
+  }
+
+  const toggleDatabase = (databaseId: number) => {
+    setOpenDatabases(prev => {
+      const next = new Set(prev)
+      if (next.has(databaseId)) {
+        next.delete(databaseId)
+      } else {
+        next.add(databaseId)
+      }
+      return next
+    })
+  }
 
   const handleCreateApp = async () => {
     setIsCreating(true)
@@ -293,14 +323,21 @@ export function AppSidebar({
               <SidebarGroupContent>
                 <SidebarMenu>
                   {apps.map((app) => (
-                    <Collapsible key={app.id}>
+                    <Collapsible key={app.id} open={openApps.has(app.id)} onOpenChange={() => toggleApp(app.id)}>
                       <SidebarMenuItem>
-                        <CollapsibleTrigger asChild>
+                        <CollapsibleTrigger className="w-full">
                           <SidebarMenuButton
                             asChild
                             isActive={pathname === `/apps/${app.id}`}
                           >
-                            <Link href={`/apps/${app.id}`}>{app.name}</Link>
+                            <div className="flex items-center justify-between w-full">
+                              <Link href={`/apps/${app.id}`} className="flex-1">{app.name}</Link>
+                              {openApps.has(app.id) ? (
+                                <ChevronDown className="h-4 w-4 ml-auto" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 ml-auto" />
+                              )}
+                            </div>
                           </SidebarMenuButton>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
@@ -479,14 +516,21 @@ export function AppSidebar({
               <SidebarGroupContent>
                 <SidebarMenu>
                   {databases.map((database) => (
-                    <Collapsible key={database.id}>
+                    <Collapsible key={database.id} open={openDatabases.has(database.id)} onOpenChange={() => toggleDatabase(database.id)}>
                       <SidebarMenuItem>
-                        <CollapsibleTrigger asChild>
+                        <CollapsibleTrigger className="w-full">
                           <SidebarMenuButton
                             asChild
                             isActive={pathname === `/data`}
                           >
-                            <Link href={`/data`}>{database.name}</Link>
+                            <div className="flex items-center justify-between w-full">
+                              <Link href={`/data`} className="flex-1">{database.name}</Link>
+                              {openDatabases.has(database.id) ? (
+                                <ChevronDown className="h-4 w-4 ml-auto" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 ml-auto" />
+                              )}
+                            </div>
                           </SidebarMenuButton>
                         </CollapsibleTrigger>
                         <CollapsibleContent>

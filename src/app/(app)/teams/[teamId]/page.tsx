@@ -46,12 +46,7 @@ export default async function TeamPage({ params }: TeamPageProps) {
       icon={<Users className="h-5 w-5" />}
     >
       <Suspense fallback={<Loading text="Loading team..." />}>
-        <TeamDetailsView
-          team={team}
-          agents={agents || []}
-          onEdit={() => {}}
-          onUpdate={() => {}}
-        />
+        <TeamDetailsView team={team} agents={agents || []} />
       </Suspense>
     </BasePage>
   );

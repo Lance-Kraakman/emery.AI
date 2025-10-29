@@ -31,8 +31,6 @@ import { TableSelector } from './TableSelector';
 
 interface AgentDetailsViewProps {
   agent: AgentDTO;
-  onEdit: () => void;
-  onUpdate?: () => void;
 }
 
 interface EditFormData {
@@ -44,7 +42,7 @@ interface EditFormData {
   schedules: any[]; // ScheduleConfigurationDTO[] - use any during migration
 }
 
-export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetailsViewProps) {
+export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
   const [isActivityOpen, setIsActivityOpen] = useState(false);
   const [isTriggerConfigOpen, setIsTriggerConfigOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -111,10 +109,10 @@ export default function AgentDetailsView({ agent, onEdit, onUpdate }: AgentDetai
       if (!result.success) {
         throw new Error(result.error || 'Failed to update agent');
       }
-      
+
       setIsEditMode(false);
-      onUpdate?.();
-      
+      // Data will be automatically revalidated by Next.js
+
     } catch (error) {
       console.error('Error updating agent:', error);
       // Simple alert for now - could be replaced with a toast system later
