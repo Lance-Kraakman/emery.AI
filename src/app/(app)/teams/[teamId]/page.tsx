@@ -2,10 +2,10 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getTeam } from "@/app/actions/teams";
 import { getAgents } from "@/app/actions/agents";
-import { CanvasBase } from "@/components/canvas";
 import TeamDetailsView from "../components/TeamDetailsView";
 import { Suspense } from "react";
 import { Loading } from "@/components/ui/loading";
+import { CanvasBase } from "@/components/canvas/CanvasBase";
 
 // AIDEV-NOTE: Team detail page - renders individual team view
 // Uses CanvasBase for minimal wrapper with collapse functionality
