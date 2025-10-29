@@ -1,35 +1,25 @@
-import React from 'react';
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { getSkillsByOrganization } from '@/app/actions/skills';
-import { OrganizationSkillsListView } from './components/OrganizationSkillsListView';
+
+// AIDEV-NOTE: Skills list now shown in sidebar
+// This page redirects to first skill or mission-control
 
 export default async function OrganizationSkillsPage() {
   const session = await auth();
 
-  if (!session?.user) {
-    redirect('/auth/signin');
+  if (!session?.user?.currentOrganizationId) {
+    redirect('/mission-control/dashboard');
   }
 
-  // Get user's organization ID from session
-  const organizationId = session.user.currentOrganizationId;
-
-  if (!organizationId) {
-    redirect('/organization/setup');
-  }
-
-  // Fetch ALL skills for the organization (both org and agent-scoped)
-  const skillsResult = await getSkillsByOrganization(organizationId);
+  // Fetch organization skills
+  const skillsResult = await getSkillsByOrganization(session.user.currentOrganizationId);
   const skills = skillsResult.success ? skillsResult.data : [];
 
-  return (
-    <div className="container mx-auto p-6">
-      <div className="max-w-6xl mx-auto">
-        <OrganizationSkillsListView
-          organizationId={organizationId}
-          initialSkills={skills || []}
-        />
-      </div>
-    </div>
-  );
+  // Redirect to first skill if exists, otherwise to mission-control
+  if (skills && skills.length > 0) {
+    redirect(`/skills/${skills[0].id}`);
+  }
+
+  redirect("/mission-control/dashboard");
 }
