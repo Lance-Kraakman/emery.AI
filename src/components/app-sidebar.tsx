@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
   AppWindow,
@@ -259,7 +260,7 @@ export function AppSidebar({
                       asChild
                       isActive={pathname === "/mission-control/dashboard"}
                     >
-                      <a href="/mission-control/dashboard">Dashboard</a>
+                      <Link href="/mission-control/dashboard">Dashboard</Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
@@ -267,10 +268,10 @@ export function AppSidebar({
                       asChild
                       isActive={pathname === "/mission-control/org-chart"}
                     >
-                      <a href="/mission-control/org-chart">
+                      <Link href="/mission-control/org-chart">
                         <Building2 className="h-4 w-4" />
                         <span>Org Chart</span>
-                      </a>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
@@ -299,7 +300,7 @@ export function AppSidebar({
                             asChild
                             isActive={pathname === `/apps/${app.id}`}
                           >
-                            <a href={`/apps/${app.id}`}>{app.name}</a>
+                            <Link href={`/apps/${app.id}`}>{app.name}</Link>
                           </SidebarMenuButton>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
@@ -307,10 +308,10 @@ export function AppSidebar({
                             {app.pages && app.pages.map((page) => (
                               <SidebarMenuSubItem key={page.id}>
                                 <SidebarMenuSubButton asChild>
-                                  <a href={`/puck-demo${app.slug}${page.slug}`}>
+                                  <Link href={`/puck-demo${app.slug}${page.slug}`}>
                                     <FileText className="h-3 w-3" />
                                     <span>{page.name}</span>
-                                  </a>
+                                  </Link>
                                 </SidebarMenuSubButton>
                               </SidebarMenuSubItem>
                             ))}
@@ -366,7 +367,7 @@ export function AppSidebar({
                         asChild
                         isActive={pathname?.startsWith(`/agents/${agent.id}`)}
                       >
-                        <a href={`/agents/${agent.id}`}>{agent.name}</a>
+                        <Link href={`/agents/${agent.id}`}>{agent.name}</Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -405,7 +406,7 @@ export function AppSidebar({
                         asChild
                         isActive={pathname?.startsWith(`/teams/${team.id}`)}
                       >
-                        <a href={`/teams/${team.id}`}>{team.name}</a>
+                        <Link href={`/teams/${team.id}`}>{team.name}</Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -444,7 +445,7 @@ export function AppSidebar({
                         asChild
                         isActive={pathname?.startsWith(`/skills/${skill.id}`)}
                       >
-                        <a href={`/skills/${skill.id}`}>{skill.name}</a>
+                        <Link href={`/skills/${skill.id}`}>{skill.name}</Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -485,7 +486,7 @@ export function AppSidebar({
                             asChild
                             isActive={pathname === `/data`}
                           >
-                            <a href={`/data`}>{database.name}</a>
+                            <Link href={`/data`}>{database.name}</Link>
                           </SidebarMenuButton>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
@@ -493,10 +494,10 @@ export function AppSidebar({
                             {database.tables && database.tables.map((table) => (
                               <SidebarMenuSubItem key={table.id}>
                                 <SidebarMenuSubButton asChild>
-                                  <a href={`/data`}>
+                                  <Link href={`/data`}>
                                     <FileText className="h-3 w-3" />
                                     <span>{table.name}</span>
-                                  </a>
+                                  </Link>
                                 </SidebarMenuSubButton>
                               </SidebarMenuSubItem>
                             ))}
@@ -548,10 +549,10 @@ export function AppSidebar({
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={pathname === "/connections"}>
-                      <a href="/connections">
+                      <Link href="/connections">
                         <Plug className="h-4 w-4" />
                         <span>OAuth Connections</span>
-                      </a>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
@@ -559,18 +560,18 @@ export function AppSidebar({
                       asChild
                       isActive={pathname === "/organization/settings/permissions"}
                     >
-                      <a href="/organization/settings/permissions">
+                      <Link href="/organization/settings/permissions">
                         <Users className="h-4 w-4" />
                         <span>Permissions</span>
-                      </a>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={pathname === "/settings/system"}>
-                      <a href="/settings/system">
+                      <Link href="/settings/system">
                         <SlidersHorizontal className="h-4 w-4" />
                         <span>System</span>
-                      </a>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
