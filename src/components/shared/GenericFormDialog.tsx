@@ -19,7 +19,7 @@ interface GenericFormDialogProps {
   error?: string | null;
   submitLabel?: string;
   cancelLabel?: string;
-  submitVariant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link" | "success";
+  submitVariant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
   maxWidth?: string;
   hideButtons?: boolean; // For custom button implementations
 }

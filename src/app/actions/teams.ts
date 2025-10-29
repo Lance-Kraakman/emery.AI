@@ -29,14 +29,14 @@ export async function createTeamFromClient(data: CreateTeamClientData): Promise<
  * Used for quick creation from sidebar + button
  */
 export async function createDefaultTeam(): Promise<Result> {
-  return withAuthContext(async () => {
-    const defaultData: CreateTeamClientData = {
-      name: "Untitled Team",
-      purpose: "",
-      description: "",
-    };
-    return createTeamFromClient(defaultData);
-  });
+  // createTeamFromClient already uses withAuthContext, no need to wrap again
+  const defaultData: CreateTeamClientData = {
+    name: "Untitled Team",
+    purpose: "",
+    description: "",
+    organizationId: 0, // Will be set by createTeam from session
+  };
+  return createTeamFromClient(defaultData);
 }
 
 // Helper function for updating teams from client data (with plain types)

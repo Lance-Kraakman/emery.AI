@@ -276,13 +276,16 @@ export function AppSidebar({
                                 </SidebarMenuSubItem>
                               ))}
                               <SidebarMenuSubItem>
-                                <SidebarMenuSubButton
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="w-full justify-start h-8"
                                   onClick={() => handleCreatePage(app.id)}
                                   disabled={isCreating}
                                 >
                                   <Plus className="h-3 w-3" />
                                   <span>Add Page</span>
-                                </SidebarMenuSubButton>
+                                </Button>
                               </SidebarMenuSubItem>
                             </SidebarMenuSub>
                           </CollapsibleContent>
@@ -291,10 +294,15 @@ export function AppSidebar({
                     </Collapsible>
                   ))}
                   <SidebarMenuItem>
-                    <SidebarMenuButton onClick={handleCreateApp} disabled={isCreating}>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start"
+                      onClick={handleCreateApp}
+                      disabled={isCreating}
+                    >
                       <Plus className="h-4 w-4" />
                       <span>Add App</span>
-                    </SidebarMenuButton>
+                    </Button>
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
@@ -325,10 +333,15 @@ export function AppSidebar({
                     </SidebarMenuItem>
                   ))}
                   <SidebarMenuItem>
-                    <SidebarMenuButton onClick={handleCreateAgent} disabled={isCreating}>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start"
+                      onClick={handleCreateAgent}
+                      disabled={isCreating}
+                    >
                       <Plus className="h-4 w-4" />
                       <span>Add Agent</span>
-                    </SidebarMenuButton>
+                    </Button>
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
@@ -359,10 +372,15 @@ export function AppSidebar({
                     </SidebarMenuItem>
                   ))}
                   <SidebarMenuItem>
-                    <SidebarMenuButton onClick={handleCreateTeam} disabled={isCreating}>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start"
+                      onClick={handleCreateTeam}
+                      disabled={isCreating}
+                    >
                       <Plus className="h-4 w-4" />
                       <span>Add Team</span>
-                    </SidebarMenuButton>
+                    </Button>
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
@@ -393,10 +411,15 @@ export function AppSidebar({
                     </SidebarMenuItem>
                   ))}
                   <SidebarMenuItem>
-                    <SidebarMenuButton onClick={handleCreateSkill} disabled={isCreating}>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start"
+                      onClick={handleCreateSkill}
+                      disabled={isCreating}
+                    >
                       <Plus className="h-4 w-4" />
                       <span>Add Skill</span>
-                    </SidebarMenuButton>
+                    </Button>
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
