@@ -38,7 +38,7 @@ export default async function AppPage({ params }: AppPageProps) {
       icon={<AppWindow className="h-5 w-5" />}
     >
       <Suspense fallback={<Loading text="Loading app..." />}>
-        <AppDetailsView app={app} onBack={() => {}} />
+        <AppDetailsView app={app} />
       </Suspense>
     </BasePage>
   );

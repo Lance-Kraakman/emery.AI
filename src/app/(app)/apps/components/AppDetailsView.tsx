@@ -5,7 +5,7 @@ import type { AppDTO } from '@/app/mappers/puck-app-mapper';
 import type { PageDTO } from '@/app/mappers/puck-page-mapper';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Edit, Trash2 } from 'lucide-react';
+import { Edit, Trash2 } from 'lucide-react';
 import { appsActions } from '@/stores/apps.store';
 import { deleteApp } from '@/app/actions/puck-apps';
 import { getPages } from '@/app/actions/puck-pages';
@@ -25,10 +25,9 @@ import {
 
 interface AppDetailsViewProps {
   app: AppDTO;
-  onBack: () => void;
 }
 
-export function AppDetailsView({ app, onBack }: AppDetailsViewProps) {
+export function AppDetailsView({ app }: AppDetailsViewProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [pages, setPages] = useState<PageDTO[]>([]);
@@ -83,14 +82,9 @@ export function AppDetailsView({ app, onBack }: AppDetailsViewProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={onBack}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h2 className="text-2xl font-bold">{app.name}</h2>
-            <p className="text-sm text-muted-foreground">/{app.slug}</p>
-          </div>
+        <div>
+          <h2 className="text-2xl font-bold">{app.name}</h2>
+          <p className="text-sm text-muted-foreground">/{app.slug}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleEdit}>
