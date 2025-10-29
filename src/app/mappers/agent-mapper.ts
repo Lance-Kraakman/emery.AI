@@ -25,8 +25,8 @@ export interface AgentDTO {
   organizationId: number;
   ownerId: string; // Used for OAuth resolution via proxy
   apiKey?: string | null;
-  createdAt?: Date | null;
-  updatedAt?: Date | null;
+  createdAt?: string | null; // ISO string for serialization
+  updatedAt?: string | null; // ISO string for serialization
 }
 
 export class AgentMapper {
@@ -44,8 +44,9 @@ export class AgentMapper {
       organizationId: agent.organizationId.value,
       ownerId: agent.ownerId.value,
       apiKey: agent.apiKey?.value || null,
-      createdAt: agent.createdAt,
-      updatedAt: agent.updatedAt
+      // Convert Date objects to ISO strings for server component serialization
+      createdAt: agent.createdAt ? agent.createdAt.toISOString() : null,
+      updatedAt: agent.updatedAt ? agent.updatedAt.toISOString() : null
     };
   }
 }

@@ -41,11 +41,7 @@ export default async function AgentPage({ params }: AgentPageProps) {
       icon={<Bot className="h-5 w-5" />}
     >
       <Suspense fallback={<Loading text="Loading agent..." />}>
-        <AgentDetailsView
-          agent={agent}
-          onEdit={() => {}}
-          onUpdate={() => {}}
-        />
+        <AgentDetailsView agent={agent} />
       </Suspense>
     </BasePage>
   );
