@@ -7,6 +7,8 @@ import { getPages } from "@/app/actions/puck-pages"
 import { getAgents } from "@/app/actions/agents"
 import { getTeams } from "@/app/actions/teams"
 import { getSkillsByOrganization } from "@/app/actions/skills"
+import { getDatabases } from "@/app/actions/databases"
+import { getTables } from "@/app/actions/tables"
 import { useSession } from "next-auth/react"
 
 // AIDEV-NOTE: Client-side wrapper that fetches sidebar data
@@ -15,12 +17,14 @@ import { useSession } from "next-auth/react"
 interface SidebarPage {
   id: number
   name: string
+  slug: string
   appId: number
 }
 
 interface SidebarApp {
   id: number
   name: string
+  slug: string
   pages: SidebarPage[]
 }
 
@@ -77,11 +81,13 @@ export function AppSidebarClient() {
       }
 
       try {
-        const [appsResult, agentsResult, teamsResult, skillsResult] = await Promise.all([
+        const [appsResult, agentsResult, teamsResult, skillsResult, databasesResult, tablesResult] = await Promise.all([
           getApps(),
           getAgents(),
           getTeams(),
-          getSkillsByOrganization(session.user.currentOrganizationId)
+          getSkillsByOrganization(session.user.currentOrganizationId),
+          getDatabases(),
+          getTables()
         ])
 
         // Fetch pages for each app
@@ -95,13 +101,24 @@ export function AppSidebarClient() {
           })
         )
 
+        // Group tables by database
+        const tablesByDatabase = (tablesResult || []).reduce((acc, table) => {
+          if (!acc[table.databaseId]) {
+            acc[table.databaseId] = []
+          }
+          acc[table.databaseId].push(table)
+          return acc
+        }, {} as Record<number, typeof tablesResult>)
+
         setData({
           apps: appsWithPages.map((app) => ({
             id: app.id,
             name: app.name,
+            slug: app.slug,
             pages: app.pages.map((page) => ({
               id: page.id,
               name: page.name,
+              slug: page.slug,
               appId: app.id
             }))
           })),
@@ -117,7 +134,14 @@ export function AppSidebarClient() {
             id: skill.id,
             name: skill.name
           })),
-          databases: [] // TODO: Fetch databases
+          databases: (databasesResult || []).map((database) => ({
+            id: database.id,
+            name: database.name,
+            tables: (tablesByDatabase[database.id] || []).map((table) => ({
+              id: table.id,
+              name: table.name
+            }))
+          }))
         })
       } catch (error) {
         console.error("Error fetching sidebar data:", error)
