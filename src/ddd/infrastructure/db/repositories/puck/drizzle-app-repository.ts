@@ -1,84 +1,85 @@
-// AIDEV-NOTE: Drizzle implementation of IPuckAppRepository
-// Handles data access for PuckApp entities using PostgreSQL
+// AIDEV-NOTE: Drizzle implementation of IAppRepository
+// Handles data access for App entities using PostgreSQL
+// Uses Puck schema but that's just an implementation detail
 
 import type { DbClient } from '@/lib/db/client';
-import { puckApps } from '@/lib/db/schema';
+import { apps } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import type { IPuckAppRepository } from '@/ddd/domain/puck/repositories/puck-app-repository';
-import { PuckApp } from '@/ddd/domain/puck/entities/puck-app';
+import type { IAppRepository } from '@/ddd/domain/puck/repositories/app-repository';
+import { App } from '@/ddd/domain/puck/entities/app';
 import { AppId } from '@/ddd/domain/puck/value-objects/app-id';
 import { AppSlug } from '@/ddd/domain/puck/value-objects/app-slug';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 
-export class DrizzlePuckAppRepository implements IPuckAppRepository {
+export class DrizzleAppRepository implements IAppRepository {
   constructor(private readonly db: DbClient) {}
 
-  async findById(id: AppId): Promise<PuckApp | null> {
+  async findById(id: AppId): Promise<App | null> {
     try {
-      const record = await this.db.query.puckApps.findFirst({
-        where: eq(puckApps.id, id.value)
+      const record = await this.db.query.apps.findFirst({
+        where: eq(apps.id, id.value)
       });
 
       return record ? this.toDomain(record) : null;
     } catch (error) {
-      console.error('[DrizzlePuckAppRepository] Error finding app by ID:', error);
+      console.error('[DrizzleAppRepository] Error finding app by ID:', error);
       throw error;
     }
   }
 
-  async findByOrganization(organizationId: OrganizationId): Promise<PuckApp[]> {
+  async findByOrganization(organizationId: OrganizationId): Promise<App[]> {
     try {
-      const records = await this.db.query.puckApps.findMany({
-        where: eq(puckApps.organizationId, organizationId.value)
+      const records = await this.db.query.apps.findMany({
+        where: eq(apps.organizationId, organizationId.value)
       });
 
       // Sort by name on the application side
       return records
         .map((record: any) => this.toDomain(record))
-        .sort((a: PuckApp, b: PuckApp) => a.name.localeCompare(b.name));
+        .sort((a: App, b: App) => a.name.localeCompare(b.name));
     } catch (error) {
-      console.error('[DrizzlePuckAppRepository] Error finding apps by organization:', error);
+      console.error('[DrizzleAppRepository] Error finding apps by organization:', error);
       throw error;
     }
   }
 
-  async findBySlug(organizationId: OrganizationId, slug: AppSlug): Promise<PuckApp | null> {
+  async findBySlug(organizationId: OrganizationId, slug: AppSlug): Promise<App | null> {
     try {
-      const record = await this.db.query.puckApps.findFirst({
+      const record = await this.db.query.apps.findFirst({
         where: and(
-          eq(puckApps.organizationId, organizationId.value),
-          eq(puckApps.slug, slug.value)
+          eq(apps.organizationId, organizationId.value),
+          eq(apps.slug, slug.value)
         )
       });
 
       return record ? this.toDomain(record) : null;
     } catch (error) {
-      console.error('[DrizzlePuckAppRepository] Error finding app by slug:', error);
+      console.error('[DrizzleAppRepository] Error finding app by slug:', error);
       throw error;
     }
   }
 
   async existsBySlug(organizationId: OrganizationId, slug: AppSlug): Promise<boolean> {
     try {
-      const record = await this.db.query.puckApps.findFirst({
+      const record = await this.db.query.apps.findFirst({
         where: and(
-          eq(puckApps.organizationId, organizationId.value),
-          eq(puckApps.slug, slug.value)
+          eq(apps.organizationId, organizationId.value),
+          eq(apps.slug, slug.value)
         )
       });
 
       return !!record;
     } catch (error) {
-      console.error('[DrizzlePuckAppRepository] Error checking slug existence:', error);
+      console.error('[DrizzleAppRepository] Error checking slug existence:', error);
       throw error;
     }
   }
 
-  async create(app: PuckApp): Promise<PuckApp> {
+  async create(app: App): Promise<App> {
     try {
       const persistence = app.toPersistence();
 
-      const [record] = await this.db.insert(puckApps).values({
+      const [record] = await this.db.insert(apps).values({
         organizationId: persistence.organizationId,
         name: persistence.name,
         slug: persistence.slug,
@@ -90,24 +91,24 @@ export class DrizzlePuckAppRepository implements IPuckAppRepository {
 
       return this.toDomain(record);
     } catch (error) {
-      console.error('[DrizzlePuckAppRepository] Error creating app:', error);
+      console.error('[DrizzleAppRepository] Error creating app:', error);
       throw error;
     }
   }
 
-  async update(app: PuckApp): Promise<PuckApp> {
+  async update(app: App): Promise<App> {
     try {
       const persistence = app.toPersistence();
 
       const [record] = await this.db
-        .update(puckApps)
+        .update(apps)
         .set({
           name: persistence.name,
           slug: persistence.slug,
           description: persistence.description,
           updatedAt: new Date()
         })
-        .where(eq(puckApps.id, persistence.id))
+        .where(eq(apps.id, persistence.id))
         .returning();
 
       if (!record) {
@@ -116,7 +117,7 @@ export class DrizzlePuckAppRepository implements IPuckAppRepository {
 
       return this.toDomain(record);
     } catch (error) {
-      console.error('[DrizzlePuckAppRepository] Error updating app:', error);
+      console.error('[DrizzleAppRepository] Error updating app:', error);
       throw error;
     }
   }
@@ -124,32 +125,32 @@ export class DrizzlePuckAppRepository implements IPuckAppRepository {
   async delete(id: AppId): Promise<void> {
     try {
       await this.db
-        .delete(puckApps)
-        .where(eq(puckApps.id, id.value));
+        .delete(apps)
+        .where(eq(apps.id, id.value));
 
-      console.log(`[DrizzlePuckAppRepository] Deleted app ID: ${id.value}`);
+      console.log(`[DrizzleAppRepository] Deleted app ID: ${id.value}`);
     } catch (error) {
-      console.error('[DrizzlePuckAppRepository] Error deleting app:', error);
+      console.error('[DrizzleAppRepository] Error deleting app:', error);
       throw error;
     }
   }
 
   async countByOrganization(organizationId: OrganizationId): Promise<number> {
     try {
-      const records = await this.db.query.puckApps.findMany({
-        where: eq(puckApps.organizationId, organizationId.value)
+      const records = await this.db.query.apps.findMany({
+        where: eq(apps.organizationId, organizationId.value)
       });
 
       return records.length;
     } catch (error) {
-      console.error('[DrizzlePuckAppRepository] Error counting apps:', error);
+      console.error('[DrizzleAppRepository] Error counting apps:', error);
       throw error;
     }
   }
 
   // Helper method to convert database record to domain entity
-  private toDomain(record: any): PuckApp {
-    return PuckApp.fromPersistence({
+  private toDomain(record: any): App {
+    return App.fromPersistence({
       id: record.id,
       organizationId: record.organizationId,
       name: record.name,

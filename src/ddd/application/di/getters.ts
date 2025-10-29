@@ -49,9 +49,9 @@ import type { EmbeddingGeneratorService } from '@/ddd/domain/rag/services/embedd
 import type { DrizzleRagIndexRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-index-repository';
 import type { DrizzleRagDocumentRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-document-repository';
 import type { DrizzleRagQueryLogRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-query-log-repository';
-import type { IPuckAppRepository } from '@/ddd/domain/puck/repositories/puck-app-repository';
+import type { IAppRepository } from '@/ddd/domain/puck/repositories/app-repository';
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
-import type { PuckAppApplicationService } from '@/ddd/application/services/puck/puck-app-application-service';
+import type { AppApplicationService } from '@/ddd/application/services/puck/app-application-service';
 import type { PuckPageApplicationService } from '@/ddd/application/services/puck/puck-page-application-service';
 
 import { DIContainer } from './container';
@@ -112,9 +112,9 @@ type ServiceMap = {
   ConnectionApplicationService: ConnectionApplicationService;
 
   // Puck Services
-  PuckAppRepository: IPuckAppRepository;
+  AppRepository: IAppRepository;
   PuckPageRepository: IPuckPageRepository;
-  PuckAppApplicationService: PuckAppApplicationService;
+  AppApplicationService: AppApplicationService;
   PuckPageApplicationService: PuckPageApplicationService;
 
   // Tool Services
@@ -136,7 +136,7 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
     'RagDocumentRepository': 'IRagDocumentRepository',
     'RagQueryLogRepository': 'IRagQueryLogRepository',
     'ConnectionRepository': 'IConnectionRepository',
-    'PuckAppRepository': 'IPuckAppRepository',
+    'AppRepository': 'IAppRepository',
     'PuckPageRepository': 'IPuckPageRepository',
     'IToolRegistryService': 'IToolRegistryService',
   };
@@ -245,9 +245,9 @@ export const getOAuthProxyApplicationService = (): OAuthProxyApplicationService 
 };
 
 // Puck domain repository getters
-export const getPuckAppRepository = createGetter('PuckAppRepository');
+export const getAppRepository = createGetter('AppRepository');
 export const getPuckPageRepository = createGetter('PuckPageRepository');
 
 // Puck application service getters
-export const getPuckAppApplicationService = createGetter('PuckAppApplicationService');
+export const getAppApplicationService = createGetter('AppApplicationService');
 export const getPuckPageApplicationService = createGetter('PuckPageApplicationService');

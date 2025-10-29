@@ -3,10 +3,11 @@
 
 export const ACTIONS = {
   VIEW: 'view',
-  MANAGE: 'manage', 
+  MANAGE: 'manage',
   CREATE: 'create',
   EXECUTE: 'execute',
-  INVITE: 'invite'
+  INVITE: 'invite',
+  PUBLISH: 'publish'
 } as const;
 
 export const RESOURCES = {
@@ -16,7 +17,8 @@ export const RESOURCES = {
   AGENTS: 'agents',
   TASKS: 'tasks',
   DATA: 'data',
-  SKILLS: 'skills'
+  SKILLS: 'skills',
+  APPS: 'apps'
 } as const;
 
 export type ActionType = typeof ACTIONS[keyof typeof ACTIONS];
@@ -66,6 +68,11 @@ export class Permission {
   static readonly SKILLS_MANAGE = new Permission(RESOURCES.SKILLS, ACTIONS.MANAGE);
   static readonly SKILLS_CREATE = new Permission(RESOURCES.SKILLS, ACTIONS.CREATE);
   static readonly SKILLS_EXECUTE = new Permission(RESOURCES.SKILLS, ACTIONS.EXECUTE);
+
+  static readonly APPS_VIEW = new Permission(RESOURCES.APPS, ACTIONS.VIEW);
+  static readonly APPS_MANAGE = new Permission(RESOURCES.APPS, ACTIONS.MANAGE);
+  static readonly APPS_CREATE = new Permission(RESOURCES.APPS, ACTIONS.CREATE);
+  static readonly APPS_PUBLISH = new Permission(RESOURCES.APPS, ACTIONS.PUBLISH);
 
   // Helper method to get all permissions for a resource
   static getAllForResource(resource: ResourceType): Permission[] {

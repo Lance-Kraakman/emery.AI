@@ -2,7 +2,7 @@
 // Handles data access for PuckPage entities using PostgreSQL
 
 import type { DbClient } from '@/lib/db/client';
-import { puckPages } from '@/lib/db/schema';
+import { pages } from '@/lib/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
 import { PuckPage } from '@/ddd/domain/puck/entities/puck-page';
@@ -16,8 +16,8 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
 
   async findById(id: PageId): Promise<PuckPage | null> {
     try {
-      const record = await this.db.query.puckPages.findFirst({
-        where: eq(puckPages.id, id.value)
+      const record = await this.db.query.pages.findFirst({
+        where: eq(pages.id, id.value)
       });
 
       return record ? this.toDomain(record) : null;
@@ -29,8 +29,8 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
 
   async findByApp(appId: AppId): Promise<PuckPage[]> {
     try {
-      const records = await this.db.query.puckPages.findMany({
-        where: eq(puckPages.appId, appId.value)
+      const records = await this.db.query.pages.findMany({
+        where: eq(pages.appId, appId.value)
       });
 
       // Sort by order on the application side
@@ -45,10 +45,10 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
 
   async findBySlug(appId: AppId, slug: PageSlug): Promise<PuckPage | null> {
     try {
-      const record = await this.db.query.puckPages.findFirst({
+      const record = await this.db.query.pages.findFirst({
         where: and(
-          eq(puckPages.appId, appId.value),
-          eq(puckPages.slug, slug.value)
+          eq(pages.appId, appId.value),
+          eq(pages.slug, slug.value)
         )
       });
 
@@ -61,10 +61,10 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
 
   async existsBySlug(appId: AppId, slug: PageSlug): Promise<boolean> {
     try {
-      const record = await this.db.query.puckPages.findFirst({
+      const record = await this.db.query.pages.findFirst({
         where: and(
-          eq(puckPages.appId, appId.value),
-          eq(puckPages.slug, slug.value)
+          eq(pages.appId, appId.value),
+          eq(pages.slug, slug.value)
         )
       });
 
@@ -79,7 +79,7 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
     try {
       const persistence = page.toPersistence();
 
-      const [record] = await this.db.insert(puckPages).values({
+      const [record] = await this.db.insert(pages).values({
         appId: persistence.appId,
         name: persistence.name,
         slug: persistence.slug,
@@ -104,7 +104,7 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
       const persistence = page.toPersistence();
 
       const [record] = await this.db
-        .update(puckPages)
+        .update(pages)
         .set({
           name: persistence.name,
           slug: persistence.slug,
@@ -114,7 +114,7 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
           isPublished: persistence.isPublished,
           updatedAt: new Date()
         })
-        .where(eq(puckPages.id, persistence.id))
+        .where(eq(pages.id, persistence.id))
         .returning();
 
       if (!record) {
@@ -131,8 +131,8 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
   async delete(id: PageId): Promise<void> {
     try {
       await this.db
-        .delete(puckPages)
-        .where(eq(puckPages.id, id.value));
+        .delete(pages)
+        .where(eq(pages.id, id.value));
 
       console.log(`[DrizzlePuckPageRepository] Deleted page ID: ${id.value}`);
     } catch (error) {
@@ -149,15 +149,15 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
       await this.db.transaction(async (tx: any) => {
         for (const [pageId, newOrder] of pageOrders.entries()) {
           await tx
-            .update(puckPages)
+            .update(pages)
             .set({
               order: newOrder.value,
               updatedAt: new Date()
             })
             .where(
               and(
-                eq(puckPages.id, pageId.value),
-                eq(puckPages.appId, appId.value)
+                eq(pages.id, pageId.value),
+                eq(pages.appId, appId.value)
               )
             );
         }
@@ -172,8 +172,8 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
 
   async countByApp(appId: AppId): Promise<number> {
     try {
-      const records = await this.db.query.puckPages.findMany({
-        where: eq(puckPages.appId, appId.value)
+      const records = await this.db.query.pages.findMany({
+        where: eq(pages.appId, appId.value)
       });
 
       return records.length;
@@ -185,8 +185,8 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
 
   async getMaxOrder(appId: AppId): Promise<number> {
     try {
-      const records = await this.db.query.puckPages.findMany({
-        where: eq(puckPages.appId, appId.value)
+      const records = await this.db.query.pages.findMany({
+        where: eq(pages.appId, appId.value)
       });
 
       if (records.length === 0) return 0;
@@ -201,10 +201,10 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
 
   async findPublishedByApp(appId: AppId): Promise<PuckPage[]> {
     try {
-      const records = await this.db.query.puckPages.findMany({
+      const records = await this.db.query.pages.findMany({
         where: and(
-          eq(puckPages.appId, appId.value),
-          eq(puckPages.isPublished, true)
+          eq(pages.appId, appId.value),
+          eq(pages.isPublished, true)
         )
       });
 

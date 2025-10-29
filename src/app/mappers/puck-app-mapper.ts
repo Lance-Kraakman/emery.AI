@@ -1,7 +1,7 @@
-// AIDEV-NOTE: PuckApp DTO mapper - converts domain entities to DTOs for API responses
+// AIDEV-NOTE: App DTO mapper - converts domain entities to DTOs for API responses
 // Follows the pattern used in table-mapper.ts
 
-import type { PuckApp } from '@/ddd/domain/puck/entities/puck-app';
+import type { App } from '@/ddd/domain/puck/entities/app';
 
 export interface AppDTO {
   id: number;
@@ -14,11 +14,11 @@ export interface AppDTO {
   updatedAt: string;
 }
 
-export class PuckAppMapper {
+export class AppMapper {
   /**
    * Convert domain entity to DTO
    */
-  static toDTO(app: PuckApp): AppDTO {
+  static toDTO(app: App): AppDTO {
     return {
       id: app.id.value,
       organizationId: app.organizationId.value,
@@ -34,7 +34,7 @@ export class PuckAppMapper {
   /**
    * Convert multiple domain entities to DTOs
    */
-  static toDTOs(apps: PuckApp[]): AppDTO[] {
+  static toDTOs(apps: App[]): AppDTO[] {
     return apps.map(app => this.toDTO(app));
   }
 }

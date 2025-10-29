@@ -2,13 +2,13 @@
 // Stateless service that handles slug generation logic
 
 import type { AppSlug } from '../value-objects/app-slug';
-import type { IPuckAppRepository } from '../repositories/puck-app-repository';
+import type { IAppRepository } from '../repositories/app-repository';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { Result } from '@/ddd/domain/shared/result';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
 
 export class AppSlugGenerator {
-  constructor(private readonly appRepository: IPuckAppRepository) {}
+  constructor(private readonly appRepository: IAppRepository) {}
 
   /**
    * Generate a unique slug for an app within an organization

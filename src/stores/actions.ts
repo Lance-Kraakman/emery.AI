@@ -15,6 +15,7 @@ import { dataActions, dataStore } from './data-management.store'
 import { chatActions, chatStore } from './chat.store'
 import { orgChartActions, orgChartStore } from './organization-chart.store'
 import { formsActions, formsStore } from './forms.store'
+import { appsActions, appsStore } from './apps.store'
 
 // Import server actions
 import { getCurrentOrganization } from '@/app/actions/user-organizations'
@@ -371,6 +372,7 @@ export const storeActions = {
     chatActions.reset()
     orgChartActions.reset()
     formsActions.reset()
+    appsActions.reset()
   },
 
   /**
@@ -385,7 +387,8 @@ export const storeActions = {
       data: dataStore.state,
       chat: chatStore.state,
       orgChart: orgChartStore.state,
-      forms: formsStore.state
+      forms: formsStore.state,
+      apps: appsStore.state
     }
   }
 }
@@ -399,5 +402,6 @@ export {
   dataActions,
   chatActions,
   orgChartActions,
-  formsActions
+  formsActions,
+  appsActions
 }

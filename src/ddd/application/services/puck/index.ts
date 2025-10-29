@@ -1,6 +1,6 @@
 // AIDEV-NOTE: Puck application services exports
 
-export { PuckAppApplicationService } from './puck-app-application-service';
+export { AppApplicationService } from './app-application-service';
 export { PuckPageApplicationService } from './puck-page-application-service';
 
 // Export command types
@@ -8,7 +8,7 @@ export type {
   CreateAppCommand,
   UpdateAppCommand,
   AppWithPagesDTO
-} from './puck-app-application-service';
+} from './app-application-service';
 
 export type {
   CreatePageCommand,

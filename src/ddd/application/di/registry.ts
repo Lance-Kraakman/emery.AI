@@ -53,9 +53,9 @@ import type { DrizzleRagIndexRepository } from '@/ddd/infrastructure/db/reposito
 import type { DrizzleRagDocumentRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-document-repository';
 import type { DrizzleRagQueryLogRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-query-log-repository';
 
-import type { IPuckAppRepository } from '@/ddd/domain/puck/repositories/puck-app-repository';
+import type { IAppRepository } from '@/ddd/domain/puck/repositories/app-repository';
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
-import type { PuckAppApplicationService } from '@/ddd/application/services/puck/puck-app-application-service';
+import type { AppApplicationService } from '@/ddd/application/services/puck/app-application-service';
 import type { PuckPageApplicationService } from '@/ddd/application/services/puck/puck-page-application-service';
 
 /**
@@ -98,8 +98,8 @@ export interface RepositoryRegistry {
   // Delegation domain repositories
   IDelegationRepository: IDelegationRepository;
 
-  // Puck domain repositories
-  IPuckAppRepository: IPuckAppRepository;
+  // App domain repositories (Puck is implementation detail)
+  IAppRepository: IAppRepository;
   IPuckPageRepository: IPuckPageRepository;
 
   // Tool domain services
@@ -150,7 +150,7 @@ export interface RepositoryRegistry {
   // Delegation application services
   CredentialDelegationApplicationService: CredentialDelegationApplicationService;
 
-  // Puck application services
-  PuckAppApplicationService: PuckAppApplicationService;
+  // App application services (Puck is implementation detail)
+  AppApplicationService: AppApplicationService;
   PuckPageApplicationService: PuckPageApplicationService;
 }

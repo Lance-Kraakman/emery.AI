@@ -12,8 +12,9 @@ export class AppId extends BaseId<'AppId'> {
     return new AppId(value);
   }
 
-  static create(): AppId {
-    // Create a new AppId with 0 as placeholder before persistence
-    return BaseId.createNew('AppId', 0) as AppId;
+  static temporary(): AppId {
+    // Use -1 for temporary IDs to distinguish from real IDs
+    // BaseId allows -1 as a special case for new entities
+    return new AppId(-1);
   }
 }

@@ -1,26 +1,27 @@
-// AIDEV-NOTE: PuckApp repository interface - defines data access contract
+// AIDEV-NOTE: App repository interface - defines data access contract
 // Implementation will be in infrastructure layer using Drizzle
+// Puck is just the visual page builder implementation detail
 
-import type { PuckApp } from '../entities/puck-app';
+import type { App } from '../entities/app';
 import type { AppId } from '../value-objects/app-id';
 import type { AppSlug } from '../value-objects/app-slug';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 
-export interface IPuckAppRepository {
+export interface IAppRepository {
   /**
    * Find an app by its ID
    */
-  findById(id: AppId): Promise<PuckApp | null>;
+  findById(id: AppId): Promise<App | null>;
 
   /**
    * Find all apps for an organization
    */
-  findByOrganization(organizationId: OrganizationId): Promise<PuckApp[]>;
+  findByOrganization(organizationId: OrganizationId): Promise<App[]>;
 
   /**
    * Find an app by slug within an organization
    */
-  findBySlug(organizationId: OrganizationId, slug: AppSlug): Promise<PuckApp | null>;
+  findBySlug(organizationId: OrganizationId, slug: AppSlug): Promise<App | null>;
 
   /**
    * Check if a slug exists within an organization
@@ -30,12 +31,12 @@ export interface IPuckAppRepository {
   /**
    * Create a new app
    */
-  create(app: PuckApp): Promise<PuckApp>;
+  create(app: App): Promise<App>;
 
   /**
    * Update an existing app
    */
-  update(app: PuckApp): Promise<PuckApp>;
+  update(app: App): Promise<App>;
 
   /**
    * Delete an app (cascade deletes pages)
