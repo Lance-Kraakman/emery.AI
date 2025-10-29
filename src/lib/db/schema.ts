@@ -39,12 +39,13 @@ export const databases = pgTable("databases", {
   id: serial("id").primaryKey(),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
-  slug: text("slug").notNull().unique(), // URL-safe database identifier
+  slug: text("slug").notNull(), // URL-safe database identifier (unique per organization)
   metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata for RAG indexing
   createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
+  unique("databases_org_slug_unique").on(table.organizationId, table.slug),
   pgPolicy("databases_tenant_isolation", {
     as: "permissive",
     for: "all",
