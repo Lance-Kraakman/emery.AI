@@ -18,7 +18,7 @@
  */
 
 import { ExternalField } from "@measured/puck";
-import { getDataSourcesForOrganization } from "@/app/actions/data-sources";
+import { getViewsForOrganization } from "@/app/actions/views";
 
 export interface DataSourceFieldValue {
   id: number;
@@ -42,7 +42,7 @@ export function createDataSourceField(params: {
 
     fetchList: async ({ query }) => {
       // Fetch data sources for the organization (Server Action - returns DTOs)
-      const dataSources = await getDataSourcesForOrganization();
+      const dataSources = await getViewsForOrganization();
 
       // Filter by search query
       const filteredSources = query
@@ -89,7 +89,7 @@ export function createDataSourceFieldForTable(params: {
 
     fetchList: async ({ query }) => {
       // Fetch all data sources for the organization (Server Action - returns DTOs)
-      const allDataSources = await getDataSourcesForOrganization();
+      const allDataSources = await getViewsForOrganization();
 
       // Filter by table ID
       // AIDEV-NOTE: DTOs have plain tableId property, not ds.tableId.value

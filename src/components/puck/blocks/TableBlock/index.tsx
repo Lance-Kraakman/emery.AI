@@ -30,7 +30,7 @@
 
 import type { ComponentConfig } from "@measured/puck";
 import TableBlock, { type TableBlockProps } from "./TableBlock";
-import { getDataSource, executeDataSource, getDataSourcesForTable, createDataSource } from "@/app/actions/data-sources";
+import { getView, executeView, getViewsForTable, createView } from "@/app/actions/views";
 import { getTables } from "@/app/actions/tables";
 
 export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
@@ -58,11 +58,11 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
           description: t.description || `Database ID: ${t.databaseId}`,
         }));
       },
-      mapProp: (item: any) => ({
+      mapProp: (item: any) => (item ? {
         id: item.id,
         name: item.name,
         databaseId: item.databaseId,
-      }),
+      } : null),
       getItemSummary: (item: any) => item?.name || "No table selected",
     } as any,
 
@@ -89,7 +89,7 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
         const tableId = context.props.table.id;
         console.log('[dataSourceOverride fetchList] Fetching data sources for table:', tableId);
 
-        const dataSources = await getDataSourcesForTable(tableId);
+        const dataSources = await getViewsForTable(tableId);
         console.log('[dataSourceOverride fetchList] Found data sources:', dataSources.length);
 
         const filteredSources = query
@@ -256,7 +256,7 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       } else {
         // Auto-create or use default data source for the table
         console.log('[TableBlock resolveData] Fetching existing data sources for table:', tableId);
-        const existingDataSources = await getDataSourcesForTable(tableId);
+        const existingDataSources = await getViewsForTable(tableId);
         console.log('[TableBlock resolveData] Found existing data sources:', existingDataSources.length);
 
         if (existingDataSources.length > 0) {
@@ -267,7 +267,7 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
         } else {
           // Auto-create a default data source
           console.log('[TableBlock resolveData] Auto-creating default data source for table:', tableName);
-          const createResult = await createDataSource({
+          const createResult = await createView({
             tableId,
             name: `Default view of ${tableName}`,
             description: "Auto-created default data source for table",
@@ -293,10 +293,10 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
 
       // Execute data source to get rows (Server Action - returns DTOs)
       console.log('[TableBlock resolveData] Executing data source:', dataSourceId);
-      const result = await executeDataSource(dataSourceId);
+      const result = await executeView(dataSourceId);
 
       if (!result) {
-        console.error('[TableBlock resolveData] executeDataSource returned null');
+        console.error('[TableBlock resolveData] executeView returned null');
         return {
           props: {
             ...props,
