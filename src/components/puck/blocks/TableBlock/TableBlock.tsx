@@ -63,8 +63,22 @@ export default function TableBlock(props: TableBlockProps) {
     _totalCount = 0,
   } = props;
 
+  console.log('[TableBlock render] Rendering with props:', {
+    hasTable: !!props.table,
+    tableId: props.table?.id,
+    dataSourceName,
+    rowCount: _rows.length,
+    fieldCount: _fields.length,
+    totalCount: _totalCount,
+    mappingCount: fieldMappings.length,
+    sampleRow: _rows[0],
+    sampleField: _fields[0],
+    visibleMappings: fieldMappings.filter(m => m.visible).length
+  });
+
   // If no table selected, show placeholder
   if (!props.table?.id) {
+    console.log('[TableBlock render] No table selected, showing placeholder');
     return (
       <div className={styles.placeholder}>
         <div className={styles.placeholderIcon}>📊</div>
@@ -77,12 +91,16 @@ export default function TableBlock(props: TableBlockProps) {
 
   // If data source selected but no data, show empty state
   if (_rows.length === 0) {
+    console.log('[TableBlock render] No rows, showing empty state');
     return (
       <div className={styles.emptyState}>
         <div className={styles.emptyIcon}>📭</div>
         <p className={styles.emptyText}>
           No data available
           {dataSourceName && ` from ${dataSourceName}`}
+        </p>
+        <p className={styles.emptySubtext} style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+          Check browser console for detailed logs
         </p>
       </div>
     );
@@ -93,8 +111,11 @@ export default function TableBlock(props: TableBlockProps) {
     .filter((m) => m.visible)
     .sort((a, b) => a.order - b.order);
 
+  console.log('[TableBlock render] Visible mappings:', visibleMappings);
+
   // If no visible columns, show message
   if (visibleMappings.length === 0) {
+    console.log('[TableBlock render] No visible columns, showing message');
     return (
       <div className={styles.emptyState}>
         <p className={styles.emptyText}>
