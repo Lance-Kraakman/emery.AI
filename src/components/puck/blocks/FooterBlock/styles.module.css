@@ -14,48 +14,67 @@
   margin-right: auto;
 }
 
-.FooterBlock-columns {
+/* Layout: Columns (dynamic grid) */
+.FooterBlock--columns .FooterBlock-columns {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 32px;
   padding-bottom: 32px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-.FooterBlock-column {
+.FooterBlock[style*="1f2937"] .FooterBlock-columns,
+.FooterBlock[style*="111827"] .FooterBlock-columns {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Layout: Centered */
+.FooterBlock--centered .FooterBlock-columns {
   display: flex;
   flex-direction: column;
-}
-
-.FooterBlock-columnTitle {
-  margin: 0;
-  padding: 0;
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 16px;
-}
-
-.FooterBlock-linkList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.FooterBlock-link {
-  text-decoration: none;
-  font-size: 14px;
-  transition: opacity 0.2s;
-}
-
-.FooterBlock-link:hover {
-  opacity: 0.7;
-}
-
-.FooterBlock-copyright {
-  padding-top: 32px;
+  align-items: center;
   text-align: center;
-  font-size: 14px;
+  gap: 24px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.FooterBlock--centered[style*="1f2937"] .FooterBlock-columns,
+.FooterBlock--centered[style*="111827"] .FooterBlock-columns {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Layout: Minimal */
+.FooterBlock--minimal .FooterBlock-columns {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.FooterBlock--minimal[style*="1f2937"] .FooterBlock-columns,
+.FooterBlock--minimal[style*="111827"] .FooterBlock-columns {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Bottom Bar */
+.FooterBlock-bottomBar {
+  padding-top: 32px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .FooterBlock--columns .FooterBlock-columns {
+    grid-template-columns: 1fr !important;
+  }
+
+  .FooterBlock--minimal .FooterBlock-columns {
+    flex-direction: column;
+  }
 }

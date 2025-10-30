@@ -16,7 +16,7 @@
   padding: 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 24px;
 }
 
 @media (min-width: 768px) {
@@ -25,31 +25,122 @@
   }
 }
 
-.HeaderBlock-logo {
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: 1.4px;
-  opacity: 0.8;
+/* Layout: Left Logo + Nav (default) */
+.HeaderBlock--left-nav .HeaderBlock-inner {
+  justify-content: flex-start;
 }
 
-.HeaderBlock-nav {
+.HeaderBlock--left-nav .HeaderBlock-logoSlot {
+  flex-shrink: 0;
+}
+
+.HeaderBlock--left-nav .HeaderBlock-navigationSlot {
   display: flex;
-  gap: 24px;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
-@media (min-width: 1024px) {
-  .HeaderBlock-nav {
-    gap: 32px;
+.HeaderBlock--left-nav .HeaderBlock-actionsSlot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+/* Layout: Centered */
+.HeaderBlock--centered .HeaderBlock-inner {
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 24px 16px;
+}
+
+.HeaderBlock--centered .HeaderBlock-logoSlot {
+  margin-bottom: 16px;
+}
+
+.HeaderBlock--centered .HeaderBlock-navigationSlot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Layout: Split */
+.HeaderBlock--split .HeaderBlock-inner {
+  justify-content: space-between;
+}
+
+.HeaderBlock--split .HeaderBlock-logoSlot {
+  flex-shrink: 0;
+}
+
+.HeaderBlock--split .HeaderBlock-navigationSlot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-left: auto;
+  margin-right: 16px;
+}
+
+.HeaderBlock--split .HeaderBlock-actionsSlot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* Layout: Minimal */
+.HeaderBlock--minimal .HeaderBlock-inner {
+  justify-content: space-between;
+}
+
+.HeaderBlock--minimal .HeaderBlock-logoSlot {
+  flex-shrink: 0;
+}
+
+.HeaderBlock--minimal .HeaderBlock-actionsSlot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+/* Slot containers */
+.HeaderBlock-logoSlot {
+  display: flex;
+  align-items: center;
+}
+
+.HeaderBlock-navigationSlot {
+  display: flex;
+  align-items: center;
+}
+
+.HeaderBlock-actionsSlot {
+  display: flex;
+  align-items: center;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .HeaderBlock-inner {
+    flex-wrap: wrap;
   }
-}
 
-.HeaderBlock-navLink {
-  text-decoration: none;
-  color: inherit;
-  font-size: 14px;
-  transition: opacity 0.2s;
-}
+  .HeaderBlock--left-nav .HeaderBlock-navigationSlot,
+  .HeaderBlock--split .HeaderBlock-navigationSlot {
+    width: 100%;
+    order: 3;
+    margin-top: 16px;
+    margin-left: 0;
+  }
 
-.HeaderBlock-navLink:hover {
-  opacity: 0.7;
+  .HeaderBlock--split .HeaderBlock-actionsSlot {
+    margin-right: 0;
+  }
 }
