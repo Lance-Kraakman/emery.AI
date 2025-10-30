@@ -72,26 +72,42 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       type: "external",
       placeholder: "Use default view",
       showSearch: true,
-      fetchList: async ({ query }: { query: string }, { props }: any) => {
+      fetchList: async ({ query }: { query: string }, context: any) => {
+        console.log('[dataSourceOverride fetchList] Called with:', {
+          query,
+          contextKeys: Object.keys(context || {}),
+          props: context?.props,
+          tableId: context?.props?.table?.id
+        });
+
         // Only show data sources if a table is selected
-        if (!props?.table?.id) {
+        if (!context?.props?.table?.id) {
+          console.log('[dataSourceOverride fetchList] No table ID in context, returning empty');
           return [];
         }
 
-        const dataSources = await getDataSourcesForTable(props.table.id);
+        const tableId = context.props.table.id;
+        console.log('[dataSourceOverride fetchList] Fetching data sources for table:', tableId);
+
+        const dataSources = await getDataSourcesForTable(tableId);
+        console.log('[dataSourceOverride fetchList] Found data sources:', dataSources.length);
+
         const filteredSources = query
           ? dataSources.filter((ds: any) =>
               ds.name.toLowerCase().includes(query.toLowerCase())
             )
           : dataSources;
 
-        return filteredSources.map((ds: any) => ({
+        const result = filteredSources.map((ds: any) => ({
           id: ds.id,
           name: ds.name,
           tableId: ds.tableId,
           title: ds.name,
           description: `${ds.filters.length} filters, ${ds.sorting.length} sorts`,
         }));
+
+        console.log('[dataSourceOverride fetchList] Returning options:', result.length);
+        return result;
       },
       mapProp: (item: any) => (item ? {
         id: item.id,
@@ -213,8 +229,15 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
    */
   resolveData: async ({ props }, { metadata }) => {
     try {
+      console.log('[TableBlock resolveData] Starting with props:', {
+        tableId: props.table?.id,
+        tableName: props.table?.name,
+        hasDataSourceOverride: !!props.dataSourceOverride
+      });
+
       // If no table selected, return props as-is
       if (!props.table?.id) {
+        console.log('[TableBlock resolveData] No table selected, returning empty');
         return { props };
       }
 
@@ -229,16 +252,21 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
         // Use the custom data source selected by user
         dataSourceId = props.dataSourceOverride.id;
         dataSourceName = props.dataSourceOverride.name;
+        console.log('[TableBlock resolveData] Using custom data source override:', { dataSourceId, dataSourceName });
       } else {
         // Auto-create or use default data source for the table
+        console.log('[TableBlock resolveData] Fetching existing data sources for table:', tableId);
         const existingDataSources = await getDataSourcesForTable(tableId);
+        console.log('[TableBlock resolveData] Found existing data sources:', existingDataSources.length);
 
         if (existingDataSources.length > 0) {
           // Use the first existing data source
           dataSourceId = existingDataSources[0].id;
           dataSourceName = existingDataSources[0].name;
+          console.log('[TableBlock resolveData] Using existing data source:', { dataSourceId, dataSourceName });
         } else {
           // Auto-create a default data source
+          console.log('[TableBlock resolveData] Auto-creating default data source for table:', tableName);
           const createResult = await createDataSource({
             tableId,
             name: `Default view of ${tableName}`,
@@ -246,6 +274,7 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
           });
 
           if (!createResult.success || !createResult.data) {
+            console.error('[TableBlock resolveData] Failed to create data source:', createResult.error);
             return {
               props: {
                 ...props,
@@ -258,13 +287,16 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
 
           dataSourceId = createResult.data.id;
           dataSourceName = createResult.data.name;
+          console.log('[TableBlock resolveData] Created data source:', { dataSourceId, dataSourceName });
         }
       }
 
       // Execute data source to get rows (Server Action - returns DTOs)
+      console.log('[TableBlock resolveData] Executing data source:', dataSourceId);
       const result = await executeDataSource(dataSourceId);
 
       if (!result) {
+        console.error('[TableBlock resolveData] executeDataSource returned null');
         return {
           props: {
             ...props,
@@ -277,9 +309,18 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
         };
       }
 
+      console.log('[TableBlock resolveData] Got result:', {
+        rowCount: result.rows.length,
+        fieldCount: result.fields.length,
+        totalCount: result.totalCount,
+        sampleRow: result.rows[0],
+        sampleField: result.fields[0]
+      });
+
       // Auto-generate field mappings if none exist
       let fieldMappings = props.fieldMappings || [];
       if (fieldMappings.length === 0 && result.fields.length > 0) {
+        console.log('[TableBlock resolveData] Auto-generating field mappings for', result.fields.length, 'fields');
         // Note: result.fields are now plain objects with { id, name, type }
         fieldMappings = result.fields.slice(0, 10).map((field, index) => ({
           sourceFieldId: field.id, // Plain number, not field.id.value
@@ -287,9 +328,20 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
           visible: true,
           order: index,
         }));
+        console.log('[TableBlock resolveData] Generated mappings:', fieldMappings);
+      } else {
+        console.log('[TableBlock resolveData] Using existing field mappings:', fieldMappings.length);
       }
 
       // Return props with resolved DTO data
+      console.log('[TableBlock resolveData] Returning resolved data:', {
+        dataSourceId,
+        dataSourceName,
+        rowCount: result.rows.length,
+        fieldCount: result.fields.length,
+        mappingCount: fieldMappings.length
+      });
+
       return {
         props: {
           ...props,
@@ -302,7 +354,8 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
         } as any,
       };
     } catch (error) {
-      console.error("Error in TableBlock resolveData:", error);
+      console.error("[TableBlock resolveData] Fatal error:", error);
+      console.error("[TableBlock resolveData] Error stack:", error instanceof Error ? error.stack : 'No stack');
 
       // Return safe fallback on error
       return {
