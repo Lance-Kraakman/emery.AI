@@ -1,18 +1,18 @@
 /**
- * DataSource Application Service
+ * View Application Service
  *
- * AIDEV-NOTE: Orchestrates data source operations for Puck page builder integration.
+ * AIDEV-NOTE: Orchestrates view operations for Puck page builder integration.
  * Bridges between Puck components and dynamic table data.
- * Handles data source CRUD, query execution, and schema retrieval.
+ * Handles view CRUD, query execution, and schema retrieval.
  */
 
-import type { DataSourceRepository } from "@/ddd/domain/data-sources/repositories/data-source-repository";
+import type { ViewRepository } from "@/ddd/domain/views/repositories/view-repository";
 import type { TableApplicationService } from "@/ddd/application/services/tables/table-application-service";
-import { DataSource } from "@/ddd/domain/data-sources/entities/data-source";
-import { DataSourceId } from "@/ddd/domain/data-sources/value-objects/data-source-id";
-import { FilterConfig } from "@/ddd/domain/data-sources/value-objects/filter-config";
-import { SortConfig } from "@/ddd/domain/data-sources/value-objects/sort-config";
-import { PaginationConfig } from "@/ddd/domain/data-sources/value-objects/pagination-config";
+import { View } from "@/ddd/domain/views/entities/view";
+import { ViewId } from "@/ddd/domain/views/value-objects/view-id";
+import { FilterConfig } from "@/ddd/domain/views/value-objects/filter-config";
+import { SortConfig } from "@/ddd/domain/views/value-objects/sort-config";
+import { PaginationConfig } from "@/ddd/domain/views/value-objects/pagination-config";
 import { TableId } from "@/ddd/domain/shared/value-objects/table-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects/organization-id";
 import { UserId } from "@/ddd/domain/shared/value-objects/user-id";
@@ -21,10 +21,10 @@ import type { Row } from "@/ddd/domain/tables/value-objects/row";
 import type { TableField } from "@/ddd/domain/tables/value-objects/table-field";
 import { createDebugLogger } from "@/lib/utils/debug-logger";
 
-const logger = createDebugLogger("DataSourceService");
+const logger = createDebugLogger("ViewService");
 
 // Command interfaces
-export interface CreateDataSourceCommand {
+export interface CreateViewCommand {
   name: string;
   description?: string;
   tableId: TableId;
@@ -35,41 +35,41 @@ export interface CreateDataSourceCommand {
   pagination?: PaginationConfig;
 }
 
-export interface UpdateDataSourceCommand {
-  id: DataSourceId;
+export interface UpdateViewCommand {
+  id: ViewId;
   name?: string;
   filters?: FilterConfig[];
   sorting?: SortConfig[];
   pagination?: PaginationConfig;
 }
 
-export interface ExecuteDataSourceCommand {
-  dataSourceId: DataSourceId;
+export interface ExecuteViewCommand {
+  dataSourceId: ViewId;
   overridePagination?: PaginationConfig;
 }
 
 // Result types
-export interface DataSourceExecutionResult {
+export interface ViewExecutionResult {
   rows: Row[];
   totalCount: number;
   pageSize: number;
   offset: number;
 }
 
-export class DataSourceApplicationService {
+export class ViewApplicationService {
   constructor(
-    private readonly dataSourceRepository: DataSourceRepository,
+    private readonly dataSourceRepository: ViewRepository,
     private readonly tableApplicationService: TableApplicationService
   ) {}
 
   /**
-   * Create a new data source
+   * Create a new view
    */
-  async createDataSource(
-    command: CreateDataSourceCommand
-  ): Promise<Result<DataSource>> {
+  async createView(
+    command: CreateViewCommand
+  ): Promise<Result<View>> {
     try {
-      logger.debug("Creating data source", { name: command.name, tableId: command.tableId.value });
+      logger.debug("Creating view", { name: command.name, tableId: command.tableId.value });
 
       // 1. Validate table exists
       const table = await this.tableApplicationService.getTable(command.tableId);
@@ -81,15 +81,15 @@ export class DataSourceApplicationService {
       }
 
       // 2. Check if name already exists in organization
-      const existingDataSource = await this.dataSourceRepository.findByName(
+      const existingView = await this.dataSourceRepository.findByName(
         command.organizationId,
         command.name
       );
 
-      if (existingDataSource) {
+      if (existingView) {
         return {
           success: false,
-          error: `Data source with name "${command.name}" already exists in this organization`,
+          error: `View with name "${command.name}" already exists in this organization`,
         };
       }
 
@@ -121,8 +121,8 @@ export class DataSourceApplicationService {
         }
       }
 
-      // 5. Create data source entity
-      const dataSource = DataSource.create({
+      // 5. Create view entity
+      const dataSource = View.create({
         name: command.name,
         description: command.description,
         tableId: command.tableId,
@@ -134,38 +134,38 @@ export class DataSourceApplicationService {
       });
 
       // 6. Save to repository
-      const savedDataSource = await this.dataSourceRepository.save(dataSource);
+      const savedView = await this.dataSourceRepository.save(dataSource);
 
-      logger.debug("Data source created successfully", { id: savedDataSource.id.value });
+      logger.debug("View created successfully", { id: savedView.id.value });
 
       return {
         success: true,
-        data: savedDataSource,
+        data: savedView,
       };
     } catch (error) {
-      logger.error("Error creating data source", error);
+      logger.error("Error creating view", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error creating data source",
+        error: error instanceof Error ? error.message : "Unknown error creating view",
       };
     }
   }
 
   /**
-   * Update an existing data source
+   * Update an existing view
    */
-  async updateDataSource(
-    command: UpdateDataSourceCommand
-  ): Promise<Result<DataSource>> {
+  async updateView(
+    command: UpdateViewCommand
+  ): Promise<Result<View>> {
     try {
-      logger.debug("Updating data source", { id: command.id.value });
+      logger.debug("Updating view", { id: command.id.value });
 
-      // 1. Find existing data source
+      // 1. Find existing view
       const dataSource = await this.dataSourceRepository.findById(command.id);
       if (!dataSource) {
         return {
           success: false,
-          error: `Data source ${command.id.value} not found`,
+          error: `View ${command.id.value} not found`,
         };
       }
 
@@ -180,7 +180,7 @@ export class DataSourceApplicationService {
         if (existingByName && !existingByName.id.equals(command.id)) {
           return {
             success: false,
-            error: `Data source with name "${command.name}" already exists in this organization`,
+            error: `View with name "${command.name}" already exists in this organization`,
           };
         }
 
@@ -214,67 +214,67 @@ export class DataSourceApplicationService {
         dataSource.updatePagination(command.pagination);
       }
 
-      // 6. Save updated data source
+      // 6. Save updated view
       const updated = await this.dataSourceRepository.save(dataSource);
 
-      logger.debug("Data source updated successfully", { id: updated.id.value });
+      logger.debug("View updated successfully", { id: updated.id.value });
 
       return {
         success: true,
         data: updated,
       };
     } catch (error) {
-      logger.error("Error updating data source", error);
+      logger.error("Error updating view", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error updating data source",
+        error: error instanceof Error ? error.message : "Unknown error updating view",
       };
     }
   }
 
   /**
-   * Delete a data source
+   * Delete a view
    */
-  async deleteDataSource(id: DataSourceId): Promise<Result<void>> {
+  async deleteView(id: ViewId): Promise<Result<void>> {
     try {
-      logger.debug("Deleting data source", { id: id.value });
+      logger.debug("Deleting view", { id: id.value });
 
       const dataSource = await this.dataSourceRepository.findById(id);
       if (!dataSource) {
         return {
           success: false,
-          error: `Data source ${id.value} not found`,
+          error: `View ${id.value} not found`,
         };
       }
 
       await this.dataSourceRepository.delete(id);
 
-      logger.debug("Data source deleted successfully", { id: id.value });
+      logger.debug("View deleted successfully", { id: id.value });
 
       return {
         success: true,
         data: undefined,
       };
     } catch (error) {
-      logger.error("Error deleting data source", error);
+      logger.error("Error deleting view", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error deleting data source",
+        error: error instanceof Error ? error.message : "Unknown error deleting view",
       };
     }
   }
 
   /**
-   * Get a data source by ID
+   * Get a view by ID
    */
-  async getDataSource(id: DataSourceId): Promise<Result<DataSource>> {
+  async getView(id: ViewId): Promise<Result<View>> {
     try {
       const dataSource = await this.dataSourceRepository.findById(id);
 
       if (!dataSource) {
         return {
           success: false,
-          error: `Data source ${id.value} not found`,
+          error: `View ${id.value} not found`,
         };
       }
 
@@ -283,18 +283,18 @@ export class DataSourceApplicationService {
         data: dataSource,
       };
     } catch (error) {
-      logger.error("Error getting data source", error);
+      logger.error("Error getting view", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error getting data source",
+        error: error instanceof Error ? error.message : "Unknown error getting view",
       };
     }
   }
 
   /**
-   * Get all data sources for a table
+   * Get all views for a table
    */
-  async getDataSourcesByTable(tableId: TableId): Promise<Result<DataSource[]>> {
+  async getViewsByTable(tableId: TableId): Promise<Result<View[]>> {
     try {
       const dataSources = await this.dataSourceRepository.findByTableId(tableId);
 
@@ -303,20 +303,20 @@ export class DataSourceApplicationService {
         data: dataSources,
       };
     } catch (error) {
-      logger.error("Error getting data sources by table", error);
+      logger.error("Error getting views by table", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error getting data sources",
+        error: error instanceof Error ? error.message : "Unknown error getting views",
       };
     }
   }
 
   /**
-   * Get all data sources for an organization
+   * Get all views for an organization
    */
-  async getDataSourcesByOrganization(
+  async getViewsByOrganization(
     organizationId: OrganizationId
-  ): Promise<Result<DataSource[]>> {
+  ): Promise<Result<View[]>> {
     try {
       const dataSources = await this.dataSourceRepository.findByOrganizationId(organizationId);
 
@@ -325,35 +325,35 @@ export class DataSourceApplicationService {
         data: dataSources,
       };
     } catch (error) {
-      logger.error("Error getting data sources by organization", error);
+      logger.error("Error getting views by organization", error);
       return {
         success: false,
         error:
-          error instanceof Error ? error.message : "Unknown error getting data sources",
+          error instanceof Error ? error.message : "Unknown error getting views",
       };
     }
   }
 
   /**
-   * Execute a data source - fetch rows with filters, sorting, and pagination applied
+   * Execute a view - fetch rows with filters, sorting, and pagination applied
    * AIDEV-NOTE: This is the key method for Puck components to fetch data
    */
-  async executeDataSource(
-    command: ExecuteDataSourceCommand
-  ): Promise<Result<DataSourceExecutionResult>> {
+  async executeView(
+    command: ExecuteViewCommand
+  ): Promise<Result<ViewExecutionResult>> {
     try {
-      logger.debug("Executing data source", { id: command.dataSourceId.value });
+      logger.debug("Executing view", { id: command.dataSourceId.value });
 
-      // 1. Get data source
+      // 1. Get view
       const dataSource = await this.dataSourceRepository.findById(command.dataSourceId);
       if (!dataSource) {
         return {
           success: false,
-          error: `Data source ${command.dataSourceId.value} not found`,
+          error: `View ${command.dataSourceId.value} not found`,
         };
       }
 
-      // 2. Use override pagination if provided, otherwise use data source pagination
+      // 2. Use override pagination if provided, otherwise use view pagination
       const pagination = command.overridePagination ?? dataSource.pagination;
 
       // 3. Fetch rows from table
@@ -381,7 +381,7 @@ export class DataSourceApplicationService {
         pagination.offset + pagination.pageSize
       );
 
-      logger.debug("Data source executed successfully", {
+      logger.debug("View executed successfully", {
         id: command.dataSourceId.value,
         rowCount: paginatedRows.length,
       });
@@ -396,24 +396,24 @@ export class DataSourceApplicationService {
         },
       };
     } catch (error) {
-      logger.error("Error executing data source", error);
+      logger.error("Error executing view", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error executing data source",
+        error: error instanceof Error ? error.message : "Unknown error executing view",
       };
     }
   }
 
   /**
-   * Get the schema (field definitions) for a data source
+   * Get the schema (field definitions) for a view
    */
-  async getDataSourceSchema(id: DataSourceId): Promise<Result<TableField[]>> {
+  async getViewSchema(id: ViewId): Promise<Result<TableField[]>> {
     try {
       const dataSource = await this.dataSourceRepository.findById(id);
       if (!dataSource) {
         return {
           success: false,
-          error: `Data source ${id.value} not found`,
+          error: `View ${id.value} not found`,
         };
       }
 
@@ -430,7 +430,7 @@ export class DataSourceApplicationService {
         data: table.fields,
       };
     } catch (error) {
-      logger.error("Error getting data source schema", error);
+      logger.error("Error getting view schema", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error getting schema",
