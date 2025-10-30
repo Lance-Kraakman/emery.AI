@@ -1,23 +1,23 @@
 /**
- * Drizzle implementation of DataSourceRepository
+ * Drizzle implementation of ViewRepository
  *
- * AIDEV-NOTE: Handles data access for DataSource entities using PostgreSQL.
+ * AIDEV-NOTE: Handles data access for View entities using PostgreSQL.
  * Follows DDD repository pattern - maps between domain entities and database records.
  */
 
 import type { DbClient } from "@/lib/db/client";
 import { dataSources } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import type { DataSourceRepository } from "@/ddd/domain/data-sources/repositories/data-source-repository";
-import { DataSource } from "@/ddd/domain/data-sources/entities/data-source";
-import { DataSourceId } from "@/ddd/domain/data-sources/value-objects/data-source-id";
+import type { ViewRepository } from "@/ddd/domain/views/repositories/view-repository";
+import { View } from "@/ddd/domain/views/entities/view";
+import { ViewId } from "@/ddd/domain/views/value-objects/view-id";
 import { TableId } from "@/ddd/domain/shared/value-objects/table-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects/organization-id";
 
-export class DrizzleDataSourceRepository implements DataSourceRepository {
+export class DrizzleViewRepository implements ViewRepository {
   constructor(private readonly db: DbClient) {}
 
-  async save(dataSource: DataSource): Promise<DataSource> {
+  async save(dataSource: View): Promise<View> {
     try {
       const persistence = dataSource.toPersistence();
 
@@ -53,18 +53,18 @@ export class DrizzleDataSourceRepository implements DataSourceRepository {
           .returning();
 
         if (!record) {
-          throw new Error(`DataSource ${persistence.id} not found`);
+          throw new Error(`View ${persistence.id} not found`);
         }
 
         return this.toDomain(record);
       }
     } catch (error) {
-      console.error("[DrizzleDataSourceRepository] Error saving data source:", error);
+      console.error("[DrizzleViewRepository] Error saving view:", error);
       throw error;
     }
   }
 
-  async findById(id: DataSourceId): Promise<DataSource | null> {
+  async findById(id: ViewId): Promise<View | null> {
     try {
       const record = await this.db.query.dataSources.findFirst({
         where: eq(dataSources.id, id.value),
@@ -72,12 +72,12 @@ export class DrizzleDataSourceRepository implements DataSourceRepository {
 
       return record ? this.toDomain(record) : null;
     } catch (error) {
-      console.error("[DrizzleDataSourceRepository] Error finding data source by ID:", error);
+      console.error("[DrizzleViewRepository] Error finding view by ID:", error);
       throw error;
     }
   }
 
-  async findByTableId(tableId: TableId): Promise<DataSource[]> {
+  async findByTableId(tableId: TableId): Promise<View[]> {
     try {
       const records = await this.db.query.dataSources.findMany({
         where: eq(dataSources.tableId, tableId.value),
@@ -85,12 +85,12 @@ export class DrizzleDataSourceRepository implements DataSourceRepository {
 
       return records.map((record: any) => this.toDomain(record));
     } catch (error) {
-      console.error("[DrizzleDataSourceRepository] Error finding data sources by table ID:", error);
+      console.error("[DrizzleViewRepository] Error finding views by table ID:", error);
       throw error;
     }
   }
 
-  async findByOrganizationId(organizationId: OrganizationId): Promise<DataSource[]> {
+  async findByOrganizationId(organizationId: OrganizationId): Promise<View[]> {
     try {
       const records = await this.db.query.dataSources.findMany({
         where: eq(dataSources.organizationId, organizationId.value),
@@ -99,17 +99,17 @@ export class DrizzleDataSourceRepository implements DataSourceRepository {
       // Sort by name on the application side
       return records
         .map((record: any) => this.toDomain(record))
-        .sort((a: DataSource, b: DataSource) => a.name.localeCompare(b.name));
+        .sort((a: View, b: View) => a.name.localeCompare(b.name));
     } catch (error) {
       console.error(
-        "[DrizzleDataSourceRepository] Error finding data sources by organization ID:",
+        "[DrizzleViewRepository] Error finding views by organization ID:",
         error
       );
       throw error;
     }
   }
 
-  async findByName(organizationId: OrganizationId, name: string): Promise<DataSource | null> {
+  async findByName(organizationId: OrganizationId, name: string): Promise<View | null> {
     try {
       const record = await this.db.query.dataSources.findFirst({
         where: and(
@@ -120,18 +120,18 @@ export class DrizzleDataSourceRepository implements DataSourceRepository {
 
       return record ? this.toDomain(record) : null;
     } catch (error) {
-      console.error("[DrizzleDataSourceRepository] Error finding data source by name:", error);
+      console.error("[DrizzleViewRepository] Error finding view by name:", error);
       throw error;
     }
   }
 
-  async delete(id: DataSourceId): Promise<void> {
+  async delete(id: ViewId): Promise<void> {
     try {
       await this.db.delete(dataSources).where(eq(dataSources.id, id.value));
 
-      console.log(`[DrizzleDataSourceRepository] Deleted data source ID: ${id.value}`);
+      console.log(`[DrizzleViewRepository] Deleted view ID: ${id.value}`);
     } catch (error) {
-      console.error("[DrizzleDataSourceRepository] Error deleting data source:", error);
+      console.error("[DrizzleViewRepository] Error deleting view:", error);
       throw error;
     }
   }
@@ -147,7 +147,7 @@ export class DrizzleDataSourceRepository implements DataSourceRepository {
 
       return !!record;
     } catch (error) {
-      console.error("[DrizzleDataSourceRepository] Error checking name existence:", error);
+      console.error("[DrizzleViewRepository] Error checking name existence:", error);
       throw error;
     }
   }
@@ -155,8 +155,8 @@ export class DrizzleDataSourceRepository implements DataSourceRepository {
   /**
    * Helper method to convert database record to domain entity
    */
-  private toDomain(record: any): DataSource {
-    return DataSource.fromPersistence({
+  private toDomain(record: any): View {
+    return View.fromPersistence({
       id: record.id,
       organizationId: record.organizationId,
       tableId: record.tableId,
