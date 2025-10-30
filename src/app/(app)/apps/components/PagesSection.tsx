@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { PageDTO } from '@/app/mappers/puck-page-mapper';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, FileText, Eye, EyeOff, Edit, Trash2, MoreVertical } from 'lucide-react';
+import { Plus, FileText, EyeOff, Edit, Trash2, MoreVertical, Monitor, Eye } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Loading } from '@/components/ui/loading';
 import { PageFormDialog } from './PageFormDialog';
@@ -53,12 +53,12 @@ export function PagesSection({ appId, pages, loading, onPagesChange }: PagesSect
     setShowPageDialog(true);
   };
 
-  const handleViewPage = (page: PageDTO) => {
-    router.push(`/apps/${appId}/pages/${page.id}`);
-  };
-
   const handleEditPage = (page: PageDTO) => {
     router.push(`/apps/${appId}/pages/${page.id}/edit`);
+  };
+
+  const handlePreviewPage = (page: PageDTO) => {
+    router.push(`/apps/${appId}/pages/${page.id}/preview`);
   };
 
   const handleDeletePage = async () => {
@@ -124,8 +124,7 @@ export function PagesSection({ appId, pages, loading, onPagesChange }: PagesSect
               {pages.map((page) => (
                 <div
                   key={page.id}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer"
-                  onClick={() => handleViewPage(page)}
+                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-secondary/50 transition-colors"
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
@@ -156,6 +155,14 @@ export function PagesSection({ appId, pages, loading, onPagesChange }: PagesSect
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={() => handlePreviewPage(page)}
+                    >
+                      <Monitor className="h-4 w-4 mr-1" />
+                      Preview
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleEditPage(page)}
                     >
                       <Edit className="h-4 w-4 mr-1" />
@@ -168,9 +175,9 @@ export function PagesSection({ appId, pages, loading, onPagesChange }: PagesSect
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleViewPage(page)}>
-                          <Eye className="h-4 w-4 mr-2" />
-                          View
+                        <DropdownMenuItem onClick={() => handlePreviewPage(page)}>
+                          <Monitor className="h-4 w-4 mr-2" />
+                          Preview
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleEditPage(page)}>
                           <Edit className="h-4 w-4 mr-2" />

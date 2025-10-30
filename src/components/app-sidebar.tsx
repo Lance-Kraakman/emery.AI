@@ -345,7 +345,7 @@ export function AppSidebar({
                             {app.pages && app.pages.map((page) => (
                               <SidebarMenuSubItem key={page.id}>
                                 <SidebarMenuSubButton asChild>
-                                  <Link href={`/puck-demo${app.slug}${page.slug}`}>
+                                  <Link href={`/apps/${app.id}/pages/${page.id}/preview`}>
                                     <FileText className="h-3 w-3" />
                                     <span>{page.name}</span>
                                   </Link>
@@ -369,17 +369,16 @@ export function AppSidebar({
                       </SidebarMenuItem>
                     </Collapsible>
                   ))}
-                  <SidebarMenuItem>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start"
-                      onClick={handleCreateApp}
-                      disabled={isCreating}
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span>Add App</span>
-                    </Button>
-                  </SidebarMenuItem>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start mt-1"
+                    onClick={handleCreateApp}
+                    disabled={isCreating}
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add App</span>
+                  </Button>
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>
@@ -408,17 +407,16 @@ export function AppSidebar({
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
-                  <SidebarMenuItem>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start"
-                      onClick={handleCreateAgent}
-                      disabled={isCreating}
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span>Add Agent</span>
-                    </Button>
-                  </SidebarMenuItem>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start mt-1"
+                    onClick={handleCreateAgent}
+                    disabled={isCreating}
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Agent</span>
+                  </Button>
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>
@@ -447,17 +445,16 @@ export function AppSidebar({
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
-                  <SidebarMenuItem>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start"
-                      onClick={handleCreateTeam}
-                      disabled={isCreating}
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span>Add Team</span>
-                    </Button>
-                  </SidebarMenuItem>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start mt-1"
+                    onClick={handleCreateTeam}
+                    disabled={isCreating}
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Team</span>
+                  </Button>
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>
@@ -486,17 +483,16 @@ export function AppSidebar({
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
-                  <SidebarMenuItem>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start"
-                      onClick={handleCreateSkill}
-                      disabled={isCreating}
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span>Add Skill</span>
-                    </Button>
-                  </SidebarMenuItem>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start mt-1"
+                    onClick={handleCreateSkill}
+                    disabled={isCreating}
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Skill</span>
+                  </Button>
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>
@@ -562,17 +558,16 @@ export function AppSidebar({
                       </SidebarMenuItem>
                     </Collapsible>
                   ))}
-                  <SidebarMenuItem>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start"
-                      onClick={handleCreateDatabase}
-                      disabled={isCreating}
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span>Add Database</span>
-                    </Button>
-                  </SidebarMenuItem>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start mt-1"
+                    onClick={handleCreateDatabase}
+                    disabled={isCreating}
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Database</span>
+                  </Button>
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>

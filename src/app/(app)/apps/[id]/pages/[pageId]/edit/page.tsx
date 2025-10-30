@@ -2,13 +2,13 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Puck, Data, usePuck, IconButton, Button as PuckButton } from "@measured/puck";
+import { Puck, Data, usePuck, Button as PuckButton } from "@measured/puck";
 import "@measured/puck/puck.css";
 import { config } from "@/puck-extraction/components/config";
 import { getPage, updatePageContent, publishPage, unpublishPage } from "@/app/actions/puck-pages";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Save, Eye, Undo2, Redo2, Monitor, Tablet, Smartphone, Globe } from "lucide-react";
+import { ArrowLeft, Globe, Eye } from "lucide-react";
 import { Loading } from "@/components/ui/loading";
 import { toast } from "sonner";
 
@@ -30,59 +30,13 @@ function CustomHeaderActions({
   hasUnsavedChanges: boolean;
   isPublished: boolean;
 }) {
-  const { history, appState, dispatch } = usePuck();
-
-  const handleViewportChange = (width: number, height: number | "auto") => {
-    dispatch({
-      type: "setUi",
-      ui: {
-        viewports: {
-          ...appState.ui.viewports,
-          current: { width, height }
-        }
-      }
-    });
-  };
+  // AIDEV-NOTE: The `children` prop only contains Puck's default Publish button.
+  // We don't render it because we provide our own custom Publish/Unpublish button.
+  // Undo/redo buttons are hardcoded in Puck's MenuBar and render automatically.
+  // Viewport buttons are configured via the `viewports` prop and render in a separate row.
 
   return (
     <div className="flex items-center gap-2 w-full">
-      {/* Undo/Redo Controls */}
-      <div className="flex gap-1">
-        <IconButton
-          title="Undo"
-          disabled={!history.hasPast}
-          onClick={history.back}
-        >
-          <Undo2 size={21} />
-        </IconButton>
-        <IconButton
-          title="Redo"
-          disabled={!history.hasFuture}
-          onClick={history.forward}
-        >
-          <Redo2 size={21} />
-        </IconButton>
-      </div>
-
-      {/* Viewport/Frame Controls */}
-      <div className="flex gap-1 border-l pl-2 ml-2">
-        {appState.ui.viewports.options.map((viewport) => {
-          const isActive = appState.ui.viewports.current.width === viewport.width;
-          return (
-            <div key={viewport.width} style={isActive ? { backgroundColor: '#e0f2fe' } : {}}>
-              <IconButton
-                title={viewport.label || `${viewport.width}px`}
-                onClick={() => handleViewportChange(viewport.width, viewport.height || "auto")}
-              >
-                {viewport.icon === "Smartphone" && <Smartphone size={16} />}
-                {viewport.icon === "Tablet" && <Tablet size={16} />}
-                {viewport.icon === "Monitor" && <Monitor size={16} />}
-              </IconButton>
-            </div>
-          );
-        })}
-      </div>
-
       {/* Spacer to push actions to the right */}
       <div className="flex-1" />
 
@@ -134,6 +88,25 @@ export default function PageEditPage() {
     async function loadPage() {
       try {
         setLoading(true);
+
+        // First check if we have unsaved changes in sessionStorage (returning from preview)
+        const savedData = sessionStorage.getItem(`preview-${pageId}`);
+        if (savedData) {
+          try {
+            const restoredData = JSON.parse(savedData);
+            const loadedPage = await getPage(pageId);
+            setPage(loadedPage);
+            setPageData(restoredData);
+            setHasUnsavedChanges(true); // Mark as having unsaved changes
+            setLoading(false);
+            return;
+          } catch (err) {
+            console.error('Error parsing saved preview data:', err);
+            // Continue to normal load if parsing fails
+          }
+        }
+
+        // Normal load from database
         const loadedPage = await getPage(pageId);
         setPage(loadedPage);
 
@@ -182,6 +155,9 @@ export default function PageEditPage() {
       toast.success("Page saved successfully!");
       setHasUnsavedChanges(false);
 
+      // Clean up sessionStorage since changes are now saved
+      sessionStorage.removeItem(`preview-${pageId}`);
+
       // Update local state
       setPage(prev => prev ? { ...prev, templateData: pageData } : null);
     } catch (err) {
@@ -216,7 +192,10 @@ export default function PageEditPage() {
   };
 
   const handlePreview = () => {
-    router.push(`/apps/${appId}/pages/${pageId}`);
+    // Save current pageData to sessionStorage so preview can access unsaved changes
+    sessionStorage.setItem(`preview-${pageId}`, JSON.stringify(pageData));
+    // Navigate to preview route
+    router.push(`/apps/${appId}/pages/${pageId}/preview`);
   };
 
   const handleCancel = () => {
@@ -245,109 +224,34 @@ export default function PageEditPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-4 px-6 py-4 border-b bg-background/95">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleCancel}
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
-
-        <h1 className="text-lg font-semibold flex-1">
-          Editing: {page.name}
-        </h1>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleSave}
-          disabled={saving || !hasUnsavedChanges}
-        >
-          {saving ? (
-            <>
-              <Save className="h-4 w-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              {hasUnsavedChanges ? "Save Changes" : "Saved"}
-            </>
-          )}
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handlePreview}
-        >
-          <Eye className="h-4 w-4 mr-2" />
-          Preview
-        </Button>
-
-        <Button
-          variant={page.isPublished ? "secondary" : "default"}
-          size="sm"
-          onClick={handlePublish}
-        >
-          {page.isPublished ? "Unpublish" : "Publish"}
-        </Button>
-      </div>
-
-      {/* Puck Editor with Custom Layout */}
-      <div className="flex-1 overflow-hidden">
-        <Puck
-          config={config}
-          data={pageData}
-          onChange={handleDataChange}
-          headerTitle={page.name}
-          headerPath={`/apps/${appId}/pages/${pageId}`}
-          viewports={[
-            { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
-            { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },
-            { width: 1440, height: "auto", icon: "Monitor", label: "Desktop" }
-          ]}
-          iframe={{ enabled: true }}
-          overrides={{
-            headerActions: ({ children }) => (
-              <CustomHeaderActions
-                onSave={handleSave}
-                onPreview={handlePreview}
-                onPublish={handlePublish}
-                saving={saving}
-                hasUnsavedChanges={hasUnsavedChanges}
-                isPublished={page?.isPublished || false}
-              >
-                {children}
-              </CustomHeaderActions>
-            )
-          }}
-        >
-          <div className="grid grid-cols-4 h-full">
-            {/* Left: Components & Outline (1/4) */}
-            <div className="col-span-1 h-full overflow-y-auto border-r">
-              <Puck.Components />
-              <div className="border-t">
-                <Puck.Outline />
-              </div>
-            </div>
-
-            {/* Center: Preview (2/4) */}
-            <div className="col-span-2 h-full overflow-y-auto">
-              <Puck.Preview />
-            </div>
-
-            {/* Right: Fields (1/4) */}
-            <div className="col-span-1 h-full overflow-y-auto border-l">
-              <Puck.Fields />
-            </div>
-          </div>
-        </Puck>
-      </div>
+    <div className="h-screen">
+      <Puck
+        config={config}
+        data={pageData}
+        onChange={handleDataChange}
+        headerTitle={page.name}
+        headerPath={`/apps/${appId}/pages/${pageId}`}
+        viewports={[
+          { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
+          { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },
+          { width: 1440, height: "auto", icon: "Monitor", label: "Desktop" }
+        ]}
+        iframe={{ enabled: true }}
+        overrides={{
+          headerActions: ({ children }) => (
+            <CustomHeaderActions
+              onSave={handleSave}
+              onPreview={handlePreview}
+              onPublish={handlePublish}
+              saving={saving}
+              hasUnsavedChanges={hasUnsavedChanges}
+              isPublished={page?.isPublished || false}
+            >
+              {children}
+            </CustomHeaderActions>
+          )
+        }}
+      />
     </div>
   );
 }
