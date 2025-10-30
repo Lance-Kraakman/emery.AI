@@ -22,11 +22,13 @@ import { OrganizationId } from "@/ddd/domain/shared/value-objects/organization-i
 export interface DataSourceProps {
   id: DataSourceId;
   name: string;
+  description?: string;
   tableId: TableId;
   organizationId: OrganizationId;
   filters?: FilterConfig[];
   sorting?: SortConfig[];
   pagination?: PaginationConfig;
+  createdBy?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -34,22 +36,26 @@ export interface DataSourceProps {
 export class DataSource {
   private readonly _id: DataSourceId;
   private _name: string;
+  private _description?: string;
   private readonly _tableId: TableId;
   private readonly _organizationId: OrganizationId;
   private _filters: FilterConfig[];
   private _sorting: SortConfig[];
   private _pagination: PaginationConfig;
+  private readonly _createdBy?: string;
   private readonly _createdAt: Date;
   private _updatedAt: Date;
 
   private constructor(props: DataSourceProps) {
     this._id = props.id;
     this._name = props.name;
+    this._description = props.description;
     this._tableId = props.tableId;
     this._organizationId = props.organizationId;
     this._filters = props.filters ?? [];
     this._sorting = props.sorting ?? [];
     this._pagination = props.pagination ?? PaginationConfig.createDefault();
+    this._createdBy = props.createdBy;
     this._createdAt = props.createdAt ?? new Date();
     this._updatedAt = props.updatedAt ?? new Date();
 
@@ -94,8 +100,16 @@ export class DataSource {
     return this._name;
   }
 
+  get description(): string | undefined {
+    return this._description;
+  }
+
   get tableId(): TableId {
     return this._tableId;
+  }
+
+  get createdBy(): string | undefined {
+    return this._createdBy;
   }
 
   get organizationId(): OrganizationId {
@@ -135,6 +149,14 @@ export class DataSource {
       throw new Error("DataSource name cannot exceed 255 characters");
     }
     this._name = name;
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Update the data source description
+   */
+  updateDescription(description?: string): void {
+    this._description = description;
     this._updatedAt = new Date();
   }
 
@@ -314,9 +336,11 @@ export class DataSource {
     organizationId: number;
     tableId: number;
     name: string;
+    description?: string;
     filters: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null }>;
     sorting: Array<{ fieldId: number; direction: 'asc' | 'desc'; priority: number }>;
     pagination: { pageSize: number; offset: number };
+    createdBy?: string;
     createdAt: Date;
     updatedAt: Date;
   } {
@@ -325,6 +349,7 @@ export class DataSource {
       organizationId: this._organizationId.value,
       tableId: this._tableId.value,
       name: this._name,
+      description: this._description,
       filters: this._filters.map((f) => f.toJSON()),
       sorting: this._sorting.map((s) => ({
         fieldId: s.fieldId,
@@ -335,6 +360,7 @@ export class DataSource {
         pageSize: this._pagination.pageSize,
         offset: this._pagination.offset,
       },
+      createdBy: this._createdBy,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt,
     };
@@ -348,9 +374,11 @@ export class DataSource {
     organizationId: number;
     tableId: number;
     name: string;
+    description?: string;
     filters: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null }>;
     sorting: Array<{ fieldId: number; direction: 'asc' | 'desc'; priority: number }>;
     pagination: { pageSize: number; offset: number };
+    createdBy?: string;
     createdAt: Date;
     updatedAt: Date;
   }): DataSource {
@@ -359,6 +387,7 @@ export class DataSource {
       organizationId: OrganizationId.fromNumber(data.organizationId),
       tableId: TableId.fromNumber(data.tableId),
       name: data.name,
+      description: data.description,
       filters: data.filters.map((f) => FilterConfig.create({
         fieldId: f.fieldId,
         operator: f.operator as any, // Type cast operator string to FilterOperator
@@ -373,6 +402,7 @@ export class DataSource {
         pageSize: data.pagination.pageSize,
         offset: data.pagination.offset,
       }),
+      createdBy: data.createdBy,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
     });

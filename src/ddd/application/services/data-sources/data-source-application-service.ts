@@ -15,6 +15,7 @@ import { SortConfig } from "@/ddd/domain/data-sources/value-objects/sort-config"
 import { PaginationConfig } from "@/ddd/domain/data-sources/value-objects/pagination-config";
 import { TableId } from "@/ddd/domain/shared/value-objects/table-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects/organization-id";
+import { UserId } from "@/ddd/domain/shared/value-objects/user-id";
 import type { Result } from "@/ddd/domain/shared/result";
 import type { Row } from "@/ddd/domain/tables/value-objects/row";
 import type { TableField } from "@/ddd/domain/tables/value-objects/table-field";
@@ -25,8 +26,10 @@ const logger = createDebugLogger("DataSourceService");
 // Command interfaces
 export interface CreateDataSourceCommand {
   name: string;
+  description?: string;
   tableId: TableId;
   organizationId: OrganizationId;
+  createdBy?: UserId;
   filters?: FilterConfig[];
   sorting?: SortConfig[];
   pagination?: PaginationConfig;
@@ -121,8 +124,10 @@ export class DataSourceApplicationService {
       // 5. Create data source entity
       const dataSource = DataSource.create({
         name: command.name,
+        description: command.description,
         tableId: command.tableId,
         organizationId: command.organizationId,
+        createdBy: command.createdBy?.value,
         filters: command.filters,
         sorting: command.sorting,
         pagination: command.pagination,

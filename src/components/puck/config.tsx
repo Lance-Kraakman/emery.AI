@@ -11,6 +11,7 @@ import { Text } from "./blocks/Text";
 import { Space } from "./blocks/Space";
 import { HeaderBlock } from "./blocks/HeaderBlock";
 import { FooterBlock } from "./blocks/FooterBlock";
+import TableBlockConfig from "./blocks/TableBlock";
 
 import Root from "./root";
 import { UserConfig } from "./types";
@@ -27,6 +28,10 @@ export const config: UserConfig = {
     interactive: {
       title: "Actions",
       components: ["Button"],
+    },
+    data: {
+      title: "Data",
+      components: ["TableBlock"],
     },
     other: {
       title: "Other",
@@ -47,6 +52,7 @@ export const config: UserConfig = {
     Space,
     HeaderBlock,
     FooterBlock,
+    TableBlock: TableBlockConfig,
   },
 };
 

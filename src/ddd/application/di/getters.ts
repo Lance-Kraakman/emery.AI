@@ -53,6 +53,8 @@ import type { IAppRepository } from '@/ddd/domain/puck/repositories/app-reposito
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
 import type { AppApplicationService } from '@/ddd/application/services/puck/app-application-service';
 import type { PuckPageApplicationService } from '@/ddd/application/services/puck/puck-page-application-service';
+import type { DataSourceRepository as IDataSourceRepository } from '@/ddd/domain/data-sources/repositories/data-source-repository';
+import type { DataSourceApplicationService } from '@/ddd/application/services/data-sources/data-source-application-service';
 
 import { DIContainer } from './container';
 
@@ -117,6 +119,10 @@ type ServiceMap = {
   AppApplicationService: AppApplicationService;
   PuckPageApplicationService: PuckPageApplicationService;
 
+  // Data Source Services
+  DataSourceRepository: IDataSourceRepository;
+  DataSourceApplicationService: DataSourceApplicationService;
+
   // Tool Services
   IToolRegistryService: IToolRegistryService;
 };
@@ -138,6 +144,7 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
     'ConnectionRepository': 'IConnectionRepository',
     'AppRepository': 'IAppRepository',
     'PuckPageRepository': 'IPuckPageRepository',
+    'DataSourceRepository': 'DataSourceRepository',
     'IToolRegistryService': 'IToolRegistryService',
   };
 
@@ -251,3 +258,9 @@ export const getPuckPageRepository = createGetter('PuckPageRepository');
 // Puck application service getters
 export const getAppApplicationService = createGetter('AppApplicationService');
 export const getPuckPageApplicationService = createGetter('PuckPageApplicationService');
+
+// Data Source domain repository getters
+export const getDataSourceRepository = createGetter('DataSourceRepository');
+
+// Data Source application service getters
+export const getDataSourceApplicationService = createGetter('DataSourceApplicationService');

@@ -386,5 +386,9 @@ export {
   getAppRepository,
   getPuckPageRepository,
   getAppApplicationService,
-  getPuckPageApplicationService
+  getPuckPageApplicationService,
+
+  // Data Source services
+  getDataSourceRepository,
+  getDataSourceApplicationService
 } from './getters';
