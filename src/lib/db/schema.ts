@@ -108,9 +108,9 @@ export const fields = pgTable("fields", {
   }),
 ]);
 
-// AIDEV-NOTE: Data Sources - Puck page builder integration with tables
+// AIDEV-NOTE: Views - Filtered/sorted table configurations (Baserow view pattern) with tables
 // Defines filtered, sorted, paginated views of table data for components
-export const dataSources = pgTable("data_sources", {
+export const views = pgTable("views", {
   id: serial("id").primaryKey(),
   organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
   tableId: integer("table_id").notNull().references(() => tables.id, { onDelete: 'cascade' }),
@@ -140,16 +140,16 @@ export const dataSources = pgTable("data_sources", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   // Unique name per organization
-  unique("data_sources_org_name_unique").on(table.organizationId, table.name),
+  unique("views_org_name_unique").on(table.organizationId, table.name),
 
   // Index for organization queries
-  index("data_sources_org_idx").on(table.organizationId),
+  index("views_org_idx").on(table.organizationId),
 
   // Index for table queries
-  index("data_sources_table_idx").on(table.tableId),
+  index("views_table_idx").on(table.tableId),
 
-  // RLS: Users can view data sources in their organization
-  pgPolicy("data_sources_view_permission", {
+  // RLS: Users can view views in their organization
+  pgPolicy("views_view_permission", {
     as: "permissive",
     for: "select",
     to: "public",
@@ -161,8 +161,8 @@ export const dataSources = pgTable("data_sources", {
       )`,
   }),
 
-  // RLS: Users can create data sources if they have data:manage permission
-  pgPolicy("data_sources_create_permission", {
+  // RLS: Users can create views if they have data:manage permission
+  pgPolicy("views_create_permission", {
     as: "permissive",
     for: "insert",
     to: "public",
@@ -174,8 +174,8 @@ export const dataSources = pgTable("data_sources", {
       )`,
   }),
 
-  // RLS: Users can manage data sources if they have data:manage permission
-  pgPolicy("data_sources_manage_permission", {
+  // RLS: Users can manage views if they have data:manage permission
+  pgPolicy("views_manage_permission", {
     as: "permissive",
     for: "all",
     to: "public",
