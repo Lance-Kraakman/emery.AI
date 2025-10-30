@@ -112,6 +112,43 @@ export class Row {
     return obj;
   }
 
+  /**
+   * Convert row to view format with field_{id} keys
+   *
+   * AIDEV-NOTE: Used by Views (filtered/sorted table views) and grid displays
+   * that need the Baserow-style field_{id} column naming convention.
+   * Unlike toPlainObject() which uses human-readable field names,
+   * this format is used for rendering in views/grids where field IDs
+   * are used as stable identifiers even when field names change.
+   *
+   * @param fields - Table fields to map field names to IDs
+   * @returns Object with field_{id} keys instead of field names
+   */
+  toViewFormat(fields: TableField[]): Record<string, any> {
+    const obj: Record<string, any> = {
+      id: this.id.value
+    };
+
+    for (const fieldValue of this.fieldValues) {
+      // Find the field definition to get its ID
+      const field = fields.find(f => f.name === fieldValue.fieldSlug);
+
+      if (field) {
+        const value = fieldValue.value;
+
+        // Convert Date objects to ISO strings for JSON serialization
+        if (fieldValue.fieldType === 'date' && value instanceof Date) {
+          obj[`field_${field.id.value}`] = value.toISOString();
+        } else {
+          // All other types: return value as-is (arrays, objects, strings, primitives)
+          obj[`field_${field.id.value}`] = value;
+        }
+      }
+    }
+
+    return obj;
+  }
+
   static fromPlainObject(
     data: Record<string, any> & { id?: string },
     tableId: number,

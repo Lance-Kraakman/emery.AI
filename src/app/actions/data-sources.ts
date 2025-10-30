@@ -392,11 +392,14 @@ export async function executeDataSource(
       return null;
     }
 
-    // Convert Row entities to plain objects
-    const plainRows = result.data.rows.map((row) => row.toPlainObject());
+    // Type-narrow the schema fields after null check
+    const fields = schemaResult.data;
+
+    // Convert Row entities to view format (field_{id} keys for grid display)
+    const plainRows = result.data.rows.map((row) => row.toViewFormat(fields));
 
     // Convert TableField VOs to plain objects
-    const plainFields = schemaResult.data.map((field) => ({
+    const plainFields = fields.map((field) => ({
       id: field.id.value,
       name: field.name,
       type: field.type,
