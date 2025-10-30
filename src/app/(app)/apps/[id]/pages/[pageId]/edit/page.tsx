@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import React, { useEffect, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Puck, Data, usePuck } from "@measured/puck";
 import "@measured/puck/puck.css";
@@ -66,6 +66,63 @@ function CustomHeaderActions({
     </div>
   );
 }
+
+// AIDEV-NOTE: Memoized Puck editor component to prevent re-renders from sidebar context changes.
+// This prevents the iframe from redrawing when the sidebar collapses/expands.
+const PuckEditor = React.memo(function PuckEditor({
+  pageId,
+  appId,
+  page,
+  pageData,
+  handleDataChange,
+  handleSave,
+  handlePreview,
+  handlePublish,
+  saving,
+  hasUnsavedChanges,
+}: {
+  pageId: number;
+  appId: number;
+  page: PageDTO;
+  pageData: Data;
+  handleDataChange: (data: Data) => void;
+  handleSave: () => void;
+  handlePreview: () => void;
+  handlePublish: () => void;
+  saving: boolean;
+  hasUnsavedChanges: boolean;
+}) {
+  return (
+    <Puck
+      key={`puck-editor-${pageId}`}
+      config={config}
+      data={pageData}
+      onChange={handleDataChange}
+      headerTitle={page.name}
+      headerPath={`/apps/${appId}/pages/${pageId}`}
+      viewports={[
+        { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
+        { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },
+        { width: 1440, height: "auto", icon: "Monitor", label: "Desktop" }
+      ]}
+      iframe={{ enabled: true }}
+      overrides={{
+        headerActions: ({ children }) => (
+          <CustomHeaderActions
+            onSave={handleSave}
+            onPreview={handlePreview}
+            onPublish={handlePublish}
+            saving={saving}
+            hasUnsavedChanges={hasUnsavedChanges}
+            isPublished={page?.isPublished || false}
+          >
+            {children}
+          </CustomHeaderActions>
+        )
+      }}
+    />
+  );
+});
 
 export default function PageEditPage() {
   const params = useParams();
@@ -221,32 +278,17 @@ export default function PageEditPage() {
 
   return (
     <div className="h-screen">
-      <Puck
-        config={config}
-        data={pageData}
-        onChange={handleDataChange}
-        headerTitle={page.name}
-        headerPath={`/apps/${appId}/pages/${pageId}`}
-        viewports={[
-          { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
-          { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },
-          { width: 1440, height: "auto", icon: "Monitor", label: "Desktop" }
-        ]}
-        iframe={{ enabled: true }}
-        overrides={{
-          headerActions: ({ children }) => (
-            <CustomHeaderActions
-              onSave={handleSave}
-              onPreview={handlePreview}
-              onPublish={handlePublish}
-              saving={saving}
-              hasUnsavedChanges={hasUnsavedChanges}
-              isPublished={page?.isPublished || false}
-            >
-              {children}
-            </CustomHeaderActions>
-          )
-        }}
+      <PuckEditor
+        pageId={pageId}
+        appId={appId}
+        page={page}
+        pageData={pageData}
+        handleDataChange={handleDataChange}
+        handleSave={handleSave}
+        handlePreview={handlePreview}
+        handlePublish={handlePublish}
+        saving={saving}
+        hasUnsavedChanges={hasUnsavedChanges}
       />
     </div>
   );
