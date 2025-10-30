@@ -17,6 +17,7 @@ import { registerCoreServices, type CoreServices } from './modules/core-registra
 import { registerAgentServices, type AgentServices } from './modules/agent-registration';
 import { registerSkillServices, type SkillServices } from './modules/skill-registration';
 import { registerDatabaseServices, type DatabaseServices } from './modules/database-registration';
+import { registerDataSourceServices, type DataSourceServices } from './modules/data-source-registration';
 import { registerChatServices, type ChatServices } from './modules/chat-registration';
 import { registerToolsServices, type ToolsServices } from './modules/tools-registration';
 import { registerRagServices, type RagServices } from './modules/rag-registration';
@@ -97,6 +98,14 @@ export class DIContainer {
     });
     this.registerServices('database', databaseServices);
 
+    // Phase 4.5: Register data source services (Puck integration)
+    // Depends on: table application service
+    const dataSourceServices = registerDataSourceServices({
+      db,
+      tableApplicationService: databaseServices.tableApplicationService
+    });
+    this.registerServices('dataSource', dataSourceServices);
+
     // Phase 5: Register chat services
     // Depends on: dynamic table service, agent repository
     const chatServices = registerChatServices({
@@ -166,7 +175,7 @@ export class DIContainer {
    */
   private registerServices(
     domain: string,
-    services: CoreServices | AgentServices | SkillServices | DatabaseServices | ChatServices | ToolsServices | RagServices | ConnectionServices | DelegationServices | PuckServices
+    services: CoreServices | AgentServices | SkillServices | DatabaseServices | DataSourceServices | ChatServices | ToolsServices | RagServices | ConnectionServices | DelegationServices | PuckServices
   ): void {
     // Map service names to container keys
     const serviceKeyMappings: Record<string, string> = {
@@ -200,6 +209,10 @@ export class DIContainer {
       'tableApplicationService': 'TableApplicationService',
       'fileApplicationService': 'FileApplicationService',
       'documentApplicationService': 'DocumentApplicationService',
+
+      // Data Source domain (Puck integration)
+      'dataSourceRepository': 'DataSourceRepository',
+      'dataSourceApplicationService': 'DataSourceApplicationService',
 
       // Chat domain
       'chatRepository': 'IChatRepository',

@@ -13,6 +13,7 @@ import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repos
 import type { IInvitationRepository } from '@/ddd/domain/invitations/repositories/invitation-repository';
 import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
+import type { DataSourceRepository } from '@/ddd/domain/data-sources/repositories/data-source-repository';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
 import type { IAgentExecutionRepository } from '@/ddd/domain/agents/repositories/agent-execution-repository';
@@ -35,6 +36,7 @@ import type { InvitationApplicationService } from '@/ddd/application/services/in
 import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
 import type { FileUseCases } from '@/ddd/application/services/tables/file-application-service';
 import type { DocumentApplicationService } from '@/ddd/application/services/tables/document-application-service';
+import type { DataSourceApplicationService } from '@/ddd/application/services/data-sources/data-source-application-service';
 import type { ChatApplicationService } from '@/ddd/application/services/chat/chat-application-service';
 import type { ToolSearchApplicationService } from '@/ddd/application/services/tools/tool-search-application-service';
 import type { ToolConfigurationApplicationService } from '@/ddd/application/services/tools/tool-configuration-application-service';
@@ -83,6 +85,9 @@ export interface RepositoryRegistry {
   IDynamicTableRepository: IDynamicTableRepository;
   IFileStorageRepository: IFileStorageRepository;
 
+  // Data Source domain repositories (Puck integration)
+  DataSourceRepository: DataSourceRepository;
+
   // Chat domain repositories
   IChatRepository: IChatRepository;
   IChatMessageRepository: IChatMessageRepository;
@@ -126,6 +131,9 @@ export interface RepositoryRegistry {
   TableApplicationService: TableApplicationService;
   FileApplicationService: FileUseCases;
   DocumentApplicationService: DocumentApplicationService;
+
+  // Data Source application services (Puck integration)
+  DataSourceApplicationService: DataSourceApplicationService;
 
   // Chat application services
   ChatApplicationService: ChatApplicationService;
