@@ -30,15 +30,45 @@
 
 import type { ComponentConfig } from "@measured/puck";
 import TableBlock, { type TableBlockProps } from "./TableBlock";
-import { getDataSource, executeDataSource } from "@/app/actions/data-sources";
+import { getDataSource, executeDataSource, getDataSourcesForTable, createDataSource } from "@/app/actions/data-sources";
+import { getTables } from "@/app/actions/tables";
 
 export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
   label: "Table",
 
   fields: {
-    // Data Source Selection
+    // Table Selection (auto-creates default data source)
+    table: {
+      label: "Table",
+      type: "external",
+      placeholder: "Select a table",
+      showSearch: true,
+      fetchList: async ({ query }: { query: string }) => {
+        const tables = await getTables();
+        const filteredTables = query
+          ? tables.filter((t) =>
+              t.name.toLowerCase().includes(query.toLowerCase())
+            )
+          : tables;
+        return filteredTables.map((t) => ({
+          id: t.id,
+          name: t.name,
+          databaseId: t.databaseId,
+          title: t.name,
+          description: t.description || `Database ID: ${t.databaseId}`,
+        }));
+      },
+      mapProp: (item: any) => ({
+        id: item.id,
+        name: item.name,
+        databaseId: item.databaseId,
+      }),
+      getItemSummary: (item: any) => item?.name || "No table selected",
+    } as any,
+
+    // Hidden fields populated by resolveData
     dataSourceId: {
-      label: "Data Source",
+      label: "Data Source ID",
       type: "number",
     },
     dataSourceName: {
@@ -137,37 +167,64 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
    * Uses Server Actions which create an RPC boundary when called from client.
    * All data is returned as DTOs (plain objects), not domain entities.
    *
-   * The TableBlock render component receives pre-resolved plain data.
+   * Flow:
+   * 1. User selects table from dropdown
+   * 2. Check if default data source exists for that table
+   * 3. If not, auto-create one with name "Default view of {tableName}"
+   * 4. Execute data source and return rows
    */
   resolveData: async ({ props }, { metadata }) => {
     try {
-      // If no data source selected, return props as-is
-      if (!props.dataSourceId) {
+      // If no table selected, return props as-is
+      if (!props.table?.id) {
         return { props };
       }
 
-      // Get data source details (Server Action - RPC to server if on client)
-      const dataSource = await getDataSource(props.dataSourceId);
+      const tableId = props.table.id;
+      const tableName = props.table.name;
 
-      if (!dataSource) {
-        return {
-          props: {
-            ...props,
-            _rows: [],
-            _fields: [],
-            _totalCount: 0,
-          } as any,
-        };
+      // Get existing data sources for this table
+      const existingDataSources = await getDataSourcesForTable(tableId);
+
+      let dataSourceId: number;
+      let dataSourceName: string;
+
+      if (existingDataSources.length > 0) {
+        // Use the first existing data source
+        dataSourceId = existingDataSources[0].id;
+        dataSourceName = existingDataSources[0].name;
+      } else {
+        // Auto-create a default data source
+        const createResult = await createDataSource({
+          tableId,
+          name: `Default view of ${tableName}`,
+          description: "Auto-created default data source for table",
+        });
+
+        if (!createResult.success || !createResult.data) {
+          return {
+            props: {
+              ...props,
+              _rows: [],
+              _fields: [],
+              _totalCount: 0,
+            } as any,
+          };
+        }
+
+        dataSourceId = createResult.data.id;
+        dataSourceName = createResult.data.name;
       }
 
       // Execute data source to get rows (Server Action - returns DTOs)
-      const result = await executeDataSource(props.dataSourceId);
+      const result = await executeDataSource(dataSourceId);
 
       if (!result) {
         return {
           props: {
             ...props,
-            dataSourceName: dataSource.name,
+            dataSourceId,
+            dataSourceName,
             _rows: [],
             _fields: [],
             _totalCount: 0,
@@ -178,7 +235,7 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       // Auto-generate field mappings if none exist
       let fieldMappings = props.fieldMappings || [];
       if (fieldMappings.length === 0 && result.fields.length > 0) {
-        // Note: result.fields are now plain objects with { id, name, type, slug }
+        // Note: result.fields are now plain objects with { id, name, type }
         fieldMappings = result.fields.slice(0, 10).map((field, index) => ({
           sourceFieldId: field.id, // Plain number, not field.id.value
           displayName: field.name,
@@ -191,10 +248,11 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       return {
         props: {
           ...props,
-          dataSourceName: dataSource.name,
+          dataSourceId,
+          dataSourceName,
           fieldMappings,
           _rows: result.rows,        // Plain objects from .toPlainObject()
-          _fields: result.fields,    // Plain objects: { id, name, type, slug }
+          _fields: result.fields,    // Plain objects: { id, name, type }
           _totalCount: result.totalCount,
         } as any,
       };

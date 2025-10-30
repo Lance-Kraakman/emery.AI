@@ -100,7 +100,7 @@ export async function updateDataSource(
   revalidateUrl?: string
 ): Promise<Result<DataSourceDTO>> {
   try {
-    await requirePermission("data:update");
+    await requirePermission("data:manage");
     await requireCurrentOrganization();
 
     const { id, name, description, filters, sorting, pagination } = data;
@@ -209,7 +209,7 @@ export async function deleteDataSource(
   revalidateUrl?: string
 ): Promise<Result> {
   try {
-    await requirePermission("data:delete");
+    await requirePermission("data:manage");
     await requireCurrentOrganization();
 
     if (!id) {
@@ -256,7 +256,7 @@ export async function deleteDataSource(
  */
 export async function getDataSource(id: number): Promise<DataSourceDTO | null> {
   try {
-    await requirePermission("data:read");
+    await requirePermission("data:view");
     await requireCurrentOrganization();
 
     if (!id) {
@@ -289,7 +289,7 @@ export async function getDataSourcesForTable(
   tableId: number
 ): Promise<DataSourceDTO[]> {
   try {
-    await requirePermission("data:read");
+    await requirePermission("data:view");
     await requireCurrentOrganization();
 
     if (!tableId) {
@@ -318,7 +318,7 @@ export async function getDataSourcesForTable(
  */
 export async function getDataSourcesForOrganization(): Promise<DataSourceDTO[]> {
   try {
-    await requirePermission("data:read");
+    await requirePermission("data:view");
     const currentOrg = await requireCurrentOrganization();
 
     const dataSourceService = getDataSourceApplicationService();
@@ -354,7 +354,7 @@ export async function executeDataSource(
   offset: number;
 } | null> {
   try {
-    await requirePermission("data:read");
+    await requirePermission("data:view");
     await requireCurrentOrganization();
 
     if (!dataSourceId) {
