@@ -1,4 +1,4 @@
-import { Config, Data } from "@measured/puck";
+import { Config, Data, Slot } from "@measured/puck";
 import { ButtonProps } from "./blocks/Button";
 import { CardProps } from "./blocks/Card";
 import { GridProps } from "./blocks/Grid";
@@ -10,12 +10,28 @@ import { StatsProps } from "./blocks/Stats";
 import { TemplateProps } from "./blocks/Template";
 import { TextProps } from "./blocks/Text";
 import { SpaceProps } from "./blocks/Space";
-import { HeaderBlockProps } from "./blocks/HeaderBlock";
-import { FooterBlockProps } from "./blocks/FooterBlock";
 
 import { RootProps } from "./root";
 
 export type { RootProps } from "./root";
+
+// Updated HeaderBlock and FooterBlock types with slots
+export type HeaderBlockProps = {
+  layout?: "left-nav" | "centered" | "split" | "minimal";
+  logo?: Slot;
+  navigation?: Slot;
+  actions?: Slot;
+  sticky?: boolean;
+  backgroundColor?: string;
+};
+
+export type FooterBlockProps = {
+  layout?: "columns" | "centered" | "minimal";
+  numColumns?: 2 | 3 | 4;
+  columns?: Slot;
+  bottomBar?: Slot;
+  backgroundColor?: string;
+};
 
 export type Components = {
   Button: ButtonProps;

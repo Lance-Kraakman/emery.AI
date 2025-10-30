@@ -1,46 +1,45 @@
-import { ComponentConfig } from "@measured/puck";
+import { ComponentConfig, Slot } from "@measured/puck";
 import { getClassNameFactory } from "@/components/puck/lib";
 import styles from "./styles.module.css";
 
 const getClassName = getClassNameFactory("FooterBlock", styles);
 
 export type FooterBlockProps = {
-  columns?: Array<{
-    title: string;
-    links: Array<{ label: string; href: string }>;
-  }>;
-  copyrightText?: string;
+  layout?: "columns" | "centered" | "minimal";
+  numColumns?: 2 | 3 | 4;
+  columns?: Slot;
+  bottomBar?: Slot;
   backgroundColor?: string;
 };
 
 export const FooterBlock: ComponentConfig<FooterBlockProps> = {
   label: "Footer",
   fields: {
-    columns: {
-      type: "array",
-      label: "Footer Columns",
-      getItemSummary: (item) => item.title || "Column",
-      arrayFields: {
-        title: { type: "text" },
-        links: {
-          type: "array",
-          arrayFields: {
-            label: { type: "text" },
-            href: { type: "text" },
-          },
-        },
-      },
-      defaultItemProps: {
-        title: "Section",
-        links: [
-          { label: "Link 1", href: "#" },
-          { label: "Link 2", href: "#" },
-        ],
-      },
+    layout: {
+      type: "radio",
+      label: "Layout",
+      options: [
+        { label: "Columns", value: "columns" },
+        { label: "Centered", value: "centered" },
+        { label: "Minimal", value: "minimal" },
+      ],
     },
-    copyrightText: {
-      type: "text",
-      label: "Copyright Text",
+    numColumns: {
+      type: "radio",
+      label: "Number of Columns",
+      options: [
+        { label: "2", value: 2 },
+        { label: "3", value: 3 },
+        { label: "4", value: 4 },
+      ],
+    },
+    columns: {
+      type: "slot",
+      label: "Content",
+    },
+    bottomBar: {
+      type: "slot",
+      label: "Bottom Bar",
     },
     backgroundColor: {
       type: "select",
@@ -53,80 +52,56 @@ export const FooterBlock: ComponentConfig<FooterBlockProps> = {
     },
   },
   defaultProps: {
-    columns: [
-      {
-        title: "Product",
-        links: [
-          { label: "Features", href: "#" },
-          { label: "Pricing", href: "#" },
-          { label: "FAQ", href: "#" },
-        ],
-      },
-      {
-        title: "Company",
-        links: [
-          { label: "About", href: "#" },
-          { label: "Blog", href: "#" },
-          { label: "Careers", href: "#" },
-        ],
-      },
-      {
-        title: "Support",
-        links: [
-          { label: "Help Center", href: "#" },
-          { label: "Contact", href: "#" },
-          { label: "Status", href: "#" },
-        ],
-      },
-    ],
-    copyrightText: "© 2025 Your Company. All rights reserved.",
+    layout: "columns",
+    numColumns: 4,
+    columns: [],
+    bottomBar: [],
     backgroundColor: "#1f2937",
   },
-  render: ({ columns, copyrightText, backgroundColor, puck }) => {
+  resolveFields: async (data, { fields }) => {
+    const layout = data.props.layout || "columns";
+
+    // Only show numColumns for column layout
+    if (layout !== "columns") {
+      return {
+        ...fields,
+        numColumns: undefined,
+      };
+    }
+
+    return fields;
+  },
+  render: ({ layout, numColumns, columns: Columns, bottomBar: BottomBar, backgroundColor, puck }) => {
     const isDark = backgroundColor !== "#f9fafb";
 
     return (
       <footer
-        className={getClassName()}
+        className={getClassName({
+          [layout || "columns"]: true,
+        })}
         style={{
           backgroundColor,
           color: isDark ? "white" : "inherit",
         }}
       >
         <div className={getClassName("inner")}>
-          <div className={getClassName("columns")}>
-            {columns?.map((column, idx) => (
-              <div key={idx} className={getClassName("column")}>
-                <h3
-                  className={getClassName("columnTitle")}
-                  style={{ color: isDark ? "#e5e7eb" : "#374151" }}
-                >
-                  {column.title}
-                </h3>
-                <ul className={getClassName("linkList")}>
-                  {column.links?.map((link, linkIdx) => (
-                    <li key={linkIdx}>
-                      <a
-                        href={puck.isEditing ? "#" : link.href}
-                        className={getClassName("link")}
-                        style={{
-                          color: isDark ? "#9ca3af" : "#6b7280",
-                        }}
-                      >
-                        {link.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-          {copyrightText && (
+          {Columns && (
             <div
-              className={getClassName("copyright")}
-              style={{ color: isDark ? "#9ca3af" : "#6b7280" }}
+              className={getClassName("columns")}
+              style={{
+                gridTemplateColumns:
+                  layout === "columns"
+                    ? `repeat(${numColumns || 4}, 1fr)`
+                    : undefined,
+              }}
             >
-              {copyrightText}
+              <Columns />
+            </div>
+          )}
+
+          {BottomBar && (
+            <div className={getClassName("bottomBar")}>
+              <BottomBar />
             </div>
           )}
         </div>

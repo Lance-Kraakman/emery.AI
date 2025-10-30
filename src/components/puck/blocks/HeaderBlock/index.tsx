@@ -1,12 +1,14 @@
-import { ComponentConfig } from "@measured/puck";
+import { ComponentConfig, Slot } from "@measured/puck";
 import { getClassNameFactory } from "@/components/puck/lib";
 import styles from "./styles.module.css";
 
 const getClassName = getClassNameFactory("HeaderBlock", styles);
 
 export type HeaderBlockProps = {
-  logo?: string;
-  navItems?: Array<{ label: string; href: string }>;
+  layout?: "left-nav" | "centered" | "split" | "minimal";
+  logo?: Slot;
+  navigation?: Slot;
+  actions?: Slot;
   sticky?: boolean;
   backgroundColor?: string;
 };
@@ -14,22 +16,27 @@ export type HeaderBlockProps = {
 export const HeaderBlock: ComponentConfig<HeaderBlockProps> = {
   label: "Header",
   fields: {
-    logo: {
-      type: "text",
-      label: "Logo Text",
+    layout: {
+      type: "radio",
+      label: "Layout",
+      options: [
+        { label: "Left Logo + Nav", value: "left-nav" },
+        { label: "Centered", value: "centered" },
+        { label: "Split", value: "split" },
+        { label: "Minimal", value: "minimal" },
+      ],
     },
-    navItems: {
-      type: "array",
-      label: "Navigation Items",
-      getItemSummary: (item) => item.label || "Nav Item",
-      arrayFields: {
-        label: { type: "text" },
-        href: { type: "text" },
-      },
-      defaultItemProps: {
-        label: "Link",
-        href: "#",
-      },
+    logo: {
+      type: "slot",
+      label: "Logo",
+    },
+    navigation: {
+      type: "slot",
+      label: "Navigation",
+    },
+    actions: {
+      type: "slot",
+      label: "Actions",
     },
     sticky: {
       type: "radio",
@@ -50,40 +57,65 @@ export const HeaderBlock: ComponentConfig<HeaderBlockProps> = {
     },
   },
   defaultProps: {
-    logo: "LOGO",
-    navItems: [
-      { label: "Home", href: "/" },
-      { label: "About", href: "/about" },
-      { label: "Contact", href: "/contact" },
-    ],
+    layout: "left-nav",
+    logo: [],
+    navigation: [],
+    actions: [],
     sticky: true,
     backgroundColor: "white",
   },
-  render: ({ logo, navItems, sticky, backgroundColor, puck }) => {
+  resolveFields: async (data, { fields }) => {
+    const layout = data.props.layout || "left-nav";
+
+    // Hide fields based on layout
+    if (layout === "minimal") {
+      return {
+        ...fields,
+        navigation: undefined, // Hide navigation in minimal layout
+      };
+    }
+
+    if (layout === "centered") {
+      return {
+        ...fields,
+        actions: undefined, // Hide actions in centered layout
+      };
+    }
+
+    return fields;
+  },
+  render: ({ layout, logo: Logo, navigation: Navigation, actions: Actions, sticky, backgroundColor, puck }) => {
+    const isDark = backgroundColor === "#1f2937";
+
     return (
       <header
-        className={getClassName({ sticky: sticky })}
+        className={getClassName({
+          sticky: sticky,
+          [layout || "left-nav"]: true,
+        })}
         style={{
           backgroundColor,
-          color: backgroundColor === "#1f2937" ? "white" : "inherit",
+          color: isDark ? "white" : "inherit",
         }}
       >
         <div className={getClassName("inner")}>
-          <div className={getClassName("logo")}>{logo}</div>
-          <nav className={getClassName("nav")}>
-            {navItems?.map((item, idx) => (
-              <a
-                key={idx}
-                href={puck.isEditing ? "#" : item.href}
-                className={getClassName("navLink")}
-                style={{
-                  color: backgroundColor === "#1f2937" ? "white" : "inherit",
-                }}
-              >
-                {item.label}
-              </a>
-            ))}
-          </nav>
+          {Logo && (
+            <div className={getClassName("logoSlot")}>
+              <Logo />
+            </div>
+          )}
+
+          {Navigation && layout !== "minimal" && (
+            <div className={getClassName("navigationSlot")}>
+              <Navigation />
+            </div>
+          )}
+
+          {Actions && layout !== "centered" && (
+            <div className={getClassName("actionsSlot")}>
+              <Actions />
+            </div>
+          )}
         </div>
       </header>
     );
