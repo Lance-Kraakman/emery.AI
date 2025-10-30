@@ -1,10 +1,10 @@
 /* eslint-disable @next/next/no-img-element */
 import React from "react";
+import { ComponentConfig } from "@measured/puck";
 import { quotes } from "./quotes";
-import { AutoField, FieldLabel } from "@/core";
+import { AutoField, FieldLabel } from "@measured/puck";
 import { Link2 } from "lucide-react";
 import HeroComponent, { HeroProps } from "./Hero";
-import { ComponentConfig } from "@measured/puck";
 
 export const Hero: ComponentConfig<{
   props: HeroProps;

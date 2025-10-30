@@ -1,6 +1,6 @@
 import React from "react";
 import { ComponentConfig } from "@measured/puck";
-import { Button as _Button } from "@measured/puck";
+import { Button as _Button } from "@/components/puck/components/Button";
 
 export type ButtonProps = {
   label: string;

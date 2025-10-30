@@ -1,4 +1,4 @@
-import { getClassNameFactory } from "@/core/lib";
+import { getClassNameFactory } from "@/components/puck/lib";
 
 import styles from "./styles.module.css";
 

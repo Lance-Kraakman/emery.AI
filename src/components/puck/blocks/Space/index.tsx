@@ -1,11 +1,10 @@
 import React from "react";
 
+import { ComponentConfig } from "@measured/puck";
 import { spacingOptions } from "../../options";
-import { getClassNameFactory } from "@/measured/puck";
-
+import { getClassNameFactory } from "@/components/puck/lib";
 
 import styles from "./styles.module.css";
-import { ComponentConfig } from "@measured/puck";
 
 const getClassName = getClassNameFactory("Space", styles);
 

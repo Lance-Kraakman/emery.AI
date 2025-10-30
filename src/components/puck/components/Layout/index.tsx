@@ -3,9 +3,9 @@ import {
   ComponentConfig,
   DefaultComponentProps,
   ObjectField,
-} from "@/core/types";
+} from "@measured/puck";
 import { spacingOptions } from "../../options";
-import { getClassNameFactory } from "@/core/lib";
+import { getClassNameFactory } from "@/components/puck/lib";
 import styles from "./styles.module.css";
 
 const getClassName = getClassNameFactory("Layout", styles);
