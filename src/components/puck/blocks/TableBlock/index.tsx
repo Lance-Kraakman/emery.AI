@@ -70,10 +70,12 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
     dataSourceId: {
       label: "Data Source ID",
       type: "number",
+      visible: false,
     },
     dataSourceName: {
       label: "Data Source Name",
       type: "text",
+      visible: false,
     },
 
     // Field Mappings
