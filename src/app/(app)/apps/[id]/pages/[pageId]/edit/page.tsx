@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Puck, Data, usePuck, Button as PuckButton } from "@measured/puck";
+import { Puck, Data, usePuck } from "@measured/puck";
 import "@measured/puck/puck.css";
 import { config } from "@/puck-extraction/components/config";
 import { getPage, updatePageContent, publishPage, unpublishPage } from "@/app/actions/puck-pages";
@@ -42,30 +42,26 @@ function CustomHeaderActions({
 
       {/* Custom Action Buttons */}
       <div className="flex gap-2 items-center">
-        <PuckButton
+        <Button
           onClick={onSave}
           disabled={saving || !hasUnsavedChanges}
-          loading={saving}
-          size="medium"
         >
           {hasUnsavedChanges ? "Save Changes" : "Saved"}
-        </PuckButton>
+        </Button>
 
-        <PuckButton
+        <Button
           onClick={onPreview}
-          size="medium"
         >
           <Eye size={16} className="mr-1" />
           Preview
-        </PuckButton>
+        </Button>
 
-        <PuckButton
+        <Button
           onClick={onPublish}
-          size="medium"
         >
           <Globe size={16} className="mr-1" />
           {isPublished ? "Unpublish" : "Publish"}
-        </PuckButton>
+        </Button>
       </div>
     </div>
   );

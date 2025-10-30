@@ -1,0 +1,59 @@
+# Getting Started
+
+## Installation
+
+Install the package
+
+```sh npm2yarn copy
+npm i @measured/puck --save
+```
+
+Or generate a Puck application using a [recipe](https://github.com/measuredco/puck#recipes)
+
+```sh copy
+npx create-puck-app my-app
+```
+
+## Render the editor
+
+```jsx copy filename="Editor.jsx"
+import { Puck } from "@measured/puck";
+import "@measured/puck/puck.css";
+
+// Create Puck component config
+const config = {
+  components: {
+    HeadingBlock: {
+      fields: {
+        children: {
+          type: "text",
+        },
+      },
+      render: ({ children }) => {
+        return <h1>{children}</h1>;
+      },
+    },
+  },
+};
+
+// Describe the initial data
+const initialData = {};
+
+// Save the data to your database
+const save = (data) => {};
+
+// Render Puck editor
+export function Editor() {
+  return <Puck config={config} data={initialData} onPublish={save} />;
+}
+```
+
+## Render the page
+
+```jsx copy filename="Page.jsx"
+import { Render } from "@measured/puck";
+
+export function Page() {
+  return <Render config={config} data={data} />;
+}
+```
