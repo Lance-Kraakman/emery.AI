@@ -27,6 +27,13 @@
   border-bottom-color: rgba(255, 255, 255, 0.1);
 }
 
+.FooterBlock-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 150px;
+}
+
 /* Layout: Centered */
 .FooterBlock--centered .FooterBlock-columns {
   display: flex;

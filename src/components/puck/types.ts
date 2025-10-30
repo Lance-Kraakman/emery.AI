@@ -28,7 +28,10 @@ export type HeaderBlockProps = {
 export type FooterBlockProps = {
   layout?: "columns" | "centered" | "minimal";
   numColumns?: 2 | 3 | 4;
-  columns?: Slot;
+  column1?: Slot;
+  column2?: Slot;
+  column3?: Slot;
+  column4?: Slot;
   bottomBar?: Slot;
   backgroundColor?: string;
 };
