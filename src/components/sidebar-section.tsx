@@ -61,7 +61,7 @@ export function SidebarSection<T>({
             <SidebarMenu className="gap-0.5">
               {items.map((item) => (
                 <SidebarMenuItem key={getItemKey(item)}>
-                  <SidebarMenuButton asChild isActive={isItemActive(item, pathname)} className="h-7">
+                  <SidebarMenuButton asChild isActive={isItemActive(item, pathname)} className="h-6">
                     <Link href={getItemHref(item)}>
                       <span className="group-data-[collapsible=icon]:hidden">
                         {getItemName(item)}
@@ -72,7 +72,7 @@ export function SidebarSection<T>({
               ))}
               <Button
                 variant="ghost"
-                className="w-full justify-start h-7 px-2 text-sm mt-0.5"
+                className="w-full justify-start h-6 px-2 text-sm mt-0.5"
                 onClick={onAdd}
                 disabled={isCreating}
               >

@@ -12,15 +12,25 @@
  * 4. TableBlock component receives pre-resolved data as props
  */
 
+/**
+ * TableBlock - Puck Component Configuration
+ *
+ * AIDEV-NOTE: This is the Puck config for TableBlock.
+ * Uses Server Actions to fetch data, avoiding client bundle pollution.
+ * Server Actions ('use server') create an RPC boundary that prevents
+ * DIContainer, gRPC clients, and Node.js built-ins from bundling into client.
+ *
+ * Flow:
+ * 1. User selects data source in Puck editor (via DataSourceField)
+ * 2. User configures field mappings (via FieldMappingField)
+ * 3. resolveData executes (server or client context)
+ * 4. Server Actions called → RPC to server if needed
+ * 5. TableBlock component receives pre-resolved DTO data as props
+ */
+
 import type { ComponentConfig } from "@measured/puck";
 import TableBlock, { type TableBlockProps } from "./TableBlock";
-import { createDataSourceField } from "../../custom-fields/data-source-field";
-import { createFieldMappingField } from "../../custom-fields/field-mapping-field";
-import { getDataSource, executeDataSource } from "@/lib/puck/data-source-helpers";
-import { getTableFromMetadata } from "@/lib/puck/resolve-table-metadata";
-import { createDebugLogger } from "@/lib/utils/debug-logger";
-
-const logger = createDebugLogger("TableBlock");
+import { getDataSource, executeDataSource } from "@/app/actions/data-sources";
 
 export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
   label: "Table",
@@ -123,30 +133,23 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
   /**
    * Server-side data resolution
    *
-   * AIDEV-NOTE: This executes on the server during page rendering.
-   * It fetches the actual row data from the selected data source
-   * and injects it into props as _rows, _fields, _totalCount.
+   * AIDEV-NOTE: This executes in multiple contexts (server render, Puck editor).
+   * Uses Server Actions which create an RPC boundary when called from client.
+   * All data is returned as DTOs (plain objects), not domain entities.
    *
-   * The TableBlock render component then uses this pre-resolved data.
+   * The TableBlock render component receives pre-resolved plain data.
    */
   resolveData: async ({ props }, { metadata }) => {
     try {
-      logger.debug("TableBlock resolveData called", {
-        dataSourceId: props.dataSourceId,
-        hasMetadata: !!metadata,
-      });
-
       // If no data source selected, return props as-is
       if (!props.dataSourceId) {
-        logger.debug("No data source selected, skipping data resolution");
         return { props };
       }
 
-      // Get data source details
+      // Get data source details (Server Action - RPC to server if on client)
       const dataSource = await getDataSource(props.dataSourceId);
 
       if (!dataSource) {
-        logger.debug("Data source not found", { dataSourceId: props.dataSourceId });
         return {
           props: {
             ...props,
@@ -157,11 +160,10 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
         };
       }
 
-      // Execute data source to get rows
+      // Execute data source to get rows (Server Action - returns DTOs)
       const result = await executeDataSource(props.dataSourceId);
 
       if (!result) {
-        logger.debug("Failed to execute data source", { dataSourceId: props.dataSourceId });
         return {
           props: {
             ...props,
@@ -176,34 +178,28 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       // Auto-generate field mappings if none exist
       let fieldMappings = props.fieldMappings || [];
       if (fieldMappings.length === 0 && result.fields.length > 0) {
-        logger.debug("Auto-generating field mappings", { fieldCount: result.fields.length });
+        // Note: result.fields are now plain objects with { id, name, type, slug }
         fieldMappings = result.fields.slice(0, 10).map((field, index) => ({
-          sourceFieldId: field.id.value,
+          sourceFieldId: field.id, // Plain number, not field.id.value
           displayName: field.name,
           visible: true,
           order: index,
         }));
       }
 
-      logger.debug("TableBlock data resolved", {
-        rowCount: result.rows.length,
-        totalCount: result.totalCount,
-        fieldCount: result.fields.length,
-      });
-
-      // Return props with resolved data
+      // Return props with resolved DTO data
       return {
         props: {
           ...props,
           dataSourceName: dataSource.name,
           fieldMappings,
-          _rows: result.rows,
-          _fields: result.fields,
+          _rows: result.rows,        // Plain objects from .toPlainObject()
+          _fields: result.fields,    // Plain objects: { id, name, type, slug }
           _totalCount: result.totalCount,
         } as any,
       };
     } catch (error) {
-      logger.error("Error in TableBlock resolveData", error);
+      console.error("Error in TableBlock resolveData:", error);
 
       // Return safe fallback on error
       return {

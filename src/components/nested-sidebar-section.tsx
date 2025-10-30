@@ -93,7 +93,7 @@ export function NestedSidebarSection<TParent, TChild>({
                   >
                     <SidebarMenuItem>
                       <CollapsibleTrigger className="w-full">
-                        <SidebarMenuButton asChild isActive={isParentActive(parent, pathname)} className="h-7">
+                        <SidebarMenuButton asChild isActive={isParentActive(parent, pathname)} className="h-6">
                           <div className="flex items-center justify-between w-full">
                             <Link href={getParentHref(parent)} className="flex-1">
                               <span className="group-data-[collapsible=icon]:hidden">
@@ -148,7 +148,7 @@ export function NestedSidebarSection<TParent, TChild>({
               })}
               <Button
                 variant="ghost"
-                className="w-full justify-start h-7 px-2 text-sm mt-0.5"
+                className="w-full justify-start h-6 px-2 text-sm mt-0.5"
                 onClick={onAddParent}
                 disabled={isCreating}
               >
