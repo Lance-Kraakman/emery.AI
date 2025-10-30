@@ -2,7 +2,8 @@
  * DataSourceField - Custom Puck field for selecting data sources
  *
  * AIDEV-NOTE: This is a field configuration object (not a React component).
- * It uses Puck's "external" field type to fetch and display available data sources.
+ * Uses Server Actions to fetch data sources. Server Actions ('use server')
+ * prevent bundling server-only code (DIContainer, gRPC) into client bundle.
  *
  * Usage in a Puck component:
  * ```typescript
@@ -17,7 +18,7 @@
  */
 
 import { ExternalField } from "@measured/puck";
-import { getDataSourcesForOrganization } from "@/lib/puck/data-source-helpers";
+import { getDataSourcesForOrganization } from "@/app/actions/data-sources";
 
 export interface DataSourceFieldValue {
   id: number;
@@ -40,8 +41,8 @@ export function createDataSourceField(params: {
     showSearch: true,
 
     fetchList: async ({ query }) => {
-      // Fetch data sources for the organization
-      const dataSources = await getDataSourcesForOrganization(params.organizationId);
+      // Fetch data sources for the organization (Server Action - returns DTOs)
+      const dataSources = await getDataSourcesForOrganization();
 
       // Filter by search query
       const filteredSources = query
@@ -51,12 +52,13 @@ export function createDataSourceField(params: {
         : dataSources;
 
       // Map to external field format
+      // AIDEV-NOTE: dataSources are now DTOs (plain objects), not domain entities
       return filteredSources.map((ds) => ({
-        id: ds.id.value,
+        id: ds.id,        // Plain number, not ds.id.value
         name: ds.name,
-        tableId: ds.tableId.value,
+        tableId: ds.tableId,  // Plain number, not ds.tableId.value
         title: ds.name,
-        description: `Table ID: ${ds.tableId.value}`,
+        description: `Table ID: ${ds.tableId}`,
       }));
     },
 
@@ -86,12 +88,13 @@ export function createDataSourceFieldForTable(params: {
     showSearch: true,
 
     fetchList: async ({ query }) => {
-      // Fetch all data sources for the organization
-      const allDataSources = await getDataSourcesForOrganization(params.organizationId);
+      // Fetch all data sources for the organization (Server Action - returns DTOs)
+      const allDataSources = await getDataSourcesForOrganization();
 
       // Filter by table ID
+      // AIDEV-NOTE: DTOs have plain tableId property, not ds.tableId.value
       const tableSources = allDataSources.filter(
-        (ds) => ds.tableId.value === params.tableId
+        (ds) => ds.tableId === params.tableId
       );
 
       // Further filter by search query
@@ -102,9 +105,9 @@ export function createDataSourceFieldForTable(params: {
         : tableSources;
 
       return filteredSources.map((ds) => ({
-        id: ds.id.value,
+        id: ds.id,        // Plain number
         name: ds.name,
-        tableId: ds.tableId.value,
+        tableId: ds.tableId,  // Plain number
         title: ds.name,
         description: `${ds.filters.length} filters, ${ds.sorting.length} sorts`,
       }));

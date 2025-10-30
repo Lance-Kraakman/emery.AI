@@ -337,3 +337,80 @@ export async function getDataSourcesForOrganization(): Promise<DataSourceDTO[]> 
     return [];
   }
 }
+
+/**
+ * Execute a data source and return rows as DTOs
+ *
+ * Used by TableBlock to fetch and render data.
+ * Returns plain serializable objects (not domain entities).
+ */
+export async function executeDataSource(
+  dataSourceId: number
+): Promise<{
+  rows: Array<Record<string, any>>;
+  fields: Array<{ id: number; name: string; type: string }>;
+  totalCount: number;
+  pageSize: number;
+  offset: number;
+} | null> {
+  try {
+    await requirePermission("data:read");
+    await requireCurrentOrganization();
+
+    if (!dataSourceId) {
+      return null;
+    }
+
+    const dataSourceService = getDataSourceApplicationService();
+
+    // Execute the data source
+    const result = await dataSourceService.executeDataSource({
+      dataSourceId: DataSourceId.fromNumber(dataSourceId),
+    });
+
+    if (!result.success || !result.data) {
+      console.error("Failed to execute data source:", result.error);
+      return null;
+    }
+
+    // Get the schema
+    const dataSource = await dataSourceService.getDataSource(
+      DataSourceId.fromNumber(dataSourceId)
+    );
+
+    if (!dataSource.success || !dataSource.data) {
+      console.error("Failed to get data source:", dataSource.error);
+      return null;
+    }
+
+    const schemaResult = await dataSourceService.getDataSourceSchema(
+      DataSourceId.fromNumber(dataSourceId)
+    );
+
+    if (!schemaResult.success || !schemaResult.data) {
+      console.error("Failed to get data source schema:", schemaResult.error);
+      return null;
+    }
+
+    // Convert Row entities to plain objects
+    const plainRows = result.data.rows.map((row) => row.toPlainObject());
+
+    // Convert TableField VOs to plain objects
+    const plainFields = schemaResult.data.map((field) => ({
+      id: field.id.value,
+      name: field.name,
+      type: field.type,
+    }));
+
+    return {
+      rows: plainRows,
+      fields: plainFields,
+      totalCount: result.data.totalCount,
+      pageSize: result.data.pageSize,
+      offset: result.data.offset,
+    };
+  } catch (error) {
+    console.error("Error executing data source:", error);
+    return null;
+  }
+}

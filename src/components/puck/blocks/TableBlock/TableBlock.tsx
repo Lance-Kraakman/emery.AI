@@ -132,19 +132,22 @@ export default function TableBlock(props: TableBlockProps) {
 
           <tbody>
             {_rows.map((row, rowIndex) => {
-              const rowData = row.toPlainObject();
+              // AIDEV-NOTE: _rows are already plain objects (from Server Action DTOs)
+              // No need to call .toPlainObject() anymore
+              const rowData = row as Record<string, any>;
 
               return (
                 <tr key={rowData.id || rowIndex} className={styles.tr}>
                   {visibleMappings.map((mapping) => {
                     const fieldValue = rowData[`field_${mapping.sourceFieldId}`];
+                    // AIDEV-NOTE: _fields are now plain objects: { id, name, type, slug }
                     const field = _fields.find(
-                      (f) => f.id.value === mapping.sourceFieldId
+                      (f) => (f as any).id === mapping.sourceFieldId
                     );
 
                     return (
                       <td key={mapping.sourceFieldId} className={styles.td}>
-                        {formatCellValue(fieldValue, field?.type)}
+                        {formatCellValue(fieldValue, (field as any)?.type)}
                       </td>
                     );
                   })}
