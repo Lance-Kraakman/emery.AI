@@ -1,0 +1,61 @@
+.FooterBlock {
+  padding: 48px 16px 32px;
+}
+
+@media (min-width: 768px) {
+  .FooterBlock {
+    padding: 64px 24px 32px;
+  }
+}
+
+.FooterBlock-inner {
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.FooterBlock-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 32px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.FooterBlock-column {
+  display: flex;
+  flex-direction: column;
+}
+
+.FooterBlock-columnTitle {
+  margin: 0;
+  padding: 0;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.FooterBlock-linkList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.FooterBlock-link {
+  text-decoration: none;
+  font-size: 14px;
+  transition: opacity 0.2s;
+}
+
+.FooterBlock-link:hover {
+  opacity: 0.7;
+}
+
+.FooterBlock-copyright {
+  padding-top: 32px;
+  text-align: center;
+  font-size: 14px;
+}

@@ -13,35 +13,7 @@ export const Root = {
       <div
         style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}
       >
-        <Header editMode={isEditing} />
         <DropZone zone="default-zone" style={{ flexGrow: 1 }} />
-
-        <Footer>
-          <Footer.List title="Section">
-            <Footer.Link href="#">Label</Footer.Link>
-            <Footer.Link href="#">Label</Footer.Link>
-            <Footer.Link href="#">Label</Footer.Link>
-            <Footer.Link href="#">Label</Footer.Link>
-          </Footer.List>
-          <Footer.List title="Section">
-            <Footer.Link href="#">Label</Footer.Link>
-            <Footer.Link href="#">Label</Footer.Link>
-            <Footer.Link href="#">Label</Footer.Link>
-            <Footer.Link href="#">Label</Footer.Link>
-          </Footer.List>
-          <Footer.List title="Section">
-            <Footer.Link href="#">Label</Footer.Link>
-            <Footer.Link href="#">Label</Footer.Link>
-            <Footer.Link href="#">Label</Footer.Link>
-            <Footer.Link href="#">Label</Footer.Link>
-          </Footer.List>
-          <Footer.List title="Section">
-            <Footer.Link href="#">Label</Footer.Link>
-            <Footer.Link href="#">Label</Footer.Link>
-            <Footer.Link href="#">Label</Footer.Link>
-            <Footer.Link href="#">Label</Footer.Link>
-          </Footer.List>
-        </Footer>
       </div>
     );
   },

@@ -6,15 +6,7 @@ import { AutoField, FieldLabel } from "@measured/puck";
 import { Link2 } from "lucide-react";
 import HeroComponent, { HeroProps } from "./Hero";
 
-export const Hero: ComponentConfig<{
-  props: HeroProps;
-  fields: {
-    userField: {
-      type: "userField";
-      option: boolean;
-    };
-  };
-}> = {
+export const Hero: ComponentConfig<HeroProps> = {
   fields: {
     quote: {
       type: "external",
@@ -141,7 +133,6 @@ export const Hero: ComponentConfig<{
         },
       },
     },
-    padding: { type: "userField", option: true },
   },
   defaultProps: {
     title: "Hero",

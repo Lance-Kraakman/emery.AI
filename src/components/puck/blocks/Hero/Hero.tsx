@@ -13,7 +13,7 @@ export type HeroProps = {
   title: string | ReactNode;
   description: string;
   align?: string;
-  padding: string;
+  padding?: string;
   image?: {
     content?: Slot;
     mode?: "inline" | "background" | "custom";
@@ -31,7 +31,7 @@ export const Hero: PuckComponent<HeroProps> = ({
   title,
   description,
   buttons,
-  padding,
+  padding = "48px",
   image,
   puck,
 }) => {

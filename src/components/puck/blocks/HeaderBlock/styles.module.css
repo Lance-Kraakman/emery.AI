@@ -1,0 +1,55 @@
+.HeaderBlock {
+  background-color: white;
+  border-bottom: 1px solid #e5e7eb;
+  z-index: 100;
+}
+
+.HeaderBlock--sticky {
+  position: sticky;
+  top: 0;
+}
+
+.HeaderBlock-inner {
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@media (min-width: 768px) {
+  .HeaderBlock-inner {
+    padding: 24px;
+  }
+}
+
+.HeaderBlock-logo {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  opacity: 0.8;
+}
+
+.HeaderBlock-nav {
+  display: flex;
+  gap: 24px;
+}
+
+@media (min-width: 1024px) {
+  .HeaderBlock-nav {
+    gap: 32px;
+  }
+}
+
+.HeaderBlock-navLink {
+  text-decoration: none;
+  color: inherit;
+  font-size: 14px;
+  transition: opacity 0.2s;
+}
+
+.HeaderBlock-navLink:hover {
+  opacity: 0.7;
+}

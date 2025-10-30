@@ -10,6 +10,8 @@ import { StatsProps } from "./blocks/Stats";
 import { TemplateProps } from "./blocks/Template";
 import { TextProps } from "./blocks/Text";
 import { SpaceProps } from "./blocks/Space";
+import { HeaderBlockProps } from "./blocks/HeaderBlock";
+import { FooterBlockProps } from "./blocks/FooterBlock";
 
 import { RootProps } from "./root";
 
@@ -27,6 +29,8 @@ export type Components = {
   Template: TemplateProps;
   Text: TextProps;
   Space: SpaceProps;
+  HeaderBlock: HeaderBlockProps;
+  FooterBlock: FooterBlockProps;
 };
 
 export type UserConfig = Config<{

@@ -117,7 +117,7 @@ export function AppSidebar({
   const pathname = usePathname()
   const router = useRouter()
   const { data: sessionData } = useSession()
-  const { state } = useSidebar()
+  const { state, toggleSidebar } = useSidebar()
   const isCollapsed = state === 'collapsed'
 
   const [isCreating, setIsCreating] = React.useState(false)
@@ -276,7 +276,18 @@ export function AppSidebar({
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b p-4">
         <div className="flex items-center justify-between">
-          <EmeryOrganizationModal isCollapsed={isCollapsed} />
+          {isCollapsed ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleSidebar}
+              className="h-12 w-12"
+            >
+              <img src="/assets/mission.png" alt="Logo" className="h-8 w-8 object-contain" />
+            </Button>
+          ) : (
+            <EmeryOrganizationModal isCollapsed={isCollapsed} />
+          )}
           <SidebarTrigger className="group-data-[collapsible=icon]:hidden" />
         </div>
       </SidebarHeader>
@@ -288,7 +299,7 @@ export function AppSidebar({
             <SidebarGroupLabel asChild>
               <CollapsibleTrigger>
                 <Target className="h-4 w-4" />
-                <span>Mission Control</span>
+                <span className="group-data-[collapsible=icon]:hidden">Mission Control</span>
               </CollapsibleTrigger>
             </SidebarGroupLabel>
             <CollapsibleContent>
@@ -301,7 +312,7 @@ export function AppSidebar({
                     >
                       <Link href="/mission-control/dashboard">
                         <LayoutDashboard className="h-4 w-4" />
-                        <span>Dashboard</span>
+                        <span className="group-data-[collapsible=icon]:hidden">Dashboard</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -312,7 +323,7 @@ export function AppSidebar({
                     >
                       <Link href="/mission-control/org-chart">
                         <Building2 className="h-4 w-4" />
-                        <span>Org Chart</span>
+                        <span className="group-data-[collapsible=icon]:hidden">Org Chart</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -328,7 +339,7 @@ export function AppSidebar({
             <SidebarGroupLabel asChild>
               <CollapsibleTrigger>
                 <AppWindow className="h-4 w-4" />
-                <span>Apps</span>
+                <span className="group-data-[collapsible=icon]:hidden">Apps</span>
               </CollapsibleTrigger>
             </SidebarGroupLabel>
             <CollapsibleContent>
@@ -343,7 +354,9 @@ export function AppSidebar({
                             isActive={pathname === `/apps/${app.id}`}
                           >
                             <div className="flex items-center justify-between w-full">
-                              <Link href={`/apps/${app.id}`} className="flex-1">{app.name}</Link>
+                              <Link href={`/apps/${app.id}`} className="flex-1">
+                                <span className="group-data-[collapsible=icon]:hidden">{app.name}</span>
+                              </Link>
                               {openApps.has(app.id) ? (
                                 <ChevronDown className="h-4 w-4 ml-auto" />
                               ) : (
@@ -357,9 +370,9 @@ export function AppSidebar({
                             {app.pages && app.pages.map((page) => (
                               <SidebarMenuSubItem key={page.id}>
                                 <SidebarMenuSubButton asChild>
-                                  <Link href={`/apps/${app.id}/pages/${page.id}/preview`}>
+                                  <Link href={`/apps/${app.id}/pages/${page.id}/edit`}>
                                     <FileText className="h-3 w-3" />
-                                    <span>{page.name}</span>
+                                    <span className="group-data-[collapsible=icon]:hidden">{page.name}</span>
                                   </Link>
                                 </SidebarMenuSubButton>
                               </SidebarMenuSubItem>
@@ -372,7 +385,7 @@ export function AppSidebar({
                                 disabled={isCreating}
                               >
                                 <Plus className="h-3 w-3" />
-                                <span>Add Page</span>
+                                <span className="group-data-[collapsible=icon]:hidden">Add Page</span>
                               </Button>
                             </SidebarMenuSubItem>
                           </SidebarMenuSub>
@@ -387,7 +400,7 @@ export function AppSidebar({
                     disabled={isCreating}
                   >
                     <Plus className="h-4 w-4" />
-                    <span>Add App</span>
+                    <span className="group-data-[collapsible=icon]:hidden">Add App</span>
                   </Button>
                 </SidebarMenu>
               </SidebarGroupContent>
@@ -401,7 +414,7 @@ export function AppSidebar({
             <SidebarGroupLabel asChild>
               <CollapsibleTrigger>
                 <Bot className="h-4 w-4" />
-                <span>Agents</span>
+                <span className="group-data-[collapsible=icon]:hidden">Agents</span>
               </CollapsibleTrigger>
             </SidebarGroupLabel>
             <CollapsibleContent>
@@ -413,7 +426,9 @@ export function AppSidebar({
                         asChild
                         isActive={pathname?.startsWith(`/agents/${agent.id}`)}
                       >
-                        <Link href={`/agents/${agent.id}`}>{agent.name}</Link>
+                        <Link href={`/agents/${agent.id}`}>
+                          <span className="group-data-[collapsible=icon]:hidden">{agent.name}</span>
+                        </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -424,7 +439,7 @@ export function AppSidebar({
                     disabled={isCreating}
                   >
                     <Plus className="h-4 w-4" />
-                    <span>Add Agent</span>
+                    <span className="group-data-[collapsible=icon]:hidden">Add Agent</span>
                   </Button>
                 </SidebarMenu>
               </SidebarGroupContent>
@@ -438,7 +453,7 @@ export function AppSidebar({
             <SidebarGroupLabel asChild>
               <CollapsibleTrigger>
                 <Users className="h-4 w-4" />
-                <span>Teams</span>
+                <span className="group-data-[collapsible=icon]:hidden">Teams</span>
               </CollapsibleTrigger>
             </SidebarGroupLabel>
             <CollapsibleContent>
@@ -450,7 +465,9 @@ export function AppSidebar({
                         asChild
                         isActive={pathname?.startsWith(`/teams/${team.id}`)}
                       >
-                        <Link href={`/teams/${team.id}`}>{team.name}</Link>
+                        <Link href={`/teams/${team.id}`}>
+                          <span className="group-data-[collapsible=icon]:hidden">{team.name}</span>
+                        </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -461,7 +478,7 @@ export function AppSidebar({
                     disabled={isCreating}
                   >
                     <Plus className="h-4 w-4" />
-                    <span>Add Team</span>
+                    <span className="group-data-[collapsible=icon]:hidden">Add Team</span>
                   </Button>
                 </SidebarMenu>
               </SidebarGroupContent>
@@ -475,7 +492,7 @@ export function AppSidebar({
             <SidebarGroupLabel asChild>
               <CollapsibleTrigger>
                 <Workflow className="h-4 w-4" />
-                <span>Skills</span>
+                <span className="group-data-[collapsible=icon]:hidden">Skills</span>
               </CollapsibleTrigger>
             </SidebarGroupLabel>
             <CollapsibleContent>
@@ -487,7 +504,9 @@ export function AppSidebar({
                         asChild
                         isActive={pathname?.startsWith(`/skills/${skill.id}`)}
                       >
-                        <Link href={`/skills/${skill.id}`}>{skill.name}</Link>
+                        <Link href={`/skills/${skill.id}`}>
+                          <span className="group-data-[collapsible=icon]:hidden">{skill.name}</span>
+                        </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -498,7 +517,7 @@ export function AppSidebar({
                     disabled={isCreating}
                   >
                     <Plus className="h-4 w-4" />
-                    <span>Add Skill</span>
+                    <span className="group-data-[collapsible=icon]:hidden">Add Skill</span>
                   </Button>
                 </SidebarMenu>
               </SidebarGroupContent>
@@ -512,7 +531,7 @@ export function AppSidebar({
             <SidebarGroupLabel asChild>
               <CollapsibleTrigger>
                 <Database className="h-4 w-4" />
-                <span>Data</span>
+                <span className="group-data-[collapsible=icon]:hidden">Data</span>
               </CollapsibleTrigger>
             </SidebarGroupLabel>
             <CollapsibleContent>
@@ -527,7 +546,9 @@ export function AppSidebar({
                             isActive={pathname === `/data`}
                           >
                             <div className="flex items-center justify-between w-full">
-                              <Link href={`/data`} className="flex-1">{database.name}</Link>
+                              <Link href={`/data`} className="flex-1">
+                                <span className="group-data-[collapsible=icon]:hidden">{database.name}</span>
+                              </Link>
                               {openDatabases.has(database.id) ? (
                                 <ChevronDown className="h-4 w-4 ml-auto" />
                               ) : (
@@ -543,7 +564,7 @@ export function AppSidebar({
                                 <SidebarMenuSubButton asChild>
                                   <Link href={`/data?tableId=${table.id}`}>
                                     <FileText className="h-3 w-3" />
-                                    <span>{table.name}</span>
+                                    <span className="group-data-[collapsible=icon]:hidden">{table.name}</span>
                                   </Link>
                                 </SidebarMenuSubButton>
                               </SidebarMenuSubItem>
@@ -556,7 +577,7 @@ export function AppSidebar({
                                 disabled={isCreating}
                               >
                                 <Plus className="h-3 w-3" />
-                                <span>Add Table</span>
+                                <span className="group-data-[collapsible=icon]:hidden">Add Table</span>
                               </Button>
                             </SidebarMenuSubItem>
                           </SidebarMenuSub>
@@ -571,7 +592,7 @@ export function AppSidebar({
                     disabled={isCreating}
                   >
                     <Plus className="h-4 w-4" />
-                    <span>Add Database</span>
+                    <span className="group-data-[collapsible=icon]:hidden">Add Database</span>
                   </Button>
                 </SidebarMenu>
               </SidebarGroupContent>
@@ -585,7 +606,7 @@ export function AppSidebar({
             <SidebarGroupLabel asChild>
               <CollapsibleTrigger>
                 <Settings className="h-4 w-4" />
-                <span>Settings</span>
+                <span className="group-data-[collapsible=icon]:hidden">Settings</span>
               </CollapsibleTrigger>
             </SidebarGroupLabel>
             <CollapsibleContent>
@@ -595,7 +616,7 @@ export function AppSidebar({
                     <SidebarMenuButton asChild isActive={pathname === "/connections"}>
                       <Link href="/connections">
                         <Plug className="h-4 w-4" />
-                        <span>OAuth Connections</span>
+                        <span className="group-data-[collapsible=icon]:hidden">OAuth Connections</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -606,7 +627,7 @@ export function AppSidebar({
                     >
                       <Link href="/organization/settings/permissions">
                         <Users className="h-4 w-4" />
-                        <span>Permissions</span>
+                        <span className="group-data-[collapsible=icon]:hidden">Permissions</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -614,7 +635,7 @@ export function AppSidebar({
                     <SidebarMenuButton asChild isActive={pathname === "/settings/system"}>
                       <Link href="/settings/system">
                         <SlidersHorizontal className="h-4 w-4" />
-                        <span>System</span>
+                        <span className="group-data-[collapsible=icon]:hidden">System</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
