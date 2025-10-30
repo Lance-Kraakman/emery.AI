@@ -66,6 +66,41 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       getItemSummary: (item: any) => item?.name || "No table selected",
     } as any,
 
+    // Optional: Custom data source override (filtered by selected table)
+    dataSourceOverride: {
+      label: "Custom View (Optional)",
+      type: "external",
+      placeholder: "Use default view",
+      showSearch: true,
+      fetchList: async ({ query }: { query: string }, { props }: any) => {
+        // Only show data sources if a table is selected
+        if (!props?.table?.id) {
+          return [];
+        }
+
+        const dataSources = await getDataSourcesForTable(props.table.id);
+        const filteredSources = query
+          ? dataSources.filter((ds: any) =>
+              ds.name.toLowerCase().includes(query.toLowerCase())
+            )
+          : dataSources;
+
+        return filteredSources.map((ds: any) => ({
+          id: ds.id,
+          name: ds.name,
+          tableId: ds.tableId,
+          title: ds.name,
+          description: `${ds.filters.length} filters, ${ds.sorting.length} sorts`,
+        }));
+      },
+      mapProp: (item: any) => (item ? {
+        id: item.id,
+        name: item.name,
+        tableId: item.tableId,
+      } : null),
+      getItemSummary: (item: any) => item?.name || "Using default view",
+    } as any,
+
     // Hidden fields populated by resolveData
     dataSourceId: {
       label: "Data Source ID",
@@ -169,11 +204,12 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
    * Uses Server Actions which create an RPC boundary when called from client.
    * All data is returned as DTOs (plain objects), not domain entities.
    *
-   * Flow:
+   * Hybrid Flow (Either/Or Approach):
    * 1. User selects table from dropdown
-   * 2. Check if default data source exists for that table
-   * 3. If not, auto-create one with name "Default view of {tableName}"
-   * 4. Execute data source and return rows
+   * 2. If user selected a custom data source override → use it
+   * 3. Otherwise, check if default data source exists for that table
+   * 4. If not, auto-create one with name "Default view of {tableName}"
+   * 5. Execute data source and return rows
    */
   resolveData: async ({ props }, { metadata }) => {
     try {
@@ -185,37 +221,44 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       const tableId = props.table.id;
       const tableName = props.table.name;
 
-      // Get existing data sources for this table
-      const existingDataSources = await getDataSourcesForTable(tableId);
-
       let dataSourceId: number;
       let dataSourceName: string;
 
-      if (existingDataSources.length > 0) {
-        // Use the first existing data source
-        dataSourceId = existingDataSources[0].id;
-        dataSourceName = existingDataSources[0].name;
+      // Check if user selected a custom data source override
+      if (props.dataSourceOverride?.id) {
+        // Use the custom data source selected by user
+        dataSourceId = props.dataSourceOverride.id;
+        dataSourceName = props.dataSourceOverride.name;
       } else {
-        // Auto-create a default data source
-        const createResult = await createDataSource({
-          tableId,
-          name: `Default view of ${tableName}`,
-          description: "Auto-created default data source for table",
-        });
+        // Auto-create or use default data source for the table
+        const existingDataSources = await getDataSourcesForTable(tableId);
 
-        if (!createResult.success || !createResult.data) {
-          return {
-            props: {
-              ...props,
-              _rows: [],
-              _fields: [],
-              _totalCount: 0,
-            } as any,
-          };
+        if (existingDataSources.length > 0) {
+          // Use the first existing data source
+          dataSourceId = existingDataSources[0].id;
+          dataSourceName = existingDataSources[0].name;
+        } else {
+          // Auto-create a default data source
+          const createResult = await createDataSource({
+            tableId,
+            name: `Default view of ${tableName}`,
+            description: "Auto-created default data source for table",
+          });
+
+          if (!createResult.success || !createResult.data) {
+            return {
+              props: {
+                ...props,
+                _rows: [],
+                _fields: [],
+                _totalCount: 0,
+              } as any,
+            };
+          }
+
+          dataSourceId = createResult.data.id;
+          dataSourceName = createResult.data.name;
         }
-
-        dataSourceId = createResult.data.id;
-        dataSourceName = createResult.data.name;
       }
 
       // Execute data source to get rows (Server Action - returns DTOs)

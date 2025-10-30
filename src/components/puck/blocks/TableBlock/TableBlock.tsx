@@ -25,6 +25,11 @@ export interface TableBlockProps {
     name: string;
     databaseId: number;
   };
+  dataSourceOverride?: {
+    id: number;
+    name: string;
+    tableId: number;
+  };
   dataSourceId?: number;
   dataSourceName?: string;
   fieldMappings?: FieldMapping[];
