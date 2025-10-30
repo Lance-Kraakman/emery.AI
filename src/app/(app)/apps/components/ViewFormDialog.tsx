@@ -29,16 +29,16 @@ import { Loader2 } from 'lucide-react';
 interface ViewFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  dataSource?: ViewDTO;
+  view?: ViewDTO;
   onSuccess?: () => void;
 }
 
-export function ViewFormDialog({ open, onOpenChange, dataSource, onSuccess }: ViewFormDialogProps) {
+export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewFormDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tables, setTables] = useState<Array<{ id: number; name: string }>>([]);
   const [loadingTables, setLoadingTables] = useState(false);
-  const isEditMode = !!dataSource;
+  const isEditMode = !!view;
 
   // Form state
   const [name, setName] = useState('');
@@ -52,18 +52,18 @@ export function ViewFormDialog({ open, onOpenChange, dataSource, onSuccess }: Vi
     }
   }, [open]);
 
-  // Reset form when dataSource changes
+  // Reset form when view changes
   useEffect(() => {
-    if (dataSource) {
-      setName(dataSource.name);
-      setDescription(dataSource.description || '');
-      setTableId(dataSource.tableId);
+    if (view) {
+      setName(view.name);
+      setDescription(view.description || '');
+      setTableId(view.tableId);
     } else {
       setName('');
       setDescription('');
       setTableId(undefined);
     }
-  }, [dataSource]);
+  }, [view]);
 
   const loadTables = async () => {
     try {
@@ -97,7 +97,7 @@ export function ViewFormDialog({ open, onOpenChange, dataSource, onSuccess }: Vi
 
       const result = isEditMode
         ? await updateView({
-            id: dataSource!.id,
+            id: view!.id,
             name: name.trim(),
             description: description.trim() || undefined
           })
@@ -197,11 +197,11 @@ export function ViewFormDialog({ open, onOpenChange, dataSource, onSuccess }: Vi
               )}
 
               {/* Show current table in edit mode */}
-              {isEditMode && dataSource && (
+              {isEditMode && view && (
                 <div className="space-y-2">
                   <Label>Table</Label>
                   <div className="text-sm text-muted-foreground">
-                    Table ID: {dataSource.tableId}
+                    Table ID: {view.tableId}
                   </div>
                 </div>
               )}

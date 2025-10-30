@@ -6,7 +6,7 @@
  */
 
 import type { DbClient } from "@/lib/db/client";
-import { dataSources } from "@/lib/db/schema";
+import { views } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import type { ViewRepository } from "@/ddd/domain/views/repositories/view-repository";
 import { View } from "@/ddd/domain/views/entities/view";
@@ -24,7 +24,7 @@ export class DrizzleViewRepository implements ViewRepository {
       // If ID is 0, this is a new entity - use insert
       if (persistence.id === 0) {
         const [record] = await this.db
-          .insert(dataSources)
+          .insert(views)
           .values({
             organizationId: persistence.organizationId,
             tableId: persistence.tableId,
@@ -41,7 +41,7 @@ export class DrizzleViewRepository implements ViewRepository {
       } else {
         // Update existing entity
         const [record] = await this.db
-          .update(dataSources)
+          .update(views)
           .set({
             name: persistence.name,
             filters: persistence.filters,
@@ -49,7 +49,7 @@ export class DrizzleViewRepository implements ViewRepository {
             pagination: persistence.pagination,
             updatedAt: new Date(),
           })
-          .where(eq(dataSources.id, persistence.id))
+          .where(eq(views.id, persistence.id))
           .returning();
 
         if (!record) {
@@ -66,8 +66,8 @@ export class DrizzleViewRepository implements ViewRepository {
 
   async findById(id: ViewId): Promise<View | null> {
     try {
-      const record = await this.db.query.dataSources.findFirst({
-        where: eq(dataSources.id, id.value),
+      const record = await this.db.query.views.findFirst({
+        where: eq(views.id, id.value),
       });
 
       return record ? this.toDomain(record) : null;
@@ -79,8 +79,8 @@ export class DrizzleViewRepository implements ViewRepository {
 
   async findByTableId(tableId: TableId): Promise<View[]> {
     try {
-      const records = await this.db.query.dataSources.findMany({
-        where: eq(dataSources.tableId, tableId.value),
+      const records = await this.db.query.views.findMany({
+        where: eq(views.tableId, tableId.value),
       });
 
       return records.map((record: any) => this.toDomain(record));
@@ -92,8 +92,8 @@ export class DrizzleViewRepository implements ViewRepository {
 
   async findByOrganizationId(organizationId: OrganizationId): Promise<View[]> {
     try {
-      const records = await this.db.query.dataSources.findMany({
-        where: eq(dataSources.organizationId, organizationId.value),
+      const records = await this.db.query.views.findMany({
+        where: eq(views.organizationId, organizationId.value),
       });
 
       // Sort by name on the application side
@@ -111,10 +111,10 @@ export class DrizzleViewRepository implements ViewRepository {
 
   async findByName(organizationId: OrganizationId, name: string): Promise<View | null> {
     try {
-      const record = await this.db.query.dataSources.findFirst({
+      const record = await this.db.query.views.findFirst({
         where: and(
-          eq(dataSources.organizationId, organizationId.value),
-          eq(dataSources.name, name)
+          eq(views.organizationId, organizationId.value),
+          eq(views.name, name)
         ),
       });
 
@@ -127,7 +127,7 @@ export class DrizzleViewRepository implements ViewRepository {
 
   async delete(id: ViewId): Promise<void> {
     try {
-      await this.db.delete(dataSources).where(eq(dataSources.id, id.value));
+      await this.db.delete(views).where(eq(views.id, id.value));
 
       console.log(`[DrizzleViewRepository] Deleted view ID: ${id.value}`);
     } catch (error) {
@@ -138,10 +138,10 @@ export class DrizzleViewRepository implements ViewRepository {
 
   async existsByName(organizationId: OrganizationId, name: string): Promise<boolean> {
     try {
-      const record = await this.db.query.dataSources.findFirst({
+      const record = await this.db.query.views.findFirst({
         where: and(
-          eq(dataSources.organizationId, organizationId.value),
-          eq(dataSources.name, name)
+          eq(views.organizationId, organizationId.value),
+          eq(views.name, name)
         ),
       });
 

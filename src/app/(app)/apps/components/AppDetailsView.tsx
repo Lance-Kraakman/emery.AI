@@ -14,7 +14,7 @@ import { getViewsForOrganization } from '@/app/actions/views';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { PagesSection } from './PagesSection';
-import { DataSourcesSection } from './DataSourcesSection';
+import { ViewsSection } from './ViewsSection';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -153,10 +153,10 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
       <PagesSection appId={app.id} pages={pages} loading={loadingPages} onPagesChange={loadPages} />
 
       {/* Data Sources Section */}
-      <DataSourcesSection
-        dataSources={dataSources}
+      <ViewsSection
+        views={dataSources}
         loading={loadingDataSources}
-        onDataSourcesChange={loadDataSources}
+        onViewsChange={loadDataSources}
       />
 
       {/* Delete Confirmation Dialog */}
