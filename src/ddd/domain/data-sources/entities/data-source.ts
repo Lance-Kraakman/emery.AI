@@ -63,11 +63,11 @@ export class DataSource {
   }
 
   static create(props: Omit<DataSourceProps, "id" | "createdAt" | "updatedAt">): DataSource {
-    // For new entities, we'll use a temporary ID of 0
+    // For new entities, we use newEntity() which creates ID with value 0
     // The repository will assign the actual ID upon persistence
     return new DataSource({
       ...props,
-      id: DataSourceId.fromNumber(0),
+      id: DataSourceId.newEntity(),
       createdAt: new Date(),
       updatedAt: new Date(),
     });
