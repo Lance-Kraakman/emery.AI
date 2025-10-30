@@ -20,7 +20,7 @@
 
 import { ArrayField } from "@measured/puck";
 import type { TableField } from "@/ddd/domain/tables/value-objects/table-field";
-import type { FilterOperator } from "@/ddd/domain/data-sources/value-objects/filter-config";
+import type { FilterOperator } from "@/ddd/domain/views/value-objects/filter-config";
 
 export interface FilterCondition {
   fieldId: number;

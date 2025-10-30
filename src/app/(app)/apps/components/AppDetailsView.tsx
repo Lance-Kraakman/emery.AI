@@ -3,14 +3,14 @@
 import React, { useEffect, useState } from 'react';
 import type { AppDTO } from '@/app/mappers/puck-app-mapper';
 import type { PageDTO } from '@/app/mappers/puck-page-mapper';
-import type { DataSourceDTO } from '@/app/mappers/data-source-mapper';
+import type { ViewDTO } from '@/app/mappers/view-mapper';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Edit, Trash2 } from 'lucide-react';
 import { appsActions } from '@/stores/apps.store';
 import { deleteApp } from '@/app/actions/puck-apps';
 import { getPages } from '@/app/actions/puck-pages';
-import { getDataSourcesForOrganization } from '@/app/actions/data-sources';
+import { getViewsForOrganization } from '@/app/actions/views';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { PagesSection } from './PagesSection';
@@ -35,7 +35,7 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [pages, setPages] = useState<PageDTO[]>([]);
   const [loadingPages, setLoadingPages] = useState(true);
-  const [dataSources, setDataSources] = useState<DataSourceDTO[]>([]);
+  const [dataSources, setDataSources] = useState<ViewDTO[]>([]);
   const [loadingDataSources, setLoadingDataSources] = useState(true);
 
   // Load pages for this app
@@ -57,7 +57,7 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
   const loadDataSources = async () => {
     try {
       setLoadingDataSources(true);
-      const dataSourcesData = await getDataSourcesForOrganization();
+      const dataSourcesData = await getViewsForOrganization();
       setDataSources(dataSourcesData);
     } catch (error) {
       console.error('Error loading data sources:', error);
