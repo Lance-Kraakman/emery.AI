@@ -1,7 +1,7 @@
 import React from "react";
 import { ALargeSmall, AlignLeft } from "lucide-react";
 
-import { ComponentConfig } from "@/core/types";
+import { ComponentConfig } from "@measured/puck";
 import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
 

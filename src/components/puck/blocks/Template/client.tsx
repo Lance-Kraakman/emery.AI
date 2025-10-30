@@ -1,9 +1,9 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 import React, { useState } from "react";
-import { AutoField, Button, createUsePuck, FieldLabel, walkTree } from "@/core";
-import { ComponentConfig, ComponentDataOptionalId, Slot } from "@/core/types";
+import { AutoField, Button, createUsePuck, FieldLabel, walkTree } from "@measured/puck";
+import { ComponentConfig, ComponentDataOptionalId, Slot } from "@measured/puck";
 import { withLayout } from "../../components/Layout";
-import { generateId } from "@/core/lib/generate-id";
+import { generateId } from "@/components/puck/lib/generate-id";
 import { componentKey } from "../../index";
 import { type Components } from "../../types";
 import TemplateComponent, { TemplateProps } from "./Template";

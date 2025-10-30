@@ -35,7 +35,9 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  SidebarRail,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Button } from "@/components/ui/button"
@@ -115,6 +117,8 @@ export function AppSidebar({
   const pathname = usePathname()
   const router = useRouter()
   const { data: sessionData } = useSession()
+  const { state } = useSidebar()
+  const isCollapsed = state === 'collapsed'
 
   const [isCreating, setIsCreating] = React.useState(false)
 
@@ -272,8 +276,8 @@ export function AppSidebar({
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b p-4">
         <div className="flex items-center justify-between">
-          <EmeryOrganizationModal />
-          <SidebarTrigger />
+          <EmeryOrganizationModal isCollapsed={isCollapsed} />
+          <SidebarTrigger className="group-data-[collapsible=icon]:hidden" />
         </div>
       </SidebarHeader>
 
@@ -624,7 +628,7 @@ export function AppSidebar({
       <SidebarFooter className="border-t p-4">
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="ghost" className="w-full justify-start gap-4 p-2">
+            <Button variant="ghost" className="w-full justify-start gap-4 p-2 group-data-[collapsible=icon]:justify-center">
               <Avatar className="h-10 w-10">
                 <AvatarImage
                   src={sessionData?.user?.image || undefined}
@@ -636,7 +640,7 @@ export function AppSidebar({
                     "U"}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex flex-col items-start text-left">
+              <div className="flex flex-col items-start text-left group-data-[collapsible=icon]:hidden">
                 <span className="text-base font-semibold text-foreground">
                   {sessionData?.user?.name || "User"}
                 </span>
@@ -684,6 +688,7 @@ export function AppSidebar({
           </PopoverContent>
         </Popover>
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   )
 }

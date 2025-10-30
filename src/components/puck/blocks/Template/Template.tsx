@@ -1,9 +1,9 @@
 import React from "react";
-import { Slot } from "@/core/types";
+import { Slot } from "@measured/puck";
 import styles from "./styles.module.css";
-import { getClassNameFactory } from "@/core/lib";
+import { getClassNameFactory } from "@/components/puck/lib";
 import { Section } from "../../components/Section";
-import { PuckComponent } from "@/core/types";
+import { PuckComponent } from "@measured/puck";
 
 const getClassName = getClassNameFactory("Template", styles);
 

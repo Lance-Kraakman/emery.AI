@@ -1,10 +1,10 @@
 import React from "react";
 
-import { Heading as _Heading } from "@/core/components/Heading";
-import type { HeadingProps as _HeadingProps } from "@/core/components/Heading";
+import { ComponentConfig } from "@measured/puck";
+import { Heading as _Heading } from "@/components/puck/components/Heading";
+import type { HeadingProps as _HeadingProps } from "@/components/puck/components/Heading";
 import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
-import { ComponentConfig } from "@measured/puck";
 
 export type HeadingProps = WithLayout<{
   align: "left" | "center" | "right";

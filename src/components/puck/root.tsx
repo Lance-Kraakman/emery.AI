@@ -1,0 +1,50 @@
+import { DefaultRootProps } from "@measured/puck";
+import { Header } from "./components/Header";
+import { Footer } from "./components/Footer";
+
+export type RootProps = DefaultRootProps;
+
+export const Root = {
+  defaultProps: {
+    title: "My Page",
+  },
+  render: ({ puck: { isEditing, renderDropZone: DropZone } }: any) => {
+    return (
+      <div
+        style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}
+      >
+        <Header editMode={isEditing} />
+        <DropZone zone="default-zone" style={{ flexGrow: 1 }} />
+
+        <Footer>
+          <Footer.List title="Section">
+            <Footer.Link href="#">Label</Footer.Link>
+            <Footer.Link href="#">Label</Footer.Link>
+            <Footer.Link href="#">Label</Footer.Link>
+            <Footer.Link href="#">Label</Footer.Link>
+          </Footer.List>
+          <Footer.List title="Section">
+            <Footer.Link href="#">Label</Footer.Link>
+            <Footer.Link href="#">Label</Footer.Link>
+            <Footer.Link href="#">Label</Footer.Link>
+            <Footer.Link href="#">Label</Footer.Link>
+          </Footer.List>
+          <Footer.List title="Section">
+            <Footer.Link href="#">Label</Footer.Link>
+            <Footer.Link href="#">Label</Footer.Link>
+            <Footer.Link href="#">Label</Footer.Link>
+            <Footer.Link href="#">Label</Footer.Link>
+          </Footer.List>
+          <Footer.List title="Section">
+            <Footer.Link href="#">Label</Footer.Link>
+            <Footer.Link href="#">Label</Footer.Link>
+            <Footer.Link href="#">Label</Footer.Link>
+            <Footer.Link href="#">Label</Footer.Link>
+          </Footer.List>
+        </Footer>
+      </div>
+    );
+  },
+};
+
+export default Root;

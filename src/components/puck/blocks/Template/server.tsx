@@ -1,4 +1,4 @@
-import { ComponentConfig } from "@/core/types";
+import { ComponentConfig } from "@measured/puck";
 import { withLayout } from "../../components/Layout";
 import TemplateComponent, { TemplateProps } from "./Template";
 

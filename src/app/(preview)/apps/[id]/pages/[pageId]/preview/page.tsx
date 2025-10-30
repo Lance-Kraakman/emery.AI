@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Render, type Data } from "@measured/puck";
 import "@measured/puck/puck.css";
-import { config } from "@/puck-extraction/components/config";
+import { config } from "@/components/puck/config";
 import { getPage } from "@/app/actions/puck-pages";
 import { Button } from "@/components/ui/button";
 import { Monitor, Tablet, Smartphone, X, ArrowLeft } from "lucide-react";

@@ -1,9 +1,10 @@
 /* eslint-disable @next/next/no-img-element */
 import React, { ReactNode } from "react";
 import styles from "./styles.module.css";
-import { getClassNameFactory } from "@/core/lib";
+import { getClassNameFactory } from "@/components/puck/lib";
+import { Button } from "@/components/puck/components/Button";
 import { Section } from "../../components/Section";
-import { Button, PuckComponent, Slot } from "@measured/puck";
+import { PuckComponent, Slot } from "@measured/puck";
 
 const getClassName = getClassNameFactory("Hero", styles);
 

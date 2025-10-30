@@ -1,9 +1,9 @@
 import React from "react";
+import { ComponentConfig, Slot } from "@measured/puck";
 import styles from "./styles.module.css";
-import { getClassNameFactory } from "@/core/lib";
+import { getClassNameFactory } from "@/components/puck/lib";
 import { Section } from "../../components/Section";
 import { withLayout } from "../../components/Layout";
-import { ComponentConfig, Slot } from "@measured/puck";
 
 const getClassName = getClassNameFactory("Grid", styles);
 
