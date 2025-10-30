@@ -9,6 +9,8 @@ import { Stats } from "./blocks/Stats";
 import { Template } from "./blocks/Template";
 import { Text } from "./blocks/Text";
 import { Space } from "./blocks/Space";
+import { HeaderBlock } from "./blocks/HeaderBlock";
+import { FooterBlock } from "./blocks/FooterBlock";
 
 import Root from "./root";
 import { UserConfig } from "./types";
@@ -17,7 +19,7 @@ export const config: UserConfig = {
   root: Root,
   categories: {
     layout: {
-      components: ["Grid", "Flex", "Space"],
+      components: ["HeaderBlock", "Grid", "Flex", "Space", "FooterBlock"],
     },
     typography: {
       components: ["Heading", "Text"],
@@ -43,6 +45,8 @@ export const config: UserConfig = {
     Template,
     Text,
     Space,
+    HeaderBlock,
+    FooterBlock,
   },
 };
 
