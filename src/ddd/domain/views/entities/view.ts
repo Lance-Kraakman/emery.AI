@@ -1,26 +1,27 @@
 /**
- * DataSource Entity (Aggregate Root)
+ * View Entity (Aggregate Root)
  *
- * AIDEV-NOTE: Represents a configured data source for Puck components.
+ * AIDEV-NOTE: Represents a filtered/sorted view of a table (Baserow view pattern).
+ * Formerly named DataSource - renamed to align with Baserow terminology.
  * Owns filters, sorting, and pagination configurations.
  * References a table but doesn't own it (follows DDD aggregate boundaries).
  *
  * Business Rules:
- * - Data source must reference a valid table
+ * - View must reference a valid table
  * - Filters and sorting can be added/removed dynamically
  * - Pagination settings can be updated
  * - Name must be unique within an organization
  */
 
-import { DataSourceId } from "../value-objects/data-source-id";
+import { ViewId } from "../value-objects/view-id";
 import { FilterConfig } from "../value-objects/filter-config";
 import { SortConfig } from "../value-objects/sort-config";
 import { PaginationConfig } from "../value-objects/pagination-config";
 import { TableId } from "@/ddd/domain/shared/value-objects/table-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects/organization-id";
 
-export interface DataSourceProps {
-  id: DataSourceId;
+export interface ViewProps {
+  id: ViewId;
   name: string;
   description?: string;
   tableId: TableId;
@@ -33,8 +34,8 @@ export interface DataSourceProps {
   updatedAt?: Date;
 }
 
-export class DataSource {
-  private readonly _id: DataSourceId;
+export class View {
+  private readonly _id: ViewId;
   private _name: string;
   private _description?: string;
   private readonly _tableId: TableId;
@@ -46,7 +47,7 @@ export class DataSource {
   private readonly _createdAt: Date;
   private _updatedAt: Date;
 
-  private constructor(props: DataSourceProps) {
+  private constructor(props: ViewProps) {
     this._id = props.id;
     this._name = props.name;
     this._description = props.description;
@@ -62,28 +63,28 @@ export class DataSource {
     this.validate();
   }
 
-  static create(props: Omit<DataSourceProps, "id" | "createdAt" | "updatedAt">): DataSource {
+  static create(props: Omit<ViewProps, "id" | "createdAt" | "updatedAt">): View {
     // For new entities, we use newEntity() which creates ID with value 0
     // The repository will assign the actual ID upon persistence
-    return new DataSource({
+    return new View({
       ...props,
-      id: DataSourceId.newEntity(),
+      id: ViewId.newEntity(),
       createdAt: new Date(),
       updatedAt: new Date(),
     });
   }
 
-  static reconstitute(props: DataSourceProps): DataSource {
-    return new DataSource(props);
+  static reconstitute(props: ViewProps): View {
+    return new View(props);
   }
 
   private validate(): void {
     if (!this._name || this._name.trim().length === 0) {
-      throw new Error("DataSource name cannot be empty");
+      throw new Error("View name cannot be empty");
     }
 
     if (this._name.length > 255) {
-      throw new Error("DataSource name cannot exceed 255 characters");
+      throw new Error("View name cannot exceed 255 characters");
     }
 
     // Validate that field IDs in filters exist in the table
@@ -92,7 +93,7 @@ export class DataSource {
   }
 
   // Getters
-  get id(): DataSourceId {
+  get id(): ViewId {
     return this._id;
   }
 
@@ -139,21 +140,21 @@ export class DataSource {
   // Business Methods
 
   /**
-   * Update the data source name
+   * Update the view name
    */
   updateName(name: string): void {
     if (!name || name.trim().length === 0) {
-      throw new Error("DataSource name cannot be empty");
+      throw new Error("View name cannot be empty");
     }
     if (name.length > 255) {
-      throw new Error("DataSource name cannot exceed 255 characters");
+      throw new Error("View name cannot exceed 255 characters");
     }
     this._name = name;
     this._updatedAt = new Date();
   }
 
   /**
-   * Update the data source description
+   * Update the view description
    */
   updateDescription(description?: string): void {
     this._description = description;
@@ -161,7 +162,7 @@ export class DataSource {
   }
 
   /**
-   * Add a filter to the data source
+   * Add a filter to the view
    */
   addFilter(filter: FilterConfig): void {
     // Check if a filter for this field already exists
@@ -298,14 +299,14 @@ export class DataSource {
   }
 
   /**
-   * Check if data source has any filters
+   * Check if view has any filters
    */
   hasFilters(): boolean {
     return this._filters.length > 0;
   }
 
   /**
-   * Check if data source has any sorting
+   * Check if view has any sorting
    */
   hasSorting(): boolean {
     return this._sorting.length > 0;
@@ -381,9 +382,9 @@ export class DataSource {
     createdBy?: string;
     createdAt: Date;
     updatedAt: Date;
-  }): DataSource {
-    return DataSource.reconstitute({
-      id: DataSourceId.fromNumber(data.id),
+  }): View {
+    return View.reconstitute({
+      id: ViewId.fromNumber(data.id),
       organizationId: OrganizationId.fromNumber(data.organizationId),
       tableId: TableId.fromNumber(data.tableId),
       name: data.name,
