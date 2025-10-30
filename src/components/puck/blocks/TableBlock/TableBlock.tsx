@@ -20,6 +20,11 @@ export interface FieldMapping {
 
 export interface TableBlockProps {
   // Configuration props (set in Puck editor)
+  table?: {
+    id: number;
+    name: string;
+    databaseId: number;
+  };
   dataSourceId?: number;
   dataSourceName?: string;
   fieldMappings?: FieldMapping[];
@@ -53,13 +58,13 @@ export default function TableBlock(props: TableBlockProps) {
     _totalCount = 0,
   } = props;
 
-  // If no data source selected, show placeholder
-  if (!props.dataSourceId) {
+  // If no table selected, show placeholder
+  if (!props.table?.id) {
     return (
       <div className={styles.placeholder}>
         <div className={styles.placeholderIcon}>📊</div>
         <p className={styles.placeholderText}>
-          Select a data source to display table data
+          Select a table to display data
         </p>
       </div>
     );
