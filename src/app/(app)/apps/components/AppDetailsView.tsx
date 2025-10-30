@@ -3,15 +3,18 @@
 import React, { useEffect, useState } from 'react';
 import type { AppDTO } from '@/app/mappers/puck-app-mapper';
 import type { PageDTO } from '@/app/mappers/puck-page-mapper';
+import type { DataSourceDTO } from '@/app/mappers/data-source-mapper';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Edit, Trash2 } from 'lucide-react';
 import { appsActions } from '@/stores/apps.store';
 import { deleteApp } from '@/app/actions/puck-apps';
 import { getPages } from '@/app/actions/puck-pages';
+import { getDataSourcesForOrganization } from '@/app/actions/data-sources';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { PagesSection } from './PagesSection';
+import { DataSourcesSection } from './DataSourcesSection';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +35,8 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [pages, setPages] = useState<PageDTO[]>([]);
   const [loadingPages, setLoadingPages] = useState(true);
+  const [dataSources, setDataSources] = useState<DataSourceDTO[]>([]);
+  const [loadingDataSources, setLoadingDataSources] = useState(true);
 
   // Load pages for this app
   const loadPages = async () => {
@@ -48,8 +53,23 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
     }
   };
 
+  // Load data sources for the organization
+  const loadDataSources = async () => {
+    try {
+      setLoadingDataSources(true);
+      const dataSourcesData = await getDataSourcesForOrganization();
+      setDataSources(dataSourcesData);
+    } catch (error) {
+      console.error('Error loading data sources:', error);
+      toast.error("Failed to load data sources");
+    } finally {
+      setLoadingDataSources(false);
+    }
+  };
+
   useEffect(() => {
     loadPages();
+    loadDataSources();
   }, [app.id]);
 
   const handleEdit = () => {
@@ -131,6 +151,13 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
 
       {/* Pages Section */}
       <PagesSection appId={app.id} pages={pages} loading={loadingPages} onPagesChange={loadPages} />
+
+      {/* Data Sources Section */}
+      <DataSourcesSection
+        dataSources={dataSources}
+        loading={loadingDataSources}
+        onDataSourcesChange={loadDataSources}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
