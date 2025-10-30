@@ -1,0 +1,104 @@
+.PreviewFrame {
+  background: white;
+  border: 1px solid var(--puck-color-grey-09);
+  color: black;
+  border-radius: 16px;
+  margin-top: 32px;
+  overflow: hidden;
+}
+
+.PreviewFrame-header {
+  background: var(--puck-color-azure-11);
+  gap: 8px;
+  color: var(--puck-color-azure-05);
+  font-weight: 0;
+  padding: 12px 16px;
+  border-top-left-radius: 15px;
+  border-top-right-radius: 15px;
+  border-bottom: 1px solid var(--puck-color-grey-09);
+  align-items: center;
+}
+
+.PreviewFrame-annotation {
+  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.PreviewFrame-label {
+  margin-inline-start: auto;
+}
+
+.PreviewFrame-contents {
+  align-items: stretch;
+  background-color: var(--puck-color-grey-09);
+  display: flex;
+  gap: 1px;
+  flex-wrap: wrap;
+  position: relative;
+}
+
+.PreviewFrame-body {
+  background-color: white;
+  flex-grow: 1;
+  padding: 32px;
+  flex-basis: 49%;
+}
+
+.PreviewFrame-info {
+  background-color: white;
+  flex-grow: 1;
+  flex-basis: 49%;
+}
+
+.PreviewFrame-codeblock {
+  height: 100%;
+  overflow: auto;
+}
+
+.PreviewFrame-codeblock pre {
+  white-space: break-spaces;
+  height: 100%;
+  padding: 24px;
+}
+
+.PreviewFrame-drawerButton {
+  align-items: center;
+  border-left: 1px solid var(--puck-color-grey-10);
+  border-top: 1px solid var(--puck-color-grey-10);
+  display: flex;
+  gap: 4px;
+  border-top-left-radius: 4px;
+  font-size: var(--puck-font-size-xxxs);
+  font-weight: 500;
+  position: absolute;
+  padding: 4px 12px;
+  padding-right: 4px;
+  bottom: 0px;
+  right: 0px;
+}
+
+.PreviewFrame-drawerButton:hover {
+  background: var(--puck-color-azure-11);
+  color: var(--puck-color-azure-02);
+}
+
+.PreviewFrame-drawerButtonIcon {
+  color: var(--puck-color-grey-07);
+}
+
+.PreviewFrame-drawer {
+  background: var(--puck-color-grey-12);
+  border-top: 1px solid var(--puck-color-grey-09);
+}
+
+.PreviewFrame-preview {
+  color: var(--puck-color-grey-03);
+  padding: 16px;
+}
+
+.PreviewFrame-preview > * {
+  color: var(
+    --puck-color-grey-03
+  ) !important; /* Override any injected Nextra/Tailwind styles */
+}

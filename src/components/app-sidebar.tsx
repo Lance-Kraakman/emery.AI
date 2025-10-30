@@ -8,6 +8,7 @@ import {
   Bot,
   Building2,
   Database,
+  LayoutDashboard,
   Plus,
   Settings,
   Target,
@@ -34,6 +35,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Button } from "@/components/ui/button"
@@ -267,9 +269,12 @@ export function AppSidebar({
   }
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarHeader className="border-b p-4">
-        <EmeryOrganizationModal />
+        <div className="flex items-center justify-between">
+          <EmeryOrganizationModal />
+          <SidebarTrigger />
+        </div>
       </SidebarHeader>
 
       <SidebarContent>
@@ -290,7 +295,10 @@ export function AppSidebar({
                       asChild
                       isActive={pathname === "/mission-control/dashboard"}
                     >
-                      <Link href="/mission-control/dashboard">Dashboard</Link>
+                      <Link href="/mission-control/dashboard">
+                        <LayoutDashboard className="h-4 w-4" />
+                        <span>Dashboard</span>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
@@ -355,8 +363,7 @@ export function AppSidebar({
                             <SidebarMenuSubItem>
                               <Button
                                 variant="ghost"
-                                size="sm"
-                                className="w-full justify-start h-8"
+                                className="w-full justify-start h-8 px-2 text-sm"
                                 onClick={() => handleCreatePage(app.id)}
                                 disabled={isCreating}
                               >
@@ -371,8 +378,7 @@ export function AppSidebar({
                   ))}
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="w-full justify-start mt-1"
+                    className="w-full justify-start h-8 px-2 text-sm mt-1"
                     onClick={handleCreateApp}
                     disabled={isCreating}
                   >
@@ -409,8 +415,7 @@ export function AppSidebar({
                   ))}
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="w-full justify-start mt-1"
+                    className="w-full justify-start h-8 px-2 text-sm mt-1"
                     onClick={handleCreateAgent}
                     disabled={isCreating}
                   >
@@ -447,8 +452,7 @@ export function AppSidebar({
                   ))}
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="w-full justify-start mt-1"
+                    className="w-full justify-start h-8 px-2 text-sm mt-1"
                     onClick={handleCreateTeam}
                     disabled={isCreating}
                   >
@@ -485,8 +489,7 @@ export function AppSidebar({
                   ))}
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="w-full justify-start mt-1"
+                    className="w-full justify-start h-8 px-2 text-sm mt-1"
                     onClick={handleCreateSkill}
                     disabled={isCreating}
                   >
@@ -544,8 +547,7 @@ export function AppSidebar({
                             <SidebarMenuSubItem>
                               <Button
                                 variant="ghost"
-                                size="sm"
-                                className="w-full justify-start h-8"
+                                className="w-full justify-start h-8 px-2 text-sm"
                                 onClick={() => handleCreateTable(database.id)}
                                 disabled={isCreating}
                               >
@@ -560,8 +562,7 @@ export function AppSidebar({
                   ))}
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="w-full justify-start mt-1"
+                    className="w-full justify-start h-8 px-2 text-sm mt-1"
                     onClick={handleCreateDatabase}
                     disabled={isCreating}
                   >
