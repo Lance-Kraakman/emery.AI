@@ -17,7 +17,7 @@ import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { getViewApplicationService } from "@/ddd/application/di/container";
 import { OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
-import { ViewId } from "@/ddd/domain/views/value-objects/data-source-id";
+import { ViewId } from "@/ddd/domain/views/value-objects/view-id";
 import { FilterConfig } from "@/ddd/domain/views/value-objects/filter-config";
 import { SortConfig } from "@/ddd/domain/views/value-objects/sort-config";
 import { PaginationConfig } from "@/ddd/domain/views/value-objects/pagination-config";

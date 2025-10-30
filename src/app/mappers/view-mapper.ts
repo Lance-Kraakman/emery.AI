@@ -5,7 +5,7 @@
  * DTOs use plain serializable types that can pass through Next.js Server Actions.
  */
 
-import { View } from "@/ddd/domain/views/entities/data-source";
+import { View } from "@/ddd/domain/views/entities/view";
 
 export interface ViewDTO {
   id: number;

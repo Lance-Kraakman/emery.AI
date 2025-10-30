@@ -136,13 +136,13 @@ export interface TeamMembershipData {
 }
 
 // Data Source types
-export interface CreateDataSourceData {
+export interface CreateViewData {
   tableId: number;
   name: string;
   description?: string;
 }
 
-export interface UpdateDataSourceData {
+export interface UpdateViewData {
   id: number;
   name?: string;
   description?: string;
