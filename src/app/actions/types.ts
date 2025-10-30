@@ -135,3 +135,30 @@ export interface TeamMembershipData {
   userId: string;
 }
 
+// Data Source types
+export interface CreateDataSourceData {
+  tableId: number;
+  name: string;
+  description?: string;
+}
+
+export interface UpdateDataSourceData {
+  id: number;
+  name?: string;
+  description?: string;
+  filters?: Array<{
+    fieldId: number;
+    operator: string;
+    value: string;
+  }>;
+  sorting?: Array<{
+    fieldId: number;
+    direction: "asc" | "desc";
+    priority: number;
+  }>;
+  pagination?: {
+    pageSize: number;
+    offset?: number;
+  };
+}
+
