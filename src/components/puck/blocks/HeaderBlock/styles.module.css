@@ -114,16 +114,21 @@
 .HeaderBlock-logoSlot {
   display: flex;
   align-items: center;
+  min-height: 40px;
 }
 
 .HeaderBlock-navigationSlot {
   display: flex;
   align-items: center;
+  gap: 12px;
+  min-height: 40px;
 }
 
 .HeaderBlock-actionsSlot {
   display: flex;
   align-items: center;
+  gap: 12px;
+  min-height: 40px;
 }
 
 /* Responsive */

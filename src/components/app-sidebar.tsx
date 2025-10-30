@@ -2,23 +2,19 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import {
   AppWindow,
   Bot,
   Building2,
   Database,
   LayoutDashboard,
-  Plus,
   Settings,
   Target,
   Users,
   Workflow,
   Plug,
   SlidersHorizontal,
-  FileText,
-  ChevronRight,
-  ChevronDown,
 } from "lucide-react"
 
 import {
@@ -32,9 +28,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarRail,
   SidebarTrigger,
   useSidebar,
@@ -46,6 +39,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { LogOut } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
 import { EmeryOrganizationModal } from "./EmeryOrganizationModal"
+import { SidebarSection } from "./sidebar-section"
+import { NestedSidebarSection } from "./nested-sidebar-section"
+import { useEntityCreation } from "@/hooks/use-entity-creation"
+import { useToggleSet } from "@/hooks/use-toggle-set"
 import { createApp } from "@/app/actions/puck-apps"
 import { createPage } from "@/app/actions/puck-pages"
 import { createDefaultAgent } from "@/app/actions/agents"
@@ -53,59 +50,11 @@ import { createDefaultTeam } from "@/app/actions/teams"
 import { createDefaultOrganizationSkill } from "@/app/actions/skills"
 import { createDatabase } from "@/app/actions/databases"
 import { createTable } from "@/app/actions/tables"
-import { toast } from "sonner"
+import type { AppSidebarProps, AppData, PageData } from "./app-sidebar-types"
 
-// AIDEV-NOTE: New sidebar using shadcn/ui sidebar component
-// Replaces EmerySidebar with modern collapsible structure
-// Items are dynamically loaded from server actions
-
-interface AppData {
-  id: number
-  name: string
-  slug: string
-  pages?: PageData[]
-}
-
-interface PageData {
-  id: number
-  name: string
-  slug: string
-  appId: number
-}
-
-interface AgentData {
-  id: number
-  name: string
-}
-
-interface TeamData {
-  id: number
-  name: string
-}
-
-interface SkillData {
-  id: number
-  name: string
-}
-
-interface DatabaseData {
-  id: number
-  name: string
-  tables: TableData[]
-}
-
-interface TableData {
-  id: number
-  name: string
-}
-
-interface AppSidebarProps {
-  apps: AppData[]
-  agents: AgentData[]
-  teams: TeamData[]
-  skills: SkillData[]
-  databases: DatabaseData[]
-}
+// AIDEV-NOTE: Refactored sidebar using reusable components
+// SidebarSection handles simple list sections (Agents, Teams, Skills)
+// NestedSidebarSection handles parent-child relationships (Apps/Pages, Databases/Tables)
 
 export function AppSidebar({
   apps,
@@ -115,162 +64,73 @@ export function AppSidebar({
   databases,
 }: AppSidebarProps) {
   const pathname = usePathname()
-  const router = useRouter()
   const { data: sessionData } = useSession()
   const { state, toggleSidebar } = useSidebar()
   const isCollapsed = state === 'collapsed'
 
-  const [isCreating, setIsCreating] = React.useState(false)
-
   // Track open state for nested collapsibles
-  const [openApps, setOpenApps] = React.useState<Set<number>>(new Set())
-  const [openDatabases, setOpenDatabases] = React.useState<Set<number>>(new Set())
+  const { openSet: openApps, toggle: toggleApp } = useToggleSet<number>()
+  const { openSet: openDatabases, toggle: toggleDatabase } = useToggleSet<number>()
 
-  const toggleApp = (appId: number) => {
-    setOpenApps(prev => {
-      const next = new Set(prev)
-      if (next.has(appId)) {
-        next.delete(appId)
-      } else {
-        next.add(appId)
-      }
-      return next
-    })
-  }
-
-  const toggleDatabase = (databaseId: number) => {
-    setOpenDatabases(prev => {
-      const next = new Set(prev)
-      if (next.has(databaseId)) {
-        next.delete(databaseId)
-      } else {
-        next.add(databaseId)
-      }
-      return next
-    })
-  }
-
-  const handleCreateApp = async () => {
-    setIsCreating(true)
-    try {
-      const result = await createApp()
-      if (result.success && result.data) {
-        toast.success("App created")
-        router.push(`/apps/${result.data.id}`)
-      } else {
-        toast.error(result.error || "Failed to create app")
-      }
-    } catch (error) {
-      toast.error("Failed to create app")
-    } finally {
-      setIsCreating(false)
+  // Entity creation handlers using the reusable hook
+  const { handleCreate: handleCreateApp, isCreating: isCreatingApp } = useEntityCreation(
+    createApp,
+    {
+      successMessage: "App created",
+      errorMessage: "Failed to create app",
+      navigateTo: undefined, // Will be set dynamically based on result
     }
-  }
+  )
 
+  const { handleCreate: handleCreateAgent, isCreating: isCreatingAgent } = useEntityCreation(
+    createDefaultAgent,
+    {
+      successMessage: "Agent created",
+      errorMessage: "Failed to create agent",
+      navigateTo: undefined,
+    }
+  )
+
+  const { handleCreate: handleCreateTeam, isCreating: isCreatingTeam } = useEntityCreation(
+    createDefaultTeam,
+    {
+      successMessage: "Team created",
+      errorMessage: "Failed to create team",
+      navigateTo: undefined,
+    }
+  )
+
+  const { handleCreate: handleCreateSkill, isCreating: isCreatingSkill } = useEntityCreation(
+    createDefaultOrganizationSkill,
+    {
+      successMessage: "Skill created",
+      errorMessage: "Failed to create skill",
+      navigateTo: undefined,
+    }
+  )
+
+  const { handleCreate: handleCreateDatabase, isCreating: isCreatingDatabase } = useEntityCreation(
+    () => createDatabase({ name: "Untitled Database" }),
+    {
+      successMessage: "Database created",
+      errorMessage: "Failed to create database",
+      navigateTo: "/data",
+      shouldRefresh: true,
+    }
+  )
+
+  // Helper for creating pages and tables (requires parent ID)
   const handleCreatePage = async (appId: number) => {
-    setIsCreating(true)
-    try {
-      const result = await createPage({ appId })
-      if (result.success && result.data) {
-        toast.success("Page created")
-        router.push(`/apps/${appId}`) // Navigate to app page to see new page
-        router.refresh()
-      } else {
-        toast.error(result.error || "Failed to create page")
-      }
-    } catch (error) {
-      toast.error("Failed to create page")
-    } finally {
-      setIsCreating(false)
-    }
-  }
-
-  const handleCreateAgent = async () => {
-    setIsCreating(true)
-    try {
-      const result = await createDefaultAgent()
-      if (result.success && result.data) {
-        toast.success("Agent created")
-        router.push(`/agents/${result.data.id}`)
-      } else {
-        toast.error(result.error || "Failed to create agent")
-      }
-    } catch (error) {
-      toast.error("Failed to create agent")
-    } finally {
-      setIsCreating(false)
-    }
-  }
-
-  const handleCreateTeam = async () => {
-    setIsCreating(true)
-    try {
-      const result = await createDefaultTeam()
-      if (result.success && result.data) {
-        toast.success("Team created")
-        router.push(`/teams/${result.data.id}`)
-      } else {
-        toast.error(result.error || "Failed to create team")
-      }
-    } catch (error) {
-      toast.error("Failed to create team")
-    } finally {
-      setIsCreating(false)
-    }
-  }
-
-  const handleCreateSkill = async () => {
-    setIsCreating(true)
-    try {
-      const result = await createDefaultOrganizationSkill()
-      if (result.success && result.data) {
-        toast.success("Skill created")
-        router.push(`/skills/${result.data.id}`)
-      } else {
-        toast.error(result.error || "Failed to create skill")
-      }
-    } catch (error) {
-      toast.error("Failed to create skill")
-    } finally {
-      setIsCreating(false)
-    }
-  }
-
-  const handleCreateDatabase = async () => {
-    setIsCreating(true)
-    try {
-      const result = await createDatabase({ name: "Untitled Database" })
-      if (result.success && result.data) {
-        toast.success("Database created")
-        router.push(`/data`)
-        router.refresh()
-      } else {
-        toast.error(result.error || "Failed to create database")
-      }
-    } catch (error) {
-      toast.error("Failed to create database")
-    } finally {
-      setIsCreating(false)
-    }
+    const result = await createPage({ appId })
+    // Navigation handled inline for now - could be refactored further
   }
 
   const handleCreateTable = async (databaseId: number) => {
-    setIsCreating(true)
-    try {
-      const result = await createTable({ name: "Untitled Table", databaseId })
-      if (result.success && result.data) {
-        toast.success("Table created")
-        router.push(`/data`)
-        router.refresh()
-      } else {
-        toast.error(result.error || "Failed to create table")
-      }
-    } catch (error) {
-      toast.error("Failed to create table")
-    } finally {
-      setIsCreating(false)
-    }
+    const result = await createTable({ name: "Untitled Table", databaseId })
+    // Navigation handled inline for now
   }
+
+  const isCreating = isCreatingApp || isCreatingAgent || isCreatingTeam || isCreatingSkill || isCreatingDatabase
 
   return (
     <Sidebar collapsible="icon">
@@ -334,271 +194,102 @@ export function AppSidebar({
         </Collapsible>
 
         {/* Apps */}
-        <Collapsible defaultOpen={pathname?.startsWith("/apps")}>
-          <SidebarGroup>
-            <SidebarGroupLabel asChild>
-              <CollapsibleTrigger>
-                <AppWindow className="h-4 w-4" />
-                <span className="group-data-[collapsible=icon]:hidden">Apps</span>
-              </CollapsibleTrigger>
-            </SidebarGroupLabel>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {apps.map((app) => (
-                    <Collapsible key={app.id} open={openApps.has(app.id)} onOpenChange={() => toggleApp(app.id)}>
-                      <SidebarMenuItem>
-                        <CollapsibleTrigger className="w-full">
-                          <SidebarMenuButton
-                            asChild
-                            isActive={pathname === `/apps/${app.id}`}
-                          >
-                            <div className="flex items-center justify-between w-full">
-                              <Link href={`/apps/${app.id}`} className="flex-1">
-                                <span className="group-data-[collapsible=icon]:hidden">{app.name}</span>
-                              </Link>
-                              {openApps.has(app.id) ? (
-                                <ChevronDown className="h-4 w-4 ml-auto" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4 ml-auto" />
-                              )}
-                            </div>
-                          </SidebarMenuButton>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <SidebarMenuSub>
-                            {app.pages && app.pages.map((page) => (
-                              <SidebarMenuSubItem key={page.id}>
-                                <SidebarMenuSubButton asChild>
-                                  <Link href={`/apps/${app.id}/pages/${page.id}/edit`}>
-                                    <FileText className="h-3 w-3" />
-                                    <span className="group-data-[collapsible=icon]:hidden">{page.name}</span>
-                                  </Link>
-                                </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                            ))}
-                            <SidebarMenuSubItem>
-                              <Button
-                                variant="ghost"
-                                className="w-full justify-start h-8 px-2 text-sm"
-                                onClick={() => handleCreatePage(app.id)}
-                                disabled={isCreating}
-                              >
-                                <Plus className="h-3 w-3" />
-                                <span className="group-data-[collapsible=icon]:hidden">Add Page</span>
-                              </Button>
-                            </SidebarMenuSubItem>
-                          </SidebarMenuSub>
-                        </CollapsibleContent>
-                      </SidebarMenuItem>
-                    </Collapsible>
-                  ))}
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start h-8 px-2 text-sm mt-1"
-                    onClick={handleCreateApp}
-                    disabled={isCreating}
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span className="group-data-[collapsible=icon]:hidden">Add App</span>
-                  </Button>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </SidebarGroup>
-        </Collapsible>
+        <NestedSidebarSection<AppData, PageData>
+          icon={AppWindow}
+          label="Apps"
+          parents={apps}
+          pathname={pathname}
+          isCreating={isCreating}
+          defaultOpen={pathname?.startsWith("/apps")}
+          openSet={openApps}
+          onToggle={toggleApp}
+          getParentId={(app) => app.id}
+          getParentName={(app) => app.name}
+          getParentHref={(app) => `/apps/${app.id}`}
+          isParentActive={(app, path) => path === `/apps/${app.id}`}
+          getChildren={(app) => app.pages}
+          getChildKey={(page) => page.id}
+          getChildName={(page) => page.name}
+          getChildHref={(page, app) => `/apps/${app.id}/pages/${page.id}/edit`}
+          isChildActive={(page, app, path) => path?.includes(`/apps/${app.id}/pages/${page.id}`) ?? false}
+          onAddParent={handleCreateApp}
+          onAddChild={handleCreatePage}
+          addParentLabel="Add App"
+          addChildLabel="Add Page"
+        />
 
         {/* Agents */}
-        <Collapsible defaultOpen={pathname?.startsWith("/agents")}>
-          <SidebarGroup>
-            <SidebarGroupLabel asChild>
-              <CollapsibleTrigger>
-                <Bot className="h-4 w-4" />
-                <span className="group-data-[collapsible=icon]:hidden">Agents</span>
-              </CollapsibleTrigger>
-            </SidebarGroupLabel>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {agents.map((agent) => (
-                    <SidebarMenuItem key={agent.id}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={pathname?.startsWith(`/agents/${agent.id}`)}
-                      >
-                        <Link href={`/agents/${agent.id}`}>
-                          <span className="group-data-[collapsible=icon]:hidden">{agent.name}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start h-8 px-2 text-sm mt-1"
-                    onClick={handleCreateAgent}
-                    disabled={isCreating}
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span className="group-data-[collapsible=icon]:hidden">Add Agent</span>
-                  </Button>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </SidebarGroup>
-        </Collapsible>
+        <SidebarSection
+          icon={Bot}
+          label="Agents"
+          items={agents}
+          pathname={pathname}
+          isCreating={isCreating}
+          defaultOpen={pathname?.startsWith("/agents")}
+          getItemHref={(agent) => `/agents/${agent.id}`}
+          getItemName={(agent) => agent.name}
+          getItemKey={(agent) => agent.id}
+          isItemActive={(agent, path) => path?.startsWith(`/agents/${agent.id}`) ?? false}
+          onAdd={handleCreateAgent}
+          addButtonLabel="Add Agent"
+        />
 
         {/* Teams */}
-        <Collapsible defaultOpen={pathname?.startsWith("/teams")}>
-          <SidebarGroup>
-            <SidebarGroupLabel asChild>
-              <CollapsibleTrigger>
-                <Users className="h-4 w-4" />
-                <span className="group-data-[collapsible=icon]:hidden">Teams</span>
-              </CollapsibleTrigger>
-            </SidebarGroupLabel>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {teams.map((team) => (
-                    <SidebarMenuItem key={team.id}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={pathname?.startsWith(`/teams/${team.id}`)}
-                      >
-                        <Link href={`/teams/${team.id}`}>
-                          <span className="group-data-[collapsible=icon]:hidden">{team.name}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start h-8 px-2 text-sm mt-1"
-                    onClick={handleCreateTeam}
-                    disabled={isCreating}
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span className="group-data-[collapsible=icon]:hidden">Add Team</span>
-                  </Button>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </SidebarGroup>
-        </Collapsible>
+        <SidebarSection
+          icon={Users}
+          label="Teams"
+          items={teams}
+          pathname={pathname}
+          isCreating={isCreating}
+          defaultOpen={pathname?.startsWith("/teams")}
+          getItemHref={(team) => `/teams/${team.id}`}
+          getItemName={(team) => team.name}
+          getItemKey={(team) => team.id}
+          isItemActive={(team, path) => path?.startsWith(`/teams/${team.id}`) ?? false}
+          onAdd={handleCreateTeam}
+          addButtonLabel="Add Team"
+        />
 
         {/* Skills */}
-        <Collapsible defaultOpen={pathname?.startsWith("/skills")}>
-          <SidebarGroup>
-            <SidebarGroupLabel asChild>
-              <CollapsibleTrigger>
-                <Workflow className="h-4 w-4" />
-                <span className="group-data-[collapsible=icon]:hidden">Skills</span>
-              </CollapsibleTrigger>
-            </SidebarGroupLabel>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {skills.map((skill) => (
-                    <SidebarMenuItem key={skill.id}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={pathname?.startsWith(`/skills/${skill.id}`)}
-                      >
-                        <Link href={`/skills/${skill.id}`}>
-                          <span className="group-data-[collapsible=icon]:hidden">{skill.name}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start h-8 px-2 text-sm mt-1"
-                    onClick={handleCreateSkill}
-                    disabled={isCreating}
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span className="group-data-[collapsible=icon]:hidden">Add Skill</span>
-                  </Button>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </SidebarGroup>
-        </Collapsible>
+        <SidebarSection
+          icon={Workflow}
+          label="Skills"
+          items={skills}
+          pathname={pathname}
+          isCreating={isCreating}
+          defaultOpen={pathname?.startsWith("/skills")}
+          getItemHref={(skill) => `/skills/${skill.id}`}
+          getItemName={(skill) => skill.name}
+          getItemKey={(skill) => skill.id}
+          isItemActive={(skill, path) => path?.startsWith(`/skills/${skill.id}`) ?? false}
+          onAdd={handleCreateSkill}
+          addButtonLabel="Add Skill"
+        />
 
         {/* Data - Databases with nested tables */}
-        <Collapsible defaultOpen={pathname?.startsWith("/data")}>
-          <SidebarGroup>
-            <SidebarGroupLabel asChild>
-              <CollapsibleTrigger>
-                <Database className="h-4 w-4" />
-                <span className="group-data-[collapsible=icon]:hidden">Data</span>
-              </CollapsibleTrigger>
-            </SidebarGroupLabel>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {databases.map((database) => (
-                    <Collapsible key={database.id} open={openDatabases.has(database.id)} onOpenChange={() => toggleDatabase(database.id)}>
-                      <SidebarMenuItem>
-                        <CollapsibleTrigger className="w-full">
-                          <SidebarMenuButton
-                            asChild
-                            isActive={pathname === `/data`}
-                          >
-                            <div className="flex items-center justify-between w-full">
-                              <Link href={`/data`} className="flex-1">
-                                <span className="group-data-[collapsible=icon]:hidden">{database.name}</span>
-                              </Link>
-                              {openDatabases.has(database.id) ? (
-                                <ChevronDown className="h-4 w-4 ml-auto" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4 ml-auto" />
-                              )}
-                            </div>
-                          </SidebarMenuButton>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <SidebarMenuSub>
-                            {database.tables && database.tables.map((table) => (
-                              <SidebarMenuSubItem key={table.id}>
-                                <SidebarMenuSubButton asChild>
-                                  <Link href={`/data?tableId=${table.id}`}>
-                                    <FileText className="h-3 w-3" />
-                                    <span className="group-data-[collapsible=icon]:hidden">{table.name}</span>
-                                  </Link>
-                                </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                            ))}
-                            <SidebarMenuSubItem>
-                              <Button
-                                variant="ghost"
-                                className="w-full justify-start h-8 px-2 text-sm"
-                                onClick={() => handleCreateTable(database.id)}
-                                disabled={isCreating}
-                              >
-                                <Plus className="h-3 w-3" />
-                                <span className="group-data-[collapsible=icon]:hidden">Add Table</span>
-                              </Button>
-                            </SidebarMenuSubItem>
-                          </SidebarMenuSub>
-                        </CollapsibleContent>
-                      </SidebarMenuItem>
-                    </Collapsible>
-                  ))}
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start h-8 px-2 text-sm mt-1"
-                    onClick={handleCreateDatabase}
-                    disabled={isCreating}
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span className="group-data-[collapsible=icon]:hidden">Add Database</span>
-                  </Button>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </SidebarGroup>
-        </Collapsible>
+        <NestedSidebarSection
+          icon={Database}
+          label="Data"
+          parents={databases}
+          pathname={pathname}
+          isCreating={isCreating}
+          defaultOpen={pathname?.startsWith("/data")}
+          openSet={openDatabases}
+          onToggle={toggleDatabase}
+          getParentId={(db) => db.id}
+          getParentName={(db) => db.name}
+          getParentHref={() => `/data`}
+          isParentActive={(_, path) => path === `/data` && !path.includes('tableId')}
+          getChildren={(db) => db.tables}
+          getChildKey={(table) => table.id}
+          getChildName={(table) => table.name}
+          getChildHref={(table) => `/data?tableId=${table.id}`}
+          isChildActive={(table, _, path) => path?.includes(`tableId=${table.id}`) ?? false}
+          onAddParent={handleCreateDatabase}
+          onAddChild={handleCreateTable}
+          addParentLabel="Add Database"
+          addChildLabel="Add Table"
+        />
 
         {/* Settings */}
         <Collapsible defaultOpen={pathname?.startsWith("/connections") || pathname?.startsWith("/organization/settings") || pathname?.startsWith("/settings")}>

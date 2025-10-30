@@ -81,23 +81,23 @@ export const fields = pgTable("fields", {
   type: text("type").notNull(), // text, number, boolean, email, url, date, file, relation
   orderIndex: integer("order_index").default(0),
   required: boolean("required").default(false),
-  
+
   // Configuration for complex field types (file, relation)
   fieldConfig: jsonb("field_config").$type<{
     // File field config
     allowedTypes?: string[]; // ['image/*', '.pdf', etc.]
     maxSize?: number; // in bytes
     multiple?: boolean;
-    
-    // Relation field config  
+
+    // Relation field config
     targetTableId?: number;
     relationshipType?: 'one-to-one' | 'one-to-many' | 'many-to-many';
     displayField?: string;
-    
+
     // Generic extension metadata
     [key: string]: any;
   }>(),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   pgPolicy("fields_tenant_isolation", {
@@ -105,6 +105,92 @@ export const fields = pgTable("fields", {
     for: "all",
     to: "public",
     using: sql`EXISTS (SELECT 1 FROM tables t WHERE t.id = table_id AND t.organization_id = current_setting('app.current_organization_id')::integer)`,
+  }),
+]);
+
+// AIDEV-NOTE: Data Sources - Puck page builder integration with tables
+// Defines filtered, sorted, paginated views of table data for components
+export const dataSources = pgTable("data_sources", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  tableId: integer("table_id").notNull().references(() => tables.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+
+  // Filter configuration (array of filter conditions)
+  filters: jsonb("filters").$type<Array<{
+    fieldId: number;
+    operator: string;
+    value?: string | number | boolean | null;
+  }>>().default(sql`'[]'::jsonb`).notNull(),
+
+  // Sort configuration (array of sort rules with priority)
+  sorting: jsonb("sorting").$type<Array<{
+    fieldId: number;
+    direction: 'asc' | 'desc';
+    priority: number;
+  }>>().default(sql`'[]'::jsonb`).notNull(),
+
+  // Pagination configuration
+  pagination: jsonb("pagination").$type<{
+    pageSize: number;
+    offset: number;
+  }>().default(sql`'{"pageSize": 50, "offset": 0}'::jsonb`).notNull(),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  // Unique name per organization
+  unique("data_sources_org_name_unique").on(table.organizationId, table.name),
+
+  // Index for organization queries
+  index("data_sources_org_idx").on(table.organizationId),
+
+  // Index for table queries
+  index("data_sources_table_idx").on(table.tableId),
+
+  // RLS: Users can view data sources in their organization
+  pgPolicy("data_sources_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:view',
+        organization_id
+      )`,
+  }),
+
+  // RLS: Users can create data sources if they have data:manage permission
+  pgPolicy("data_sources_create_permission", {
+    as: "permissive",
+    for: "insert",
+    to: "public",
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:manage',
+        organization_id
+      )`,
+  }),
+
+  // RLS: Users can manage data sources if they have data:manage permission
+  pgPolicy("data_sources_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:manage',
+        organization_id
+      )`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:manage',
+        organization_id
+      )`,
   }),
 ]);
 

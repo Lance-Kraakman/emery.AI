@@ -1,5 +1,6 @@
 import { ComponentConfig, Slot } from "@measured/puck";
 import { getClassNameFactory } from "@/components/puck/lib";
+import { createComponent } from "@/components/puck/lib/create-component";
 import styles from "./styles.module.css";
 
 const getClassName = getClassNameFactory("HeaderBlock", styles);
@@ -83,6 +84,54 @@ export const HeaderBlock: ComponentConfig<HeaderBlockProps> = {
     }
 
     return fields;
+  },
+  resolveData: async (data, { changed, trigger }) => {
+    // Only populate on initial load
+    if (trigger !== "load") return data;
+
+    // Pre-populate slots with default content
+    const logo = [
+      await createComponent("Heading", {
+        text: "LOGO",
+        size: "l",
+      }),
+    ];
+
+    const navigation = [
+      await createComponent("Button", {
+        label: "Home",
+        href: "/",
+        variant: "secondary",
+      }),
+      await createComponent("Button", {
+        label: "About",
+        href: "/about",
+        variant: "secondary",
+      }),
+      await createComponent("Button", {
+        label: "Contact",
+        href: "/contact",
+        variant: "secondary",
+      }),
+    ];
+
+    const actions = [
+      await createComponent("Button", {
+        label: "Get Started",
+        href: "#",
+        variant: "primary",
+      }),
+    ];
+
+    return {
+      ...data,
+      props: {
+        ...data.props,
+        logo,
+        navigation,
+        actions,
+      },
+    };
   },
   render: ({ layout, logo: Logo, navigation: Navigation, actions: Actions, sticky, backgroundColor, puck }) => {
     const isDark = backgroundColor === "#1f2937";
