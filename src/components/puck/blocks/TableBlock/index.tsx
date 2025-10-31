@@ -152,32 +152,54 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
           placeholder: "Select a field",
           showSearch: true,
           fetchList: async ({ query }: { query: string }, context: any) => {
-            // Get tableId from context - need to traverse up to parent props
-            const tableId = context?.props?.table?.id;
+            // DEBUG: Log full context structure
+            console.log('[sourceFieldId fetchList] Called with:', {
+              hasContext: !!context,
+              hasProps: !!context?.props,
+              hasTable: !!context?.props?.table,
+              tableId: context?.props?.table?.id,
+              contextKeys: Object.keys(context || {}),
+              propsKeys: Object.keys(context?.props || {}),
+              query
+            });
+
+            // Try multiple paths to get tableId
+            const tableId = context?.props?.table?.id
+              || context?.props?.tableId
+              || context?.itemProps?.table?.id
+              || context?.parent?.props?.table?.id;
 
             if (!tableId) {
-              console.log('[sourceFieldId fetchList] No table ID in context');
+              console.warn('[sourceFieldId fetchList] Could not find tableId. Full context:', context);
               return [];
             }
 
             console.log('[sourceFieldId fetchList] Fetching fields for table:', tableId);
-            const fields = await getFields(tableId);
+            try {
+              const fields = await getFields(tableId);
+              console.log('[sourceFieldId fetchList] Got fields:', fields.length, fields);
 
-            // Filter by query if provided
-            const filteredFields = query
-              ? fields.filter((f) =>
-                  f.name.toLowerCase().includes(query.toLowerCase())
-                )
-              : fields;
+              // Filter by query if provided
+              const filteredFields = query
+                ? fields.filter((f) =>
+                    f.name.toLowerCase().includes(query.toLowerCase())
+                  )
+                : fields;
 
-            console.log('[sourceFieldId fetchList] Returning fields:', filteredFields.length);
-            return filteredFields.map((f) => ({
-              id: f.id,
-              name: f.name,
-              type: f.type,
-              title: f.name,
-              description: `Type: ${f.type}${f.required ? ' (required)' : ''}`,
-            }));
+              console.log('[sourceFieldId fetchList] Returning fields:', filteredFields.length);
+              const result = filteredFields.map((f) => ({
+                id: f.id,
+                name: f.name,
+                type: f.type,
+                title: f.name,
+                description: `Type: ${f.type}${f.required ? ' (required)' : ''}`,
+              }));
+              console.log('[sourceFieldId fetchList] Mapped result:', result);
+              return result;
+            } catch (error) {
+              console.error('[sourceFieldId fetchList] Error fetching fields:', error);
+              return [];
+            }
           },
           mapProp: (item: any) => (item?.id || 0),
           getItemSummary: (item: any, context: any) => {
