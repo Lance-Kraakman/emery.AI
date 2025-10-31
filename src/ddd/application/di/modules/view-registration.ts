@@ -17,8 +17,8 @@ import { DrizzleViewRepository } from "@/ddd/infrastructure/db/repositories/view
 import { ViewApplicationService } from "@/ddd/application/services/views/view-application-service";
 
 export interface ViewServices {
-  dataSourceRepository: ViewRepository;
-  dataSourceApplicationService: ViewApplicationService;
+  viewRepository: ViewRepository;
+  viewApplicationService: ViewApplicationService;
 }
 
 export interface ViewDependencies {
@@ -32,16 +32,16 @@ export function registerViewServices(
   const { db, tableApplicationService } = deps;
 
   // Register repository
-  const dataSourceRepository = new DrizzleViewRepository(db);
+  const viewRepository = new DrizzleViewRepository(db);
 
   // Register application service
-  const dataSourceApplicationService = new ViewApplicationService(
-    dataSourceRepository,
+  const viewApplicationService = new ViewApplicationService(
+    viewRepository,
     tableApplicationService
   );
 
   return {
-    dataSourceRepository,
-    dataSourceApplicationService,
+    viewRepository,
+    viewApplicationService,
   };
 }
