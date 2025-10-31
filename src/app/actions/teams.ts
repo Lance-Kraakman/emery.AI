@@ -293,11 +293,11 @@ export async function duplicateTeam(teamId: number): Promise<Result> {
       // Build DTO for the duplicate
       const dto: CreateTeamDTO = {
         name: newName,
-        purpose: originalTeam.purpose,
-        description: originalTeam.description,
-        responsibilities: originalTeam.responsibilities,
-        goals: originalTeam.goals,
-        agentIds: originalTeam.agentIds,
+        purpose: originalTeam.purpose || undefined,
+        description: originalTeam.description || undefined,
+        responsibilities: originalTeam.responsibilities || undefined,
+        goals: originalTeam.goals || undefined,
+        agentIds: originalTeam.agentIds?.map(id => id.value.toString()) || undefined,
         organizationId: currentOrg.id
       };
 

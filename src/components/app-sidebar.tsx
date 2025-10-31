@@ -44,14 +44,24 @@ import { NestedSidebarSection } from "./nested-sidebar-section"
 import { GroupedSidebarSection } from "./grouped-sidebar-section"
 import { useEntityCreation } from "@/hooks/use-entity-creation"
 import { useToggleSet } from "@/hooks/use-toggle-set"
-import { createApp } from "@/app/actions/puck-apps"
-import { createPage } from "@/app/actions/puck-pages"
-import { createDefaultAgent } from "@/app/actions/agents"
-import { createDefaultTeam } from "@/app/actions/teams"
-import { createDefaultOrganizationSkill } from "@/app/actions/skills"
-import { createDatabase } from "@/app/actions/databases"
-import { createTable } from "@/app/actions/tables"
-import type { AppSidebarProps, AppData, PageData } from "./app-sidebar-types"
+import { createApp, updateApp, deleteApp, duplicateApp } from "@/app/actions/puck-apps"
+import { createPage, updatePage, deletePage, duplicatePage } from "@/app/actions/puck-pages"
+import { createDefaultAgent, updateAgent, deleteAgent, duplicateAgent } from "@/app/actions/agents"
+import { createDefaultTeam, updateTeam, deleteTeam, duplicateTeam } from "@/app/actions/teams"
+import { createDefaultOrganizationSkill, updateSkill, deleteSkill, duplicateSkill } from "@/app/actions/skills"
+import { createDatabase, updateDatabase, deleteDatabase, duplicateDatabase } from "@/app/actions/databases"
+import { createTable, deleteTable, duplicateTable } from "@/app/actions/tables"
+import type { AppSidebarProps, AppData, PageData, AgentData, TeamData, SkillData, DatabaseData, TableData } from "./app-sidebar-types"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 // AIDEV-NOTE: Refactored sidebar using reusable components
 // SidebarSection handles simple list sections (Agents, Teams, Skills)
@@ -132,6 +142,144 @@ export function AppSidebar({
   }
 
   const isCreating = isCreatingApp || isCreatingAgent || isCreatingTeam || isCreatingSkill || isCreatingDatabase
+
+  // Delete confirmation state
+  const [deletingItem, setDeletingItem] = React.useState<{
+    type: 'app' | 'page' | 'agent' | 'team' | 'skill' | 'database' | 'table'
+    id: number
+    name: string
+  } | null>(null)
+  const [isDeleting, setIsDeleting] = React.useState(false)
+
+  // Action handlers for Apps
+  const handleRenameApp = async (app: AppData, newName: string) => {
+    await updateApp({ id: app.id, name: newName })
+  }
+
+  const handleDuplicateApp = async (app: AppData) => {
+    await duplicateApp(app.id)
+  }
+
+  const handleDeleteApp = (app: AppData) => {
+    setDeletingItem({ type: 'app', id: app.id, name: app.name })
+  }
+
+  // Action handlers for Pages
+  const handleRenamePage = async (page: PageData, app: AppData, newName: string) => {
+    await updatePage({ id: page.id, name: newName })
+  }
+
+  const handleDuplicatePage = async (page: PageData, app: AppData) => {
+    await duplicatePage(page.id)
+  }
+
+  const handleDeletePage = (page: PageData, app: AppData) => {
+    setDeletingItem({ type: 'page', id: page.id, name: page.name })
+  }
+
+  // Action handlers for Agents
+  const handleRenameAgent = async (agent: AgentData, newName: string) => {
+    await updateAgent(agent.id, { name: newName })
+  }
+
+  const handleDuplicateAgent = async (agent: AgentData) => {
+    await duplicateAgent(agent.id)
+  }
+
+  const handleDeleteAgent = (agent: AgentData) => {
+    setDeletingItem({ type: 'agent', id: agent.id, name: agent.name })
+  }
+
+  // Action handlers for Teams
+  const handleRenameTeam = async (team: TeamData, newName: string) => {
+    await updateTeam(team.id, { name: newName })
+  }
+
+  const handleDuplicateTeam = async (team: TeamData) => {
+    await duplicateTeam(team.id)
+  }
+
+  const handleDeleteTeam = (team: TeamData) => {
+    setDeletingItem({ type: 'team', id: team.id, name: team.name })
+  }
+
+  // Action handlers for Skills
+  const handleRenameSkill = async (skill: SkillData, newName: string) => {
+    await updateSkill(skill.id, { name: newName })
+  }
+
+  const handleDuplicateSkill = async (skill: SkillData) => {
+    await duplicateSkill(skill.id)
+  }
+
+  const handleDeleteSkill = (skill: SkillData) => {
+    setDeletingItem({ type: 'skill', id: skill.id, name: skill.name })
+  }
+
+  // Action handlers for Databases
+  const handleRenameDatabase = async (database: DatabaseData, newName: string) => {
+    await updateDatabase({ id: database.id, name: newName })
+  }
+
+  const handleDuplicateDatabase = async (database: DatabaseData) => {
+    await duplicateDatabase(database.id)
+  }
+
+  const handleDeleteDatabase = (database: DatabaseData) => {
+    setDeletingItem({ type: 'database', id: database.id, name: database.name })
+  }
+
+  // Action handlers for Tables
+  const handleRenameTable = async (table: TableData, database: DatabaseData, newName: string) => {
+    // Note: updateTable doesn't exist yet, would need to be created
+    console.log("Rename table not yet implemented")
+  }
+
+  const handleDuplicateTable = async (table: TableData, database: DatabaseData) => {
+    await duplicateTable(table.id)
+  }
+
+  const handleDeleteTable = (table: TableData, database: DatabaseData) => {
+    setDeletingItem({ type: 'table', id: table.id, name: table.name })
+  }
+
+  // Unified delete confirmation handler
+  const confirmDelete = async () => {
+    if (!deletingItem) return
+
+    setIsDeleting(true)
+    let result
+
+    switch (deletingItem.type) {
+      case 'app':
+        result = await deleteApp(deletingItem.id)
+        break
+      case 'page':
+        result = await deletePage(deletingItem.id)
+        break
+      case 'agent':
+        result = await deleteAgent(deletingItem.id)
+        break
+      case 'team':
+        result = await deleteTeam(deletingItem.id)
+        break
+      case 'skill':
+        result = await deleteSkill(deletingItem.id)
+        break
+      case 'database':
+        result = await deleteDatabase(deletingItem.id)
+        break
+      case 'table':
+        result = await deleteTable(deletingItem.id)
+        break
+    }
+
+    setIsDeleting(false)
+
+    if (result?.success) {
+      setDeletingItem(null)
+    }
+  }
 
   return (
     <Sidebar collapsible="icon">
@@ -217,6 +365,12 @@ export function AppSidebar({
           onAddChild={handleCreatePage}
           addParentLabel="Add App"
           addChildLabel="Add Page"
+          onRenameParent={handleRenameApp}
+          onDuplicateParent={handleDuplicateApp}
+          onDeleteParent={handleDeleteApp}
+          onRenameChild={handleRenamePage}
+          onDuplicateChild={handleDuplicatePage}
+          onDeleteChild={handleDeletePage}
         />
 
         {/* Agents */}
@@ -233,6 +387,9 @@ export function AppSidebar({
           isItemActive={(agent, path) => path?.startsWith(`/agents/${agent.id}`) ?? false}
           onAdd={handleCreateAgent}
           addButtonLabel="Add Agent"
+          onRename={handleRenameAgent}
+          onDuplicate={handleDuplicateAgent}
+          onDelete={handleDeleteAgent}
         />
 
         {/* Teams */}
@@ -249,6 +406,9 @@ export function AppSidebar({
           isItemActive={(team, path) => path?.startsWith(`/teams/${team.id}`) ?? false}
           onAdd={handleCreateTeam}
           addButtonLabel="Add Team"
+          onRename={handleRenameTeam}
+          onDuplicate={handleDuplicateTeam}
+          onDelete={handleDeleteTeam}
         />
 
         {/* Skills - Grouped by Organization and Agents */}
@@ -276,6 +436,9 @@ export function AppSidebar({
           isUngroupedItem={(skill) => skill.agentId === null}
           onAdd={handleCreateSkill}
           addButtonLabel="Add Skill"
+          onRename={handleRenameSkill}
+          onDuplicate={handleDuplicateSkill}
+          onDelete={handleDeleteSkill}
         />
 
         {/* Data - Databases with nested tables */}
@@ -301,6 +464,12 @@ export function AppSidebar({
           onAddChild={handleCreateTable}
           addParentLabel="Add Database"
           addChildLabel="Add Table"
+          onRenameParent={handleRenameDatabase}
+          onDuplicateParent={handleDuplicateDatabase}
+          onDeleteParent={handleDeleteDatabase}
+          onRenameChild={handleRenameTable}
+          onDuplicateChild={handleDuplicateTable}
+          onDeleteChild={handleDeleteTable}
         />
 
         {/* Settings */}
@@ -413,6 +582,32 @@ export function AppSidebar({
         </Popover>
       </SidebarFooter>
       <SidebarRail />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deletingItem} onOpenChange={() => setDeletingItem(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete {deletingItem?.type === 'app' && 'the app'}
+              {deletingItem?.type === 'page' && 'the page'}
+              {deletingItem?.type === 'agent' && 'the agent'}
+              {deletingItem?.type === 'team' && 'the team'}
+              {deletingItem?.type === 'skill' && 'the skill'}
+              {deletingItem?.type === 'database' && 'the database'}
+              {deletingItem?.type === 'table' && 'the table'} "{deletingItem?.name}"
+              {(deletingItem?.type === 'app' || deletingItem?.type === 'database') && ' and all its contents'}.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={isDeleting}>
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sidebar>
   )
 }

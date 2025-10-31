@@ -408,7 +408,7 @@ export async function duplicateApp(id: number, revalidateUrl?: string): Promise<
       await pageService.createPage({
         appId: AppId.fromNumber(result.data.id.value),
         name: page.name,
-        slug: page.slug,
+        slug: page.slug.value, // Extract the value from PageSlug value object
         description: page.description,
         templateData: page.templateData,
         createdBy: UserId.fromString(session.user.id)

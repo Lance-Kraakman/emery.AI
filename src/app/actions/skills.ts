@@ -265,31 +265,16 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
     // Create new name with " (Copy)" suffix
     const newName = `${originalSkill.name} (Copy)`;
 
-    // Determine if this is an organization skill or agent skill
-    const isOrganizationSkill = originalSkill.agentId === null;
-
     // Create the duplicate skill
     const createResult = await service.createSkill({
       agentId: originalSkill.agentId?.value || null,
       organizationId: originalSkill.organizationId.value,
       name: newName,
       description: originalSkill.description,
-      inputs: originalSkill.inputs.map(input => ({
-        name: input.name,
-        type: input.type,
-        description: input.description,
-        required: input.required
-      })),
-      outputs: originalSkill.outputs.map(output => ({
-        name: output.name,
-        type: output.type,
-        description: output.description
-      })),
+      inputs: originalSkill.inputs as any, // TODO: properly type the skill inputs
+      outputs: originalSkill.outputs as any, // TODO: properly type the skill outputs
       instructions: originalSkill.instructions,
-      tools: originalSkill.tools.map(tool => ({
-        type: tool.type,
-        config: tool.config
-      }))
+      tools: originalSkill.tools as any // TODO: properly type the tools
     });
 
     if (!createResult.success || !createResult.data) {
