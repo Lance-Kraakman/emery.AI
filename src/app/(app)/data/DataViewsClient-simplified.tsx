@@ -229,18 +229,27 @@ export function DataViewsClientSimplified() {
   // AIDEV-NOTE: Table-level debounced batch processor (500ms delay)
   // Collects ALL pending cell changes across entire table and sends in SINGLE API call
   // This eliminates race conditions and reduces database load significantly
-  const debouncedBatchUpdate = useRef(
-    debounce(() => {
+  // CRITICAL FIX: Use useMemo with [fields] dependency to ensure closure captures latest field data
+  const debouncedBatchUpdate = useMemo(
+    () => debounce(() => {
       const pendingUpdates = Array.from(pendingMutationsRef.current.values())
 
-      if (pendingUpdates.length === 0) return
+      if (pendingUpdates.length === 0) {
+        logger.debug('No pending updates to process')
+        return
+      }
+
+      logger.debug('Processing pending updates', { count: pendingUpdates.length })
 
       // Group updates by rowId to create batch payload
       const updatesByRow = new Map<string, Record<string, any>>()
 
       pendingUpdates.forEach(({ rowId, fieldId, value }) => {
         const fieldName = getFieldNameById(fieldId)
-        if (!fieldName) return
+        if (!fieldName) {
+          logger.error('Field not found, skipping update', { fieldId, rowId })
+          return
+        }
 
         if (!updatesByRow.has(rowId)) {
           updatesByRow.set(rowId, {})
@@ -254,18 +263,30 @@ export function DataViewsClientSimplified() {
         data
       }))
 
+      if (bulkUpdates.length === 0) {
+        logger.error('No valid updates after field resolution', {
+          pendingCount: pendingUpdates.length,
+          fieldsCount: fields.length
+        })
+        pendingMutationsRef.current.clear()
+        return
+      }
+
+      logger.debug('Submitting bulk update', { rows: bulkUpdates.length })
+
       // Clear pending mutations and trigger bulk update
       pendingMutationsRef.current.clear()
       bulkUpdateMutation.mutate(bulkUpdates)
-    }, 500)
+    }, 500),
+    [fields, bulkUpdateMutation, getFieldNameById, logger] // Recreate when fields or mutation changes
   )
 
-  // Cleanup debounced function on unmount
+  // Cleanup debounced function on unmount or when function changes
   useEffect(() => {
     return () => {
-      debouncedBatchUpdate.current.cancel()
+      debouncedBatchUpdate.cancel()
     }
-  }, [])
+  }, [debouncedBatchUpdate])
 
   const addRowsMutation = useMutation({
     mutationFn: async (rowsData: Record<string, any>[]) => {
@@ -375,7 +396,7 @@ export function DataViewsClientSimplified() {
 
     // Trigger table-level debounced batch processor
     // This will collect ALL pending updates and send in single API call
-    debouncedBatchUpdate.current()
+    debouncedBatchUpdate()
   }
 
   const handleAddRows = async (rowsData: Record<string, any>[]): Promise<void> => {
