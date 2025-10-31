@@ -311,7 +311,17 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
 
       // Generate available fields info for user reference
       const availableFieldsInfo = result.fields.length > 0
-        ? `Available Fields:\n${result.fields.map(f => `  ID ${f.id}: ${f.name} (${f.type})${f.name === 'id' ? ' [hidden by default]' : ''}`).join('\n')}\n\nℹ️ Columns are auto-configured. The 'id' field is included but hidden by default - you can make it visible if needed.`
+        ? `Available Fields in "${view.name}":\n\n` +
+          `${'ID'.padEnd(6)} | ${'Field Name'.padEnd(25)} | ${'Type'.padEnd(12)} | Status\n` +
+          `${'-'.repeat(6)} | ${'-'.repeat(25)} | ${'-'.repeat(12)} | ${'-'.repeat(20)}\n` +
+          result.fields.map(f => {
+            const status = f.name === 'id' ? 'Hidden by default' : 'Visible';
+            return `${String(f.id).padEnd(6)} | ${f.name.padEnd(25)} | ${f.type.padEnd(12)} | ${status}`;
+          }).join('\n') +
+          `\n\nℹ️ Info:\n` +
+          `• Columns are auto-configured when you select a view\n` +
+          `• The 'id' field is hidden by default but can be made visible\n` +
+          `• Edit field mappings below to customize which columns appear and their order`
         : 'No fields available';
 
       // Return props with resolved DTO data
