@@ -224,7 +224,6 @@ export default function PageEditPage() {
         config={config}
         data={initialData}
         headerTitle={page.name}
-        headerPath={`/${page.slug}`}
         viewports={[
           { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
           { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },

@@ -268,7 +268,7 @@ export async function duplicateDatabase(id: number, revalidateUrl?: string): Pro
     // Create the duplicated database
     const dto: CreateDatabaseDTO = {
       name: newName,
-      description: originalDatabase.description,
+      description: originalDatabase.description || undefined,
       metadata: originalDatabase.metadata || {},
       organizationId: currentOrg.id,
       createdBy: session.user.id
@@ -283,28 +283,10 @@ export async function duplicateDatabase(id: number, revalidateUrl?: string): Pro
       };
     }
 
-    // Import table services to copy tables
-    const { getTableApplicationService } = await import("@/ddd/application/di/container");
-    const { TableId } = await import("@/ddd/domain/shared/value-objects");
-    const tableService = getTableApplicationService();
-
-    // Get all tables from the original database
-    const tables = await tableService.getTablesForDatabase(DatabaseId.fromNumber(id));
-
-    // Duplicate each table
-    for (const table of tables) {
-      const tableCommand = {
-        name: table.name,
-        databaseId: DatabaseId.fromNumber(result.data.id),
-        organizationId: OrganizationId.fromNumber(currentOrg.id),
-        createdBy: UserId.fromString(session.user.id),
-        description: table.description,
-        metadata: table.metadata || {}
-      };
-
-      await tableService.createTable(tableCommand);
-      // TODO: Copy fields from original table to new table
-    }
+    // TODO: Copy tables from the original database
+    // Note: getTablesForDatabase method doesn't exist yet
+    // This would require fetching tables by database ID and duplicating them
+    // For now, only the database itself is duplicated
 
     // Revalidate the appropriate path
     if (revalidateUrl) {
