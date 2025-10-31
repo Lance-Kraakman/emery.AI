@@ -168,11 +168,17 @@ export default function TableBlock(props: TableBlockProps) {
               return (
                 <tr key={rowData.id || rowIndex} className={styles.tr}>
                   {visibleMappings.map((mapping) => {
-                    const fieldValue = rowData[`field_${mapping.sourceFieldId}`];
                     // AIDEV-NOTE: _fields are now plain objects: { id, name, type, slug }
                     const field = _fields.find(
                       (f) => (f as any).id === mapping.sourceFieldId
                     );
+
+                    // AIDEV-NOTE: Special handling for 'id' field
+                    // The 'id' field is stored as `row.id`, NOT as `row.field_X`
+                    // See src/ddd/domain/tables/value-objects/row.ts:162-164
+                    const fieldValue = field?.name === 'id'
+                      ? rowData.id
+                      : rowData[`field_${mapping.sourceFieldId}`];
 
                     return (
                       <td key={mapping.sourceFieldId} className={styles.td}>

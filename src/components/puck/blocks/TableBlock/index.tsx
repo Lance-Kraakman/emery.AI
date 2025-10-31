@@ -288,24 +288,30 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       if (fieldMappings.length === 0 && result.fields.length > 0) {
         console.log('[TableBlock resolveData] Auto-generating field mappings for', result.fields.length, 'fields');
 
-        // AIDEV-NOTE: Exclude 'id' field - it's stored as `row.id` not `row.field_X` in toViewFormat()
+        // AIDEV-NOTE: Include 'id' field but hidden by default
+        // The 'id' field is special - it's stored as `row.id` not `row.field_X` in toViewFormat()
         // See src/ddd/domain/tables/value-objects/row.ts:162-164
-        const fieldsToMap = result.fields.filter(f => f.name !== 'id');
+        // We need to handle it specially in the render component
 
-        fieldMappings = fieldsToMap.slice(0, 10).map((field, index) => ({
-          sourceFieldId: field.id, // Plain number, not field.id.value
-          displayName: field.name,
-          visible: true,
-          order: index,
-        }));
-        console.log('[TableBlock resolveData] Generated mappings (excluding id field):', fieldMappings);
+        fieldMappings = result.fields.map((field, index) => {
+          const isIdField = field.name === 'id';
+
+          return {
+            sourceFieldId: field.id, // Plain number, not field.id.value
+            displayName: field.name,
+            visible: !isIdField, // Hide 'id' field by default
+            order: index,
+          };
+        }).slice(0, 10); // Take first 10 fields
+
+        console.log('[TableBlock resolveData] Generated mappings (id field hidden by default):', fieldMappings);
       } else {
         console.log('[TableBlock resolveData] Using existing field mappings:', fieldMappings.length);
       }
 
       // Generate available fields info for user reference
       const availableFieldsInfo = result.fields.length > 0
-        ? `Available Fields:\n${result.fields.filter(f => f.name !== 'id').map(f => `  ID ${f.id}: ${f.name} (${f.type})`).join('\n')}\n\nℹ️ Columns are auto-configured. The 'id' field is excluded (it's always available as row.id).`
+        ? `Available Fields:\n${result.fields.map(f => `  ID ${f.id}: ${f.name} (${f.type})${f.name === 'id' ? ' [hidden by default]' : ''}`).join('\n')}\n\nℹ️ Columns are auto-configured. The 'id' field is included but hidden by default - you can make it visible if needed.`
         : 'No fields available';
 
       // Return props with resolved DTO data
