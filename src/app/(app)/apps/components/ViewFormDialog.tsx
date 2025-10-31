@@ -133,7 +133,7 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{isEditMode ? 'Edit Data Source' : 'Create Data Source'}</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Edit View' : 'Create View'}</DialogTitle>
           <DialogDescription>
             {isEditMode
               ? 'Update the view name and description. Filters and sorting can be configured later.'
@@ -232,7 +232,7 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {isEditMode ? 'Save Changes' : 'Create Data Source'}
+              {isEditMode ? 'Save Changes' : 'Create View'}
             </Button>
           </div>
         </form>

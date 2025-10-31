@@ -82,14 +82,14 @@ export function ViewsSection({ views, loading, onViewsChange }: ViewsSectionProp
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Data Sources</CardTitle>
+              <CardTitle>Views</CardTitle>
               <CardDescription>
                 Manage filtered and sorted views of your tables
               </CardDescription>
             </div>
             <Button size="sm" onClick={handleAddView}>
               <Plus className="h-4 w-4 mr-2" />
-              Add Data Source
+              Add View
             </Button>
           </div>
         </CardHeader>
@@ -105,7 +105,7 @@ export function ViewsSection({ views, loading, onViewsChange }: ViewsSectionProp
               </p>
               <Button size="sm" onClick={handleAddView}>
                 <Plus className="h-4 w-4 mr-2" />
-                Create First Data Source
+                Create First View
               </Button>
             </div>
           ) : (
@@ -194,7 +194,7 @@ export function ViewsSection({ views, loading, onViewsChange }: ViewsSectionProp
       <AlertDialog open={!!deletingView} onOpenChange={() => setDeletingView(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Data Source</AlertDialogTitle>
+            <AlertDialogTitle>Delete View</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{deletingView?.name}"? This action cannot be undone.
               Any TableBlock components using this view may stop working.
