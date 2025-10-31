@@ -17,6 +17,7 @@ import { ViewId } from "../value-objects/view-id";
 import { FilterConfig } from "../value-objects/filter-config";
 import { SortConfig } from "../value-objects/sort-config";
 import { PaginationConfig } from "../value-objects/pagination-config";
+import { FieldMapping } from "../value-objects/field-mapping";
 import { TableId } from "@/ddd/domain/shared/value-objects/table-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects/organization-id";
 
@@ -29,6 +30,7 @@ export interface ViewProps {
   filters?: FilterConfig[];
   sorting?: SortConfig[];
   pagination?: PaginationConfig;
+  fieldMappings?: FieldMapping[];
   createdBy?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -43,6 +45,7 @@ export class View {
   private _filters: FilterConfig[];
   private _sorting: SortConfig[];
   private _pagination: PaginationConfig;
+  private _fieldMappings: FieldMapping[];
   private readonly _createdBy?: string;
   private readonly _createdAt: Date;
   private _updatedAt: Date;
@@ -56,6 +59,7 @@ export class View {
     this._filters = props.filters ?? [];
     this._sorting = props.sorting ?? [];
     this._pagination = props.pagination ?? PaginationConfig.createDefault();
+    this._fieldMappings = props.fieldMappings ?? [];
     this._createdBy = props.createdBy;
     this._createdAt = props.createdAt ?? new Date();
     this._updatedAt = props.updatedAt ?? new Date();
@@ -127,6 +131,10 @@ export class View {
 
   get pagination(): PaginationConfig {
     return this._pagination;
+  }
+
+  get fieldMappings(): readonly FieldMapping[] {
+    return [...this._fieldMappings];
   }
 
   get createdAt(): Date {
@@ -292,6 +300,81 @@ export class View {
   }
 
   /**
+   * Set field mappings (replaces all existing mappings)
+   */
+  setFieldMappings(mappings: FieldMapping[]): void {
+    this._fieldMappings = [...mappings];
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Add a field mapping
+   */
+  addFieldMapping(mapping: FieldMapping): void {
+    const existingIndex = this._fieldMappings.findIndex(
+      (m) => m.sourceFieldId === mapping.sourceFieldId
+    );
+
+    if (existingIndex >= 0) {
+      throw new Error(
+        `Field mapping for field ${mapping.sourceFieldId} already exists. Use updateFieldMapping instead.`
+      );
+    }
+
+    this._fieldMappings.push(mapping);
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Update an existing field mapping
+   */
+  updateFieldMapping(sourceFieldId: number, newMapping: FieldMapping): void {
+    const index = this._fieldMappings.findIndex((m) => m.sourceFieldId === sourceFieldId);
+
+    if (index === -1) {
+      throw new Error(`Field mapping for field ${sourceFieldId} not found`);
+    }
+
+    if (newMapping.sourceFieldId !== sourceFieldId) {
+      throw new Error("Cannot change field mapping sourceFieldId. Remove and add a new mapping instead.");
+    }
+
+    this._fieldMappings[index] = newMapping;
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Remove a field mapping by field ID
+   */
+  removeFieldMapping(sourceFieldId: number): void {
+    const initialLength = this._fieldMappings.length;
+    this._fieldMappings = this._fieldMappings.filter((m) => m.sourceFieldId !== sourceFieldId);
+
+    if (this._fieldMappings.length === initialLength) {
+      throw new Error(`Field mapping for field ${sourceFieldId} not found`);
+    }
+
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Remove all field mappings
+   */
+  clearFieldMappings(): void {
+    this._fieldMappings = [];
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Get visible field mappings sorted by order
+   */
+  getVisibleFieldMappings(): readonly FieldMapping[] {
+    return [...this._fieldMappings]
+      .filter((m) => m.visible)
+      .sort((a, b) => a.order - b.order);
+  }
+
+  /**
    * Get sorted sorting configurations by priority
    */
   getSortedSorting(): readonly SortConfig[] {
@@ -324,6 +407,7 @@ export class View {
       filters: this._filters.map((f) => f.toJSON()),
       sorting: this._sorting.map((s) => s.toJSON()),
       pagination: this._pagination.toJSON(),
+      fieldMappings: this._fieldMappings.map((m) => m.toJSON()),
       createdAt: this._createdAt.toISOString(),
       updatedAt: this._updatedAt.toISOString(),
     };
@@ -341,6 +425,7 @@ export class View {
     filters: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null }>;
     sorting: Array<{ fieldId: number; direction: 'asc' | 'desc'; priority: number }>;
     pagination: { pageSize: number; offset: number };
+    fieldMappings?: Array<{ sourceFieldId: number; displayName: string; visible: boolean; order: number }>;
     createdBy?: string;
     createdAt: Date;
     updatedAt: Date;
@@ -361,6 +446,9 @@ export class View {
         pageSize: this._pagination.pageSize,
         offset: this._pagination.offset,
       },
+      fieldMappings: this._fieldMappings.length > 0
+        ? this._fieldMappings.map((m) => m.toJSON())
+        : undefined,
       createdBy: this._createdBy,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt,
@@ -379,6 +467,7 @@ export class View {
     filters: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null }>;
     sorting: Array<{ fieldId: number; direction: 'asc' | 'desc'; priority: number }>;
     pagination: { pageSize: number; offset: number };
+    fieldMappings?: Array<{ sourceFieldId: number; displayName: string; visible: boolean; order: number }>;
     createdBy?: string;
     createdAt: Date;
     updatedAt: Date;
@@ -403,6 +492,12 @@ export class View {
         pageSize: data.pagination.pageSize,
         offset: data.pagination.offset,
       }),
+      fieldMappings: data.fieldMappings?.map((m) => FieldMapping.create({
+        sourceFieldId: m.sourceFieldId,
+        displayName: m.displayName,
+        visible: m.visible,
+        order: m.order,
+      })),
       createdBy: data.createdBy,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,

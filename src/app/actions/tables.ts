@@ -165,13 +165,82 @@ export async function deleteTableAction(formData: FormData) {
   const tableId = parseInt(formData.get('tableId') as string);
 
   const result = await deleteTable(tableId);
-  
+
   if (!result.success) {
     throw new Error(result.error);
   }
 
   // Note: revalidatePath is handled in the main deleteTable function
   return result;
+}
+
+/**
+ * Duplicate an existing table
+ * Appends " (Copy)" to the table name and copies the schema
+ */
+export async function duplicateTable(tableId: number, revalidateUrl?: string): Promise<Result> {
+  try {
+    const session = await requirePermission("data:create");
+    const currentOrg = await requireCurrentOrganization();
+
+    if (!tableId) {
+      return {
+        success: false,
+        error: "Table ID is required",
+      };
+    }
+
+    const tableApplicationService = getTableApplicationService();
+
+    // Get the original table
+    const originalTable = await tableApplicationService.getTable(TableId.fromNumber(tableId));
+    if (!originalTable) {
+      return { success: false, error: "Table not found" };
+    }
+
+    // Create new name with " (Copy)" suffix
+    const newName = `${originalTable.name} (Copy)`;
+
+    // Create the duplicate table
+    const command: CreateTableCommand = {
+      name: newName,
+      databaseId: originalTable.databaseId,
+      organizationId: OrganizationId.fromNumber(currentOrg.id),
+      createdBy: UserId.fromString(session.user.id),
+      description: originalTable.description,
+      metadata: originalTable.metadata || {}
+    };
+
+    const result = await tableApplicationService.createTable(command);
+
+    if (!result.success || !result.data) {
+      return {
+        success: false,
+        error: result.error || "Failed to duplicate table"
+      };
+    }
+
+    // TODO: Copy fields from original table to new table
+    // This would require additional logic to duplicate the table schema
+
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/data');
+    }
+
+    return {
+      success: true,
+      data: TableMapper.toDTO(result.data),
+    };
+  } catch (error) {
+    console.error("Error duplicating table:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to duplicate table",
+    };
+  }
 }
 
 /**

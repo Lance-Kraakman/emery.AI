@@ -127,6 +127,13 @@
       "when": 1761874231678,
       "tag": "0017_oval_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1761886992895,
+      "tag": "0018_groovy_rockslide",
+      "breakpoints": true
     }
   ]
 }

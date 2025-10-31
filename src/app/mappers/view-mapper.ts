@@ -27,6 +27,12 @@ export interface ViewDTO {
     pageSize: number;
     offset: number;
   };
+  fieldMappings?: Array<{
+    sourceFieldId: number;
+    displayName: string;
+    visible: boolean;
+    order: number;
+  }>;
   createdBy?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -45,6 +51,7 @@ export class ViewMapper {
       filters: persistence.filters,
       sorting: persistence.sorting,
       pagination: persistence.pagination,
+      fieldMappings: persistence.fieldMappings,
       createdBy: persistence.createdBy,
       createdAt: persistence.createdAt,
       updatedAt: persistence.updatedAt,

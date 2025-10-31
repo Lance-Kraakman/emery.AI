@@ -226,7 +226,7 @@ export async function deleteTeam(teamId: number): Promise<Result> {
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("teams:manage");
-      
+
       if (!teamId) {
         return {
           success: false,
@@ -247,7 +247,7 @@ export async function deleteTeam(teamId: number): Promise<Result> {
       // Note: RAG reindexing is now handled automatically by database triggers
       revalidatePath('/dashboard');
       revalidatePath('/teams');
-      
+
       return {
         success: true,
         data: { message: "Team deleted successfully" },
@@ -257,6 +257,72 @@ export async function deleteTeam(teamId: number): Promise<Result> {
       return {
         success: false,
         error: "Failed to delete team",
+      };
+    }
+  });
+}
+
+/**
+ * Duplicate an existing team
+ * Appends " (Copy)" to the team name and copies all agent assignments
+ */
+export async function duplicateTeam(teamId: number): Promise<Result> {
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("teams:manage");
+      const currentOrg = await requireCurrentOrganization();
+
+      if (!teamId) {
+        return {
+          success: false,
+          error: "teamId is required",
+        };
+      }
+
+      const teamApplicationService = getTeamApplicationService();
+
+      // Get the original team
+      const originalTeam = await teamApplicationService.getTeam(teamId);
+      if (!originalTeam) {
+        return { success: false, error: "Team not found" };
+      }
+
+      // Create new name with " (Copy)" suffix
+      const newName = `${originalTeam.name} (Copy)`;
+
+      // Build DTO for the duplicate
+      const dto: CreateTeamDTO = {
+        name: newName,
+        purpose: originalTeam.purpose,
+        description: originalTeam.description,
+        responsibilities: originalTeam.responsibilities,
+        goals: originalTeam.goals,
+        agentIds: originalTeam.agentIds,
+        organizationId: currentOrg.id
+      };
+
+      const result = await teamApplicationService.createTeam(dto);
+
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          error: result.error || "Failed to duplicate team"
+        };
+      }
+
+      revalidatePath('/dashboard');
+      revalidatePath('/teams');
+
+      return {
+        success: true,
+        data: result.data,
+        warnings: result.warnings
+      };
+    } catch (error) {
+      console.error("Error duplicating team:", error);
+      return {
+        success: false,
+        error: "Failed to duplicate team",
       };
     }
   });

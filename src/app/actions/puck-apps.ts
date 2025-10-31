@@ -346,3 +346,88 @@ export async function getAppCount() {
     throw new Error('Failed to fetch app count');
   }
 }
+
+/**
+ * Duplicate an existing app with all its pages
+ * Appends " (Copy)" to the app name and generates a new slug
+ */
+export async function duplicateApp(id: number, revalidateUrl?: string): Promise<Result> {
+  try {
+    const session = await requirePermission("apps:create");
+    const currentOrg = await requireCurrentOrganization();
+
+    if (!id) {
+      return { success: false, error: "App ID is required" };
+    }
+
+    const appService = getAppApplicationService();
+
+    // Get the original app
+    const originalApp = await appService.getApp(AppId.fromNumber(id));
+    if (!originalApp) {
+      return { success: false, error: "App not found" };
+    }
+
+    // Create new name with " (Copy)" suffix
+    const newName = `${originalApp.name} (Copy)`;
+
+    // Generate unique slug for the copy
+    const slugResult = await appService.generateSlugFromName(
+      OrganizationId.fromNumber(currentOrg.id),
+      newName
+    );
+    if (!slugResult.success) {
+      return { success: false, error: "Failed to generate slug for duplicate" };
+    }
+
+    // Create the duplicated app
+    const result = await appService.createApp({
+      name: newName,
+      slug: slugResult.data!,
+      description: originalApp.description,
+      organizationId: OrganizationId.fromNumber(currentOrg.id),
+      createdBy: UserId.fromString(session.user.id)
+    });
+
+    if (!result.success || !result.data) {
+      return {
+        success: false,
+        error: result.error || "Failed to duplicate app"
+      };
+    }
+
+    // Import pages service
+    const { getPuckPageApplicationService } = await import("@/ddd/application/di/container");
+    const pageService = getPuckPageApplicationService();
+
+    // Get all pages from the original app
+    const pages = await pageService.getPagesByApp(AppId.fromNumber(id));
+
+    // Duplicate each page
+    for (const page of pages) {
+      await pageService.createPage({
+        appId: AppId.fromNumber(result.data.id.value),
+        name: page.name,
+        slug: page.slug,
+        description: page.description,
+        templateData: page.templateData,
+        createdBy: UserId.fromString(session.user.id)
+      });
+    }
+
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl)
+    } else {
+      revalidatePath('/apps')
+    }
+
+    return {
+      success: true,
+      data: AppMapper.toDTO(result.data)
+    };
+  } catch (error) {
+    console.error('Error duplicating app:', error)
+    return { success: false, error: "Failed to duplicate app" }
+  }
+}

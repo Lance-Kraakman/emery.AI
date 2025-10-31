@@ -136,6 +136,14 @@ export const views = pgTable("views", {
     offset: number;
   }>().default(sql`'{"pageSize": 50, "offset": 0}'::jsonb`).notNull(),
 
+  // Field mappings configuration (column visibility, order, and display names)
+  fieldMappings: jsonb("field_mappings").$type<Array<{
+    sourceFieldId: number;
+    displayName: string;
+    visible: boolean;
+    order: number;
+  }>>(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

@@ -32,6 +32,7 @@ export class DrizzleViewRepository implements ViewRepository {
             filters: persistence.filters,
             sorting: persistence.sorting,
             pagination: persistence.pagination,
+            fieldMappings: persistence.fieldMappings ?? null,
             createdAt: persistence.createdAt,
             updatedAt: persistence.updatedAt,
           })
@@ -47,6 +48,7 @@ export class DrizzleViewRepository implements ViewRepository {
             filters: persistence.filters,
             sorting: persistence.sorting,
             pagination: persistence.pagination,
+            fieldMappings: persistence.fieldMappings ?? null,
             updatedAt: new Date(),
           })
           .where(eq(views.id, persistence.id))
@@ -164,6 +166,7 @@ export class DrizzleViewRepository implements ViewRepository {
       filters: record.filters,
       sorting: record.sorting,
       pagination: record.pagination,
+      fieldMappings: record.fieldMappings ?? undefined,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     });
