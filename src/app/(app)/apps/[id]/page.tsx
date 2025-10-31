@@ -5,6 +5,7 @@ import { CanvasBase } from "@/components/canvas";
 import { AppDetailsView } from "../components/AppDetailsView";
 import { Suspense } from "react";
 import { Loading } from "@/components/ui/loading";
+import { CenteredCanvasLayout } from "@/components/layouts/CenteredCanvasLayout";
 
 interface AppPageProps {
   params: Promise<{ id: string }>;
@@ -31,10 +32,10 @@ export default async function AppPage({ params }: AppPageProps) {
   }
 
   return (
-    <CanvasBase>
+    <CenteredCanvasLayout>
       <Suspense fallback={<Loading text="Loading app..." />}>
         <AppDetailsView app={app} />
       </Suspense>
-    </CanvasBase>
+    </CenteredCanvasLayout>
   );
 }
