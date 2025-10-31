@@ -192,6 +192,13 @@ export function DataViewsClientSimplified() {
   // Each cell's updates are debounced independently to batch rapid changes
   const pendingMutationsRef = useRef<Map<string, { rowId: string; fieldId: number; value: any }>>(new Map())
 
+  // AIDEV-NOTE: Keep fields reference fresh without triggering debounce recreation
+  // This allows the debounce function to access current field data without being recreated
+  const fieldsRef = useRef(fields)
+  useEffect(() => {
+    fieldsRef.current = fields
+  }, [fields])
+
   // Helper: Convert field ID to field name for row data updates
   // Grid component works with numeric field IDs (1, 2, 3...), but row data is keyed by field names ("email", "age", etc.)
   // This conversion is needed because rows are stored as { email: "test@example.com", age: 25 }, not { 1: "test@example.com", 2: 25 }
@@ -229,13 +236,9 @@ export function DataViewsClientSimplified() {
   // AIDEV-NOTE: Table-level debounced batch processor (500ms delay)
   // Collects ALL pending cell changes across entire table and sends in SINGLE API call
   // This eliminates race conditions and reduces database load significantly
-  // CRITICAL FIX: Use useRef + useEffect to avoid recreating function on every render
-  // Only recreate when fields or bulkUpdateMutation actually change
-  const debouncedBatchUpdateRef = useRef<ReturnType<typeof debounce> | null>(null)
-
-  useEffect(() => {
-    // Create debounced function with fresh closure over fields and bulkUpdateMutation
-    debouncedBatchUpdateRef.current = debounce(() => {
+  // SIMPLIFIED: Create debounce ONCE on mount, use fieldsRef for fresh data (no recreation)
+  const debouncedBatchUpdateRef = useRef(
+    debounce(() => {
       const pendingUpdates = Array.from(pendingMutationsRef.current.values())
 
       if (pendingUpdates.length === 0) {
@@ -245,12 +248,12 @@ export function DataViewsClientSimplified() {
 
       logger.debug('Processing pending updates', { count: pendingUpdates.length })
 
-      // Group updates by rowId to create batch payload
+      // Group updates by rowId using fresh field data from ref
       const updatesByRow = new Map<string, Record<string, any>>()
 
       pendingUpdates.forEach(({ rowId, fieldId, value }) => {
-        // Access fields directly from closure (fresh when useEffect runs)
-        const field = fields.find(f => f.id === fieldId)
+        // Access fields from ref - always fresh without recreation!
+        const field = fieldsRef.current.find(f => f.id === fieldId)
         if (!field) {
           logger.error('Field not found, skipping update', { fieldId, rowId })
           return
@@ -271,7 +274,7 @@ export function DataViewsClientSimplified() {
       if (bulkUpdates.length === 0) {
         logger.error('No valid updates after field resolution', {
           pendingCount: pendingUpdates.length,
-          fieldsCount: fields.length
+          fieldsCount: fieldsRef.current.length
         })
         pendingMutationsRef.current.clear()
         return
@@ -283,12 +286,14 @@ export function DataViewsClientSimplified() {
       pendingMutationsRef.current.clear()
       bulkUpdateMutation.mutate(bulkUpdates)
     }, 500)
+  )
 
-    // Cleanup: cancel debounced function when effect re-runs or component unmounts
+  // Cleanup debounce on unmount only (no dependencies - debounce never recreated)
+  useEffect(() => {
     return () => {
       debouncedBatchUpdateRef.current?.cancel()
     }
-  }, [fields, bulkUpdateMutation]) // Only recreate when fields or mutation change
+  }, [])
 
   const addRowsMutation = useMutation({
     mutationFn: async (rowsData: Record<string, any>[]) => {
