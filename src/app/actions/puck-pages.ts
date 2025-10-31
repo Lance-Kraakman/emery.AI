@@ -550,3 +550,69 @@ export async function getPageCount(appId: number) {
     throw new Error('Failed to fetch page count');
   }
 }
+
+/**
+ * Duplicate an existing page
+ * Appends " (Copy)" to the page name and generates a new slug
+ */
+export async function duplicatePage(id: number, revalidateUrl?: string): Promise<Result> {
+  try {
+    const session = await requirePermission("apps:create");
+
+    if (!id) {
+      return { success: false, error: "Page ID is required" };
+    }
+
+    const pageService = getPuckPageApplicationService();
+
+    // Get the original page
+    const originalPage = await pageService.getPage(PageId.fromNumber(id));
+    if (!originalPage) {
+      return { success: false, error: "Page not found" };
+    }
+
+    // Create new name with " (Copy)" suffix
+    const newName = `${originalPage.name} (Copy)`;
+
+    // Generate unique slug for the copy
+    const slugResult = await pageService.generateSlugFromName(
+      originalPage.appId,
+      newName
+    );
+    if (!slugResult.success) {
+      return { success: false, error: "Failed to generate slug for duplicate" };
+    }
+
+    // Create the duplicated page
+    const result = await pageService.createPage({
+      appId: originalPage.appId,
+      name: newName,
+      slug: slugResult.data!,
+      description: originalPage.description,
+      templateData: originalPage.templateData,
+      createdBy: UserId.fromString(session.user.id)
+    });
+
+    if (!result.success || !result.data) {
+      return {
+        success: false,
+        error: result.error || "Failed to duplicate page"
+      };
+    }
+
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl)
+    } else {
+      revalidatePath(`/apps/${originalPage.appId.value}`)
+    }
+
+    return {
+      success: true,
+      data: PuckPageMapper.toDTO(result.data)
+    };
+  } catch (error) {
+    console.error('Error duplicating page:', error)
+    return { success: false, error: "Failed to duplicate page" }
+  }
+}

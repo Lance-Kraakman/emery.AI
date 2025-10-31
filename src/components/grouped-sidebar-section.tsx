@@ -17,6 +17,8 @@ import {
   SidebarMenuButton,
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
+import { SidebarItemActions } from "./sidebar-item-actions"
+import { InlineRename } from "./inline-rename"
 
 interface GroupedSidebarSectionProps<T> {
   icon: LucideIcon
@@ -37,6 +39,10 @@ interface GroupedSidebarSectionProps<T> {
   // Actions
   onAdd: () => void
   addButtonLabel?: string
+  // Action callbacks
+  onRename?: (item: T, newName: string) => void | Promise<void>
+  onDuplicate?: (item: T) => void | Promise<void>
+  onDelete?: (item: T) => void | Promise<void>
 }
 
 /**
@@ -63,13 +69,70 @@ export function GroupedSidebarSection<T>({
   isUngroupedItem,
   onAdd,
   addButtonLabel = `Add ${label.slice(0, -1)}`, // Remove trailing 's' for singular
+  onRename,
+  onDuplicate,
+  onDelete,
 }: GroupedSidebarSectionProps<T>) {
+  const [renamingItemId, setRenamingItemId] = React.useState<number | null>(null)
+
+  const hasActions = onRename || onDuplicate || onDelete
+
+  const handleRename = async (item: T, newName: string) => {
+    if (onRename) {
+      await onRename(item, newName)
+    }
+    setRenamingItemId(null)
+  }
+
   // Separate ungrouped items (e.g., organization skills)
   const ungroupedItems = items.filter(isUngroupedItem)
 
   // Group the remaining items
   const groupedItems = items.filter(item => !isUngroupedItem(item))
   const uniqueGroupKeys = Array.from(new Set(groupedItems.map(getGroupKey)))
+
+  // Helper function to render an item with actions
+  const renderItem = (item: T, className = "") => {
+    const itemId = getItemId(item)
+    const isRenaming = renamingItemId === itemId
+
+    return (
+      <SidebarMenuItem key={itemId} className="group">
+        <div className="flex items-center gap-1 w-full">
+          {isRenaming ? (
+            <div className="flex-1 px-2">
+              <InlineRename
+                value={getItemName(item)}
+                onSave={(newName) => handleRename(item, newName)}
+                onCancel={() => setRenamingItemId(null)}
+              />
+            </div>
+          ) : (
+            <>
+              <SidebarMenuButton
+                asChild
+                isActive={isItemActive(item, pathname)}
+                className={`h-6 flex-1 ${className}`}
+              >
+                <Link href={getItemHref(item)}>
+                  <span className="group-data-[collapsible=icon]:hidden">
+                    {getItemName(item)}
+                  </span>
+                </Link>
+              </SidebarMenuButton>
+              {hasActions && (
+                <SidebarItemActions
+                  onRename={onRename ? () => setRenamingItemId(itemId) : undefined}
+                  onDuplicate={onDuplicate ? () => onDuplicate(item) : undefined}
+                  onDelete={onDelete ? () => onDelete(item) : undefined}
+                />
+              )}
+            </>
+          )}
+        </div>
+      </SidebarMenuItem>
+    )
+  }
 
   return (
     <Collapsible defaultOpen={defaultOpen}>
@@ -84,21 +147,7 @@ export function GroupedSidebarSection<T>({
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
               {/* Ungrouped items (top level) */}
-              {ungroupedItems.map((item) => (
-                <SidebarMenuItem key={getItemId(item)}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isItemActive(item, pathname)}
-                    className="h-6"
-                  >
-                    <Link href={getItemHref(item)}>
-                      <span className="group-data-[collapsible=icon]:hidden">
-                        {getItemName(item)}
-                      </span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {ungroupedItems.map((item) => renderItem(item))}
 
               {/* Grouped items */}
               {uniqueGroupKeys.map((groupKey) => {
@@ -110,21 +159,7 @@ export function GroupedSidebarSection<T>({
                     <div className="px-2 py-1 text-xs text-muted-foreground font-medium">
                       {groupName}
                     </div>
-                    {itemsInGroup.map(item => (
-                      <SidebarMenuItem key={getItemId(item)}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={isItemActive(item, pathname)}
-                          className="h-6 pl-4"
-                        >
-                          <Link href={getItemHref(item)}>
-                            <span className="group-data-[collapsible=icon]:hidden">
-                              {getItemName(item)}
-                            </span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
+                    {itemsInGroup.map(item => renderItem(item, "pl-4"))}
                   </div>
                 )
               })}

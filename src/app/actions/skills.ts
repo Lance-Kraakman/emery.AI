@@ -242,6 +242,83 @@ export async function deleteSkill(skillId: number): Promise<Result<void>> {
 }
 
 /**
+ * Duplicate an existing skill
+ * Appends " (Copy)" to the skill name
+ */
+export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const service = getSkillApplicationService();
+
+    // Get the original skill
+    const skillResult = await service.getSkill(skillId);
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    const originalSkill = skillResult.data;
+
+    // Create new name with " (Copy)" suffix
+    const newName = `${originalSkill.name} (Copy)`;
+
+    // Determine if this is an organization skill or agent skill
+    const isOrganizationSkill = originalSkill.agentId === null;
+
+    // Create the duplicate skill
+    const createResult = await service.createSkill({
+      agentId: originalSkill.agentId?.value || null,
+      organizationId: originalSkill.organizationId.value,
+      name: newName,
+      description: originalSkill.description,
+      inputs: originalSkill.inputs.map(input => ({
+        name: input.name,
+        type: input.type,
+        description: input.description,
+        required: input.required
+      })),
+      outputs: originalSkill.outputs.map(output => ({
+        name: output.name,
+        type: output.type,
+        description: output.description
+      })),
+      instructions: originalSkill.instructions,
+      tools: originalSkill.tools.map(tool => ({
+        type: tool.type,
+        config: tool.config
+      }))
+    });
+
+    if (!createResult.success || !createResult.data) {
+      return {
+        success: false,
+        error: createResult.error || 'Failed to duplicate skill'
+      };
+    }
+
+    // Fetch the created skill to return full DTO
+    const newSkillResult = await service.getSkill(createResult.data.value);
+    if (!newSkillResult.success || !newSkillResult.data) {
+      return { success: false, error: 'Failed to fetch duplicated skill' };
+    }
+
+    return {
+      success: true,
+      data: SkillMapper.toDTO(newSkillResult.data)
+    };
+  } catch (error) {
+    console.error('[duplicateSkill] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to duplicate skill'
+    };
+  }
+}
+
+/**
  * Get a skill by ID
  */
 export async function getSkill(skillId: number): Promise<Result<SkillDTO | null>> {

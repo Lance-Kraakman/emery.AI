@@ -306,7 +306,7 @@ export async function deleteAgent(agentId: number, revalidateUrl?: string): Prom
 
       const session = await requirePermission("agents:manage");
     const agentApplicationService = getAgentApplicationService();
-    
+
     const result = await agentApplicationService.deleteAgent(AgentId.fromNumber(agentId));
 
     if (!result.success) {
@@ -322,7 +322,7 @@ export async function deleteAgent(agentId: number, revalidateUrl?: string): Prom
     } else {
       revalidatePath('/manage'); // Default path for agent operations
     }
-    
+
     return {
       success: true,
       data: { message: "Agent deleted successfully" },
@@ -332,6 +332,76 @@ export async function deleteAgent(agentId: number, revalidateUrl?: string): Prom
       return {
         success: false,
         error: "Failed to delete agent",
+      };
+    }
+  });
+}
+
+/**
+ * Duplicate an existing agent
+ * Appends " (Copy)" to the agent name
+ */
+export async function duplicateAgent(agentId: number, revalidateUrl?: string): Promise<Result> {
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("agents:manage");
+      const currentOrg = await requireCurrentOrganization();
+
+      if (!agentId) {
+        return {
+          success: false,
+          error: "agentId is required",
+        };
+      }
+
+      const agentApplicationService = getAgentApplicationService();
+
+      // Get the original agent
+      const originalAgent = await agentApplicationService.getAgent(AgentId.fromNumber(agentId));
+      if (!originalAgent) {
+        return { success: false, error: "Agent not found" };
+      }
+
+      // Create new name with " (Copy)" suffix
+      const newName = `${originalAgent.name} (Copy)`;
+
+      // Build DTO for the duplicate
+      const dto: CreateAgentDTO = {
+        name: newName,
+        role: originalAgent.role,
+        description: originalAgent.description,
+        persona: originalAgent.persona,
+        ownerId: session.user.id,
+        organizationId: currentOrg.id,
+        schedules: originalAgent.schedules as any,
+        status: originalAgent.status.value as 'active' | 'inactive' | 'archived'
+      };
+
+      const result = await agentApplicationService.createAgent(dto);
+
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          error: result.error || "Failed to duplicate agent"
+        };
+      }
+
+      // Revalidate the appropriate path
+      if (revalidateUrl) {
+        revalidatePath(revalidateUrl);
+      } else {
+        revalidatePath('/manage');
+      }
+
+      return {
+        success: true,
+        data: result.data,
+      };
+    } catch (error) {
+      console.error("Error duplicating agent:", error);
+      return {
+        success: false,
+        error: "Failed to duplicate agent",
       };
     }
   });

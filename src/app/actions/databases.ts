@@ -232,12 +232,95 @@ export async function getDatabaseCount() {
   try {
     const session = await requirePermission("data:view");
     const currentOrg = await requireCurrentOrganization();
-    
+
     const databaseApplicationService = getDatabaseApplicationService();
     return await databaseApplicationService.getDatabaseCount(OrganizationId.fromNumber(currentOrg.id));
   } catch (error) {
     console.error('Error fetching database count:', error);
     throw new Error('Failed to fetch database count');
+  }
+}
+
+/**
+ * Duplicate an existing database with all its tables
+ * Appends " (Copy)" to the database name and copies all tables
+ */
+export async function duplicateDatabase(id: number, revalidateUrl?: string): Promise<Result> {
+  try {
+    const session = await requirePermission("data:create");
+    const currentOrg = await requireCurrentOrganization();
+
+    if (!id) {
+      return { success: false, error: "Database ID is required" };
+    }
+
+    const databaseApplicationService = getDatabaseApplicationService();
+
+    // Get the original database
+    const originalDatabase = await databaseApplicationService.getDatabase(DatabaseId.fromNumber(id));
+    if (!originalDatabase) {
+      return { success: false, error: "Database not found" };
+    }
+
+    // Create new name with " (Copy)" suffix
+    const newName = `${originalDatabase.name} (Copy)`;
+
+    // Create the duplicated database
+    const dto: CreateDatabaseDTO = {
+      name: newName,
+      description: originalDatabase.description,
+      metadata: originalDatabase.metadata || {},
+      organizationId: currentOrg.id,
+      createdBy: session.user.id
+    };
+
+    const result = await databaseApplicationService.createDatabase(dto);
+
+    if (!result.success || !result.data) {
+      return {
+        success: false,
+        error: result.error || "Failed to duplicate database"
+      };
+    }
+
+    // Import table services to copy tables
+    const { getTableApplicationService } = await import("@/ddd/application/di/container");
+    const { TableId } = await import("@/ddd/domain/shared/value-objects");
+    const tableService = getTableApplicationService();
+
+    // Get all tables from the original database
+    const tables = await tableService.getTablesForDatabase(DatabaseId.fromNumber(id));
+
+    // Duplicate each table
+    for (const table of tables) {
+      const tableCommand = {
+        name: table.name,
+        databaseId: DatabaseId.fromNumber(result.data.id),
+        organizationId: OrganizationId.fromNumber(currentOrg.id),
+        createdBy: UserId.fromString(session.user.id),
+        description: table.description,
+        metadata: table.metadata || {}
+      };
+
+      await tableService.createTable(tableCommand);
+      // TODO: Copy fields from original table to new table
+    }
+
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl)
+    } else {
+      revalidatePath('/data')
+    }
+
+    return {
+      success: true,
+      data: result.data,
+      warnings: result.warnings
+    };
+  } catch (error) {
+    console.error('Error duplicating database:', error)
+    return { success: false, error: "Failed to duplicate database" }
   }
 }
 
