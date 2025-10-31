@@ -271,10 +271,10 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
       organizationId: originalSkill.organizationId.value,
       name: newName,
       description: originalSkill.description,
-      inputs: originalSkill.inputs as any, // TODO: properly type the skill inputs
-      outputs: originalSkill.outputs as any, // TODO: properly type the skill outputs
+      inputs: originalSkill.inputs,
+      outputs: originalSkill.outputs,
       instructions: originalSkill.instructions,
-      tools: originalSkill.tools as any // TODO: properly type the tools
+      tools: originalSkill.tools
     });
 
     if (!createResult.success || !createResult.data) {
