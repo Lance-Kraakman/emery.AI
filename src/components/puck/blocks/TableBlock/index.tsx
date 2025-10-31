@@ -283,8 +283,11 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
         sampleField: result.fields[0]
       });
 
-      // Auto-generate field mappings if none exist
+      // Auto-generate field mappings ONLY if none exist
+      // AIDEV-NOTE: Never regenerate if mappings already exist - this prevents infinite re-renders
+      // User can manually edit field mappings, and we preserve their changes
       let fieldMappings = props.fieldMappings || [];
+
       if (fieldMappings.length === 0 && result.fields.length > 0) {
         console.log('[TableBlock resolveData] Auto-generating field mappings for', result.fields.length, 'fields');
 
@@ -306,23 +309,28 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
 
         console.log('[TableBlock resolveData] Generated mappings (id field hidden by default):', fieldMappings);
       } else {
-        console.log('[TableBlock resolveData] Using existing field mappings:', fieldMappings.length);
+        console.log('[TableBlock resolveData] Preserving existing field mappings:', fieldMappings.length);
+        // Use existing mappings as-is to avoid triggering re-renders
+        fieldMappings = props.fieldMappings || [];
       }
 
       // Generate available fields info for user reference
-      const availableFieldsInfo = result.fields.length > 0
-        ? `Available Fields in "${view.name}":\n\n` +
-          `${'ID'.padEnd(6)} | ${'Field Name'.padEnd(25)} | ${'Type'.padEnd(12)} | Status\n` +
-          `${'-'.repeat(6)} | ${'-'.repeat(25)} | ${'-'.repeat(12)} | ${'-'.repeat(20)}\n` +
-          result.fields.map(f => {
-            const status = f.name === 'id' ? 'Hidden by default' : 'Visible';
-            return `${String(f.id).padEnd(6)} | ${f.name.padEnd(25)} | ${f.type.padEnd(12)} | ${status}`;
-          }).join('\n') +
-          `\n\nℹ️ Info:\n` +
-          `• Columns are auto-configured when you select a view\n` +
-          `• The 'id' field is hidden by default but can be made visible\n` +
-          `• Edit field mappings below to customize which columns appear and their order`
-        : 'No fields available';
+      // AIDEV-NOTE: Only regenerate if not already set to avoid infinite re-renders
+      const availableFieldsInfo = props._availableFieldsInfo || (
+        result.fields.length > 0
+          ? `Available Fields in "${view.name}":\n\n` +
+            `${'ID'.padEnd(6)} | ${'Field Name'.padEnd(25)} | ${'Type'.padEnd(12)} | Status\n` +
+            `${'-'.repeat(6)} | ${'-'.repeat(25)} | ${'-'.repeat(12)} | ${'-'.repeat(20)}\n` +
+            result.fields.map(f => {
+              const status = f.name === 'id' ? 'Hidden by default' : 'Visible';
+              return `${String(f.id).padEnd(6)} | ${f.name.padEnd(25)} | ${f.type.padEnd(12)} | ${status}`;
+            }).join('\n') +
+            `\n\nℹ️ Info:\n` +
+            `• Columns are auto-configured when you select a view\n` +
+            `• The 'id' field is hidden by default but can be made visible\n` +
+            `• Edit field mappings below to customize which columns appear and their order`
+          : 'No fields available'
+      );
 
       // Return props with resolved DTO data
       console.log('[TableBlock resolveData] Returning resolved data:', {
