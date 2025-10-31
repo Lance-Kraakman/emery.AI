@@ -10,7 +10,7 @@ import { withAuthContext } from '@/lib/auth/with-context';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import { OrganizationId, TableId, DatabaseId, UserId } from "@/ddd/domain/shared/value-objects";
 import type { Result, CreateTableData } from "./types";
-import type { CreateTableCommand } from "@/ddd/application/services/tables/table-application-service";
+import type { CreateTableCommand, UpdateTableCommand } from "@/ddd/application/services/tables/table-application-service";
 import { TableMapper, type TableDTO } from "@/app/mappers/table-mapper";
 
 // Import the DI setup to ensure container is initialized
@@ -102,7 +102,7 @@ export async function getTables(): Promise<TableDTO[]> {
     const session = await requirePermission("data:view");
     const currentOrg = await requireCurrentOrganization();
     const tableApplicationService = getTableApplicationService();
-    
+
     const tableList = await tableApplicationService.getTablesForOrganization(OrganizationId.fromNumber(currentOrg.id));
 
     console.log(`[GET-TABLES] Found ${tableList.length} tables for org ${currentOrg.id}`);
@@ -111,10 +111,67 @@ export async function getTables(): Promise<TableDTO[]> {
     console.error("Error fetching tables:", error);
     console.error("Error details:", error instanceof Error ? error.message : String(error));
     console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
-    
+
     // Return empty array instead of throwing error to prevent UI crashes
     console.log(`[GET-TABLES] Returning empty array due to error to prevent UI crash`);
     return [];
+  }
+}
+
+/**
+ * Update an existing table
+ */
+export async function updateTable(
+  tableId: number,
+  updates: { name?: string; description?: string; metadata?: Record<string, any> },
+  revalidateUrl?: string
+): Promise<Result> {
+  try {
+    const session = await requirePermission("data:manage");
+    const currentOrg = await requireCurrentOrganization();
+
+    if (!tableId) {
+      return {
+        success: false,
+        error: "Table ID is required",
+      };
+    }
+
+    const tableApplicationService = getTableApplicationService();
+
+    const command: UpdateTableCommand = {
+      id: TableId.fromNumber(tableId),
+      name: updates.name,
+      description: updates.description,
+      metadata: updates.metadata
+    };
+
+    const result = await tableApplicationService.updateTable(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to update table"
+      };
+    }
+
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/data'); // Default path for table operations
+    }
+
+    return {
+      success: true,
+      data: result.data ? TableMapper.toDTO(result.data) : null,
+    };
+  } catch (error) {
+    console.error("Error updating table:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update table",
+    };
   }
 }
 

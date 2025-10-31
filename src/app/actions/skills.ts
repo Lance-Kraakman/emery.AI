@@ -1,12 +1,14 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { getSkillApplicationService, getAgentApplicationService } from '@/ddd/application/di/container';
 import { SkillMapper } from '@/app/mappers/skill-mapper';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import type { Result } from '@/ddd/domain/shared/result';
-import type { SkillDTO, SkillInput, SkillOutput, ToolConfigDTO } from '@/app/mappers/skill-mapper';
+import type { SkillInput, SkillOutput, ToolConfigDTO } from '@/app/mappers/skill-mapper';
+import type { SkillDTO } from '@/app/mappers/skill-mapper';
 
 /**
  * Server Actions for Skill Management
@@ -85,6 +87,10 @@ export async function createSkill(command: {
       return { success: false, error: 'Failed to fetch created skill' };
     }
 
+    // Revalidate sidebar and skill pages
+    revalidatePath(`/agents/${command.agentId}/skills`);
+    revalidatePath('/');
+
     return {
       success: true,
       data: SkillMapper.toDTO(skillResult.data)
@@ -161,6 +167,10 @@ export async function createOrganizationSkill(command: {
       return { success: false, error: 'Failed to fetch created skill' };
     }
 
+    // Revalidate sidebar and skills pages
+    revalidatePath('/skills');
+    revalidatePath('/');
+
     return {
       success: true,
       data: SkillMapper.toDTO(skillResult.data)
@@ -207,6 +217,15 @@ export async function updateSkill(
       return { success: false, error: 'Failed to fetch updated skill' };
     }
 
+    // Revalidate sidebar and skill pages
+    const skill = skillResult.data;
+    if (skill.agentId) {
+      revalidatePath(`/agents/${skill.agentId.value}/skills`);
+    } else {
+      revalidatePath('/skills');
+    }
+    revalidatePath('/');
+
     return {
       success: true,
       data: SkillMapper.toDTO(skillResult.data)
@@ -231,7 +250,24 @@ export async function deleteSkill(skillId: number): Promise<Result<void>> {
     }
 
     const service = getSkillApplicationService();
-    return await service.deleteSkill(skillId);
+
+    // Get skill info before deleting for revalidation
+    const skillResult = await service.getSkill(skillId);
+    const agentId = skillResult.success && skillResult.data ? skillResult.data.agentId?.value : null;
+
+    const result = await service.deleteSkill(skillId);
+
+    if (result.success) {
+      // Revalidate sidebar and skill pages
+      if (agentId) {
+        revalidatePath(`/agents/${agentId}/skills`);
+      } else {
+        revalidatePath('/skills');
+      }
+      revalidatePath('/');
+    }
+
+    return result;
   } catch (error) {
     console.error('[deleteSkill] error:', error);
     return {
@@ -289,6 +325,14 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
     if (!newSkillResult.success || !newSkillResult.data) {
       return { success: false, error: 'Failed to fetch duplicated skill' };
     }
+
+    // Revalidate sidebar and skill pages
+    if (originalSkill.agentId) {
+      revalidatePath(`/agents/${originalSkill.agentId.value}/skills`);
+    } else {
+      revalidatePath('/skills');
+    }
+    revalidatePath('/');
 
     return {
       success: true,

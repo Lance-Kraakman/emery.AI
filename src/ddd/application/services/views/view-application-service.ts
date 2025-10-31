@@ -13,6 +13,7 @@ import { ViewId } from "@/ddd/domain/views/value-objects/view-id";
 import { FilterConfig } from "@/ddd/domain/views/value-objects/filter-config";
 import { SortConfig } from "@/ddd/domain/views/value-objects/sort-config";
 import { PaginationConfig } from "@/ddd/domain/views/value-objects/pagination-config";
+import { FieldMapping } from "@/ddd/domain/views/value-objects/field-mapping";
 import { TableId } from "@/ddd/domain/shared/value-objects/table-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects/organization-id";
 import { UserId } from "@/ddd/domain/shared/value-objects/user-id";
@@ -33,6 +34,7 @@ export interface CreateViewCommand {
   filters?: FilterConfig[];
   sorting?: SortConfig[];
   pagination?: PaginationConfig;
+  fieldMappings?: FieldMapping[];
 }
 
 export interface UpdateViewCommand {
@@ -41,6 +43,7 @@ export interface UpdateViewCommand {
   filters?: FilterConfig[];
   sorting?: SortConfig[];
   pagination?: PaginationConfig;
+  fieldMappings?: FieldMapping[];
 }
 
 export interface ExecuteViewCommand {
@@ -121,7 +124,21 @@ export class ViewApplicationService {
         }
       }
 
-      // 5. Create view entity
+      // 5. Validate field mappings reference valid fields
+      if (command.fieldMappings && command.fieldMappings.length > 0) {
+        const validFieldIds = new Set(table.fields.map((f: TableField) => f.id.value));
+
+        for (const mapping of command.fieldMappings) {
+          if (!validFieldIds.has(mapping.sourceFieldId)) {
+            return {
+              success: false,
+              error: `Field mapping references invalid field ID: ${mapping.sourceFieldId}`,
+            };
+          }
+        }
+      }
+
+      // 6. Create view entity
       const dataSource = View.create({
         name: command.name,
         description: command.description,
@@ -131,6 +148,7 @@ export class ViewApplicationService {
         filters: command.filters,
         sorting: command.sorting,
         pagination: command.pagination,
+        fieldMappings: command.fieldMappings,
       });
 
       // 6. Save to repository
@@ -214,7 +232,13 @@ export class ViewApplicationService {
         dataSource.updatePagination(command.pagination);
       }
 
-      // 6. Save updated view
+      // 6. Update field mappings if provided
+      if (command.fieldMappings !== undefined) {
+        // Clear existing mappings and set new ones
+        dataSource.setFieldMappings(command.fieldMappings);
+      }
+
+      // 7. Save updated view
       const updated = await this.dataSourceRepository.save(dataSource);
 
       logger.debug("View updated successfully", { id: updated.id.value });

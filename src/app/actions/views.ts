@@ -21,6 +21,7 @@ import { ViewId } from "@/ddd/domain/views/value-objects/view-id";
 import { FilterConfig } from "@/ddd/domain/views/value-objects/filter-config";
 import { SortConfig } from "@/ddd/domain/views/value-objects/sort-config";
 import { PaginationConfig } from "@/ddd/domain/views/value-objects/pagination-config";
+import { FieldMapping } from "@/ddd/domain/views/value-objects/field-mapping";
 import { ViewMapper, type ViewDTO } from "@/app/mappers/view-mapper";
 import type { Result, CreateViewData, UpdateViewData } from "./types";
 
@@ -37,7 +38,7 @@ export async function createView(
     const session = await requirePermission("data:create");
     const currentOrg = await requireCurrentOrganization();
 
-    const { tableId, name, description } = data;
+    const { tableId, name, description, fieldMappings } = data;
 
     if (!name) {
       return {
@@ -55,12 +56,23 @@ export async function createView(
 
     const dataSourceService = getViewApplicationService();
 
+    // Convert plain field mapping objects to FieldMapping value objects
+    const fieldMappingVOs = fieldMappings?.map((mapping) =>
+      FieldMapping.create({
+        sourceFieldId: mapping.sourceFieldId,
+        displayName: mapping.displayName,
+        visible: mapping.visible,
+        order: mapping.order,
+      })
+    );
+
     const result = await dataSourceService.createView({
       tableId: TableId.fromNumber(tableId),
       organizationId: OrganizationId.fromNumber(currentOrg.id),
       name,
       description,
       createdBy: UserId.fromString(session.user.id),
+      fieldMappings: fieldMappingVOs,
     });
 
     if (!result.success || !result.data) {
@@ -103,7 +115,7 @@ export async function updateView(
     await requirePermission("data:manage");
     await requireCurrentOrganization();
 
-    const { id, name, description, filters, sorting, pagination } = data;
+    const { id, name, description, filters, sorting, pagination, fieldMappings } = data;
 
     if (!id) {
       return {
@@ -175,6 +187,20 @@ export async function updateView(
           offset: pagination.offset,
         })
       );
+    }
+
+    // Update field mappings if provided
+    if (fieldMappings !== undefined) {
+      // Convert plain objects to FieldMapping value objects
+      const fieldMappingVOs = fieldMappings.map((mapping) =>
+        FieldMapping.create({
+          sourceFieldId: mapping.sourceFieldId,
+          displayName: mapping.displayName,
+          visible: mapping.visible,
+          order: mapping.order,
+        })
+      );
+      dataSource.setFieldMappings(fieldMappingVOs);
     }
 
     // Get the repository to save directly

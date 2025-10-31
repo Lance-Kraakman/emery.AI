@@ -50,7 +50,7 @@ import { createDefaultAgent, updateAgent, deleteAgent, duplicateAgent } from "@/
 import { createDefaultTeam, updateTeam, deleteTeam, duplicateTeam } from "@/app/actions/teams"
 import { createDefaultOrganizationSkill, updateSkill, deleteSkill, duplicateSkill } from "@/app/actions/skills"
 import { createDatabase, updateDatabase, deleteDatabase, duplicateDatabase } from "@/app/actions/databases"
-import { createTable, deleteTable, duplicateTable } from "@/app/actions/tables"
+import { createTable, updateTable, deleteTable, duplicateTable } from "@/app/actions/tables"
 import type { AppSidebarProps, AppData, PageData, AgentData, TeamData, SkillData, DatabaseData, TableData } from "./app-sidebar-types"
 import {
   AlertDialog,
@@ -231,8 +231,7 @@ export function AppSidebar({
 
   // Action handlers for Tables
   const handleRenameTable = async (table: TableData, database: DatabaseData, newName: string) => {
-    // Note: updateTable doesn't exist yet, would need to be created
-    console.log("Rename table not yet implemented")
+    await updateTable(table.id, { name: newName })
   }
 
   const handleDuplicateTable = async (table: TableData, database: DatabaseData) => {
@@ -454,7 +453,11 @@ export function AppSidebar({
           getParentId={(db) => db.id}
           getParentName={(db) => db.name}
           getParentHref={() => `/data`}
-          isParentActive={(_, path) => path === `/data` && !path.includes('tableId')}
+          isParentActive={(db, path) => {
+            // Database is active if any of its tables are selected
+            const tables = db.tables || []
+            return tables.some(table => path?.includes(`tableId=${table.id}`))
+          }}
           getChildren={(db) => db.tables}
           getChildKey={(table) => table.id}
           getChildName={(table) => table.name}
