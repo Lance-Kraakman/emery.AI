@@ -20,18 +20,7 @@ export interface FieldMapping {
 
 export interface TableBlockProps {
   // Configuration props (set in Puck editor)
-  table?: {
-    id: number;
-    name: string;
-    databaseId: number;
-  };
-  dataSourceOverride?: {
-    id: number;
-    name: string;
-    tableId: number;
-  };
-  dataSourceId?: number;
-  dataSourceName?: string;
+  viewId?: number;                  // Selected view ID
   fieldMappings?: FieldMapping[];
   showHeader?: boolean;
   striped?: boolean;
@@ -39,6 +28,9 @@ export interface TableBlockProps {
   compact?: boolean;
 
   // Resolved data (injected by resolveData hook)
+  _viewName?: string;               // View name for display
+  _tableName?: string;              // Table name for display
+  _tableId?: number;                // Table ID
   _rows?: Row[];
   _fields?: TableField[];
   _totalCount?: number;
@@ -53,21 +45,26 @@ export interface TableBlockProps {
  */
 export default function TableBlock(props: TableBlockProps) {
   const {
-    dataSourceName,
+    viewId,
     fieldMappings = [],
     showHeader = true,
     striped = true,
     bordered = false,
     compact = false,
+    _viewName,
+    _tableName,
+    _tableId,
     _rows = [],
     _fields = [],
     _totalCount = 0,
   } = props;
 
   console.log('[TableBlock render] Rendering with props:', {
-    hasTable: !!props.table,
-    tableId: props.table?.id,
-    dataSourceName,
+    hasView: !!viewId,
+    viewId,
+    viewName: _viewName,
+    tableName: _tableName,
+    tableId: _tableId,
     rowCount: _rows.length,
     fieldCount: _fields.length,
     totalCount: _totalCount,
@@ -77,20 +74,20 @@ export default function TableBlock(props: TableBlockProps) {
     visibleMappings: fieldMappings.filter(m => m.visible).length
   });
 
-  // If no table selected, show placeholder
-  if (!props.table?.id) {
-    console.log('[TableBlock render] No table selected, showing placeholder');
+  // If no view selected, show placeholder
+  if (!viewId) {
+    console.log('[TableBlock render] No view selected, showing placeholder');
     return (
       <div className={styles.placeholder}>
         <div className={styles.placeholderIcon}>📊</div>
         <p className={styles.placeholderText}>
-          Select a table to display data
+          Select a view to display data
         </p>
       </div>
     );
   }
 
-  // If data source selected but no data, show empty state
+  // If view selected but no data, show empty state
   if (_rows.length === 0) {
     console.log('[TableBlock render] No rows, showing empty state');
     return (
@@ -98,7 +95,7 @@ export default function TableBlock(props: TableBlockProps) {
         <div className={styles.emptyIcon}>📭</div>
         <p className={styles.emptyText}>
           No data available
-          {dataSourceName && ` from ${dataSourceName}`}
+          {_viewName && ` from ${_viewName}`}
         </p>
         <p className={styles.emptySubtext} style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
           Check browser console for detailed logs
@@ -138,9 +135,9 @@ export default function TableBlock(props: TableBlockProps) {
 
   return (
     <div className={styles.container}>
-      {dataSourceName && (
+      {_viewName && (
         <div className={styles.header}>
-          <h3 className={styles.title}>{dataSourceName}</h3>
+          <h3 className={styles.title}>{_viewName}</h3>
           <span className={styles.count}>
             {_rows.length} {_rows.length === 1 ? "row" : "rows"}
             {_totalCount > _rows.length && ` of ${_totalCount}`}
