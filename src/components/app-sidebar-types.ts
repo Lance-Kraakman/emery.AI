@@ -25,6 +25,8 @@ export interface TeamData {
 export interface SkillData {
   id: number
   name: string
+  agentId: number | null
+  agentName?: string
 }
 
 export interface DatabaseData {

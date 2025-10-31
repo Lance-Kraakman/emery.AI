@@ -5,10 +5,10 @@ import { getAgents } from "@/app/actions/agents";
 import TeamDetailsView from "../components/TeamDetailsView";
 import { Suspense } from "react";
 import { Loading } from "@/components/ui/loading";
-import { CanvasBase } from "@/components/canvas/CanvasBase";
+import { CenteredCanvasLayout } from "@/components/layouts/CenteredCanvasLayout";
 
 // AIDEV-NOTE: Team detail page - renders individual team view
-// Uses CanvasBase for minimal wrapper with collapse functionality
+// Uses CenteredCanvasLayout for centered content with collapse functionality
 
 interface TeamPageProps {
   params: Promise<{ teamId: string }>;
@@ -39,10 +39,10 @@ export default async function TeamPage({ params }: TeamPageProps) {
   }
 
   return (
-    <CanvasBase>
+    <CenteredCanvasLayout>
       <Suspense fallback={<Loading text="Loading team..." />}>
         <TeamDetailsView team={team} agents={agents || []} />
       </Suspense>
-    </CanvasBase>
+    </CenteredCanvasLayout>
   );
 }

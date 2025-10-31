@@ -2,6 +2,7 @@ import React from 'react';
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { NewOrganizationSkillView } from '../components/NewOrganizationSkillView';
+import { CenteredCanvasLayout } from '@/components/layouts/CenteredCanvasLayout';
 
 interface PageProps {
   searchParams: Promise<{
@@ -26,10 +27,8 @@ export default async function NewOrganizationSkillPage({ searchParams }: PagePro
   const templateId = resolvedParams.templateId ? parseInt(resolvedParams.templateId, 10) : undefined;
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="max-w-6xl mx-auto">
-        <NewOrganizationSkillView organizationId={organizationId} templateId={templateId} />
-      </div>
-    </div>
+    <CenteredCanvasLayout>
+      <NewOrganizationSkillView organizationId={organizationId} templateId={templateId} />
+    </CenteredCanvasLayout>
   );
 }

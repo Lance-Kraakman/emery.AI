@@ -91,12 +91,12 @@ function EmeryChatHeader({
   }
 
   return (
-    <div className="flex items-center justify-between py-4 border-b border-border bg-muted/20">
+    <div className="flex items-center justify-between py-4 px-4 bg-muted/20">
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-lg bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-              Emery
+              Dash
             </h3>
             <ChatHistoryDropdown
               currentChatId={currentChatId}
@@ -342,7 +342,7 @@ function ChatContentWithCanvas({
       />
 
       {/* Input area */}
-      <div className="flex-shrink-0 py-4 border-t border-border/10 bg-card" onKeyDown={onKeyDown}>
+      <div className="flex-shrink-0 py-4 px-3 border-t border-border/10 bg-card" onKeyDown={onKeyDown}>
         <CustomChatInput
           onSendMessage={async (message) => {
             // Send message with tools

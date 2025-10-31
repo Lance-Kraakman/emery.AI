@@ -112,8 +112,8 @@ export const FooterBlock: ComponentConfig<FooterBlockProps> = {
     return fields;
   },
   resolveData: async (data, { changed, trigger }) => {
-    // Only populate on initial load
-    if (trigger !== "load") return data;
+    // Only populate when component is first inserted (dragged onto page)
+    if (trigger !== "insert") return data;
 
     // Pre-populate columns with default content
     const column1 = [

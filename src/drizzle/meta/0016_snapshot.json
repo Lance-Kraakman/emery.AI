@@ -1,5 +1,5 @@
 {
-  "id": "c53bbc43-6ce3-426f-ad08-63c48216922b",
+  "id": "83204290-626e-410f-a2ea-2bf988408100",
   "prevId": "61b24263-7887-4fb4-8ce9-c126f88dd2d7",
   "version": "7",
   "dialect": "postgresql",
@@ -870,174 +870,6 @@
           ],
           "using": "owner_id = current_setting('app.current_user_id')::uuid",
           "withCheck": "owner_id = current_setting('app.current_user_id')::uuid"
-        }
-      },
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.data_sources": {
-      "name": "data_sources",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "table_id": {
-          "name": "table_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "filters": {
-          "name": "filters",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "sorting": {
-          "name": "sorting",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "pagination": {
-          "name": "pagination",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{\"pageSize\": 50, \"offset\": 0}'::jsonb"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "data_sources_org_idx": {
-          "name": "data_sources_org_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "data_sources_table_idx": {
-          "name": "data_sources_table_idx",
-          "columns": [
-            {
-              "expression": "table_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "data_sources_organization_id_organizations_id_fk": {
-          "name": "data_sources_organization_id_organizations_id_fk",
-          "tableFrom": "data_sources",
-          "tableTo": "organizations",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "data_sources_table_id_tables_id_fk": {
-          "name": "data_sources_table_id_tables_id_fk",
-          "tableFrom": "data_sources",
-          "tableTo": "tables",
-          "columnsFrom": [
-            "table_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "data_sources_org_name_unique": {
-          "name": "data_sources_org_name_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "organization_id",
-            "name"
-          ]
-        }
-      },
-      "policies": {
-        "data_sources_view_permission": {
-          "name": "data_sources_view_permission",
-          "as": "PERMISSIVE",
-          "for": "SELECT",
-          "to": [
-            "public"
-          ],
-          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:view',\n        organization_id\n      )"
-        },
-        "data_sources_create_permission": {
-          "name": "data_sources_create_permission",
-          "as": "PERMISSIVE",
-          "for": "INSERT",
-          "to": [
-            "public"
-          ],
-          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:manage',\n        organization_id\n      )"
-        },
-        "data_sources_manage_permission": {
-          "name": "data_sources_manage_permission",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "public"
-          ],
-          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:manage',\n        organization_id\n      )",
-          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:manage',\n        organization_id\n      )"
         }
       },
       "checkConstraints": {},
@@ -3566,6 +3398,174 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.views": {
+      "name": "views",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "table_id": {
+          "name": "table_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "filters": {
+          "name": "filters",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "sorting": {
+          "name": "sorting",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "pagination": {
+          "name": "pagination",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{\"pageSize\": 50, \"offset\": 0}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "views_org_idx": {
+          "name": "views_org_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "views_table_idx": {
+          "name": "views_table_idx",
+          "columns": [
+            {
+              "expression": "table_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "views_organization_id_organizations_id_fk": {
+          "name": "views_organization_id_organizations_id_fk",
+          "tableFrom": "views",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "views_table_id_tables_id_fk": {
+          "name": "views_table_id_tables_id_fk",
+          "tableFrom": "views",
+          "tableTo": "tables",
+          "columnsFrom": [
+            "table_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "views_org_name_unique": {
+          "name": "views_org_name_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organization_id",
+            "name"
+          ]
+        }
+      },
+      "policies": {
+        "views_view_permission": {
+          "name": "views_view_permission",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "public"
+          ],
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:view',\n        organization_id\n      )"
+        },
+        "views_create_permission": {
+          "name": "views_create_permission",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "public"
+          ],
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:manage',\n        organization_id\n      )"
+        },
+        "views_manage_permission": {
+          "name": "views_manage_permission",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:manage',\n        organization_id\n      )",
+          "withCheck": "organization_id = current_setting('app.current_organization_id')::integer\n      AND user_has_permission(\n        current_setting('app.current_user_id')::uuid,\n        'data:manage',\n        organization_id\n      )"
+        }
+      },
       "checkConstraints": {},
       "isRLSEnabled": false
     }

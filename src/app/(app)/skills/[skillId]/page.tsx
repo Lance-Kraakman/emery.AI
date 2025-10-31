@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { getSkill } from '@/app/actions/skills';
 import { EditOrganizationSkillView } from '../components/EditOrganizationSkillView';
+import { CenteredCanvasLayout } from '@/components/layouts/CenteredCanvasLayout';
 
 interface PageProps {
   params: Promise<{
@@ -39,10 +40,8 @@ export default async function EditOrganizationSkillPage({ params }: PageProps) {
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="max-w-6xl mx-auto">
-        <EditOrganizationSkillView skill={skill} />
-      </div>
-    </div>
+    <CenteredCanvasLayout>
+      <EditOrganizationSkillView skill={skill} />
+    </CenteredCanvasLayout>
   );
 }
