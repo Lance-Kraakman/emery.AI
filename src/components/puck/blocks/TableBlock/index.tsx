@@ -338,21 +338,25 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       let fieldMappings = props.fieldMappings || [];
       if (fieldMappings.length === 0 && result.fields.length > 0) {
         console.log('[TableBlock resolveData] Auto-generating field mappings for', result.fields.length, 'fields');
-        // Note: result.fields are now plain objects with { id, name, type }
-        fieldMappings = result.fields.slice(0, 10).map((field, index) => ({
+
+        // AIDEV-NOTE: Exclude 'id' field - it's stored as `row.id` not `row.field_X` in toViewFormat()
+        // See src/ddd/domain/tables/value-objects/row.ts:162-164
+        const fieldsToMap = result.fields.filter(f => f.name !== 'id');
+
+        fieldMappings = fieldsToMap.slice(0, 10).map((field, index) => ({
           sourceFieldId: field.id, // Plain number, not field.id.value
           displayName: field.name,
           visible: true,
           order: index,
         }));
-        console.log('[TableBlock resolveData] Generated mappings:', fieldMappings);
+        console.log('[TableBlock resolveData] Generated mappings (excluding id field):', fieldMappings);
       } else {
         console.log('[TableBlock resolveData] Using existing field mappings:', fieldMappings.length);
       }
 
       // Generate available fields info for user reference
       const availableFieldsInfo = result.fields.length > 0
-        ? `Available Fields:\n${result.fields.map(f => `  ID ${f.id}: ${f.name} (${f.type})`).join('\n')}\n\nℹ️ Columns are auto-configured. To customize, edit the items above.`
+        ? `Available Fields:\n${result.fields.filter(f => f.name !== 'id').map(f => `  ID ${f.id}: ${f.name} (${f.type})`).join('\n')}\n\nℹ️ Columns are auto-configured. The 'id' field is excluded (it's always available as row.id).`
         : 'No fields available';
 
       // Return props with resolved DTO data

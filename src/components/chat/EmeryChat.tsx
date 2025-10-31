@@ -21,6 +21,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
+import { RightPanelResizeHandle } from '@/components/ui/right-panel-resize-handle'
 import { ChatCanvas } from './ChatCanvas'
 import CustomChatInput from './CustomChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
@@ -371,11 +372,13 @@ export function EmeryChat() {
 
   // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders
   const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
+  const chatWidth = useStore(uiStateStore, uiStateSelectors.chatWidth)
   const canvasState = useStore(uiStateStore, uiStateSelectors.canvasState)
   const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
   const chatContext = useStore(uiStateStore, uiStateSelectors.chatContext)
   const toggleCanvas = uiStateActions.toggleCanvas
   const setChatContext = uiStateActions.setChatContext
+  const setChatWidth = uiStateActions.setChatWidth
 
   const { data: emeryData } = useEmery()
 
@@ -489,21 +492,33 @@ export function EmeryChat() {
     }
   }
   
-  // Collapsed state - just show header with expand button
+  // Collapsed state - show minimal icon strip with dashlet logo
   if (chatState === 'collapsed') {
     return (
-      <div className="w-12 h-full flex flex-col bg-card border-l border-border flex-shrink-0">
-        <EmeryChatHeader 
-          domainType={chatContext?.domainType}
-          domainName={chatContext?.domainName}
-          currentChatId={currentChatId}
-          onChatSelect={handleChatSelect}
-          onNewChat={handleNewChat}
-          onChatHistoryUpdate={handleChatHistoryUpdate}
-          userId={userId || ''}
-          organizationId={organizationId || 0}
-        />
-        <div className="flex-1" />
+      <div className="w-12 h-full flex flex-col bg-card border-l border-border flex-shrink-0 items-center py-4 gap-4">
+        {/* Dashlet logo */}
+        <button
+          onClick={() => uiStateActions.toggleChat()}
+          className="flex items-center justify-center hover:opacity-80 transition-opacity"
+          title="Expand chat"
+        >
+          <img
+            src="/assets/dashlet/logo_icon.svg"
+            alt="Dashlet"
+            className="h-6 w-6"
+          />
+        </button>
+
+        {/* Expand button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => uiStateActions.toggleChat()}
+          className="h-8 w-8"
+          title="Expand chat"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
       </div>
     )
   }
@@ -593,11 +608,20 @@ export function EmeryChat() {
 
   // Determine layout based on canvas state
   const isFullWidth = canvasState === 'collapsed'
-  
+
   return (
-    <div className={`flex bg-card border-l border-border flex-shrink-0 ${isFullWidth ? 'h-screen' : 'h-full'}`}>
+    <div className={`relative flex bg-card border-l border-border flex-shrink-0 ${isFullWidth ? 'h-screen' : 'h-full'}`} style={{ width: isFullWidth ? '100%' : `${chatWidth}px` }}>
+      {/* Resize handle */}
+      {!isFullWidth && (
+        <RightPanelResizeHandle
+          onResize={setChatWidth}
+          minWidth={280}
+          maxWidth={600}
+        />
+      )}
+
       {/* Chat Section - now full width without sidebar */}
-      <div className={`flex flex-col ${isFullWidth ? 'h-screen' : 'h-full'} ${isFullWidth ? 'flex-1' : 'w-[459px]'}`}>
+      <div className={`flex flex-col w-full ${isFullWidth ? 'h-screen' : 'h-full'}`}>
         <EmeryChatHeader 
           domainType={chatContext?.domainType}
           domainName={chatContext?.domainName}

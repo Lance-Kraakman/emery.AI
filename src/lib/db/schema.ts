@@ -139,8 +139,7 @@ export const views = pgTable("views", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
-  // Unique name per organization
-  unique("views_org_name_unique").on(table.organizationId, table.name),
+  // AIDEV-NOTE: No unique constraint on view names - users can name views however they want
 
   // Index for organization queries
   index("views_org_idx").on(table.organizationId),
