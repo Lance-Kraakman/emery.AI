@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Globe } from 'lucide-react';
+import { Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -103,32 +103,22 @@ export function NewOrganizationSkillView({ organizationId, templateId }: NewOrga
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <Globe className="h-6 w-6" />
-            <h1 className="text-2xl font-semibold">Organization Skill Builder</h1>
-            {templateName && (
-              <Badge variant="secondary">
-                Based on: {templateName}
-              </Badge>
-            )}
-          </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            {templateName
-              ? 'Creating skill from template - customize as needed'
-              : 'Create a new organization skill available to all agents'
-            }
-          </p>
+      <div>
+        <div className="flex items-center gap-2">
+          <Globe className="h-6 w-6" />
+          <h1 className="text-2xl font-semibold">Organization Skill Builder</h1>
+          {templateName && (
+            <Badge variant="secondary">
+              Based on: {templateName}
+            </Badge>
+          )}
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push('/skills')}
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
+        <p className="text-sm text-muted-foreground mt-1">
+          {templateName
+            ? 'Creating skill from template - customize as needed'
+            : 'Create a new organization skill available to all agents'
+          }
+        </p>
       </div>
 
       {/* Editor */}

@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { getAgent } from '@/app/actions/agents';
 import { NewSkillView } from '../components/NewSkillView';
+import { CenteredCanvasLayout } from '@/components/layouts/CenteredCanvasLayout';
 
 interface PageProps {
   params: Promise<{
@@ -41,10 +42,8 @@ export default async function NewSkillPage({ params, searchParams }: PageProps) 
     : undefined;
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="max-w-6xl mx-auto">
-        <NewSkillView agent={agent} templateId={templateId} />
-      </div>
-    </div>
+    <CenteredCanvasLayout>
+      <NewSkillView agent={agent} templateId={templateId} />
+    </CenteredCanvasLayout>
   );
 }

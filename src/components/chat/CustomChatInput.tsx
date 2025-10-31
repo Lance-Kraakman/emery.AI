@@ -230,7 +230,7 @@ export default function CustomChatInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          className="min-h-[220px] max-h-[400px] resize-none px-0 pr-12"
+          className="min-h-[220px] max-h-[400px] resize-none px-3 pr-12"
         />
 
         {/* Floating Send Button - positioned inside textarea */}

@@ -56,7 +56,7 @@ export function SidebarSection<T>({
             <span className="group-data-[collapsible=icon]:hidden">{label}</span>
           </CollapsibleTrigger>
         </SidebarGroupLabel>
-        <CollapsibleContent>
+        <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
               {items.map((item) => (
@@ -72,7 +72,7 @@ export function SidebarSection<T>({
               ))}
               <Button
                 variant="ghost"
-                className="w-full justify-start h-6 px-2 text-sm mt-0.5"
+                className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
                 onClick={onAdd}
                 disabled={isCreating}
               >

@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { getSkill } from '@/app/actions/skills';
 import { getAgent } from '@/app/actions/agents';
 import { EditSkillView } from '../components/EditSkillView';
+import { CenteredCanvasLayout } from '@/components/layouts/CenteredCanvasLayout';
 
 interface PageProps {
   params: Promise<{
@@ -38,16 +39,14 @@ export default async function EditSkillPage({ params }: PageProps) {
   }
 
   if (!skillResult.success || !skillResult.data) {
-    redirect(`/agents/${agentId}/skills`);
+    redirect(`/agents/${agentId}`);
   }
 
   const skill = skillResult.data;
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="max-w-6xl mx-auto">
-        <EditSkillView agent={agent} skill={skill} />
-      </div>
-    </div>
+    <CenteredCanvasLayout>
+      <EditSkillView agent={agent} skill={skill} />
+    </CenteredCanvasLayout>
   );
 }

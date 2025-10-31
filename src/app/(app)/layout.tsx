@@ -26,6 +26,13 @@ interface SidebarItem {
   name: string
 }
 
+interface SidebarSkill {
+  id: number
+  name: string
+  agentId: number | null
+  agentName?: string
+}
+
 interface SidebarDatabase {
   id: number
   name: string
@@ -43,7 +50,7 @@ export default async function AppLayout({
     apps: SidebarApp[]
     agents: SidebarItem[]
     teams: SidebarItem[]
-    skills: SidebarItem[]
+    skills: SidebarSkill[]
     databases: SidebarDatabase[]
   } = {
     apps: [],
@@ -105,10 +112,16 @@ export default async function AppLayout({
           id: team.id,
           name: team.name
         })),
-        skills: (skillsResult?.success && skillsResult?.data ? skillsResult.data : []).map(skill => ({
-          id: skill.id,
-          name: skill.name
-        })),
+        skills: (skillsResult?.success && skillsResult?.data ? skillsResult.data : []).map(skill => {
+          // Find agent name if this is an agent-specific skill
+          const agent = skill.agentId ? (agentsResult || []).find(a => a.id === skill.agentId) : null
+          return {
+            id: skill.id,
+            name: skill.name,
+            agentId: skill.agentId,
+            agentName: agent?.name
+          }
+        }),
         databases: (databasesResult || []).map(database => ({
           id: database.id,
           name: database.name,

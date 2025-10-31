@@ -42,6 +42,7 @@ export interface TableBlockProps {
   _rows?: Row[];
   _fields?: TableField[];
   _totalCount?: number;
+  _availableFieldsInfo?: string;
 }
 
 /**

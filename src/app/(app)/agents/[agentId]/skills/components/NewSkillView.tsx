@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -87,7 +87,7 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
 
       if (result.success) {
         toast.success('Skill created successfully');
-        router.push(`/agents/${agent.id}/skills`);
+        router.push(`/agents/${agent.id}`);
       } else {
         toast.error(result.error || 'Failed to create skill');
       }
@@ -102,31 +102,21 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold">Skill Builder</h1>
-            {templateName && (
-              <Badge variant="secondary">
-                Based on: {templateName}
-              </Badge>
-            )}
-          </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            {templateName
-              ? `Creating skill from template for ${agent.name}`
-              : `Create a new skill for ${agent.name}`
-            }
-          </p>
+      <div>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold">Skill Builder</h1>
+          {templateName && (
+            <Badge variant="secondary">
+              Based on: {templateName}
+            </Badge>
+          )}
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push(`/agents/${agent.id}/skills`)}
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
+        <p className="text-sm text-muted-foreground mt-1">
+          {templateName
+            ? `Creating skill from template for ${agent.name}`
+            : `Create a new skill for ${agent.name}`
+          }
+        </p>
       </div>
 
       {/* Editor */}

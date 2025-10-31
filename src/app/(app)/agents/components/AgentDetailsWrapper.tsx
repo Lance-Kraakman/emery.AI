@@ -1,7 +1,7 @@
 'use client';
 
 // AIDEV-NOTE: Client wrapper for NewAgentDetailsView to handle routing
-// Provides onBack navigation to /agents
+// Provides refresh on update
 
 import { useRouter } from 'next/navigation';
 import { NewAgentDetailsView } from './NewAgentDetailsView';
@@ -14,10 +14,6 @@ interface AgentDetailsWrapperProps {
 export function AgentDetailsWrapper({ agent }: AgentDetailsWrapperProps) {
   const router = useRouter();
 
-  const handleBack = () => {
-    router.push('/agents');
-  };
-
   const handleUpdate = () => {
     router.refresh(); // Refresh server data
   };
@@ -25,7 +21,6 @@ export function AgentDetailsWrapper({ agent }: AgentDetailsWrapperProps) {
   return (
     <NewAgentDetailsView
       agent={agent}
-      onBack={handleBack}
       onUpdate={handleUpdate}
     />
   );

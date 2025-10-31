@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Trash2 } from 'lucide-react';
+import { Save, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
@@ -73,7 +73,7 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
 
       if (result.success) {
         toast.success('Skill deleted successfully');
-        router.push(`/agents/${agent.id}/skills`);
+        router.push(`/agents/${agent.id}`);
       } else {
         toast.error(result.error || 'Failed to delete skill');
       }
@@ -89,21 +89,11 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.push(`/agents/${agent.id}/skills`)}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">Edit Skill</h1>
-            <p className="text-muted-foreground mt-1">
-              Agent: {agent.name}
-            </p>
-          </div>
+        <div>
+          <h1 className="text-3xl font-bold">Edit Skill</h1>
+          <p className="text-muted-foreground mt-1">
+            Agent: {agent.name}
+          </p>
         </div>
         <div className="flex gap-2">
           <Button

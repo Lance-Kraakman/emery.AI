@@ -41,6 +41,7 @@ import { signOut, useSession } from "next-auth/react"
 import { EmeryOrganizationModal } from "./EmeryOrganizationModal"
 import { SidebarSection } from "./sidebar-section"
 import { NestedSidebarSection } from "./nested-sidebar-section"
+import { GroupedSidebarSection } from "./grouped-sidebar-section"
 import { useEntityCreation } from "@/hooks/use-entity-creation"
 import { useToggleSet } from "@/hooks/use-toggle-set"
 import { createApp } from "@/app/actions/puck-apps"
@@ -143,7 +144,7 @@ export function AppSidebar({
               onClick={toggleSidebar}
               className="h-12 w-12"
             >
-              <img src="/assets/mission.png" alt="Logo" className="h-8 w-8 object-contain" />
+              <img src="/assets/dashlet/logo_icon.svg" alt="Dashlet" className="h-6 w-6" />
             </Button>
           ) : (
             <EmeryOrganizationModal isCollapsed={isCollapsed} />
@@ -162,7 +163,7 @@ export function AppSidebar({
                 <span className="group-data-[collapsible=icon]:hidden">Mission Control</span>
               </CollapsibleTrigger>
             </SidebarGroupLabel>
-            <CollapsibleContent>
+            <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
@@ -250,18 +251,29 @@ export function AppSidebar({
           addButtonLabel="Add Team"
         />
 
-        {/* Skills */}
-        <SidebarSection
+        {/* Skills - Grouped by Organization and Agents */}
+        <GroupedSidebarSection
           icon={Workflow}
           label="Skills"
           items={skills}
           pathname={pathname}
           isCreating={isCreating}
-          defaultOpen={pathname?.startsWith("/skills")}
-          getItemHref={(skill) => `/skills/${skill.id}`}
+          defaultOpen={pathname?.startsWith("/skills") || pathname?.includes("/skills/")}
+          getItemId={(skill) => skill.id}
           getItemName={(skill) => skill.name}
-          getItemKey={(skill) => skill.id}
-          isItemActive={(skill, path) => path?.startsWith(`/skills/${skill.id}`) ?? false}
+          getItemHref={(skill) =>
+            skill.agentId
+              ? `/agents/${skill.agentId}/skills/${skill.id}`
+              : `/skills/${skill.id}`
+          }
+          isItemActive={(skill, path) =>
+            skill.agentId
+              ? path?.includes(`/agents/${skill.agentId}/skills/${skill.id}`) ?? false
+              : path?.startsWith(`/skills/${skill.id}`) ?? false
+          }
+          getGroupKey={(skill) => skill.agentId}
+          getGroupName={(skill) => skill.agentName}
+          isUngroupedItem={(skill) => skill.agentId === null}
           onAdd={handleCreateSkill}
           addButtonLabel="Add Skill"
         />
@@ -300,7 +312,7 @@ export function AppSidebar({
                 <span className="group-data-[collapsible=icon]:hidden">Settings</span>
               </CollapsibleTrigger>
             </SidebarGroupLabel>
-            <CollapsibleContent>
+            <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>

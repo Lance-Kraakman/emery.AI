@@ -132,12 +132,22 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       visible: false,
     },
 
+    // Helper field to show available fields (populated by resolveData)
+    _availableFieldsInfo: {
+      label: "Available Fields (Reference Only)",
+      type: "textarea",
+    },
+
     // Field Mappings
     // AIDEV-NOTE: Column configuration controls which fields are displayed and in what order.
     // If left empty, the first 10 fields will be auto-generated in resolveData.
-    // Users can now select fields from a dropdown instead of entering numeric IDs.
+    // Users typically don't need to configure this manually - auto-generation works for most cases.
+    // To customize: After selecting a table, the columns will auto-populate. You can then:
+    // - Reorder by changing the "order" value
+    // - Rename by changing "Display Name"
+    // - Hide by changing "Visible" to "Hide"
     fieldMappings: {
-      label: "Column Configuration (Optional)",
+      label: "Column Configuration (Auto-configured)",
       type: "array",
       min: 0,
       getItemSummary: (item: any) => {
@@ -147,75 +157,10 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       },
       arrayFields: {
         sourceFieldId: {
-          type: "external",
-          label: "Field",
-          placeholder: "Select a field",
-          showSearch: true,
-          fetchList: async ({ query }: { query: string }, context: any) => {
-            // DEBUG: Log full context structure
-            console.log('[sourceFieldId fetchList] Called with:', {
-              hasContext: !!context,
-              hasProps: !!context?.props,
-              hasTable: !!context?.props?.table,
-              tableId: context?.props?.table?.id,
-              contextKeys: Object.keys(context || {}),
-              propsKeys: Object.keys(context?.props || {}),
-              query
-            });
-
-            // Try multiple paths to get tableId
-            const tableId = context?.props?.table?.id
-              || context?.props?.tableId
-              || context?.itemProps?.table?.id
-              || context?.parent?.props?.table?.id;
-
-            if (!tableId) {
-              console.warn('[sourceFieldId fetchList] Could not find tableId. Full context:', context);
-              return [];
-            }
-
-            console.log('[sourceFieldId fetchList] Fetching fields for table:', tableId);
-            try {
-              const fields = await getFields(tableId);
-              console.log('[sourceFieldId fetchList] Got fields:', fields.length, fields);
-
-              // Filter by query if provided
-              const filteredFields = query
-                ? fields.filter((f) =>
-                    f.name.toLowerCase().includes(query.toLowerCase())
-                  )
-                : fields;
-
-              console.log('[sourceFieldId fetchList] Returning fields:', filteredFields.length);
-              const result = filteredFields.map((f) => ({
-                id: f.id,
-                name: f.name,
-                type: f.type,
-                title: f.name,
-                description: `Type: ${f.type}${f.required ? ' (required)' : ''}`,
-              }));
-              console.log('[sourceFieldId fetchList] Mapped result:', result);
-              return result;
-            } catch (error) {
-              console.error('[sourceFieldId fetchList] Error fetching fields:', error);
-              return [];
-            }
-          },
-          mapProp: (item: any) => (item?.id || 0),
-          getItemSummary: (item: any, context: any) => {
-            // item is the stored value (field ID number)
-            const fieldId = typeof item === 'number' ? item : item?.id;
-
-            // Try to find field name from resolved data
-            const field = context?.props?._fields?.find((f: any) => f.id === fieldId);
-
-            if (field) {
-              return `${field.name} (${field.type})`;
-            }
-
-            return fieldId ? `Field ID: ${fieldId}` : 'No field selected';
-          },
-        } as any,
+          type: "number",
+          label: "Field ID (auto-filled)",
+          min: 1,
+        },
         displayName: {
           type: "text",
           label: "Display Name",
@@ -405,6 +350,11 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
         console.log('[TableBlock resolveData] Using existing field mappings:', fieldMappings.length);
       }
 
+      // Generate available fields info for user reference
+      const availableFieldsInfo = result.fields.length > 0
+        ? `Available Fields:\n${result.fields.map(f => `  ID ${f.id}: ${f.name} (${f.type})`).join('\n')}\n\nℹ️ Columns are auto-configured. To customize, edit the items above.`
+        : 'No fields available';
+
       // Return props with resolved DTO data
       console.log('[TableBlock resolveData] Returning resolved data:', {
         dataSourceId,
@@ -420,6 +370,7 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
           dataSourceId,
           dataSourceName,
           fieldMappings,
+          _availableFieldsInfo: availableFieldsInfo,
           _rows: result.rows,        // Plain objects from .toPlainObject()
           _fields: result.fields,    // Plain objects: { id, name, type }
           _totalCount: result.totalCount,
