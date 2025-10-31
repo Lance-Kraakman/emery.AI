@@ -32,6 +32,7 @@ import type { ComponentConfig } from "@measured/puck";
 import TableBlock, { type TableBlockProps } from "./TableBlock";
 import { getView, executeView, getViewsForTable, createView } from "@/app/actions/views";
 import { getTables } from "@/app/actions/tables";
+import { getFields } from "@/app/actions/fields";
 
 export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
   label: "Table",
@@ -66,9 +67,11 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       getItemSummary: (item: any) => item?.name || "No table selected",
     } as any,
 
-    // Optional: Custom data source override (filtered by selected table)
+    // Optional: Custom view override (filtered by selected table)
+    // AIDEV-NOTE: Views represent filtered/sorted configurations of a table.
+    // If not specified, a default view will be auto-created for the selected table.
     dataSourceOverride: {
-      label: "Custom View (Optional)",
+      label: "View (Optional)",
       type: "external",
       placeholder: "Use default view",
       showSearch: true,
@@ -130,8 +133,11 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
     },
 
     // Field Mappings
+    // AIDEV-NOTE: Column configuration controls which fields are displayed and in what order.
+    // If left empty, the first 10 fields will be auto-generated in resolveData.
+    // Users can now select fields from a dropdown instead of entering numeric IDs.
     fieldMappings: {
-      label: "Column Configuration",
+      label: "Column Configuration (Optional)",
       type: "array",
       min: 0,
       getItemSummary: (item: any) => {
@@ -141,9 +147,53 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       },
       arrayFields: {
         sourceFieldId: {
-          type: "number",
-          label: "Field ID",
-        },
+          type: "external",
+          label: "Field",
+          placeholder: "Select a field",
+          showSearch: true,
+          fetchList: async ({ query }: { query: string }, context: any) => {
+            // Get tableId from context - need to traverse up to parent props
+            const tableId = context?.props?.table?.id;
+
+            if (!tableId) {
+              console.log('[sourceFieldId fetchList] No table ID in context');
+              return [];
+            }
+
+            console.log('[sourceFieldId fetchList] Fetching fields for table:', tableId);
+            const fields = await getFields(tableId);
+
+            // Filter by query if provided
+            const filteredFields = query
+              ? fields.filter((f) =>
+                  f.name.toLowerCase().includes(query.toLowerCase())
+                )
+              : fields;
+
+            console.log('[sourceFieldId fetchList] Returning fields:', filteredFields.length);
+            return filteredFields.map((f) => ({
+              id: f.id,
+              name: f.name,
+              type: f.type,
+              title: f.name,
+              description: `Type: ${f.type}${f.required ? ' (required)' : ''}`,
+            }));
+          },
+          mapProp: (item: any) => (item?.id || 0),
+          getItemSummary: (item: any, context: any) => {
+            // item is the stored value (field ID number)
+            const fieldId = typeof item === 'number' ? item : item?.id;
+
+            // Try to find field name from resolved data
+            const field = context?.props?._fields?.find((f: any) => f.id === fieldId);
+
+            if (field) {
+              return `${field.name} (${field.type})`;
+            }
+
+            return fieldId ? `Field ID: ${fieldId}` : 'No field selected';
+          },
+        } as any,
         displayName: {
           type: "text",
           label: "Display Name",
