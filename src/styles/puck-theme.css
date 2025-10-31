@@ -1,0 +1,220 @@
+/**
+ * Puck Editor Theme Override
+ *
+ * Applies the application's dark theme with animated background to Puck sidebars and header,
+ * while keeping the canvas dropzone white for proper website preview.
+ *
+ * AIDEV-NOTE: This must be imported AFTER @measured/puck/puck.css to ensure overrides work.
+ */
+
+/* Override Puck's CSS variables to use application theme */
+:root {
+  /* Sidebar and header backgrounds - make transparent/semi-transparent */
+  --puck-color-grey-12: transparent; /* Left sidebar */
+  --puck-color-white: hsl(var(--background) / 0.85); /* Right sidebar & header */
+  --puck-color-grey-11: transparent; /* Canvas outer area */
+
+  /* Text colors for dark theme */
+  --puck-color-grey-01: hsl(var(--foreground)); /* Primary text */
+  --puck-color-grey-03: hsl(var(--foreground) / 0.9); /* Secondary text */
+  --puck-color-grey-04: hsl(var(--muted-foreground)); /* Tertiary text */
+  --puck-color-grey-05: hsl(var(--muted-foreground) / 0.8); /* Muted text */
+  --puck-color-grey-06: hsl(var(--muted-foreground) / 0.7); /* Subtle text */
+  --puck-color-grey-07: hsl(var(--border)); /* Subtle borders */
+
+  /* Border colors */
+  --puck-color-grey-09: hsl(var(--border)); /* Standard borders */
+  --puck-color-grey-08: hsl(var(--border) / 0.7); /* Subtle borders */
+
+  /* Accent colors */
+  --puck-color-azure-07: hsl(var(--primary)); /* Primary actions */
+  --puck-color-azure-09: hsl(var(--primary) / 0.9); /* Primary hover */
+
+  /* Canvas dropzone stays white - handled by class override below */
+}
+
+/* Left Sidebar (Components Panel) - Show animated background */
+[class*="_Sidebar--left"] {
+  background: transparent !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-right: 1px solid hsl(var(--border)) !important;
+}
+
+/* Right Sidebar (Properties Panel) - Semi-transparent dark */
+[class*="_Sidebar--right"] {
+  background: hsl(var(--background) / 0.85) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-left: 1px solid hsl(var(--border)) !important;
+}
+
+/* Puck Header - Semi-transparent dark */
+[class*="_PuckHeader"] {
+  background: hsl(var(--background) / 0.85) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+/* Header text elements */
+[class*="_PuckHeader"] h1,
+[class*="_PuckHeader"] h2,
+[class*="_PuckHeader"] h3,
+[class*="_PuckHeader"] span,
+[class*="_PuckHeader"] p {
+  color: hsl(var(--foreground)) !important;
+}
+
+/* Canvas outer area - Show animated background */
+[class*="_PuckCanvas"]:not([class*="_PuckCanvas-root"]) {
+  background: transparent !important;
+}
+
+/* Canvas dropzone - Keep white for website preview */
+[class*="_PuckCanvas-root"] {
+  background: white !important;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Component list items in left sidebar */
+[class*="_ComponentList"] [class*="_ComponentListItem"] {
+  color: hsl(var(--foreground)) !important;
+  background: hsl(var(--card) / 0.5) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+[class*="_ComponentList"] [class*="_ComponentListItem"]:hover {
+  background: hsl(var(--muted) / 0.7) !important;
+  border-color: hsl(var(--primary) / 0.5) !important;
+}
+
+/* Fields panel in right sidebar */
+[class*="_PuckFields"] {
+  color: hsl(var(--foreground)) !important;
+}
+
+[class*="_PuckFields"] label {
+  color: hsl(var(--foreground)) !important;
+}
+
+[class*="_PuckFields"] input,
+[class*="_PuckFields"] textarea,
+[class*="_PuckFields"] select {
+  background: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+[class*="_PuckFields"] input:focus,
+[class*="_PuckFields"] textarea:focus,
+[class*="_PuckFields"] select:focus {
+  border-color: hsl(var(--ring)) !important;
+  outline: 2px solid hsl(var(--ring) / 0.2) !important;
+  outline-offset: 2px;
+}
+
+/* Section headings in sidebars */
+[class*="_SectionLabel"],
+[class*="_Heading"] {
+  color: hsl(var(--foreground)) !important;
+}
+
+/* Buttons and interactive elements */
+[class*="_Button"] {
+  background: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  border: none !important;
+}
+
+[class*="_Button"]:hover {
+  background: hsl(var(--primary) / 0.9) !important;
+}
+
+[class*="_Button--secondary"] {
+  background: hsl(var(--secondary)) !important;
+  color: hsl(var(--secondary-foreground)) !important;
+}
+
+/* Accordions and collapsible sections */
+[class*="_Accordion"] {
+  border-color: hsl(var(--border)) !important;
+}
+
+[class*="_AccordionItem"] {
+  border-color: hsl(var(--border)) !important;
+}
+
+[class*="_AccordionTrigger"] {
+  color: hsl(var(--foreground)) !important;
+  background: transparent !important;
+}
+
+[class*="_AccordionTrigger"]:hover {
+  background: hsl(var(--muted) / 0.5) !important;
+}
+
+/* Drag and drop indicators */
+[class*="_DropZone"] {
+  border-color: hsl(var(--primary)) !important;
+  background: hsl(var(--primary) / 0.1) !important;
+}
+
+[class*="_DropZone--isOver"] {
+  border-color: hsl(var(--primary)) !important;
+  background: hsl(var(--primary) / 0.2) !important;
+}
+
+/* Layer tree / outline view */
+[class*="_LayerTree"] [class*="_LayerTreeItem"] {
+  color: hsl(var(--foreground)) !important;
+  background: transparent !important;
+}
+
+[class*="_LayerTree"] [class*="_LayerTreeItem"]:hover {
+  background: hsl(var(--muted) / 0.5) !important;
+}
+
+[class*="_LayerTree"] [class*="_LayerTreeItem--isSelected"] {
+  background: hsl(var(--primary) / 0.2) !important;
+  border-left: 2px solid hsl(var(--primary)) !important;
+}
+
+/* Scrollbars */
+[class*="_Sidebar"] ::-webkit-scrollbar {
+  width: 8px;
+}
+
+[class*="_Sidebar"] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[class*="_Sidebar"] ::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+[class*="_Sidebar"] ::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Tooltips */
+[class*="_Tooltip"] {
+  background: hsl(var(--popover)) !important;
+  color: hsl(var(--popover-foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+}
+
+/* Loading states */
+[class*="_Loading"] {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+/* Empty states */
+[class*="_EmptyState"] {
+  color: hsl(var(--muted-foreground)) !important;
+}

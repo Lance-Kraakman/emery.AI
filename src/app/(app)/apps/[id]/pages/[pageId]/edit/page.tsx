@@ -4,6 +4,7 @@ import React, { useEffect, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Puck, Data, usePuck } from "@measured/puck";
 import "@measured/puck/puck.css";
+import "@/styles/puck-theme.css";
 import { config } from "@/components/puck/config";
 import { getPage, updatePageContent, publishPage, unpublishPage } from "@/app/actions/puck-pages";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
