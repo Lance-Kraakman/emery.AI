@@ -11,7 +11,14 @@ export const Root = {
   render: ({ puck: { isEditing, renderDropZone: DropZone } }: any) => {
     return (
       <div
-        style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}
+        className="puck-canvas-content"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          minHeight: "100vh",
+          background: "#f5f5f5",
+          color: "#181818",
+        }}
       >
         <DropZone zone="default-zone" style={{ flexGrow: 1 }} />
       </div>

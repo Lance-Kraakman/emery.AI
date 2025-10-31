@@ -12,29 +12,76 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Globe, Eye } from "lucide-react";
 import { Loading } from "@/components/ui/loading";
 import { toast } from "sonner";
+import { AppName } from "@/ddd/domain/connections/value-objects";
 
 // Custom header actions component with full Puck controls
+// AIDEV-NOTE: This component is rendered inside Puck's context via overrides.headerActions,
+// so it has access to usePuck() hook to get current editor data without causing re-renders
 function CustomHeaderActions({
   children,
-  onSave,
-  onPreview,
+  pageId,
+  appId,
+  page,
   onPublish,
-  saving,
-  hasUnsavedChanges,
-  isPublished
 }: {
   children: ReactNode;
-  onSave: () => void;
-  onPreview: () => void;
+  pageId: number;
+  appId: number;
+  page: PageDTO;
   onPublish: () => void;
-  saving: boolean;
-  hasUnsavedChanges: boolean;
-  isPublished: boolean;
 }) {
   // AIDEV-NOTE: The `children` prop only contains Puck's default Publish button.
   // We don't render it because we provide our own custom Publish/Unpublish button.
   // Undo/redo buttons are hardcoded in Puck's MenuBar and render automatically.
   // Viewport buttons are configured via the `viewports` prop and render in a separate row.
+
+  const router = useRouter();
+  const { appState, history } = usePuck();
+  const [saving, setSaving] = useState(false);
+
+  // Detect unsaved changes using Puck's history
+  const hasUnsavedChanges = history.hasPast;
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+
+      // Get current data from Puck's state (no re-render!)
+      const currentData = appState.data;
+
+      // Update the page content
+      const result = await updatePageContent({
+        id: pageId,
+        templateData: currentData
+      }, `/apps/${appId}/pages/${pageId}/edit`);
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to save page");
+        return;
+      }
+
+      toast.success("Page saved successfully!");
+
+      // Clean up sessionStorage since changes are now saved
+      sessionStorage.removeItem(`preview-${pageId}`);
+    } catch (err) {
+      console.error('Error saving page:', err);
+      toast.error("Failed to save page");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePreview = () => {
+    // Get current data from Puck's state (no re-render!)
+    const currentData = appState.data;
+
+    // Save current data to sessionStorage so preview can access unsaved changes
+    sessionStorage.setItem(`preview-${pageId}`, JSON.stringify(currentData));
+
+    // Navigate to preview route
+    router.push(`/apps/${appId}/pages/${pageId}/preview`);
+  };
 
   return (
     <div className="flex items-center gap-2 w-full">
@@ -44,14 +91,14 @@ function CustomHeaderActions({
       {/* Custom Action Buttons */}
       <div className="flex gap-2 items-center">
         <Button
-          onClick={onSave}
+          onClick={handleSave}
           disabled={saving || !hasUnsavedChanges}
         >
           {hasUnsavedChanges ? "Save Changes" : "Saved"}
         </Button>
 
         <Button
-          onClick={onPreview}
+          onClick={handlePreview}
         >
           <Eye size={16} className="mr-1" />
           Preview
@@ -61,69 +108,12 @@ function CustomHeaderActions({
           onClick={onPublish}
         >
           <Globe size={16} className="mr-1" />
-          {isPublished ? "Unpublish" : "Publish"}
+          {page.isPublished ? "Unpublish" : "Publish"}
         </Button>
       </div>
     </div>
   );
 }
-
-// AIDEV-NOTE: Memoized Puck editor component to prevent re-renders from sidebar context changes.
-// This prevents the iframe from redrawing when the sidebar collapses/expands.
-const PuckEditor = React.memo(function PuckEditor({
-  pageId,
-  appId,
-  page,
-  pageData,
-  handleDataChange,
-  handleSave,
-  handlePreview,
-  handlePublish,
-  saving,
-  hasUnsavedChanges,
-}: {
-  pageId: number;
-  appId: number;
-  page: PageDTO;
-  pageData: Data;
-  handleDataChange: (data: Data) => void;
-  handleSave: () => void;
-  handlePreview: () => void;
-  handlePublish: () => void;
-  saving: boolean;
-  hasUnsavedChanges: boolean;
-}) {
-  return (
-    <Puck
-      key={`puck-editor-${pageId}`}
-      config={config}
-      data={pageData}
-      onChange={handleDataChange}
-      headerTitle={page.name}
-      headerPath={`/apps/${appId}/pages/${pageId}`}
-      viewports={[
-        { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
-        { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },
-        { width: 1440, height: "auto", icon: "Monitor", label: "Desktop" }
-      ]}
-      iframe={{ enabled: true }}
-      overrides={{
-        headerActions: ({ children }) => (
-          <CustomHeaderActions
-            onSave={handleSave}
-            onPreview={handlePreview}
-            onPublish={handlePublish}
-            saving={saving}
-            hasUnsavedChanges={hasUnsavedChanges}
-            isPublished={page?.isPublished || false}
-          >
-            {children}
-          </CustomHeaderActions>
-        )
-      }}
-    />
-  );
-});
 
 export default function PageEditPage() {
   const params = useParams();
@@ -132,10 +122,8 @@ export default function PageEditPage() {
   const pageId = parseInt(params.pageId as string);
 
   const [page, setPage] = useState<PageDTO | null>(null);
-  const [pageData, setPageData] = useState<Data>({ content: [], root: {}, zones: {} });
+  const [initialData, setInitialData] = useState<Data>({ content: [], root: {}, zones: {} });
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -150,8 +138,7 @@ export default function PageEditPage() {
             const restoredData = JSON.parse(savedData);
             const loadedPage = await getPage(pageId);
             setPage(loadedPage);
-            setPageData(restoredData);
-            setHasUnsavedChanges(true); // Mark as having unsaved changes
+            setInitialData(restoredData);
             setLoading(false);
             return;
           } catch (err) {
@@ -164,13 +151,13 @@ export default function PageEditPage() {
         const loadedPage = await getPage(pageId);
         setPage(loadedPage);
 
-        // Initialize pageData with loaded content or empty structure
-        const initialData: Data = loadedPage.templateData || {
+        // Initialize with loaded content or empty structure
+        const data: Data = loadedPage.templateData || {
           content: [],
           root: {},
           zones: {}
         };
-        setPageData(initialData);
+        setInitialData(data);
       } catch (err) {
         console.error('Error loading page:', err);
         setError(err instanceof Error ? err.message : 'Failed to load page');
@@ -183,44 +170,6 @@ export default function PageEditPage() {
       loadPage();
     }
   }, [pageId]);
-
-  const handleDataChange = (data: Data) => {
-    setPageData(data);
-    setHasUnsavedChanges(true);
-  };
-
-  const handleSave = async () => {
-    if (!page) return;
-
-    try {
-      setSaving(true);
-
-      // Update the page content
-      const result = await updatePageContent({
-        id: pageId,
-        templateData: pageData
-      }, `/apps/${appId}/pages/${pageId}/edit`);
-
-      if (!result.success) {
-        toast.error(result.error || "Failed to save page");
-        return;
-      }
-
-      toast.success("Page saved successfully!");
-      setHasUnsavedChanges(false);
-
-      // Clean up sessionStorage since changes are now saved
-      sessionStorage.removeItem(`preview-${pageId}`);
-
-      // Update local state
-      setPage(prev => prev ? { ...prev, templateData: pageData } : null);
-    } catch (err) {
-      console.error('Error saving page:', err);
-      toast.error("Failed to save page");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handlePublish = async () => {
     if (!page) return;
@@ -243,17 +192,6 @@ export default function PageEditPage() {
       console.error('Error publishing page:', err);
       toast.error(`Failed to ${page.isPublished ? 'unpublish' : 'publish'} page`);
     }
-  };
-
-  const handlePreview = () => {
-    // Save current pageData to sessionStorage so preview can access unsaved changes
-    sessionStorage.setItem(`preview-${pageId}`, JSON.stringify(pageData));
-    // Navigate to preview route
-    router.push(`/apps/${appId}/pages/${pageId}/preview`);
-  };
-
-  const handleCancel = () => {
-    router.push(`/apps/${appId}`);
   };
 
   if (loading) {
@@ -279,17 +217,43 @@ export default function PageEditPage() {
 
   return (
     <div className="h-screen">
-      <PuckEditor
-        pageId={pageId}
-        appId={appId}
-        page={page}
-        pageData={pageData}
-        handleDataChange={handleDataChange}
-        handleSave={handleSave}
-        handlePreview={handlePreview}
-        handlePublish={handlePublish}
-        saving={saving}
-        hasUnsavedChanges={hasUnsavedChanges}
+      {/* AIDEV-NOTE: Puck is used as an UNCONTROLLED component (no onChange prop).
+          This prevents iframe reloads on every edit. CustomHeaderActions uses
+          usePuck() hook to access current data when saving/previewing. */}
+      <Puck
+        config={config}
+        data={initialData}
+        headerTitle={page.name}
+        headerPath={`/${page.slug}`}
+        viewports={[
+          { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
+          { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },
+          { width: 1440, height: "auto", icon: "Monitor", label: "Desktop" }
+        ]}
+        iframe={{
+          enabled: true,
+          waitForStyles: true,
+          // htmlAttributes: {
+          //   className: "puck-canvas-light-mode",
+          // },
+        }}
+        overrides={{
+          puck: ({ children }) => (
+            <div className="puck-themed-wrapper">
+              {children}
+            </div>
+          ),
+          headerActions: ({ children }) => (
+            <CustomHeaderActions
+              pageId={pageId}
+              appId={appId}
+              page={page}
+              onPublish={handlePublish}
+            >
+              {children}
+            </CustomHeaderActions>
+          )
+        }}
       />
     </div>
   );
