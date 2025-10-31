@@ -140,6 +140,12 @@ export interface CreateViewData {
   tableId: number;
   name: string;
   description?: string;
+  fieldMappings?: Array<{
+    sourceFieldId: number;
+    displayName: string;
+    visible: boolean;
+    order: number;
+  }>;
 }
 
 export interface UpdateViewData {
@@ -160,5 +166,11 @@ export interface UpdateViewData {
     pageSize: number;
     offset?: number;
   };
+  fieldMappings?: Array<{
+    sourceFieldId: number;
+    displayName: string;
+    visible: boolean;
+    order: number;
+  }>;
 }
 

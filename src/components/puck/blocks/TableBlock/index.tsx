@@ -2,29 +2,14 @@
  * TableBlock - Puck Component Configuration
  *
  * AIDEV-NOTE: This is the Puck config for TableBlock.
- * The resolveData hook executes server-side to fetch data from the selected
- * data source, applying filters/sorting/pagination before rendering.
+ * Column configuration is now stored in the View (database), following Baserow's architecture.
+ * Users manage column visibility, order, and display names through the Views UI.
  *
  * Flow:
- * 1. User selects data source in Puck editor (via DataSourceField)
- * 2. User configures field mappings (via FieldMappingField)
- * 3. resolveData executes on server, fetches rows
- * 4. TableBlock component receives pre-resolved data as props
- */
-
-/**
- * TableBlock - Puck Component Configuration
- *
- * AIDEV-NOTE: This is the Puck config for TableBlock.
- * Uses Server Actions to fetch data, avoiding client bundle pollution.
- * Server Actions ('use server') create an RPC boundary that prevents
- * DIContainer, gRPC clients, and Node.js built-ins from bundling into client.
- *
- * Flow:
- * 1. User selects data source in Puck editor (via DataSourceField)
- * 2. User configures field mappings (via FieldMappingField)
- * 3. resolveData executes (server or client context)
- * 4. Server Actions called → RPC to server if needed
+ * 1. User selects a view in Puck editor
+ * 2. resolveData executes on server, fetches view details
+ * 3. Uses view's field mappings (or auto-generates if none exist)
+ * 4. Executes view to get filtered/sorted/paginated data
  * 5. TableBlock component receives pre-resolved DTO data as props
  */
 
@@ -115,61 +100,6 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       visible: false,
     },
 
-    // Helper field to show available fields (populated by resolveData)
-    _availableFieldsInfo: {
-      label: "Available Fields (Reference Only)",
-      type: "textarea",
-    },
-
-    // Field Mappings
-    // AIDEV-NOTE: Column configuration controls which fields are displayed and in what order.
-    // If left empty, the first 10 fields will be auto-generated in resolveData.
-    // Users typically don't need to configure this manually - auto-generation works for most cases.
-    // To customize: After selecting a table, the columns will auto-populate. You can then:
-    // - Reorder by changing the "order" value
-    // - Rename by changing "Display Name"
-    // - Hide by changing "Visible" to "Hide"
-    fieldMappings: {
-      label: "Column Configuration (Auto-configured)",
-      type: "array",
-      min: 0,
-      getItemSummary: (item: any) => {
-        return item?.visible
-          ? `${item.order + 1}. ${item.displayName}`
-          : `${item.displayName} (hidden)`;
-      },
-      arrayFields: {
-        sourceFieldId: {
-          type: "number",
-          label: "Field ID (auto-filled)",
-          min: 1,
-        },
-        displayName: {
-          type: "text",
-          label: "Display Name",
-        },
-        visible: {
-          type: "radio",
-          label: "Visible",
-          options: [
-            { label: "Show", value: true },
-            { label: "Hide", value: false },
-          ],
-        },
-        order: {
-          type: "number",
-          label: "Order",
-          min: 0,
-        },
-      },
-      defaultItemProps: {
-        sourceFieldId: 0,
-        displayName: "Column",
-        visible: true,
-        order: 0,
-      },
-    },
-
     // Display Options
     showHeader: {
       label: "Show Table Header",
@@ -210,15 +140,15 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
     striped: true,
     bordered: false,
     compact: false,
-    fieldMappings: [],
   },
 
   /**
    * Server-side data resolution
    *
-   * AIDEV-NOTE: Simplified flow - just execute the selected view.
+   * AIDEV-NOTE: Uses view-based field mappings following Baserow's architecture.
    * User selects a view (required), which determines the table automatically.
-   * View contains filters, sorting, and pagination configuration.
+   * View contains filters, sorting, pagination, AND field mappings (column config).
+   * Field mappings control column visibility, order, and display names.
    */
   resolveData: async ({ props }, { metadata }) => {
     try {
@@ -283,54 +213,33 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
         sampleField: result.fields[0]
       });
 
-      // Auto-generate field mappings ONLY if none exist
-      // AIDEV-NOTE: Never regenerate if mappings already exist - this prevents infinite re-renders
-      // User can manually edit field mappings, and we preserve their changes
-      let fieldMappings = props.fieldMappings || [];
+      // Use field mappings from view, auto-generate only if view has none
+      // AIDEV-NOTE: Field mappings are now stored in the view (database), not component props.
+      // This follows Baserow's architecture where views control column visibility/order.
+      let fieldMappings = view.fieldMappings || [];
 
       if (fieldMappings.length === 0 && result.fields.length > 0) {
-        console.log('[TableBlock resolveData] Auto-generating field mappings for', result.fields.length, 'fields');
+        console.log('[TableBlock resolveData] View has no field mappings, auto-generating for', result.fields.length, 'fields');
 
         // AIDEV-NOTE: Include 'id' field but hidden by default
         // The 'id' field is special - it's stored as `row.id` not `row.field_X` in toViewFormat()
         // See src/ddd/domain/tables/value-objects/row.ts:162-164
-        // We need to handle it specially in the render component
 
         fieldMappings = result.fields.map((field, index) => {
           const isIdField = field.name === 'id';
 
           return {
-            sourceFieldId: field.id, // Plain number, not field.id.value
+            sourceFieldId: field.id, // Plain number
             displayName: field.name,
             visible: !isIdField, // Hide 'id' field by default
             order: index,
           };
         }).slice(0, 10); // Take first 10 fields
 
-        console.log('[TableBlock resolveData] Generated mappings (id field hidden by default):', fieldMappings);
+        console.log('[TableBlock resolveData] Generated mappings (id field hidden):', fieldMappings.length);
       } else {
-        console.log('[TableBlock resolveData] Preserving existing field mappings:', fieldMappings.length);
-        // Use existing mappings as-is to avoid triggering re-renders
-        fieldMappings = props.fieldMappings || [];
+        console.log('[TableBlock resolveData] Using view field mappings:', fieldMappings.length);
       }
-
-      // Generate available fields info for user reference
-      // AIDEV-NOTE: Only regenerate if not already set to avoid infinite re-renders
-      const availableFieldsInfo = props._availableFieldsInfo || (
-        result.fields.length > 0
-          ? `Available Fields in "${view.name}":\n\n` +
-            `${'ID'.padEnd(6)} | ${'Field Name'.padEnd(25)} | ${'Type'.padEnd(12)} | Status\n` +
-            `${'-'.repeat(6)} | ${'-'.repeat(25)} | ${'-'.repeat(12)} | ${'-'.repeat(20)}\n` +
-            result.fields.map(f => {
-              const status = f.name === 'id' ? 'Hidden by default' : 'Visible';
-              return `${String(f.id).padEnd(6)} | ${f.name.padEnd(25)} | ${f.type.padEnd(12)} | ${status}`;
-            }).join('\n') +
-            `\n\nℹ️ Info:\n` +
-            `• Columns are auto-configured when you select a view\n` +
-            `• The 'id' field is hidden by default but can be made visible\n` +
-            `• Edit field mappings below to customize which columns appear and their order`
-          : 'No fields available'
-      );
 
       // Return props with resolved DTO data
       console.log('[TableBlock resolveData] Returning resolved data:', {
@@ -349,8 +258,7 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
           _viewName: view.name,
           _tableName: tableName,
           _tableId: view.tableId,
-          fieldMappings,
-          _availableFieldsInfo: availableFieldsInfo,
+          fieldMappings,            // From view, not component props
           _rows: result.rows,        // Plain objects from .toViewFormat()
           _fields: result.fields,    // Plain objects: { id, name, type }
           _totalCount: result.totalCount,
