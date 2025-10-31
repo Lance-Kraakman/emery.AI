@@ -30,105 +30,88 @@
 
 import type { ComponentConfig } from "@measured/puck";
 import TableBlock, { type TableBlockProps } from "./TableBlock";
-import { getView, executeView, getViewsForTable, createView } from "@/app/actions/views";
+import { getView, executeView, getViewsForOrganization } from "@/app/actions/views";
 import { getTables } from "@/app/actions/tables";
-import { getFields } from "@/app/actions/fields";
 
 export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
   label: "Table",
 
   fields: {
-    // Table Selection (auto-creates default data source)
-    table: {
-      label: "Table",
+    // View Selection - Single required field showing "ViewName (TableName)"
+    // AIDEV-NOTE: Simplified from table+view to just view selection.
+    // Users select a view, which automatically determines the table.
+    viewId: {
+      label: "View",
       type: "external",
-      placeholder: "Select a table",
+      placeholder: "Select a view",
       showSearch: true,
       fetchList: async ({ query }: { query: string }) => {
-        const tables = await getTables();
-        const filteredTables = query
-          ? tables.filter((t) =>
-              t.name.toLowerCase().includes(query.toLowerCase())
+        console.log('[viewId fetchList] Fetching all views for organization');
+
+        // Get all views and tables to build "ViewName (TableName)" format
+        const [views, tables] = await Promise.all([
+          getViewsForOrganization(),
+          getTables()
+        ]);
+
+        console.log('[viewId fetchList] Found views:', views.length, 'tables:', tables.length);
+
+        // Create a table lookup map
+        const tableMap = new Map(tables.map(t => [t.id, t.name]));
+
+        // Filter by query if provided
+        const filteredViews = query
+          ? views.filter((v) =>
+              v.name.toLowerCase().includes(query.toLowerCase()) ||
+              tableMap.get(v.tableId)?.toLowerCase().includes(query.toLowerCase())
             )
-          : tables;
-        return filteredTables.map((t) => ({
-          id: t.id,
-          name: t.name,
-          databaseId: t.databaseId,
-          title: t.name,
-          description: t.description || `Database ID: ${t.databaseId}`,
-        }));
-      },
-      mapProp: (item: any) => (item ? {
-        id: item.id,
-        name: item.name,
-        databaseId: item.databaseId,
-      } : null),
-      getItemSummary: (item: any) => item?.name || "No table selected",
-    } as any,
+          : views;
 
-    // Optional: Custom view override (filtered by selected table)
-    // AIDEV-NOTE: Views represent filtered/sorted configurations of a table.
-    // If not specified, a default view will be auto-created for the selected table.
-    dataSourceOverride: {
-      label: "View (Optional)",
-      type: "external",
-      placeholder: "Use default view",
-      showSearch: true,
-      fetchList: async ({ query }: { query: string }, context: any) => {
-        console.log('[dataSourceOverride fetchList] Called with:', {
-          query,
-          contextKeys: Object.keys(context || {}),
-          props: context?.props,
-          tableId: context?.props?.table?.id
-        });
-
-        // Only show data sources if a table is selected
-        if (!context?.props?.table?.id) {
-          console.log('[dataSourceOverride fetchList] No table ID in context, returning empty');
-          return [];
-        }
-
-        const tableId = context.props.table.id;
-        console.log('[dataSourceOverride fetchList] Fetching data sources for table:', tableId);
-
-        const dataSources = await getViewsForTable(tableId);
-        console.log('[dataSourceOverride fetchList] Found data sources:', dataSources.length);
-
-        const filteredSources = query
-          ? dataSources.filter((ds: any) =>
-              ds.name.toLowerCase().includes(query.toLowerCase())
-            )
-          : dataSources;
-
-        const result = filteredSources.map((ds: any) => ({
-          id: ds.id,
-          name: ds.name,
-          tableId: ds.tableId,
-          title: ds.name,
-          description: `${ds.filters.length} filters, ${ds.sorting.length} sorts`,
+        const result = filteredViews.map((v) => ({
+          id: v.id,
+          name: v.name,
+          tableId: v.tableId,
+          tableName: tableMap.get(v.tableId) || `Table ${v.tableId}`,
+          title: `${v.name}`,
+          description: `Table: ${tableMap.get(v.tableId) || v.tableId} | ${v.filters.length} filters, ${v.sorting.length} sorts`,
         }));
 
-        console.log('[dataSourceOverride fetchList] Returning options:', result.length);
+        console.log('[viewId fetchList] Returning options:', result.length);
         return result;
       },
-      mapProp: (item: any) => (item ? {
-        id: item.id,
-        name: item.name,
-        tableId: item.tableId,
-      } : null),
-      getItemSummary: (item: any) => item?.name || "Using default view",
+      mapProp: (item: any) => item?.id || null,
+      getItemSummary: (item: any, context: any) => {
+        // item is the viewId (number)
+        // Try to get view name from context if available
+        const viewId = typeof item === 'number' ? item : item?.id;
+        const viewName = context?.props?._viewName;
+        const tableName = context?.props?._tableName;
+
+        if (viewName && tableName) {
+          return `${viewName} (${tableName})`;
+        } else if (viewName) {
+          return viewName;
+        } else if (viewId) {
+          return `View ID: ${viewId}`;
+        }
+        return "No view selected";
+      },
     } as any,
 
     // Hidden fields populated by resolveData
-    dataSourceId: {
-      label: "Data Source ID",
-      type: "number",
+    _viewName: {
+      label: "View Name",
+      type: "text",
       visible: false,
     },
-    dataSourceName: {
-      label: "Data Source Name",
+    _tableName: {
+      label: "Table Name",
       type: "text",
+      visible: false,
+    },
+    _tableId: {
+      label: "Table ID",
+      type: "number",
       visible: false,
     },
 
@@ -233,92 +216,55 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
   /**
    * Server-side data resolution
    *
-   * AIDEV-NOTE: This executes in multiple contexts (server render, Puck editor).
-   * Uses Server Actions which create an RPC boundary when called from client.
-   * All data is returned as DTOs (plain objects), not domain entities.
-   *
-   * Hybrid Flow (Either/Or Approach):
-   * 1. User selects table from dropdown
-   * 2. If user selected a custom data source override → use it
-   * 3. Otherwise, check if default data source exists for that table
-   * 4. If not, auto-create one with name "Default view of {tableName}"
-   * 5. Execute data source and return rows
+   * AIDEV-NOTE: Simplified flow - just execute the selected view.
+   * User selects a view (required), which determines the table automatically.
+   * View contains filters, sorting, and pagination configuration.
    */
   resolveData: async ({ props }, { metadata }) => {
     try {
       console.log('[TableBlock resolveData] Starting with props:', {
-        tableId: props.table?.id,
-        tableName: props.table?.name,
-        hasDataSourceOverride: !!props.dataSourceOverride
+        viewId: props.viewId
       });
 
-      // If no table selected, return props as-is
-      if (!props.table?.id) {
-        console.log('[TableBlock resolveData] No table selected, returning empty');
+      // If no view selected, return props as-is
+      if (!props.viewId) {
+        console.log('[TableBlock resolveData] No view selected, returning empty');
         return { props };
       }
 
-      const tableId = props.table.id;
-      const tableName = props.table.name;
+      const viewId = props.viewId;
 
-      let dataSourceId: number;
-      let dataSourceName: string;
-
-      // Check if user selected a custom data source override
-      if (props.dataSourceOverride?.id) {
-        // Use the custom data source selected by user
-        dataSourceId = props.dataSourceOverride.id;
-        dataSourceName = props.dataSourceOverride.name;
-        console.log('[TableBlock resolveData] Using custom data source override:', { dataSourceId, dataSourceName });
-      } else {
-        // Auto-create or use default data source for the table
-        console.log('[TableBlock resolveData] Fetching existing data sources for table:', tableId);
-        const existingDataSources = await getViewsForTable(tableId);
-        console.log('[TableBlock resolveData] Found existing data sources:', existingDataSources.length);
-
-        if (existingDataSources.length > 0) {
-          // Use the first existing data source
-          dataSourceId = existingDataSources[0].id;
-          dataSourceName = existingDataSources[0].name;
-          console.log('[TableBlock resolveData] Using existing data source:', { dataSourceId, dataSourceName });
-        } else {
-          // Auto-create a default data source
-          console.log('[TableBlock resolveData] Auto-creating default data source for table:', tableName);
-          const createResult = await createView({
-            tableId,
-            name: `Default view of ${tableName}`,
-            description: "Auto-created default data source for table",
-          });
-
-          if (!createResult.success || !createResult.data) {
-            console.error('[TableBlock resolveData] Failed to create data source:', createResult.error);
-            return {
-              props: {
-                ...props,
-                _rows: [],
-                _fields: [],
-                _totalCount: 0,
-              } as any,
-            };
-          }
-
-          dataSourceId = createResult.data.id;
-          dataSourceName = createResult.data.name;
-          console.log('[TableBlock resolveData] Created data source:', { dataSourceId, dataSourceName });
-        }
+      // Get view details to populate view name and table name for display
+      const view = await getView(viewId);
+      if (!view) {
+        console.error('[TableBlock resolveData] Failed to get view details for viewId:', viewId);
+        return {
+          props: {
+            ...props,
+            _rows: [],
+            _fields: [],
+            _totalCount: 0,
+          } as any,
+        };
       }
 
-      // Execute data source to get rows (Server Action - returns DTOs)
-      console.log('[TableBlock resolveData] Executing data source:', dataSourceId);
-      const result = await executeView(dataSourceId);
+      // Get table name for display
+      const tables = await getTables();
+      const table = tables.find(t => t.id === view.tableId);
+      const tableName = table?.name || `Table ${view.tableId}`;
+
+      // Execute view to get rows (Server Action - returns DTOs)
+      console.log('[TableBlock resolveData] Executing view:', viewId);
+      const result = await executeView(viewId);
 
       if (!result) {
         console.error('[TableBlock resolveData] executeView returned null');
         return {
           props: {
             ...props,
-            dataSourceId,
-            dataSourceName,
+            _viewName: view.name,
+            _tableName: tableName,
+            _tableId: view.tableId,
             _rows: [],
             _fields: [],
             _totalCount: 0,
@@ -327,6 +273,9 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       }
 
       console.log('[TableBlock resolveData] Got result:', {
+        viewId,
+        viewName: view.name,
+        tableName,
         rowCount: result.rows.length,
         fieldCount: result.fields.length,
         totalCount: result.totalCount,
@@ -361,8 +310,10 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
 
       // Return props with resolved DTO data
       console.log('[TableBlock resolveData] Returning resolved data:', {
-        dataSourceId,
-        dataSourceName,
+        viewId,
+        viewName: view.name,
+        tableName,
+        tableId: view.tableId,
         rowCount: result.rows.length,
         fieldCount: result.fields.length,
         mappingCount: fieldMappings.length
@@ -371,11 +322,12 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       return {
         props: {
           ...props,
-          dataSourceId,
-          dataSourceName,
+          _viewName: view.name,
+          _tableName: tableName,
+          _tableId: view.tableId,
           fieldMappings,
           _availableFieldsInfo: availableFieldsInfo,
-          _rows: result.rows,        // Plain objects from .toPlainObject()
+          _rows: result.rows,        // Plain objects from .toViewFormat()
           _fields: result.fields,    // Plain objects: { id, name, type }
           _totalCount: result.totalCount,
         } as any,
