@@ -457,23 +457,14 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
   async getRow(tableId: TableId, rowId: string): Promise<Row | null> {
     try {
-      const table = await this.findById(tableId);
-      if (!table) {
-        throw new Error('Table not found');
-      }
+      // OPTIMIZED: Use server-side filtering instead of loading all rows
+      // This queries Delta Lake with WHERE id = 'rowId' instead of loading 1000+ rows
+      const rows = await this.getRows(tableId, {
+        filters: [{ field: 'id', operator: 'eq', value: rowId }],
+        limit: 1
+      });
 
-      const s3Path = S3TablePath.fromPath(table.storageLocation);
-      
-      // Load all rows and find specific row
-      const allRows = await this.loadTableData(s3Path);
-      
-      const foundRow = allRows.find(row => row.id.value === rowId);
-      if (!foundRow) {
-        return null;
-      }
-      
-      // Return Row entity directly - no conversion needed
-      return foundRow;
+      return rows.length > 0 ? rows[0] : null;
 
     } catch (error) {
       console.error('[TableService] Error getting row:', error);

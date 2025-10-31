@@ -18,7 +18,7 @@ import { dataStore, dataSelectors } from '@/stores/data-management.store'
 import { storeActions, dataActions } from '@/stores/actions'
 import type { TableDTO } from "@/app/mappers/table-mapper"
 import { getFields } from "@/app/actions/fields"
-import { getRowsDSG, searchRowsDSG, createRow, createRows, updateRowData, deleteRowData } from "@/app/actions/rows"
+import { getRowsDSG, searchRowsDSG, createRow, createRows, updateRowData, updateRowsData, deleteRowData } from "@/app/actions/rows"
 import { GRID_CONFIG } from "@/lib/constants/grid"
 import { rowQueryKeys, fieldQueryKeys } from "@/lib/query-keys/rows"
 import type { FilterConfig } from "@/lib/types/filters"
@@ -200,86 +200,70 @@ export function DataViewsClientSimplified() {
     return field ? field.name : null
   }
 
-  // TanStack Mutations for optimistic updates
-  const updateRowMutation = useMutation({
-    // Built-in columns (textColumn, floatColumn, etc.) handle normalization automatically
-    // Values from grid are already in correct format - no custom normalization needed
-    mutationFn: async ({ rowId, fieldId, value }: { rowId: string, fieldId: number, value: DomainFieldValue }) => {
+  // TanStack Mutations for optimistic updates - BULK UPDATE VERSION
+  // Processes multiple row updates in a single API call to eliminate race conditions
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async (updates: Array<{ rowId: string; data: Record<string, any> }>) => {
       if (!selectedTableId) throw new Error('No table selected')
-
-      // Convert field ID to field name (grid uses IDs, row data uses names)
-      const fieldName = getFieldNameById(fieldId)
-      if (!fieldName) throw new Error('Field not found')
-
-      return updateRowData({
-        tableId: selectedTableId,
-        rowId,
-        data: { [fieldName]: value },
-      })
+      return updateRowsData(selectedTableId, updates)
     },
-    onMutate: async ({ rowId, fieldId, value }) => {
-      // Use EXACT query key with sortBy and activeFilters to match the infinite query
-      const queryKey = selectedTableId
-        ? rowQueryKeys.infinite(selectedTableId, sortBy, activeFilters ?? [])
-        : ['rows', null, 'infinite']
-
-      // Cancel outgoing refetches to prevent race conditions
-      await queryClient.cancelQueries({ queryKey })
-
-      // Snapshot the previous data for rollback (using exact key)
-      const previousData = queryClient.getQueryData(queryKey)
-
-      // Convert field ID to field name for optimistic update
-      const fieldName = getFieldNameById(fieldId)
-      if (!fieldName) return { previousData, queryKey }
-
-      // Optimistically update all pages in the infinite query (using exact key)
-      queryClient.setQueryData(queryKey, (old: any) => {
-        if (!old?.pages) return old
-        return {
-          ...old,
-          pages: old.pages.map((page: any) => ({
-            ...page,
-            rows: page.rows.map((row: DSGRow) =>
-              row.id === rowId ? { ...row, [fieldName]: value } : row
-            )
-          }))
-        }
+    onError: (err) => {
+      logger.error("Failed to bulk update rows:", err)
+      toast.error("Failed to save changes", {
+        description: err instanceof Error ? err.message : "An error occurred while saving changes"
       })
 
-      return { previousData, queryKey }
-    },
-    onError: (err, variables, context) => {
-      // Rollback to previous state on error (using exact key from context)
-      if (context?.previousData && context?.queryKey) {
-        queryClient.setQueryData(context.queryKey, context.previousData)
+      // Invalidate to refetch correct data on error
+      if (selectedTableId) {
+        queryClient.invalidateQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
       }
-      logger.error("Failed to update row:", err)
-      toast.error("Failed to update cell", {
-        description: err instanceof Error ? err.message : "An error occurred while updating the cell"
-      })
+    },
+    onSuccess: (data, variables) => {
+      logger.summary('Bulk update completed', { rows: variables.length })
     },
     onSettled: () => {
-      // Don't invalidate - let optimistic update persist
-      // Only refetch on errors (handled by onError rollback)
+      // Don't invalidate - let optimistic updates persist
     },
   })
 
-  // AIDEV-NOTE: Debounced database write function (500ms delay)
-  // Batches rapid cell changes to reduce database writes by ~95%
-  // Each cell (rowId + fieldId combination) gets its own debounce timer
-  const debouncedMutateRef = useRef(
-    debounce((rowId: string, fieldId: number, value: any) => {
-      const key = `${rowId}-${fieldId}`
-      pendingMutationsRef.current.delete(key)
-      updateRowMutation.mutate({ rowId, fieldId, value })
+  // AIDEV-NOTE: Table-level debounced batch processor (500ms delay)
+  // Collects ALL pending cell changes across entire table and sends in SINGLE API call
+  // This eliminates race conditions and reduces database load significantly
+  const debouncedBatchUpdate = useRef(
+    debounce(() => {
+      const pendingUpdates = Array.from(pendingMutationsRef.current.values())
+
+      if (pendingUpdates.length === 0) return
+
+      // Group updates by rowId to create batch payload
+      const updatesByRow = new Map<string, Record<string, any>>()
+
+      pendingUpdates.forEach(({ rowId, fieldId, value }) => {
+        const fieldName = getFieldNameById(fieldId)
+        if (!fieldName) return
+
+        if (!updatesByRow.has(rowId)) {
+          updatesByRow.set(rowId, {})
+        }
+        updatesByRow.get(rowId)![fieldName] = value
+      })
+
+      // Convert to array format expected by bulk API
+      const bulkUpdates = Array.from(updatesByRow.entries()).map(([rowId, data]) => ({
+        rowId,
+        data
+      }))
+
+      // Clear pending mutations and trigger bulk update
+      pendingMutationsRef.current.clear()
+      bulkUpdateMutation.mutate(bulkUpdates)
     }, 500)
   )
 
   // Cleanup debounced function on unmount
   useEffect(() => {
     return () => {
-      debouncedMutateRef.current.cancel()
+      debouncedBatchUpdate.current.cancel()
     }
   }, [])
 
@@ -358,9 +342,9 @@ export function DataViewsClientSimplified() {
   })
 
   const handleUpdateRow = async (rowId: string, fieldId: number, value: DomainFieldValue) => {
-    // AIDEV-NOTE: Two-phase update for performance:
+    // AIDEV-NOTE: Two-phase update with table-level batching:
     // 1. Immediate optimistic UI update (instant feedback to user)
-    // 2. Debounced server write (batches rapid changes)
+    // 2. Collect in batch, debounced bulk server write (eliminates race conditions)
 
     // Step 1: Immediate optimistic UI update for instant feedback
     const queryKey = selectedTableId
@@ -384,11 +368,14 @@ export function DataViewsClientSimplified() {
       })
     }
 
-    // Step 2: Debounced server write (batches rapid changes, 500ms delay)
-    // Track pending mutation and trigger debounced save
+    // Step 2: Add to batch and trigger table-level debounced update
+    // Key is per-cell to handle same cell being edited multiple times
     const key = `${rowId}-${fieldId}`
     pendingMutationsRef.current.set(key, { rowId, fieldId, value })
-    debouncedMutateRef.current(rowId, fieldId, value)
+
+    // Trigger table-level debounced batch processor
+    // This will collect ALL pending updates and send in single API call
+    debouncedBatchUpdate.current()
   }
 
   const handleAddRows = async (rowsData: Record<string, any>[]): Promise<void> => {

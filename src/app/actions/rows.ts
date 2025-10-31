@@ -271,6 +271,107 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
   }
 }
 
+/**
+ * Bulk update multiple rows with partial data (optimized for batch cell edits)
+ * PERFORMANCE: Single query to fetch existing rows + single Delta Lake merge
+ */
+export async function updateRowsData(
+  tableId: number,
+  updates: Array<{ rowId: string; data: Record<string, any> }>,
+  revalidateUrl?: string
+): Promise<Result> {
+  try {
+    const session = await requirePermission("data:manage");
+
+    if (!tableId || !updates || updates.length === 0) {
+      return {
+        success: false,
+        error: "tableId and updates array are required",
+      };
+    }
+
+    // Use table application service
+    const tableAppService = getTableApplicationService();
+
+    // Get table to retrieve field information
+    const table = await tableAppService.getTable(TableId.fromNumber(tableId));
+
+    if (!table) {
+      return {
+        success: false,
+        error: "Table not found"
+      };
+    }
+
+    // OPTIMIZED: Fetch all existing rows in ONE query using 'in' filter
+    const rowIds = updates.map(u => u.rowId);
+    const existingRows = await tableAppService.getRows(
+      TableId.fromNumber(tableId),
+      {
+        filters: [{ field: 'id', operator: 'in' as const, value: rowIds }]
+      }
+    );
+
+    // Create a map for quick lookup
+    const existingRowMap = new Map(
+      existingRows.map(row => [row.id.value, row.toPlainObject()])
+    );
+
+    // AIDEV-NOTE: Ensure we have a valid user ID
+    if (!session.user?.id || typeof session.user.id !== 'string') {
+      return {
+        success: false,
+        error: "Invalid user session - user ID not found"
+      };
+    }
+
+    // Merge each update with existing row data
+    const mergedUpdates = updates.map(update => {
+      const existingData = existingRowMap.get(update.rowId) || {};
+      const mergedData = { ...existingData, ...update.data, id: update.rowId };
+      const row = Row.fromPlainObject(mergedData, tableId, table.fields);
+
+      return {
+        rowId: RowId.fromString(update.rowId),
+        data: row
+      };
+    });
+
+    // Bulk update using application service
+    const result = await tableAppService.updateRows({
+      tableId: TableId.fromNumber(tableId),
+      updates: mergedUpdates,
+      updatedBy: UserId.fromString(session.user.id)
+    });
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to bulk update rows"
+      };
+    }
+
+    // Optional revalidation with custom URL
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    }
+
+    // Convert Domain objects to DTOs for serialization
+    const rowDTOs = result.data?.map(row => RowMapper.toDTO(row)) || [];
+
+    return {
+      success: true,
+      data: rowDTOs,
+    };
+  } catch (error) {
+    console.error("Error bulk updating rows:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to bulk update rows",
+    };
+  }
+}
+
 export async function updateRowAction(formData: FormData) {
   const tableId = parseInt(formData.get('tableId') as string);
   const rowId = formData.get('rowId') as string;
