@@ -115,6 +115,15 @@ export interface BulkCreateRowsCommand {
   createdBy?: UserId;
 }
 
+export interface BulkUpdateRowsCommand {
+  tableId: TableId;
+  updates: Array<{
+    rowId: RowId;
+    data: Row;
+  }>;
+  updatedBy?: UserId;
+}
+
 export interface SearchTableRowsCommand {
   tableId: TableId;
   query: string;
@@ -788,6 +797,55 @@ export class TableApplicationService {
     } catch (error) {
       logger.error('Error updating row:', error);
       return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to update row');
+    }
+  }
+
+  /**
+   * Update multiple rows in a table (bulk update)
+   * OPTIMIZED: Single transaction, single Delta Lake merge operation
+   */
+  async updateRows(command: BulkUpdateRowsCommand): Promise<TableApplicationServiceResult<Row[]>> {
+    try {
+      const { tableId, updates } = command;
+
+      if (updates.length === 0) {
+        return ResultHelpers.success([]);
+      }
+
+      // Verify table exists
+      const table = await this.dynamicTableService.getTable(tableId);
+      if (!table) {
+        return ResultHelpers.failure(`Table ${tableId.value} not found`);
+      }
+
+      // Validate relation fields for all rows
+      for (const update of updates) {
+        const relationValidation = await this.validateRelationFields(table, update.data);
+        if (!relationValidation.valid) {
+          return ResultHelpers.failure(
+            `Relation validation failed for row ${update.rowId.value}: ${relationValidation.error}`
+          );
+        }
+      }
+
+      // Bulk update using repository (single Delta Lake merge)
+      const updatedRows = await this.dynamicTableRepository.updateRows(
+        tableId,
+        updates.map(u => ({
+          rowId: u.rowId.value,
+          row: u.data
+        }))
+      );
+
+      logger.summary('Bulk update completed', {
+        rows: updatedRows.length,
+        tableId: tableId.value
+      });
+      return ResultHelpers.success(updatedRows);
+
+    } catch (error) {
+      logger.error('Error bulk updating rows:', error);
+      return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to bulk update rows');
     }
   }
 
