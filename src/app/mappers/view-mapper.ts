@@ -13,6 +13,11 @@ export interface ViewDTO {
   tableId: number;
   name: string;
   description?: string;
+  viewType: 'grid' | 'metric' | 'dashboard' | 'recent-entries';
+  viewConfig: {
+    type: 'grid' | 'metric' | 'dashboard' | 'recent-entries';
+    [key: string]: any;
+  };
   filters: Array<{
     fieldId: number;
     operator: string;
@@ -48,6 +53,11 @@ export class ViewMapper {
       tableId: persistence.tableId,
       name: persistence.name,
       description: persistence.description,
+      viewType: persistence.viewType as 'grid' | 'metric' | 'dashboard' | 'recent-entries',
+      viewConfig: persistence.viewConfig as {
+        type: 'grid' | 'metric' | 'dashboard' | 'recent-entries';
+        [key: string]: any;
+      },
       filters: persistence.filters,
       sorting: persistence.sorting,
       pagination: persistence.pagination,

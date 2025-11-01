@@ -35,6 +35,12 @@ export interface RowQueryOptions {
   orderBy?: string;                    // Column name to order by
   orderDirection?: 'ASC' | 'DESC';
   filters?: RowFilter[];               // Complex filtering options
+  aggregations?: Array<{               // Aggregation configuration for metric/dashboard views
+    fieldId: string;
+    type: string;
+    alias: string;
+    formatType?: string;
+  }>;
 }
 
 export interface RowFilter {

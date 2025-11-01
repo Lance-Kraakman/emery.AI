@@ -29,6 +29,8 @@ export class DrizzleViewRepository implements ViewRepository {
             organizationId: persistence.organizationId,
             tableId: persistence.tableId,
             name: persistence.name,
+            viewType: persistence.viewType,
+            viewConfig: persistence.viewConfig,
             filters: persistence.filters,
             sorting: persistence.sorting,
             pagination: persistence.pagination,
@@ -45,6 +47,8 @@ export class DrizzleViewRepository implements ViewRepository {
           .update(views)
           .set({
             name: persistence.name,
+            viewType: persistence.viewType,
+            viewConfig: persistence.viewConfig,
             filters: persistence.filters,
             sorting: persistence.sorting,
             pagination: persistence.pagination,
@@ -163,6 +167,8 @@ export class DrizzleViewRepository implements ViewRepository {
       organizationId: record.organizationId,
       tableId: record.tableId,
       name: record.name,
+      viewType: record.viewType || 'grid',
+      viewConfig: record.viewConfig || { type: 'grid' },
       filters: record.filters,
       sorting: record.sorting,
       pagination: record.pagination,

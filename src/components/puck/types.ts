@@ -11,6 +11,7 @@ import { TemplateProps } from "./blocks/Template";
 import { TextProps } from "./blocks/Text";
 import { SpaceProps } from "./blocks/Space";
 import { TableBlockProps } from "./blocks/TableBlock/TableBlock";
+import { MetricBlockProps } from "./blocks/MetricBlock/MetricBlock";
 
 import { RootProps } from "./root";
 
@@ -52,6 +53,7 @@ export type Components = {
   HeaderBlock: HeaderBlockProps;
   FooterBlock: FooterBlockProps;
   TableBlock: TableBlockProps;
+  MetricBlock: MetricBlockProps;
 };
 
 export type UserConfig = Config<{

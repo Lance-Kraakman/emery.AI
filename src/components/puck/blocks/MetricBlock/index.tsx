@@ -1,0 +1,250 @@
+/**
+ * MetricBlock - Puck Component Configuration
+ *
+ * AIDEV-NOTE: This is the Puck config for MetricBlock.
+ * Metric views store aggregation configuration (field, type, format) in the database.
+ * The aggregation is computed at the backend (Python/Polars via gRPC), never in Node.js/browser.
+ *
+ * Flow:
+ * 1. User selects a metric view in Puck editor (view must have viewType='metric')
+ * 2. resolveData executes on server, calls executeViewAggregations server action
+ * 3. Backend computes aggregation via gRPC (filters applied first, then aggregation)
+ * 4. MetricBlock component receives pre-computed value as props
+ *
+ * TODO-CACHING: Add caching layer for aggregation results with configurable TTL.
+ * Cache should be invalidated on data changes or manual refresh.
+ */
+
+import type { ComponentConfig } from "@measured/puck";
+import MetricBlock, { type MetricBlockProps } from "./MetricBlock";
+import { getView, executeViewAggregations, getViewsForOrganization } from "@/app/actions/views";
+import { getTables } from "@/app/actions/tables";
+
+export const MetricBlockConfig: ComponentConfig<MetricBlockProps> = {
+  label: "Metric",
+
+  fields: {
+    // View Selection - Filtered to only show metric-type views
+    viewId: {
+      label: "Metric View",
+      type: "external",
+      placeholder: "Select a metric view",
+      showSearch: true,
+      fetchList: async ({ query }: { query: string }) => {
+        console.log('[MetricBlock viewId fetchList] Fetching metric views');
+
+        // Get all views and filter to metric-type only
+        const [views, tables] = await Promise.all([
+          getViewsForOrganization(),
+          getTables()
+        ]);
+
+        console.log('[MetricBlock viewId fetchList] Found views:', views.length, 'tables:', tables.length);
+
+        // Filter to metric views only
+        const metricViews = views.filter(v => v.viewType === 'metric');
+
+        console.log('[MetricBlock viewId fetchList] Metric views:', metricViews.length);
+
+        // Create a table lookup map
+        const tableMap = new Map(tables.map(t => [t.id, t.name]));
+
+        // Filter by query if provided
+        const filteredViews = query
+          ? metricViews.filter((v) =>
+              v.name.toLowerCase().includes(query.toLowerCase()) ||
+              tableMap.get(v.tableId)?.toLowerCase().includes(query.toLowerCase())
+            )
+          : metricViews;
+
+        const result = filteredViews.map((v) => {
+          // Extract aggregation info from viewConfig for better display
+          const config = v.viewConfig as any;
+          const aggType = config?.aggregation?.aggregationType || 'unknown';
+
+          return {
+            id: v.id,
+            name: v.name,
+            tableId: v.tableId,
+            tableName: tableMap.get(v.tableId) || `Table ${v.tableId}`,
+            title: `${v.name}`,
+            description: `Table: ${tableMap.get(v.tableId) || v.tableId} | Aggregation: ${aggType}`,
+          };
+        });
+
+        console.log('[MetricBlock viewId fetchList] Returning options:', result.length);
+        return result;
+      },
+      mapProp: (item: any) => item?.id || null,
+      getItemSummary: (item: any, context: any) => {
+        const viewId = typeof item === 'number' ? item : item?.id;
+        const viewName = context?.props?._viewName;
+        const metricLabel = context?.props?._metricLabel;
+
+        if (viewName) {
+          return metricLabel ? `${viewName} - ${metricLabel}` : viewName;
+        } else if (viewId) {
+          return `Metric View ID: ${viewId}`;
+        }
+        return "No metric view selected";
+      },
+    } as any,
+
+    // Hidden fields populated by resolveData
+    _viewName: {
+      label: "View Name",
+      type: "text",
+      visible: false,
+    },
+    _metricLabel: {
+      label: "Metric Label",
+      type: "text",
+      visible: false,
+    },
+    _metricType: {
+      label: "Metric Type",
+      type: "text",
+      visible: false,
+    },
+
+    // Display Options
+    showLabel: {
+      label: "Show Label",
+      type: "radio",
+      options: [
+        { label: "Show", value: true },
+        { label: "Hide", value: false },
+      ],
+    },
+    showChange: {
+      label: "Show Change Indicator",
+      type: "radio",
+      options: [
+        { label: "Show", value: true },
+        { label: "Hide", value: false },
+      ],
+    },
+    size: {
+      label: "Size",
+      type: "radio",
+      options: [
+        { label: "Small", value: "small" },
+        { label: "Medium", value: "medium" },
+        { label: "Large", value: "large" },
+      ],
+    },
+  },
+
+  defaultProps: {
+    showLabel: true,
+    showChange: false,
+    size: 'medium',
+  },
+
+  /**
+   * Server-side data resolution
+   *
+   * AIDEV-NOTE: Executes view aggregation at backend via gRPC.
+   * The aggregation is computed in Python using Polars, following Baserow's architecture.
+   * Filters from the view are applied before aggregation (WHERE before GROUP BY).
+   */
+  resolveData: async ({ props }, { metadata }) => {
+    try {
+      console.log('[MetricBlock resolveData] Starting with props:', {
+        viewId: props.viewId
+      });
+
+      // If no view selected, return props as-is
+      if (!props.viewId) {
+        console.log('[MetricBlock resolveData] No view selected, returning empty');
+        return { props };
+      }
+
+      const viewId = props.viewId;
+
+      // Get view details to verify it's a metric view
+      const view = await getView(viewId);
+      if (!view) {
+        console.error('[MetricBlock resolveData] Failed to get view details for viewId:', viewId);
+        return {
+          props: {
+            ...props,
+            _metricValue: null,
+          } as any,
+        };
+      }
+
+      // Verify view type is 'metric'
+      if (view.viewType !== 'metric') {
+        console.error('[MetricBlock resolveData] View is not a metric view:', view.viewType);
+        return {
+          props: {
+            ...props,
+            _viewName: view.name,
+            _metricValue: null,
+          } as any,
+        };
+      }
+
+      // Execute aggregation via server action
+      console.log('[MetricBlock resolveData] Executing aggregations for view:', viewId);
+      const result = await executeViewAggregations(viewId);
+
+      if (!result || !result.results || result.results.length === 0) {
+        console.error('[MetricBlock resolveData] executeViewAggregations returned no results');
+        return {
+          props: {
+            ...props,
+            _viewName: view.name,
+            _metricValue: null,
+          } as any,
+        };
+      }
+
+      // Metric views should have exactly one aggregation result
+      const metricResult = result.results[0];
+
+      console.log('[MetricBlock resolveData] Aggregation result:', JSON.stringify(metricResult));
+
+      console.log('[MetricBlock resolveData] Got aggregation result:', {
+        viewId,
+        viewName: view.name,
+        fieldId: metricResult.fieldId,
+        aggregationType: metricResult.aggregationType,
+        value: metricResult.value,
+        label: metricResult.label,
+        formatType: metricResult.formatType,
+      });
+
+      // Return props with resolved aggregation data
+      return {
+        props: {
+          ...props,
+          _viewName: view.name,
+          _metricValue: metricResult.value,
+          _metricLabel: metricResult.label,
+          _metricType: metricResult.aggregationType,
+          _formatType: metricResult.formatType || 'number',
+          _decimals: 0, // TODO: Add decimals to AggregationConfig
+        } as any,
+      };
+    } catch (error) {
+      console.error("[MetricBlock resolveData] Fatal error:", error);
+      console.error("[MetricBlock resolveData] Error stack:", error instanceof Error ? error.stack : 'No stack');
+
+      // Return safe fallback on error
+      return {
+        props: {
+          ...props,
+          _metricValue: null,
+        } as any,
+      };
+    }
+  },
+
+  render: (props) => {
+    return <MetricBlock {...(props as any)} />;
+  },
+};
+
+export default MetricBlockConfig;

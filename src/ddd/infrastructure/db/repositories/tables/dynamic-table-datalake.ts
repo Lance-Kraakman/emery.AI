@@ -203,6 +203,9 @@ export class DynamicTableDataLake {
    * Receives Arrow IPC bytes from Python service for zero-copy transfer
    * Deserializes to Arrow Table and converts to domain entities
    * Returns rows and totalCount from gRPC response
+   *
+   * AIDEV-NOTE: Extended to support aggregations for metric/dashboard views.
+   * When aggregations are provided, returns aggregated data instead of raw rows.
    */
   async retrieveRows(
     table: DynamicTable,
@@ -212,27 +215,35 @@ export class DynamicTableDataLake {
       filters?: Record<string, any>;
       orderBy?: string;
       orderDirection?: 'ASC' | 'DESC';
+      aggregations?: Array<{
+        fieldId: string;
+        type: string;
+        alias: string;
+        formatType?: string;
+      }>;
     } = {}
   ): Promise<Result<{ rows: Row[]; totalCount: number }>> {
     const startTime = Date.now();
 
     try {
-      const { limit = 1000, offset = 0, filters = {}, orderBy = '', orderDirection = 'ASC' } = options;
+      const { limit = 1000, offset = 0, filters = {}, orderBy = '', orderDirection = 'ASC', aggregations } = options;
 
       // Build query summary for logging
       const orderClause = orderBy ? `${orderBy} ${orderDirection}` : 'none';
       const filterCount = Object.keys(filters).length;
+      const aggCount = aggregations?.length || 0;
 
       logger.debug('Query started', {
         table: `${table.name}(${table.id.value})`,
         limit,
         offset,
         orderBy: orderClause,
-        filters: filterCount
+        filters: filterCount,
+        aggregations: aggCount
       });
 
-      // 1. Create query request
-      const queryOptions = { orderBy, orderDirection, limit, offset, filters };
+      // 1. Create query request (with optional aggregations)
+      const queryOptions = { orderBy, orderDirection, limit, offset, filters, aggregations };
       const queryRequest = TableGrpcMapper.toQueryRowsRequest(
         table.id,
         table.storageLocation || `s3://emery-tables/${table.id.value}`,

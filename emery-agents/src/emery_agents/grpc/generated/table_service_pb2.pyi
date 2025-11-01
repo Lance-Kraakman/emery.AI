@@ -36,6 +36,18 @@ class FilterOperator(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     FILTER_OP_CONTAINS: _ClassVar[FilterOperator]
     FILTER_OP_CONTAINED_BY: _ClassVar[FilterOperator]
     FILTER_OP_HAS_KEY: _ClassVar[FilterOperator]
+
+class AggregationType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    AGG_TYPE_UNSPECIFIED: _ClassVar[AggregationType]
+    AGG_TYPE_SUM: _ClassVar[AggregationType]
+    AGG_TYPE_AVG: _ClassVar[AggregationType]
+    AGG_TYPE_COUNT: _ClassVar[AggregationType]
+    AGG_TYPE_MIN: _ClassVar[AggregationType]
+    AGG_TYPE_MAX: _ClassVar[AggregationType]
+    AGG_TYPE_COUNT_DISTINCT: _ClassVar[AggregationType]
+    AGG_TYPE_COUNT_EMPTY: _ClassVar[AggregationType]
+    AGG_TYPE_COUNT_NOT_EMPTY: _ClassVar[AggregationType]
 FIELD_TYPE_UNSPECIFIED: FieldType
 FIELD_TYPE_TEXT: FieldType
 FIELD_TYPE_NUMBER: FieldType
@@ -60,6 +72,15 @@ FILTER_OP_IS_NOT_NULL: FilterOperator
 FILTER_OP_CONTAINS: FilterOperator
 FILTER_OP_CONTAINED_BY: FilterOperator
 FILTER_OP_HAS_KEY: FilterOperator
+AGG_TYPE_UNSPECIFIED: AggregationType
+AGG_TYPE_SUM: AggregationType
+AGG_TYPE_AVG: AggregationType
+AGG_TYPE_COUNT: AggregationType
+AGG_TYPE_MIN: AggregationType
+AGG_TYPE_MAX: AggregationType
+AGG_TYPE_COUNT_DISTINCT: AggregationType
+AGG_TYPE_COUNT_EMPTY: AggregationType
+AGG_TYPE_COUNT_NOT_EMPTY: AggregationType
 
 class TableField(_message.Message):
     __slots__ = ("name", "type", "required", "metadata")
@@ -314,8 +335,28 @@ class RowFilter(_message.Message):
     values: _containers.RepeatedCompositeFieldContainer[RowDataValue]
     def __init__(self, field: _Optional[str] = ..., operator: _Optional[_Union[FilterOperator, str]] = ..., value: _Optional[_Union[RowDataValue, _Mapping]] = ..., values: _Optional[_Iterable[_Union[RowDataValue, _Mapping]]] = ...) -> None: ...
 
+class AggregationFunction(_message.Message):
+    __slots__ = ("field_id", "type", "alias", "format_type")
+    FIELD_ID_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    ALIAS_FIELD_NUMBER: _ClassVar[int]
+    FORMAT_TYPE_FIELD_NUMBER: _ClassVar[int]
+    field_id: str
+    type: AggregationType
+    alias: str
+    format_type: str
+    def __init__(self, field_id: _Optional[str] = ..., type: _Optional[_Union[AggregationType, str]] = ..., alias: _Optional[str] = ..., format_type: _Optional[str] = ...) -> None: ...
+
+class AggregationConfig(_message.Message):
+    __slots__ = ("group_by_fields", "aggregations")
+    GROUP_BY_FIELDS_FIELD_NUMBER: _ClassVar[int]
+    AGGREGATIONS_FIELD_NUMBER: _ClassVar[int]
+    group_by_fields: _containers.RepeatedScalarFieldContainer[str]
+    aggregations: _containers.RepeatedCompositeFieldContainer[AggregationFunction]
+    def __init__(self, group_by_fields: _Optional[_Iterable[str]] = ..., aggregations: _Optional[_Iterable[_Union[AggregationFunction, _Mapping]]] = ...) -> None: ...
+
 class QueryRowsRequest(_message.Message):
-    __slots__ = ("table_id", "s3_path", "filters", "order_by", "order_direction", "limit", "offset", "user_id", "organization_id")
+    __slots__ = ("table_id", "s3_path", "filters", "order_by", "order_direction", "limit", "offset", "user_id", "organization_id", "aggregation")
     TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     S3_PATH_FIELD_NUMBER: _ClassVar[int]
     FILTERS_FIELD_NUMBER: _ClassVar[int]
@@ -325,6 +366,7 @@ class QueryRowsRequest(_message.Message):
     OFFSET_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
+    AGGREGATION_FIELD_NUMBER: _ClassVar[int]
     table_id: str
     s3_path: str
     filters: _containers.RepeatedCompositeFieldContainer[RowFilter]
@@ -334,7 +376,8 @@ class QueryRowsRequest(_message.Message):
     offset: int
     user_id: str
     organization_id: str
-    def __init__(self, table_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., filters: _Optional[_Iterable[_Union[RowFilter, _Mapping]]] = ..., order_by: _Optional[str] = ..., order_direction: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ...) -> None: ...
+    aggregation: AggregationConfig
+    def __init__(self, table_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., filters: _Optional[_Iterable[_Union[RowFilter, _Mapping]]] = ..., order_by: _Optional[str] = ..., order_direction: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., aggregation: _Optional[_Union[AggregationConfig, _Mapping]] = ...) -> None: ...
 
 class TableResponse(_message.Message):
     __slots__ = ("success", "table", "message")

@@ -53,8 +53,12 @@ export class FieldName {
 
   /**
    * Generate database column name (field_{id} format)
+   * Baserow-compatible naming convention for dynamic columns
+   *
+   * @param fieldId - Numeric field ID
+   * @returns Column name in field_{id} format
    */
-  getDatabaseColumnName(fieldId: number): string {
+  static getDatabaseColumnName(fieldId: number): string {
     return `field_${fieldId}`;
   }
 
