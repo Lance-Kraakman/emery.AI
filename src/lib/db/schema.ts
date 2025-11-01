@@ -144,6 +144,24 @@ export const views = pgTable("views", {
     order: number;
   }>>(),
 
+  // View type (grid, metric, dashboard, recent-entries)
+  // AIDEV-NOTE: Determines how data is transformed and displayed.
+  // Defaults to 'grid' for backward compatibility with existing views.
+  viewType: text("view_type")
+    .$type<'grid' | 'metric' | 'dashboard' | 'recent-entries'>()
+    .notNull()
+    .default('grid'),
+
+  // View-type-specific configuration stored as JSONB
+  // AIDEV-NOTE: Schema varies by viewType. Validated by ViewConfig Value Object.
+  viewConfig: jsonb("view_config")
+    .$type<{
+      type: 'grid' | 'metric' | 'dashboard' | 'recent-entries';
+      [key: string]: any;
+    }>()
+    .notNull()
+    .default(sql`'{"type": "grid"}'::jsonb`),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -154,6 +172,9 @@ export const views = pgTable("views", {
 
   // Index for table queries
   index("views_table_idx").on(table.tableId),
+
+  // Index for view type queries (e.g., list all metric views)
+  index("views_type_idx").on(table.viewType),
 
   // RLS: Users can view views in their organization
   pgPolicy("views_view_permission", {

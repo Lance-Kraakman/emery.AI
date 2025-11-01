@@ -14,6 +14,9 @@ import { FilterConfig } from "@/ddd/domain/views/value-objects/filter-config";
 import { SortConfig } from "@/ddd/domain/views/value-objects/sort-config";
 import { PaginationConfig } from "@/ddd/domain/views/value-objects/pagination-config";
 import { FieldMapping } from "@/ddd/domain/views/value-objects/field-mapping";
+import { ViewType } from "@/ddd/domain/views/value-objects/view-type";
+import { ViewConfig } from "@/ddd/domain/views/value-objects/view-config";
+import { AggregationConfig } from "@/ddd/domain/views/value-objects/aggregation-config";
 import { TableId } from "@/ddd/domain/shared/value-objects/table-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects/organization-id";
 import { UserId } from "@/ddd/domain/shared/value-objects/user-id";
@@ -35,6 +38,8 @@ export interface CreateViewCommand {
   sorting?: SortConfig[];
   pagination?: PaginationConfig;
   fieldMappings?: FieldMapping[];
+  viewType?: ViewType;
+  viewConfig?: ViewConfig;
 }
 
 export interface UpdateViewCommand {
@@ -51,12 +56,24 @@ export interface ExecuteViewCommand {
   overridePagination?: PaginationConfig;
 }
 
+export interface ExecuteAggregationCommand {
+  viewId: ViewId;
+}
+
 // Result types
 export interface ViewExecutionResult {
   rows: Row[];
   totalCount: number;
   pageSize: number;
   offset: number;
+}
+
+export interface AggregationResult {
+  fieldId: number;
+  aggregationType: string;
+  value: any;
+  label?: string;
+  formatType?: string;
 }
 
 export class ViewApplicationService {
@@ -149,6 +166,8 @@ export class ViewApplicationService {
         sorting: command.sorting,
         pagination: command.pagination,
         fieldMappings: command.fieldMappings,
+        viewType: command.viewType || ViewType.grid(),
+        viewConfig: command.viewConfig || ViewConfig.createGrid(),
       });
 
       // 6. Save to repository
@@ -424,6 +443,169 @@ export class ViewApplicationService {
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error executing view",
+      };
+    }
+  }
+
+  /**
+   * Execute aggregations for a metric/dashboard view
+   *
+   * AIDEV-NOTE: This method delegates aggregation computation to the backend gRPC service.
+   * Aggregations are computed at the database layer (PostgreSQL/DuckDB via Python),
+   * never in Node.js/browser. This ensures proper performance for large datasets.
+   *
+   * Flow:
+   * 1. Get view and validate it requires aggregations
+   * 2. Extract aggregations from viewConfig
+   * 3. Call table service with aggregations parameter
+   * 4. Backend applies filters then aggregations (WHERE before GROUP BY)
+   * 5. Return pre-computed aggregation results
+   */
+  async executeAggregations(
+    command: ExecuteAggregationCommand
+  ): Promise<Result<AggregationResult[]>> {
+    try {
+      logger.debug("Executing aggregations", { viewId: command.viewId.value });
+
+      // 1. Get view
+      const view = await this.dataSourceRepository.findById(command.viewId);
+      if (!view) {
+        return {
+          success: false,
+          error: `View ${command.viewId.value} not found`,
+        };
+      }
+
+      // 2. Verify view type supports aggregations
+      if (!view.requiresAggregation()) {
+        return {
+          success: false,
+          error: `View type '${view.viewType.value}' does not support aggregations`,
+        };
+      }
+
+      // 3. Get aggregations from view config
+      const aggregations = view.getAggregations();
+      if (aggregations.length === 0) {
+        return {
+          success: false,
+          error: "View has no aggregations configured",
+        };
+      }
+
+      logger.debug("Aggregations extracted", {
+        count: aggregations.length,
+        types: aggregations.map(a => a.aggregationType),
+      });
+
+      // 4. Get table for context
+      const table = await this.tableApplicationService.getTable(view.tableId);
+      if (!table) {
+        return {
+          success: false,
+          error: "Failed to fetch table",
+        };
+      }
+
+      // 5. Get table fields for mapping field IDs to names
+      const tableFields = table.fields;
+
+      // 6. Convert aggregations to format expected by table service
+      // AIDEV-NOTE: S3 Parquet files use actual field names, not field_{id} format
+      // We must map field IDs to actual field names for Python/Polars to find the columns
+      const aggregationParams = aggregations.map(agg => {
+        // Look up the actual field to get its name
+        const field = tableFields.find(f => f.id.value === agg.fieldId);
+        if (!field) {
+          throw new Error(`Field ${agg.fieldId} not found in table ${table.id.value}`);
+        }
+
+        logger.debug("Mapping aggregation field", {
+          fieldId: agg.fieldId,
+          fieldName: field.name,
+          aggregationType: agg.aggregationType,
+        });
+
+        return {
+          fieldId: field.name,  // Use actual field name for S3 Parquet columns
+          type: agg.aggregationType,
+          alias: field.name,    // Alias matches field name
+          formatType: agg.formatType || 'number',
+        };
+      });
+
+      // 7. Execute query with aggregations via table service
+      // AIDEV-NOTE: This calls DynamicTableDataLake → TableGrpcMapper → Python QueryRows
+      // Python applies filters THEN aggregations for correct SQL semantics
+      const result = await this.tableApplicationService.getRows(view.tableId, {
+        limit: 0, // No limit for aggregations
+        offset: 0,
+        aggregations: aggregationParams,
+      });
+
+      // 8. Parse aggregated results from returned rows
+      // Aggregated data comes back as a single row with computed values
+      if (result.length === 0) {
+        return {
+          success: false,
+          error: "No aggregation results returned",
+        };
+      }
+
+      const aggregatedRow = result[0];
+
+      // Debug logging to verify column names
+      const expectedFieldNames = aggregations.map(a => {
+        const field = tableFields.find(f => f.id.value === a.fieldId);
+        return field?.name || `field_${a.fieldId}`;
+      });
+
+      logger.debug("Aggregated row columns", {
+        columns: Object.keys(aggregatedRow.toPlainObject()),
+        expectedFields: expectedFieldNames,
+      });
+
+      const results: AggregationResult[] = aggregations.map((agg, index) => {
+        // Look up field name for this aggregation
+        const field = tableFields.find(f => f.id.value === agg.fieldId);
+        if (!field) {
+          throw new Error(`Field ${agg.fieldId} not found during result extraction`);
+        }
+
+        // Use actual field name to access result from S3 Parquet
+        const fieldValue = aggregatedRow.getFieldValue(field.name);
+        const value = fieldValue?.value;
+
+        logger.debug("Extracting aggregation value", {
+          fieldId: agg.fieldId,
+          fieldName: field.name,
+          hasFieldValue: !!fieldValue,
+          value,
+        });
+
+        return {
+          fieldId: agg.fieldId,
+          aggregationType: agg.aggregationType,
+          value: value,
+          label: agg.label,  // Preserve original label for display
+          formatType: agg.formatType,
+        };
+      });
+
+      logger.summary("Aggregations executed successfully", {
+        viewId: command.viewId.value,
+        resultCount: results.length,
+      });
+
+      return {
+        success: true,
+        data: results,
+      };
+    } catch (error) {
+      logger.error("Error executing aggregations", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error executing aggregations",
       };
     }
   }

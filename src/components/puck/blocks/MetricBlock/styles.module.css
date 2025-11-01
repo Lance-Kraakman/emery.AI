@@ -1,0 +1,156 @@
+/**
+ * MetricBlock Styles
+ *
+ * AIDEV-NOTE: Styles for metric display with support for different sizes and formats.
+ */
+
+/* Placeholder - shown when no view is selected */
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  border: 2px dashed var(--border-color, #ddd);
+  border-radius: 8px;
+  background: var(--bg-muted, #f9f9f9);
+  min-height: 150px;
+}
+
+.placeholderIcon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.placeholderText {
+  color: var(--text-muted, #666);
+  font-size: 1rem;
+  margin: 0;
+}
+
+/* Empty state - shown when view is selected but no data */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 8px;
+  background: var(--bg-surface, #fff);
+  min-height: 150px;
+}
+
+.emptyIcon {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.4;
+}
+
+.emptyText {
+  color: var(--text-muted, #666);
+  font-size: 0.9375rem;
+  margin: 0;
+  text-align: center;
+}
+
+/* Metric block container */
+.metricBlock {
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  background: var(--bg-surface, #ffffff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s ease;
+}
+
+.metricBlock:hover {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+}
+
+/* Label */
+.label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary, #6b7280);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.metricType {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-muted, #9ca3af);
+}
+
+/* Value */
+.value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-primary, #111827);
+  line-height: 1.2;
+}
+
+/* Change indicator */
+.change {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.changeText {
+  color: var(--text-muted, #9ca3af);
+  font-style: italic;
+}
+
+.changePositive {
+  color: var(--success-color, #10b981);
+}
+
+.changeNegative {
+  color: var(--danger-color, #ef4444);
+}
+
+/* Size variants */
+.small {
+  padding: 1rem;
+}
+
+.small .value {
+  font-size: 1.75rem;
+}
+
+.small .label {
+  font-size: 0.75rem;
+}
+
+.medium {
+  padding: 1.5rem;
+}
+
+.medium .value {
+  font-size: 2.5rem;
+}
+
+.medium .label {
+  font-size: 0.875rem;
+}
+
+.large {
+  padding: 2rem;
+}
+
+.large .value {
+  font-size: 3.5rem;
+}
+
+.large .label {
+  font-size: 1rem;
+}

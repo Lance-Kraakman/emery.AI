@@ -22,6 +22,8 @@ import { FilterConfig } from "@/ddd/domain/views/value-objects/filter-config";
 import { SortConfig } from "@/ddd/domain/views/value-objects/sort-config";
 import { PaginationConfig } from "@/ddd/domain/views/value-objects/pagination-config";
 import { FieldMapping } from "@/ddd/domain/views/value-objects/field-mapping";
+import { ViewType } from "@/ddd/domain/views/value-objects/view-type";
+import { ViewConfig } from "@/ddd/domain/views/value-objects/view-config";
 import { ViewMapper, type ViewDTO } from "@/app/mappers/view-mapper";
 import type { Result, CreateViewData, UpdateViewData } from "./types";
 
@@ -38,7 +40,7 @@ export async function createView(
     const session = await requirePermission("data:create");
     const currentOrg = await requireCurrentOrganization();
 
-    const { tableId, name, description, fieldMappings } = data;
+    const { tableId, name, description, fieldMappings, viewType, viewConfig } = data;
 
     if (!name) {
       return {
@@ -66,6 +68,26 @@ export async function createView(
       })
     );
 
+    // Reconstruct ViewType and ViewConfig value objects from serialized data
+    // AIDEV-NOTE: Value objects don't survive client→server serialization,
+    // so we need to reconstruct them on the server side
+    let viewTypeVO: ViewType | undefined;
+    let viewConfigVO: ViewConfig | undefined;
+
+    if (viewType) {
+      // viewType comes as a string or serialized object with _value property
+      const typeValue = typeof viewType === 'string'
+        ? viewType
+        : (viewType as any)._value || viewType;
+      viewTypeVO = ViewType.create(typeValue);
+    }
+
+    if (viewConfig) {
+      // viewConfig comes as a plain object
+      const configData = (viewConfig as any)._config || viewConfig;
+      viewConfigVO = ViewConfig.fromJSON(configData);
+    }
+
     const result = await dataSourceService.createView({
       tableId: TableId.fromNumber(tableId),
       organizationId: OrganizationId.fromNumber(currentOrg.id),
@@ -73,6 +95,8 @@ export async function createView(
       description,
       createdBy: UserId.fromString(session.user.id),
       fieldMappings: fieldMappingVOs,
+      viewType: viewTypeVO,
+      viewConfig: viewConfigVO,
     });
 
     if (!result.success || !result.data) {
@@ -440,6 +464,57 @@ export async function executeView(
     };
   } catch (error) {
     console.error("Error executing view:", error);
+    return null;
+  }
+}
+
+/**
+ * Execute aggregations for a metric/dashboard view
+ *
+ * AIDEV-NOTE: Used by MetricBlock and DashboardBlock to compute aggregations.
+ * Aggregations are computed at the backend (Python/Polars via gRPC), never in Node.js/browser.
+ * This follows Baserow's architecture pattern for backend aggregation computation.
+ *
+ * TODO-CACHING: Add caching layer with configurable TTL for aggregation results.
+ * Cache key should include: viewId, filters, timestamp bucket (e.g., rounded to nearest 5 minutes).
+ * Invalidate cache on data changes or manual refresh.
+ */
+export async function executeViewAggregations(
+  viewId: number
+): Promise<{
+  results: Array<{
+    fieldId: number;
+    aggregationType: string;
+    value: any;
+    label?: string;
+    formatType?: string;
+  }>;
+} | null> {
+  try {
+    await requirePermission("data:view");
+    await requireCurrentOrganization();
+
+    if (!viewId) {
+      return null;
+    }
+
+    const viewService = getViewApplicationService();
+
+    // Execute aggregations via application service
+    const result = await viewService.executeAggregations({
+      viewId: ViewId.fromNumber(viewId),
+    });
+
+    if (!result.success || !result.data) {
+      console.error("Failed to execute view aggregations:", result.error);
+      return null;
+    }
+
+    return {
+      results: result.data,
+    };
+  } catch (error) {
+    console.error("Error executing view aggregations:", error);
     return null;
   }
 }

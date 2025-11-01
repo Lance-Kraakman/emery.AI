@@ -1162,6 +1162,82 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                         search_term = value.replace('%', '')
                         df = df.filter(pl.col(filter_obj.field).str.contains(search_term))
 
+            # AIDEV-NOTE: Aggregation support for metric/dashboard views
+            # Check if aggregation is requested (new field in QueryRowsRequest)
+            # Aggregations are applied AFTER filters for correct SQL semantics (WHERE before GROUP BY)
+            # This extends QueryRows to support metric views with computed aggregations.
+            if hasattr(request, 'aggregation') and request.HasField('aggregation'):
+                logger.info(f"[QueryRows] Aggregation requested with {len(request.aggregation.aggregations)} functions")
+
+                agg_config = request.aggregation
+
+                # Build Polars aggregation expressions
+                agg_exprs = []
+                for agg_func in agg_config.aggregations:
+                    field_name = agg_func.field_id  # e.g., "field_5"
+
+                    # Map protobuf aggregation type to Polars expression
+                    if agg_func.type == table_service_pb2.AGG_TYPE_SUM:
+                        agg_exprs.append(pl.col(field_name).sum().alias(agg_func.alias))
+                    elif agg_func.type == table_service_pb2.AGG_TYPE_AVG:
+                        agg_exprs.append(pl.col(field_name).mean().alias(agg_func.alias))
+                    elif agg_func.type == table_service_pb2.AGG_TYPE_COUNT:
+                        agg_exprs.append(pl.col(field_name).count().alias(agg_func.alias))
+                    elif agg_func.type == table_service_pb2.AGG_TYPE_MIN:
+                        agg_exprs.append(pl.col(field_name).min().alias(agg_func.alias))
+                    elif agg_func.type == table_service_pb2.AGG_TYPE_MAX:
+                        agg_exprs.append(pl.col(field_name).max().alias(agg_func.alias))
+                    elif agg_func.type == table_service_pb2.AGG_TYPE_COUNT_DISTINCT:
+                        agg_exprs.append(pl.col(field_name).n_unique().alias(agg_func.alias))
+                    elif agg_func.type == table_service_pb2.AGG_TYPE_COUNT_EMPTY:
+                        agg_exprs.append(
+                            pl.col(field_name).is_null().sum().alias(agg_func.alias)
+                        )
+                    elif agg_func.type == table_service_pb2.AGG_TYPE_COUNT_NOT_EMPTY:
+                        agg_exprs.append(
+                            pl.col(field_name).is_not_null().sum().alias(agg_func.alias)
+                        )
+                    else:
+                        logger.warning(f"[QueryRows] Unknown aggregation type: {agg_func.type}")
+                        continue
+
+                # Apply aggregation
+                if len(agg_config.group_by_fields) > 0:
+                    # GROUP BY aggregation (for dashboard views with multiple groups)
+                    logger.info(f"[QueryRows] Applying GROUP BY aggregation on fields: {list(agg_config.group_by_fields)}")
+                    df = df.group_by(list(agg_config.group_by_fields)).agg(agg_exprs)
+                else:
+                    # Global aggregation (single row result for metric views)
+                    logger.info(f"[QueryRows] Applying global aggregation (no GROUP BY)")
+                    df = df.select(agg_exprs)
+
+                logger.info(f"[QueryRows] Aggregation complete, result shape: {df.shape}")
+
+                # Get total count (for aggregated results, this is the row count after aggregation)
+                total_count = len(df)
+
+                # Skip sorting and pagination for aggregated results
+                # Aggregated data is already in final form
+
+                # Convert Polars DataFrame to PyArrow Table (zero-copy)
+                arrow_table = df.to_arrow()
+
+                # Serialize to Arrow IPC format (zero-copy stream)
+                import io
+                sink = io.BytesIO()
+                with pa.ipc.new_stream(sink, arrow_table.schema) as writer:
+                    writer.write_table(arrow_table)
+
+                arrow_ipc_bytes = sink.getvalue()
+
+                logger.info(f"Successfully executed aggregation query: {request.table_id}, returned {len(df)} rows as Arrow IPC ({len(arrow_ipc_bytes)} bytes)")
+                return table_service_pb2.QueryRowsResponse(
+                    success=True,
+                    arrow_ipc_stream=arrow_ipc_bytes,
+                    total_count=total_count,
+                    message=f"Successfully executed aggregation, {len(df)} result rows"
+                )
+
             # Apply ordering
             if request.order_by:
                 # User-specified sort

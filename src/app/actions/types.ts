@@ -146,6 +146,8 @@ export interface CreateViewData {
     visible: boolean;
     order: number;
   }>;
+  viewType?: any; // ViewType Value Object
+  viewConfig?: any; // ViewConfig Value Object
 }
 
 export interface UpdateViewData {

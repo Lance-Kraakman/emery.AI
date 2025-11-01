@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import type { ViewDTO } from '@/app/mappers/view-mapper';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -23,8 +25,14 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { createView, updateView } from '@/app/actions/views';
 import { getTables } from '@/app/actions/tables';
+import { getFields } from '@/app/actions/fields';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
+import { ViewType } from '@/ddd/domain/views/value-objects/view-type';
+import { ViewConfig } from '@/ddd/domain/views/value-objects/view-config';
+import type { AggregationType, FormatType } from '@/ddd/domain/views/value-objects/aggregation-config';
+import { ViewTypeSelector } from './ViewTypeSelector';
+import { MetricConfigurationSection } from './MetricConfigurationSection';
 
 interface ViewFormDialogProps {
   open: boolean;
@@ -38,12 +46,22 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tables, setTables] = useState<Array<{ id: number; name: string }>>([]);
   const [loadingTables, setLoadingTables] = useState(false);
+  const [fields, setFields] = useState<FieldDTO[]>([]);
+  const [loadingFields, setLoadingFields] = useState(false);
   const isEditMode = !!view;
 
   // Form state
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [tableId, setTableId] = useState<number | undefined>();
+  const [viewType, setViewType] = useState<'grid' | 'metric' | 'dashboard' | 'recent-entries'>('grid');
+
+  // Metric view configuration
+  const [selectedFieldId, setSelectedFieldId] = useState<number | undefined>();
+  const [aggregationType, setAggregationType] = useState<AggregationType>('sum');
+  const [customLabel, setCustomLabel] = useState('');
+  const [formatType, setFormatType] = useState<FormatType>('number');
+  const [decimals, setDecimals] = useState(2);
 
   // Load tables on mount
   useEffect(() => {
@@ -52,16 +70,42 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
     }
   }, [open]);
 
+  // Load fields when table is selected
+  useEffect(() => {
+    if (tableId) {
+      loadFields(tableId);
+    }
+  }, [tableId]);
+
   // Reset form when view changes
   useEffect(() => {
     if (view) {
       setName(view.name);
       setDescription(view.description || '');
       setTableId(view.tableId);
+      setViewType(view.viewType);
+
+      // Load metric configuration if it's a metric view
+      if (view.viewType === 'metric' && view.viewConfig.type === 'metric') {
+        const metricConfig = view.viewConfig as any;
+        if (metricConfig.aggregation) {
+          setSelectedFieldId(metricConfig.aggregation.fieldId);
+          setAggregationType(metricConfig.aggregation.aggregationType);
+          setCustomLabel(metricConfig.aggregation.label || '');
+          setFormatType(metricConfig.aggregation.formatType || 'number');
+          setDecimals(metricConfig.aggregation.decimals || 2);
+        }
+      }
     } else {
       setName('');
       setDescription('');
       setTableId(undefined);
+      setViewType('grid');
+      setSelectedFieldId(undefined);
+      setAggregationType('sum');
+      setCustomLabel('');
+      setFormatType('number');
+      setDecimals(2);
     }
   }, [view]);
 
@@ -78,6 +122,19 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
     }
   };
 
+  const loadFields = async (selectedTableId: number) => {
+    try {
+      setLoadingFields(true);
+      const fieldsData = await getFields(selectedTableId);
+      setFields(fieldsData);
+    } catch (error) {
+      console.error('Error loading fields:', error);
+      toast.error('Failed to load fields');
+    } finally {
+      setLoadingFields(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -91,9 +148,52 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
       return;
     }
 
+    // Validate metric view configuration
+    if (viewType === 'metric') {
+      if (!selectedFieldId) {
+        setError('Field selection is required for metric views');
+        return;
+      }
+    }
+
     try {
       setIsSubmitting(true);
       setError(null);
+
+      // Build viewType and viewConfig based on selected type
+      let viewTypeVO: ViewType;
+      let viewConfigVO: ViewConfig;
+
+      switch (viewType) {
+        case 'metric':
+          viewTypeVO = ViewType.metric();
+          viewConfigVO = ViewConfig.createMetric({
+            aggregation: {
+              fieldId: selectedFieldId!,
+              aggregationType,
+              label: customLabel || undefined,
+              formatType,
+              decimals,
+            },
+          });
+          break;
+        case 'dashboard':
+          viewTypeVO = ViewType.dashboard();
+          viewConfigVO = ViewConfig.createDashboard({
+            metrics: [],
+            layout: 'grid',
+          });
+          break;
+        case 'recent-entries':
+          viewTypeVO = ViewType.recentEntries();
+          viewConfigVO = ViewConfig.createRecentEntries();
+          break;
+        case 'grid':
+        default:
+          viewTypeVO = ViewType.grid();
+          viewConfigVO = ViewConfig.createGrid();
+          break;
+      }
 
       const result = isEditMode
         ? await updateView({
@@ -104,7 +204,9 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
         : await createView({
             tableId,
             name: name.trim(),
-            description: description.trim() || undefined
+            description: description.trim() || undefined,
+            viewType: viewTypeVO,
+            viewConfig: viewConfigVO,
           });
 
       if (!result.success) {
@@ -136,14 +238,15 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
           <DialogTitle>{isEditMode ? 'Edit View' : 'Create View'}</DialogTitle>
           <DialogDescription>
             {isEditMode
-              ? 'Update the view name and description. Filters and sorting can be configured later.'
-              : 'Create a filtered and sorted view of a table. You can configure filters and sorting after creation.'}
+              ? 'Update the view name and description. To change view type or configuration, create a new view.'
+              : 'Create a view with filters and sorting. Select the view type and configure settings below.'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
-          <ScrollArea className="max-h-[60vh]">
-            <div className="space-y-4 p-1">
+          <ScrollArea className="h-[60vh]">
+            <div className="pr-4">
+              <div className="space-y-4 p-1">
               {/* Name Field */}
               <div className="space-y-2">
                 <Label htmlFor="name">
@@ -206,10 +309,56 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
                 </div>
               )}
 
-              {/* Info about filters/sorting */}
+              {/* Show current view type in edit mode */}
+              {isEditMode && view && (
+                <div className="space-y-2">
+                  <Label>View Type</Label>
+                  <div>
+                    <Badge variant="secondary" className="capitalize">
+                      {view.viewType.replace(/-/g, ' ')}
+                    </Badge>
+                  </div>
+                </div>
+              )}
+
+              {/* View Type Selection (only for new views) */}
               {!isEditMode && (
+                <>
+                  <div className="border-t pt-4 mt-4" />
+                  <ViewTypeSelector
+                    value={viewType}
+                    onChange={setViewType}
+                    disabled={isSubmitting}
+                  />
+                </>
+              )}
+
+              {/* Metric Configuration (conditional) */}
+              {!isEditMode && viewType === 'metric' && tableId && (
+                <MetricConfigurationSection
+                  fields={fields}
+                  loadingFields={loadingFields}
+                  selectedFieldId={selectedFieldId}
+                  onFieldChange={setSelectedFieldId}
+                  aggregationType={aggregationType}
+                  onAggregationTypeChange={setAggregationType}
+                  customLabel={customLabel}
+                  onCustomLabelChange={setCustomLabel}
+                  formatType={formatType}
+                  onFormatTypeChange={setFormatType}
+                  decimals={decimals}
+                  onDecimalsChange={setDecimals}
+                  isSubmitting={isSubmitting}
+                />
+              )}
+
+
+              {/* Info about dashboard/recent views */}
+              {!isEditMode && (viewType === 'dashboard' || viewType === 'recent-entries') && (
                 <div className="bg-secondary/50 p-3 rounded-md text-sm text-muted-foreground">
-                  Note: After creating the view, you can configure filters and sorting in a future update.
+                  {viewType === 'dashboard'
+                    ? 'Dashboard views can be configured with multiple metrics after creation.'
+                    : 'Recent entries views will automatically show the most recently created records.'}
                 </div>
               )}
 
@@ -218,6 +367,7 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
                   {error}
                 </div>
               )}
+              </div>
             </div>
           </ScrollArea>
 

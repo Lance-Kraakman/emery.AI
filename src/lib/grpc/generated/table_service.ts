@@ -227,6 +227,94 @@ export function filterOperatorToJSON(object: FilterOperator): string {
   }
 }
 
+/**
+ * Aggregation types for metric/dashboard views
+ * AIDEV-NOTE: Used by ViewApplicationService to compute aggregations via gRPC.
+ * Aggregations are applied AFTER filters for correct SQL semantics (WHERE before GROUP BY).
+ */
+export enum AggregationType {
+  AGG_TYPE_UNSPECIFIED = 0,
+  /** AGG_TYPE_SUM - Sum of values */
+  AGG_TYPE_SUM = 1,
+  /** AGG_TYPE_AVG - Average (mean) of values */
+  AGG_TYPE_AVG = 2,
+  /** AGG_TYPE_COUNT - Count of non-null values */
+  AGG_TYPE_COUNT = 3,
+  /** AGG_TYPE_MIN - Minimum value */
+  AGG_TYPE_MIN = 4,
+  /** AGG_TYPE_MAX - Maximum value */
+  AGG_TYPE_MAX = 5,
+  /** AGG_TYPE_COUNT_DISTINCT - Count of unique values */
+  AGG_TYPE_COUNT_DISTINCT = 6,
+  /** AGG_TYPE_COUNT_EMPTY - Count of null/empty values */
+  AGG_TYPE_COUNT_EMPTY = 7,
+  /** AGG_TYPE_COUNT_NOT_EMPTY - Count of non-null/non-empty values */
+  AGG_TYPE_COUNT_NOT_EMPTY = 8,
+  UNRECOGNIZED = -1,
+}
+
+export function aggregationTypeFromJSON(object: any): AggregationType {
+  switch (object) {
+    case 0:
+    case "AGG_TYPE_UNSPECIFIED":
+      return AggregationType.AGG_TYPE_UNSPECIFIED;
+    case 1:
+    case "AGG_TYPE_SUM":
+      return AggregationType.AGG_TYPE_SUM;
+    case 2:
+    case "AGG_TYPE_AVG":
+      return AggregationType.AGG_TYPE_AVG;
+    case 3:
+    case "AGG_TYPE_COUNT":
+      return AggregationType.AGG_TYPE_COUNT;
+    case 4:
+    case "AGG_TYPE_MIN":
+      return AggregationType.AGG_TYPE_MIN;
+    case 5:
+    case "AGG_TYPE_MAX":
+      return AggregationType.AGG_TYPE_MAX;
+    case 6:
+    case "AGG_TYPE_COUNT_DISTINCT":
+      return AggregationType.AGG_TYPE_COUNT_DISTINCT;
+    case 7:
+    case "AGG_TYPE_COUNT_EMPTY":
+      return AggregationType.AGG_TYPE_COUNT_EMPTY;
+    case 8:
+    case "AGG_TYPE_COUNT_NOT_EMPTY":
+      return AggregationType.AGG_TYPE_COUNT_NOT_EMPTY;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return AggregationType.UNRECOGNIZED;
+  }
+}
+
+export function aggregationTypeToJSON(object: AggregationType): string {
+  switch (object) {
+    case AggregationType.AGG_TYPE_UNSPECIFIED:
+      return "AGG_TYPE_UNSPECIFIED";
+    case AggregationType.AGG_TYPE_SUM:
+      return "AGG_TYPE_SUM";
+    case AggregationType.AGG_TYPE_AVG:
+      return "AGG_TYPE_AVG";
+    case AggregationType.AGG_TYPE_COUNT:
+      return "AGG_TYPE_COUNT";
+    case AggregationType.AGG_TYPE_MIN:
+      return "AGG_TYPE_MIN";
+    case AggregationType.AGG_TYPE_MAX:
+      return "AGG_TYPE_MAX";
+    case AggregationType.AGG_TYPE_COUNT_DISTINCT:
+      return "AGG_TYPE_COUNT_DISTINCT";
+    case AggregationType.AGG_TYPE_COUNT_EMPTY:
+      return "AGG_TYPE_COUNT_EMPTY";
+    case AggregationType.AGG_TYPE_COUNT_NOT_EMPTY:
+      return "AGG_TYPE_COUNT_NOT_EMPTY";
+    case AggregationType.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
 /** Table field definition with strong typing */
 export interface TableField {
   name: string;
@@ -434,6 +522,30 @@ export interface RowFilter {
   values: RowDataValue[];
 }
 
+/** Single aggregation function to apply to a field */
+export interface AggregationFunction {
+  /** field_{id} format (e.g., "field_5") */
+  fieldId: string;
+  /** Aggregation type (sum, avg, count, etc.) */
+  type: AggregationType;
+  /** Alias for result (e.g., "total_sales") */
+  alias: string;
+  /** Display format hint: "number", "currency", "percentage", "duration" */
+  formatType: string;
+}
+
+/**
+ * Aggregation configuration for QueryRows
+ * AIDEV-NOTE: Extends QueryRows to support metric/dashboard views.
+ * When aggregation is present, QueryRows returns aggregated data instead of raw rows.
+ */
+export interface AggregationConfig {
+  /** Fields to group by (empty for global aggregation) */
+  groupByFields: string[];
+  /** Aggregations to compute */
+  aggregations: AggregationFunction[];
+}
+
 export interface QueryRowsRequest {
   tableId: string;
   s3Path: string;
@@ -446,6 +558,12 @@ export interface QueryRowsRequest {
   offset: number;
   userId: string;
   organizationId: string;
+  /**
+   * AIDEV-NOTE: Optional aggregation config for metric/dashboard views.
+   * When present, QueryRows applies filters, then aggregations, returning aggregated data.
+   * This reuses all existing filter/sort logic in Python gRPC service.
+   */
+  aggregation: AggregationConfig | undefined;
 }
 
 /** Response messages */
@@ -2980,6 +3098,194 @@ export const RowFilter: MessageFns<RowFilter> = {
   },
 };
 
+function createBaseAggregationFunction(): AggregationFunction {
+  return { fieldId: "", type: 0, alias: "", formatType: "" };
+}
+
+export const AggregationFunction: MessageFns<AggregationFunction> = {
+  encode(message: AggregationFunction, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.fieldId !== "") {
+      writer.uint32(10).string(message.fieldId);
+    }
+    if (message.type !== 0) {
+      writer.uint32(16).int32(message.type);
+    }
+    if (message.alias !== "") {
+      writer.uint32(26).string(message.alias);
+    }
+    if (message.formatType !== "") {
+      writer.uint32(34).string(message.formatType);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AggregationFunction {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAggregationFunction();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.fieldId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.type = reader.int32() as any;
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.alias = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.formatType = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AggregationFunction {
+    return {
+      fieldId: isSet(object.fieldId) ? globalThis.String(object.fieldId) : "",
+      type: isSet(object.type) ? aggregationTypeFromJSON(object.type) : 0,
+      alias: isSet(object.alias) ? globalThis.String(object.alias) : "",
+      formatType: isSet(object.formatType) ? globalThis.String(object.formatType) : "",
+    };
+  },
+
+  toJSON(message: AggregationFunction): unknown {
+    const obj: any = {};
+    if (message.fieldId !== "") {
+      obj.fieldId = message.fieldId;
+    }
+    if (message.type !== 0) {
+      obj.type = aggregationTypeToJSON(message.type);
+    }
+    if (message.alias !== "") {
+      obj.alias = message.alias;
+    }
+    if (message.formatType !== "") {
+      obj.formatType = message.formatType;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AggregationFunction>, I>>(base?: I): AggregationFunction {
+    return AggregationFunction.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AggregationFunction>, I>>(object: I): AggregationFunction {
+    const message = createBaseAggregationFunction();
+    message.fieldId = object.fieldId ?? "";
+    message.type = object.type ?? 0;
+    message.alias = object.alias ?? "";
+    message.formatType = object.formatType ?? "";
+    return message;
+  },
+};
+
+function createBaseAggregationConfig(): AggregationConfig {
+  return { groupByFields: [], aggregations: [] };
+}
+
+export const AggregationConfig: MessageFns<AggregationConfig> = {
+  encode(message: AggregationConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.groupByFields) {
+      writer.uint32(10).string(v!);
+    }
+    for (const v of message.aggregations) {
+      AggregationFunction.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AggregationConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAggregationConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.groupByFields.push(reader.string());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.aggregations.push(AggregationFunction.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AggregationConfig {
+    return {
+      groupByFields: globalThis.Array.isArray(object?.groupByFields)
+        ? object.groupByFields.map((e: any) => globalThis.String(e))
+        : [],
+      aggregations: globalThis.Array.isArray(object?.aggregations)
+        ? object.aggregations.map((e: any) => AggregationFunction.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: AggregationConfig): unknown {
+    const obj: any = {};
+    if (message.groupByFields?.length) {
+      obj.groupByFields = message.groupByFields;
+    }
+    if (message.aggregations?.length) {
+      obj.aggregations = message.aggregations.map((e) => AggregationFunction.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AggregationConfig>, I>>(base?: I): AggregationConfig {
+    return AggregationConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AggregationConfig>, I>>(object: I): AggregationConfig {
+    const message = createBaseAggregationConfig();
+    message.groupByFields = object.groupByFields?.map((e) => e) || [];
+    message.aggregations = object.aggregations?.map((e) => AggregationFunction.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 function createBaseQueryRowsRequest(): QueryRowsRequest {
   return {
     tableId: "",
@@ -2991,6 +3297,7 @@ function createBaseQueryRowsRequest(): QueryRowsRequest {
     offset: 0,
     userId: "",
     organizationId: "",
+    aggregation: undefined,
   };
 }
 
@@ -3022,6 +3329,9 @@ export const QueryRowsRequest: MessageFns<QueryRowsRequest> = {
     }
     if (message.organizationId !== "") {
       writer.uint32(74).string(message.organizationId);
+    }
+    if (message.aggregation !== undefined) {
+      AggregationConfig.encode(message.aggregation, writer.uint32(82).fork()).join();
     }
     return writer;
   },
@@ -3105,6 +3415,14 @@ export const QueryRowsRequest: MessageFns<QueryRowsRequest> = {
           message.organizationId = reader.string();
           continue;
         }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.aggregation = AggregationConfig.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3125,6 +3443,7 @@ export const QueryRowsRequest: MessageFns<QueryRowsRequest> = {
       offset: isSet(object.offset) ? globalThis.Number(object.offset) : 0,
       userId: isSet(object.userId) ? globalThis.String(object.userId) : "",
       organizationId: isSet(object.organizationId) ? globalThis.String(object.organizationId) : "",
+      aggregation: isSet(object.aggregation) ? AggregationConfig.fromJSON(object.aggregation) : undefined,
     };
   },
 
@@ -3157,6 +3476,9 @@ export const QueryRowsRequest: MessageFns<QueryRowsRequest> = {
     if (message.organizationId !== "") {
       obj.organizationId = message.organizationId;
     }
+    if (message.aggregation !== undefined) {
+      obj.aggregation = AggregationConfig.toJSON(message.aggregation);
+    }
     return obj;
   },
 
@@ -3174,6 +3496,9 @@ export const QueryRowsRequest: MessageFns<QueryRowsRequest> = {
     message.offset = object.offset ?? 0;
     message.userId = object.userId ?? "";
     message.organizationId = object.organizationId ?? "";
+    message.aggregation = (object.aggregation !== undefined && object.aggregation !== null)
+      ? AggregationConfig.fromPartial(object.aggregation)
+      : undefined;
     return message;
   },
 };

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Puck, Data, usePuck } from "@measured/puck";
+import { Puck, Data, usePuck, resolveAllData } from "@measured/puck";
 import "@measured/puck/puck.css";
 import "@/styles/puck-theme.css";
 import { config } from "@/components/puck/config";
@@ -131,14 +131,24 @@ export default function PageEditPage() {
       try {
         setLoading(true);
 
+        let rawData: Data;
+        let loadedPage: PageDTO;
+
         // First check if we have unsaved changes in sessionStorage (returning from preview)
         const savedData = sessionStorage.getItem(`preview-${pageId}`);
         if (savedData) {
           try {
-            const restoredData = JSON.parse(savedData);
-            const loadedPage = await getPage(pageId);
+            rawData = JSON.parse(savedData);
+            loadedPage = await getPage(pageId);
             setPage(loadedPage);
-            setInitialData(restoredData);
+
+            // AIDEV-NOTE: Resolve data even from sessionStorage to ensure
+            // components like MetricBlock have their resolveData executed
+            console.log('[EditPage] Resolving data from sessionStorage...');
+            const resolvedData = await resolveAllData(rawData, config, {});
+            console.log('[EditPage] Data resolved, initializing editor...');
+
+            setInitialData(resolvedData);
             setLoading(false);
             return;
           } catch (err) {
@@ -148,16 +158,24 @@ export default function PageEditPage() {
         }
 
         // Normal load from database
-        const loadedPage = await getPage(pageId);
+        loadedPage = await getPage(pageId);
         setPage(loadedPage);
 
         // Initialize with loaded content or empty structure
-        const data: Data = loadedPage.templateData || {
+        rawData = loadedPage.templateData || {
           content: [],
           root: {},
           zones: {}
         };
-        setInitialData(data);
+
+        // CRITICAL: Resolve all component data before initializing Puck editor
+        // This ensures MetricBlock and other components with resolveData functions
+        // have their data pre-fetched and available on first render
+        console.log('[EditPage] Resolving component data...');
+        const resolvedData = await resolveAllData(rawData, config, {});
+        console.log('[EditPage] Data resolved, initializing editor...');
+
+        setInitialData(resolvedData);
       } catch (err) {
         console.error('Error loading page:', err);
         setError(err instanceof Error ? err.message : 'Failed to load page');

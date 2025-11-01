@@ -187,6 +187,37 @@ message RowFilter {
   repeated RowDataValue values = 4; // Multiple values for IN/NOT_IN operators
 }
 
+// Aggregation types for metric/dashboard views
+// AIDEV-NOTE: Used by ViewApplicationService to compute aggregations via gRPC.
+// Aggregations are applied AFTER filters for correct SQL semantics (WHERE before GROUP BY).
+enum AggregationType {
+  AGG_TYPE_UNSPECIFIED = 0;
+  AGG_TYPE_SUM = 1;           // Sum of values
+  AGG_TYPE_AVG = 2;           // Average (mean) of values
+  AGG_TYPE_COUNT = 3;         // Count of non-null values
+  AGG_TYPE_MIN = 4;           // Minimum value
+  AGG_TYPE_MAX = 5;           // Maximum value
+  AGG_TYPE_COUNT_DISTINCT = 6;// Count of unique values
+  AGG_TYPE_COUNT_EMPTY = 7;   // Count of null/empty values
+  AGG_TYPE_COUNT_NOT_EMPTY = 8; // Count of non-null/non-empty values
+}
+
+// Single aggregation function to apply to a field
+message AggregationFunction {
+  string field_id = 1;          // field_{id} format (e.g., "field_5")
+  AggregationType type = 2;     // Aggregation type (sum, avg, count, etc.)
+  string alias = 3;             // Alias for result (e.g., "total_sales")
+  string format_type = 4;       // Display format hint: "number", "currency", "percentage", "duration"
+}
+
+// Aggregation configuration for QueryRows
+// AIDEV-NOTE: Extends QueryRows to support metric/dashboard views.
+// When aggregation is present, QueryRows returns aggregated data instead of raw rows.
+message AggregationConfig {
+  repeated string group_by_fields = 1;    // Fields to group by (empty for global aggregation)
+  repeated AggregationFunction aggregations = 2; // Aggregations to compute
+}
+
 message QueryRowsRequest {
   string table_id = 1;
   string s3_path = 2;
@@ -197,6 +228,11 @@ message QueryRowsRequest {
   int32 offset = 7;
   string user_id = 8;
   string organization_id = 9;
+
+  // AIDEV-NOTE: Optional aggregation config for metric/dashboard views.
+  // When present, QueryRows applies filters, then aggregations, returning aggregated data.
+  // This reuses all existing filter/sort logic in Python gRPC service.
+  AggregationConfig aggregation = 10;
 }
 
 

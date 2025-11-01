@@ -244,6 +244,20 @@ export class TableGrpcMapper {
       }
     }
 
+    // AIDEV-NOTE: Add aggregation support for metric/dashboard views
+    // Convert aggregation configuration to protobuf format if provided
+    const aggregation = (queryParams.aggregations && Array.isArray(queryParams.aggregations) && queryParams.aggregations.length > 0)
+      ? {
+          groupByFields: [], // Empty for global aggregations (metric views)
+          aggregations: queryParams.aggregations.map((agg: any) => ({
+            fieldId: agg.fieldId,
+            type: this.mapAggregationTypeToProto(agg.type),
+            alias: agg.alias,
+            formatType: agg.formatType || 'number',
+          })),
+        }
+      : undefined;
+
     const request: IQueryRowsRequest = {
       tableId: tableId.value.toString(),
       s3Path: s3Path,
@@ -254,9 +268,28 @@ export class TableGrpcMapper {
       limit: queryParams.limit || 0,
       offset: queryParams.offset || 0,
       filters: protoFilters,
+      aggregation,
     };
 
     return request;
+  }
+
+  /**
+   * Map TypeScript aggregation type to protobuf enum
+   * AIDEV-NOTE: Maps AggregationType from domain to protobuf enum values
+   */
+  private static mapAggregationTypeToProto(type: string): number {
+    const mapping: Record<string, number> = {
+      'sum': 1,           // AGG_TYPE_SUM
+      'avg': 2,           // AGG_TYPE_AVG
+      'count': 3,         // AGG_TYPE_COUNT
+      'min': 4,           // AGG_TYPE_MIN
+      'max': 5,           // AGG_TYPE_MAX
+      'count_distinct': 6, // AGG_TYPE_COUNT_DISTINCT
+      'count_empty': 7,    // AGG_TYPE_COUNT_EMPTY
+      'count_not_empty': 8, // AGG_TYPE_COUNT_NOT_EMPTY
+    };
+    return mapping[type] || 0; // Default to UNSPECIFIED
   }
 
   /**

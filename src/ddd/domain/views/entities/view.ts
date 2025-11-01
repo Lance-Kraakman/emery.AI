@@ -3,7 +3,7 @@
  *
  * AIDEV-NOTE: Represents a filtered/sorted view of a table (Baserow view pattern).
  * Formerly named DataSource - renamed to align with Baserow terminology.
- * Owns filters, sorting, and pagination configurations.
+ * Owns filters, sorting, pagination, field mappings, and view-type-specific configuration.
  * References a table but doesn't own it (follows DDD aggregate boundaries).
  *
  * Business Rules:
@@ -11,6 +11,9 @@
  * - Filters and sorting can be added/removed dynamically
  * - Pagination settings can be updated
  * - Name must be unique within an organization
+ * - ViewType determines data transformation (grid, metric, dashboard, recent-entries)
+ * - ViewConfig must match ViewType (validated)
+ * - Aggregations computed via backend for metric/dashboard views
  */
 
 import { ViewId } from "../value-objects/view-id";
@@ -18,6 +21,9 @@ import { FilterConfig } from "../value-objects/filter-config";
 import { SortConfig } from "../value-objects/sort-config";
 import { PaginationConfig } from "../value-objects/pagination-config";
 import { FieldMapping } from "../value-objects/field-mapping";
+import { ViewType } from "../value-objects/view-type";
+import { ViewConfig, type ViewConfigData } from "../value-objects/view-config";
+import { AggregationConfig } from "../value-objects/aggregation-config";
 import { TableId } from "@/ddd/domain/shared/value-objects/table-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects/organization-id";
 
@@ -25,6 +31,8 @@ export interface ViewProps {
   id: ViewId;
   name: string;
   description?: string;
+  viewType: ViewType;
+  viewConfig: ViewConfig;
   tableId: TableId;
   organizationId: OrganizationId;
   filters?: FilterConfig[];
@@ -40,6 +48,8 @@ export class View {
   private readonly _id: ViewId;
   private _name: string;
   private _description?: string;
+  private readonly _viewType: ViewType;
+  private _viewConfig: ViewConfig;
   private readonly _tableId: TableId;
   private readonly _organizationId: OrganizationId;
   private _filters: FilterConfig[];
@@ -54,6 +64,8 @@ export class View {
     this._id = props.id;
     this._name = props.name;
     this._description = props.description;
+    this._viewType = props.viewType;
+    this._viewConfig = props.viewConfig;
     this._tableId = props.tableId;
     this._organizationId = props.organizationId;
     this._filters = props.filters ?? [];
@@ -89,6 +101,20 @@ export class View {
 
     if (this._name.length > 255) {
       throw new Error("View name cannot exceed 255 characters");
+    }
+
+    // Validate viewConfig type matches viewType
+    if (this._viewType.isGrid() && !this._viewConfig.isGrid()) {
+      throw new Error("Grid view type requires grid view configuration");
+    }
+    if (this._viewType.isMetric() && !this._viewConfig.isMetric()) {
+      throw new Error("Metric view type requires metric view configuration");
+    }
+    if (this._viewType.isDashboard() && !this._viewConfig.isDashboard()) {
+      throw new Error("Dashboard view type requires dashboard view configuration");
+    }
+    if (this._viewType.isRecentEntries() && !this._viewConfig.isRecentEntries()) {
+      throw new Error("Recent entries view type requires recent entries view configuration");
     }
 
     // Validate that field IDs in filters exist in the table
@@ -135,6 +161,14 @@ export class View {
 
   get fieldMappings(): readonly FieldMapping[] {
     return [...this._fieldMappings];
+  }
+
+  get viewType(): ViewType {
+    return this._viewType;
+  }
+
+  get viewConfig(): ViewConfig {
+    return this._viewConfig;
   }
 
   get createdAt(): Date {
@@ -382,6 +416,55 @@ export class View {
   }
 
   /**
+   * Update view configuration
+   * Validates that config type matches view type
+   *
+   * AIDEV-NOTE: ViewConfig must match ViewType. Grid views need grid config,
+   * metric views need metric config, etc. This enforces type safety.
+   */
+  updateViewConfig(config: ViewConfig): void {
+    // Validate config matches view type
+    if (this._viewType.isGrid() && !config.isGrid()) {
+      throw new Error("Grid view requires grid configuration");
+    }
+    if (this._viewType.isMetric() && !config.isMetric()) {
+      throw new Error("Metric view requires metric configuration");
+    }
+    if (this._viewType.isDashboard() && !config.isDashboard()) {
+      throw new Error("Dashboard view requires dashboard configuration");
+    }
+    if (this._viewType.isRecentEntries() && !config.isRecentEntries()) {
+      throw new Error("Recent entries view requires recent entries configuration");
+    }
+
+    this._viewConfig = config;
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Get all aggregations for this view
+   *
+   * AIDEV-NOTE: This extracts aggregations from viewConfig for execution via gRPC.
+   * - Grid views: return empty array (no aggregations)
+   * - Metric views: return single aggregation
+   * - Dashboard views: return all metrics' aggregations
+   * - Recent entries views: return summary aggregations if configured
+   */
+  getAggregations(): readonly AggregationConfig[] {
+    return this._viewConfig.getAggregations();
+  }
+
+  /**
+   * Check if this view requires aggregation computation
+   *
+   * AIDEV-NOTE: Used by ViewApplicationService to determine if
+   * executeAggregations should be called via gRPC backend.
+   */
+  requiresAggregation(): boolean {
+    return this._viewType.requiresAggregation();
+  }
+
+  /**
    * Check if view has any filters
    */
   hasFilters(): boolean {
@@ -402,6 +485,8 @@ export class View {
     return {
       id: this._id.value,
       name: this._name,
+      viewType: this._viewType.toJSON(),
+      viewConfig: this._viewConfig.toJSON(),
       tableId: this._tableId.value,
       organizationId: this._organizationId.value,
       filters: this._filters.map((f) => f.toJSON()),
@@ -422,6 +507,8 @@ export class View {
     tableId: number;
     name: string;
     description?: string;
+    viewType: string;
+    viewConfig: ViewConfigData;
     filters: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null }>;
     sorting: Array<{ fieldId: number; direction: 'asc' | 'desc'; priority: number }>;
     pagination: { pageSize: number; offset: number };
@@ -436,6 +523,8 @@ export class View {
       tableId: this._tableId.value,
       name: this._name,
       description: this._description,
+      viewType: this._viewType.toString(),
+      viewConfig: this._viewConfig.toJSON(),
       filters: this._filters.map((f) => f.toJSON()),
       sorting: this._sorting.map((s) => ({
         fieldId: s.fieldId,
@@ -464,6 +553,8 @@ export class View {
     tableId: number;
     name: string;
     description?: string;
+    viewType: string;
+    viewConfig: ViewConfigData;
     filters: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null }>;
     sorting: Array<{ fieldId: number; direction: 'asc' | 'desc'; priority: number }>;
     pagination: { pageSize: number; offset: number };
@@ -478,6 +569,8 @@ export class View {
       tableId: TableId.fromNumber(data.tableId),
       name: data.name,
       description: data.description,
+      viewType: ViewType.create(data.viewType as any), // Type cast string to ViewTypeValue
+      viewConfig: ViewConfig.fromJSON(data.viewConfig),
       filters: data.filters.map((f) => FilterConfig.create({
         fieldId: f.fieldId,
         operator: f.operator as any, // Type cast operator string to FilterOperator
