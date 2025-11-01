@@ -137,17 +137,25 @@
 }
 
 /* Component drawer items - semi-transparent with shadows */
-.puck-themed-wrapper [class*="DrawerItem-draggable"] {
+/* Multiple selectors to ensure we catch the elements */
+.puck-themed-wrapper [class*="DrawerItem-draggable"],
+.puck-themed-wrapper [class*="DrawerItem"][class*="draggable"],
+.puck-themed-wrapper [class*="Drawer"] [class*="draggable"],
+[class*="puck"] [class*="DrawerItem-draggable"] {
   background: hsl(var(--muted) / 0.15) !important;
   backdrop-filter: blur(8px) !important;
   -webkit-backdrop-filter: blur(8px) !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: all 0.2s ease-in-out;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+  transition: all 0.2s ease-in-out !important;
+  border: 1px solid hsl(var(--border) / 0.3) !important;
 }
 
-.puck-themed-wrapper [class*="DrawerItem-draggable"]:hover {
+.puck-themed-wrapper [class*="DrawerItem-draggable"]:hover,
+.puck-themed-wrapper [class*="DrawerItem"][class*="draggable"]:hover,
+.puck-themed-wrapper [class*="Drawer"] [class*="draggable"]:hover,
+[class*="puck"] [class*="DrawerItem-draggable"]:hover {
   background: hsl(var(--muted) / 0.25) !important;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
   transform: translateY(-1px);
 }
 
@@ -253,6 +261,7 @@
 }
 
 /* Dropdown menus and select options - solid backgrounds for popups */
+/* External field inputs need solid backgrounds for visibility */
 .puck-themed-wrapper [class*="Dropdown"],
 .puck-themed-wrapper [class*="Menu"],
 .puck-themed-wrapper [class*="Popover"],
@@ -268,10 +277,15 @@
 .puck-themed-wrapper div[class*="AutoField"][class*="external"] [class*="Options"],
 .puck-themed-wrapper [class*="AutoField-"] > ul,
 .puck-themed-wrapper [class*="AutoField-"] > div[role="listbox"],
-.puck-themed-wrapper [class*="AutoField-"] > div[role="menu"] {
+.puck-themed-wrapper [class*="AutoField-"] > div[role="menu"],
+.puck-themed-wrapper [class*="AutoField"] ul,
+.puck-themed-wrapper [class*="external"] ul,
+[class*="puck"] [class*="AutoField"] ul,
+[class*="puck"] [class*="external"] ul {
   background: hsl(var(--popover)) !important;
-  border: 1px solid hsl(var(--border));
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  background-color: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
