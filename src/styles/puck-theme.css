@@ -138,6 +138,12 @@
 
 /* Component drawer items - semi-transparent with shadows */
 /* Target actual Puck class names with CSS modules hash */
+
+/* Target the background wrapper that contains the white background */
+[class*="Drawer-draggableBg"] {
+  background: transparent !important;
+}
+
 [class*="DrawerItem-draggable"] {
   background: hsl(var(--muted) / 0.15) !important;
   backdrop-filter: blur(8px) !important;
