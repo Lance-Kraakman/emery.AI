@@ -33,7 +33,7 @@ import { ViewConfig } from '@/ddd/domain/views/value-objects/view-config';
 import type { AggregationType, FormatType } from '@/ddd/domain/views/value-objects/aggregation-config';
 import { ViewTypeSelector } from './ViewTypeSelector';
 import { MetricConfigurationSection } from './MetricConfigurationSection';
-import { GridConfigurationSection, type GridFilterConfig, type GridSortConfig } from './GridConfigurationSection';
+import { GridConfigurationSection, type GridFilterConfig, type GridSortConfig, type GridFieldMapping } from './GridConfigurationSection';
 
 interface ViewFormDialogProps {
   open: boolean;
@@ -67,6 +67,8 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
   // Grid view configuration
   const [gridFilters, setGridFilters] = useState<GridFilterConfig[]>([]);
   const [gridSorting, setGridSorting] = useState<GridSortConfig[]>([]);
+  const [gridFieldMappings, setGridFieldMappings] = useState<GridFieldMapping[]>([]);
+  const [gridDefaultPageSize, setGridDefaultPageSize] = useState<number>(50);
 
   // Load tables on mount
   useEffect(() => {
@@ -81,6 +83,23 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
       loadFields(tableId);
     }
   }, [tableId]);
+
+  // Convert view filters from fieldId to field names once fields are loaded
+  useEffect(() => {
+    if (view && view.viewType === 'grid' && fields.length > 0 && gridFilters.length === 0) {
+      // Create a map of fieldId -> fieldName
+      const fieldIdToNameMap = new Map(fields.map(f => [f.id, f.name]));
+
+      // Convert filters
+      const filterConfigs = view.filters.map(f => ({
+        field: fieldIdToNameMap.get(f.fieldId) || '',
+        operator: f.operator as any,
+        value: f.value ?? null, // Convert undefined to null
+      })).filter(f => f.field !== ''); // Remove filters for fields that no longer exist
+
+      setGridFilters(filterConfigs);
+    }
+  }, [view, fields, gridFilters.length]);
 
   // Reset form when view changes
   useEffect(() => {
@@ -101,6 +120,31 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
           setDecimals(metricConfig.aggregation.decimals || 2);
         }
       }
+
+      // Load grid configuration if it's a grid view
+      if (view.viewType === 'grid') {
+        // Load filters - convert fieldId to field name
+        // We'll need to wait for fields to load first
+        setGridFilters([]); // Will be populated after fields load
+
+        // Load sorting
+        setGridSorting(view.sorting);
+
+        // Load field mappings
+        if (view.fieldMappings) {
+          setGridFieldMappings(view.fieldMappings);
+        } else {
+          setGridFieldMappings([]);
+        }
+
+        // Load page size from view config
+        const gridConfig = view.viewConfig as any;
+        if (gridConfig.defaultPageSize) {
+          setGridDefaultPageSize(gridConfig.defaultPageSize);
+        } else {
+          setGridDefaultPageSize(50);
+        }
+      }
     } else {
       setName('');
       setDescription('');
@@ -113,6 +157,8 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
       setDecimals(2);
       setGridFilters([]);
       setGridSorting([]);
+      setGridFieldMappings([]);
+      setGridDefaultPageSize(50);
     }
   }, [view]);
 
@@ -187,7 +233,9 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
         case 'grid':
         default:
           viewTypeVO = ViewType.grid();
-          viewConfigVO = ViewConfig.createGrid();
+          viewConfigVO = ViewConfig.createGrid({
+            defaultPageSize: gridDefaultPageSize,
+          });
           break;
       }
 
@@ -195,7 +243,11 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
         ? await updateView({
             id: view!.id,
             name: name.trim(),
-            description: description.trim() || undefined
+            description: description.trim() || undefined,
+            filters: viewType === 'grid' ? gridFilters : undefined,
+            sorting: viewType === 'grid' ? gridSorting : undefined,
+            fieldMappings: viewType === 'grid' && gridFieldMappings.length > 0 ? gridFieldMappings : undefined,
+            pagination: viewType === 'grid' ? { pageSize: gridDefaultPageSize } : undefined,
           })
         : await createView({
             tableId,
@@ -203,6 +255,7 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
             description: description.trim() || undefined,
             filters: viewType === 'grid' ? gridFilters : undefined,
             sorting: viewType === 'grid' ? gridSorting : undefined,
+            fieldMappings: viewType === 'grid' && gridFieldMappings.length > 0 ? gridFieldMappings : undefined,
             viewType: viewTypeVO,
             viewConfig: viewConfigVO,
           });
@@ -331,8 +384,8 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
                 </>
               )}
 
-              {/* Metric Configuration (conditional) */}
-              {!isEditMode && viewType === 'metric' && tableId && (
+              {/* Metric Configuration */}
+              {viewType === 'metric' && tableId && (
                 <MetricConfigurationSection
                   fields={fields}
                   loadingFields={loadingFields}
@@ -350,8 +403,8 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
                 />
               )}
 
-              {/* Grid Configuration (conditional) */}
-              {!isEditMode && viewType === 'grid' && tableId && (
+              {/* Grid Configuration */}
+              {viewType === 'grid' && tableId && (
                 <GridConfigurationSection
                   fields={fields}
                   loadingFields={loadingFields}
@@ -359,6 +412,10 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
                   onFiltersChange={setGridFilters}
                   sorting={gridSorting}
                   onSortingChange={setGridSorting}
+                  fieldMappings={gridFieldMappings}
+                  onFieldMappingsChange={setGridFieldMappings}
+                  defaultPageSize={gridDefaultPageSize}
+                  onDefaultPageSizeChange={setGridDefaultPageSize}
                   isSubmitting={isSubmitting}
                 />
               )}

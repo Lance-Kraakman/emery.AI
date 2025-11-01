@@ -165,9 +165,9 @@ export interface UpdateViewData {
   name?: string;
   description?: string;
   filters?: Array<{
-    fieldId: number;
+    field: string;           // Field name (will be converted to fieldId in action)
     operator: string;
-    value: string;
+    value: string | number | boolean | null;
   }>;
   sorting?: Array<{
     fieldId: number;

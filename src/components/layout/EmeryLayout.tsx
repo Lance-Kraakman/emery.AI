@@ -71,7 +71,7 @@ function EmeryLayoutInner({
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full overflow-hidden bg-transparent">
+      <div className="flex h-full w-full overflow-hidden bg-transparent">
         {/* Sidebar - now receives server-fetched data */}
         <Suspense fallback={<SidebarSkeleton />}>
           <AppSidebar
@@ -85,9 +85,9 @@ function EmeryLayoutInner({
 
         {/* Main Content Area + Chat */}
         <SidebarInset className="flex-1 flex min-h-0 overflow-hidden">
-          <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
+          <div className="flex-1 flex min-h-0 overflow-hidden">
             {/* Main Content Area with Canvas */}
-            <main className="flex-1 overflow-y-auto h-full">
+            <main className="flex-1 overflow-y-auto min-h-0">
               <MainContentWithCanvas>
                 {children || (
                   <div className="h-full flex items-center justify-center p-6">
