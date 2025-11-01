@@ -458,13 +458,13 @@ export function AppSidebar({
           isParentActive={(db, path) => {
             // Database is active if any of its tables are selected
             const tables = db.tables || []
-            return tables.some(table => path?.includes(`tableId=${table.id}`))
+            return tables.some(table => path?.includes(`/data/${table.id}`))
           }}
           getChildren={(db) => db.tables}
           getChildKey={(table) => table.id}
           getChildName={(table) => table.name}
-          getChildHref={(table) => `/data?tableId=${table.id}`}
-          isChildActive={(table, _, path) => path?.includes(`tableId=${table.id}`) ?? false}
+          getChildHref={(table) => `/data/${table.id}`}
+          isChildActive={(table, _, path) => path?.includes(`/data/${table.id}`) ?? false}
           onAddParent={handleCreateDatabase}
           onAddChild={handleCreateTable}
           addParentLabel="Add Database"

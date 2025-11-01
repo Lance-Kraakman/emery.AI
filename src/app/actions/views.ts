@@ -40,7 +40,7 @@ export async function createView(
     const session = await requirePermission("data:create");
     const currentOrg = await requireCurrentOrganization();
 
-    const { tableId, name, description, fieldMappings, viewType, viewConfig } = data;
+    const { tableId, name, description, fieldMappings, filters, sorting, viewType, viewConfig } = data;
 
     if (!name) {
       return {
@@ -58,6 +58,11 @@ export async function createView(
 
     const dataSourceService = getViewApplicationService();
 
+    // Fetch fields to convert field names to IDs for filters
+    const { getFields } = await import('./fields');
+    const fields = await getFields(tableId);
+    const fieldNameToIdMap = new Map(fields.map(f => [f.name, f.id]));
+
     // Convert plain field mapping objects to FieldMapping value objects
     const fieldMappingVOs = fieldMappings?.map((mapping) =>
       FieldMapping.create({
@@ -65,6 +70,46 @@ export async function createView(
         displayName: mapping.displayName,
         visible: mapping.visible,
         order: mapping.order,
+      })
+    );
+
+    // Convert plain filter objects to FilterConfig value objects
+    // AIDEV-NOTE: Filters from UI use field names, need to convert to field IDs
+    // Also need to map UI operators to domain operators
+    const uiToDomainOperatorMap: Record<string, string> = {
+      'eq': 'equals',
+      'ne': 'not_equals',
+      'ilike': 'contains',
+      'like': 'contains',
+      'gt': 'greater_than',
+      'gte': 'greater_than_or_equal',
+      'lt': 'less_than',
+      'lte': 'less_than_or_equal',
+      'is_null': 'is_empty',
+      'is_not_null': 'is_not_empty',
+    };
+
+    const filterVOs = filters?.map((filter) => {
+      const fieldId = fieldNameToIdMap.get(filter.field);
+      if (!fieldId) {
+        throw new Error(`Field "${filter.field}" not found in table`);
+      }
+
+      const domainOperator = uiToDomainOperatorMap[filter.operator] || filter.operator;
+
+      return FilterConfig.create({
+        fieldId,
+        operator: domainOperator as any,
+        value: filter.value,
+      });
+    });
+
+    // Convert plain sorting objects to SortConfig value objects
+    const sortingVOs = sorting?.map((sort) =>
+      SortConfig.create({
+        fieldId: sort.fieldId,
+        direction: sort.direction,
+        priority: sort.priority,
       })
     );
 
@@ -94,6 +139,8 @@ export async function createView(
       name,
       description,
       createdBy: UserId.fromString(session.user.id),
+      filters: filterVOs,
+      sorting: sortingVOs,
       fieldMappings: fieldMappingVOs,
       viewType: viewTypeVO,
       viewConfig: viewConfigVO,
@@ -381,7 +428,18 @@ export async function getViewsForOrganization(): Promise<ViewDTO[]> {
       return [];
     }
 
-    return result.data.map((ds) => ViewMapper.toDTO(ds));
+    // Fetch table names to enrich the DTOs
+    const { getTables } = await import('./tables');
+    const tables = await getTables();
+    const tableNameMap = new Map(tables.map(t => [t.id, t.name]));
+
+    return result.data.map((ds) => {
+      const dto = ViewMapper.toDTO(ds);
+      return {
+        ...dto,
+        tableName: tableNameMap.get(dto.tableId),
+      };
+    });
   } catch (error) {
     console.error("Error getting views for organization:", error);
     return [];

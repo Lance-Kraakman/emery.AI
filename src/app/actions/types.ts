@@ -140,6 +140,16 @@ export interface CreateViewData {
   tableId: number;
   name: string;
   description?: string;
+  filters?: Array<{
+    field: string;
+    operator: string;
+    value: string | number | boolean | null;
+  }>;
+  sorting?: Array<{
+    fieldId: number;
+    direction: "asc" | "desc";
+    priority: number;
+  }>;
   fieldMappings?: Array<{
     sourceFieldId: number;
     displayName: string;

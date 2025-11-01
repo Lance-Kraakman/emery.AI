@@ -11,11 +11,12 @@ export interface ViewDTO {
   id: number;
   organizationId: number;
   tableId: number;
+  tableName?: string;  // Optional table name for display purposes
   name: string;
   description?: string;
-  viewType: 'grid' | 'metric' | 'dashboard' | 'recent-entries';
+  viewType: 'grid' | 'metric';
   viewConfig: {
-    type: 'grid' | 'metric' | 'dashboard' | 'recent-entries';
+    type: 'grid' | 'metric';
     [key: string]: any;
   };
   filters: Array<{
@@ -53,9 +54,9 @@ export class ViewMapper {
       tableId: persistence.tableId,
       name: persistence.name,
       description: persistence.description,
-      viewType: persistence.viewType as 'grid' | 'metric' | 'dashboard' | 'recent-entries',
+      viewType: persistence.viewType as 'grid' | 'metric',
       viewConfig: persistence.viewConfig as {
-        type: 'grid' | 'metric' | 'dashboard' | 'recent-entries';
+        type: 'grid' | 'metric';
         [key: string]: any;
       },
       filters: persistence.filters,

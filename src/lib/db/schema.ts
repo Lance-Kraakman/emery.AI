@@ -144,11 +144,11 @@ export const views = pgTable("views", {
     order: number;
   }>>(),
 
-  // View type (grid, metric, dashboard, recent-entries)
+  // View type (grid, metric)
   // AIDEV-NOTE: Determines how data is transformed and displayed.
   // Defaults to 'grid' for backward compatibility with existing views.
   viewType: text("view_type")
-    .$type<'grid' | 'metric' | 'dashboard' | 'recent-entries'>()
+    .$type<'grid' | 'metric'>()
     .notNull()
     .default('grid'),
 
@@ -156,7 +156,7 @@ export const views = pgTable("views", {
   // AIDEV-NOTE: Schema varies by viewType. Validated by ViewConfig Value Object.
   viewConfig: jsonb("view_config")
     .$type<{
-      type: 'grid' | 'metric' | 'dashboard' | 'recent-entries';
+      type: 'grid' | 'metric';
       [key: string]: any;
     }>()
     .notNull()

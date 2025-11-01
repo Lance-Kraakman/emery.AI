@@ -110,12 +110,6 @@ export class View {
     if (this._viewType.isMetric() && !this._viewConfig.isMetric()) {
       throw new Error("Metric view type requires metric view configuration");
     }
-    if (this._viewType.isDashboard() && !this._viewConfig.isDashboard()) {
-      throw new Error("Dashboard view type requires dashboard view configuration");
-    }
-    if (this._viewType.isRecentEntries() && !this._viewConfig.isRecentEntries()) {
-      throw new Error("Recent entries view type requires recent entries view configuration");
-    }
 
     // Validate that field IDs in filters exist in the table
     // Note: This validation should ideally be done with the actual table schema
@@ -429,12 +423,6 @@ export class View {
     }
     if (this._viewType.isMetric() && !config.isMetric()) {
       throw new Error("Metric view requires metric configuration");
-    }
-    if (this._viewType.isDashboard() && !config.isDashboard()) {
-      throw new Error("Dashboard view requires dashboard configuration");
-    }
-    if (this._viewType.isRecentEntries() && !config.isRecentEntries()) {
-      throw new Error("Recent entries view requires recent entries configuration");
     }
 
     this._viewConfig = config;

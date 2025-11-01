@@ -2,20 +2,16 @@
  * ViewType Value Object
  *
  * Represents the type of view, determining how data is displayed and whether
- * aggregations are computed. Follows Baserow's multi-view-type architecture.
+ * aggregations are computed.
  *
  * AIDEV-NOTE: View types determine data transformation behavior:
- * - grid: Raw table rows (existing behavior)
- * - metric: Single aggregated value
- * - dashboard: Multiple aggregated metrics
- * - recent-entries: Sorted by recency, optional summary aggregations
+ * - grid: Raw table rows with filters/sorting
+ * - metric: Single aggregated value (sum, avg, count, etc.)
  */
 
 export type ViewTypeValue =
   | 'grid'            // Standard table view with rows/columns
-  | 'metric'          // Single metric display (e.g., "Total Sales: $150,000")
-  | 'dashboard'       // Multiple metrics in grid layout
-  | 'recent-entries'; // Recently added/updated entries
+  | 'metric';         // Single metric display (e.g., "Total Sales: $150,000")
 
 export class ViewType {
   private constructor(private readonly _value: ViewTypeValue) {}
@@ -25,7 +21,7 @@ export class ViewType {
    * Validates that value is a supported view type
    */
   static create(value: ViewTypeValue): ViewType {
-    const validTypes: ViewTypeValue[] = ['grid', 'metric', 'dashboard', 'recent-entries'];
+    const validTypes: ViewTypeValue[] = ['grid', 'metric'];
 
     if (!validTypes.includes(value)) {
       throw new Error(
@@ -47,14 +43,6 @@ export class ViewType {
     return new ViewType('metric');
   }
 
-  static dashboard(): ViewType {
-    return new ViewType('dashboard');
-  }
-
-  static recentEntries(): ViewType {
-    return new ViewType('recent-entries');
-  }
-
   /**
    * Get the raw string value
    */
@@ -73,29 +61,21 @@ export class ViewType {
     return this._value === 'metric';
   }
 
-  isDashboard(): boolean {
-    return this._value === 'dashboard';
-  }
-
-  isRecentEntries(): boolean {
-    return this._value === 'recent-entries';
-  }
-
   /**
    * Check if this view type requires aggregation computation
    *
-   * AIDEV-NOTE: Metric and dashboard views need aggregations computed
+   * AIDEV-NOTE: Metric views need aggregations computed
    * via the backend QueryRows RPC with aggregation config.
    */
   requiresAggregation(): boolean {
-    return this._value === 'metric' || this._value === 'dashboard';
+    return this._value === 'metric';
   }
 
   /**
    * Check if this view type displays raw table rows
    */
   displaysRows(): boolean {
-    return this._value === 'grid' || this._value === 'recent-entries';
+    return this._value === 'grid';
   }
 
   /**
