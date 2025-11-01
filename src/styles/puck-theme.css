@@ -273,6 +273,19 @@
   -webkit-backdrop-filter: none !important;
 }
 
+/* Buttons inside modal - ensure proper contrast */
+[class*="ExternalInputModal"] button[class*="Button--primary"],
+[class*="Modal-inner"] button[class*="Button--primary"] {
+  background: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  border: none !important;
+}
+
+[class*="ExternalInputModal"] button[class*="Button--primary"]:hover,
+[class*="Modal-inner"] button[class*="Button--primary"]:hover {
+  background: hsl(var(--primary) / 0.9) !important;
+}
+
 /* Additional selectors for other popup types */
 .puck-themed-wrapper [class*="Dropdown"],
 .puck-themed-wrapper [class*="Menu"],
