@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loading } from '@/components/ui/loading';
 import { ViewFormDialog } from './ViewFormDialog';
 import { deleteView } from '@/app/actions/views';
+import Link from 'next/link';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -133,9 +134,21 @@ export function ViewsSection({ views, loading, onViewsChange }: ViewsSectionProp
                           </Badge>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {view.description || `Table ID: ${view.tableId}`}
-                      </p>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {view.description && <p className="mb-1">{view.description}</p>}
+                        {view.tableName ? (
+                          <Link
+                            href={`/data/${view.tableId}`}
+                            className="text-primary hover:underline inline-flex items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Database className="h-3 w-3" />
+                            {view.tableName}
+                          </Link>
+                        ) : (
+                          <span>Table ID: {view.tableId}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>

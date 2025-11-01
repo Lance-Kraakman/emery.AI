@@ -22,11 +22,19 @@ export interface DataState {
   // Current selection
   selectedTableId?: number
   selectedDatabaseId?: number
-  
+  selectedViewId?: number
+
   // Table and field data
   fields: FieldDTO[]
   rows: RowDTO[]
   availableTables: Array<{ id: number; name: string }>
+  viewsForCurrentTable: Array<{
+    id: number
+    name: string
+    viewType: 'grid' | 'metric' | 'dashboard' | 'recent-entries'
+    filters?: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null }>
+    sorting?: Array<{ fieldId: number; direction: 'asc' | 'desc'; priority: number }>
+  }>
   
   // Search and filtering
   searchTerm: string
@@ -126,11 +134,13 @@ const initialState: DataState = {
   // Selection
   selectedTableId: undefined,
   selectedDatabaseId: undefined,
-  
+  selectedViewId: undefined,
+
   // Data
   fields: [],
   rows: [],
   availableTables: [],
+  viewsForCurrentTable: [],
   
   // Search and filtering
   searchTerm: '',
@@ -234,6 +244,14 @@ export const dataActions = {
     dataStore.setState((state) => ({ ...state, selectedDatabaseId: databaseId }))
   },
 
+  setSelectedView: (viewId?: number) => {
+    dataStore.setState((state) => ({ ...state, selectedViewId: viewId }))
+  },
+
+  clearSelectedView: () => {
+    dataStore.setState((state) => ({ ...state, selectedViewId: undefined }))
+  },
+
   // Data loading actions
   setFields: (fields: FieldDTO[]) => {
     dataStore.setState((state) => ({ ...state, fields, fieldsLoading: false }))
@@ -250,6 +268,16 @@ export const dataActions = {
 
   setAvailableTables: (tables: Array<{ id: number; name: string }>) => {
     dataStore.setState((state) => ({ ...state, availableTables: tables }))
+  },
+
+  setViewsForCurrentTable: (views: Array<{
+    id: number
+    name: string
+    viewType: 'grid' | 'metric' | 'dashboard' | 'recent-entries'
+    filters?: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null }>
+    sorting?: Array<{ fieldId: number; direction: 'asc' | 'desc'; priority: number }>
+  }>) => {
+    dataStore.setState((state) => ({ ...state, viewsForCurrentTable: views }))
   },
 
   // Search and filter actions
@@ -676,13 +704,17 @@ export const dataSelectors = {
   // Selection selectors
   selectedTableId: (state: DataState) => state.selectedTableId,
   selectedDatabaseId: (state: DataState) => state.selectedDatabaseId,
+  selectedViewId: (state: DataState) => state.selectedViewId,
   selectedTable: (availableTables: Array<{ id: number; name: string }>) => (state: DataState) =>
     availableTables.find(table => table.id === state.selectedTableId),
+  selectedView: (state: DataState) =>
+    state.viewsForCurrentTable.find(view => view.id === state.selectedViewId),
 
   // Data selectors
   fields: (state: DataState) => state.fields,
   rows: (state: DataState) => state.rows,
   availableTables: (state: DataState) => state.availableTables,
+  viewsForCurrentTable: (state: DataState) => state.viewsForCurrentTable,
   
   // Filtered data selectors
   filteredRows: (state: DataState) => {

@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useEffect, useMemo, useCallback, useRef } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { useStore } from '@tanstack/react-store'
 import { toast } from 'sonner'
@@ -30,13 +29,13 @@ import { createDebugLogger } from '@/lib/utils/debug-logger'
 
 const logger = createDebugLogger('DataViewsClient')
 
-export function DataViewsClientSimplified() {
-  const searchParams = useSearchParams()
+interface DataViewsClientSimplifiedProps {
+  tableId?: number
+}
+
+export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplifiedProps = {}) {
   const queryClient = useQueryClient()
   const { data, isLoading: dataLoading, error: dataError } = useEmery()
-
-  const tableIdParam = searchParams?.get("tableId")
-  const initialTableId = tableIdParam ? parseInt(tableIdParam) : undefined
 
   // Find the initial table across all databases
   const findTableById = (id: number): TableDTO | undefined => {
@@ -66,20 +65,14 @@ export function DataViewsClientSimplified() {
     }
   }, [selectedTableId])
 
-  // Initialize with URL parameter
+  // Initialize with tableId prop
   useEffect(() => {
-    if (initialTableId && !selectedTableId) {
-      dataActions.setSelectedTable(initialTableId)
+    if (tableId && !selectedTableId) {
+      dataActions.setSelectedTable(tableId)
     }
-  }, [initialTableId, selectedTableId])
+  }, [tableId, selectedTableId])
 
   const selectedTable = selectedTableId ? findTableById(selectedTableId) : undefined
-
-  // Update selected table when URL changes
-  useEffect(() => {
-    const tableId = tableIdParam ? parseInt(tableIdParam) : undefined;
-    dataActions.setSelectedTable(tableId);
-  }, [tableIdParam]);
 
   // TanStack Query for fields
   const fieldsQuery = useQuery({

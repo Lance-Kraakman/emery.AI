@@ -33,6 +33,7 @@ import { ViewConfig } from '@/ddd/domain/views/value-objects/view-config';
 import type { AggregationType, FormatType } from '@/ddd/domain/views/value-objects/aggregation-config';
 import { ViewTypeSelector } from './ViewTypeSelector';
 import { MetricConfigurationSection } from './MetricConfigurationSection';
+import { GridConfigurationSection, type GridFilterConfig, type GridSortConfig } from './GridConfigurationSection';
 
 interface ViewFormDialogProps {
   open: boolean;
@@ -54,7 +55,7 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [tableId, setTableId] = useState<number | undefined>();
-  const [viewType, setViewType] = useState<'grid' | 'metric' | 'dashboard' | 'recent-entries'>('grid');
+  const [viewType, setViewType] = useState<'grid' | 'metric'>('grid');
 
   // Metric view configuration
   const [selectedFieldId, setSelectedFieldId] = useState<number | undefined>();
@@ -62,6 +63,10 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
   const [customLabel, setCustomLabel] = useState('');
   const [formatType, setFormatType] = useState<FormatType>('number');
   const [decimals, setDecimals] = useState(2);
+
+  // Grid view configuration
+  const [gridFilters, setGridFilters] = useState<GridFilterConfig[]>([]);
+  const [gridSorting, setGridSorting] = useState<GridSortConfig[]>([]);
 
   // Load tables on mount
   useEffect(() => {
@@ -106,6 +111,8 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
       setCustomLabel('');
       setFormatType('number');
       setDecimals(2);
+      setGridFilters([]);
+      setGridSorting([]);
     }
   }, [view]);
 
@@ -177,17 +184,6 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
             },
           });
           break;
-        case 'dashboard':
-          viewTypeVO = ViewType.dashboard();
-          viewConfigVO = ViewConfig.createDashboard({
-            metrics: [],
-            layout: 'grid',
-          });
-          break;
-        case 'recent-entries':
-          viewTypeVO = ViewType.recentEntries();
-          viewConfigVO = ViewConfig.createRecentEntries();
-          break;
         case 'grid':
         default:
           viewTypeVO = ViewType.grid();
@@ -205,6 +201,8 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
             tableId,
             name: name.trim(),
             description: description.trim() || undefined,
+            filters: viewType === 'grid' ? gridFilters : undefined,
+            sorting: viewType === 'grid' ? gridSorting : undefined,
             viewType: viewTypeVO,
             viewConfig: viewConfigVO,
           });
@@ -352,15 +350,20 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
                 />
               )}
 
-
-              {/* Info about dashboard/recent views */}
-              {!isEditMode && (viewType === 'dashboard' || viewType === 'recent-entries') && (
-                <div className="bg-secondary/50 p-3 rounded-md text-sm text-muted-foreground">
-                  {viewType === 'dashboard'
-                    ? 'Dashboard views can be configured with multiple metrics after creation.'
-                    : 'Recent entries views will automatically show the most recently created records.'}
-                </div>
+              {/* Grid Configuration (conditional) */}
+              {!isEditMode && viewType === 'grid' && tableId && (
+                <GridConfigurationSection
+                  fields={fields}
+                  loadingFields={loadingFields}
+                  filters={gridFilters}
+                  onFiltersChange={setGridFilters}
+                  sorting={gridSorting}
+                  onSortingChange={setGridSorting}
+                  isSubmitting={isSubmitting}
+                />
               )}
+
+
 
               {error && (
                 <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">
