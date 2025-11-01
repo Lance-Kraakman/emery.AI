@@ -87,7 +87,7 @@ function EmeryLayoutInner({
         <SidebarInset className="flex-1 flex min-h-0 overflow-hidden">
           <div className="flex-1 flex min-h-0 overflow-hidden">
             {/* Main Content Area with Canvas */}
-            <main className="flex-1 overflow-y-auto min-h-0">
+            <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
               <MainContentWithCanvas>
                 {children || (
                   <div className="h-full flex items-center justify-center p-6">
