@@ -136,17 +136,17 @@
   -webkit-backdrop-filter: var(--sidebar-backdrop);
 }
 
-/* Component items - semi-transparent with shadows */
-.puck-themed-wrapper [class*="ComponentList"] [class*="ComponentListItem"] {
-  background: hsl(var(--muted) / 0.15);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+/* Component drawer items - semi-transparent with shadows */
+.puck-themed-wrapper [class*="DrawerItem-draggable"] {
+  background: hsl(var(--muted) / 0.15) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   transition: all 0.2s ease-in-out;
 }
 
-.puck-themed-wrapper [class*="ComponentList"] [class*="ComponentListItem"]:hover {
-  background: hsl(var(--muted) / 0.25);
+.puck-themed-wrapper [class*="DrawerItem-draggable"]:hover {
+  background: hsl(var(--muted) / 0.25) !important;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
   transform: translateY(-1px);
 }
