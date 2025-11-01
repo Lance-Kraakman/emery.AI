@@ -145,7 +145,7 @@
 }
 
 [class*="DrawerItem-draggable"] {
-  background: hsl(var(--muted) / 0.15) !important;
+  background-color: hsl(var(--muted) / 0.15) !important;
   backdrop-filter: blur(8px) !important;
   -webkit-backdrop-filter: blur(8px) !important;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
@@ -154,7 +154,7 @@
 }
 
 [class*="DrawerItem-draggable"]:hover {
-  background: hsl(var(--muted) / 0.25) !important;
+  background-color: hsl(var(--muted) / 0.25) !important;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
   transform: translateY(-1px);
 }
