@@ -1,21 +1,16 @@
 'use client';
 
 import React from 'react';
-import { Plus, X, ArrowUp, ArrowDown, ChevronsUpDown, Filter as FilterIcon } from 'lucide-react';
+import { Plus, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
-import {
-  type FilterOperator,
-  type FieldType,
-  OPERATORS_BY_FIELD_TYPE,
-  operatorNeedsValue,
-  getOperatorLabel
-} from '@/lib/types/filters';
+import { type FilterOperator, type FieldType } from '@/lib/types/filters';
+import { FilterPopover } from '@/app/(app)/data/components/FilterPopover';
+import { FilterChip } from '@/app/(app)/data/components/FilterChip';
 
 /**
  * Filter configuration for Grid views
@@ -97,13 +92,6 @@ export function GridConfigurationSection({
   onDefaultPageSizeChange,
   isSubmitting = false,
 }: GridConfigurationSectionProps) {
-  // Track filter editor state
-  const [isAddingFilter, setIsAddingFilter] = React.useState(false);
-  const [editingFilterIndex, setEditingFilterIndex] = React.useState<number | null>(null);
-  const [newFilterField, setNewFilterField] = React.useState<string>('');
-  const [newFilterOperator, setNewFilterOperator] = React.useState<FilterOperator>('eq');
-  const [newFilterValue, setNewFilterValue] = React.useState<string>('');
-
   // Get sort info for a field
   const getSortForField = (fieldId: number) => {
     return sorting.find(s => s.fieldId === fieldId);
@@ -172,111 +160,6 @@ export function GridConfigurationSection({
     }
   };
 
-  // Start adding a new filter
-  const handleStartAddFilter = () => {
-    if (fields.length === 0) return;
-    const firstField = fields[0];
-    const fieldType = (firstField.type as FieldType) || 'text';
-    const defaultOp = OPERATORS_BY_FIELD_TYPE[fieldType][0]?.value || 'eq';
-
-    setNewFilterField(firstField.name);
-    setNewFilterOperator(defaultOp);
-    setNewFilterValue('');
-    setIsAddingFilter(true);
-    setEditingFilterIndex(null);
-  };
-
-  // Start editing existing filter
-  const handleStartEditFilter = (index: number) => {
-    const filter = filters[index];
-    setNewFilterField(filter.field);
-    setNewFilterOperator(filter.operator);
-    setNewFilterValue(String(filter.value || ''));
-    setEditingFilterIndex(index);
-    setIsAddingFilter(false);
-  };
-
-  // Update operator when field changes
-  const handleFilterFieldChange = (fieldName: string) => {
-    setNewFilterField(fieldName);
-    const field = fields.find(f => f.name === fieldName);
-    const fieldType = (field?.type as FieldType) || 'text';
-    const defaultOp = OPERATORS_BY_FIELD_TYPE[fieldType][0]?.value || 'eq';
-    setNewFilterOperator(defaultOp);
-    setNewFilterValue('');
-  };
-
-  // Save filter (add or update)
-  const handleSaveFilter = () => {
-    const field = fields.find(f => f.name === newFilterField);
-    if (!field) return;
-
-    const fieldType = (field.type as FieldType) || 'text';
-    const needsValue = operatorNeedsValue(newFilterOperator);
-
-    if (needsValue && !newFilterValue) {
-      return; // Don't save if value is required but missing
-    }
-
-    let processedValue: any = newFilterValue;
-
-    if (needsValue) {
-      if (fieldType === 'number') {
-        processedValue = parseFloat(newFilterValue);
-        if (isNaN(processedValue)) return;
-      } else if (fieldType === 'boolean') {
-        processedValue = newFilterValue === 'true';
-      }
-    } else {
-      processedValue = null;
-    }
-
-    const newFilter: GridFilterConfig = {
-      field: newFilterField,
-      operator: newFilterOperator,
-      value: processedValue,
-    };
-
-    if (editingFilterIndex !== null) {
-      // Update existing filter
-      const newFilters = [...filters];
-      newFilters[editingFilterIndex] = newFilter;
-      onFiltersChange(newFilters);
-    } else {
-      // Add new filter
-      onFiltersChange([...filters, newFilter]);
-    }
-
-    handleCancelFilterEdit();
-  };
-
-  // Remove filter
-  const handleRemoveFilter = (index: number) => {
-    onFiltersChange(filters.filter((_, i) => i !== index));
-    if (editingFilterIndex === index) {
-      handleCancelFilterEdit();
-    }
-  };
-
-  // Cancel filter edit
-  const handleCancelFilterEdit = () => {
-    setIsAddingFilter(false);
-    setEditingFilterIndex(null);
-    setNewFilterField('');
-    setNewFilterOperator('eq');
-    setNewFilterValue('');
-  };
-
-  // Format filter label for display
-  const formatFilterLabel = (filter: GridFilterConfig) => {
-    const operatorLabel = getOperatorLabel(filter.operator);
-    const needsValue = operatorNeedsValue(filter.operator);
-
-    if (needsValue && filter.value !== null && filter.value !== undefined) {
-      return `${filter.field} ${operatorLabel} ${filter.value}`;
-    }
-    return `${filter.field} ${operatorLabel}`;
-  };
 
   if (loadingFields) {
     return <div className="text-sm text-muted-foreground">Loading fields...</div>;
@@ -365,141 +248,34 @@ export function GridConfigurationSection({
         </table>
       </div>
 
-      {/* Filters Section */}
+      {/* Filters Section - Using Data Grid Components */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label className="text-sm font-medium">Filters</Label>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7"
-            onClick={handleStartAddFilter}
-            disabled={isSubmitting || isAddingFilter || editingFilterIndex !== null}
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" />
-            Add Filter
-          </Button>
+          <FilterPopover
+            trigger={
+              <Button variant="outline" size="sm" className="h-7">
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                {filters.length > 0 ? `Filters (${filters.length})` : 'Add Filter'}
+              </Button>
+            }
+            fields={fields}
+            activeFilters={filters}
+            onAddFilter={(filter) => onFiltersChange([...filters, filter as GridFilterConfig])}
+            onRemoveFilter={(index) => onFiltersChange(filters.filter((_, i) => i !== index))}
+          />
         </div>
 
-        {/* Horizontal Filter Chips */}
-        {filters.length > 0 || isAddingFilter || editingFilterIndex !== null ? (
-          <div className="border rounded-lg p-2 min-h-[40px] flex flex-wrap items-center gap-2">
+        {/* Filter Chips Display */}
+        {filters.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
             {filters.map((filter, index) => (
-              <Badge
+              <FilterChip
                 key={index}
-                variant="secondary"
-                className="h-7 px-2 py-1 text-xs cursor-pointer hover:bg-secondary/80 transition-colors"
-                onClick={() => handleStartEditFilter(index)}
-              >
-                <FilterIcon className="h-3 w-3 mr-1" />
-                {formatFilterLabel(filter)}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-4 w-4 p-0 ml-1 hover:bg-destructive/10 hover:text-destructive rounded-sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleRemoveFilter(index);
-                  }}
-                  disabled={isSubmitting}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </Badge>
+                filter={filter}
+                onRemove={() => onFiltersChange(filters.filter((_, i) => i !== index))}
+              />
             ))}
-
-            {/* Filter Editor (inline when adding/editing) */}
-            {(isAddingFilter || editingFilterIndex !== null) && (
-              <div className="flex items-center gap-2 p-2 bg-muted/30 rounded border border-primary/20">
-                <Select
-                  value={newFilterField}
-                  onValueChange={handleFilterFieldChange}
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger className="h-7 w-32 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {fields.map(field => (
-                      <SelectItem key={field.id} value={field.name}>
-                        {field.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select
-                  value={newFilterOperator}
-                  onValueChange={(value) => setNewFilterOperator(value as FilterOperator)}
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger className="h-7 w-28 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(() => {
-                      const field = fields.find(f => f.name === newFilterField);
-                      const fieldType = (field?.type as FieldType) || 'text';
-                      return OPERATORS_BY_FIELD_TYPE[fieldType].map(op => (
-                        <SelectItem key={op.value} value={op.value}>
-                          {op.label}
-                        </SelectItem>
-                      ));
-                    })()}
-                  </SelectContent>
-                </Select>
-
-                {operatorNeedsValue(newFilterOperator) && (() => {
-                  const field = fields.find(f => f.name === newFilterField);
-                  const fieldType = (field?.type as FieldType) || 'text';
-
-                  return fieldType === 'boolean' ? (
-                    <Select
-                      value={newFilterValue}
-                      onValueChange={setNewFilterValue}
-                      disabled={isSubmitting}
-                    >
-                      <SelectTrigger className="h-7 w-24 text-xs">
-                        <SelectValue placeholder="Value" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="true">True</SelectItem>
-                        <SelectItem value="false">False</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Input
-                      type={fieldType === 'number' ? 'number' : fieldType === 'date' ? 'date' : 'text'}
-                      value={newFilterValue}
-                      onChange={(e) => setNewFilterValue(e.target.value)}
-                      placeholder="Value..."
-                      className="h-7 w-32 text-xs"
-                      disabled={isSubmitting}
-                    />
-                  );
-                })()}
-
-                <div className="flex gap-1">
-                  <Button
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={handleSaveFilter}
-                    disabled={isSubmitting || (operatorNeedsValue(newFilterOperator) && !newFilterValue)}
-                  >
-                    Save
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 px-2 text-xs"
-                    onClick={handleCancelFilterEdit}
-                    disabled={isSubmitting}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
         ) : (
           <div className="border rounded-lg p-3 text-center">
