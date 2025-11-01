@@ -211,6 +211,14 @@ export async function updateView(
 
     const dataSource = existingResult.data;
 
+    // Fetch fields for filter field name conversion
+    let fieldNameToIdMap: Map<string, number> | undefined;
+    if (filters && filters.length > 0) {
+      const { getFields } = await import('./fields');
+      const fields = await getFields(dataSource.tableId.value);
+      fieldNameToIdMap = new Map(fields.map(f => [f.name, f.id]));
+    }
+
     // Update name/description if provided
     if (name !== undefined) {
       dataSource.updateName(name);
@@ -221,14 +229,37 @@ export async function updateView(
     }
 
     // Update filters if provided
-    if (filters !== undefined) {
+    if (filters !== undefined && fieldNameToIdMap) {
       // Clear existing filters and add new ones
       dataSource.clearFilters();
+
+      // Operator mapping (same as createView)
+      const uiToDomainOperatorMap: Record<string, string> = {
+        'eq': 'equals',
+        'ne': 'not_equals',
+        'ilike': 'contains',
+        'like': 'contains',
+        'gt': 'greater_than',
+        'gte': 'greater_than_or_equal',
+        'lt': 'less_than',
+        'lte': 'less_than_or_equal',
+        'is_null': 'is_empty',
+        'is_not_null': 'is_not_empty',
+      };
+
       for (const filter of filters) {
+        const fieldId = fieldNameToIdMap.get(filter.field);
+        if (!fieldId) {
+          console.warn(`Field "${filter.field}" not found, skipping filter`);
+          continue;
+        }
+
+        const domainOperator = uiToDomainOperatorMap[filter.operator] || filter.operator;
+
         dataSource.addFilter(
           FilterConfig.create({
-            fieldId: filter.fieldId,
-            operator: filter.operator as any,
+            fieldId,
+            operator: domainOperator as any,
             value: filter.value,
           })
         );

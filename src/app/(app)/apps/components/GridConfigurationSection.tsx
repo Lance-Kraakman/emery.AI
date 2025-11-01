@@ -1,12 +1,13 @@
 'use client';
 
 import React from 'react';
-import { Plus, X, ArrowUp, ArrowDown, GripVertical } from 'lucide-react';
+import { Plus, X, ArrowUp, ArrowDown, ChevronsUpDown, Filter as FilterIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import {
   type FilterOperator,
@@ -36,6 +37,17 @@ export interface GridSortConfig {
   priority: number;
 }
 
+/**
+ * Field mapping configuration for Grid views
+ * Controls column visibility and order
+ */
+export interface GridFieldMapping {
+  sourceFieldId: number;
+  displayName: string;
+  visible: boolean;
+  order: number;
+}
+
 interface GridConfigurationSectionProps {
   fields: FieldDTO[];
   loadingFields: boolean;
@@ -48,7 +60,28 @@ interface GridConfigurationSectionProps {
   sorting: GridSortConfig[];
   onSortingChange: (sorting: GridSortConfig[]) => void;
 
+  // Field mappings (column visibility/order)
+  fieldMappings: GridFieldMapping[];
+  onFieldMappingsChange: (mappings: GridFieldMapping[]) => void;
+
+  // Pagination
+  defaultPageSize: number;
+  onDefaultPageSizeChange: (size: number) => void;
+
   isSubmitting?: boolean;
+}
+
+/**
+ * Get field type badge variant
+ */
+function getFieldTypeBadgeVariant(type: string): 'default' | 'secondary' | 'outline' {
+  const typeMap: Record<string, 'default' | 'secondary' | 'outline'> = {
+    text: 'secondary',
+    number: 'outline',
+    boolean: 'default',
+    date: 'outline',
+  };
+  return typeMap[type] || 'secondary';
 }
 
 export function GridConfigurationSection({
@@ -58,129 +91,191 @@ export function GridConfigurationSection({
   onFiltersChange,
   sorting,
   onSortingChange,
+  fieldMappings,
+  onFieldMappingsChange,
+  defaultPageSize,
+  onDefaultPageSizeChange,
   isSubmitting = false,
 }: GridConfigurationSectionProps) {
-  // Filter state
+  // Track filter editor state
+  const [isAddingFilter, setIsAddingFilter] = React.useState(false);
+  const [editingFilterIndex, setEditingFilterIndex] = React.useState<number | null>(null);
   const [newFilterField, setNewFilterField] = React.useState<string>('');
   const [newFilterOperator, setNewFilterOperator] = React.useState<FilterOperator>('eq');
   const [newFilterValue, setNewFilterValue] = React.useState<string>('');
 
-  // Sort state
-  const [newSortFieldId, setNewSortFieldId] = React.useState<number | undefined>();
+  // Get sort info for a field
+  const getSortForField = (fieldId: number) => {
+    return sorting.find(s => s.fieldId === fieldId);
+  };
 
-  const selectedFilterField = fields.find(f => f.name === newFilterField);
-  const filterFieldType = (selectedFilterField?.type as FieldType) || 'text';
-  const availableFilterOperators = OPERATORS_BY_FIELD_TYPE[filterFieldType];
+  // Get field mapping for a field
+  const getFieldMapping = (fieldId: number) => {
+    return fieldMappings.find(fm => fm.sourceFieldId === fieldId);
+  };
 
-  // Reset operator when filter field changes
-  React.useEffect(() => {
-    if (newFilterField && !availableFilterOperators.find(op => op.value === newFilterOperator)) {
-      setNewFilterOperator(availableFilterOperators[0]?.value || 'eq');
+  // Toggle field visibility
+  const handleToggleFieldVisibility = (fieldId: number) => {
+    const existingMapping = getFieldMapping(fieldId);
+    const field = fields.find(f => f.id === fieldId);
+    if (!field) return;
+
+    if (existingMapping) {
+      // Toggle visibility
+      onFieldMappingsChange(
+        fieldMappings.map(fm =>
+          fm.sourceFieldId === fieldId ? { ...fm, visible: !fm.visible } : fm
+        )
+      );
+    } else {
+      // Add new mapping (visible by default when explicitly set)
+      onFieldMappingsChange([
+        ...fieldMappings,
+        {
+          sourceFieldId: fieldId,
+          displayName: field.name,
+          visible: false, // User is toggling it, so set to false (hiding it)
+          order: fieldMappings.length,
+        },
+      ]);
     }
-  }, [newFilterField, availableFilterOperators, newFilterOperator]);
+  };
 
-  const needsFilterValue = operatorNeedsValue(newFilterOperator);
+  // Check if field is visible
+  const isFieldVisible = (fieldId: number) => {
+    const mapping = getFieldMapping(fieldId);
+    // Default to visible if no mapping exists
+    return mapping ? mapping.visible : true;
+  };;
 
-  // Add filter
-  const handleAddFilter = () => {
-    if (!newFilterField) return;
-    if (needsFilterValue && !newFilterValue) return;
+  // Toggle sort for a field
+  const handleToggleSort = (fieldId: number) => {
+    const existingSort = getSortForField(fieldId);
+
+    if (!existingSort) {
+      // Add new sort
+      onSortingChange([
+        ...sorting,
+        { fieldId, direction: 'asc', priority: sorting.length },
+      ]);
+    } else if (existingSort.direction === 'asc') {
+      // Change to desc
+      onSortingChange(
+        sorting.map(s => s.fieldId === fieldId ? { ...s, direction: 'desc' } : s)
+      );
+    } else {
+      // Remove sort
+      const newSorting = sorting
+        .filter(s => s.fieldId !== fieldId)
+        .map((s, index) => ({ ...s, priority: index }));
+      onSortingChange(newSorting);
+    }
+  };
+
+  // Start adding a new filter
+  const handleStartAddFilter = () => {
+    if (fields.length === 0) return;
+    const firstField = fields[0];
+    const fieldType = (firstField.type as FieldType) || 'text';
+    const defaultOp = OPERATORS_BY_FIELD_TYPE[fieldType][0]?.value || 'eq';
+
+    setNewFilterField(firstField.name);
+    setNewFilterOperator(defaultOp);
+    setNewFilterValue('');
+    setIsAddingFilter(true);
+    setEditingFilterIndex(null);
+  };
+
+  // Start editing existing filter
+  const handleStartEditFilter = (index: number) => {
+    const filter = filters[index];
+    setNewFilterField(filter.field);
+    setNewFilterOperator(filter.operator);
+    setNewFilterValue(String(filter.value || ''));
+    setEditingFilterIndex(index);
+    setIsAddingFilter(false);
+  };
+
+  // Update operator when field changes
+  const handleFilterFieldChange = (fieldName: string) => {
+    setNewFilterField(fieldName);
+    const field = fields.find(f => f.name === fieldName);
+    const fieldType = (field?.type as FieldType) || 'text';
+    const defaultOp = OPERATORS_BY_FIELD_TYPE[fieldType][0]?.value || 'eq';
+    setNewFilterOperator(defaultOp);
+    setNewFilterValue('');
+  };
+
+  // Save filter (add or update)
+  const handleSaveFilter = () => {
+    const field = fields.find(f => f.name === newFilterField);
+    if (!field) return;
+
+    const fieldType = (field.type as FieldType) || 'text';
+    const needsValue = operatorNeedsValue(newFilterOperator);
+
+    if (needsValue && !newFilterValue) {
+      return; // Don't save if value is required but missing
+    }
 
     let processedValue: any = newFilterValue;
 
-    // Type conversion
-    if (needsFilterValue) {
-      if (filterFieldType === 'number') {
+    if (needsValue) {
+      if (fieldType === 'number') {
         processedValue = parseFloat(newFilterValue);
         if (isNaN(processedValue)) return;
-      } else if (filterFieldType === 'boolean') {
+      } else if (fieldType === 'boolean') {
         processedValue = newFilterValue === 'true';
-      } else if (filterFieldType === 'date') {
-        processedValue = newFilterValue;
       }
     } else {
       processedValue = null;
     }
 
-    onFiltersChange([
-      ...filters,
-      {
-        field: newFilterField,
-        operator: newFilterOperator,
-        value: processedValue,
-      },
-    ]);
+    const newFilter: GridFilterConfig = {
+      field: newFilterField,
+      operator: newFilterOperator,
+      value: processedValue,
+    };
 
-    // Reset form
-    setNewFilterField('');
-    setNewFilterOperator('eq');
-    setNewFilterValue('');
+    if (editingFilterIndex !== null) {
+      // Update existing filter
+      const newFilters = [...filters];
+      newFilters[editingFilterIndex] = newFilter;
+      onFiltersChange(newFilters);
+    } else {
+      // Add new filter
+      onFiltersChange([...filters, newFilter]);
+    }
+
+    handleCancelFilterEdit();
   };
 
   // Remove filter
   const handleRemoveFilter = (index: number) => {
     onFiltersChange(filters.filter((_, i) => i !== index));
-  };
-
-  // Add sort
-  const handleAddSort = () => {
-    if (!newSortFieldId) return;
-
-    // Check if field already has sorting
-    if (sorting.find(s => s.fieldId === newSortFieldId)) {
-      return;
+    if (editingFilterIndex === index) {
+      handleCancelFilterEdit();
     }
-
-    onSortingChange([
-      ...sorting,
-      {
-        fieldId: newSortFieldId,
-        direction: 'asc',
-        priority: sorting.length,
-      },
-    ]);
-
-    setNewSortFieldId(undefined);
   };
 
-  // Remove sort
-  const handleRemoveSort = (fieldId: number) => {
-    const newSorting = sorting
-      .filter(s => s.fieldId !== fieldId)
-      .map((s, index) => ({ ...s, priority: index })); // Re-index priorities
-    onSortingChange(newSorting);
+  // Cancel filter edit
+  const handleCancelFilterEdit = () => {
+    setIsAddingFilter(false);
+    setEditingFilterIndex(null);
+    setNewFilterField('');
+    setNewFilterOperator('eq');
+    setNewFilterValue('');
   };
 
-  // Toggle sort direction
-  const handleToggleSortDirection = (fieldId: number) => {
-    onSortingChange(
-      sorting.map(s =>
-        s.fieldId === fieldId
-          ? { ...s, direction: s.direction === 'asc' ? 'desc' : 'asc' }
-          : s
-      )
-    );
-  };
+  // Format filter label for display
+  const formatFilterLabel = (filter: GridFilterConfig) => {
+    const operatorLabel = getOperatorLabel(filter.operator);
+    const needsValue = operatorNeedsValue(filter.operator);
 
-  // Move sort up/down in priority
-  const handleMoveSortPriority = (fieldId: number, direction: 'up' | 'down') => {
-    const currentIndex = sorting.findIndex(s => s.fieldId === fieldId);
-    if (currentIndex === -1) return;
-
-    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    if (newIndex < 0 || newIndex >= sorting.length) return;
-
-    const newSorting = [...sorting];
-    [newSorting[currentIndex], newSorting[newIndex]] = [newSorting[newIndex], newSorting[currentIndex]];
-
-    // Update priorities
-    onSortingChange(newSorting.map((s, index) => ({ ...s, priority: index })));
-  };
-
-  const formatFilterValue = (value: any, type: string): string => {
-    if (value === null || value === undefined) return '';
-    if (typeof value === 'boolean') return value ? 'true' : 'false';
-    return String(value);
+    if (needsValue && filter.value !== null && filter.value !== undefined) {
+      return `${filter.field} ${operatorLabel} ${filter.value}`;
+    }
+    return `${filter.field} ${operatorLabel}`;
   };
 
   if (loadingFields) {
@@ -188,63 +283,184 @@ export function GridConfigurationSection({
   }
 
   return (
-    <div className="space-y-6 border-t pt-4 mt-4">
+    <div className="space-y-4 border-t pt-4 mt-4">
       <div className="space-y-1">
         <Label className="text-sm font-medium">Grid View Configuration</Label>
         <p className="text-xs text-muted-foreground">
-          Configure which data to display and how to sort it
+          Configure which fields to show, how to filter and sort
         </p>
       </div>
 
+      {/* Fields Table */}
+      <div className="border rounded-lg overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-muted/50">
+            <tr className="text-xs">
+              <th className="text-center px-3 py-2 font-medium w-16">Visible</th>
+              <th className="text-left px-3 py-2 font-medium">Field</th>
+              <th className="text-left px-3 py-2 font-medium">Type</th>
+              <th className="text-center px-3 py-2 font-medium w-20">Sort</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fields.map((field) => {
+              const sortInfo = getSortForField(field.id);
+
+              return (
+                <tr key={field.id} className="border-t hover:bg-muted/30 transition-colors">
+                  <td className="px-3 py-2 text-center">
+                    <Checkbox
+                      checked={isFieldVisible(field.id)}
+                      onCheckedChange={() => handleToggleFieldVisibility(field.id)}
+                      disabled={isSubmitting}
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="text-sm font-medium">{field.name}</span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <Badge variant={getFieldTypeBadgeVariant(field.type)} className="text-xs">
+                      {field.type}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleToggleSort(field.id);
+                      }}
+                      disabled={isSubmitting}
+                    >
+                      {!sortInfo && <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                      {sortInfo?.direction === 'asc' && (
+                        <div className="flex items-center gap-0.5">
+                          <ArrowUp className="h-3.5 w-3.5 text-primary" />
+                          {sorting.length > 1 && (
+                            <span className="text-[10px] font-medium text-primary">
+                              {sortInfo.priority + 1}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {sortInfo?.direction === 'desc' && (
+                        <div className="flex items-center gap-0.5">
+                          <ArrowDown className="h-3.5 w-3.5 text-primary" />
+                          {sorting.length > 1 && (
+                            <span className="text-[10px] font-medium text-primary">
+                              {sortInfo.priority + 1}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
       {/* Filters Section */}
-      <div className="space-y-3">
-        <Label className="text-sm font-medium">Filters</Label>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-medium">Filters</Label>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7"
+            onClick={handleStartAddFilter}
+            disabled={isSubmitting || isAddingFilter || editingFilterIndex !== null}
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Add Filter
+          </Button>
+        </div>
 
-        {/* Add Filter Form */}
-        <div className="space-y-2 p-3 bg-secondary/20 rounded-md">
-          <Label className="text-xs text-muted-foreground">Add Filter</Label>
-
-          {/* Field Selector */}
-          <Select value={newFilterField} onValueChange={setNewFilterField} disabled={isSubmitting}>
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="Select field..." />
-            </SelectTrigger>
-            <SelectContent>
-              {fields.map(field => (
-                <SelectItem key={field.id} value={field.name}>
-                  <span className="font-medium">{field.name}</span>
-                  <span className="text-xs text-muted-foreground ml-2">({field.type})</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Operator & Value Row */}
-          {newFilterField && (
-            <div className="flex gap-2">
-              <Select
-                value={newFilterOperator}
-                onValueChange={(value) => setNewFilterOperator(value as FilterOperator)}
-                disabled={isSubmitting}
+        {/* Horizontal Filter Chips */}
+        {filters.length > 0 || isAddingFilter || editingFilterIndex !== null ? (
+          <div className="border rounded-lg p-2 min-h-[40px] flex flex-wrap items-center gap-2">
+            {filters.map((filter, index) => (
+              <Badge
+                key={index}
+                variant="secondary"
+                className="h-7 px-2 py-1 text-xs cursor-pointer hover:bg-secondary/80 transition-colors"
+                onClick={() => handleStartEditFilter(index)}
               >
-                <SelectTrigger className="h-9 w-[140px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableFilterOperators.map(op => (
-                    <SelectItem key={op.value} value={op.value}>
-                      {op.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <FilterIcon className="h-3 w-3 mr-1" />
+                {formatFilterLabel(filter)}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-4 w-4 p-0 ml-1 hover:bg-destructive/10 hover:text-destructive rounded-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveFilter(index);
+                  }}
+                  disabled={isSubmitting}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </Badge>
+            ))}
 
-              {needsFilterValue && (
-                <>
-                  {filterFieldType === 'boolean' ? (
-                    <Select value={newFilterValue} onValueChange={setNewFilterValue} disabled={isSubmitting}>
-                      <SelectTrigger className="h-9 flex-1">
-                        <SelectValue placeholder="Value..." />
+            {/* Filter Editor (inline when adding/editing) */}
+            {(isAddingFilter || editingFilterIndex !== null) && (
+              <div className="flex items-center gap-2 p-2 bg-muted/30 rounded border border-primary/20">
+                <Select
+                  value={newFilterField}
+                  onValueChange={handleFilterFieldChange}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger className="h-7 w-32 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {fields.map(field => (
+                      <SelectItem key={field.id} value={field.name}>
+                        {field.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={newFilterOperator}
+                  onValueChange={(value) => setNewFilterOperator(value as FilterOperator)}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger className="h-7 w-28 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(() => {
+                      const field = fields.find(f => f.name === newFilterField);
+                      const fieldType = (field?.type as FieldType) || 'text';
+                      return OPERATORS_BY_FIELD_TYPE[fieldType].map(op => (
+                        <SelectItem key={op.value} value={op.value}>
+                          {op.label}
+                        </SelectItem>
+                      ));
+                    })()}
+                  </SelectContent>
+                </Select>
+
+                {operatorNeedsValue(newFilterOperator) && (() => {
+                  const field = fields.find(f => f.name === newFilterField);
+                  const fieldType = (field?.type as FieldType) || 'text';
+
+                  return fieldType === 'boolean' ? (
+                    <Select
+                      value={newFilterValue}
+                      onValueChange={setNewFilterValue}
+                      disabled={isSubmitting}
+                    >
+                      <SelectTrigger className="h-7 w-24 text-xs">
+                        <SelectValue placeholder="Value" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="true">True</SelectItem>
@@ -253,170 +469,84 @@ export function GridConfigurationSection({
                     </Select>
                   ) : (
                     <Input
-                      type={filterFieldType === 'number' ? 'number' : filterFieldType === 'date' ? 'date' : 'text'}
+                      type={fieldType === 'number' ? 'number' : fieldType === 'date' ? 'date' : 'text'}
                       value={newFilterValue}
                       onChange={(e) => setNewFilterValue(e.target.value)}
                       placeholder="Value..."
-                      className="h-9 flex-1"
+                      className="h-7 w-32 text-xs"
                       disabled={isSubmitting}
                     />
-                  )}
-                </>
-              )}
+                  );
+                })()}
 
-              <Button
-                size="sm"
-                onClick={handleAddFilter}
-                disabled={!newFilterField || (needsFilterValue && !newFilterValue) || isSubmitting}
-                className="h-9"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* Active Filters List */}
-        {filters.length > 0 ? (
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Active Filters ({filters.length})</Label>
-            {filters.map((filter, index) => {
-              const field = fields.find(f => f.name === filter.field);
-              return (
-                <div
-                  key={index}
-                  className="flex items-center justify-between text-sm px-3 py-2 bg-muted/50 rounded-md hover:bg-muted transition-colors"
-                >
-                  <span className="flex-1 truncate">
-                    <span className="font-medium">{filter.field}</span>
-                    <span className="text-muted-foreground mx-1.5">
-                      {getOperatorLabel(filter.operator)}
-                    </span>
-                    {filter.operator !== 'is_null' && filter.operator !== 'is_not_null' && (
-                      <span>{formatFilterValue(filter.value, field?.type || 'text')}</span>
-                    )}
-                  </span>
+                <div className="flex gap-1">
                   <Button
-                    variant="ghost"
                     size="sm"
-                    className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => handleRemoveFilter(index)}
+                    className="h-7 px-2 text-xs"
+                    onClick={handleSaveFilter}
+                    disabled={isSubmitting || (operatorNeedsValue(newFilterOperator) && !newFilterValue)}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs"
+                    onClick={handleCancelFilterEdit}
                     disabled={isSubmitting}
                   >
-                    <X className="h-3.5 w-3.5" />
+                    Cancel
                   </Button>
                 </div>
-              );
-            })}
+              </div>
+            )}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground text-center py-4 bg-muted/20 rounded-md">
-            No filters configured. Add filters to control which rows are displayed.
-          </p>
+          <div className="border rounded-lg p-3 text-center">
+            <p className="text-xs text-muted-foreground">No filters applied</p>
+          </div>
         )}
       </div>
 
-      {/* Sorting Section */}
-      <div className="space-y-3">
-        <Label className="text-sm font-medium">Sorting</Label>
-
-        {/* Add Sort Form */}
-        <div className="flex gap-2">
-          <Select
-            value={newSortFieldId?.toString()}
-            onValueChange={(value) => setNewSortFieldId(parseInt(value))}
-            disabled={isSubmitting}
-          >
-            <SelectTrigger className="h-9 flex-1">
-              <SelectValue placeholder="Select field to sort..." />
-            </SelectTrigger>
-            <SelectContent>
-              {fields
-                .filter(field => !sorting.find(s => s.fieldId === field.id))
-                .map(field => (
-                  <SelectItem key={field.id} value={field.id.toString()}>
-                    <span className="font-medium">{field.name}</span>
-                    <span className="text-xs text-muted-foreground ml-2">({field.type})</span>
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-
-          <Button
-            size="sm"
-            onClick={handleAddSort}
-            disabled={!newSortFieldId || isSubmitting}
-            className="h-9"
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Add Sort
-          </Button>
-        </div>
-
-        {/* Active Sorting List */}
-        {sorting.length > 0 ? (
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Sort Order ({sorting.length})</Label>
-            {sorting.map((sort, index) => {
-              const field = fields.find(f => f.id === sort.fieldId);
-              return (
-                <div
-                  key={sort.fieldId}
-                  className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-md hover:bg-muted transition-colors"
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-4 w-4 p-0"
-                      onClick={() => handleMoveSortPriority(sort.fieldId, 'up')}
-                      disabled={index === 0 || isSubmitting}
-                    >
-                      <ArrowUp className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-4 w-4 p-0"
-                      onClick={() => handleMoveSortPriority(sort.fieldId, 'down')}
-                      disabled={index === sorting.length - 1 || isSubmitting}
-                    >
-                      <ArrowDown className="h-3 w-3" />
-                    </Button>
-                  </div>
-
-                  <GripVertical className="h-4 w-4 text-muted-foreground" />
-
-                  <span className="flex-1 font-medium text-sm">
-                    {field?.name || `Field ID: ${sort.fieldId}`}
-                  </span>
-
-                  <Badge
-                    variant="secondary"
-                    className="cursor-pointer"
-                    onClick={() => !isSubmitting && handleToggleSortDirection(sort.fieldId)}
-                  >
-                    {sort.direction === 'asc' ? 'A → Z' : 'Z → A'}
-                  </Badge>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => handleRemoveSort(sort.fieldId)}
-                    disabled={isSubmitting}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              );
-            })}
+      {/* Page Size Configuration */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Display Settings</Label>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="pageSize" className="text-xs text-muted-foreground whitespace-nowrap">
+              Default rows per page:
+            </Label>
+            <Select
+              value={defaultPageSize.toString()}
+              onValueChange={(value) => onDefaultPageSizeChange(parseInt(value))}
+              disabled={isSubmitting}
+            >
+              <SelectTrigger id="pageSize" className="h-8 w-24">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+                <SelectItem value="200">200</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        ) : (
-          <p className="text-xs text-muted-foreground text-center py-4 bg-muted/20 rounded-md">
-            No sorting configured. Data will be displayed in default order.
-          </p>
-        )}
+        </div>
+      </div>
+
+      {/* Summary */}
+      <div className="flex gap-4 text-xs text-muted-foreground">
+        <div>
+          <span className="font-medium">{fieldMappings.filter(fm => !fm.visible).length}</span> hidden column{fieldMappings.filter(fm => !fm.visible).length !== 1 ? 's' : ''}
+        </div>
+        <div>
+          <span className="font-medium">{sorting.length}</span> sort rule{sorting.length !== 1 ? 's' : ''}
+        </div>
+        <div>
+          <span className="font-medium">{filters.length}</span> filter{filters.length !== 1 ? 's' : ''}
+        </div>
       </div>
     </div>
   );

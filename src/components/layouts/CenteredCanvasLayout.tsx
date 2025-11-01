@@ -36,7 +36,7 @@ export function CenteredCanvasLayout({
 
   return (
     <CanvasBase>
-      <div className={`container mx-auto ${paddingClass} h-full overflow-y-auto`}>
+      <div className={`container mx-auto ${paddingClass}`}>
         <div className={`${maxWidthClass} mx-auto ${className}`}>
           {children}
         </div>
