@@ -312,11 +312,12 @@ export function AppSidebar({
             </SidebarGroupLabel>
             <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
               <SidebarGroupContent>
-                <SidebarMenu>
+                <SidebarMenu className="gap-0.5">
                   <SidebarMenuItem>
                     <SidebarMenuButton
                       asChild
                       isActive={pathname === "/mission-control/dashboard"}
+                      className="h-6"
                     >
                       <Link href="/mission-control/dashboard">
                         <LayoutDashboard className="h-4 w-4" />
@@ -328,6 +329,7 @@ export function AppSidebar({
                     <SidebarMenuButton
                       asChild
                       isActive={pathname === "/mission-control/org-chart"}
+                      className="h-6"
                     >
                       <Link href="/mission-control/org-chart">
                         <Building2 className="h-4 w-4" />
@@ -486,9 +488,9 @@ export function AppSidebar({
             </SidebarGroupLabel>
             <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
               <SidebarGroupContent>
-                <SidebarMenu>
+                <SidebarMenu className="gap-0.5">
                   <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === "/connections"}>
+                    <SidebarMenuButton asChild isActive={pathname === "/connections"} className="h-6">
                       <Link href="/connections">
                         <Plug className="h-4 w-4" />
                         <span className="group-data-[collapsible=icon]:hidden">OAuth Connections</span>
@@ -499,6 +501,7 @@ export function AppSidebar({
                     <SidebarMenuButton
                       asChild
                       isActive={pathname === "/organization/settings/permissions"}
+                      className="h-6"
                     >
                       <Link href="/organization/settings/permissions">
                         <Users className="h-4 w-4" />
@@ -507,7 +510,7 @@ export function AppSidebar({
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === "/settings/system"}>
+                    <SidebarMenuButton asChild isActive={pathname === "/settings/system"} className="h-6">
                       <Link href="/settings/system">
                         <SlidersHorizontal className="h-4 w-4" />
                         <span className="group-data-[collapsible=icon]:hidden">System</span>
