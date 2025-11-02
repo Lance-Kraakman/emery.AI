@@ -1,46 +1,46 @@
 'use client';
 
 import React from 'react';
-import { Badge } from '@/components/ui/badge';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import { AgentDetailsPanel } from './AgentDetailsPanel';
+import type { TaskDTO } from '@/app/mappers/task-mapper';
+import type { SkillDTO } from '@/app/mappers/skill-mapper';
+import type { ConnectionDTO } from '@/app/mappers/connection-mapper';
+import { CompactAgentHeader } from './CompactAgentHeader';
+import { AgentExecutionTimeline } from '@/components/timeline/AgentExecutionTimeline';
 import { ModalProvider } from './modals/ModalContext';
 import { ModalManager } from './modals/ModalManager';
 
 interface NewAgentDetailsViewProps {
   agent: AgentDTO;
+  tasks: TaskDTO[];
+  skills: SkillDTO[];
+  connections: ConnectionDTO[];
   onUpdate?: () => void;
 }
 
-export function NewAgentDetailsView({ agent, onUpdate }: NewAgentDetailsViewProps) {
+export function NewAgentDetailsView({ agent, tasks, skills, connections, onUpdate }: NewAgentDetailsViewProps) {
   return (
     <ModalProvider>
-      <div className="space-y-6">
-        {/* Header without back button */}
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">Agent Details</h1>
-            <p className="text-sm text-muted-foreground">
-              Configure and monitor your AI agent
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-lg font-bold text-foreground">{agent.name}</span>
-            <Badge variant={agent.status === 'active' ? 'default' : 'secondary'} className="text-xs">
-              {agent.status}
-            </Badge>
-            {agent.role && agent.role !== 'No role specified' && (
-              <span className="text-sm text-muted-foreground">• {agent.role}</span>
-            )}
-          </div>
+      {/* Full-screen layout: header on top, timeline below */}
+      <div className="h-full flex flex-col bg-card">
+        {/* Compact Agent Header */}
+        <CompactAgentHeader
+          agent={agent}
+          skills={skills}
+          connections={connections}
+        />
+
+        {/* Full-width Timeline */}
+        <div className="flex-1 overflow-hidden">
+          <AgentExecutionTimeline
+            tasks={tasks}
+            schedules={agent.schedules}
+          />
         </div>
-
-        {/* Main content */}
-        <AgentDetailsPanel agent={agent} onUpdate={onUpdate} />
-
-        {/* Modal manager */}
-        <ModalManager onUpdate={onUpdate} />
       </div>
+
+      {/* Modal manager */}
+      <ModalManager onUpdate={onUpdate} />
     </ModalProvider>
   );
 }

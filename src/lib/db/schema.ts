@@ -547,6 +547,13 @@ export const agents = pgTable("agents", {
   // Model configuration
   defaultModel: text("default_model"), // Agent-specific default model (overrides organization default)
 
+  // Avatar configuration (JSON for extensibility)
+  avatarConfig: jsonb("avatar_config").$type<{
+    version: number;
+    icon?: string;
+    color?: string;
+  }>(),
+
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   // RBAC-based policy for viewing agents (resource-aware)

@@ -185,6 +185,7 @@ export class AgentApplicationService {
       // Convert ScheduleConfigurationDTO[] to ScheduleConfiguration[]
       if (dto.schedules !== undefined) updateData.schedules = ScheduleMapper.fromDTOs(dto.schedules);
       if (dto.status !== undefined) updateData.status = dto.status;
+      if (dto.avatarConfig !== undefined) updateData.avatarConfig = dto.avatarConfig;
 
       // Update agent via repository
       const savedAgent = await this.agentRepository.update(agentId, updateData);

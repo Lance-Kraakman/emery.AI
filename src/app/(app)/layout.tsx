@@ -137,7 +137,7 @@ export default async function AppLayout({
   }
 
   return (
-    <>
+    <React.Fragment key="app-layout">
       <AnimatedBackground />
       <EmeryProviders sidebarData={sidebarData}>
         <div className="relative z-10 h-full">
@@ -145,6 +145,6 @@ export default async function AppLayout({
         </div>
         <Toaster position="bottom-right" />
       </EmeryProviders>
-    </>
+    </React.Fragment>
   )
 }

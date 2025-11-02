@@ -8,6 +8,7 @@
 
 import type { ToolConfigDTO, AgentDTO as AgentDTOFromMapper } from '@/app/mappers/agent-mapper';
 import type { ScheduleConfigurationDTO } from './schedule.dto';
+import type { AvatarConfig } from '@/lib/avatars';
 
 // Re-export the canonical AgentDTO from mapper
 export type AgentDTO = AgentDTOFromMapper;
@@ -29,6 +30,7 @@ export interface CreateAgentDTO {
   schedules?: ScheduleConfigurationDTO[]; // Schedules with task instructions
   status?: 'active' | 'inactive' | 'archived';
   defaultModel?: string | null; // AI model override for this agent
+  avatarConfig?: AvatarConfig | null; // Avatar configuration with icon + color (versioned JSON)
 }
 
 /**
@@ -45,6 +47,7 @@ export interface UpdateAgentDTO {
   schedules?: ScheduleConfigurationDTO[]; // Schedules with task instructions
   status?: 'active' | 'inactive' | 'archived';
   defaultModel?: string | null; // AI model override for this agent
+  avatarConfig?: AvatarConfig | null; // Avatar configuration with icon + color (versioned JSON)
 }
 
 /**
