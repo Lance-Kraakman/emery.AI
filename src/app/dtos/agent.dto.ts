@@ -28,6 +28,7 @@ export interface CreateAgentDTO {
   organizationId?: number; // Organization ID - converted to OrganizationId Value Object in application layer
   schedules?: ScheduleConfigurationDTO[]; // Schedules with task instructions
   status?: 'active' | 'inactive' | 'archived';
+  defaultModel?: string | null; // AI model override for this agent
 }
 
 /**
@@ -43,6 +44,7 @@ export interface UpdateAgentDTO {
   ownerId?: string;
   schedules?: ScheduleConfigurationDTO[]; // Schedules with task instructions
   status?: 'active' | 'inactive' | 'archived';
+  defaultModel?: string | null; // AI model override for this agent
 }
 
 /**

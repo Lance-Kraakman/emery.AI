@@ -80,11 +80,13 @@ export function mapAgentToProto(agent: Agent): AgentConfigProto {
 export function mapInstructionConfigToProto(instructionConfig: {
   instructions: string;
   tools?: ToolConfig[];
+  model?: string;
 }): InstructionConfigProto {
   return {
     instructions: instructionConfig.instructions,
     tools: instructionConfig.tools?.filter(tool => tool !== null && tool !== undefined)?.map(mapToolToProto) || [],
-    servers: [] // Servers removed from task instructions
+    servers: [], // Servers removed from task instructions
+    model: instructionConfig.model || '' // Empty model will be resolved by worker using hierarchy
   };
 }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Edit, ChevronDown, ChevronRight, Activity, Cog, Save, X, Loader2, Calendar, Plus, Trash2 } from 'lucide-react';
+import { Edit, ChevronDown, ChevronRight, Activity, Cog, Save, X, Loader2, Calendar, Plus, Trash2, Sparkles } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ModelSelector } from '@/components/ai/ModelSelector';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import AgentActivityPanel from './AgentActivityPanel';
 import ScheduleManager from './ScheduleManager';
@@ -40,6 +41,7 @@ interface EditFormData {
   persona: string;
   status: string;
   schedules: any[]; // ScheduleConfigurationDTO[] - use any during migration
+  defaultModel?: string | null; // Agent's default AI model
 }
 
 export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
@@ -53,7 +55,8 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
     description: agent.description || '',
     persona: agent.persona || '',
     status: agent.status || 'active',
-    schedules: agent.schedules?.length > 0 ? agent.schedules : [TriggerConfigs.manual()]
+    schedules: agent.schedules?.length > 0 ? agent.schedules : [TriggerConfigs.manual()],
+    defaultModel: agent.defaultModel || null
   });
 
   const handleEdit = () => {
@@ -64,7 +67,8 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
       description: agent.description || '',
       persona: agent.persona || '',
       status: agent.status || 'active',
-      schedules: agent.schedules?.length > 0 ? agent.schedules : [TriggerConfigs.manual()]
+      schedules: agent.schedules?.length > 0 ? agent.schedules : [TriggerConfigs.manual()],
+      defaultModel: agent.defaultModel || null
     });
   };
 
@@ -76,7 +80,8 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
       description: agent.description || '',
       persona: agent.persona || '',
       status: agent.status || 'active',
-      schedules: agent.schedules?.length > 0 ? agent.schedules : [TriggerConfigs.manual()]
+      schedules: agent.schedules?.length > 0 ? agent.schedules : [TriggerConfigs.manual()],
+      defaultModel: agent.defaultModel || null
     });
   };
 
@@ -103,7 +108,8 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
         description: editFormData.description.trim(),
         persona: editFormData.persona.trim(),
         status: editFormData.status as 'active' | 'inactive' | 'archived',
-        schedules: editFormData.schedules
+        schedules: editFormData.schedules,
+        defaultModel: editFormData.defaultModel
       });
       
       if (!result.success) {
@@ -122,7 +128,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
     }
   };
 
-  const handleInputChange = (field: keyof EditFormData, value: string) => {
+  const handleInputChange = (field: keyof EditFormData, value: string | null) => {
     setEditFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -280,6 +286,47 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                 </p>
               )}
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* AI Configuration Section */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-base">AI Configuration</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="py-3">
+          <div className="space-y-2">
+            <h4 className="font-medium text-foreground mb-1 text-sm">Default Model</h4>
+            {isEditMode ? (
+              <div className="space-y-2">
+                <ModelSelector
+                  value={editFormData.defaultModel}
+                  onChange={(model) => handleInputChange('defaultModel', model)}
+                  organizationTier="free"
+                  showInherit={true}
+                  inheritLabel="Inherit from organization"
+                  inheritFromModel="IBM Granite 3.3 8B"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Set the default AI model for this agent. Skills can override this setting.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">
+                  {agent.defaultModel || 'Inherits from organization (IBM Granite 3.3 8B)'}
+                </p>
+                {!agent.defaultModel && (
+                  <p className="text-xs text-muted-foreground">
+                    Using organization default model
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

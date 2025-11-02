@@ -24,6 +24,8 @@ import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
 import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository } from '@/ddd/application/di/container';
+import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
+import { getTokenUsageRepository } from '@/ddd/application/di/getters';
 import type { CreateChatDTO, SendMessageDTO } from '@/app/dtos/chat.dto';
 import type { EnrichToolsWithUserApiKeyCommand } from '@/ddd/application/services/tools/tool-configuration-application-service';
 
@@ -111,14 +113,58 @@ export async function POST(req: NextRequest) {
     if (!organizationId) {
       console.error('[CHAT-GRPC-API] No current organization found for user:', userId);
       return new Response(
-        JSON.stringify({ 
-          error: 'No current organization found. Please select an organization and try again.' 
+        JSON.stringify({
+          error: 'No current organization found. Please select an organization and try again.'
         }),
-        { 
+        {
           status: 400,
           headers: { 'Content-Type': 'application/json' }
         }
       );
+    }
+
+    // 2.5 Check token quota before processing
+    console.log('[CHAT-GRPC-API] Checking token quota for organization:', organizationId);
+    const tokenUsageRepo = getTokenUsageRepository();
+    const tokenUsageService = new TokenUsageApplicationService(tokenUsageRepo);
+    const quotaCheck = await tokenUsageService.checkQuota(organizationId);
+
+    console.log('[CHAT-GRPC-API] Quota check result:', {
+      allowed: quotaCheck.allowed,
+      currentUsage: quotaCheck.currentUsage,
+      quotaExceeded: quotaCheck.quotaExceeded,
+      percentageUsed: quotaCheck.percentageUsed
+    });
+
+    if (quotaCheck.quotaExceeded) {
+      console.error('[CHAT-GRPC-API] Monthly token quota exceeded for organization:', organizationId);
+      return new Response(
+        JSON.stringify({
+          error: 'Monthly token quota exceeded',
+          message: 'Your organization has exceeded its monthly token quota. Please upgrade your plan or wait until the quota resets.',
+          currentUsage: quotaCheck.currentUsage,
+          monthlyQuota: quotaCheck.monthlyQuota,
+          percentageUsed: quotaCheck.percentageUsed
+        }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RateLimit-Limit': quotaCheck.monthlyQuota?.toString() || 'unlimited',
+            'X-RateLimit-Remaining': Math.max(0, (quotaCheck.monthlyQuota || 0) - quotaCheck.currentUsage).toString(),
+            'X-RateLimit-Reset': new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // Approximation
+          }
+        }
+      );
+    }
+
+    // AIDEV-NOTE: Add warning headers if approaching quota limit (80% or 95%)
+    const quotaWarningHeaders: Record<string, string> = {};
+    if (quotaCheck.percentageUsed && quotaCheck.percentageUsed >= 80) {
+      const warningLevel = quotaCheck.percentageUsed >= 95 ? 'critical' : 'warning';
+      quotaWarningHeaders['X-Quota-Warning'] = warningLevel;
+      quotaWarningHeaders['X-Quota-Usage'] = quotaCheck.percentageUsed.toFixed(1);
+      console.log(`[CHAT-GRPC-API] Quota ${warningLevel}: ${quotaCheck.percentageUsed.toFixed(1)}% used`);
     }
 
     // 3. Database Operations (Next.js responsibility)
@@ -417,8 +463,31 @@ export async function POST(req: NextRequest) {
                 console.log(`[CHAT-GRPC-API] AI processing completed:`, {
                   model: response.complete.modelUsed,
                   tokens: response.complete.totalTokens,
-                  processingTime: response.complete.processingTimeMs
+                  processingTime: response.complete.processingTimeMs,
+                  tokenUsage: response.complete.tokenUsage
                 });
+
+                // Record token usage for billing
+                if (response.complete.tokenUsage) {
+                  const tokenUsage = response.complete.tokenUsage;
+                  tokenUsageService.recordTokenUsage({
+                    organizationId: organizationId,
+                    userId: userId,
+                    entityType: 'chat' as const,
+                    entityId: currentChatId,
+                    modelName: tokenUsage.modelName,
+                    inputTokens: tokenUsage.inputTokens,
+                    outputTokens: tokenUsage.outputTokens,
+                    processingTimeMs: response.complete.processingTimeMs,
+                    metadata: {
+                      chatContext: 'streaming'
+                    }
+                  }).catch((error) => {
+                    console.error('[CHAT-GRPC-API] Failed to record token usage:', error);
+                    // Don't fail the request if token recording fails
+                  });
+                }
+
                 controller.close();
                 
               } else if (response.type === 'error' && response.error) {
@@ -452,13 +521,14 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // Return streaming response
+    // Return streaming response with quota warning headers if applicable
     return new Response(readableStream.pipeThrough(responseStream), {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
         'Transfer-Encoding': 'chunked',
+        ...quotaWarningHeaders, // Include quota warning headers if approaching limit
       },
     });
     

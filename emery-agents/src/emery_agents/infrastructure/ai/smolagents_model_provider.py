@@ -1,10 +1,9 @@
 """
-Simplified Smolagents Model Provider
+Enhanced Smolagents Model Provider with Model Registry Support
 
-AIDEV-NOTE: Custom model provider for IBM Granite model integration.
-Successfully routes to dedicated HuggingFace endpoint with proper token mapping.
-Endpoint: https://tpn5ewnxy4r17v9c.us-east-1.aws.endpoints.huggingface.cloud
-Model: ibm-granite/granite-3.3-8b-instruct
+AIDEV-NOTE: Centralized model provider supporting both dedicated endpoints and HF Inference API.
+Integrates with model registry for pricing, capabilities, and access control.
+Supports model selection hierarchy: skill > agent > organization > default.
 """
 
 import os
@@ -15,15 +14,24 @@ from dataclasses import dataclass
 from smolagents.models import Model
 from huggingface_hub import InferenceClient
 
+from .model_registry import (
+    get_model_metadata,
+    get_default_model_for_tier,
+    calculate_token_cost,
+    ModelTier,
+)
+
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class TokenUsage:
-    """Token usage information compatible with smolagents expectations."""
+    """Token usage information with cost tracking."""
     input_tokens: int = 0   # smolagents expects 'input_tokens', not 'prompt_tokens'
     output_tokens: int = 0  # smolagents expects 'output_tokens', not 'completion_tokens'
     total_tokens: int = 0
+    cost_usd: float = 0.0   # Calculated cost in USD
+    model_name: str = ""    # Model used for generation
 
 
 class SmolagentsCompatibleMessage:
@@ -95,16 +103,25 @@ class CustomInferenceModel(Model):
             content = message.content
             logger.info(f"✅ Generated response: {len(content)} chars")
 
-            # Extract token usage if available
+            # Extract token usage if available and calculate cost
             token_usage = None
             if hasattr(response, 'usage') and response.usage:
                 usage = response.usage
+                input_tokens = getattr(usage, 'prompt_tokens', 0)
+                output_tokens = getattr(usage, 'completion_tokens', 0)
+                total_tokens = getattr(usage, 'total_tokens', 0)
+
+                # Calculate cost using model registry
+                cost = calculate_token_cost(self.model_name, input_tokens, output_tokens)
+
                 token_usage = TokenUsage(
-                    input_tokens=getattr(usage, 'prompt_tokens', 0),      # Map prompt_tokens to input_tokens
-                    output_tokens=getattr(usage, 'completion_tokens', 0), # Map completion_tokens to output_tokens
-                    total_tokens=getattr(usage, 'total_tokens', 0)
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    total_tokens=total_tokens,
+                    cost_usd=cost,
+                    model_name=self.model_name,
                 )
-                logger.info(f"✅ Token usage: input={token_usage.input_tokens}, output={token_usage.output_tokens}, total={token_usage.total_tokens}")
+                logger.info(f"✅ Token usage: input={input_tokens}, output={output_tokens}, total={total_tokens}, cost=${cost:.6f}")
             else:
                 logger.info("⚠️ No usage info in response")
 
@@ -122,34 +139,133 @@ class CustomInferenceModel(Model):
 
 
 class SmolagentsModelProvider:
-    """Simple model provider using custom endpoint."""
+    """
+    Enhanced model provider with registry support.
+
+    Supports:
+    - Model selection hierarchy: skill override > agent default > org default > system default
+    - Both dedicated endpoints and HF Inference API
+    - Automatic cost tracking via model registry
+    """
 
     def __init__(self):
-        """Initialize with custom endpoint and token."""
+        """Initialize provider with HuggingFace token."""
         self.hf_token = self._get_hf_token()
-        self.endpoint_url = 'https://dxv8q9ubsizxcp4v.us-east-1.aws.endpoints.huggingface.cloud/v1'
+        logger.info("✅ SmolagentsModelProvider initialized with model registry support")
 
-        # Simple model config - all point to custom endpoint for now
-        self.models = {
-            'chat': self.endpoint_url,
-            'tool_calling': self.endpoint_url,
-            'default': self.endpoint_url
-        }
+    def get_model(
+        self,
+        model_id: Optional[str] = None,
+        model_type: str = 'default',
+    ) -> CustomInferenceModel:
+        """
+        Get model instance by ID or type.
 
-        logger.info(f"✅ SmolagentsModelProvider initialized with custom endpoint")
+        Args:
+            model_id: Specific model ID to use (e.g., 'ibm-granite/granite-3.3-8b-instruct')
+            model_type: Fallback type if no model_id provided ('chat', 'tool_calling', 'default')
 
-    def get_model(self, model_type: str = 'default') -> CustomInferenceModel:
-        """Get model for specified type. Types: 'chat', 'tool_calling', 'default'"""
-        # Use custom model class to properly handle dedicated endpoint
-        logger.info(f"🔧 Creating CustomInferenceModel with dedicated endpoint")
+        Returns:
+            Configured model instance ready for generation
+        """
+        # Determine which model to use
+        if not model_id:
+            # Use default model for free tier
+            model_id = get_default_model_for_tier(ModelTier.FREE)
+            logger.info(f"🔧 No model specified, using default: {model_id}")
+
+        # Get model metadata from registry
+        metadata = get_model_metadata(model_id)
+        if not metadata:
+            logger.warning(f"⚠️ Model {model_id} not in registry, falling back to default")
+            model_id = get_default_model_for_tier(ModelTier.FREE)
+            metadata = get_model_metadata(model_id)
+
+        logger.info(f"🔧 Creating model: {metadata.name} ({metadata.category.value})")
+
+        # Create model based on endpoint type
+        if metadata.endpoint.type == "dedicated" and metadata.endpoint.url:
+            # Dedicated endpoint
+            endpoint_url = metadata.endpoint.url
+            logger.info(f"🔧 Using dedicated endpoint: {endpoint_url}")
+        else:
+            # HF Inference API
+            endpoint_url = "https://api-inference.huggingface.co"
+            logger.info(f"🔧 Using HF Inference API for {model_id}")
 
         model = CustomInferenceModel(
-            endpoint_url=self.endpoint_url.replace('/v1', ''),  # Remove /v1 for InferenceClient
-            model_name="ibm-granite/granite-3.3-8b-instruct",  # Exact model name your endpoint expects
+            endpoint_url=endpoint_url,
+            model_name=model_id,
             token=self.hf_token
         )
-        logger.info(f"🔧 Created custom model: {model}")
+
         return model
+
+    def get_model_by_type(self, model_type: str) -> CustomInferenceModel:
+        """
+        Get model by type (legacy method for compatibility).
+
+        Args:
+            model_type: 'chat', 'tool_calling', or 'default'
+
+        Returns:
+            Configured model instance
+        """
+        # Map model types to actual models
+        type_mapping = {
+            'chat': 'ibm-granite/granite-3.3-8b-instruct',
+            'tool_calling': 'ibm-granite/granite-3.3-8b-instruct',
+            'default': 'ibm-granite/granite-3.3-8b-instruct',
+        }
+
+        model_id = type_mapping.get(model_type, type_mapping['default'])
+        return self.get_model(model_id=model_id)
+
+    def get_default_model_for_capability(self, skill_name: Optional[str] = None) -> CustomInferenceModel:
+        """
+        Get default model for skill execution (legacy method for compatibility).
+
+        Args:
+            skill_name: Optional skill name (currently unused)
+
+        Returns:
+            Configured model instance
+        """
+        return self.get_model()  # Uses system default
+
+    def resolve_model_selection(
+        self,
+        skill_model: Optional[str] = None,
+        agent_model: Optional[str] = None,
+        org_model: Optional[str] = None,
+    ) -> str:
+        """
+        Resolve model selection using hierarchy: skill > agent > org > default.
+
+        Args:
+            skill_model: Model override from skill configuration
+            agent_model: Default model from agent configuration
+            org_model: Default model from organization configuration
+
+        Returns:
+            Model ID to use for execution
+        """
+        if skill_model:
+            logger.info(f"📌 Using skill model override: {skill_model}")
+            return skill_model
+
+        if agent_model:
+            logger.info(f"📌 Using agent default model: {agent_model}")
+            return agent_model
+
+        if org_model:
+            logger.info(f"📌 Using organization default model: {org_model}")
+            return org_model
+
+        # Fall back to system default
+        default_model = get_default_model_for_tier(ModelTier.FREE)
+        logger.info(f"📌 Using system default model: {default_model}")
+        return default_model
 
     def _get_hf_token(self) -> str:
         """Get HuggingFace token from environment."""

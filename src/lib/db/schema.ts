@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, serial, bigserial, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole, index } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, serial, bigserial, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole, index, doublePrecision } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
@@ -236,6 +236,14 @@ export const organizations = pgTable("organizations", {
   stripeSubscriptionId: text("stripe_subscription_id"),
   stripeSubscriptionStatus: text("stripe_subscription_status"),
   analysisCapabilities: jsonb("analysis_capabilities").$type<OrganizationAnalysisCapabilities>(), // Type-safe organizational analysis configuration
+
+  // Model configuration fields for AI billing and access control
+  defaultModel: text("default_model"), // Organization-wide default model
+  availableModels: jsonb("available_models").$type<string[]>().default(sql`'[]'::jsonb`), // Models available to this organization
+  tokenQuotaMonthly: integer("token_quota_monthly"), // Monthly token quota (null = unlimited)
+  tokenUsageCurrentMonth: integer("token_usage_current_month").default(0), // Current month's token usage
+  quotaResetAt: timestamp("quota_reset_at"), // When quota was last reset
+
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   // RBAC-based policy for viewing organizations
@@ -535,6 +543,10 @@ export const agents = pgTable("agents", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   apiKey: text("api_key").unique(), // For API authentication
   lastUsedAt: timestamp("last_used_at"), // Track API key usage
+
+  // Model configuration
+  defaultModel: text("default_model"), // Agent-specific default model (overrides organization default)
+
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   // RBAC-based policy for viewing agents (resource-aware)
@@ -695,6 +707,9 @@ export const skills = pgTable("skills", {
   }>>().default([]),
   instructions: text("instructions").notNull().default(''),
   tools: jsonb("tools").default('[]').notNull(),
+
+  // Model configuration
+  model: text("model"), // Skill-specific model override (highest priority)
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -1162,6 +1177,63 @@ export const chatMessages: any = pgTable("chat_messages", {
     for: "all",
     to: "public",
     using: sql`EXISTS (SELECT 1 FROM chats c WHERE c.id = chat_id AND c.organization_id = current_setting('app.current_organization_id')::integer)`,
+  }),
+]);
+
+// Token usage tracking for billing
+export const tokenUsageLogs = pgTable("token_usage_logs", {
+  id: serial("id").primaryKey(),
+
+  // Execution context
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'set null' }),
+
+  // Entity reference (what consumed the tokens)
+  entityType: text("entity_type").notNull(), // 'chat', 'skill', 'task', 'instruction'
+  entityId: text("entity_id"), // UUID for chat message, integer string for task/skill
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: 'set null' }),
+
+  // Model and token details
+  modelName: text("model_name").notNull(), // e.g., 'ibm-granite/granite-3.3-8b-instruct'
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  totalTokens: integer("total_tokens").notNull().default(0),
+
+  // Cost tracking
+  costUsd: doublePrecision("cost_usd").notNull().default(0), // Cost in USD
+
+  // Metadata
+  processingTimeMs: integer("processing_time_ms"), // Processing time in milliseconds
+  metadata: jsonb("metadata").$type<{
+    taskName?: string;
+    skillName?: string;
+    chatContext?: string;
+    success?: boolean;
+    error?: string;
+  }>(),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  // Indexes for efficient querying
+  index("token_usage_organization_idx").on(table.organizationId),
+  index("token_usage_user_idx").on(table.userId),
+  index("token_usage_entity_idx").on(table.entityType, table.entityId),
+  index("token_usage_created_at_idx").on(table.createdAt),
+
+  // RBAC policy: users can view usage for their organization
+  pgPolicy("token_usage_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        user_id = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'organizations:manage',
+          organization_id
+        )
+      )`
   }),
 ]);
 

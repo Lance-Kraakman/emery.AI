@@ -181,6 +181,8 @@ export interface TaskProgress {
   timestampMs: number;
   /** Completion percentage (0-100) */
   progressPercent: number;
+  /** Token usage for this task (set when completed) */
+  tokenUsage: TokenUsage | undefined;
 }
 
 /** Request to cancel a running task */
@@ -232,6 +234,20 @@ export interface ErrorResponse {
   details: string;
 }
 
+/** Token usage tracking for billing */
+export interface TokenUsage {
+  /** Model used for this operation */
+  modelName: string;
+  /** Input/prompt tokens consumed */
+  inputTokens: number;
+  /** Output/completion tokens generated */
+  outputTokens: number;
+  /** Total tokens (input + output) */
+  totalTokens: number;
+  /** Estimated cost in USD */
+  costUsd: number;
+}
+
 /** Complete agent configuration */
 export interface AgentConfig {
   name: string;
@@ -254,6 +270,8 @@ export interface SkillConfig {
   outputs: SkillOutput[];
   instructions: string;
   tools: ToolConfig[];
+  /** Optional: model override for this skill */
+  model: string;
 }
 
 /** Skill input parameter */
@@ -309,6 +327,8 @@ export interface InstructionConfig {
   tools: ToolConfig[];
   /** Optional servers for this task */
   servers: ServerConfig[];
+  /** Optional: model override for this instruction */
+  model: string;
 }
 
 /** Request for AI message processing */
@@ -327,6 +347,8 @@ export interface ProcessMessageRequest {
   conversationHistory: HistoryMessage[];
   /** Tools for ToolCallingAgent execution (can be empty) */
   tools: ToolConfig[];
+  /** Optional: model override for this chat message */
+  model: string;
 }
 
 /** Streaming response from AI processing */
@@ -394,14 +416,16 @@ export interface RagSource {
 
 /** Processing completion marker */
 export interface ProcessingComplete {
-  /** AI model used for generation */
+  /** AI model used for generation (deprecated - use token_usage.model_name) */
   modelUsed: string;
-  /** Total tokens processed */
+  /** Total tokens processed (deprecated - use token_usage.total_tokens) */
   totalTokens: number;
   /** Processing time in milliseconds */
   processingTimeMs: number;
   /** Additional processing metadata */
   metadata: { [key: string]: string };
+  /** Detailed token usage and cost tracking */
+  tokenUsage: TokenUsage | undefined;
 }
 
 export interface ProcessingComplete_MetadataEntry {
@@ -668,7 +692,15 @@ export const TaskRequest: MessageFns<TaskRequest> = {
 };
 
 function createBaseTaskProgress(): TaskProgress {
-  return { taskId: "", status: 0, outputJson: "", errorMessage: "", timestampMs: 0, progressPercent: 0 };
+  return {
+    taskId: "",
+    status: 0,
+    outputJson: "",
+    errorMessage: "",
+    timestampMs: 0,
+    progressPercent: 0,
+    tokenUsage: undefined,
+  };
 }
 
 export const TaskProgress: MessageFns<TaskProgress> = {
@@ -690,6 +722,9 @@ export const TaskProgress: MessageFns<TaskProgress> = {
     }
     if (message.progressPercent !== 0) {
       writer.uint32(69).float(message.progressPercent);
+    }
+    if (message.tokenUsage !== undefined) {
+      TokenUsage.encode(message.tokenUsage, writer.uint32(74).fork()).join();
     }
     return writer;
   },
@@ -749,6 +784,14 @@ export const TaskProgress: MessageFns<TaskProgress> = {
           message.progressPercent = reader.float();
           continue;
         }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.tokenUsage = TokenUsage.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -766,6 +809,7 @@ export const TaskProgress: MessageFns<TaskProgress> = {
       errorMessage: isSet(object.errorMessage) ? globalThis.String(object.errorMessage) : "",
       timestampMs: isSet(object.timestampMs) ? globalThis.Number(object.timestampMs) : 0,
       progressPercent: isSet(object.progressPercent) ? globalThis.Number(object.progressPercent) : 0,
+      tokenUsage: isSet(object.tokenUsage) ? TokenUsage.fromJSON(object.tokenUsage) : undefined,
     };
   },
 
@@ -789,6 +833,9 @@ export const TaskProgress: MessageFns<TaskProgress> = {
     if (message.progressPercent !== 0) {
       obj.progressPercent = message.progressPercent;
     }
+    if (message.tokenUsage !== undefined) {
+      obj.tokenUsage = TokenUsage.toJSON(message.tokenUsage);
+    }
     return obj;
   },
 
@@ -803,6 +850,9 @@ export const TaskProgress: MessageFns<TaskProgress> = {
     message.errorMessage = object.errorMessage ?? "";
     message.timestampMs = object.timestampMs ?? 0;
     message.progressPercent = object.progressPercent ?? 0;
+    message.tokenUsage = (object.tokenUsage !== undefined && object.tokenUsage !== null)
+      ? TokenUsage.fromPartial(object.tokenUsage)
+      : undefined;
     return message;
   },
 };
@@ -1294,6 +1344,130 @@ export const ErrorResponse: MessageFns<ErrorResponse> = {
   },
 };
 
+function createBaseTokenUsage(): TokenUsage {
+  return { modelName: "", inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 };
+}
+
+export const TokenUsage: MessageFns<TokenUsage> = {
+  encode(message: TokenUsage, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.modelName !== "") {
+      writer.uint32(10).string(message.modelName);
+    }
+    if (message.inputTokens !== 0) {
+      writer.uint32(16).int32(message.inputTokens);
+    }
+    if (message.outputTokens !== 0) {
+      writer.uint32(24).int32(message.outputTokens);
+    }
+    if (message.totalTokens !== 0) {
+      writer.uint32(32).int32(message.totalTokens);
+    }
+    if (message.costUsd !== 0) {
+      writer.uint32(41).double(message.costUsd);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TokenUsage {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTokenUsage();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.modelName = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.inputTokens = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.outputTokens = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.totalTokens = reader.int32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 41) {
+            break;
+          }
+
+          message.costUsd = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TokenUsage {
+    return {
+      modelName: isSet(object.modelName) ? globalThis.String(object.modelName) : "",
+      inputTokens: isSet(object.inputTokens) ? globalThis.Number(object.inputTokens) : 0,
+      outputTokens: isSet(object.outputTokens) ? globalThis.Number(object.outputTokens) : 0,
+      totalTokens: isSet(object.totalTokens) ? globalThis.Number(object.totalTokens) : 0,
+      costUsd: isSet(object.costUsd) ? globalThis.Number(object.costUsd) : 0,
+    };
+  },
+
+  toJSON(message: TokenUsage): unknown {
+    const obj: any = {};
+    if (message.modelName !== "") {
+      obj.modelName = message.modelName;
+    }
+    if (message.inputTokens !== 0) {
+      obj.inputTokens = Math.round(message.inputTokens);
+    }
+    if (message.outputTokens !== 0) {
+      obj.outputTokens = Math.round(message.outputTokens);
+    }
+    if (message.totalTokens !== 0) {
+      obj.totalTokens = Math.round(message.totalTokens);
+    }
+    if (message.costUsd !== 0) {
+      obj.costUsd = message.costUsd;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TokenUsage>, I>>(base?: I): TokenUsage {
+    return TokenUsage.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TokenUsage>, I>>(object: I): TokenUsage {
+    const message = createBaseTokenUsage();
+    message.modelName = object.modelName ?? "";
+    message.inputTokens = object.inputTokens ?? 0;
+    message.outputTokens = object.outputTokens ?? 0;
+    message.totalTokens = object.totalTokens ?? 0;
+    message.costUsd = object.costUsd ?? 0;
+    return message;
+  },
+};
+
 function createBaseAgentConfig(): AgentConfig {
   return { name: "", role: "", description: "", persona: "", tools: [], servers: [], skills: [] };
 }
@@ -1453,7 +1627,7 @@ export const AgentConfig: MessageFns<AgentConfig> = {
 };
 
 function createBaseSkillConfig(): SkillConfig {
-  return { name: "", description: "", inputs: [], outputs: [], instructions: "", tools: [] };
+  return { name: "", description: "", inputs: [], outputs: [], instructions: "", tools: [], model: "" };
 }
 
 export const SkillConfig: MessageFns<SkillConfig> = {
@@ -1475,6 +1649,9 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     }
     for (const v of message.tools) {
       ToolConfig.encode(v!, writer.uint32(50).fork()).join();
+    }
+    if (message.model !== "") {
+      writer.uint32(58).string(message.model);
     }
     return writer;
   },
@@ -1534,6 +1711,14 @@ export const SkillConfig: MessageFns<SkillConfig> = {
           message.tools.push(ToolConfig.decode(reader, reader.uint32()));
           continue;
         }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.model = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1551,6 +1736,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
       outputs: globalThis.Array.isArray(object?.outputs) ? object.outputs.map((e: any) => SkillOutput.fromJSON(e)) : [],
       instructions: isSet(object.instructions) ? globalThis.String(object.instructions) : "",
       tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
+      model: isSet(object.model) ? globalThis.String(object.model) : "",
     };
   },
 
@@ -1574,6 +1760,9 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     if (message.tools?.length) {
       obj.tools = message.tools.map((e) => ToolConfig.toJSON(e));
     }
+    if (message.model !== "") {
+      obj.model = message.model;
+    }
     return obj;
   },
 
@@ -1588,6 +1777,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     message.outputs = object.outputs?.map((e) => SkillOutput.fromPartial(e)) || [];
     message.instructions = object.instructions ?? "";
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
+    message.model = object.model ?? "";
     return message;
   },
 };
@@ -2256,7 +2446,7 @@ export const TriggerData_PayloadEntry: MessageFns<TriggerData_PayloadEntry> = {
 };
 
 function createBaseInstructionConfig(): InstructionConfig {
-  return { instructions: "", tools: [], servers: [] };
+  return { instructions: "", tools: [], servers: [], model: "" };
 }
 
 export const InstructionConfig: MessageFns<InstructionConfig> = {
@@ -2269,6 +2459,9 @@ export const InstructionConfig: MessageFns<InstructionConfig> = {
     }
     for (const v of message.servers) {
       ServerConfig.encode(v!, writer.uint32(26).fork()).join();
+    }
+    if (message.model !== "") {
+      writer.uint32(34).string(message.model);
     }
     return writer;
   },
@@ -2304,6 +2497,14 @@ export const InstructionConfig: MessageFns<InstructionConfig> = {
           message.servers.push(ServerConfig.decode(reader, reader.uint32()));
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.model = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2320,6 +2521,7 @@ export const InstructionConfig: MessageFns<InstructionConfig> = {
       servers: globalThis.Array.isArray(object?.servers)
         ? object.servers.map((e: any) => ServerConfig.fromJSON(e))
         : [],
+      model: isSet(object.model) ? globalThis.String(object.model) : "",
     };
   },
 
@@ -2334,6 +2536,9 @@ export const InstructionConfig: MessageFns<InstructionConfig> = {
     if (message.servers?.length) {
       obj.servers = message.servers.map((e) => ServerConfig.toJSON(e));
     }
+    if (message.model !== "") {
+      obj.model = message.model;
+    }
     return obj;
   },
 
@@ -2345,12 +2550,21 @@ export const InstructionConfig: MessageFns<InstructionConfig> = {
     message.instructions = object.instructions ?? "";
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     message.servers = object.servers?.map((e) => ServerConfig.fromPartial(e)) || [];
+    message.model = object.model ?? "";
     return message;
   },
 };
 
 function createBaseProcessMessageRequest(): ProcessMessageRequest {
-  return { messageContent: "", userId: "", organizationId: 0, context: undefined, conversationHistory: [], tools: [] };
+  return {
+    messageContent: "",
+    userId: "",
+    organizationId: 0,
+    context: undefined,
+    conversationHistory: [],
+    tools: [],
+    model: "",
+  };
 }
 
 export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
@@ -2372,6 +2586,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     }
     for (const v of message.tools) {
       ToolConfig.encode(v!, writer.uint32(50).fork()).join();
+    }
+    if (message.model !== "") {
+      writer.uint32(58).string(message.model);
     }
     return writer;
   },
@@ -2431,6 +2648,14 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
           message.tools.push(ToolConfig.decode(reader, reader.uint32()));
           continue;
         }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.model = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2450,6 +2675,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
         ? object.conversationHistory.map((e: any) => HistoryMessage.fromJSON(e))
         : [],
       tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
+      model: isSet(object.model) ? globalThis.String(object.model) : "",
     };
   },
 
@@ -2473,6 +2699,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     if (message.tools?.length) {
       obj.tools = message.tools.map((e) => ToolConfig.toJSON(e));
     }
+    if (message.model !== "") {
+      obj.model = message.model;
+    }
     return obj;
   },
 
@@ -2489,6 +2718,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
       : undefined;
     message.conversationHistory = object.conversationHistory?.map((e) => HistoryMessage.fromPartial(e)) || [];
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
+    message.model = object.model ?? "";
     return message;
   },
 };
@@ -3010,7 +3240,7 @@ export const RagSource: MessageFns<RagSource> = {
 };
 
 function createBaseProcessingComplete(): ProcessingComplete {
-  return { modelUsed: "", totalTokens: 0, processingTimeMs: 0, metadata: {} };
+  return { modelUsed: "", totalTokens: 0, processingTimeMs: 0, metadata: {}, tokenUsage: undefined };
 }
 
 export const ProcessingComplete: MessageFns<ProcessingComplete> = {
@@ -3027,6 +3257,9 @@ export const ProcessingComplete: MessageFns<ProcessingComplete> = {
     Object.entries(message.metadata).forEach(([key, value]) => {
       ProcessingComplete_MetadataEntry.encode({ key: key as any, value }, writer.uint32(34).fork()).join();
     });
+    if (message.tokenUsage !== undefined) {
+      TokenUsage.encode(message.tokenUsage, writer.uint32(42).fork()).join();
+    }
     return writer;
   },
 
@@ -3072,6 +3305,14 @@ export const ProcessingComplete: MessageFns<ProcessingComplete> = {
           }
           continue;
         }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.tokenUsage = TokenUsage.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3092,6 +3333,7 @@ export const ProcessingComplete: MessageFns<ProcessingComplete> = {
           return acc;
         }, {})
         : {},
+      tokenUsage: isSet(object.tokenUsage) ? TokenUsage.fromJSON(object.tokenUsage) : undefined,
     };
   },
 
@@ -3115,6 +3357,9 @@ export const ProcessingComplete: MessageFns<ProcessingComplete> = {
         });
       }
     }
+    if (message.tokenUsage !== undefined) {
+      obj.tokenUsage = TokenUsage.toJSON(message.tokenUsage);
+    }
     return obj;
   },
 
@@ -3132,6 +3377,9 @@ export const ProcessingComplete: MessageFns<ProcessingComplete> = {
       }
       return acc;
     }, {});
+    message.tokenUsage = (object.tokenUsage !== undefined && object.tokenUsage !== null)
+      ? TokenUsage.fromPartial(object.tokenUsage)
+      : undefined;
     return message;
   },
 };
