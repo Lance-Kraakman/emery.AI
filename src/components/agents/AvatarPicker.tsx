@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import {
   AVATAR_STYLES,
@@ -33,6 +33,13 @@ export function AvatarPicker({ value, onChange, className }: AvatarPickerProps) 
   const config = value || DEFAULT_AVATAR_CONFIG;
   const [selectedStyle, setSelectedStyle] = useState<string>(config.style || 'lorelei');
   const [selectedColor, setSelectedColor] = useState<string>(config.color || 'blue');
+
+  // Sync local state with incoming value prop to fix stale state bug
+  useEffect(() => {
+    const newConfig = value || DEFAULT_AVATAR_CONFIG;
+    setSelectedStyle(newConfig.style || 'lorelei');
+    setSelectedColor(newConfig.color || 'blue');
+  }, [value]);
 
   const handleStyleSelect = (styleName: string) => {
     setSelectedStyle(styleName);

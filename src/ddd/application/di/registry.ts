@@ -20,6 +20,7 @@ import type { IAgentExecutionRepository } from '@/ddd/domain/agents/repositories
 import type { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
 import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
 import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
+import type { ITokenUsageRepository } from '@/ddd/domain/billing/repositories/token-usage-repository';
 import type { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
 import type { IDelegationRepository } from '@/ddd/domain/delegations/repositories/delegation-repository';
 import type { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
@@ -91,6 +92,9 @@ export interface RepositoryRegistry {
   // Chat domain repositories
   IChatRepository: IChatRepository;
   IChatMessageRepository: IChatMessageRepository;
+
+  // Billing domain repositories
+  ITokenUsageRepository: ITokenUsageRepository;
 
   // RAG domain repositories
   IRagIndexRepository: DrizzleRagIndexRepository;

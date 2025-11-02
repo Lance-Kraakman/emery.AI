@@ -109,6 +109,7 @@ export class AgentWorkerTestClient {
         organizationId: this.config.organizationId,
         ownerId: request.ownerId,
         timeoutSeconds: request.timeoutSeconds || 300,
+        organizationModel: '', // Empty string will use system default
         agentConfig: {
           name: request.name,
           // Add other agent config fields as needed

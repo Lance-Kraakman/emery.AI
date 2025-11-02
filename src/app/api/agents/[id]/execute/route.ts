@@ -63,8 +63,8 @@ export async function POST(
 
     // Verify agent ownership (agents can only be used by their owners)
     if (agent.ownerId !== userId) {
-      return Response.json({ 
-        error: 'Access denied: You can only execute actions for agents you own' 
+      return Response.json({
+        error: 'Access denied: You can only execute actions for agents you own'
       }, { status: 403 });
     }
 

@@ -47,7 +47,13 @@ export interface CreateOrganizationData {
   plan?: string;
 }
 
-export interface UpdateOrganizationData extends Partial<CreateOrganizationData> {}
+export interface UpdateOrganizationData extends Partial<CreateOrganizationData> {
+  // Billing and model configuration fields
+  defaultModel?: string | null;
+  tokenQuotaMonthly?: number | null;
+  tier?: 'free' | 'pro' | 'enterprise';
+  availableModels?: string[];
+}
 
 export interface OrganizationWithMembers extends Organization {
   memberCount: number;

@@ -185,13 +185,15 @@ class SmolagentsModelProvider:
 
         # Create model based on endpoint type
         if metadata.endpoint.type == "dedicated" and metadata.endpoint.url:
-            # Dedicated endpoint
+            # Dedicated endpoint - use full endpoint URL
             endpoint_url = metadata.endpoint.url
             logger.info(f"🔧 Using dedicated endpoint: {endpoint_url}")
         else:
-            # HF Inference API
-            endpoint_url = "https://api-inference.huggingface.co"
-            logger.info(f"🔧 Using HF Inference API for {model_id}")
+            # HF Inference API - pass model ID directly (InferenceClient handles routing to router.huggingface.co)
+            # AIDEV-NOTE: As of Nov 2025, old api-inference.huggingface.co is deprecated (404)
+            # InferenceClient automatically routes to router.huggingface.co/hf-inference/ when given model ID
+            endpoint_url = model_id
+            logger.info(f"🔧 Using HF Inference API for model: {model_id}")
 
         model = CustomInferenceModel(
             endpoint_url=endpoint_url,

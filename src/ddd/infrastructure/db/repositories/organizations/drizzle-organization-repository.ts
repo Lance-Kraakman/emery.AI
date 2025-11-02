@@ -48,6 +48,12 @@ export class DrizzleOrganizationRepository
         stripeCustomerId: organizations.stripeCustomerId,
         stripeSubscriptionId: organizations.stripeSubscriptionId,
         stripeSubscriptionStatus: organizations.stripeSubscriptionStatus,
+        // Billing and model configuration
+        defaultModel: organizations.defaultModel,
+        availableModels: organizations.availableModels,
+        tokenQuotaMonthly: organizations.tokenQuotaMonthly,
+        tokenUsageCurrentMonth: organizations.tokenUsageCurrentMonth,
+        quotaResetAt: organizations.quotaResetAt,
         createdAt: organizations.createdAt,
       })
       .from(organizations)
@@ -278,7 +284,7 @@ export class DrizzleOrganizationRepository
       slug: data.slug,
       mission: data.mission,
       sharedTools: data.sharedTools,
-      sharedServers: data.sharedServers, 
+      sharedServers: data.sharedServers,
       databaseId: data.databaseId,
       viewConfig: data.viewConfig as Record<string, any> | null,
       analysisCapabilities: data.analysisCapabilities,
@@ -286,6 +292,12 @@ export class DrizzleOrganizationRepository
       stripeCustomerId: data.stripeCustomerId,
       stripeSubscriptionId: data.stripeSubscriptionId,
       stripeSubscriptionStatus: data.stripeSubscriptionStatus,
+      // Billing and model configuration
+      defaultModel: data.defaultModel,
+      availableModels: data.availableModels,
+      tokenQuotaMonthly: data.tokenQuotaMonthly,
+      tokenUsageCurrentMonth: data.tokenUsageCurrentMonth,
+      quotaResetAt: data.quotaResetAt,
       createdAt: data.createdAt
     };
   }
@@ -305,6 +317,12 @@ export class DrizzleOrganizationRepository
       stripeCustomerId: organization.stripeCustomerId,
       stripeSubscriptionId: organization.stripeSubscriptionId,
       stripeSubscriptionStatus: organization.stripeSubscriptionStatus,
+      // Billing and model configuration
+      defaultModel: organization.defaultModel,
+      availableModels: organization.availableModels,
+      tokenQuotaMonthly: organization.tokenQuotaMonthly,
+      tokenUsageCurrentMonth: organization.tokenUsageCurrentMonth,
+      quotaResetAt: organization.quotaResetAt,
       createdAt: organization.createdAt
     };
   }

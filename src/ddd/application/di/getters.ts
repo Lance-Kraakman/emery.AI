@@ -149,6 +149,7 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
     'AppRepository': 'IAppRepository',
     'PuckPageRepository': 'IPuckPageRepository',
     'ViewRepository': 'ViewRepository',
+    'TokenUsageRepository': 'ITokenUsageRepository',
     'IToolRegistryService': 'IToolRegistryService',
   };
 

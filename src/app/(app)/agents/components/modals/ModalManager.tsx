@@ -6,6 +6,7 @@ import { BasicInfoModal } from './BasicInfoModal';
 import { TriggerConfigModal } from './TriggerConfigModal';
 import { ActivityDetailsModal } from './ActivityDetailsModal';
 import { AuthorizedConnectionsModal } from './AuthorizedConnectionsModal';
+import { AvatarCustomizationModal } from './AvatarCustomizationModal';
 
 interface ModalManagerProps {
   onUpdate?: () => void;
@@ -56,6 +57,16 @@ export function ModalManager({ onUpdate }: ModalManagerProps) {
           onClose={closeModal}
           agent={modalState.data?.agent}
           onUpdate={onUpdate}
+        />
+      );
+
+    case 'avatar-customization':
+      return (
+        <AvatarCustomizationModal
+          isOpen={true}
+          onClose={closeModal}
+          initialConfig={modalState.data?.avatarConfig}
+          onSave={modalState.data?.onSave}
         />
       );
 

@@ -7,15 +7,16 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, X, User } from 'lucide-react';
+import { Loader2, Save, X, User, Pencil } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import { UserSelect } from '@/components/ui/UserSelect';
 import { getOrganizationMembers } from '@/app/actions/invitations';
 import { checkPermission } from '@/app/actions/permissions';
 import { useSession } from 'next-auth/react';
-import { AvatarPicker } from '@/components/agents/AvatarPicker';
+import { AgentAvatar } from '@/components/agents/AgentAvatar';
 import type { AvatarConfigV1 } from '@/lib/avatars';
+import { useModal } from './ModalContext';
 
 interface BasicInfoModalProps {
   isOpen: boolean;
@@ -42,6 +43,7 @@ interface User {
 
 export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoModalProps) {
   const { data: session } = useSession();
+  const { openModal } = useModal();
   const [formData, setFormData] = useState<FormData>({
     name: '',
     role: '',
@@ -165,6 +167,15 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
     onClose();
   };
 
+  const handleAvatarEdit = () => {
+    openModal('avatar-customization', {
+      avatarConfig: formData.avatarConfig,
+      onSave: (config: AvatarConfigV1) => {
+        setFormData(prev => ({ ...prev, avatarConfig: config }));
+      }
+    });
+  };
+
   const footer = (
     <div className="flex items-center justify-between">
       <div className="text-sm text-muted-foreground">
@@ -196,52 +207,64 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
       onClose={handleCancel}
       title="Edit Agent Information"
       description="Update the basic information for this agent"
-      size="md"
+      size="lg"
       footer={footer}
       closeOnEscape={!hasChanges}
       closeOnOutsideClick={!hasChanges}
     >
       <div className="p-6 space-y-6">
-        {/* Avatar Picker */}
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">
-            Avatar
-          </Label>
-          <AvatarPicker
-            value={formData.avatarConfig}
-            onChange={(config) => setFormData(prev => ({ ...prev, avatarConfig: config }))}
-          />
-        </div>
+        {/* Profile Header Section */}
+        <div className="flex items-start gap-6 pb-6 border-b">
+          {/* Avatar with Edit Button */}
+          <div className="relative group">
+            <AgentAvatar
+              avatarConfig={formData.avatarConfig}
+              agentId={agent.id}
+              size="lg"
+              className="w-24 h-24"
+            />
+            <button
+              onClick={handleAvatarEdit}
+              className="absolute -bottom-2 -right-2 w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-primary/90 transition-all hover:scale-110"
+              title="Edit avatar"
+              type="button"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          </div>
 
-        {/* Agent Name */}
-        <div className="space-y-2">
-          <Label htmlFor="name" className="text-sm font-medium">
-            Agent Name *
-          </Label>
-          <Input
-            id="name"
-            value={formData.name}
-            onChange={(e) => handleInputChange('name', e.target.value)}
-            placeholder="Enter agent name"
-            disabled={isSaving}
-          />
-        </div>
+          {/* Name and Role */}
+          <div className="flex-1 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-sm font-medium">
+                Agent Name *
+              </Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => handleInputChange('name', e.target.value)}
+                placeholder="Enter agent name"
+                disabled={isSaving}
+                className="text-lg font-semibold"
+              />
+            </div>
 
-        {/* Role */}
-        <div className="space-y-2">
-          <Label htmlFor="role" className="text-sm font-medium">
-            Role
-          </Label>
-          <Input
-            id="role"
-            value={formData.role}
-            onChange={(e) => handleInputChange('role', e.target.value)}
-            placeholder="e.g., Data Analyst, Customer Support, Content Writer"
-            disabled={isSaving}
-          />
-          <p className="text-xs text-muted-foreground">
-            Describe what this agent does or its primary function
-          </p>
+            <div className="space-y-2">
+              <Label htmlFor="role" className="text-sm font-medium">
+                Role
+              </Label>
+              <Input
+                id="role"
+                value={formData.role}
+                onChange={(e) => handleInputChange('role', e.target.value)}
+                placeholder="e.g., Data Analyst, Customer Support, Content Writer"
+                disabled={isSaving}
+              />
+              <p className="text-xs text-muted-foreground">
+                Describe what this agent does or its primary function
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Status */}

@@ -43,6 +43,10 @@ class ExecutionContext:
     # Preserves multi-step configuration with proper tool configs and instructions
     capability: Optional['CapabilityConfig'] = None
 
+    # Model selection hierarchy (from proto: agent.defaultModel → organization.defaultModel → system default)
+    agent_model: Optional[str] = None
+    org_model: Optional[str] = None
+
     # Environment data
     environment: Dict[str, Any] = None
     
@@ -79,5 +83,7 @@ class ExecutionContext:
             max_steps=self.max_steps,
             timeout_seconds=self.timeout_seconds,
             capability=self.capability,
+            agent_model=self.agent_model,
+            org_model=self.org_model,
             environment=self.environment.copy()
         )
